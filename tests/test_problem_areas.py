@@ -216,7 +216,10 @@ class ProblemAreaReviewTests(ProblemDeliveryCase, AreaMutationCase):
             packet = self.read_packet(assignment)
             self.assertEqual(assignment["history_assignment_id"], "bar-" + reviewer)
             self.assertEqual(packet["problem_areas"], [area])
-            self.assertEqual(packet["problem_refresh"]["previous_template_id"], "exactory-problem-review-v1/bar")
+            prior = records["review_assignment"]["bar-" + reviewer]
+            self.assertEqual(packet["problem_refresh"]["previous_template_id"], prior["prompt"]["template_id"])
+            base = review_protocol.prompt_paragraphs.strip_prompt_paragraphs(prior["prompt"], "bar")
+            self.assertEqual(base["template_id"], "exactory-problem-review-v1/bar")
 
     def test_result_requires_a_slate_that_cites_the_continued_bars(self):
         self.initialize_problem()

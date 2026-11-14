@@ -24,6 +24,34 @@ def build_notice(kind='request'):
 
 
 class CapacityParagraphTests(unittest.TestCase):
+    def test_capacity_notice_preserves_the_scientific_contract_of_legacy_and_current_prompts(self):
+        cases = (('bar', 1, True, False), ('result', 2, True, True),
+                 ('result', 3, True, False), ('result', 4, True, False),
+                 ('bar', 5, False, False), ('result', 5, False, False))
+        for role, version, previous, version_two in cases:
+            for common in (1, 3):
+                for repair in (False, True):
+                    with self.subTest(role=role, version=version, common=common, repair=repair):
+                        options = dict(version=version, common_version=common, repair=repair,
+                                       orchestration='problem_creation')
+                        plain = protocol.canonical_prompt(role, **options)
+                        historical = build_assignment(role, plain)
+                        historical['reassessment_required'] = repair
+                        self.assertEqual(protocol.is_previous_prompt(historical), previous)
+                        self.assertEqual(protocol.is_version_2_problem_result(historical), version_two)
+                        wrapped = protocol.canonical_prompt(role, **options,
+                            problem_paragraphs=[NOTICE_PROTOCOL], capacity=build_notice())
+                        original = copy.deepcopy(wrapped)
+                        assignment = build_assignment(role, wrapped)
+                        assignment['reassessment_required'] = repair
+                        self.assertEqual(protocol.is_previous_prompt(assignment), previous)
+                        self.assertEqual(protocol.is_version_2_problem_result(assignment), version_two)
+                        self.assertEqual(paragraphs.strip_prompt_paragraphs(wrapped, role), plain)
+                        self.assertEqual(wrapped, original)
+                        changed = dict(assignment, prompt=dict(wrapped, text=wrapped['text'] + ' Altered notice.'))
+                        self.assertFalse(protocol.is_previous_prompt(changed))
+                        self.assertFalse(protocol.is_version_2_problem_result(changed))
+
     def test_notice_renders_numbers_and_replays_the_exact_parameters_for_every_role(self):
         for role in ('bar', 'slate', 'result'):
             with self.subTest(role=role):

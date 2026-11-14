@@ -5359,7 +5359,8 @@
         "test_capacity_signals.ResponseLimitJourneyTests.test_existing_bar_session_head_moves_by_retirement_probe_and_repair_to_recording",
         "test_capacity_signals.ResponseLimitJourneyTests.test_problem_openness_moves_by_probe_and_new_export_to_recorded_finding",
         "test_capacity_signals.ResponseLimitJourneyTests.test_verification_moves_by_probe_and_first_assignment_to_recorded_verdict",
-        "test_capacity_signals.ResponseLimitJourneyTests.test_math_review_moves_by_new_attestation_to_recorded_acceptance"
+        "test_capacity_signals.ResponseLimitJourneyTests.test_math_review_moves_by_new_attestation_to_recorded_acceptance",
+        "test_capacity_signals.CapacitySignalTests.test_response_limit_has_one_retry_then_role_steps_and_no_profile_row"
       ]
     },
     {
@@ -5405,7 +5406,8 @@
         "test_record_reading_handoff.ReadingHandoffTests.test_catalog_gap_keeps_the_pure_refusal_before_the_corrected_output_needs_reading",
         "test_record_reading_handoff.ReadingHandoffTests.test_a_reading_completed_during_the_recording_error_records_without_a_reviewer_call",
         "test_review_refusal_notice.RefusalNoticeTests.test_every_registered_validator_produces_a_notice_without_the_other_reviewers_markers",
-        "test_review_refusal_notice.ContractCheckRegistryTests.test_every_check_attribution_is_registered_and_registry_fields_are_explicit"
+        "test_review_refusal_notice.ContractCheckRegistryTests.test_every_check_attribution_is_registered_and_registry_fields_are_explicit",
+        "test_research_problem_adjudication_resolution.ProblemAdjudicationResolutionTests.test_a_result_packet_offers_a_citation_only_for_a_passage_a_review_can_record"
       ]
     },
     {
@@ -5540,7 +5542,12 @@
         "test_review_capacity_notice.CapacityAssignmentTests.test_new_bar_slate_and_result_assignments_take_the_profile_rule",
         "test_review_capacity_notice.CapacityAssignmentTests.test_running_unprofiled_session_adds_notice_without_changing_stored_turns",
         "test_review_capacity_notice.CapacityChainTests.test_legacy_parts_chain_adds_current_turn_bounds_and_authenticates_old_turn",
-        "test_review_capacity_notice.CapacityChainTests.test_fitted_session_keeps_capacity_and_delivery_notices_together"
+        "test_review_capacity_notice.CapacityChainTests.test_fitted_session_keeps_capacity_and_delivery_notices_together",
+        "test_review_capacity_notice.CapacityParagraphTests.test_capacity_notice_preserves_the_scientific_contract_of_legacy_and_current_prompts",
+        "test_problem_objection_carry.ProblemObjectionCarryDeliveryTests.test_visual_source_refinement_carries_selected_page_and_attaches_destination_images",
+        "test_problem_result_contract.ProblemResultContractTests.test_legacy_final_continues_once_with_exact_output_and_same_bar_slot",
+        "test_research_problem_slate.ProblemSlateTests.test_slate_requires_version_two_bars_and_refreshes_version_one_bars",
+        "test_problem_direction_after_refutation.ProblemDirectionTests.test_previous_result_refresh_retains_reviewer_session_slot_and_recorded_requests"
       ]
     },
     {
@@ -5575,7 +5582,15 @@
         "test_openness_finding_answer.FindingRecordingTests.test_each_rule_row_reaches_record_and_composes_the_native_bindings",
         "test_openness_finding_answer.FindingRuleTests.test_every_forecast_ground_subset_and_outcome_follows_the_rule",
         "test_openness_finding_answer.FindingRuleTests.test_prompt_renders_the_same_ordered_rule_table",
-        "test_openness_finding_answer.FindingRuleTests.test_incident_revise_outputs_stay_legacy_and_are_refused_as_findings"
+        "test_openness_finding_answer.FindingRuleTests.test_incident_revise_outputs_stay_legacy_and_are_refused_as_findings",
+        "test_review_prompt_common_version.CommonPromptVersionTests.test_every_prompt_recorded_by_0663_still_verifies",
+        "test_review_prompt_common_version.CommonPromptVersionTests.test_every_prompt_recorded_by_0715_still_verifies",
+        "test_problem_openness_source_delivery.SourceDeliveryTests.test_selects_complete_main_and_preserves_all_readings_and_proof_bytes",
+        "test_problem_openness_source_delivery.SourceDeliveryTests.test_actual_selected_standalone_text_tampering_is_rejected",
+        "test_problem_openness_source_delivery.SourceDeliveryTests.test_actual_delivery_contract_must_match_the_immutable_packet",
+        "test_problem_openness_source_delivery.SourceDeliveryTests.test_missing_or_changed_actual_container_cannot_supply_a_contained_source",
+        "test_problem_openness_source_delivery.SourceDeliveryTests.test_legacy_packet_without_delivery_keeps_all_source_bodies",
+        "test_problem_openness_source_delivery.SourceDeliveryTests.test_new_source_capture_stales_selection_without_erasing_prior_readings"
       ]
     },
     {

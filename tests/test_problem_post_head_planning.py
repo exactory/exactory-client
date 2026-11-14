@@ -88,7 +88,9 @@ class PostedHeadPlanningTests(unittest.TestCase):
                     records['problem_statement']['alias'] = statement
                     assignment = records['review_assignment'][self.assignment['id']]
                     assignment.update(role=role, subject=dict(kind='problem', statement_id='alias'))
-                    assignment['prompt'] = protocol.canonical_prompt(role, orchestration='problem_creation')
+                    parameters = protocol.prompt_paragraphs.select_prompt_parameters(role,
+                        protocol._read_json(self.case.artifacts, assignment['packet']))
+                    assignment['prompt'] = protocol.canonical_prompt(role, orchestration='problem_creation', **parameters)
                     assignment['prompt_hash'] = assignment['prompt']['rendered_prompt_hash']
                     unposted = copy.deepcopy(records)
                     unposted.pop('problem_post')
@@ -116,7 +118,9 @@ class PostedHeadPlanningTests(unittest.TestCase):
                 assignment.update(role=role, subject=subject)
                 assignment['recorded_revision'] = self.case.store.revision + 1
                 orchestration = 'problem_creation' if subject.get('kind') == 'problem' else None
-                assignment['prompt'] = protocol.canonical_prompt(role, orchestration=orchestration)
+                parameters = (protocol.prompt_paragraphs.select_prompt_parameters(role,
+                    protocol._read_json(self.case.artifacts, assignment['packet'])) if orchestration else {})
+                assignment['prompt'] = protocol.canonical_prompt(role, orchestration=orchestration, **parameters)
                 assignment['prompt_hash'] = assignment['prompt']['rendered_prompt_hash']
                 unposted = copy.deepcopy(records)
                 unposted.pop('problem_post')
@@ -206,6 +210,8 @@ class PostedHeadPlanningTests(unittest.TestCase):
         case = OpennessReadingCase()
         self.addCleanup(case.doCleanups)
         case.setUp()
+        # The export handoff belongs to the legacy decision-based openness contract.
+        case.historical_v5 = True
         original_statement_id = case.selected['id']
         case.selected = case.select_statement(identifier='second-statement',
                                                statement='A distinct complete synthetic problem.')

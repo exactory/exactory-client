@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from codex_route_fixtures import invoke_codex, record_codex_route
-from openness_legacy_fixtures import load_0_71_8_openness_reading
+from openness_legacy_fixtures import export_as_0_85_3, load_0_71_8_openness_reading
 from research_harness import openness_reading as reading, review_excerpts, review_protocol as protocol
 from research_harness import problem_openness
 from research_harness.errors import ResearchError
@@ -21,6 +21,10 @@ class V4ReplayTests(unittest.TestCase):
         self.case = self.fixture.case
         record_codex_route(self.case, 'codex-route')
         self.released = load_0_71_8_openness_reading()
+        # The v4 byte oracle predates minimum v2, including the export that supplies its builder.
+        exporter = patch.object(problem_openness, 'export_openness', new=export_as_0_85_3)
+        exporter.start()
+        self.addCleanup(exporter.stop)
 
     def assign(self, identifier, reference, prior=None):
         context = {'native_packet': reference}

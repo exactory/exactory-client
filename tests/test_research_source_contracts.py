@@ -66,7 +66,7 @@ class SourceContractTests(LiteratureCase):
         self.mutate(import_bundle, bundle)
         self.mutate(record_reading, self.full_note(bundle))
         records = self.store.snapshot()["records"]
-        self.assert_error("reading_missing", lambda: validate_read_evidence(records, self.artifacts, link, depth="fulltext"))
+        self.assert_error("source_link_not_fulltext", lambda: validate_read_evidence(records, self.artifacts, link, depth="fulltext"))
         self.assertEqual(validate_read_evidence(records, self.artifacts, link, depth="passage")["reading_id"], "full")
 
     def test_complete_original_supplement_and_its_inspection_remain_usable(self):

@@ -223,8 +223,10 @@ class SearchCompletionTests(LiteratureCase):
         middle = self.save_search(new)
         last = self.save_search(self.build_payload([self.capture_page([self.build_work()])],
             completes=[dict(search_id=middle['id'], closed_gaps=[])]))
-        notice = minimums.list_minimum_notices(dict(searches=[dict(formulation=old['question'], search_digest=digest(last))]),
-            self.store.snapshot()['records'], self.artifacts)[0]
+        minimum = dict(schema_version=1, statement=old['question'], neighbours=[],
+            searches=[dict(formulation=old['question'], search_digest=digest(last))],
+            reading_digests=[], settling_work_id=None, duplicate_resolutions=[])
+        notice = minimums.list_minimum_notices(minimum, self.store.snapshot()['records'], self.artifacts)[0]
         self.assertEqual([(row['completing_search_id'], row['search_id']) for row in notice['completes']],
                          [(last['id'], middle['id']), (middle['id'], old['id'])])
         self.assertEqual(notice['completes'][1]['not_returned'],

@@ -33,6 +33,7 @@ class CapacitySignalTests(unittest.TestCase):
         self.case.setUp()
         self.addCleanup(self.case.doCleanups)
         self.case.records['review_route']['route'] = build_route()
+        self.case.assignment['context_state'] = dict(context_status='verified_for_route')
 
     def test_claude_output_maximum_reduced_and_fallback_have_distinct_details(self):
         for message, outcome, detail in (

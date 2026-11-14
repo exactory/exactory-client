@@ -70,6 +70,12 @@ def list_current_cases():
     return cases
 
 
+def expects_previous_prompt(case):
+    # UB7 adds the standalone problem-openness v7 contract. The frozen default
+    # native v6 prompt is now previous; its recorded bytes still stay exact.
+    return case["is_previous_prompt"] or (case["role"] == "native_math" and not case["options"])
+
+
 def rehash(prompt, text):
     return dict(prompt, text=text, template_hash=digest(text), rendered_prompt_hash=digest(text))
 
@@ -87,7 +93,7 @@ class CommonPromptVersionTests(unittest.TestCase):
                 self.assertEqual({key: prompt[key] for key in case["envelope"]}, case["envelope"])
                 assignment = build_frozen_assignment(case, prompt)
                 self.assertTrue(protocol._prompt_matches(assignment))
-                self.assertEqual(protocol.is_previous_prompt(assignment), case["is_previous_prompt"])
+                self.assertEqual(protocol.is_previous_prompt(assignment), expects_previous_prompt(case))
                 self.assertEqual(protocol._uses_previous_repair_suffix(assignment),
                                  case["uses_previous_repair_suffix"])
 
@@ -110,7 +116,7 @@ class CommonPromptVersionTests(unittest.TestCase):
                 self.assertEqual({key: value for key, value in prompt.items() if key != "text"}, case["envelope"])
                 assignment = build_frozen_assignment(case, prompt)
                 self.assertEqual(protocol._prompt_matches(assignment), case["prompt_matches"])
-                self.assertEqual(protocol.is_previous_prompt(assignment), case["is_previous_prompt"])
+                self.assertEqual(protocol.is_previous_prompt(assignment), expects_previous_prompt(case))
                 self.assertEqual(protocol._uses_previous_repair_suffix(assignment), case["uses_previous_repair_suffix"])
                 if "staged_matches_prompt" in case:
                     self.assertEqual(review_staged_protocol.matches_prompt(assignment, 2),

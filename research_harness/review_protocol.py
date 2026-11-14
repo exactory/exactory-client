@@ -2459,6 +2459,10 @@ def _list_previous_problem_result_prompts(repair, common_version):
 def is_previous_prompt(assignment):
     """Whether the exact assignment uses a supported previous canonical prompt. The common text that the prompt
     records does not decide it: the scientific contract does."""
+    prompt = prompt_paragraphs.strip_prompt_paragraphs(assignment['prompt'], assignment['role'])
+    if prompt is None:
+        return False
+    assignment = dict(assignment, prompt=prompt)
     common_version = find_common_prompt_version(assignment['prompt'])
     if common_version is None:
         return False
@@ -2505,7 +2509,8 @@ def _uses_previous_repair_suffix(assignment):
 def is_version_2_problem_result(assignment):
     """Whether a problem result was assigned on a version 2 result prompt, of 0.55.x or of 0.56.x: their example writes
     the stop assurance as not_assessed when nothing requires a stop."""
-    return assignment['role'] == 'result' and assignment['prompt']['template_id'] in (
+    prompt = prompt_paragraphs.strip_prompt_paragraphs(assignment['prompt'], assignment['role'])
+    return assignment['role'] == 'result' and prompt is not None and prompt['template_id'] in (
         _PROBLEM_PROTOCOL + '/result', _PROBLEM_PROTOCOL + '/result/context-repair')
 
 
@@ -3431,10 +3436,11 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             prompt = prompt_paragraphs.append_prompt_paragraphs(base, value['role'],
                 recorded.get(prompt_paragraphs.CARRY_PARAMETER),
                 parameters.get(prompt_paragraphs.PARAMETER), parameters.get(prompt_paragraphs.CAPACITY_PARAMETER))
-        if (review_problem_parts.find_stage(packet) is not None
-                and prompt_paragraphs.CAPACITY_PARAMETER in prompt['parameters']
-                and 'prompt_hash' in packet.get('problem_refresh', {})):
-            packet['problem_refresh'].update(template_id=prompt['template_id'], prompt_hash=prompt['rendered_prompt_hash'])
+        if (prompt_paragraphs.CAPACITY_PARAMETER in prompt['parameters']
+                and 'template_id' in packet.get('problem_refresh', {})):
+            packet['problem_refresh']['template_id'] = prompt['template_id']
+            if 'prompt_hash' in packet['problem_refresh']:
+                packet['problem_refresh']['prompt_hash'] = prompt['rendered_prompt_hash']
             packet.pop('digest')
             packet['digest'] = digest(packet)
         from .review_route_capacity import CAPACITY_REQUEST_KEY, prepare_assignment_capacity

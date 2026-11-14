@@ -432,8 +432,9 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                         check["reason"] = "Nothing in the record requires a stop."
             with patch.object(protocol, "canonical_prompt", side_effect=build_version_two_prompt):
                 self.observe("result", reviewer, output)
-            self.assertEqual(self.store.snapshot()["records"]["review_assignment"]["result-" + reviewer]["prompt"]["template_id"],
-                             "exactory-problem-review-v2/result")
+            assignment = self.store.snapshot()["records"]["review_assignment"]["result-" + reviewer]
+            base = protocol.prompt_paragraphs.strip_prompt_paragraphs(assignment["prompt"], "result")
+            self.assertEqual(base["template_id"], "exactory-problem-review-v2/result")
         records = self.store.snapshot()["records"]
         codes = {item["code"] for item in decisions.assess_problem_reviews(records, self.artifacts)["obligations"]}
         self.assertNotIn("problem_assurance_pending", codes)
@@ -1094,7 +1095,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
 
     def test_a_result_packet_offers_a_citation_only_for_a_passage_a_review_can_record(self):
         """R58: O1 cites a text passage and a JSON passage; the result packet carries a citation for the text passage
-        only. A link built to the JSON passage is refused with the typed reading code; the text citation is recorded."""
+        only. A link built to the JSON passage gets the typed fulltext refusal; the text citation is recorded."""
         self.prepare_problem_evidence()
         json_link = self.read_a_json_passage()
         unit = self.add_unbound_full_source()
@@ -1135,7 +1136,8 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                     with self.assertRaises(ResearchError) as caught:
                         self.mutate(decisions.record_value_review, dict(output, id="review-result-first", dossier_id=None,
                                                                         assignment_id="result-first"))
-                    self.assertEqual(caught.exception.code, "reading_missing")
+                    self.assertEqual(caught.exception.code, "source_link_not_fulltext")
+                    self.assertEqual(caught.exception.details['path'], '/value/objection_findings/0/evidence/0')
                 else:
                     self.assertEqual(self.record_result(reviewer, output)["id"], "review-result-second")
 
