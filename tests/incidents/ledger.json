@@ -5084,7 +5084,7 @@
       "record": "20261111235418-bar-final-refused-for-text-delivered-in-reduced-history",
       "class": "review session (coverage and reduced history)",
       "summary": "A final assessment was refused for citing a text delivered by an authenticated earlier turn after its body disappeared from replayed history.",
-      "fixed_in": "0.87.0",
+      "fixed_in": "0.89.0",
       "expected": "Citation and result coverage count selected verified actual turns of the session. An undelivered text stays refused. A new continuation whose fitted input loses earlier source bodies names those texts, their delivering turns, missing characters and retained verified excerpts under a versioned delivery notice; intact continuations and stored inputs keep their bytes. Exhausted-slot recovery and input-size reports belong to other units.",
       "test_kind": "real_shape",
       "tests": [
@@ -5099,7 +5099,7 @@
       "record": "20261113110022-every-open-record-and-review-capacity",
       "class": "openness evidence schema and stored-record compatibility",
       "summary": "D3 UB1 needs a closed v2 minimum for family readings, supporting readings and accepted results without activating v6 before its forecast and delivery units.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.0",
       "expected": "A fixture-store builder produces a v2 minimum with all lists. Both versions validate without mutation, v1 findings retain their audits and packet bytes, and v2 uses the UTC date of the latest capture instant. Current problem exports retain v1 and refuse unavailable new evidence before writing. Math-solver packet exports keep v1 and refuse v2 before writing.",
       "test_kind": "real_shape",
       "tests": [
@@ -5116,7 +5116,7 @@
       "class": "exhausted blind review slot",
       "summary": "Earlier successful source turns prevented a new reviewer after the final turn was refused twice.",
       "expected": "An exhausted bar head hands off to a new eligible blind reviewer in the same slot, preserving the earlier records and excluding both earlier reviewers.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.0",
       "test_kind": "real_shape",
       "tests": [
         "test_d2_outcomes.OutcomeTests.test_exhausted_bar_continuation_accepts_a_new_blind_reviewer"
@@ -5128,7 +5128,7 @@
       "class": "exhausted repaired bar slot",
       "summary": "A repaired bar continuation had no accepted next step after two audit refusals.",
       "expected": "Under D2 ruling Q4 a new eligible blind reviewer takes the exhausted slot. Same-reviewer refusal replacement and event-free slate or result repair remain later units.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.0",
       "test_kind": "real_shape",
       "tests": [
         "test_d2_outcomes.OutcomeTests.test_event_repair_step_contains_the_complete_ordered_binding"
@@ -5140,7 +5140,7 @@
       "class": "output capacity recovery",
       "summary": "One over-cap session answer ended its chain without a retry.",
       "expected": "Without a smaller task the same assignment gets one identical retry, then review_output_over_cap with role-specific route choices. The harness retains the effort.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.0",
       "test_kind": "real_shape",
       "tests": [
         "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry",
@@ -5153,7 +5153,7 @@
       "class": "provider refusal sequences",
       "summary": "Two safeguard stops ended a reading chain and lost its earlier completed turns.",
       "expected": "The current turn retains the measured three-attempt allowance and then waits for a new sequence, up to three sequences and later evidenced owner extensions. Cross-chain carried readings remain later units.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.0",
       "test_kind": "real_shape",
       "tests": [
         "test_d2_outcomes.OutcomeTests.test_sequences_reset_outcome_counts_and_owner_grants_one_more",
@@ -5167,7 +5167,7 @@
       "class": "interrupted call accounting",
       "summary": "Reconciled calls without a capture used the shorter incomplete-execution allowance.",
       "expected": "Three reconciled interruptions of a reading turn remain runnable without changing stored calls or requests. An explicitly stopped call spends no failure allowance, and a completed capture retains its meaning. Stop admission and driver settlement remain later units.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.0",
       "test_kind": "real_shape",
       "tests": [
         "test_d2_outcomes.OutcomeTests.test_three_reconciled_interruptions_continue_the_reading_chain",
@@ -5179,7 +5179,7 @@
       "record": "20261113074500-post-on-user-order-instruction-condition-export-and-chain-stop",
       "class": "generated output views and export delivery",
       "summary": "An override exported only the value citations although the statement searches had 29 relevant works read in full and no openness finding existed.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.0",
       "expected": "Override citations extend the ordinary projection with complete full readings of relevant and contradictory search works for the current statement. Family readings, version choices, a stable order, a shared 50-citation limit, overflow entries and origin counts remain explicit, while stored export bytes and review digests keep their meaning.",
       "test_kind": "real_shape",
       "tests": [
@@ -5196,7 +5196,7 @@
       "class": "instruction attribution",
       "summary": "A selection was saved with user messages and session text in a single undifferentiated instruction file.",
       "expected": "The parts form retains every message, dialog option, choice and note, pins the original bytes and separates user words from session-authored selections in status, next and final views. Stored text instructions keep their digests and views.",
-      "fixed_in": "0.87.0",
+      "fixed_in": "0.89.0",
       "test_kind": "real_shape",
       "tests": [
         "test_override_instruction_parts.InstructionPartsTests.test_selection_keeps_three_messages_apart_from_all_options_in_reports_and_view",
@@ -5209,7 +5209,7 @@
       "class": "override authority",
       "summary": "A conditional selection followed by a general instruction had no structured condition or explicit lifting relation in the override record.",
       "expected": "All applicable user overrides retain their conditions across overlapping actions and changed statements. Named or after-report lifts identify the earlier condition. Authority computes current check states and evidence without changing stored overrides or legacy coverage. Enforcement by export and public transports follows in UA5.",
-      "fixed_in": "0.87.0",
+      "fixed_in": "0.89.0",
       "test_kind": "real_shape",
       "tests": [
         "test_override_authority.OverrideAuthorityTests.test_incident_step_one_selection_records_unmet_condition_and_its_obligation",
@@ -5226,7 +5226,7 @@
       "class": "override publication authority",
       "summary": "The export and public transports could proceed after a general continuation while the selected condition was still unmet.",
       "expected": "Export and every public transport assess all applicable conditions, including local instructions without an automatic pass. The export refuses until met or explicitly lifted and pins authority in its manifest. Status, next and check mode expose the same assessment.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.0",
       "test_kind": "real_shape",
       "tests": [
         "test_override_readers.OverrideReaderTests.test_incident_export_refuses_before_lift_and_manifest_keeps_lifting_authority",
@@ -5241,7 +5241,7 @@
       "class": "post attribution",
       "summary": "Recording an external post did not preserve the instructions or the condition evidence under which its export was composed.",
       "expected": "A complete export named by digest supplies immutable post authority even after later instructions or findings. Without export authority, recording succeeds with a recording-time observation; after_post reports its unmet conditions without claiming their state at delivery. Stored posts retain their meaning and digest.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.0",
       "test_kind": "real_shape",
       "tests": [
         "test_post_override_attribution.PostOverrideAttributionTests.test_g13_export_authority_survives_intervening_instruction_and_changed_finding",
@@ -5254,7 +5254,7 @@
       "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
       "class": "review route output profile",
       "summary": "An effort-max bar exceeded its output cap without a route-capacity warning.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.0",
       "expected": "Route and probe receipts report the effective model output limit and measured task-size state. Route assessment names large stored attempts; status warns for an open chain while the reviewer effort and historical request bindings stay unchanged. Smaller-task recovery belongs to later D1 and D2 units.",
       "test_kind": "real_shape",
       "tests": [
@@ -5267,7 +5267,7 @@
       "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
       "class": "review route size measure",
       "summary": "A long reading chain reached a final input larger than its route could admit.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.0",
       "expected": "The shared route-capacity measure reports character and token limits with provenance, including conservative unknown-model defaults. This unit supplies the measure; the reading forecast and final delivery recovery remain in their own units.",
       "test_kind": "real_shape",
       "tests": [
@@ -5281,7 +5281,7 @@
       "class": "verification output criterion",
       "summary": "Judging only completed bars or short passing chains hides generated over-limit attempts.",
       "expected": "The predeclared verification reports every started max bar chain, needs twenty generated calls, enforces both the chain and combined bounds, and refuses size stops, owner steps or missing v4 plans.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.0",
       "test_kind": "real_shape",
       "tests": [
         "test_verification_criterion.VerificationCriterionTests.test_real_shape_three_historical_over_cap_turns_fail_and_list_tokens",
@@ -5295,7 +5295,7 @@
       "class": "HTTPS response capacity",
       "summary": "An oversized HTTPS response was unknown and its route decision could leave the review on its stopped head.",
       "expected": "response_over_limit permits one identical retry, then names the role steps that reach a recorded review on a serving route. Response bytes never become output-token evidence.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.0",
       "test_kind": "real_shape",
       "tests": [
         "test_capacity_signals.ResponseLimitJourneyTests.test_existing_bar_session_head_moves_by_retirement_probe_and_repair_to_recording",
@@ -5310,7 +5310,7 @@
       "class": "retained capacity signal evidence",
       "summary": "Claude compaction and non-streaming fallback were folded into unrelated general failures or output caps.",
       "expected": "A sole documented compaction is input_over_limit with compacted; an unrecognized context event remains unverified. Fallback is execution_incomplete and enters no output row; error text changes no measure.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.0",
       "test_kind": "real_shape",
       "tests": [
         "test_capacity_signals.CapacitySignalTests.test_claude_compaction_stream_is_input_limit_and_unknown_event_is_unverified",
@@ -5323,7 +5323,7 @@
       "class": "capacity advisory isolation",
       "summary": "A capacity warning decoded a malformed packet after the series had already selected its terminal stop and replaced the CLI result with input_io.",
       "expected": "An unreadable advisory task returns no size warning and preserves the original terminal refusal and exit status.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.0",
       "test_kind": "real_shape",
       "tests": [
         "test_automatic_gate_override.RecordedSeriesStopTests.test_malformed_packet_keeps_the_cli_terminal_stop_and_exit_code"
@@ -5335,7 +5335,7 @@
       "class": "review recording prerequisites and output refusals",
       "summary": "A final can cite delivered full text without an agent reading, or cite an abstract in a source-link form that no full reading satisfies.",
       "expected": "Unread full-text citations hand off to read before recording, preserving the selected output. Non-fulltext links write rechecked output refusals before reading checks, allow one more identical request, then use the exhausted role step. A corrected descriptor leaves only the actual reading work.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.0",
       "test_kind": "real_shape",
       "tests": [
         "test_record_reading_handoff.ReadingHandoffTests.test_delivered_fulltext_hands_off_reading_then_records_the_same_output_without_a_call",
