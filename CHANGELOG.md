@@ -3,6 +3,8 @@
 Each version has a full release note in [docs/releases](docs/releases/). The
 newest version comes first.
 
+Version [0.89.1](docs/releases/0.89.1.md) corrects the openness binding of 0.88.0 for a packet without a binding: a chain whose chosen capture was not yet delivered keeps its prefix and delivers that capture next. A new bar session runs under the session rules v3, with bounded artifact requests, settled requests and the union of delivered spans, and a new slate carries its forming records as artifact descriptors. No reviewer route becomes stale.
+
 Version [0.89.0](docs/releases/0.89.0.md) carries the first units of Stage 1 of the capacity, continuity and openness designs. The audit of a final credits each citation to the turn of the session that delivered it, a stop names its next step from one registry, an exhausted bar slot takes a new blind reviewer, and the outcomes of a reviewer call have their limits and sequences. The capacity of a route and its output profile are measured and reported, a response over the transport limit and a compaction have their outcomes, and the verification of the bar chains at `max` has its criterion. Overrides hold the parts of an instruction and its conditions, and every public write assesses them. No reviewer route becomes stale.
 
 Version [0.88.1](docs/releases/0.88.1.md) removes a store validation that 0.88.0 added before every command with a payload file. A command now reads the committed receipt of its request only when a path is refused with `unsafe_path`, so an artifact registration again makes two full validations of the history and one structural check. No reviewer route becomes stale.

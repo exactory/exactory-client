@@ -5354,7 +5354,7 @@
       "class": "openness-capture-binding",
       "summary": "Release 0.88.0 treated a 0.87.0 packet without a binding as the first capture even when its authenticated reading chain delivered a chosen extraction.",
       "expected": "Derive each unbound original from its delivery contract, then digest-bound stored reading plans including pending units, then planless authenticated delivery. Replay finished and stopped 0.87.0 reviews without changing packet, plan, prompt or request bytes; give delivery credit only to authenticated ready requests. Keep case 2 stale and hand its stopped v5 chain to export before any call.",
-      "fixed_in": "0.89.0",
+      "fixed_in": "0.89.1",
       "test_kind": "real_shape",
       "tests": [
         "test_unbound_packet_captures.UnboundPacketCaptureTests.test_stored_0870_findings_replay_with_their_delivered_capture_and_unchanged_bytes",
@@ -5372,7 +5372,7 @@
       "class": "review session rules and partial delivery",
       "summary": "Source continuations need explicit settlement and bounded artifact retrieval while preserving authenticated citation coverage after history reductions.",
       "expected": "A new v3 session settles its own pending fulltext request after part 3 of 22, lists the undelivered ranges as final limitations and never gains reading credit. Artifact retrieval is bounded by delivered-record references and exact delivered spans; v2 packet, prompt and request bytes remain verifiable.",
-      "fixed_in": "0.89.0",
+      "fixed_in": "0.89.1",
       "test_kind": "real_shape",
       "tests": [
         "test_session_rules_v3.SessionRulesTests.test_settling_after_three_of_twenty_two_parts_reaches_the_next_final",
@@ -5387,7 +5387,7 @@
       "class": "slate review provenance and capacity",
       "summary": "Imported forming histories attached every referenced body while native forming records did not arrive at all.",
       "expected": "New v3 slates deliver cited native forming calls and outcomes and imported records as artifact descriptors, keep origin-qualified citation identities and answer artifact requests on the next turn. Stored v2 slates retain their original delivery and digests. Oversized slate series and import size reports belong to later units.",
-      "fixed_in": "0.89.0",
+      "fixed_in": "0.89.1",
       "test_kind": "real_shape",
       "tests": [
         "test_slate_forming_descriptors.SlateFormingTests.test_native_call_and_three_outcomes_arrive_without_their_artifact_bodies",
@@ -5403,7 +5403,7 @@
       "class": "review session citation coverage",
       "summary": "Ordinary full-text parts were checked one mapping at a time, so a v3 final could not cite the union of two authenticated deliveries.",
       "expected": "A bar records a citation spanning characters 0 to 97404 after different turns deliver 0 to 60000 and 60000 to 97404. A citation ending at 97405 is refused with review_evidence_undelivered when the remaining text is held but undelivered. V2 projections and stored input bytes stay unchanged, and receipt inspection does not require the unsupplied original. Informed correction and exhausted-slot recovery belong to other units.",
-      "fixed_in": "0.89.0",
+      "fixed_in": "0.89.1",
       "test_kind": "real_shape",
       "tests": [
         "test_review_session_delivery.SessionDeliveryTests.test_final_citations_follow_the_union_of_two_delivered_parts",
