@@ -359,7 +359,7 @@ class OpenAlex:
                 identifier = normalize_identifier(item.get("id"))
                 if not identifier.startswith("openalex:"):
                     _invalid("id")
-                if not legacy and item.get("type") == "paratext":
+                if multiple and not legacy and item.get("type") == "paratext":
                     page.excluded_items.append({"index": index, "id": item["id"], "doi": item.get("doi"),
                                                 "record_type": "paratext", "reason": "openalex_paratext"})
                     continue

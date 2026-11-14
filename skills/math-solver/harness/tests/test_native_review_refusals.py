@@ -131,3 +131,44 @@ class NativeReviewRefusalTests(SearchCLIWorkspace, unittest.TestCase):
                                                "malformed-review-" + str(index), target)
                         self.assertEqual(caught.exception.code, "invalid_record")
                         self.assertEqual(controller.store.tree_path.read_bytes(), before)
+
+    def test_each_command_refuses_the_three_field_nonapproval_of_the_native_prompts(self):
+        # Every native result/recovery template, including the strategy template,
+        # inherits this form from native_review.LEGACY_PROMPT.
+        root = self.root
+        for command in ("reassess", "accept", "review", "complete"):
+            self.root = root
+            controller, spec, target = self.prepare_command(command)
+            spec["review"] = {key: spec["review"][key] for key in ("decision", "reason", "objections")}
+            objection_lists = (spec["review"]["objections"], [])
+            for decision in ("revise", "reject"):
+                for objections in objection_lists:
+                    with self.subTest(command=command, decision=decision, objections=objections):
+                        spec["review"].update(decision=decision, objections=objections)
+                        error = self.assert_refuses(command, controller, spec, target, "native_review_not_approved")
+                        self.assertEqual(error["details"], spec["review"])
+                        self.assertEqual(error["stop_class"], "decision")
+
+    def test_malformed_three_field_nonapprovals_keep_invalid_record(self):
+        root = self.root
+        for command in ("reassess", "accept", "review", "complete"):
+            self.root = root
+            controller, spec, target = self.prepare_command(command)
+            spec["review"] = {key: spec["review"][key] for key in ("decision", "reason", "objections")}
+            for decision in ("revise", "reject"):
+                for mutate in (
+                    lambda value: value.pop("reason"),
+                    lambda value: value.pop("objections"),
+                    lambda value: value.update(reason=" "),
+                    lambda value: value.update(objections="Repair the proof."),
+                    lambda value: value.update(objections=[{"blocking": 1, "description": "Repair"}]),
+                    lambda value: value.update(objections=[{"blocking": True, "description": " "}]),
+                    lambda value: value.update(unexpected=True),
+                    lambda value: value.update(subject_digest="1" * 64),
+                    lambda value: value.update(decision="approve"),
+                ):
+                    broken = copy.deepcopy(spec)
+                    broken["review"]["decision"] = decision
+                    mutate(broken["review"])
+                    with self.subTest(command=command, review=broken["review"]):
+                        self.assert_refuses(command, controller, broken, target, "invalid_record")

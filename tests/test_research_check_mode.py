@@ -84,6 +84,8 @@ class ResearchCheckModeTests(CheckCommandMixin, unittest.TestCase):
         before = self.read_workspace()
         for _ in range(2):
             diagnostic = self.assert_accepted_check(self.invoke_command("artifact", self.payload), 0)
+            self.assertEqual(set(diagnostic), {"check", "revision", "recorded", "operation", "payload_digest",
+                                               "snapshot_digest", "artifact_digests"})
             self.assertEqual(diagnostic["operation"], "workspace.artifact")
             self.assertEqual(len(diagnostic["payload_digest"]), 64)
             self.assertEqual(len(diagnostic["snapshot_digest"]), 64)

@@ -108,6 +108,38 @@ class AcquisitionTests(unittest.TestCase):
         self.assertEqual(len(records["reference_occurrence"]), 4)
         self.assertFalse(records["work"]["doi:10.1234/example"]["reference_metadata"]["bibliography_complete"])
 
+    def test_acquire_openalex_paratext_by_identifier_preserves_metadata_and_receipt_replay(self):
+        data = dict(openalex(), type="paratext", title="Issue front matter")
+        http, wire, _ = client([json_response(data)])
+        receipt = acquire_work(self.store, "openalex:W123", request_id="paratext", expected_revision=0, http=http)
+        self.assertEqual(receipt["status"], "complete")
+        self.assertEqual(receipt["work_ids"], ["openalex:W123"])
+        self.assertEqual(receipt["pending"], [])
+        work = self.store.snapshot()["records"]["work"]["openalex:W123"]
+        self.assertEqual(work["type"], "paratext")
+        self.assertEqual(work["title"], "Issue front matter")
+        self.assertEqual(ArtifactStore(self.root).read(work["abstract"]), b"An original abstract.")
+        self.assertEqual(len(wire.requests), 1)
+        before = self.store.snapshot()
+        replay_http, replay_wire, _ = client([])
+        self.assertEqual(acquire_work(self.store, "openalex:W123", request_id="paratext", expected_revision=0,
+                                      http=replay_http), receipt)
+        self.assertEqual(replay_wire.requests, [])
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_import_single_openalex_paratext_keeps_the_work_and_original_response(self):
+        raw = json.dumps(dict(openalex(), type="paratext", title="Issue front matter")).encode()
+        receipt = import_response(self.store, "openalex", raw, source_url="https://api.openalex.org/works/W123",
+                                  captured_at="2026-09-07T12:00:00Z", request_id="paratext-import", expected_revision=0)
+        self.assertEqual(receipt["work_ids"], ["openalex:W123"])
+        self.assertEqual(receipt["excluded_item_count"], 0)
+        self.assertEqual(receipt["excluded_items"], [])
+        self.assertEqual(receipt["pending"], [])
+        records = self.store.snapshot()["records"]
+        source = records["source"][receipt["source_ids"][0]]
+        self.assertEqual(ArtifactStore(self.root).read(source["response"]), raw)
+        self.assertEqual(records["work"]["openalex:W123"]["type"], "paratext")
+
     def test_failed_acquisition_cannot_erase_existing_abstract(self):
         self.metadata()
         before = self.store.snapshot()["records"]["work"]

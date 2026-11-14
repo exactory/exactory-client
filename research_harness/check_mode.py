@@ -87,8 +87,8 @@ class _CheckingStore:
         response = {"check": "accepted", "revision": self.revision, "recorded": False,
                               "operation": operation, "payload_digest": _digest(encoded_payload),
                               "snapshot_digest": snapshot_digest, "artifact_digests": self._artifacts.read_digests()}
-        if operation == "literature.search" and result["warnings"]:
-            response["warnings"] = result["warnings"]
+        if operation == "literature.search":
+            response.update(result)
         raise _CheckComplete(response)
 
 
