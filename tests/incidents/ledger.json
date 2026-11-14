@@ -5583,6 +5583,21 @@
         "test_review_unlisted_stops.UnlistedStopTests.test_driver_refuses_an_expired_unchanged_wait_with_a_command_outside_its_set",
         "test_review_unlisted_stops.UnlistedStopTests.test_driver_refuses_a_wait_refreshed_to_an_executable_command_outside_its_set"
       ]
+    },
+    {
+      "id": "series-review-a-codes-have-reviewed-next-steps",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "review chain stop coverage",
+      "summary": "Reachable review refusal codes lacked reviewed registry rows and explicit site conditions.",
+      "expected": "The stored_state group records each reviewed site and condition; every member ends a series with the shared decision and record-check answer. Codes needing workflow or environmental recovery are reported for design.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_series_code_rows_review_a.ReviewARowTests.test_every_stored_content_code_stops_at_the_shared_record_check_row",
+        "test_series_code_rows_review_a.ReviewARowTests.test_output_contract_codes_keep_the_scientific_refusal_outcome_and_retry",
+        "test_series_code_rows_review_a.ReviewARowTests.test_group_fixture_names_every_member_site_and_condition",
+        "test_series_code_rows_review_a.ReviewARowTests.test_pending_parts_hands_off_to_a_series_that_records_the_final"
+      ]
     }
   ]
 }

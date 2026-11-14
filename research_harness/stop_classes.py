@@ -7,6 +7,39 @@ Unknown codes retain the decision class used by stored records.
 import copy
 
 
+_STORED_CONTENT_CODES_REVIEW_A = (
+    'review_answer_recovery_invalid',
+    'review_correction_route_mismatch',
+    'review_history_ambiguous',
+    'review_objection_evidence_invalid',
+    'review_parts_delivery_invalid',
+    'review_prompt_mismatch',
+    'review_request_changed',
+    'review_invocation_unverified',
+    'review_output_unavailable',
+    'review_inventory_mismatch',
+    'review_source_parent_unverified',
+    'review_history_invalid',
+    'artifact_missing',
+    'artifact_corrupt',
+)
+
+_OUTPUT_CONTRACT_CODES_REVIEW_A = (
+    'review_adjudication_mismatch',
+    'review_bar_mismatch',
+    'review_bar_pending',
+    'review_composition_conflict',
+    'review_composition_pending',
+    'review_objection_history_incomplete',
+    'review_parts_request_no_progress',
+    'review_reassessment_incomplete',
+    'review_reassessment_mismatch',
+    'review_reassessment_missing',
+    'review_work_items_incomplete',
+)
+
+_CALL_OUTCOMES_REVIEW_A = (('review_provider_failure', 'provider_unavailable'),)
+
 STOP_REGISTRY = {
     code: dict(code=code, **{'class': 'waiting'}, owner='D2',
                next=dict(kind='wait', ends='The recorded owner or capacity becomes available.'))
@@ -41,7 +74,8 @@ for _code, _outcome in (
         ('review_input_too_large', 'input_over_limit'), ('review_timeout', 'timeout'),
         ('review_execution_incomplete', 'execution_incomplete'), ('review_invocation_interrupted', 'interrupted'),
         ('review_answer_malformed', 'answer_malformed'), ('review_failure_unknown', 'unknown'),
-        ('review_format_unsupported', 'format_unsupported')):
+        ('review_format_unsupported', 'format_unsupported')) + tuple(
+            (code, 'scientific_refused') for code in _OUTPUT_CONTRACT_CODES_REVIEW_A) + _CALL_OUTCOMES_REVIEW_A:
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
                                 next=dict(kind='outcome', outcome=_outcome))
 for _code in ('review_slots_fixed', 'review_resampling_forbidden', 'review_adjudicator_fixed',
@@ -68,7 +102,8 @@ for _code, _command in (
         ('verification_verdict_body_required', 'bind-verdict'),
         ('review_recording_required', 'review'),
         ('review_worker_reconciliation_required', 'review-attempt'),
-        ('assessment_incomplete', 'review-assignment')):
+        ('assessment_incomplete', 'review-assignment'),
+        ('review_parts_pending', 'review-series')):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
                                 next=dict(kind='handoff', command=_command))
 _STORED_STATE_CODES_FIRST = ('review_input_unreadable',)
@@ -119,7 +154,8 @@ STOP_GROUPS = {
 
 # Each review lane adds its own (group, codes) tuple here with its evidence file.
 for _group, _codes in (
-        ('stored_state', ()),
+        ('stored_state', _STORED_STATE_CODES_FIRST),
+        ('stored_state', _STORED_CONTENT_CODES_REVIEW_A),
 ):
     for _code in _codes:
         _row = copy.deepcopy(STOP_GROUPS[_group])
