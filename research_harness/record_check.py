@@ -57,7 +57,7 @@ EXPECTED_STOP_CODES = frozenset((
     'openness_review_not_approved',
 ))
 DEFAULT_TIME_BUDGET_SECONDS = 10800
-# The largest interval timer that macOS accepts: setitimer refuses 100000001 s with EINVAL.
+# A limit of the harness inside the range that macOS accepts for an interval timer (setitimer refuses 100000001 s).
 MAXIMUM_TIME_BUDGET_SECONDS = 100_000_000
 SNAPSHOT_ATTEMPTS = 3
 # Arms the processor-time interval timer of a math-solver reader, then replaces itself with the reader
@@ -539,7 +539,7 @@ def read_processor_seconds():
 def build_reader_timeout_error(reader, budget, details):
     return ResearchError(
         'record_command_timeout',
-        f'The {reader} reader used more processor time than its budget of {budget:g} seconds. '
+        f'The {reader} reader did not finish within its budget of {budget:g} seconds of processor time. '
         'record-check decided nothing about the record. Run record-check again with a larger --time-budget.',
         dict(details, budget_seconds=budget))
 

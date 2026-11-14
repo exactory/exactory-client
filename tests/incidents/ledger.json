@@ -4631,6 +4631,24 @@
         "test_research_record_check.RecordCheckTests.test_command_over_budget_is_failed_with_patched_processor_clock",
         "test_research_record_check.RecordCheckFollowupTests.test_cli_time_budget_defaults_to_10800_and_accepts_an_override"
       ]
+    },
+    {
+      "id": "bar-part-locator-and-repair-binding-diagnostics",
+      "record": "20261112072628-bar-final-refused-for-part-citation-with-whole-text-offsets",
+      "class": "output refusal diagnostics (part offsets and repair lineage)",
+      "summary": "Synthetic content reproduces the incident's record shape: a split text part is cited with whole-text offsets, and a later repair binds only the newest of two route retirements.",
+      "expected": "invalid_locator refuses the span without reinterpreting it and names the delivered part whole-text range and corresponding part-relative offsets. review_context_repair_mismatch names all expected cause events, missing event ids and concatenated evidence in recorded order. Exact part hashes and excerpts, accepted repairs and stored packet and prompt digests retain their meaning. Slot recovery and retry delivery are separate work.",
+      "fixed_in": "0.86.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_part_locator_refusal.PartLocatorRefusalTests.test_refused_span_names_part_range_and_relative_offsets_without_reinterpreting",
+        "test_part_locator_refusal.PartLocatorRefusalTests.test_whole_text_subspan_names_offsets_within_the_part",
+        "test_part_locator_refusal.PartLocatorRefusalTests.test_repeated_part_bytes_use_the_range_containing_the_supplied_span",
+        "test_part_locator_refusal.PartLocatorRefusalTests.test_only_matching_delivered_part_provides_whole_text_offset_guidance",
+        "test_part_locator_refusal.RepairBindingRefusalTests.test_second_retirement_alone_names_missing_predecessor_and_expected_evidence_order",
+        "test_part_locator_refusal.RepairBindingRefusalTests.test_missing_events_are_named_in_recorded_order",
+        "test_part_locator_refusal.RepairBindingRefusalTests.test_evidence_mismatch_names_all_expected_event_ids_and_evidence_in_recorded_order"
+      ]
     }
   ]
 }

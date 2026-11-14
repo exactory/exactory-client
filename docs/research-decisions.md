@@ -785,14 +785,16 @@ The subscription-backed route uses this shape:
 }
 ```
 
-Its inspected startup contract is for Codex CLI 0.159.2, 0.162.1 and, since
-0.85.1, 0.167.0, with user configuration and rules disabled, at reasoning
-effort `high`. Codex 0.167.0 records two more startup inputs in the rollout:
-the model's tool list as an `additional_tools` item, accepted only with the
-audited digest, and the review instructions as a developer message, accepted
-only when its text is exactly the instructions of the request. It accepts text
-evidence only. The adapter checks actual recorded input and rejects uninspected
-startup declarations, additional context and tool events. Other runtime contexts
+Its inspected startup contract is for Codex CLI 0.159.2 and 0.162.1 and, since
+the 0.85.1 release, for Codex CLI 0.167.0, with user configuration and rules
+disabled, at reasoning effort `high`. It accepts text evidence only. The
+adapter checks actual recorded input and rejects uninspected startup
+declarations, additional context and tool events. Codex CLI 0.167.0 records
+two startup inputs in the rollout that 0.162.1 does not record. The first is
+the model's tool list, an `additional_tools` item, and the adapter accepts it
+only when its digest is the audited digest. The second is a developer message
+with the review instructions, and the adapter accepts it only when its text is
+exactly the instructions of the request. Other runtime contexts
 remain unverified until inspected and probed. The route starts the CLI with the
 shell tool, multi-agent work, plugins, apps, hooks, memories, skill discovery,
 browser and computer use, web search and MCP servers disabled, and since 0.66.0

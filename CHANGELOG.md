@@ -3,6 +3,8 @@
 Each version has a full release note in [docs/releases](docs/releases/). The
 newest version comes first.
 
+Version [0.86.0](docs/releases/0.86.0.md) makes two refusals of a review output name the facts that correct the output. A span on a delivered part that uses whole-text offsets is still `invalid_locator`, and the message now names the part's whole-text range and the part-relative offsets of the same span. `review_context_repair_mismatch` now names the expected events in recorded order, the missing events and the expected evidence. The texts that 0.85.1 to 0.85.3 added are rewritten, and the `--time-budget` section now states the usage error for input that the parser rejects. No reviewer route becomes stale.
+
 Version [0.85.3](docs/releases/0.85.3.md) makes the `record-check --time-budget` bound the processor time of each reader instead of its elapsed time. A reader that waits while other processes use the machine passes, and a reader that uses more processor time than the budget still fails with `record_command_timeout`. The default budget is now 10,800 seconds of processor time, and the maximum is 100,000,000 seconds. Each reader row now gives `processor_seconds` next to `seconds`.
 
 Version [0.85.2](docs/releases/0.85.2.md) makes a command report a local tool that did not finish within its own time limit, such as a `pdftoppm` page render, with the code `local_tool_timeout` instead of a traceback. `record-check` reports the failed step and `ready` false. An unfinished tool changes no review, records no refusal and is not cached.

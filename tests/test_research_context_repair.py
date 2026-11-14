@@ -26,14 +26,14 @@ class ContextRepairTests(StrategyCase):
                     'assignment_id': 'assignment-bar-a', 'event_ids': ['exposure'], 'probe_id': 'repair-probe',
                     'reason': 'Reassess all original findings in a newly verified context.', 'evidence': [self.evidence]}}}
 
-    def probe(self):
+    def probe(self, identifier='repair-probe'):
         def response(route, request, credential):
             packet = json.loads(request['input'][0]['content'].removeprefix('The packet below is JSON.\n'))
             return self.provider_response({'allowed_control': packet['allowed_control'],
                                            'evidence_control': packet['evidence_control'], 'excluded_controls': []})
         with patch('research_harness.review_transport.send_request', side_effect=response):
-            self.protocol.probe_route(self.store, {'id': 'repair-probe', 'route_id': 'route'},
-                                      expected_revision=self.store.revision, request_id='repair-probe-call',
+            self.protocol.probe_route(self.store, {'id': identifier, 'route_id': 'route'},
+                                      expected_revision=self.store.revision, request_id=identifier + '-call',
                                       credential='fixture-only')
 
     def prepare(self, payload=None):
@@ -53,6 +53,24 @@ class ContextRepairTests(StrategyCase):
         self.assertEqual(prepared['scientific_history'][0]['observed_output']['value']['status'], 'insufficient')
         records = self.store.snapshot()['records']
         self.assertEqual(prepared['packet'], json.loads(self.artifacts.read(records['review_assignment']['assignment-bar-a']['packet'])))
+        # Stored repairs retain their set-based binding and their exact packet, even with multiple causes.
+        second_evidence = self.artifacts.put(b'A second actual contamination event.', 'text/plain')
+        self.mutate(self.protocol.record_context_event, {
+            'id': 'second-exposure', 'assignment_id': 'assignment-bar-a', 'kind': 'contamination',
+            'source': 'author_history', 'reason': 'A second actual exposure reached this context.',
+            'evidence': [second_evidence]})
+        self.probe('second-repair-probe')
+        payload = self.payload()
+        repair = payload['context']['context_repair']
+        repair.update(event_ids=['exposure', 'second-exposure'], evidence=[self.evidence, second_evidence],
+                      probe_id='second-repair-probe')
+        before = self.store.snapshot()
+        ordered = self.prepare(payload)
+        repair['event_ids'].reverse()
+        repair['evidence'].reverse()
+        self.assertEqual(self.prepare(payload), ordered)
+        self.assertEqual(self.store.snapshot(), before)
+        self.assertEqual(ordered['packet'], prepared['packet'])
 
     def test_repair_cannot_omit_recorded_contamination_events(self):
         self.probe()
