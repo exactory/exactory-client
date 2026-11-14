@@ -77,12 +77,16 @@ inspection locations as `span` locators (offsets and the hash of the exact
 substring), never as whole-document quotes. Read the extraction
 diagnostics on a capture before dispatching a reader. `fulltext` keeps the
 plain text of a PDF by itself when layout mode pads the text, and records that
-choice in `extraction.layout_selection`. When the record already holds a
-padded capture of a PDF (a whitespace fraction above 0.90 or an expansion
-ratio above 2.0), acquire the PDF again and then choose the new capture with
-`select-main-capture`: until that choice the first capture of an original
-stays its main capture, whose text a review chain delivers. The CLI reference
-gives the conditions of that command.
+choice in `extraction.layout_selection`. It makes the choice only for a
+request that gives no `layout` option and no OCR, and only after a layout
+extraction that succeeded. When the record already holds a padded capture of a
+PDF (a whitespace fraction above 0.90 or an expansion ratio above 2.0),
+acquire the PDF again with such a request, under a new request id. Confirm
+that the new capture is available with an extracted text: when the plain
+extraction fails, the capture is `pending` and cannot be chosen. Then choose
+the new capture with `select-main-capture`: until that choice the first
+capture of an original stays its main capture, whose text a review chain
+delivers. The CLI reference gives the conditions of that command.
 Acquire a
 large PDF original, or a PDF transfer or extraction that a single `fulltext`
 call cannot finish within its limits, as a full-text job: `fulltext-start`

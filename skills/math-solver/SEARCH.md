@@ -2727,10 +2727,13 @@ assignment for a review of one turn. `attempt_id`
 and `output_digest` are those of the observed output of that final turn in the
 common store. The summary and its digest do not hold the links, so
 `native_attempt_digest` and every record that cites it stay as they are. A
-repeat of `deliver-attempt` for an unchanged state writes the link records that
-the store lacks and nothing else: it adds no attempt record and does not move
-the pointer. This repeat gives the links to an attempt that was delivered before
-0.88.0. A link record stays when its acceptance is later invalidated. A link key
+repeat of `deliver-attempt` for an unchanged state that the current pointer
+already names writes the link records that the store lacks and nothing else:
+it adds no attempt record and does not move the pointer. Such a repeat gives the
+links to an attempt that was delivered before 0.88.0. A repeat of an earlier
+snapshot, which the pointer no longer names, writes the missing links too and
+moves the pointer back, as stated above. A link record stays when its
+acceptance is later invalidated. A link key
 that already holds other content refuses the whole delivery with
 `record_conflict`. The research harness shows no view of its own for the links,
 and `record-check` verifies each of them against its review

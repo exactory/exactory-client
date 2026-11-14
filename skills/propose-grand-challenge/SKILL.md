@@ -89,10 +89,11 @@ Do not run `post-challenge` until every locator resolves.
    For an arXiv locator, give `"arxivId": "<arxiv-id>"` in place of `"doi"`.
    Give the title and every author of the work, one name in each string, in
    the order of the work. The check compares both with the registry record of
-   the identifier, so a wrong title or a wrong author list is caught. An entry
-   without `authors` is blocking (`author_mismatch`) whenever the registry
-   record lists authors, because the author comparison catches a fabricated
-   citation that carries a real identifier.
+   the identifier, the title first and then the authors, so a wrong title or a
+   wrong author list is caught. An entry whose title agrees and that has no
+   `authors` is blocking (`author_mismatch`) whenever the registry record
+   lists authors, because the author comparison catches a fabricated citation
+   that carries a real identifier.
 2. Run
    `exactory-check lookup --refs-json challenge-refs.json --out challenge-citation-report.json`.
    Always give `--out`: the default report path belongs to a draft

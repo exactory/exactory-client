@@ -9,14 +9,21 @@ from . import review_protocol as protocol
 
 
 _USAGE_WARNING = ('The reviewer turns that this chain still plans are estimated to need more of this usage window '
-                  'than is left before its reset. The estimate is advisory and changes no plan. If a call reaches '
-                  'the limit of the window, it is the outcome usage_limit, and review-series waits for the reset. '
-                  'Report the estimate in your summary. The details give the figures and their ground.')
+                  'than is left before its reset. The estimate is advisory. It changes no plan, and usage figures '
+                  'do not decide the outcome of a call. A call is the outcome usage_limit only when the provider '
+                  'answers it with its limit message. review-series then waits until the reset that the answer '
+                  'states, or by the provider schedule, and stops when the failures that the schedule or the turn '
+                  'position allows are used up. If a wait ends more than 30 minutes ahead, review-series exits '
+                  'with status 4. Run it again at not_before. Report the estimate in your summary. The details '
+                  'give the figures and their ground.')
 _USAGE_GROUND = ('utilization_per_call is the mean increase of the utilization from one call to the next. It is taken '
-                 'over the latest consecutive calls of this record whose retained events report this window with '
-                 'the same reset time. Other use of the account between those calls is part of that increase. The '
-                 'estimate counts one call for each planned turn. It does not count a run that is repeated after a '
-                 'failure or a turn that a passage request adds.')
+                 'over the latest consecutive retained responses of calls on Claude routes of this record that '
+                 'report this window with one usable reset time and a utilization that does not decrease. A '
+                 'retained response that does not report the window, another reset time or a lower utilization '
+                 'starts a new sample. A call without a retained response is left out and ends no sample. Other '
+                 'use of the account between those calls is part of that increase. The estimate counts one call '
+                 'for each planned turn. It does not count a run that is repeated after a failure or a turn that '
+                 'a passage request adds.')
 
 
 def _list_calls(records):

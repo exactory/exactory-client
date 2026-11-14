@@ -2205,8 +2205,9 @@ is refused (`export_destination_outside_final`). Use the exported `title.txt`,
 Keep an exported `formal-statement.txt` when the record includes one. The export
 also writes `citation-refs.json`, the reference list of the same citations for
 the citation check: one entry for each entry of `citations.json`, in the same
-order, with the title and the authors that the record holds for the work and
-with its DOI or its arXiv id. That file is not sent with the post. Run the
+order, with the title and the authors that the record holds for the work and,
+when the work has one, with its DOI or its arXiv id. That file is not sent with
+the post. Run the
 citation and duplicate checks below on those exported files unchanged. A change
 to any part after export requires a new statement record and starts the post gate
 again.
@@ -2267,8 +2268,9 @@ Check every citation locator before posting, exactly as `/exactory:propose-grand
    `[{"referenceString": "<citation>", "bibliography": {"doi": "<doi>", "title": "<title>", "authors": ["<author>", "<author>"]}}]`.
    For an arXiv locator, give `"arxivId": "<arxiv-id>"` in place of `"doi"`. Give the title
    and every author of the work, one name in each string, in the order of the work. The check
-   compares both with the registry record of the identifier. An entry without `authors` is
-   blocking (`author_mismatch`) whenever the registry record lists authors, because the author
+   compares both with the registry record of the identifier, the title first and then the
+   authors. An entry whose title agrees and that has no `authors` is blocking
+   (`author_mismatch`) whenever the registry record lists authors, because the author
    comparison catches a fabricated citation that carries a real identifier.
    For a problem with a research record, do not write this file: the reference list is the
    exported `citation-refs.json`. Do not build a list from the `citation` strings of
@@ -2289,11 +2291,30 @@ Check every citation locator before posting, exactly as `/exactory:propose-grand
    shows a difference between the record and the registry: the title or the authors that the
    record holds for the work differ from the registry record of the identifier, or the
    registry holds another work, or no work, under the identifier. The entry's `detail` states
-   the difference. Correct the citation in the record and export again. An entry of the
-   exported list without `doi` and without `arxivId` is a work whose locator is an https URL.
-   The check searches Crossref and OpenAlex for its title and reports it `unresolved` when
-   neither lists the work. Check such a work under step 4. When its locator returns the cited
-   document, its status in the report does not hold the post back.
+   the difference. No command changes a title, an author list or an identifier that a work
+   record already holds: a new acquisition of the work fills only a title or an author list
+   that is empty, and `problem-citation-metadata` refuses a work that has a DOI or an arXiv
+   identity (`problem_citation_work_ineligible`). So do not acquire the work again and do not
+   export again to change a value that the record holds, because both give the same entry.
+   Fetch the registry record of the identifier and compare it with the document that the
+   record read, so that you know which of the two differs. The entry stays blocking and the
+   post waits: keep the report, and report the entry, its `detail` and the result of your
+   comparison to the user.
+   An entry of the exported list without `doi` and without `arxivId` is a work whose locator
+   is an https URL. The check searches Crossref and OpenAlex for its title. It reports the
+   entry `unresolved` when neither lists a work with that title, and `author_mismatch` when
+   a work that they list under that title has other authors. For either status, fetch the
+   locator under step 4 and compare the title and every author of the entry with the
+   document that it returns. An `unresolved` entry whose title and authors agree with that
+   document does not hold the post back. When the title or the authors of the entry differ
+   from the document, the record holds wrong metadata. For a `url:` work, record the title
+   and the authors of the document with `problem-citation-metadata` (a correction is a new
+   id with the complete payload; the CLI reference gives its conditions). The new record
+   changes the evidence digest, so export again after `exactory-research gate post` reports
+   ready.
+   In the two other cases, wrong metadata of a work that is not a `url:` work and an
+   `author_mismatch` entry whose authors agree with the document, the entry stays blocking:
+   report it to the user as above.
 4. Fetch every https locator. Check that it returns the cited document.
 
 Check that the problem is not already posted:

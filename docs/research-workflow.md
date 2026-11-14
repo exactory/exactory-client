@@ -543,9 +543,12 @@ back with `exactory problem <id>`, compare its statement, details, resolution
 criteria and area with the selected statement, and store that response with
 `artifact`. Record the post with `problem-post-external`: the returned `id` as
 `problem_id`, the manifest's `statement_digest`, that artifact as `evidence`,
-the response's `createdAt` unchanged as `posted_at`, and the export digest,
-which is the name of the export folder, as `export_digest`; the override
-already keeps the user's instruction. `problem-posted` refuses this export, and
+the response's `createdAt` unchanged as `posted_at`, and the export digest as
+`export_digest`: the 64 lowercase hexadecimal characters that name the export
+folder under `final/problem/exports/`. When the export command returns a
+folder of the history whose name has a suffix such as `-2` after the digest,
+leave the suffix out. The override already keeps the user's instruction.
+`problem-posted` refuses this export, and
 `status` shows the post with `gate` `bypassed`.
 
 ### The math-solver controller
@@ -1452,8 +1455,9 @@ A capture with this list does not import the references and the full-text
 locations of its works. Acquire a work that becomes relevant by its
 identifier with `acquire`, which reads the whole record. Give every page of
 one query the same `select`. The pages of one query share every parameter
-except paging, so pages with different lists do not form one enumeration,
-and the search records each of them as an incomplete response.
+except paging, so pages with different lists form separate page groups. Each
+group must enumerate its results by itself, and the search records a group
+that does not as an incomplete response.
 
 ```sh
 exactory-research example search > direct-search.json

@@ -52,7 +52,8 @@ def bind_import_query(mappings, source_url):
         raise ResearchError("invalid_import",
                             "The template of query_path does not hold " + placeholder + " exactly once as a whole "
                             "path segment, or it holds another brace. Write the template with " + placeholder
-                            + " as one whole segment between slashes, once, and with no other brace.")
+                            + " as one whole path segment, once, and with no other brace. It can be the last "
+                            "segment of the path.")
     actual = urlsplit(source_url).path.split("/")
     if len(parts) != len(actual) or any(part != value for part, value in zip(parts, actual) if part != placeholder):
         raise ResearchError("invalid_import",

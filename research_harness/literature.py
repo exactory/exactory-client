@@ -248,12 +248,12 @@ def _search_response(records, artifacts, response, scope, *, parse_version=1):
         actual = [value for key, value in parse_qsl(urlsplit(source["url"]).query) if key in names]
         if response["query"] not in actual and (path_query is None or response["query"] != path_query["value"]):
             raise ResearchError("invalid_search",
-                                "query is not a value that the capture of this response holds. Without "
-                                "query_locator, query must equal the value of a search-query parameter of the "
-                                "captured URL. For a web capture whose import declared query_path, query can also "
-                                "equal the path segment that the import bound. Give one of these exact values, or "
-                                "name a saved value of the response with query_locator. The search row of the CLI "
-                                "reference names the parameters of each provider.")
+                                "query does not equal the value of a search-query parameter of the captured URL "
+                                "of this response, or the path segment that a web import bound with query_path. "
+                                "Give one of these exact values. The search row of the CLI reference names the "
+                                "parameters of each provider. For a web or MCP capture, you can instead name a "
+                                "saved value of the response with query_locator. A capture from arXiv, OpenAlex "
+                                "or Crossref needs the value of its URL parameter in every case.")
     if source["provider"] in ("arxiv", "openalex", "crossref"):
         page = native_page(source, artifacts.read(source["response"]), response["query"], scope, parse_version=parse_version)
         found, pending = page["found"], []

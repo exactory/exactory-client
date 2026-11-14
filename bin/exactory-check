@@ -781,7 +781,8 @@ def _compare_entry_with_meta(entry: dict, meta: dict) -> dict:
     if title and not _titles_match(title, meta.get("titles") or [meta.get("title", "")]):
         return {"status": "title_mismatch",
                 "detail": f"the id resolves to a work titled '{meta.get('registry_title', meta.get('title'))}'"
-                          f" but the entry gives the title '{title}'"}
+                          f" but the entry gives the title '{title}'. Find out which work the citation"
+                          " means, correct its id or its title, and run the check again."}
     authors_ok, why = _compare_author_lists(entry.get("author", ""), meta.get("authors") or [])
     if not authors_ok:
         return {"status": "author_mismatch", "detail": why}
