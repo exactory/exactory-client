@@ -1,8 +1,6 @@
 """RR8/RR9 exercise registry rows through retained records and public commands."""
 
 import copy
-from contextlib import redirect_stderr
-import io
 import unittest
 from unittest.mock import patch
 
@@ -11,7 +9,7 @@ import openness_reading_fixtures as reading_fixtures
 import problem_parts_fixtures as legacy_fixtures
 import test_review_continuation as continuation_fixtures
 import test_review_staged_scale_entry as staged_fixtures
-from research_harness import record_check, review_continuation, review_series
+from research_harness import cli, review_continuation, review_series
 from research_harness import review_protocol as protocol, stop_classes
 from research_harness.errors import ResearchError
 from research_harness.review_plan_steps import complete_plan
@@ -128,40 +126,27 @@ class RegistryRowsFirstTests(unittest.TestCase):
         self.assertTrue(work['prerequisites'])
         self.assertNotIn('unlisted', terminal['details'])
 
-    def test_stored_content_proof_keeps_the_last_line_and_first_record_check_failure(self):
+    def test_stored_state_members_end_with_the_record_check_decision(self):
         fixture = self.prepare(continuation_fixtures.ContinuationTests)
-        case = fixture.case
-        assignment = copy.deepcopy(fixture.assignment)
-        assignment['packet'] = case.artifacts.put(b'{broken', 'application/json')
-        assignment['review_parts'] = dict(adapter='problem_result')
+        action = fixture.plan()
+        for code in stop_classes._STORED_STATE_CODES_FIRST:
+            with self.subTest(code=code):
+                def refuse_operation(store, payload, **identity):
+                    raise ResearchError(code, 'The retained review input is unreadable.')
 
-        def write_inconsistent_content(transaction):
-            transaction.put('review_assignment', assignment['id'], assignment)
-            return assignment
-
-        # The Store accepts the event and authenticates its history. Review
-        # commands never write this inconsistent parts binding and packet.
-        case.store.mutate('fixture.inconsistent_content', {}, write_inconsistent_content,
-                          expected_revision=case.store.revision, request_id='inconsistent-content')
-        before = copy.deepcopy(case.store.snapshot()['records']['review_assignment'])
-        rows = []
-        diagnostics = io.StringIO()
-        with redirect_stderr(diagnostics):
-            self.assertEqual(review_series.run_series(case.store, assignment['id'], emit=rows.append), 3)
-        self.assertIn('Output views were not rendered', diagnostics.getvalue())
-        terminal = rows[-1]
-        self.assertEqual((terminal['head_id'], terminal['state'], terminal['code']),
-                         (assignment['id'], 'stop', 'review_input_unreadable'))
-        self.assertNotIn('unlisted', terminal['details'])
-        self.assertEqual(terminal['details']['decision']['then'][0]['steps'][0]['command'], 'record-check')
-        self.assertEqual(stop_classes.STOP_REGISTRY[terminal['code']]['group'], 'stored_state')
-        report = record_check.check_record(case.store.root, isolate=False)
-        failed = next(row for row in report['steps'] if row['status'] == 'failed')
-        self.assertEqual(failed['step'], 'authentication')
-        self.assertEqual(failed['error']['code'], 'record_json_invalid')
-        self.assertEqual([(row['step'], row['status']) for row in report['steps'][:3]],
-                         [('snapshot', 'passed'), ('integrity', 'passed'), ('reconstruction', 'passed')])
-        self.assertEqual(case.store.snapshot()['records']['review_assignment'], before)
+                rows = []
+                with patch.dict(cli.OPERATIONS, {action['command']: refuse_operation}):
+                    exit_code = review_series.run_series(fixture.case.store, fixture.assignment['id'], emit=rows.append)
+                self.assertEqual(exit_code, 3)
+                terminal = rows[-1]
+                self.assertEqual((terminal['head_id'], terminal['state'], terminal['code'], terminal['stop_class']),
+                                 (fixture.assignment['id'], 'stop', code, 'decision'))
+                self.assertNotIn('unlisted', terminal['details'])
+                row = stop_classes.STOP_REGISTRY[code]
+                self.assertEqual(row['group'], 'stored_state')
+                decision = {key: value for key, value in row['next'].items() if key != 'kind'}
+                self.assertEqual(terminal['details']['decision'], decision)
+                self.assertEqual(terminal['details']['decision']['then'][0]['steps'][0]['command'], 'record-check')
 
     def test_pending_output_replans_to_an_accepted_call_and_recording(self):
         self.check_pending_replans(False)

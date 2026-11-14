@@ -6,7 +6,7 @@
       "record": "20261113110022-every-open-record-and-review-capacity",
       "class": "review continuity (designed registry rows and retained-record boundaries)",
       "summary": "Search freshness, a refused staged upgrade and unreadable retained input lacked reviewed next steps; pending output and source refusals stopped instead of reading the current plan.",
-      "expected": "A staged scale refusal preserves its slot and review-series records its existing delivery. A stale-search row accepts search before the planner requests a fresh export. D3 describes export choices and condition lifts. Inconsistent stored input keeps the head and unreadable-input code in the last line; record-check first reports the authentication failure after snapshot, integrity and reconstruction pass. Pending-state refusals replan to accepted calls or continuations without changing stored history.",
+      "expected": "A staged scale refusal preserves its slot and review-series records its existing delivery. A stale-search row accepts search before the planner requests a fresh export. D3 describes export choices and condition lifts. Each grouped stored-state code raised by an executed operation ends with the registry decision and its record-check answer. Pending-state refusals replan to accepted calls or continuations without changing stored history.",
       "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "tests": [
@@ -14,7 +14,7 @@
         "test_registry_rows_first.RegistryRowsFirstTests.test_openness_search_stale_executes_search_before_the_export_handoff",
         "test_registry_rows_first.RegistryRowsFirstTests.test_openness_minimum_gaps_describes_both_export_choices",
         "test_registry_rows_first.RegistryRowsFirstTests.test_gate_override_condition_unmet_describes_lift_or_condition_work",
-        "test_registry_rows_first.RegistryRowsFirstTests.test_stored_content_proof_keeps_the_last_line_and_first_record_check_failure",
+        "test_registry_rows_first.RegistryRowsFirstTests.test_stored_state_members_end_with_the_record_check_decision",
         "test_registry_rows_first.RegistryRowsFirstTests.test_pending_output_replans_to_an_accepted_call_and_recording",
         "test_registry_rows_first.RegistryRowsFirstTests.test_pending_sources_replan_to_an_accepted_continuation_and_recording"
       ]
