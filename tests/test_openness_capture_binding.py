@@ -20,9 +20,16 @@ from research_harness.literature import import_bundle
 from research_harness.reading import record_reading
 
 BUILDERS_PATH = Path(__file__).parent / 'fixtures/openness_capture_builders_3e8325b.py.txt'
-BUILDERS_SHA256 = '7fa7bc60117ef91c630c945fa883c70fa6685e7c859e59d04936d99a6bb00bf7'
+BUILDERS_SHA256 = '0eb64154b8b428b94bc1c6cb885afb38ef789c04e81658001bc7a4c640062612'
 COMPACT_TEXT = ('Paper 1 opening line.\nThe compact extraction gives the complete theorem and proof.\n'
                 'References: none.')
+
+
+def adapt_builder(function):
+    """Let an unchanged historical builder ignore the later optional review context."""
+    def call_builder(*args, **kwargs):
+        return function(*args)
+    return call_builder
 
 
 @contextmanager
@@ -32,13 +39,19 @@ def build_before_capture_binding():
     if hashlib.sha256(source).hexdigest() != BUILDERS_SHA256:
         raise AssertionError('The pre-binding openness builders changed')
     with ExitStack() as stack:
-        for module, names in ((reading, ('list_reading_texts', 'list_math_text_rows', '_list_legacy_texts')),
+        for module, names in ((reading, ('list_reading_texts', 'list_math_text_rows', '_list_legacy_texts',
+                                        'list_reading_rows', 'prepare_packet', 'verify_problem_coverage',
+                                        'verify_chain', '_verify_legacy_chain', 'has_deliverable_passage')),
                               (openness, ('collect_reading_artifacts', 'export_openness')),
                               (sources, ('build_delivery',))):
             namespace = dict(vars(module))
             exec(compile(source, str(BUILDERS_PATH), 'exec'), namespace)
             for name in names:
-                stack.enter_context(patch.object(module, name, namespace[name]))
+                function = namespace[name]
+                if name in ('list_reading_texts', 'list_math_text_rows', '_list_legacy_texts',
+                            'list_reading_rows', 'build_delivery'):
+                    function = adapt_builder(function)
+                stack.enter_context(patch.object(module, name, function))
         yield
 
 

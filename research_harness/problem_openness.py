@@ -111,7 +111,7 @@ def prepare_openness(records, artifacts, value, revision):
             raise ResearchError("openness_evidence_mismatch", "Return the exact minimum supplied to the reviewer")
         reading_digests = set(finding["minimum"]["reading_digests"])
         from .capture_selection import bind_packet_selections
-        bound_records = bind_packet_selections(records, packet["scientific_context"])
+        bound_records = bind_packet_selections(records, packet["scientific_context"], artifacts=artifacts, review=assignment)
         required_artifacts = {reference["sha256"] for reading in bound_records.get("reading", {}).values()
                               if digest(reading) in reading_digests
                               for reference in collect_reading_artifacts(bound_records, artifacts, reading)}
