@@ -40,6 +40,15 @@ _OUTPUT_CONTRACT_CODES_REVIEW_A = (
 
 _CALL_OUTCOMES_REVIEW_A = (('review_provider_failure', 'provider_unavailable'),)
 
+_STORED_CONTENT_CODES_REVIEW_B = (
+    'invalid_native_review_packet',
+    'invalid_review_prompt_version',
+    'invalid_review_role',
+    'invalid_review_route',
+    'value_review_output_mismatch',
+)
+
+
 STOP_REGISTRY = {
     code: dict(code=code, **{'class': 'waiting'}, owner='D2',
                next=dict(kind='wait', ends='The recorded owner or capacity becomes available.'))
@@ -78,7 +87,25 @@ for _code, _outcome in (
             (code, 'scientific_refused') for code in _OUTPUT_CONTRACT_CODES_REVIEW_A) + _CALL_OUTCOMES_REVIEW_A:
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
                                 next=dict(kind='outcome', outcome=_outcome))
+for _code in (
+        'invalid_locator',
+        'invalid_native_review',
+        'invalid_reading_response',
+        'invalid_record',
+        'invalid_review_adjudication',
+        'invalid_review_source_request',
+        'invalid_review_staged',
+        'invalid_value_review',
+        'research_objection_identity_conflict',
+        'source_mismatch',
+        'value_review_support_missing',
+        'openness_minimum_required',
+        'openness_search_date',
+):
+    STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
+                                next=dict(kind='outcome', outcome='scientific_refused'))
 for _code in ('review_slots_fixed', 'review_resampling_forbidden', 'review_adjudicator_fixed',
+              'value_review_duplicate',
               'review_slot_exhausted', 'review_correction_exhausted', 'review_correction_ineligible'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2', next=dict(kind='role'))
 for _code, _step, _command in (
@@ -103,7 +130,8 @@ for _code, _command in (
         ('review_recording_required', 'review'),
         ('review_worker_reconciliation_required', 'review-attempt'),
         ('assessment_incomplete', 'review-assignment'),
-        ('review_parts_pending', 'review-series')):
+        ('review_parts_pending', 'review-series'),
+        ('problem_evidence_part_pending', 'review-series')):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
                                 next=dict(kind='handoff', command=_command))
 _STORED_STATE_CODES_FIRST = ('review_input_unreadable',)
@@ -111,7 +139,8 @@ _STORED_STATE_CODES_FIRST = ('review_input_unreadable',)
 for _code in _STORED_STATE_CODES_FIRST + ('review_turn_failures_exhausted', 'review_parts_budget_exhausted',
               'review_quality_measurement_pending', 'review_invocation_unverified',
               'review_output_unavailable', 'review_inventory_mismatch', 'review_source_parent_unverified',
-              'review_history_invalid', 'artifact_missing', 'artifact_corrupt', 'review_budget_exhausted'):
+              'review_history_invalid', 'artifact_missing', 'artifact_corrupt', 'review_budget_exhausted'
+              ) + _STORED_CONTENT_CODES_REVIEW_B:
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
         next=dict(kind='decision', owner_decides='How should this review boundary be resolved?',
                   then=[dict(answer='Check the retained record', steps=[dict(command='record-check')])]))
@@ -129,6 +158,17 @@ STOP_REGISTRY.update({
                         dict(answer='Meet the condition', steps=[], prerequisites=[dict(condition=
                             'Complete the work named by the condition-check obligations.')])])),
 })
+
+for _code in _STORED_CONTENT_CODES_REVIEW_B:
+    STOP_REGISTRY[_code]['group'] = 'stored_state'
+STOP_REGISTRY['problem_bar_calibration_required'] = dict(code='problem_bar_calibration_required',
+    **{'class': 'decision'}, owner='D2',
+    next=dict(kind='decision', owner_decides='Whether to refresh the bar for the current problem.',
+        then=[dict(answer='Refresh the named bar', steps=[dict(command='review-assignment',
+            payload=dict(role='bar', context={}),
+            chooses=['id', 'dossier_id', 'author_id', 'reviewer_id', 'route_id'],
+            prerequisites=[dict(condition=(
+                'Use the reviewer, route, author and dossier of the bar named by review_id.'))])])]))
 STOP_REGISTRY['problem_already_posted'] = dict(code='problem_already_posted', **{'class': 'decision'},
                                              owner='D2', next=dict(kind='done'))
 from .openness_reading import PROJECTION_STOP, PROBLEM_PROJECTION_DECISION, WAIT_PROBLEM_ANSWER, SMALLER_PACKET_ANSWER
@@ -156,6 +196,7 @@ STOP_GROUPS = {
 for _group, _codes in (
         ('stored_state', _STORED_STATE_CODES_FIRST),
         ('stored_state', _STORED_CONTENT_CODES_REVIEW_A),
+        ('stored_state', _STORED_CONTENT_CODES_REVIEW_B),
 ):
     for _code in _codes:
         _row = copy.deepcopy(STOP_GROUPS[_group])

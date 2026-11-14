@@ -5598,6 +5598,20 @@
         "test_series_code_rows_review_a.ReviewARowTests.test_group_fixture_names_every_member_site_and_condition",
         "test_series_code_rows_review_a.ReviewARowTests.test_pending_parts_hands_off_to_a_series_that_records_the_final"
       ]
+    },
+    {
+      "id": "review-b-series-stops-have-reviewed-next-steps",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "review continuity (registry rows and stored-content boundaries)",
+      "summary": "Reachable review refusals had no reviewed stop row, including checks of saved native packets and the continuations of stale bars and legacy evidence parts.",
+      "expected": "Stored-state members have per-site conditions and share the record-check decision. Review-output refusals retain their outcome, duplicate samples keep the role rule, and the named bar refresh and evidence-part continuation are accepted without rewriting earlier artifacts.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_stop_rows_review_b.ReviewBRowTests.test_scientific_refusal_next_run_is_accepted_and_records_the_valid_output",
+        "test_stop_rows_review_b.ReviewBRowTests.test_stale_bar_handoff_refreshes_the_named_bar_in_its_original_slot",
+        "test_stop_rows_review_b.ReviewBRowTests.test_pending_evidence_part_handoff_accepts_the_series_continuation"
+      ]
     }
   ]
 }
