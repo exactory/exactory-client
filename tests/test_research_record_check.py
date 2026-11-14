@@ -17,7 +17,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-from research_harness import cli, review_protocol as protocol
+from research_harness import bar_sources, cli, review_protocol as protocol
 from research_harness.artifacts import _OBJECT_DIRECTORY, _SEALED_DIRECTORY
 from research_harness.errors import ResearchError
 from research_harness.storage import Store
@@ -127,7 +127,8 @@ class RecordCheckTests(unittest.TestCase):
         self.addCleanup(self.case.doCleanups)
         self.case.prepare_review_route()
         self.case.supporting = self.case.artifacts.put(b'A synthetic field standard.', 'text/plain')
-        self.assignment = self.case.assign('bar', 'first', **self.case.deliver_supporting('first'))
+        with patch.object(bar_sources, 'SESSION_PROTOCOL', getattr(self, 'source_rules_protocol', bar_sources.SESSION_PROTOCOL)):
+            self.assignment = self.case.assign('bar', 'first', **self.case.deliver_supporting('first'))
 
     def observe(self, output=None, failure=False):
         response = self.case.build_provider_response(output or self.case.build_review_output('bar'))
@@ -648,11 +649,15 @@ class RecordCheckTests(unittest.TestCase):
         self.assertEqual(entry['sha256'], self.case.read_records()['review_probe_invocation']['probe']['request']['sha256'])
 
     def test_fingerprint_matches_0724_on_the_same_snapshot(self):
-        self.observe()
+        legacy = RecordCheckTests()
+        legacy.source_rules_protocol = bar_sources.PROTOCOL
+        legacy.setUp()
+        self.addCleanup(legacy.doCleanups)
+        legacy.observe()
         from research_harness.record_check import copy_snapshot
         with tempfile.TemporaryDirectory() as directory:
             clone = Path(directory) / 'snapshot'
-            copy_snapshot(self.case.root, clone)
+            copy_snapshot(legacy.case.root, clone)
             previous = Path(directory) / 'previous'
             previous.mkdir()
             # Preserve the real baseline readers even in CI's shallow checkout.

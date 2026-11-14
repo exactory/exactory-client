@@ -6,7 +6,7 @@ from problem_parts_fixtures import KEY, ResultPartsCase
 from review_parts_fixtures import PartsResultCase
 from test_problem_review_refresh import RefreshCase
 import test_research_problem_reviews as fixtures
-from research_harness import cli, problem_claims, problem_delivery, report_views, research_decisions as decisions
+from research_harness import bar_sources, cli, problem_claims, problem_delivery, report_views, research_decisions as decisions
 from research_harness import review_continuation, review_protocol as protocol
 
 
@@ -132,12 +132,14 @@ class PartsOccupancyMixin:
             self.case.put('literature_search', search['id'], search)
 
     def resolve_pair(self):
-        for reviewer in ('first', 'second'):
-            assignment = self.assign('original-' + reviewer, reviewer=reviewer)
-            output = self.case.build_review_output('result')
-            output['value']['objection_findings'] = [dict(id='synthetic-bound-gap', status='resolved',
-                reason='The supplied induction step closes this gap.', evidence=[self.case.supporting])]
-            self.record_final(assignment, output)
+        with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL):
+            for reviewer in ('first', 'second'):
+                assignment = self.assign('original-' + reviewer, reviewer=reviewer)
+                self.assertNotIn('source_rules', self.packet(assignment))
+                output = self.case.build_review_output('result')
+                output['value']['objection_findings'] = [dict(id='synthetic-bound-gap', status='resolved',
+                    reason='The supplied induction step closes this gap.', evidence=[self.case.supporting])]
+                self.record_final(assignment, output)
         report = decisions.assess_problem_reviews(self.case.read_records(), self.case.artifacts)
         self.assertTrue(report['ready'], report)
         self.assertNotIn('slot_outcomes', report)

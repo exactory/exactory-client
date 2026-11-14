@@ -5,7 +5,7 @@ from unittest.mock import patch
 from codex_route_fixtures import record_codex_route
 from strategy_fixtures import StrategyCase
 from test_reviewer_excerpt_sessions import ExcerptSessionCase, build_body, build_lemma
-from research_harness import review_excerpts, review_protocol as protocol, review_supplied_evidence
+from research_harness import bar_sources, review_excerpts, review_protocol as protocol, review_supplied_evidence
 from research_harness import review_transport as transport
 from research_harness.source_links import span_locator
 
@@ -175,7 +175,8 @@ class SessionBudgetTests(SessionBudgetHelpers, ExcerptSessionCase):
         self.error('review_source_continuation_fork', lambda: self.assign('b2', prior_assignment_id='a'))
 
     def test_a_session_of_0_64_2_continues_under_the_budget(self):
-        self.assign('a')
+        with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL):
+            self.assign('a')
         self.invoke('a', self.build_request_turn(self.requests[:2]))
         unbounded = patch.object(review_excerpts, 'TURN_FULLTEXT_CHARACTERS', 10 ** 7)
         with patch.object(review_excerpts, 'PROTOCOL', review_excerpts.PROTOCOL_V1), \

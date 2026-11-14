@@ -8,7 +8,41 @@
       "characters": 1299484,
       "text_characters": 1306921,
       "tokens_upper": 960972,
-      "input_tokens": 687640
+      "input_tokens": 687640,
+      "capacity_key": {
+        "adapter": "claude_cli_v1",
+        "endpoint": "claude://local",
+        "model": "claude-opus-5-5",
+        "runtime": {
+          "adapter": "claude_cli_v1",
+          "credential_mode": "claude-subscription",
+          "flags": [
+            "-p",
+            "--safe-mode",
+            "--tools",
+            "",
+            "--strict-mcp-config",
+            "--mcp-config",
+            "{\"mcpServers\":{}}",
+            "--disable-slash-commands",
+            "--no-session-persistence",
+            "--permission-prompts",
+            "none",
+            "--input-format",
+            "stream-json",
+            "--replay-user-messages",
+            "--output-format",
+            "stream-json",
+            "--verbose"
+          ],
+          "implementation_sha256": "ee183e027eaad81de13cfab1149000c027b4504842070537a1068c93dfb1a7bf",
+          "input_contract": "observed-print-stream-v1"
+        },
+        "configuration": {
+          "effort": "xhigh"
+        }
+      },
+      "capacity_prior_id": "d1-input-0"
     },
     {
       "adapter": "codex_cli_v1",
@@ -16,7 +50,44 @@
       "characters": 1027537,
       "text_characters": 1041701,
       "tokens_upper": 496049,
-      "input_tokens": 359900
+      "input_tokens": 359900,
+      "capacity_key": {
+        "adapter": "codex_cli_v1",
+        "endpoint": "codex://local",
+        "model": "gpt-6-astra",
+        "runtime": {
+          "adapter": "codex_cli_v1",
+          "controls": [
+            "project_doc_max_bytes=0",
+            "developer_instructions=\"\"",
+            "features.memories=false",
+            "features.external_agent_memory_import=false",
+            "features.plugins=false",
+            "features.apps=false",
+            "features.hooks=false",
+            "features.shell_tool=false",
+            "features.multi_agent=false",
+            "features.code_mode=false",
+            "features.code_mode_host=false",
+            "features.code_mode_only=false",
+            "features.js_repl=false",
+            "features.js_repl_tools_only=false",
+            "features.browser_use=false",
+            "features.computer_use=false",
+            "features.skip_host_skill_discovery=true",
+            "features.skill_search=false",
+            "web_search=\"disabled\"",
+            "mcp_servers={}",
+            "model_reasoning_effort=\"high\""
+          ],
+          "credential_mode": "chatgpt-subscription",
+          "implementation_sha256": "a53baa420784a146340ae595aadbd370b1917b33725a1abf805d3bab6126d078",
+          "input_contract": "observed-exec-rollout-v1",
+          "version": "codex-cli 0.163.0"
+        },
+        "configuration": {}
+      },
+      "capacity_prior_id": "d1-input-1"
     },
     {
       "adapter": "codex_cli_visual_v1",
@@ -24,7 +95,39 @@
       "characters": 1047217,
       "text_characters": 1065743,
       "tokens_upper": 507497,
-      "input_tokens": 364458
+      "input_tokens": 364458,
+      "capacity_key": {
+        "adapter": "codex_cli_visual_v1",
+        "endpoint": "codex://local",
+        "model": "gpt-6-astra",
+        "runtime": {
+          "adapter": "codex_cli_visual_v1",
+          "controls": [
+            "project_doc_max_bytes=0",
+            "developer_instructions=\"\"",
+            "features.memories=false",
+            "features.external_agent_memory_import=false",
+            "features.plugins=false",
+            "features.apps=false",
+            "features.hooks=false",
+            "features.shell_tool=false",
+            "features.multi_agent=false",
+            "features.browser_use=false",
+            "features.computer_use=false",
+            "features.skip_host_skill_discovery=true",
+            "features.skill_search=false",
+            "web_search=\"disabled\"",
+            "mcp_servers={}",
+            "model_reasoning_effort=\"high\""
+          ],
+          "credential_mode": "chatgpt-subscription",
+          "implementation_sha256": "ce9cb99c70d3a43afa503ae047d8b389d142ab50451b72735c935d801bb57a9e",
+          "input_contract": "observed-exec-rollout-visual-v1",
+          "version": "codex-cli 0.163.0"
+        },
+        "configuration": {}
+      },
+      "capacity_prior_id": "d1-input-2"
     },
     {
       "adapter": "codex_cli_visual_v1",
@@ -32,7 +135,39 @@
       "characters": 1028820,
       "text_characters": 1046462,
       "tokens_upper": 498316,
-      "input_tokens": 358029
+      "input_tokens": 358029,
+      "capacity_key": {
+        "adapter": "codex_cli_visual_v1",
+        "endpoint": "codex://local",
+        "model": "gpt-6.1-sol",
+        "runtime": {
+          "adapter": "codex_cli_visual_v1",
+          "controls": [
+            "project_doc_max_bytes=0",
+            "developer_instructions=\"\"",
+            "features.memories=false",
+            "features.external_agent_memory_import=false",
+            "features.plugins=false",
+            "features.apps=false",
+            "features.hooks=false",
+            "features.shell_tool=false",
+            "features.multi_agent=false",
+            "features.browser_use=false",
+            "features.computer_use=false",
+            "features.skip_host_skill_discovery=true",
+            "features.skill_search=false",
+            "web_search=\"disabled\"",
+            "mcp_servers={}",
+            "model_reasoning_effort=\"high\""
+          ],
+          "credential_mode": "chatgpt-subscription",
+          "implementation_sha256": "ce9cb99c70d3a43afa503ae047d8b389d142ab50451b72735c935d801bb57a9e",
+          "input_contract": "observed-exec-rollout-visual-v1",
+          "version": "codex-cli 0.163.0"
+        },
+        "configuration": {}
+      },
+      "capacity_prior_id": "d1-input-3"
     },
     {
       "adapter": "codex_cli_v1",
@@ -40,7 +175,39 @@
       "characters": 1044370,
       "text_characters": 1060750,
       "tokens_upper": 505120,
-      "input_tokens": 316707
+      "input_tokens": 316707,
+      "capacity_key": {
+        "adapter": "codex_cli_v1",
+        "endpoint": "codex://local",
+        "model": "gpt-6.1-sol",
+        "runtime": {
+          "adapter": "codex_cli_v1",
+          "controls": [
+            "project_doc_max_bytes=0",
+            "developer_instructions=\"\"",
+            "features.memories=false",
+            "features.external_agent_memory_import=false",
+            "features.plugins=false",
+            "features.apps=false",
+            "features.hooks=false",
+            "features.shell_tool=false",
+            "features.multi_agent=false",
+            "features.browser_use=false",
+            "features.computer_use=false",
+            "features.skip_host_skill_discovery=true",
+            "features.skill_search=false",
+            "web_search=\"disabled\"",
+            "mcp_servers={}",
+            "model_reasoning_effort=\"high\""
+          ],
+          "credential_mode": "chatgpt-subscription",
+          "implementation_sha256": "f2a3919312fba798f79edddc79d0b8e2f15ce62d5b1780244ff07325f62d02a6",
+          "input_contract": "observed-exec-rollout-v1",
+          "version": "codex-cli 0.163.0"
+        },
+        "configuration": {}
+      },
+      "capacity_prior_id": "d1-input-4"
     },
     {
       "adapter": "codex_cli_framed_v1",
@@ -48,7 +215,39 @@
       "characters": 1045443,
       "text_characters": 1052208,
       "tokens_upper": 501052,
-      "input_tokens": 307507
+      "input_tokens": 307507,
+      "capacity_key": {
+        "adapter": "codex_cli_framed_v1",
+        "endpoint": "codex://local",
+        "model": "gpt-6-astra",
+        "runtime": {
+          "adapter": "codex_cli_framed_v1",
+          "controls": [
+            "project_doc_max_bytes=0",
+            "developer_instructions=\"\"",
+            "features.memories=false",
+            "features.external_agent_memory_import=false",
+            "features.plugins=false",
+            "features.apps=false",
+            "features.hooks=false",
+            "features.shell_tool=false",
+            "features.multi_agent=false",
+            "features.browser_use=false",
+            "features.computer_use=false",
+            "features.skip_host_skill_discovery=true",
+            "features.skill_search=false",
+            "web_search=\"disabled\"",
+            "mcp_servers={}",
+            "model_reasoning_effort=\"high\""
+          ],
+          "credential_mode": "chatgpt-subscription",
+          "implementation_sha256": "6fb9de719778b211b75b6b08bfc3b3d2acbc267878aa0bb43e3f4ccd3ec76d70",
+          "input_contract": "observed-exec-rollout-framed-v1",
+          "version": "codex-cli 0.163.0"
+        },
+        "configuration": {}
+      },
+      "capacity_prior_id": "d1-input-5"
     },
     {
       "adapter": "codex_cli_v1",
@@ -56,7 +255,39 @@
       "characters": 596466,
       "text_characters": 612846,
       "tokens_upper": 291832,
-      "input_tokens": 193797
+      "input_tokens": 193797,
+      "capacity_key": {
+        "adapter": "codex_cli_v1",
+        "endpoint": "codex://local",
+        "model": "gpt-6-luna",
+        "runtime": {
+          "adapter": "codex_cli_v1",
+          "controls": [
+            "project_doc_max_bytes=0",
+            "developer_instructions=\"\"",
+            "features.memories=false",
+            "features.external_agent_memory_import=false",
+            "features.plugins=false",
+            "features.apps=false",
+            "features.hooks=false",
+            "features.shell_tool=false",
+            "features.multi_agent=false",
+            "features.browser_use=false",
+            "features.computer_use=false",
+            "features.skip_host_skill_discovery=true",
+            "features.skill_search=false",
+            "web_search=\"disabled\"",
+            "mcp_servers={}",
+            "model_reasoning_effort=\"high\""
+          ],
+          "credential_mode": "chatgpt-subscription",
+          "implementation_sha256": "f2a3919312fba798f79edddc79d0b8e2f15ce62d5b1780244ff07325f62d02a6",
+          "input_contract": "observed-exec-rollout-v1",
+          "version": "codex-cli 0.162.1"
+        },
+        "configuration": {}
+      },
+      "capacity_prior_id": "d1-input-6"
     }
   ],
   "probe_requests": [

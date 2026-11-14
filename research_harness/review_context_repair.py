@@ -360,7 +360,8 @@ def collect_scientific_history(records, artifacts, chain, roles):
         from .bar_sources import pending
         epoch = records.get('review_epoch', {}).get(ancestor.get('staged_review', {}).get('epoch_id'), {})
         if (scientific_output is not None and ancestor['role'] in roles
-                and not pending(packet, scientific_output, manifest=epoch.get('manifest'))):
+                and not pending(packet, scientific_output, manifest=epoch.get('manifest'))
+                and not scientific_output.get('settled_requests')):
             finals = _reviews(records, {ancestor['id']})
             if not any({key: value for key, value in saved.get('payload', saved).items()
                         if key not in ('id', 'dossier_id', 'assignment_id')} == scientific_output for saved in finals):

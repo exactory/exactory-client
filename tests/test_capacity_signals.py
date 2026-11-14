@@ -16,11 +16,13 @@ from research_harness.review_plan_steps import complete_plan
 import test_review_failure_class as failure_fixtures
 from test_review_output_profile import build_request, build_response
 from test_review_route_capacity import build_route
+from test_review_capacity_closure import build_runtime
 import test_research_claude_transport as stream_fixtures
 import test_review_continuation as continuation_fixtures
 import test_review_parts_study as study_fixtures
 import openness_reading_fixtures as reading_fixtures
-from codex_route_fixtures import record_codex_route, build_codex_response
+from codex_route_fixtures import record_codex_route, build_codex_response, install_codex_runtime, probe_codex_route
+from research_harness import review_codex_transport as codex_transport
 from research_harness import cli, review_excerpts
 from research_harness.errors import ResearchError
 from research_harness.review_continuation import plan_next
@@ -152,7 +154,8 @@ class ResponseLimitJourneyTests(unittest.TestCase):
     def test_response_choices_exclude_unverified_retired_and_unsupported_routes(self):
         fixture = self.prepare(continuation_fixtures.ContinuationTests)
         case = fixture.case
-        record_codex_route(case, 'serving', output_tokens=128000)
+        self.register_serving_route(case)
+        self.probe_serving_capacity(case)
         self.execute(case, 'review-route', dict(id='unverified', adapter='codex_cli_v1', model='fixture-model',
             endpoint='codex://local', configuration=dict(max_output_tokens=128000, timeout_seconds=5)))
         records = case.read_records()
@@ -174,6 +177,44 @@ class ResponseLimitJourneyTests(unittest.TestCase):
         self.execute(case, 'review-context', dict(id='withdraw', assignment_id=second['id'], source='owner',
             kind='route_retired', reason='Withdraw this fixture route.', evidence=[evidence]))
         self.assertEqual(describe(case.read_records()), [])
+
+    def test_response_choices_require_capacity_evidence_after_the_route_probe(self):
+        fixture = self.prepare(continuation_fixtures.ContinuationTests)
+        case = fixture.case
+        self.register_serving_route(case)
+
+        def describe():
+            records = case.read_records()
+            report = capacity.describe_route_capacity(records['review_route']['serving'],
+                records=records, artifacts=case.artifacts)
+            choices = complete_plan(records, case.artifacts, fixture.assignment,
+                dict(state='stop', code='review_response_too_large', details={}))['details']['serving_routes']
+            return report['input_tokens']['value'], choices
+
+        self.assertEqual(protocol.route_state(case.read_records(), case.artifacts, 'serving')['context_status'],
+                         'verified_for_route')
+        self.assertEqual(describe(), (0, []))
+        self.probe_serving_capacity(case)
+        self.assertEqual(describe(), (72000, ['serving']))
+
+    def register_serving_route(self, case):
+        install_codex_runtime(case)
+        runtime = patch.object(codex_transport, 'runtime', return_value=build_runtime())
+        runtime.start()
+        self.addCleanup(runtime.stop)
+        self.execute(case, 'review-route', dict(id='serving', adapter='codex_cli_v1', model='fixture-model',
+            endpoint='codex://local', configuration=dict(max_output_tokens=128000, timeout_seconds=5)))
+        probe_codex_route(case, 'probe-serving', 'serving')
+
+    def probe_serving_capacity(self, case):
+        def respond(route, request, credential):
+            packet = review_excerpts.read_sent_packet(request)
+            response = build_codex_response(route, request, dict(allowed_control=packet['allowed_control'],
+                evidence_control=packet['evidence_control'], excluded_controls=[]))
+            response['usage']['input_tokens'] = 200000
+            return response
+        with patch.object(protocol.transport, 'send_request', side_effect=respond):
+            self.execute(case, 'review-probe', dict(id='capacity-serving', route_id='serving'))
 
     def prepare(self, cls):
         fixture = cls()

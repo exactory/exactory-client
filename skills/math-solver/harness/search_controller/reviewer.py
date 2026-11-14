@@ -512,12 +512,14 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
         supplementary = supplied["scientific_context"].get("supplementary_inputs")
         validate_supplementary_inputs(supplementary, supplied["evidence"])
         if new:
-            from research_harness.capture_selection import bind_packet_selections
+            from research_harness.capture_selection import PACKET_KEY, bind_packet_selections
             minimum = value.get("findings", {}).get("openness", {}).get("minimum")
-            bound_records = (bind_packet_selections(records, supplied["scientific_context"])
+            bound_records = (bind_packet_selections(records, supplied["scientific_context"], artifacts=artifacts, review=assignment)
                              if minimum is not None else records)
             expected = packet(root, state, content, subject, kind(value), value.get("claim_digest"), value["reviewer"], artifacts,
                               openness=minimum, common_records=bound_records, supplementary=supplementary)
+            if PACKET_KEY not in supplied["scientific_context"]:
+                expected["scientific_context"].pop(PACKET_KEY, None)
             drift = validate_packet_context(supplied, expected, state)
             if drift:
                 current = dict(current, context_drift=drift)

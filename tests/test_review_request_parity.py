@@ -3,7 +3,7 @@
 Regenerate with tests/generate_review_request_parity.py, never from the harness
 under test. Every case compares full reports and states, ordered obligations,
 selected attempts, refusal details and fingerprints of exact serialized bytes.
-The separate r3 fixture pins only added advisory fields and cannot replace any
+The separate r4 fixture pins only added advisory fields and cannot replace any
 field authenticated by the original oracle.
 """
 
@@ -15,11 +15,11 @@ import unittest
 from unittest import mock
 
 import review_request_parity_fixtures as fixtures
-from research_harness import review_continuation
+from research_harness import bar_sources, review_continuation
 from research_harness.evidence import digest
 
 
-CAPACITY_PATH = fixtures.FROZEN_PATH.with_name('review-capacity-advisory-r3.json')
+CAPACITY_PATH = fixtures.FROZEN_PATH.with_name('review-capacity-advisory-r4.json')
 
 
 class ReviewRequestParityTests(unittest.TestCase):
@@ -45,7 +45,7 @@ class ReviewRequestParityTests(unittest.TestCase):
             return attempt
         self.assertEqual(attempt['origin'], 'instrumented')
         self.assertEqual(set(metadata), {'task', 'answer', 'cli_version', 'completed_generation',
-                                         'verified_input_tokens', 'usage'})
+                                         'verified_input_tokens', 'capacity_evidence', 'usage'})
         result = copy.deepcopy(attempt)
         for key, value in metadata.items():
             if key == 'usage':
@@ -56,6 +56,18 @@ class ReviewRequestParityTests(unittest.TestCase):
                 self.assertNotIn(key, result)
                 result[key] = value
         return result
+
+    def test_result_parts_v2_preserves_stored_inputs_under_the_v3_default(self):
+        with mock.patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL_V3):
+            actual = build_without_actions(fixtures.CASE_BUILDERS['result-parts-v2'])
+            self.assertEqual(bar_sources.SESSION_PROTOCOL, bar_sources.PROTOCOL_V3)
+        expected = self.frozen['cases']['result-parts-v2']
+        for field in ('stored_packets', 'stored_requests', 'emitted_requests', 'rebuilt_requests', 'authentication'):
+            with self.subTest(field=field):
+                self.assertEqual(actual[field], expected[field])
+        for identifier, state in actual['states'].items():
+            with self.subTest(assignment=identifier):
+                self.assertEqual(state['value']['prompt_hash'], expected['states'][identifier]['value']['prompt_hash'])
 
     def extend_expected_capacity(self, name, field, expected):
         if field == 'attempts':

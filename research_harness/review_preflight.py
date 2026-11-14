@@ -93,7 +93,7 @@ def build_assignment_report(records, artifacts, assignment, request=None):
                                          native_packet=assignment['context']['native_packet'])
         native = complete['native']
         if reading.is_openness_packet(native) or reading.is_math_openness_packet(native):
-            rows = reading.list_reading_rows(records, artifacts, native)
+            rows = reading.list_reading_rows(records, artifacts, native, review=assignment)
             record = (packet.get(reading.TURN_KEY, {}).get('reading_record') or packet.get(reading.RECORD_KEY)
                       or reading._create_record(reading.find_chain_protocol(native)))
             selected = reading._classify_final_texts(records, artifacts, native, rows, record['protocol'])

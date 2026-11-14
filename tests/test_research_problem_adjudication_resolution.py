@@ -6,7 +6,7 @@ from unittest.mock import patch
 import test_research_problem_delivery as delivery_fixtures
 import test_research_problem_objections as objection_fixtures
 
-from research_harness import research_decisions as decisions, review_protocol as protocol
+from research_harness import bar_sources, research_decisions as decisions, review_protocol as protocol
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 
@@ -407,6 +407,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                          ("review_evidence_undelivered", {"record_kind": "problem_candidate", "id": "candidate-1", "digest": None,
                                                          "path": "/objections/0/evidence"}))
 
+    @patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL)
     def test_a_stop_assurance_written_as_not_assessed_passes_the_gate(self):
         """The version 2 result prompt's own example writes the stop assurance as not_assessed with the reason that
         nothing requires a stop; the gate counts that as the assurance passing for a result on that prompt. Every
@@ -1094,7 +1095,8 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
 
     def test_a_result_packet_offers_a_citation_only_for_a_passage_a_review_can_record(self):
         """R58: O1 cites a text passage and a JSON passage; the result packet carries a citation for the text passage
-        only. A link built to the JSON passage is refused with the typed reading code; the text citation is recorded."""
+        only. A link built to the JSON passage, which is no full-text capture of its version, is refused as an output
+        with source_link_not_fulltext (closure C12, ruling 28); the text citation is recorded."""
         self.prepare_problem_evidence()
         json_link = self.read_a_json_passage()
         unit = self.add_unbound_full_source()
@@ -1135,7 +1137,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                     with self.assertRaises(ResearchError) as caught:
                         self.mutate(decisions.record_value_review, dict(output, id="review-result-first", dossier_id=None,
                                                                         assignment_id="result-first"))
-                    self.assertEqual(caught.exception.code, "reading_missing")
+                    self.assertEqual(caught.exception.code, "source_link_not_fulltext")
                 else:
                     self.assertEqual(self.record_result(reviewer, output)["id"], "review-result-second")
 
@@ -1421,6 +1423,7 @@ class ReviewOutputRefusalTests(delivery_fixtures.ProblemDeliveryCase):
     def records(self):
         return self.store.snapshot()["records"]
 
+    @patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL)
     def prepare_resolved_bar_refresh(self, *, historical=False, source_request=False):
         """Retain a legacy result's packet after its delivered bar objection is resolved."""
         objection_fixtures.ProblemObjectionTests.prepare_version_one_bar_objection(self)

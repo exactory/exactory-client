@@ -5347,6 +5347,121 @@
         "test_record_reading_handoff.ReadingHandoffTests.test_catalog_gap_keeps_the_pure_refusal_before_the_corrected_output_needs_reading",
         "test_record_reading_handoff.ReadingHandoffTests.test_a_reading_completed_during_the_recording_error_records_without_a_reviewer_call"
       ]
+    },
+    {
+      "id": "unbound-openness-packet-delivered-capture",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "openness-capture-binding",
+      "summary": "Release 0.88.0 treated a 0.87.0 packet without a binding as the first capture even when its authenticated reading chain delivered a chosen extraction.",
+      "expected": "Derive each unbound original from its delivery contract, then digest-bound stored reading plans including pending units, then planless authenticated delivery. Replay finished and stopped 0.87.0 reviews without changing packet, plan, prompt or request bytes; give delivery credit only to authenticated ready requests. Keep case 2 stale and hand its stopped v5 chain to export before any call.",
+      "fixed_in": "0.89.1",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_unbound_packet_captures.UnboundPacketCaptureTests.test_stored_0870_findings_replay_with_their_delivered_capture_and_unchanged_bytes",
+        "test_unbound_packet_captures.UnboundPacketCaptureTests.test_new_chain_refuses_an_unbound_chosen_body_before_a_call_then_a_new_export_reads_it",
+        "test_unbound_packet_captures.UnboundPacketCaptureTests.test_delivery_contract_precedes_requests_and_replays_the_chosen_representation",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_observed_stopped_plans_keep_pending_capture_and_delivery_credit",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_later_choice_does_not_change_a_capture_still_named_only_in_remaining",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_an_uncalled_stored_turn_keeps_its_plan_and_then_continues",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_a_stopped_case_two_is_reexported_under_v5_and_reads_first_capture_under_v4"
+      ]
+    },
+    {
+      "id": "session-v3-settles-partial-source-requests",
+      "record": "20261111235418-bar-final-refused-for-text-delivered-in-reduced-history",
+      "class": "review session rules and partial delivery",
+      "summary": "Source continuations need explicit settlement and bounded artifact retrieval while preserving authenticated citation coverage after history reductions.",
+      "expected": "A new v3 session settles its own pending fulltext request after part 3 of 22, lists the undelivered ranges as final limitations and never gains reading credit. Artifact retrieval is bounded by delivered-record references and exact delivered spans; v2 packet, prompt and request bytes remain verifiable.",
+      "fixed_in": "0.89.1",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_session_rules_v3.SessionRulesTests.test_settling_after_three_of_twenty_two_parts_reaches_the_next_final",
+        "test_session_rules_v3.SessionRulesTests.test_artifact_requests_require_a_reference_and_keep_undelivered_spans_uncredited",
+        "test_session_rules_v3.SessionRulesTests.test_v2_rejects_new_vocabulary_and_continues_with_its_exact_prompt",
+        "test_session_rules_v3.SessionRulesTests.test_v2_source_citation_contract_keeps_its_packet_prompt_and_request_bytes"
+      ]
+    },
+    {
+      "id": "slate-forming-records-with-artifact-descriptors",
+      "record": "20261112012956-slate-review-cannot-carry-a-forming-import",
+      "class": "slate review provenance and capacity",
+      "summary": "Imported forming histories attached every referenced body while native forming records did not arrive at all.",
+      "expected": "New v3 slates deliver cited native forming calls and outcomes and imported records as artifact descriptors, keep origin-qualified citation identities and answer artifact requests on the next turn. Stored v2 slates retain their original delivery and digests. Oversized slate series and import size reports belong to later units.",
+      "fixed_in": "0.89.1",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_slate_forming_descriptors.SlateFormingTests.test_native_call_and_three_outcomes_arrive_without_their_artifact_bodies",
+        "test_slate_forming_descriptors.SlateFormingTests.test_imported_history_keeps_origin_citations_and_delivers_requested_text",
+        "test_slate_forming_descriptors.SlateFormingTests.test_a_slate_repair_keeps_v3_for_unrequested_forming_artifacts",
+        "test_slate_forming_descriptors.SlateFormingTests.test_a_slate_repair_keeps_v3_for_unrequested_imported_artifacts",
+        "test_slate_forming_descriptors.SlateFormingTests.test_a_slate_without_forming_records_and_stored_v2_sessions_keep_their_bytes"
+      ]
+    },
+    {
+      "id": "bar-final-credits-union-of-delivered-parts",
+      "record": "20261114054500-bar-cannot-be-recorded-after-instalment-deliveries",
+      "class": "review session citation coverage",
+      "summary": "Ordinary full-text parts were checked one mapping at a time, so a v3 final could not cite the union of two authenticated deliveries.",
+      "expected": "A bar records a citation spanning characters 0 to 97404 after different turns deliver 0 to 60000 and 60000 to 97404. A citation ending at 97405 is refused with review_evidence_undelivered when the remaining text is held but undelivered. V2 projections and stored input bytes stay unchanged, and receipt inspection does not require the unsupplied original. Informed correction and exhausted-slot recovery belong to other units.",
+      "fixed_in": "0.89.1",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_delivery.SessionDeliveryTests.test_final_citations_follow_the_union_of_two_delivered_parts",
+        "test_review_session_delivery.SessionDeliveryProjectionTests.test_part_union_citations_preserve_v2_and_stored_inputs"
+      ]
+    },
+    {
+      "id": "route-capacity-keyed-evidence",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "route-capacity",
+      "summary": "A runtime change or a short ordinary answer cannot establish capacity under another execution key or consume the output reservation.",
+      "expected": "Keep keyed verified witnesses, leave the asking reservation, and reject unclassified members and unsupported prior joins.",
+      "fixed_in": "0.89.1",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_capacity_closure.CapacityEvidenceTests.test_new_attempt_freezes_its_key_and_legacy_response_supplies_the_same_limit",
+        "test_review_capacity_closure.CapacityEvidenceTests.test_native_settings_authenticate_before_an_ordinary_attempt_raises_capacity",
+        "test_review_capacity_closure.CapacityEvidenceTests.test_codex_prior_matches_version_file_and_controls_only_under_its_key"
+      ]
+    },
+    {
+      "id": "request-profile-safe-start",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "output-profile",
+      "summary": "Session requests can use the wrong kind or start inside their own observed high-risk task range.",
+      "expected": "Use request rows at full task size, and start below every sufficiently sampled range whose over-limit share exceeds five percent.",
+      "fixed_in": "0.89.1",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_capacity_closure.ClosureStartTests.test_session_v4_uses_request_rows_and_counts_its_whole_request",
+        "test_review_capacity_closure.ClosureStartTests.test_ruling27_starts_below_an_own_risky_range_beside_step5"
+      ]
+    },
+    {
+      "id": "serving-route-choices-read-keyed-capacity",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "route-capacity",
+      "summary": "Serving-route selection measured without the stored evidence, and its fixture supplied only a small isolation probe.",
+      "expected": "A verified route without sufficient keyed input evidence stays excluded. After a verified probe observes 200000 input tokens, its 128000 output reservation leaves 72000 tokens and the route becomes a serving choice. Retired, unverified, unsupported and oversized routes stay excluded.",
+      "fixed_in": "0.89.1",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_capacity_signals.ResponseLimitJourneyTests.test_response_choices_require_capacity_evidence_after_the_route_probe",
+        "test_capacity_signals.ResponseLimitJourneyTests.test_response_choices_exclude_unverified_retired_and_unsupported_routes"
+      ]
+    },
+    {
+      "id": "result-parity-pins-stored-session-rules",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "stored-review-replay",
+      "summary": "The historical result-parts fixture inherited the new session-rules default when constructing its supporting bar reviews.",
+      "expected": "Construct the stored result fixture under its original v2 session rules even when the current default is v3. Preserve the frozen packet, prompt and request bytes and their authentication without replacing either oracle.",
+      "fixed_in": "0.89.1",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_request_parity.ReviewRequestParityTests.test_result_parts_v2_preserves_stored_inputs_under_the_v3_default",
+        "test_review_request_parity.ReviewRequestParityTests.test_result_parts_v2"
+      ]
     }
   ]
 }

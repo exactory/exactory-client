@@ -525,7 +525,7 @@ def describe_review_receipt(store, command, payload, receipt):
         return dict(receipt, capacity_warning=warning) if warning is not None else receipt
     routes = records.get('review_route', {})
     route = routes.get(payload['id'], payload) if command == 'review-route' else routes[payload['route_id']]
-    return dict(receipt, **describe_route_report(records, route))
+    return dict(receipt, **describe_route_report(records, route, store.build_artifact_store()))
 
 
 def _review_status(records, artifacts):
@@ -1028,7 +1028,7 @@ def run(args):
                                                              decision_id=args.decision_id), revision=snapshot["revision"])
             if args.command == "review-route-assess":
                 return dict(review_protocol.route_state(snapshot["records"], artifacts, args.route_id),
-                            **review_protocol.describe_route_report(snapshot["records"], args.route_id),
+                            **review_protocol.describe_route_report(snapshot["records"], args.route_id, artifacts),
                             revision=snapshot["revision"])
             context = strict_json(Path(args.context_file).read_bytes()) if args.context_file else {}
             if not isinstance(context, dict):

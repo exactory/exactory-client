@@ -408,7 +408,7 @@ def _describe_identity(value):
     return dict(identity[1:], kind=identity[0])
 
 
-def list_reading_texts(records, native):
+def list_reading_texts(records, native, *, artifacts=None, review=None):
     """The full-text rows of an openness packet: for each version that a bound reading read, the extracted texts of
     its bound main captures carried as evidence, so that a capture recorded after the export does not enlarge the
     chain. An alternate main body that the packet's openness_delivery contract omits is not read; the
@@ -416,7 +416,7 @@ def list_reading_texts(records, native):
     the packet's text_delivery_priority, then the version id and the text digest."""
     from .graph import main_captures
     from .capture_selection import bind_packet_selections
-    records = bind_packet_selections(records, native['scientific_context'])
+    records = bind_packet_selections(records, native['scientific_context'], artifacts=artifacts, review=review)
     bound = set(native['scientific_context']['openness_minimum']['reading_digests'])
     omitted = set((native['scientific_context'].get('openness_delivery') or {}).get('alternate_body_digests', []))
     carried = {entry['artifact']['sha256'] for entry in native['evidence']} - omitted
@@ -462,14 +462,14 @@ def list_math_response_rows(records, artifacts, native):
     return list(rows.values())
 
 
-def list_math_text_rows(records, native):
+def list_math_text_rows(records, native, *, artifacts=None, review=None):
     """The full-text rows of a math result openness packet: for each bound reading whose source bundle pins an original,
     the extracted text of that original's bound main capture, by version id and then text digest. The packet must
     carry each text, so that a capture recorded after the export never enlarges the chain. A row is {kind, version_id,
     text_sha256, artifact}."""
     from .graph import main_captures
     from .capture_selection import bind_packet_selections
-    records = bind_packet_selections(records, native['scientific_context'])
+    records = bind_packet_selections(records, native['scientific_context'], artifacts=artifacts, review=review)
     bound = set(native['scientific_context']['openness_minimum']['reading_digests'])
     carried = {entry['artifact']['sha256'] for entry in native['evidence']}
     rows = {}
@@ -517,13 +517,14 @@ def list_record_rows(artifacts, native):
             + [row for row in rows if row['record_kind'] == 'problem_statement'])
 
 
-def list_reading_rows(records, artifacts, native):
+def list_reading_rows(records, artifacts, native, *, review=None):
     """The whole reading units that an openness packet requires, in the order of delivery: for a problem its full texts,
     then its records; for a math result its captured responses, its pinned full texts, then its records."""
     if is_math_openness_packet(native):
-        return (list_math_response_rows(records, artifacts, native) + list_math_text_rows(records, native)
+        return (list_math_response_rows(records, artifacts, native) + list_math_text_rows(
+                    records, native, artifacts=artifacts, review=review)
                 + list_record_rows(artifacts, native))
-    return list_reading_texts(records, native) + list_record_rows(artifacts, native)
+    return list_reading_texts(records, native, artifacts=artifacts, review=review) + list_record_rows(artifacts, native)
 
 
 def _plan_search_delivery(artifacts, native):
@@ -1129,14 +1130,15 @@ def prepare_packet(records, artifacts, value, route, packet):
     saving the chain and returns them separately from the scientific packet."""
     native = packet['native']
     from .capture_selection import bind_packet_selections
-    records = bind_packet_selections(records, native['scientific_context'])
+    records = bind_packet_selections(records, native['scientific_context'], artifacts=artifacts, review=value)
     prior_id = value['context'].get('prior_assignment_id')
     if prior_id is None:
+        _require_initial_captures(records, native)
         if (not (is_openness_packet(native) or is_math_openness_packet(native))
                 or transport.local_input_limit(route) is None):
             return packet, None
         from .review_protocol import canonical_prompt
-        rows = list_reading_rows(records, artifacts, native)
+        rows = list_reading_rows(records, artifacts, native, review=value)
         characters = sum(len(artifacts.read(row['artifact']).decode('utf-8')) for row in rows)
         if (characters <= review_excerpts.TURN_FULLTEXT_CHARACTERS
                 and _fits(route, canonical_prompt('native_math')['text'], packet, [row['artifact'] for row in rows])):
@@ -1157,7 +1159,7 @@ def prepare_packet(records, artifacts, value, route, packet):
             rows = list_delivery_rows(rows, plan['manifest'])
         return _build_reading_turn(artifacts, route, packet, record, [], list_reading_units(artifacts, rows), 1), chain
     prior, prior_packet, state = _read_prior(records, artifacts, value, prior_id)
-    rows = list_reading_rows(records, artifacts, native)
+    rows = list_reading_rows(records, artifacts, native, review=value)
     protocol = find_chain_protocol(native, find_protocol(prior_packet))
     manifest = _find_record(prior_packet)['search_delivery'] if protocol == PROTOCOL_V5 else None
     delivery_rows = list_delivery_rows(rows, manifest) if manifest is not None else rows
@@ -1165,7 +1167,15 @@ def prepare_packet(records, artifacts, value, route, packet):
     prior_chain = _list_chain(records, prior)
     observations = _observe_turns(records, artifacts, prior_chain, delivery_rows, spans, manifest)
     if protocol == PROTOCOL_V5:
-        _require_problem_continuity(records, artifacts, native, prior_chain, rows, observations, manifest)
+        try:
+            _require_problem_continuity(records, artifacts, native, prior_chain, rows, observations, manifest)
+        except ResearchError as error:
+            from .capture_selection import PACKET_KEY, SELECTION_KIND
+            context = native['scientific_context']
+            if (error.code == 'openness_reading_incomplete' and SELECTION_KIND in records
+                    and PACKET_KEY not in context and PACKET_KEY not in context.get('source_inventory', {})):
+                error.details = dict(error.details or {}, handoff='export')
+            raise
     record = _extend_record(records, artifacts, prior_packet, state, rows, observations, protocol)
     chain = dict(prior['reading_chain'], turn=prior['reading_chain']['turn'] + 1)
     selected = _classify_final_texts(records, artifacts, native, rows, protocol)
@@ -1182,6 +1192,26 @@ def prepare_packet(records, artifacts, value, route, packet):
                      for observation in observations for row in observation['delivered_now']]
         return _build_reading_turn(artifacts, route, packet, record, delivered, remaining, chain['turn']), chain
     return _build_final_turn(route, packet, record, rows, _compute_spans(artifacts, rows), observations, selected), chain
+
+
+def _require_initial_captures(records, native):
+    """Refuse an unbound export whose carried extraction disagrees with its derived main capture."""
+    from .capture_selection import PACKET_KEY, SELECTION_KIND, list_bound_captures
+    from .graph import main_captures
+    context = native['scientific_context']
+    if (SELECTION_KIND not in records or PACKET_KEY in context
+            or PACKET_KEY in context.get('source_inventory', {}) or 'openness_minimum' not in context):
+        return
+    carried = {entry['artifact']['sha256'] for entry in native['evidence']}
+    for (version, original), captures in list_bound_captures(records, context).items():
+        main = next(capture for capture in main_captures(records, records['work'][version])
+                    if capture['original']['sha256'] == original)
+        if (main.get('text') is not None and main['text']['sha256'] not in carried
+                and any(capture['text']['sha256'] in carried for capture in captures)):
+            raise ResearchError('openness_reading_incomplete',
+                                'This unbound packet carries another extraction of a required original. Export a '
+                                'new openness packet before starting its review.',
+                                {'version_id': version, 'handoff': 'export'})
 
 
 def _classify_final_texts(records, artifacts, native, rows, protocol):
@@ -1263,7 +1293,9 @@ def has_deliverable_passage(records, artifacts, packet, output):
             or output.get('stage') != 'reading'):
         return True
     allowances = packet[RECORD_KEY]['allowances']
-    unit_sources = _collect_unit_sources(list_reading_rows(records, artifacts, packet['native']))
+    turns = packet[RECORD_KEY]['turns']
+    review = records.get('review_assignment', {}).get(turns[-1]['assignment_id']) if turns else None
+    unit_sources = _collect_unit_sources(list_reading_rows(records, artifacts, packet['native'], review=review))
     _, after = review_excerpts.answer_passages(records, artifacts, output['passage_requests'], allowances,
                                                unit_sources=unit_sources)
     return after['passages']['used'] > allowances['passages']['used']
@@ -1294,12 +1326,12 @@ def find_final_assignment(records, artifacts, identifier):
     return current
 
 
-def _list_legacy_texts(records, native):
+def _list_legacy_texts(records, native, *, artifacts=None, review=None):
     """The stored extracted full text of each version that the readings of the openness minimum read, ordered by the
     packet's text_delivery_priority and then by version id: the full texts of the chains whose final turn 0.64.2 to
     0.66.2 built."""
     from .capture_selection import bind_packet_selections
-    records = bind_packet_selections(records, native['scientific_context'])
+    records = bind_packet_selections(records, native['scientific_context'], artifacts=artifacts, review=review)
     reading_digests = set(native['scientific_context']['openness_minimum']['reading_digests'])
     versions = {reading['version_id'] for reading in records.get('reading', {}).values()
                 if digest(reading) in reading_digests}
@@ -1327,7 +1359,7 @@ def _verify_legacy_chain(records, artifacts, assignment):
     while current is not None:
         chain.insert(0, current)
         current = records['review_assignment'].get(current['context'].get('prior_assignment_id'))
-    texts = _list_legacy_texts(records, native)
+    texts = _list_legacy_texts(records, native, artifacts=artifacts, review=assignment)
     part_digests = {}
     for row in texts:
         digests = review_excerpts.compute_part_digests(artifacts.read(row['artifact']).decode('utf-8'))
@@ -1543,7 +1575,7 @@ def verify_problem_coverage(records, artifacts, assignment, *, final=False):
     """
     from .native_review import load_packet
     native = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
-    rows = list_reading_rows(records, artifacts, native)
+    rows = list_reading_rows(records, artifacts, native, review=assignment)
     manifest = _plan_search_delivery(artifacts, native)['manifest']
     delivery_rows = list_delivery_rows(rows, manifest)
     spans = _compute_spans(artifacts, delivery_rows)
@@ -1586,7 +1618,7 @@ def verify_chain(records, artifacts, assignment):
         return _verify_legacy_chain(records, artifacts, assignment)
     from .native_review import load_packet
     native = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
-    rows = list_reading_rows(records, artifacts, native)
+    rows = list_reading_rows(records, artifacts, native, review=assignment)
     spans = _compute_spans(artifacts, rows)
     chain = _list_chain(records, assignment)
     observations = _observe_turns(records, artifacts, chain, rows, spans)

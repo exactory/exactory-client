@@ -4,7 +4,7 @@ import json
 
 from .errors import ResearchError
 from .evidence import digest
-from .source_links import contains, contains_locator, validate_link
+from .source_links import TEXT_KINDS, contains, contains_locator, validate_link
 from .review_objection_evidence import resolved_objection_entries
 
 PROTOCOL = 'exactory-focused-review-evidence-v2'
@@ -82,7 +82,8 @@ def list_delivered_parts(packet):
     """The part deliveries of a packet that reached their reviewer: each maps one part of a stored extracted text to its
     span, so a citation within the part counts as delivered. A part that a capacity deferral withheld does not."""
     return [delivery for delivery in packet.get('source_deliveries', [])
-            if 'part' in delivery and delivery.get('status') in ('delivered', 'partial')]
+            if delivery.get('request', {}).get('kind') != 'artifact'
+            and 'part' in delivery and delivery.get('status') in ('delivered', 'partial')]
 
 
 def list_delivered_objections(packet):
@@ -220,9 +221,20 @@ def is_received(records, reference, references, mappings, *, artifacts, frozen=F
     if frozen:
         # Delivery supplies the same version's exact bytes and bounds. Current captured-source and component
         # qualification remains a separate recording check; it cannot create or remove a pure refusal.
-        return any(mapping['version_id'] == reference['link']['version_id']
-                   and contains_locator(cite_passage(artifacts, mapping)['locator'], reference['link']['locator'])
-                   for mapping in passages)
+        passages = [mapping for mapping in passages if mapping['version_id'] == reference['link']['version_id']]
+        if any(contains_locator(cite_passage(artifacts, mapping)['locator'], reference['link']['locator'])
+               for mapping in passages):
+            return True
+        from .bar_sources import PROTOCOL_V3
+        locator = reference['link']['locator']
+        if (packets and packets[-1].get('source_rules') == PROTOCOL_V3
+                and locator['kind'] in TEXT_KINDS):
+            from .review_staged import interval_gaps
+            spans = [mapping['origin']['locator'] for mapping in passages
+                     if mapping['origin']['locator']['kind'] in TEXT_KINDS]
+            return not interval_gaps([[locator['start'], locator['end']]],
+                                     [[span['start'], span['end']] for span in spans])
+        return False
     return any(contains(cite_passage(artifacts, mapping), reference['link'], records) for mapping in passages)
 
 

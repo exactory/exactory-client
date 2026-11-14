@@ -488,7 +488,7 @@ class ProfileIntegrationTests(unittest.TestCase):
         self.assertEqual(result['task']['kind'], 'single')
         self.assertIn('cli_version', result)
         legacy = copy.deepcopy(result)
-        for key in ('task', 'answer', 'verified_input_tokens', 'cli_version', 'completed_generation'):
+        for key in ('task', 'answer', 'verified_input_tokens', 'cli_version', 'completed_generation', 'capacity_evidence'):
             legacy.pop(key, None)
         for key in ('thinking_tokens', 'thinking_method', 'sends', 'request_characters'):
             legacy['usage'].pop(key, None)
@@ -776,8 +776,10 @@ class TaskLimitRuleTests(unittest.TestCase):
         )
         value = capacity.select_task_limits(route, profile, 'reading', frame_characters=0)
         self.assertEqual(value['state'], 'over_limit_expected')
-        self.assertEqual(value['material_allowance'], 60000)
-        self.assertEqual(value['at_or_over_limit_share'], 0.25)
+        self.assertEqual(value['step5_material_allowance'], 60000)
+        self.assertEqual(value['material_allowance'], 15000)
+        self.assertEqual(value['at_or_over_limit_share'], 1)
+        self.assertEqual(value['start_rule'], 'below_risky_ranges')
 
     def test_final_targets_halve_until_the_minimum_bound_fits(self):
         capacity = load_capacity()
@@ -822,12 +824,12 @@ class TaskLimitRuleTests(unittest.TestCase):
             30000,
         )
 
-    def test_missing_thinking_is_unmeasured_and_route_classes_do_not_borrow(self):
+    def test_missing_thinking_cannot_qualify_and_route_classes_do_not_borrow(self):
         capacity = load_capacity()
         route = build_route()
         self.assertEqual(
             capacity.select_task_limits(route, dict(rows=[build_row(thinking=None)]), 'reading')['state'],
-            'unmeasured',
+            'over_limit_expected',
         )
         with patch.object(
             capacity,

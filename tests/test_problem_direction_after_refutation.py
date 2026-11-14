@@ -5,7 +5,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from research_harness import cli, problem_rubric as rubric
+from research_harness import bar_sources, cli, problem_rubric as rubric
 from research_harness import research_decisions as decisions, review_protocol as protocol
 from research_harness import review_transport as transport
 from research_harness.errors import ResearchError
@@ -103,7 +103,8 @@ class ProblemDirectionTests(ProblemDeliveryCase):
             self.put('problem_value', saved['id'], saved)
             return {'result': saved}
 
-        with patch.object(protocol, 'canonical_prompt', side_effect=build_previous_prompt), \
+        with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL), \
+                patch.object(protocol, 'canonical_prompt', side_effect=build_previous_prompt), \
                 patch.object(self, 'build_review_output', side_effect=build_previous_output), \
                 patch.object(claims, 'record_assessment', side_effect=seed_previous_assessment), \
                 patch.object(claims, 'record_value', side_effect=seed_previous_value):
@@ -166,7 +167,8 @@ class ProblemDirectionTests(ProblemDeliveryCase):
         records = self.store.snapshot()['records']
         for identifier in ('bar-first', 'bar-second', 'slate-first', 'result-first'):
             assignment = records['review_assignment'][identifier]
-            self.assertEqual(assignment['prompt']['template_id'], 'exactory-problem-review-v5/' + assignment['role'])
+            self.assertEqual(assignment['prompt']['template_id'],
+                             'exactory-problem-review-v5/' + assignment['role'] + '/sources-v3')
 
     def test_new_result_requires_a7_evidence(self):
         self.prepare_statement_and_bars()

@@ -25,7 +25,7 @@ import test_openness_v4_replay as v4_fixtures
 import test_problem_openness_native_reviews as native_fixtures
 import test_problem_result_history as history_fixtures
 import test_research_review_protocol as ordinary_fixtures
-from research_harness import cli, gates, openness_reading, review_protocol as protocol
+from research_harness import bar_sources, cli, gates, openness_reading, review_protocol as protocol
 from research_harness import review_request_evaluation, review_transport as transport
 from research_harness import review_codex_invocation, review_request_restoration
 from research_harness import review_codex_transport as codex
@@ -317,8 +317,10 @@ def build_local_adapter_case(name):
 
 def build_result_case(version, corrupted_history=False):
     kind = legacy_parts.ResultPartsCase if version == 1 else current_parts.PartsResultCase
-    # The oracle predates record units; recreate its stored inventory rule.
-    with fix_external_inputs() as emitted, open_fixture(kind) as parts, \
+    # Pin the oracle's session rules before setup creates its supporting bars.
+    # Its result inventory also predates record units.
+    with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL), \
+            fix_external_inputs() as emitted, open_fixture(kind) as parts, \
             patch.dict(result_parts.ADAPTER, unit_rule=None):
         if version == 1:
             parts.oversized(count=2, characters=50000, limit=105000)

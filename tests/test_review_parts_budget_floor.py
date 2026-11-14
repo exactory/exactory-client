@@ -300,7 +300,7 @@ class BudgetFloorReplacementTests(PartsResultCase):
         warning = stop['capacity_warning']
         self.assertEqual({key: warning['output'][key] for key in (
             'state', 'sample_size', 'at_or_over_limit_share', 'kinds')},
-            dict(state='unmeasured', sample_size=0, at_or_over_limit_share=None, kinds=['read']))
+            dict(state='unmeasured', sample_size=0, at_or_over_limit_share=None, kinds=['request']))
         self.assertEqual(stop, dict(plan, stop_id=recorded_stop['id'], stop_class='decision',
                                    provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0),
                                    revision_after_stop=after['revision'], capacity_warning=warning))

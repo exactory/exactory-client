@@ -191,7 +191,8 @@ class ExcerptSessionTests(ExcerptSessionCase):
         self.record_final('c', final)
 
     def test_a_text_delivered_under_the_earlier_rules_is_delivered_once_more(self):
-        self.assign('a')
+        with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL):
+            self.assign('a')
         self.invoke('a', self.build_request_turn(self.requests[:1]))
         with patch.object(bar_sources, 'continuation', side_effect=continue_under_earlier_rules):
             earlier = self.assign('b', prior_assignment_id='a')
@@ -276,12 +277,12 @@ class ExcerptSessionTests(ExcerptSessionCase):
 
     def test_new_continuations_carry_the_excerpt_rules_under_the_same_template(self):
         initial = self.assign('a')
-        self.assertEqual(initial['prompt'], protocol.canonical_prompt('bar'))
+        self.assertEqual(initial['prompt'], protocol.canonical_prompt('bar', source_rules=bar_sources.PROTOCOL_V3))
         self.assertNotIn('reviewer_excerpts', initial['prompt']['parameters'])
         self.invoke('a', self.build_request_turn(self.requests[:1]))
         continued = self.assign('b', prior_assignment_id='a')
         prompt = continued['prompt']
-        self.assertEqual(prompt, protocol.canonical_prompt('bar', excerpts=True))
+        self.assertEqual(prompt, protocol.canonical_prompt('bar', excerpts=True, source_rules=bar_sources.PROTOCOL_V3))
         self.assertEqual(prompt['template_id'], initial['prompt']['template_id'])
         self.assertEqual(prompt['parameters']['reviewer_excerpts'], review_excerpts.PROTOCOL)
         self.assertTrue(prompt['text'].startswith(initial['prompt']['text']))
@@ -309,7 +310,7 @@ class ExcerptSessionTests(ExcerptSessionCase):
         repaired = self.assign('repair', reviewer='repair-reviewer', context_repair={
             'assignment_id': 'b', 'event_ids': ['exposure'], 'probe_id': 'repair-probe',
             'reason': 'A fresh verified context reassesses the session.', 'evidence': [self.evidence]})
-        self.assertEqual(repaired['prompt'], protocol.canonical_prompt('bar', repair=True, excerpts=True))
+        self.assertEqual(repaired['prompt'], protocol.canonical_prompt('bar', repair=True, excerpts=True, source_rules=bar_sources.PROTOCOL_V3))
         packet = self.packet('repair')
         self.assertEqual(packet['pending_source_requests'], [self.requests[1]])
         answer = next(delivery for delivery in packet['source_deliveries'] if delivery['request'] == passage)
@@ -333,11 +334,11 @@ class SlateExcerptRulesTests(StrategicSourceHelpers, StrategyCase):
 
     def test_a_slate_continuation_carries_the_excerpt_rules_and_answers_a_repeated_text(self):
         initial = self.assignment()
-        self.assertEqual(initial['prompt'], protocol.canonical_prompt('slate'))
+        self.assertEqual(initial['prompt'], protocol.canonical_prompt('slate', source_rules=bar_sources.PROTOCOL_V3))
         request = {'id': 'body', 'kind': 'source', 'version_id': self.source, 'depth': 'fulltext'}
         self.request([request])
         continued = self.continue_review()
-        self.assertEqual(continued['prompt'], protocol.canonical_prompt('slate', excerpts=True))
+        self.assertEqual(continued['prompt'], protocol.canonical_prompt('slate', excerpts=True, source_rules=bar_sources.PROTOCOL_V3))
         self.request([dict(request, id='body-again')], 'source-b')
         self.continue_review('source-c', 'source-b')
         packet = self.packet('source-c')
@@ -374,7 +375,8 @@ class EarlierProblemBarSessionTests(unittest.TestCase):
 
     def observe_session(self, reviewer, *, earlier):
         case, first, second = self.case, 'bar-' + reviewer, 'bar-' + reviewer + '-2'
-        case.assign('bar', reviewer, identifier=first, **case.deliver_supporting(reviewer))
+        with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL):
+            case.assign('bar', reviewer, identifier=first, **case.deliver_supporting(reviewer))
         self.invoke(first, self.request_turn())
         if earlier:
             with patch.object(bar_sources, 'continuation', side_effect=continue_under_earlier_rules):
