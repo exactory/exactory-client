@@ -1906,6 +1906,18 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
             if (legacy._measure(route, ordinary) <= transport.local_input_limit(route)
                     and legacy.preserves_ordinary_packet(artifacts, packet, ordinary)):
                 return packet
+        from .bar_sources import PROTOCOL_V3
+        if packet.get('source_rules') == PROTOCOL_V3:
+            if (previous.get('source_rules') == PROTOCOL_V3
+                    or any(request['kind'] == 'artifact' for request in packet.get('pending_source_requests', []))):
+                # An invoked source session keeps its rules; parts-v2 cannot take over its requests.
+                return packet
+            # A never-invoked review can start a parts-v2 series with its existing source vocabulary.
+            packet = {key: item for key, item in packet.items() if key not in ('source_rules', 'source_artifacts', 'digest')}
+            packet['digest'] = digest(packet)
+            if base_prompt_parameters is not None:
+                base_prompt_parameters = {key: item for key, item in base_prompt_parameters.items() if key != 'source_rules'}
+            series_key = get_adapter(adapter)['series_key'](packet)
         inventory = build_inventory(packet, adapter)
     observations = observe_series(records, artifacts, prior_id) if continuing else []
     series_id = old_header['series_assignment_id'] if continuing else value['id']

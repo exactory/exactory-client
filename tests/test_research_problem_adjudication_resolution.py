@@ -6,7 +6,7 @@ from unittest.mock import patch
 import test_research_problem_delivery as delivery_fixtures
 import test_research_problem_objections as objection_fixtures
 
-from research_harness import research_decisions as decisions, review_protocol as protocol
+from research_harness import bar_sources, research_decisions as decisions, review_protocol as protocol
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 
@@ -407,6 +407,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                          ("review_evidence_undelivered", {"record_kind": "problem_candidate", "id": "candidate-1", "digest": None,
                                                          "path": "/objections/0/evidence"}))
 
+    @patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL)
     def test_a_stop_assurance_written_as_not_assessed_passes_the_gate(self):
         """The version 2 result prompt's own example writes the stop assurance as not_assessed with the reason that
         nothing requires a stop; the gate counts that as the assurance passing for a result on that prompt. Every
@@ -1421,6 +1422,7 @@ class ReviewOutputRefusalTests(delivery_fixtures.ProblemDeliveryCase):
     def records(self):
         return self.store.snapshot()["records"]
 
+    @patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL)
     def prepare_resolved_bar_refresh(self, *, historical=False, source_request=False):
         """Retain a legacy result's packet after its delivered bar objection is resolved."""
         objection_fixtures.ProblemObjectionTests.prepare_version_one_bar_objection(self)

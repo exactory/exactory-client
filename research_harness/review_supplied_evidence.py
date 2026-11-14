@@ -82,7 +82,8 @@ def list_delivered_parts(packet):
     """The part deliveries of a packet that reached their reviewer: each maps one part of a stored extracted text to its
     span, so a citation within the part counts as delivered. A part that a capacity deferral withheld does not."""
     return [delivery for delivery in packet.get('source_deliveries', [])
-            if 'part' in delivery and delivery.get('status') in ('delivered', 'partial')]
+            if delivery.get('request', {}).get('kind') != 'artifact'
+            and 'part' in delivery and delivery.get('status') in ('delivered', 'partial')]
 
 
 def list_delivered_objections(packet):

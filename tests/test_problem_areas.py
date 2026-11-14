@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from research_harness import cli, output_views, problem_claims, problem_evidence, research_decisions, review_protocol
-from research_harness import review_prompt_paragraphs
+from research_harness import bar_sources, review_prompt_paragraphs
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from test_research_problem_claims import ProblemCase
@@ -204,7 +204,8 @@ class ProblemAreaReviewTests(ProblemDeliveryCase, AreaMutationCase):
                 options["version"] = 1
             return canonical_prompt(role, **options)
 
-        with patch.object(review_protocol, "canonical_prompt", side_effect=render_legacy_bar):
+        with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL), \
+                patch.object(review_protocol, "canonical_prompt", side_effect=render_legacy_bar):
             self.observe_bars()
         area = self.add_area()
         self.assert_error("problem_bar_calibration_required", self.record_slate)

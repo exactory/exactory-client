@@ -148,19 +148,21 @@ def requests_for_lineage(records, artifacts, prior, output, *, graph=None):
                      ('question', 'inputs', 'claim_ids', 'context_roots', 'requested_by')), 'Retrieval identifiers cannot change meaning')
             rows[row['id']] = row
         return [rows[key] for key in sorted(rows) if rows[key]['status'] in ('pending', 'delivered')]
-    requests = {}
+    requests, settled = {}, set(output.get('settled_requests', []))
     for packet in _lineage(records, artifacts, prior):
+        settled.update(row['request']['id'] for row in packet.get('settled_source_requests', []))
         rows = [row['request'] for row in packet.get('source_deliveries', [])] + packet.get('pending_source_requests', [])
         for row in rows:
             if row.get('kind') == 'source' and row.get('depth') == 'fulltext':
                 _require(row['id'] not in requests or requests[row['id']] == row, 'Source request identifiers cannot change meaning')
                 requests[row['id']] = row
     from .review_excerpts import KEY
-    for row in bar_sources.requests(output, passages=KEY in _json(artifacts, prior['packet'])):
+    packet = _json(artifacts, prior['packet'])
+    for row in bar_sources.requests(output, passages=KEY in packet, source_rules=packet.get('source_rules')):
         if row.get('kind') == 'source' and row.get('depth') == 'fulltext':
             _require(row['id'] not in requests or requests[row['id']] == row, 'Source request identifiers cannot change meaning')
             requests[row['id']] = row
-    return list(requests.values())
+    return [row for identifier, row in requests.items() if identifier not in settled]
 
 
 def _history(records, artifacts, prior, state):
@@ -211,15 +213,24 @@ def prepare(records, artifacts, prior, state, packet):
         packet['staged_review']['pending_retrievals'] = requested
         return packet[MARKER]
     requested = requests_for_lineage(records, artifacts, prior, state['output'])
-    _require(bool(requested), 'Complete-source mode requires an exact full-text request in this result lineage')
+    _require(bool(requested) or bool(packet.get('settled_source_requests')),
+             'Complete-source mode requires an exact full-text request in this result lineage')
     rows = bar_sources.validate_inventory(artifacts, packet['source_inventory'])
     originals = {row['id']: row for row in rows}
     deliveries = [bar_sources._source(records, artifacts, request, originals) for request in requested]
     deliveries.extend(row for row in packet['source_deliveries'] if row['request'] not in requested)
     packet['source_deliveries'] = deliveries
     # A passage answer never stays pending.
-    packet['pending_source_requests'] = [row['request'] for row in deliveries
-                                         if row['status'] != 'delivered' and row['request']['kind'] != 'passage']
+    if packet.get('source_rules') == bar_sources.PROTOCOL_V3:
+        artifact_ids = {request['id'] for request in packet['pending_source_requests'] if request['kind'] == 'artifact'}
+        pending = {row['request']['id']: row['request'] for row in deliveries
+                   if row['request']['kind'] != 'passage' and (
+                       row['status'] not in ('delivered', 'already_delivered', 'unavailable_qualified')
+                       or row['request']['id'] in artifact_ids)}
+        packet['pending_source_requests'] = list(pending.values())
+    else:
+        packet['pending_source_requests'] = [row['request'] for row in deliveries
+                                             if row['status'] != 'delivered' and row['request']['kind'] != 'passage']
     history = _history(records, artifacts, prior, state)
     historical_sources = _historical_sources(records, artifacts, prior)
     restored, searches, existing = _restoration(records, history, deliveries, historical_sources)

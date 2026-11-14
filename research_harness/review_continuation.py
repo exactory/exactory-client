@@ -476,6 +476,7 @@ def _plan_head(records, artifacts, assignment):
                   or review_problem_parts.find_stage(packet) == 'part'
                   or openness_reading.find_stage(packet) is not None and state['output'].get('stage') == 'reading'
                   or bool(state.get('pending_source_requests'))
+                  or bool(state['output'].get('settled_requests'))
                   or (assignment.get('subject', {}).get('kind') == 'problem'
                       and assignment['role'] in bar_sources.ROLES
                       and _list_recorded_finals(records, {assignment['id']})

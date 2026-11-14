@@ -356,6 +356,15 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
     continuing = prior is not None and prior.get(parts.KEY, {}).get('adapter') == 'context_repair'
     if not continuing and not requires_parts(records, artifacts, value, route, packet, prompt, history, slot_id):
         return packet
+    from .bar_sources import PROTOCOL_V3
+    if packet.get('source_rules') == PROTOCOL_V3:
+        if (prior is not None and not continuing
+                or packet.get('forming_records') or packet.get('problem_forming_imports')
+                or any(request['kind'] == 'artifact' for request in packet.get('pending_source_requests', []))):
+            return packet
+        packet = {key: item for key, item in packet.items() if key not in ('source_rules', 'source_artifacts', 'digest')}
+        packet['digest'] = digest(packet)
+        base_prompt_parameters = {key: item for key, item in base_prompt_parameters.items() if key != 'source_rules'}
     if continuing:
         previous = parts.read_logical_packet(artifacts, json.loads(
             artifacts.read(prior['packet']))[parts.KEY])

@@ -30,6 +30,17 @@ DELIVERY_NOTICE_PROMPT = (
     'missing characters and number of verified excerpts retained for that text. '
     'Those bodies were delivered for reading in the named turns. Cite them through the verified excerpts '
     'in reviewer_excerpts; request a passage if the retained excerpts do not contain what you need.')
+# Placeholder for the writer's pass. Historical v1 remains registered below.
+SLATE_FORMING_PROMPT = (
+    '\n\nCandidates formed in the record (exactory-problem-slate-forming-v2). '
+    'forming_records and problem_forming_imports carry the native and imported records on which the '
+    'candidates rest, with their citation identities. Their artifact descriptors describe held bytes '
+    'without delivering them. Request a needed text body with source_requests '
+    '[{id,kind:"artifact",sha256}]. Delivery is bounded by the session turn budget and grants no reading '
+    'credit. Judge the expected gain and its grounds, the independence of the facts gathered, the '
+    'nearest alternatives, the strength that is used or supported, and the checks that would refute '
+    'each candidate. State what remains unjudged in limitations; a record or a descriptor alone '
+    'does not establish the claimed gain.')
 
 
 def _has_carry(role, packet):
@@ -290,7 +301,8 @@ PARAGRAPHS = (
           'Where a candidate gathers a list, where a nearer alternative already gives what it names, or where it rests '
           'on a numerical pattern, such as a bound or a constant fitted to computed values, say so as an objection that '
           'names the candidate in candidate_ids. '
-          'The response shape of this turn is unchanged.'),)),
+          'The response shape of this turn is unchanged.'),
+         ('exactory-problem-slate-forming-v2', SLATE_FORMING_PROMPT))),
     PromptParagraph('replacement', ('result', 'adjudicator'), _has_replacement,
         (('exactory-problem-replacement-v1',
           '\n\nA statement posed in place of a refuted one (exactory-problem-replacement-v1). '
@@ -397,7 +409,9 @@ def select_prompt_parameters(role, packet):
     if not problem and not _has_delivery_notice(role, packet):
         return {}
     conditions = (packet.get(CONDITIONS) if 'value' not in packet.get('problem_evidence', {}) else None)
-    versions = [paragraph.versions[-1][0] for paragraph in PARAGRAPHS[1:]
+    from .bar_sources import PROTOCOL_V3
+    versions = [paragraph.versions[0 if paragraph.name == 'slate-forming'
+                and packet.get('source_rules') != PROTOCOL_V3 else -1][0] for paragraph in PARAGRAPHS[1:]
                 if role in paragraph.roles and (problem or paragraph.name == 'delivery-notice') and
                 (paragraph.name in conditions if conditions is not None and paragraph.name != 'delivery-notice'
                  else paragraph.condition(role, packet))]

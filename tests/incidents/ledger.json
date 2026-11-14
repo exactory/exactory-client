@@ -5365,6 +5365,37 @@
         "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_an_uncalled_stored_turn_keeps_its_plan_and_then_continues",
         "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_a_stopped_case_two_is_reexported_under_v5_and_reads_first_capture_under_v4"
       ]
+    },
+    {
+      "id": "session-v3-settles-partial-source-requests",
+      "record": "20261111235418-bar-final-refused-for-text-delivered-in-reduced-history",
+      "class": "review session rules and partial delivery",
+      "summary": "Source continuations need explicit settlement and bounded artifact retrieval while preserving authenticated citation coverage after history reductions.",
+      "expected": "A new v3 session settles its own pending fulltext request after part 3 of 22, lists the undelivered ranges as final limitations and never gains reading credit. Artifact retrieval is bounded by delivered-record references and exact delivered spans; v2 packet, prompt and request bytes remain verifiable.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_session_rules_v3.SessionRulesTests.test_settling_after_three_of_twenty_two_parts_reaches_the_next_final",
+        "test_session_rules_v3.SessionRulesTests.test_artifact_requests_require_a_reference_and_keep_undelivered_spans_uncredited",
+        "test_session_rules_v3.SessionRulesTests.test_v2_rejects_new_vocabulary_and_continues_with_its_exact_prompt",
+        "test_session_rules_v3.SessionRulesTests.test_v2_source_citation_contract_keeps_its_packet_prompt_and_request_bytes"
+      ]
+    },
+    {
+      "id": "slate-forming-records-with-artifact-descriptors",
+      "record": "20261112012956-slate-review-cannot-carry-a-forming-import",
+      "class": "slate review provenance and capacity",
+      "summary": "Imported forming histories attached every referenced body while native forming records did not arrive at all.",
+      "expected": "New v3 slates deliver cited native forming calls and outcomes and imported records as artifact descriptors, keep origin-qualified citation identities and answer artifact requests on the next turn. Stored v2 slates retain their original delivery and digests. Oversized slate series and import size reports belong to later units.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_slate_forming_descriptors.SlateFormingTests.test_native_call_and_three_outcomes_arrive_without_their_artifact_bodies",
+        "test_slate_forming_descriptors.SlateFormingTests.test_imported_history_keeps_origin_citations_and_delivers_requested_text",
+        "test_slate_forming_descriptors.SlateFormingTests.test_a_slate_repair_keeps_v3_for_unrequested_forming_artifacts",
+        "test_slate_forming_descriptors.SlateFormingTests.test_a_slate_repair_keeps_v3_for_unrequested_imported_artifacts",
+        "test_slate_forming_descriptors.SlateFormingTests.test_a_slate_without_forming_records_and_stored_v2_sessions_keep_their_bytes"
+      ]
     }
   ]
 }

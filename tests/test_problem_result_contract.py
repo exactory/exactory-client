@@ -10,7 +10,7 @@ from unittest.mock import patch
 import test_research_problem_reviews as fixtures
 from problem_parts_fixtures import KEY as PARTS_KEY, ResultPartsCase
 from research_harness.review_bodies import read_history
-from research_harness import direction_reviews, review_protocol as protocol
+from research_harness import bar_sources, direction_reviews, review_protocol as protocol
 from research_harness import research_decisions as decisions, review_transport as transport
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
@@ -26,18 +26,19 @@ class ProblemResultContractTests(unittest.TestCase):
 
     def old_result(self):
         case = self.case
-        case.observe_bar_reviews()
         original = protocol.canonical_prompt
         def old_prompt(role, **options):
             if (role == 'result' and options.get('orchestration') == 'problem_creation'
                     and 'version' not in options):
                 options['version'] = 2
             return original(role, **options)
-        output = case.build_review_output('result')
-        output['value']['assurances'][-1].update(status='not_assessed',
-            reason='The delivered contract left the stop assessment incomplete.')
-        with patch.object(protocol, 'canonical_prompt', side_effect=old_prompt):
-            case.observe('result', 'first', output)
+        with patch.object(bar_sources, 'SESSION_PROTOCOL', getattr(self, 'source_rules_protocol', bar_sources.PROTOCOL)):
+            case.observe_bar_reviews()
+            output = case.build_review_output('result')
+            output['value']['assurances'][-1].update(status='not_assessed',
+                reason='The delivered contract left the stop assessment incomplete.')
+            with patch.object(protocol, 'canonical_prompt', side_effect=old_prompt):
+                case.observe('result', 'first', output)
         return case.read_records()['review_assignment']['result-first'], output
 
     def test_new_result_example_does_not_treat_completed_no_stop_assessment_as_incomplete(self):

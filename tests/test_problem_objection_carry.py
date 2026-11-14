@@ -1458,10 +1458,11 @@ def build_output(body, root):
     def test_legacy_parts_final_retains_imported_objection_evidence(self):
         from codex_route_fixtures import invoke_codex, limit_codex_input
         from problem_parts_fixtures import note_units
-        from research_harness import review_parts, review_problem_parts
+        from research_harness import bar_sources, review_parts, review_problem_parts
         source, case = self.local_destination()
         limit_codex_input(self, 170000)
-        with patch.object(review_parts, 'prepare_packet', side_effect=lambda records, artifacts, value, route, packet, prompt, history, **kwargs: packet), \
+        with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL), \
+             patch.object(review_parts, 'prepare_packet', side_effect=lambda records, artifacts, value, route, packet, prompt, history, **kwargs: packet), \
              patch.object(review_problem_parts, 'prepare_packet', review_problem_parts._prepare_legacy_packet):
             assignment = case.assign('result', 'first', identifier='legacy-1')
             turns = 0

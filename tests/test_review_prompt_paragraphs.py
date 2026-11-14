@@ -40,6 +40,7 @@ def build_packet(role='result', *, accounts=False, replacement=False, forming=Fa
 
 def render_packet(packet, **options):
     return protocol.canonical_prompt(packet['role'], orchestration='problem_creation',
+        source_rules=packet.get('source_rules'),
         **paragraphs.select_prompt_parameters(packet['role'], packet), **options)
 
 
@@ -138,6 +139,7 @@ class OptionalParagraphTests(unittest.TestCase):
     def test_writer_placeholders_have_pinned_bytes_and_one_home(self):
         expected = {
             'exactory-problem-accounts-v1': 'c2e3eb3807d4ff247ad26a6abf716b02a58188968080195afeba16354c3a686d',
+            'exactory-problem-slate-forming-v2': '13c788192070b3fa9d16cf8abf3ab36a81d381f248a7a7333c3f69648aa9849d',
             'exactory-problem-slate-forming-v1': 'e14ff7ce5d6f1a0bd2d03b1f2fd7f45c596e14902eea5083dd7bc66d78f78d2b',
             'exactory-problem-replacement-v1': '92d8d0ace0a5c7dbd61d340f2fe6e6c5f93760ca1b7764853b7217f1dbbd12c0',
             'exactory-problem-areas-v1': 'e9a1aa5a8fa12579bbaff0cc1902f1f012c6bb7e872c02dff25131afab93da05',
