@@ -260,7 +260,8 @@ def validate(records, artifacts, assignment, packet):
     _require(value.get('protocol') == PROTOCOL and assignment['role'] == 'result'
              and (repair or (assignment.get('context', {}).get('source_delivery') == MODE
              and assignment.get('context', {}).get('prior_assignment_id'))), 'Use a prospective native result source continuation')
-    expected = selection(records, artifacts, packet['source_deliveries'])
+    from .capture_selection import bind_packet_selections
+    expected = selection(bind_packet_selections(records, packet), artifacts, packet['source_deliveries'])
     _require(all(value[key] == item for key, item in expected.items()), 'Complete main selection must match native exact source records')
     stored_history = read_history(artifacts, assignment)
     if repair:

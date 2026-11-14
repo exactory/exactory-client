@@ -4649,6 +4649,27 @@
         "test_part_locator_refusal.RepairBindingRefusalTests.test_missing_events_are_named_in_recorded_order",
         "test_part_locator_refusal.RepairBindingRefusalTests.test_evidence_mismatch_names_all_expected_event_ids_and_evidence_in_recorded_order"
       ]
+    },
+    {
+      "id": "layout-extraction-inflates-fulltext-delivery",
+      "record": "20261111223126-layout-extraction-inflates-fulltext-delivery",
+      "class": "source extraction and review continuation",
+      "summary": "Layout padding produces millions of whitespace characters and the first capture remains the delivered text after a compact recapture.",
+      "fixed_in": "open",
+      "expected": "Default PDF acquisition keeps complete plain extraction when layout whitespace exceeds 0.90 or extracted-byte expansion exceeds 2.0. A recorded main-capture choice changes the next pending version delivery while preserving captures, readings, earlier verified excerpts, exact requests and delivered part digests. Explicit layout flags remain authoritative. Request settlement and delivery-cost limits are separate later work.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_compact_fulltext.CompactFulltextTests.test_dense_figure_labels_keep_the_complete_plain_extraction_and_both_measurements",
+        "test_compact_fulltext.CompactCaptureTests.test_default_capture_records_selection_and_replay_keeps_legacy_layout_capture_digest_and_bytes",
+        "test_main_capture_selection.MainCaptureChainTests.test_pending_request_switches_next_turn_and_earlier_parts_excerpts_and_requests_stay_verifiable",
+        "test_main_capture_selection.MainCaptureSelectionTests.test_readings_of_either_capture_keep_their_coverage_and_the_old_bundle_stays_complete",
+        "test_main_capture_selection.MainCaptureSelectionTests.test_unknown_wrong_version_and_pending_captures_are_refused_without_writes",
+        "test_compact_fulltext.CompactCaptureTests.test_stored_0853_capture_keeps_its_frozen_digest_text_and_default_projection",
+        "test_main_capture_selection.StoredCompleteCaptureTests.test_frozen_complete_source_manifest_authenticates_after_a_new_main_choice",
+        "test_main_capture_selection.MainCaptureSelectionTests.test_missing_or_corrupt_selected_artifacts_are_refused_without_recording_a_choice",
+        "test_main_capture_selection.MainCaptureSelectionTests.test_main_choice_retains_component_text_from_the_same_original",
+        "test_main_capture_selection.MainCaptureSelectionTests.test_main_choice_retains_inventoried_supplement_from_the_same_original"
+      ]
     }
   ]
 }

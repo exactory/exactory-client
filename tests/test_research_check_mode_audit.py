@@ -425,6 +425,7 @@ REFUSED_OUTCOMES = {
     "screen-batch": "policy_inapplicable",
     "screening-checkpoint": "policy_inapplicable",
     "select-cohort-abstract": "invalid_cohort_selection",
+    "select-main-capture": "unknown_work",
     "select-publication-scope": "publication_scope_missing",
     "source-impact": "strategy_reference_missing",
     "strategy": "research_intent_missing",

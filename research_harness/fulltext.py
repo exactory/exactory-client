@@ -1,6 +1,6 @@
 """Conservative full-text extraction, independent of acquisition and reading.
 
-extract(data, media_type, *, extractor=None, layout=True) -> {status, text,
+extract(data, media_type, *, extractor=None, layout=None) -> {status, text,
 includes_abstract, visual_inspection_required, extractor, version, options,
 media_type, format_detection}. media_type is the type the extraction used and
 format_detection names how it was decided: 'reported_media_type', or
@@ -11,8 +11,9 @@ extraction recognizes their normalized base types. PDF extractor injection
 accepts bytes and returns {status, text}; its successful status is 'extracted'.
 extraction_measures(text, original_size) describes an extraction (bytes, pages,
 longest line, whitespace fraction, expansion) so a coordinator sees layout
-padding before a reader does; a high value is a signal to inspect, never a
-reason to truncate. Missing, scanned, malformed or timed-out extraction remains
+padding before a reader does. Default PDF extraction retries without layout when
+padding exceeds the measured thresholds; explicit layout options remain authoritative.
+Neither mode truncates text. Missing, scanned, malformed or timed-out extraction remains
 pending.
 The default pdftotext invocation uses explicit argv, a timeout, a private temp
 directory, and a bounded output read. HTML requires article-body structure with
@@ -46,6 +47,12 @@ from pathlib import Path
 from xml.parsers import expat
 
 from .errors import ResearchError
+
+
+# Measured on 30 ordinary articles and the four incident PDFs; see the measurement fixture.
+LAYOUT_WHITESPACE_THRESHOLD = 0.90
+LAYOUT_EXPANSION_THRESHOLD = 2.0
+LAYOUT_SELECTION_PROTOCOL = "exactory-pdf-layout-selection-v1"
 
 
 def extraction_measures(text, original_size):
@@ -413,7 +420,7 @@ def detect_media_type(data, media_type):
     return media_type, "reported_media_type"
 
 
-def extract(data, media_type, *, extractor=None, layout=True, ocr=False):
+def extract(data, media_type, *, extractor=None, layout=None, ocr=False):
     # Extraction may recognize base types; review construction keeps the exact reported spelling.
     detected_type, format_detection = detect_media_type(data, parse_base_media_type(media_type))
     if format_detection != "reported_media_type":
@@ -422,6 +429,8 @@ def extract(data, media_type, *, extractor=None, layout=True, ocr=False):
               "extractor": None, "version": None, "options": {},
               "media_type": media_type, "format_detection": format_detection}
     if parse_base_media_type(media_type) == "application/pdf":
+        automatic_layout = layout is None and extractor is None and not ocr
+        layout = True if layout is None else layout
         if extractor is None and ocr:
             from .ocr import OcrPdfExtractor
             extractor = OcrPdfExtractor()
@@ -436,6 +445,23 @@ def extract(data, media_type, *, extractor=None, layout=True, ocr=False):
                        "version": extracted.get("version"), "options": extracted.get("options", {"layout": layout})})
         if result["status"] == "extracted" and (not isinstance(result["text"], str) or not result["text"].strip()):
             result["status"], result["text"] = "empty_text", None
+        if automatic_layout and result["status"] == "extracted":
+            measures = extraction_measures(result["text"], len(data))
+            selection = {"protocol": LAYOUT_SELECTION_PROTOCOL, "kept_mode": "layout",
+                         "thresholds": {"whitespace_fraction": LAYOUT_WHITESPACE_THRESHOLD,
+                                        "expansion_ratio": LAYOUT_EXPANSION_THRESHOLD},
+                         "measurements": {"layout": measures}}
+            if (measures["whitespace_fraction"] > LAYOUT_WHITESPACE_THRESHOLD
+                    or measures["expansion_ratio"] > LAYOUT_EXPANSION_THRESHOLD):
+                plain = PdfExtractor(layout=False)(data)
+                selection["kept_mode"] = "plain" if plain["status"] == "extracted" else None
+                selection["plain_status"] = plain["status"]
+                if plain["text"] is not None:
+                    selection["measurements"]["plain"] = extraction_measures(plain["text"], len(data))
+                result.update(status=plain["status"], text=plain["text"],
+                              extractor=plain.get("extractor", result["extractor"]),
+                              version=plain.get("version"), options=plain.get("options", {"layout": False}))
+            result["layout_selection"] = selection
         return result
     if parse_base_media_type(media_type) in XML_MEDIA_TYPES:
         result["extractor"] = "jats"

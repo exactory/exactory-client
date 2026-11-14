@@ -46,6 +46,7 @@ from .problem_post_facts import record_post_fact
 from .problem_areas import record_area
 from .problem_reports import describe_report_advisories, record_report
 from .problem_candidate_transfers import record_candidate_transfer
+from .capture_selection import select_main_capture
 
 
 OPERATIONS = {
@@ -95,6 +96,7 @@ OPERATIONS = {
     "defer-source": defer_source,
     "resume-source": resume_source,
     "select-cohort-abstract": cohort_evidence.select_cohort_abstract,
+    "select-main-capture": select_main_capture,
     "sample": sampling.record_sample,
     "standards": synthesis.record_standards,
     "rationale": synthesis.record_rationale,
