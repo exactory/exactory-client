@@ -5594,6 +5594,24 @@
         "test_research_output_views.RegistryTests.test_capacity_member_classifications_are_not_record_writes",
         "test_research_output_views.RegistryTests.test_every_written_kind_has_a_placement"
       ]
+    },
+    {
+      "id": "single-request-output-capacity-enters-a-series",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "review capacity by construction",
+      "summary": "A single review above its output task start, or a failed single attempt at the output limit, had no entry into the registered parts series.",
+      "fixed_in": "0.89.0",
+      "expected": "The first assignment above the start enters a task series. Output overflow replaces the frozen single at the same route and reviewer with a read bounded by the profile and half its units; the native result series reaches an authenticated final. Ordinary assignments within the start and stored requests keep their bytes.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_single_request.SingleEntryTests.test_each_adapter_enters_by_task_with_profile_read_start",
+        "test_review_single_request.FrozenSingleTests.test_opus_max_128000_output_replacement_reaches_a_recorded_native_final",
+        "test_review_single_request.FrozenSingleTests.test_within_start_assignment_is_byte_for_byte_the_ordinary_preparation",
+        "test_review_single_request.FrozenSingleTests.test_replacement_refuses_changed_reviewer_route_author_or_role_and_a_fork",
+        "tests.test_review_parts_native.NativePartsAcceptanceTests.test_single_output_replacement_is_consumed_and_acceptance_link_is_audited",
+        "test_review_single_request.SingleEntryTests.test_parts_fitter_uses_only_keyed_store_capacity",
+        "test_review_single_request.SingleEntryTests.test_single_start_keeps_output_profile_separate_from_input_evidence"
+      ]
     }
   ]
 }

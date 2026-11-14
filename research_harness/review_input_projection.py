@@ -128,7 +128,7 @@ def _require_review_packet(packet, assignments=None):
                      and _has_parts_binding(packet, 'native_math'))
             if valid:
                 try:
-                    native_review.require_assignment_identity(native, dict(id=header['series_assignment_id'],
+                    native_review.require_assignment_identity(native, dict(id=header.get('replaces_assignment_id', header['series_assignment_id']),
                         reviewer_id=packet['reviewer_id'], dossier_id=None))
                 except ResearchError:
                     valid = False

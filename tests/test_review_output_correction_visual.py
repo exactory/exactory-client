@@ -16,6 +16,8 @@ import test_visual_context_repair as fixtures
 
 class VisualCorrectionTests(unittest.TestCase):
     def test_original_visual_delivery_and_negative_science_survive_observed_text_delta(self):
+        from research_harness import review_route_capacity
+        from test_review_output_profile import build_row
         fixture = fixtures.VisualContextRepairTests()
         self.addCleanup(fixture.doCleanups)
         fixture.setUp()
@@ -78,7 +80,10 @@ class VisualCorrectionTests(unittest.TestCase):
             dict(state['output'], id='negative-final', dossier_id=None, assignment_id=assignment['id']))['result']
         records = case.read_records()
         self.assertEqual(decisions._assess_problem_coverage(records, artifacts, [review], case.expected, digest(case.expected)), [])
-        second = case.assign('result', 'second')
+        # The independent comparison review remains within its single-task start.
+        with patch.object(review_route_capacity, 'read_profile_priors', return_value=[
+                dict(build_row(level=None, kind='single', thinking=1000), largest_output_tokens=12)]):
+            second = case.assign('result', 'second')
         second_output = case.build_review_output('result')
         fixture.fixture.native.invoke(second['id'], second_output)
         case.mutate(decisions.record_value_review,

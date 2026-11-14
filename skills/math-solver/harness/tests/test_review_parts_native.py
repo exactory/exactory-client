@@ -19,6 +19,43 @@ from search_controller.storage import ContentSink
 
 
 class NativePartsAcceptanceTests(MathOpennessChainCase, unittest.TestCase):
+    def test_single_output_replacement_is_consumed_and_acceptance_link_is_audited(self):
+        from research_harness.review_continuation import plan_next
+        from research_harness.record_check import check_authentication
+        self.build_native_fixture()
+        limit_codex_input(self, 2000000)
+        with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 2000000), \
+                patch.object(parts, 'prepare_packet', side_effect=lambda records, artifacts, value, route,
+                             packet, prompt, history, **options: packet):
+            original = self.assign_turn('turn-1')
+            def over_cap(route, request, credential):
+                response = self.respond(route, request, {})
+                response['status'] = 'incomplete'
+                response['usage']['output_tokens'] = route['configuration']['max_output_tokens']
+                return response
+            with patch.object(transport, 'send_request', side_effect=over_cap):
+                protocol.invoke_assignment(self.store, dict(id='over-cap', assignment_id=original['id']),
+                    expected_revision=self.store.revision, request_id='over-cap')
+        plan = plan_next(self.store.snapshot()['records'], self.artifacts, original['id'])
+        self.assertEqual(plan['state'], 'replace', plan)
+        assignment = protocol.record_assignment(self.store, plan['payload'],
+            expected_revision=self.store.revision, request_id='replace-single')['result']
+        for number in range(40):
+            packet = self.read_turn(assignment['id'])
+            self.invoke(assignment['id'], self.review if parts.find_kind(packet) == 'final' else make_output(packet))
+            if parts.find_kind(packet) == 'final':
+                break
+            assignment = self.assign_turn('replacement-' + str(number), assignment['id'])
+        else:
+            self.fail('The native replacement series did not finish')
+        checked = self.check_review()
+        self.assertEqual(checked['attempt_id'], 'attempt-' + assignment['id'])
+        self.accept_result()
+        self.controller.command('deliver-attempt', {}, self.controller.status()['revision'], 'deliver-single-series')
+        links = list(check_authentication(self.store)['acceptance_reviews'].values())
+        self.assertEqual(links[0]['assignment_id'], original['id'])
+        self.assertEqual(links[0]['final_assignment_id'], assignment['id'])
+
     def test_attempt_links_the_attested_parts_series_to_its_observed_final(self):
         from research_harness.evidence import digest
         from research_harness.record_check import check_authentication

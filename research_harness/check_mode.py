@@ -95,6 +95,9 @@ class _CheckingStore:
                 read_unrecorded_overrides(self.root) or [], result, self._artifacts)
             if authorities:
                 response["write_authorities"] = authorities
+        if operation == 'review.assignment' and result.get('packet') is not None:
+            from .review_single_request import describe_assignment_delivery
+            response['review_delivery'] = describe_assignment_delivery(self._records, self._artifacts, result)
         raise _CheckComplete(response)
 
 

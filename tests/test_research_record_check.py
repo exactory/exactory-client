@@ -1052,13 +1052,18 @@ class RecordCheckFollowupTests(unittest.TestCase):
 
     def test_non_openness_native_head_is_only_a_controller_plan(self):
         from research_harness import record_check
+        from research_harness import review_route_capacity
+        from test_review_output_profile import build_row
         case = self.build_openness_case()
         reference = case.export(assignment_id='math-first')
         native = json.loads(case.artifacts.read(reference))
         native['contract'].pop('orchestration')
         native['scientific_context'].pop('openness_minimum')
         reference = case.artifacts.put(json.dumps(native).encode(), 'application/json')
-        case.assign('math-first', reference)
+        # This controller-boundary fixture keeps its native review within the single start.
+        with patch.object(review_route_capacity, 'read_profile_priors', return_value=[
+                dict(build_row(level=None, kind='single', thinking=1000), largest_output_tokens=12)]):
+            case.assign('math-first', reference)
         plan = dict(state='stop', chain='native_math', head_id='math-first', code='review_input_too_large')
         with patch.object(record_check, 'plan_next', return_value=plan):
             result = record_check.check_continuation(record_check.OfflineStore(case.root))

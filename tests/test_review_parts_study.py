@@ -288,7 +288,12 @@ class VerificationPartsTests(StudyPartsCase):
 
     def test_fitting_packet_remains_ordinary_and_cannot_gain_a_continuation(self):
         limit_codex_input(self, self.measure(self.logical) * 2)
-        assignment = self.assign()
+        # Supply a qualifying single-task row; an unmeasured class now starts at its floor.
+        from research_harness import review_route_capacity as capacity
+        from test_review_output_profile import build_row
+        with patch.object(capacity, 'read_profile_priors', return_value=[
+                build_row(level=None, kind='single', thinking=1000)]):
+            assignment = self.assign()
         self.assertIsNone(parts.find_kind(self.packet(assignment)))
         output = dict(verdict=self.case.verdict(), checks=[dict(
             dimension=kind, reason='Read the target.',
@@ -613,7 +618,11 @@ class ReadinessPartsTests(StudyPartsCase):
 
     def test_fitting_readiness_remains_a_single_assignment(self):
         limit_codex_input(self, self.measure(self.logical) * 2)
-        assignment = self.assign()
+        from research_harness import review_route_capacity as capacity
+        from test_review_output_profile import build_row
+        with patch.object(capacity, 'read_output_profile', return_value=dict(
+                rows=[build_row(level=None, kind='single', thinking=1000)], verified_input_tokens=400000)):
+            assignment = self.assign()
         self.assertIsNone(parts.find_kind(self.packet(assignment)))
         self.invoke(assignment, self.final_output(assignment))
         self.assertTrue(protocol.assignment_state(self.records(), self.case.artifacts,

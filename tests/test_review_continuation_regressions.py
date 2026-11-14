@@ -452,6 +452,8 @@ class ContinuationRegressionTests(unittest.TestCase):
 
     def test_status_lists_failed_openness_but_not_controller_native_heads(self):
         from openness_reading_fixtures import OpennessReadingCase
+        from research_harness import review_route_capacity
+        from test_review_output_profile import build_row
         case = self.fixture(OpennessReadingCase)
         reference = case.export(assignment_id='openness-failed')
         case.assign('openness-failed', reference)
@@ -461,9 +463,12 @@ class ContinuationRegressionTests(unittest.TestCase):
         native['reviewer'] = dict(source='host', actor_id='math-reviewer',
                                  attestation_id='review-assignment:math-failed')
         reference = case.artifacts.put(json.dumps(native).encode(), 'application/json')
-        case.mutate(protocol.record_assignment, dict(id='math-failed', route_id='route',
-            dossier_id=None, role='native_math', reviewer_id='math-reviewer', author_id='problem-author',
-            context=dict(native_packet=reference)))
+        # This status fixture needs an ordinary native single beside its reading chain.
+        with patch.object(review_route_capacity, 'read_profile_priors', return_value=[
+                dict(build_row(level=None, kind='single', thinking=1000), largest_output_tokens=12)]):
+            case.mutate(protocol.record_assignment, dict(id='math-failed', route_id='route',
+                dossier_id=None, role='native_math', reviewer_id='math-reviewer', author_id='problem-author',
+                context=dict(native_packet=reference)))
         for identifier in ('math-failed', 'openness-failed'):
             with patch('research_harness.review_transport.send_request', side_effect=OSError('failure')):
                 protocol.invoke_assignment(case.store,
