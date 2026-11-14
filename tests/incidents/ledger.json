@@ -4737,6 +4737,26 @@
         "test_gate_override.ProblemOverrideTests.test_legacy_override_export_keeps_its_files_digest_and_final_index",
         "test_check.TestRefsJsonInput.test_doi_tex_titles_verify_and_keep_chapter_title_matching"
       ]
+    },
+    {
+      "id": "openness-chain-reads-the-bound-main-capture",
+      "record": "20261111223126-layout-extraction-inflates-fulltext-delivery",
+      "class": "openness reading and capture selection",
+      "summary": "A main-capture choice after an openness finding made it stale, and a choice before export left the bound version without a full-text unit.",
+      "fixed_in": "open",
+      "expected": "An openness export binds the current main-capture choices and delivers their text. Reading plans, units, final results and staleness checks use that binding. An unbound packet keeps the first capture. Later choices preserve stored v4 and v5 packet, plan, prompt and request bytes and the standing of their findings.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_stored_v4_packets_plans_prompts_requests_and_finding_survive_a_later_choice",
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_stored_v5_packets_plans_prompts_requests_and_finding_survive_a_later_choice",
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_choice_before_prioritized_export_delivers_the_chosen_fulltext_unit",
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_choice_before_export_without_priority_delivers_the_chosen_fulltext_unit",
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_a_new_reading_on_the_chosen_capture_stays_bound_after_another_choice",
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_math_and_legacy_text_rows_use_the_packet_binding_and_unbound_packets_keep_the_first",
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_stored_source_delivery_contract_keeps_its_bound_capture_under_v4_and_v5",
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_a_legacy_reading_continuation_checks_its_excerpts_against_the_first_capture",
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_export_refuses_missing_or_corrupt_chosen_text_without_changing_the_record"
+      ]
     }
   ]
 }

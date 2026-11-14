@@ -1,0 +1,341 @@
+# Frozen builders from 3e8325b before openness capture binding.
+# Only the functions changed by this lane are copied; replay uses the unchanged module dependencies.
+
+
+# research_harness/openness_reading.py
+
+
+def list_reading_texts(records, native):
+    """The full-text rows of an openness packet: for each version that a bound reading read, the extracted text of each
+    of its main captures that the packet carries as evidence, so that a capture recorded after the export does not
+    enlarge the chain. An alternate main body that the packet's openness_delivery contract omits is not read; the
+    selected representation of its version is. A row is {kind, version_id, text_sha256, artifact}; the rows follow
+    the packet's text_delivery_priority, then the version id and the text digest."""
+    from .graph import main_captures
+    bound = set(native['scientific_context']['openness_minimum']['reading_digests'])
+    omitted = set((native['scientific_context'].get('openness_delivery') or {}).get('alternate_body_digests', []))
+    carried = {entry['artifact']['sha256'] for entry in native['evidence']} - omitted
+    priority = {sha256: index for index, sha256 in
+                enumerate(native['scientific_context'].get('text_delivery_priority', []))}
+    ranks, rows = {}, {}
+    for version in {reading['version_id'] for reading in records.get('reading', {}).values()
+                    if digest(reading) in bound}:
+        work = records.get('work', {}).get(version)
+        if work is None or not work.get('fulltexts'):
+            continue
+        ranks[version] = min((priority[capture['text']['sha256']] for capture in work['fulltexts']
+                              if capture.get('text') and capture['text']['sha256'] in priority),
+                             default=len(priority))
+        for capture in main_captures(records, work):
+            reference = capture.get('text')
+            if (capture.get('extraction_status') == 'extracted' and reference is not None
+                    and reference['sha256'] in carried):
+                rows[version, reference['sha256']] = {'kind': 'fulltext', 'version_id': version,
+                                                      'text_sha256': reference['sha256'], 'artifact': reference}
+    return sorted(rows.values(), key=lambda row: (ranks[row['version_id']], row['version_id'], row['text_sha256']))
+
+
+def list_math_text_rows(records, native):
+    """The full-text rows of a math result openness packet: for each bound reading whose source bundle pins an original,
+    the extracted text of that original's main capture, by version id and then text digest. The packet must carry each
+    text, so that a capture recorded after the export never enlarges the chain. A row is {kind, version_id,
+    text_sha256, artifact}."""
+    from .graph import main_captures
+    bound = set(native['scientific_context']['openness_minimum']['reading_digests'])
+    carried = {entry['artifact']['sha256'] for entry in native['evidence']}
+    rows = {}
+    for reading in records.get('reading', {}).values():
+        if digest(reading) not in bound or reading.get('bundle_id') is None:
+            continue
+        bundle = records.get('source_bundle', {}).get(reading['bundle_id'])
+        work = records.get('work', {}).get(reading['version_id'])
+        texts = [] if bundle is None or work is None else [
+            capture['text'] for capture in main_captures(records, work)
+            if capture['original']['sha256'] == bundle['original_sha256']
+            and capture.get('extraction_status') == 'extracted' and capture.get('text') is not None]
+        if not texts or texts[0]['sha256'] not in carried:
+            raise ResearchError('openness_reading_incomplete', 'The openness packet does not carry the extracted text '
+                                'of an original that a bound reading pins',
+                                {'reading_id': reading['id'], 'version_id': reading['version_id']})
+        rows[reading['version_id'], texts[0]['sha256']] = {'kind': 'fulltext', 'version_id': reading['version_id'],
+                                                           'text_sha256': texts[0]['sha256'], 'artifact': texts[0]}
+    return [rows[key] for key in sorted(rows)]
+
+
+def _list_legacy_texts(records, native):
+    """The stored extracted full text of each version that the readings of the openness minimum read, ordered by the
+    packet's text_delivery_priority and then by version id: the full texts of the chains whose final turn 0.64.2 to
+    0.66.2 built."""
+    reading_digests = set(native['scientific_context']['openness_minimum']['reading_digests'])
+    versions = {reading['version_id'] for reading in records.get('reading', {}).values()
+                if digest(reading) in reading_digests}
+    priority = {sha256: index for index, sha256 in
+                enumerate(native['scientific_context'].get('text_delivery_priority', []))}
+
+    def find_rank(version):
+        captured = [capture['text']['sha256'] for capture in records['work'][version]['fulltexts']
+                    if capture.get('text')]
+        return min((priority[sha256] for sha256 in captured if sha256 in priority), default=len(priority))
+    texts = [{'version_id': version, 'artifact': review_excerpts.find_fulltext(records, version)}
+             for version in versions]
+    texts = [row for row in texts if row['artifact'] is not None]
+    return sorted(texts, key=lambda row: (find_rank(row['version_id']), row['version_id']))
+
+
+# research_harness/problem_openness.py
+
+
+def collect_reading_artifacts(records, artifacts, reading):
+    """Collect inspected originals, extracted text and explicitly named visuals."""
+    from .source_links import validate_link
+    found = {}
+    for inspection in reading["inspections"]:
+        link = inspection["link"]
+        context = validate_link(records, artifacts, link)
+        references = [link["artifact"], (context["capture"] or {}).get("original")]
+        references.extend(asset["artifact"] for asset in link["locator"].get("assets", []))
+        for reference in references:
+            if reference is not None:
+                artifacts.read(reference)
+                found[reference["sha256"]] = reference
+    return list(found.values())
+
+
+def export_openness(store, spec, destination=None):
+    records = store.snapshot()["records"]
+    marker = require_problem(records)
+    fields(spec, ("assignment_id", "reviewer_id", "minimum"), ("native_reviews", "source_evidence"))
+    text(spec["assignment_id"], "Openness assignment ID")
+    text(spec["reviewer_id"], "Openness reviewer ID")
+    fields(spec["minimum"], ("searches", "settling_work_id", "duplicate_resolutions"), ("text_priority",))
+    statement = find_current_statement(records)
+    if statement is None:
+        raise ResearchError("problem_statement_missing", "Record the exact statement before openness review")
+    artifacts = ArtifactStore(store.root)
+    bound, required, evidence = [], set(), {}
+
+    def include_record(record):
+        data = serialize_record(record)
+        artifact = artifacts.put(data, "application/json")
+        evidence[artifact["sha256"]] = {"digest": artifact["sha256"], "kind": "blob", "artifact": artifact}
+
+    for binding in spec["minimum"]["searches"]:
+        fields(binding, ("formulation", "search_id"))
+        search = records.get("literature_search", {}).get(binding["search_id"])
+        if search is None:
+            raise ResearchError("openness_search_missing", "Bind this store's exact search", binding)
+        bound.append((binding["formulation"], search))
+        required.update(row["work_id"] for row in search["dispositions"] if row["disposition"] in {"relevant", "contradictory"})
+    if spec["minimum"]["settling_work_id"] is not None:
+        required.add(spec["minimum"]["settling_work_id"])
+    readings = {}
+    for work in sorted(required):
+        coverage = fulltext_coverage(records, artifacts, work)
+        for reading_id in coverage["readings"]:
+            readings[reading_id] = records["reading"][reading_id]
+    minimum = {"schema_version": 1, "statement": statement["statement"], "neighbours": statement["neighbours"],
+               "searches": [{"formulation": formulation, "search_digest": digest(search)}
+                            for formulation, search in bound],
+               "reading_digests": sorted(digest(row) for row in readings.values()),
+               "settling_work_id": spec["minimum"]["settling_work_id"],
+               "duplicate_resolutions": spec["minimum"]["duplicate_resolutions"]}
+    # The declaration is checked against the store before the export writes anything.
+    from .openness_minimum import validate_minimum_bindings
+    validate_minimum_bindings(minimum, statement["statement"], records)
+    for _, search in bound:
+        include_record(search)
+    for reading in readings.values():
+        include_record(reading)
+        for artifact in collect_reading_artifacts(records, artifacts, reading):
+            evidence[artifact["sha256"]] = {"digest": artifact["sha256"], "kind": "artifact", "artifact": artifact}
+    include_record(statement)
+    scientific_context = {"openness_minimum": minimum}
+    if "source_evidence" in spec:
+        from .problem_openness_screening import resolve_source_evidence
+        source_evidence, source_artifacts = resolve_source_evidence(records, artifacts, spec["source_evidence"], materialize=True)
+        scientific_context["source_evidence"] = source_evidence
+        from .review_verbatim_text import MARKER
+        scientific_context["review_text_encoding"] = MARKER
+        evidence.update(source_artifacts)
+    if "native_reviews" in spec:
+        from .problem_openness_reviews import resolve_native_reviews
+        native_reviews, native_evidence = resolve_native_reviews(records, artifacts, spec["native_reviews"])
+        scientific_context["native_reviews"] = native_reviews
+        evidence.update(native_evidence)
+    packet = {"protocol": PROTOCOL, "kind": "result", "root": str(store.root.resolve()), "objective_id": statement["id"],
+              "contract": {"orchestration": "problem_creation", "area": marker["area"]}, "subject": statement,
+              "subject_digest": digest(statement), "claim_digest": compute_statement_digest(statement),
+              "reviewer": {"source": "host", "actor_id": spec["reviewer_id"], "attestation_id": ATTESTATION_PREFIX + spec["assignment_id"]},
+              "scientific_context": scientific_context, "evidence": [evidence[key] for key in sorted(evidence)],
+              "execution_provenance": [], "unmaterialized_digests": []}
+    if spec["minimum"].get("text_priority"):
+        # The research record declares which decisive full texts a text-limited route delivers first; the transport
+        # applies the route limit to the rest.
+        strings(spec["minimum"]["text_priority"], "Text delivery priority")
+        from .openness_reading import list_reading_texts
+        reading_texts = list_reading_texts(records, packet)
+        priority = []
+        for version in spec["minimum"]["text_priority"]:
+            texts = sorted(row["text_sha256"] for row in reading_texts if row["version_id"] == version)
+            if not texts:
+                raise ResearchError("openness_reading_gap", "Text delivery priority requires an extracted main text "
+                                    "carried by this packet for a bound reading", {"version_id": version})
+            priority.extend(texts)
+        scientific_context["text_delivery_priority"] = priority
+        scientific_context["text_delivery_rule"] = (
+            "On a text-limited reviewer route the bodies of the listed full texts are delivered in this order "
+            "while the route input limit allows; a body that does not fit is replaced by an explicit elision "
+            "note, and the reading record of that work (its notes and inspected excerpts) is delivered in full.")
+    if "native_reviews" in scientific_context:
+        from .problem_openness_sources import build_delivery
+        scientific_context["openness_delivery"] = build_delivery(records, artifacts, packet)
+    reference = artifacts.put(json.dumps(packet, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(), "application/json")
+    load_packet(artifacts, reference, spec["reviewer_id"])
+    from .review_delivery import deliver_packet, find_packet_destination
+    if destination is None:
+        destination = find_packet_destination(store, spec["assignment_id"])
+    delivered = deliver_packet(store, destination, packet, transitive=True)
+    result = dict(delivered, native_packet=reference, subject_digest=packet["subject_digest"], claim_digest=packet["claim_digest"])
+    if not spec["minimum"].get("text_priority"):
+        # A lower bound of the reviewer input: the packet and its text evidence bodies as JSON strings. Without a
+        # priority no body gives way, so a route whose limit is below it refuses the run.
+        from . import review_transport
+        estimate = len(json.dumps(packet, ensure_ascii=False)) + sum(
+            len(json.dumps(data.decode("utf-8"), ensure_ascii=False))
+            for data in (artifacts.read(entry["artifact"]) for entry in packet["evidence"]) if _is_utf8(data))
+        routes = sorted(identifier for identifier, route in records.get("review_route", {}).items()
+                        if (review_transport.local_input_limit(route) or estimate) < estimate)
+        if routes:
+            result["warnings"] = [{"code": "review_input_too_large", "message":
+                "The estimated size of this packet exceeds the input limit of the text routes in route_ids, and "
+                "without minimum.text_priority a route withholds no full text by priority. List the version ids of the "
+                "read works in minimum.text_priority, the decisive ones first, so that a route withholds full-text bodies "
+                "from the end of the list. The estimate counts the packet and its UTF-8 evidence as JSON strings, so a "
+                "delivery projection or a framed route can send less.",
+                "details": {"route_ids": routes, "estimated_characters": estimate}}]
+    return result
+
+
+# research_harness/problem_openness_sources.py
+
+
+def build_delivery(records, artifacts, packet):
+    """Reconstruct selection from authenticated exact versions and current full readings."""
+    from .bar_sources import _source, _capture_digest
+    from .identities import version_of
+    from .reading import fulltext_coverage
+    from .source_links import captured_source
+    required = required_proof(packet)
+    references = {row["digest"]: row["artifact"] for row in packet["evidence"]}
+    containers = {}
+    for identity in sorted(required):
+        data = artifacts.read(references[identity])
+        try:
+            data.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        containers[identity] = data
+    minimum = packet["scientific_context"]["openness_minimum"]
+    selected_readings = {digest(row): row for row in records.get("reading", {}).values()
+                         if digest(row) in minimum["reading_digests"]}
+    require(set(selected_readings) == set(minimum["reading_digests"]), "Retain every exact full reading")
+    from .problem_openness_screening import required_evidence
+    sources, contained, alternate = [], {}, set()
+    protected = required_evidence(packet["scientific_context"])
+    for version in sorted({row["version_id"] for row in selected_readings.values()}):
+        coverage = fulltext_coverage(records, artifacts, version)
+        reading_digests = {digest(records["reading"][identity]) for identity in coverage["readings"]}
+        bound = {identity for identity, row in selected_readings.items() if row["version_id"] == version}
+        require(coverage["complete"] and reading_digests == bound,
+                "Each held main representation needs its current full reading", version_id=version)
+        delivery = _source(records, artifacts, {"id": "openness-source", "kind": "source",
+                           "version_id": version, "depth": "fulltext"}, {})
+        require(delivery["status"] == "delivered", "Resolve required source units before selecting a representation",
+                version_id=version, pending=delivery["source_scope_pending"])
+        alternatives = delivery["source_alternatives"]
+        main = [row for row in alternatives if row["main_representation"]]
+        for row in main:
+            if version.startswith("arxiv:") or len(main) > 1:
+                source = captured_source(records, artifacts, row["source_id"])
+                require(source.get("observed_identifier") == version
+                        and (not version.startswith("arxiv:") or version_of(version) is not None),
+                        "Do not merge representations with absent or ambiguous exact-version identity", version_id=version)
+        eligible = [row for row in alternatives if row["main_representation"] and not row["source_scope_pending"]]
+        require(bool(eligible), "Select a complete authenticated main representation", version_id=version)
+        spans = {}
+        for row in eligible:
+            reference = row["extraction_descriptor"]
+            identity = reference["sha256"]
+            require(identity in references, "The selected complete extraction must remain in the immutable packet")
+            if identity not in required:
+                span = _containment(reference, artifacts.read(references[identity]), containers)
+                if span is not None:
+                    spans[identity] = span
+        selected = min(eligible, key=lambda row: (row["extraction_descriptor"]["sha256"] not in spans,
+            row["original_descriptor"]["media_type"] != "application/pdf", row["source_id"]))
+        selected_text = selected["extraction_descriptor"]["sha256"]
+        protected.update((selected_text, selected["original_descriptor"]["sha256"]))
+        if selected_text in spans:
+            contained[selected_text] = spans[selected_text]
+        for row in alternatives:
+            if row["main_representation"] and row["source_id"] != selected["source_id"]:
+                alternate.update((row["original_descriptor"]["sha256"], row["extraction_descriptor"]["sha256"]))
+        # Explicit figures, formulas, tables, supplements and their assets are never alternate main bodies.
+        for bundle in delivery["declared_bundles"]:
+            for unit in bundle["units"]:
+                link = unit["link"]
+                if link is not None and unit["kind"] in {"figure", "table", "equation", "supplement"}:
+                    protected.add(link["artifact_descriptor"]["sha256"])
+                    protected.update(identity for row in delivery["source_provenance"]
+                                     if row.get("bundle_id") == bundle["id"] and row.get("unit_id") == unit["id"]
+                                     for identity in row["delivered_sha256"])
+        for identity in bound:
+            for inspection in selected_readings[identity]["inspections"]:
+                protected.update(asset["artifact"]["sha256"] for asset in inspection["link"]["locator"].get("assets", []))
+        representations = []
+        for row in alternatives:
+            source = captured_source(records, artifacts, row["source_id"])
+            representations.append(dict(row, captured_at=source.get("captured_at"),
+                capture_method=source["capture_method"], origin_verified=source["origin_verified"],
+                observed_identifier=source.get("observed_identifier")))
+        sources.append({"version_id": version, "selected_source_id": selected["source_id"],
+            "selected_text_sha256": selected_text, "selected_original_sha256": selected["original_descriptor"]["sha256"],
+            "capture_digest": _capture_digest(records["work"][version], records),
+            "representations": representations})
+    return {"schema_version": 1, "sources": sources,
+            "contained_sources": [contained[key] for key in sorted(contained)],
+            "alternate_body_digests": sorted(alternate - protected - required),
+            "protected_source_digests": sorted(protected)}
+
+
+# skills/math-solver/harness/search_controller/reviewer.py
+
+
+def packet(root, state, content, subject, review_kind, claim_digest, reviewer, artifacts, *, write=False,
+           openness=None, common_records=None, supplementary=None):
+    from research_harness.native_review import PROTOCOL
+    context = scientific_context(state, subject, review_kind)
+    if openness is not None:
+        from .openness import validate_minimum
+        validate_minimum(openness)
+        context["openness_minimum"] = copy.deepcopy(openness)
+    validate_supplementary_inputs(supplementary)
+    if supplementary is not None:
+        context["supplementary_inputs"] = copy.deepcopy(supplementary)
+    seed = {"subject": subject, "contract": state["contract"], "scientific_context": context,
+            "claim_digest": claim_digest}
+    evidence, unavailable, provenance = _closure(seed, state, content, artifacts, write=write, common_records=common_records)
+    if supplementary is not None:
+        entries = {(entry["kind"], entry["digest"]): entry for entry in evidence}
+        binding = context["supplementary_inputs"]
+        for item in binding["inputs"]:
+            entry = entries.get((item["kind"], item["digest"]))
+            s.require(entry is not None, "Every supplementary input must reach the packet", "review_packet_mismatch")
+            if "artifact" not in item:
+                item["artifact"] = entry["artifact"]
+        validate_supplementary_inputs(binding, evidence)
+    return {"protocol": PROTOCOL, "kind": review_kind, "root": str(Path(root).resolve()),
+            "objective_id": state["objective_id"], "contract": copy.deepcopy(state["contract"]),
+            "subject": copy.deepcopy(subject), "subject_digest": s.digest(subject), "claim_digest": claim_digest,
+            "reviewer": copy.deepcopy(reviewer), "scientific_context": context,
+            "evidence": evidence, "execution_provenance": provenance, "unmaterialized_digests": unavailable}

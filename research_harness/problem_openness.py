@@ -13,16 +13,33 @@ from .reading import fulltext_coverage
 
 
 def collect_reading_artifacts(records, artifacts, reading):
-    """Collect inspected originals, extracted text and explicitly named visuals."""
+    """Collect inspected originals and visuals, using the bound main extraction for a chosen original."""
     from .source_links import validate_link
-    found = {}
+    found, originals = {}, set()
     for inspection in reading["inspections"]:
         link = inspection["link"]
         context = validate_link(records, artifacts, link)
-        references = [link["artifact"], (context["capture"] or {}).get("original")]
+        original = (context["capture"] or {}).get("original")
+        if original is not None:
+            originals.add(original["sha256"])
+        references = [link["artifact"], original]
         references.extend(asset["artifact"] for asset in link["locator"].get("assets", []))
         for reference in references:
             if reference is not None:
+                artifacts.read(reference)
+                found[reference["sha256"]] = reference
+    from .capture_selection import find_capture_selections, find_replaced_texts
+    if find_capture_selections(records, reading["version_id"]):
+        from .graph import main_captures
+        work = records["work"][reading["version_id"]]
+        inspected = set(found)
+        visuals = {asset["artifact"]["sha256"] for inspection in reading["inspections"]
+                   for asset in inspection["link"]["locator"].get("assets", [])}
+        for sha256 in find_replaced_texts(records, work) - visuals - originals:
+            found.pop(sha256, None)
+        for capture in main_captures(records, work):
+            if capture["original"]["sha256"] in inspected and capture.get("text") is not None:
+                reference = capture["text"]
                 artifacts.read(reference)
                 found[reference["sha256"]] = reference
     return list(found.values())
@@ -93,9 +110,11 @@ def prepare_openness(records, artifacts, value, revision):
         if finding["minimum"] != packet["scientific_context"].get("openness_minimum"):
             raise ResearchError("openness_evidence_mismatch", "Return the exact minimum supplied to the reviewer")
         reading_digests = set(finding["minimum"]["reading_digests"])
-        required_artifacts = {reference["sha256"] for reading in records.get("reading", {}).values()
+        from .capture_selection import bind_packet_selections
+        bound_records = bind_packet_selections(records, packet["scientific_context"])
+        required_artifacts = {reference["sha256"] for reading in bound_records.get("reading", {}).values()
                               if digest(reading) in reading_digests
-                              for reference in collect_reading_artifacts(records, artifacts, reading)}
+                              for reference in collect_reading_artifacts(bound_records, artifacts, reading)}
         if not required_artifacts <= delivered:
             raise ResearchError("openness_evidence_mismatch", "Deliver every decisive reading's inspected original and visual bytes",
                                 {"artifact_digests": sorted(required_artifacts - delivered)})
@@ -241,7 +260,8 @@ def export_openness(store, spec, destination=None):
         for artifact in collect_reading_artifacts(records, artifacts, reading):
             evidence[artifact["sha256"]] = {"digest": artifact["sha256"], "kind": "artifact", "artifact": artifact}
     include_record(statement)
-    scientific_context = {"openness_minimum": minimum}
+    from .capture_selection import describe_capture_selections
+    scientific_context = {"openness_minimum": minimum, **describe_capture_selections(records)}
     if "source_evidence" in spec:
         from .problem_openness_screening import resolve_source_evidence
         source_evidence, source_artifacts = resolve_source_evidence(records, artifacts, spec["source_evidence"], materialize=True)
