@@ -49,6 +49,9 @@ from .visual_assets import asset_dependencies
 NOTE_FIELDS = ("problem", "claims", "assumptions", "methods", "evidence", "limitations", "relevance")
 FULLTEXT_PURPOSES = ("major_claim", "novelty", "innovation", "validity", "exemplar", "lineage", "classic", "core", "contradiction")
 DEPENDENT_PURPOSES = ("lineage", "classic", "core")
+SOURCE_LINK_NOT_FULLTEXT_MESSAGE = (
+    'The cited artifact is neither the original nor the extracted text of a full-text capture of this version.'
+)
 BATCH_LIMIT = 100
 RELEVANCE = ("none", "weak", "strong")
 
@@ -463,6 +466,30 @@ def current_readings(records, artifacts, version_id, *, target=None, eligible_re
     return evaluation.compute_once_in_root(("current_readings", version_id, digest(target), eligible), compute)
 
 
+def validate_fulltext_link(records, link):
+    """Separate a citation that cannot be read at full depth from a missing reading."""
+    from .source_links import fulltext_capture
+    capture = fulltext_capture(exact_work(records, link['version_id']), link['source_id'])
+    if capture is None or link['artifact'] not in (capture['original'], capture['text']):
+        raise ResearchError('source_link_not_fulltext', SOURCE_LINK_NOT_FULLTEXT_MESSAGE,
+                            dict(version_id=link['version_id'], artifact=link['artifact']))
+    return capture
+
+
+def list_reading_targets(records, link, capture, *, target=None):
+    """Include main bundles that explicitly inspect the cited supplement."""
+    if target is not None or capture is None:
+        return [target]
+    original = capture['original']['sha256']
+    originals = {original}
+    for bundle in records.get('source_bundle', {}).values():
+        if bundle['version_id'] == link['version_id'] and any(
+                unit['kind'] == 'supplement' and unit['link'] is not None
+                and original_identity(records, unit['link']) == original for unit in bundle['units']):
+            originals.add(bundle['original_sha256'])
+    return [dict(id=link['version_id'], sha256=sha) for sha in sorted(originals)]
+
+
 def validate_read_evidence(records, artifacts, link, *, depth="fulltext", target=None, eligible_reading_ids=None):
     """Task 4 claim boundary. Verify an anchored link and an applicable reading.
 
@@ -473,17 +500,9 @@ source inspection, not comprehension, entailment, or the truth of a claim.
     context = evaluation.link(link)
     if depth not in ("fulltext", "abstract", "passage"):
         raise ResearchError("invalid_reading", "Unsupported required evidence depth")
-    targets = [target]
-    if target is None and context["capture"] is not None:
-        original = context["capture"]["original"]["sha256"]
-        originals = {original}
-        # An explicitly inspected supplement belongs to its main bundle. Its
-        # own original pin need not name a separate main-article bundle.
-        for bundle in records.get("source_bundle", {}).values():
-            if bundle["version_id"] == link["version_id"] and any(u["kind"] == "supplement" and u["link"] is not None
-                    and original_identity(records, u["link"]) == original for u in bundle["units"]):
-                originals.add(bundle["original_sha256"])
-        targets = [{"id": link["version_id"], "sha256": sha} for sha in sorted(originals)]
+    if depth == 'fulltext':
+        validate_fulltext_link(records, link)
+    targets = list_reading_targets(records, link, context['capture'], target=target)
     eligible_ids = None if eligible_reading_ids is None else frozenset(eligible_reading_ids)
     for pin in targets:
         readings, _ = current_readings(records, evaluation, link["version_id"], target=pin,

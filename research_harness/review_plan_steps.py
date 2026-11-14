@@ -39,6 +39,9 @@ PLAN_STEPS = {
              prerequisites=("Obtain the owner's grant of further calls.",)),
     12: dict(command='select-main-capture', roles=('bar', 'slate', 'result'),
              chooses=('version_id', 'source_id', 'reason'), prerequisites=('Capture the original in a size that fits.',)),
+    13: dict(command='read', roles=('bar', 'slate', 'result', 'adjudicator'),
+             chooses=('id', 'inspections', 'notes'),
+             prerequisites=('Acquire a complete full-text capture.', 'Declare its required-unit bundle.')),
 }
 
 
@@ -62,7 +65,7 @@ def list_excluded_reviewers(records, assignment, *, include_slot=True):
     return sorted(reviewers)
 
 
-def describe_step(records, artifacts, assignment, number, *, stop_id=None):
+def describe_step(records, artifacts, assignment, number, *, stop_id=None, reading=None):
     """Fill the known payload and leave reviewer choices explicit."""
     row = PLAN_STEPS[number]
     payload = _build_identity_payload(assignment)
@@ -117,6 +120,15 @@ def describe_step(records, artifacts, assignment, number, *, stop_id=None):
         from .review_budget import read_budget_usage
         payload = {}
         result['usage'] = read_budget_usage(records)
+    elif number == 13:
+        payload = dict(version_id=reading['version_id'], depth='fulltext')
+        captures = reading['captures']
+        if len(captures) == 1 and captures[0]['bundle_id'] is not None:
+            payload['bundle_id'] = captures[0]['bundle_id']
+        else:
+            result['chooses'].append('bundle_id')
+        result['captures'] = copy.deepcopy(captures)
+        result['prerequisites'] = [copy.deepcopy(step) for capture in captures for step in capture['prerequisites']]
     else:
         payload = {}
     result['payload'] = payload
@@ -164,6 +176,21 @@ def complete_plan(records, artifacts, assignment, plan):
     plan = copy.deepcopy(plan)
     details = plan.setdefault('details', {})
     code = plan.get('code')
+    if code == 'reading_missing':
+        from .review_reading import collect_missing_readings, READING_HANDOFF_MESSAGE
+        if 'readings' not in details:
+            state = protocol.assignment_state(records, artifacts, assignment['id'])
+            effective = state.get('effective') or {}
+            output = effective.get('effective_output', state.get('output'))
+            details['readings'] = collect_missing_readings(records, artifacts, output)
+        steps = [describe_step(records, artifacts, assignment, 13, reading=row) for row in details['readings']]
+        details.update(message=READING_HANDOFF_MESSAGE,
+                       then=dict(command='review-series', assignment_id=assignment['id']))
+        if steps:
+            details['step'] = steps[0]
+            if len(steps) > 1:
+                details['steps'] = steps
+        return dict(plan, state='handoff', command='read')
     terminal = describe_terminal(code)
     if terminal['details'].get('next', {}).get('kind') == 'role' and plan.get('command') != 'review-output-correction':
         return dict(plan, **describe_role_handoff(records, artifacts, assignment, code, details))

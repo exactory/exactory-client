@@ -3854,6 +3854,8 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
             with contract_check('adjudication.evidence_delivery'):
                 raise ResearchError('review_evidence_undelivered',
                     'Cite only content that this adjudicator received in its own packets.', missing[0])
+        from .review_refusal import validate_source_links_contract
+        validate_source_links_contract(records, output, packets)
 
 
 @record_refusal_on_error

@@ -5328,6 +5328,25 @@
       "tests": [
         "test_automatic_gate_override.RecordedSeriesStopTests.test_malformed_packet_keeps_the_cli_terminal_stop_and_exit_code"
       ]
+    },
+    {
+      "id": "delivered-fulltext-needs-an-agent-reading",
+      "record": "20261111235418-bar-final-refused-for-text-delivered-in-reduced-history",
+      "class": "review recording prerequisites and output refusals",
+      "summary": "A final can cite delivered full text without an agent reading, or cite an abstract in a source-link form that no full reading satisfies.",
+      "expected": "Unread full-text citations hand off to read before recording, preserving the selected output. Non-fulltext links write rechecked output refusals before reading checks, allow one more identical request, then use the exhausted role step. A corrected descriptor leaves only the actual reading work.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_record_reading_handoff.ReadingHandoffTests.test_delivered_fulltext_hands_off_reading_then_records_the_same_output_without_a_call",
+        "test_record_reading_handoff.ReadingHandoffTests.test_abstract_refusal_precedes_every_missing_reading_and_rechecks_from_frozen_output",
+        "test_record_reading_handoff.ReadingHandoffTests.test_second_output_citing_descriptor_hands_off_only_the_fulltext_reading",
+        "test_record_reading_handoff.ReadingHandoffTests.test_abstract_alone_refuses_twice_then_new_blind_reviewer_takes_the_slot",
+        "test_record_reading_handoff.FocusedReadingHandoffTests.test_adjudication_final_hands_off_a_stale_reading_then_records_the_same_output",
+        "test_record_reading_handoff.FocusedReadingHandoffTests.test_adjudication_abstract_refusal_is_bounded_and_uses_its_role_handoff",
+        "test_record_reading_handoff.ReadingHandoffTests.test_catalog_gap_keeps_the_pure_refusal_before_the_corrected_output_needs_reading",
+        "test_record_reading_handoff.ReadingHandoffTests.test_a_reading_completed_during_the_recording_error_records_without_a_reviewer_call"
+      ]
     }
   ]
 }

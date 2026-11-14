@@ -451,6 +451,8 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
                 with contract_check("review.evidence_delivery"), describe_error_at(path):
                     raise ResearchError("review_evidence_undelivered",
                         "Cite only content that this review received: no packet of the review delivered " + description, details)
+    from .review_refusal import validate_source_links_contract
+    validate_source_links_contract(records, output, packets)
     with contract_check("review.support"), describe_error_at('/support'):
         if problem and output["support"] is not None:
             raise ResearchError("invalid_value_review", "A problem review supplies problem assurances, not native proof acceptance")

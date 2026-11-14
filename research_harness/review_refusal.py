@@ -11,6 +11,9 @@ from .fulltext import GENERIC_BINARY_MEDIA_TYPES, parse_base_media_type
 from .operations import immutable_record, prepared_mutation
 
 PROTOCOL = 'exactory-review-output-refusal-v1'
+SOURCE_LINK_ACCEPTED_FORMS_NOTICE = (
+    'Cite the delivered bytes by their artifact descriptor, or use a source link into a full text that this chain delivered.'
+)
 
 
 @contextmanager
@@ -109,7 +112,9 @@ def evidence_arrays(output, *, with_paths=False):
     """Traverse completed scientific fields, never a raw task or page envelope."""
     if 'objection_id' in output and 'value' not in output:
         arrays = [('/evidence', output['evidence'])]
-        return arrays if with_paths else [output['evidence']]
+        arrays.extend(('/reassessment/findings/' + str(index) + '/evidence', row['evidence'])
+                      for index, row in enumerate(output.get('reassessment', {}).get('findings', [])))
+        return arrays if with_paths else [values for path, values in arrays]
     value = output['value']
     arrays = [('/value/evidence', value['evidence'])]
     for path, rows in (('/value/assurances', value['assurances']), ('/value/work_items', value['work_items']),
@@ -117,6 +122,44 @@ def evidence_arrays(output, *, with_paths=False):
                        ('/reassessment/findings', output.get('reassessment', {}).get('findings', []))):
         arrays.extend((path + '/' + str(index) + '/evidence', row['evidence']) for index, row in enumerate(rows))
     return arrays if with_paths else [evidence for path, evidence in arrays]
+
+
+def validate_source_links_contract(records, output, packets):
+    """Check capture membership for every link before the recording reads any prerequisite.
+
+    Capture identities are immutable; current readings and bundle selection do not
+    participate in this output refusal. Delivery depth comes from the frozen chain.
+    """
+    from .reading import validate_fulltext_link
+    for path, values in evidence_arrays(output, with_paths=True):
+        for index, reference in enumerate(values):
+            if reference.get('kind') != 'source':
+                continue
+            link = reference['link']
+            try:
+                validate_fulltext_link(records, link)
+            except ResearchError as error:
+                if error.code in ('unknown_work', 'missing_version'):
+                    # Catalog prerequisites cannot hide another pure contract
+                    # failure. The recording's source check still requires them.
+                    continue
+                if error.code != 'source_link_not_fulltext':
+                    raise
+                depths = [delivery['request'].get('depth') for packet in packets
+                          for delivery in packet.get('source_deliveries', [])
+                          if delivery.get('request', {}).get('version_id') == link['version_id']
+                          and link['artifact'] in delivery.get('evidence', [])]
+                if not depths:
+                    depths = [mapping['inspection']['depth'] for packet in packets
+                              for key in ('prior_context', 'version_source_mappings', 'supplied_source_mappings')
+                              for mapping in packet.get(key, [])
+                              if mapping.get('version_id') == link['version_id'] and 'inspection' in mapping
+                              and mapping.get('origin', {}).get('artifact_descriptor', {}).get('sha256')
+                              == link['artifact']['sha256']]
+                error.details.update(path=path + '/' + str(index),
+                    delivered_depth=depths[0] if depths else None, notice=SOURCE_LINK_ACCEPTED_FORMS_NOTICE)
+                error.contract_check = 'evidence.fulltext'
+                raise
 
 
 def _validate_staged_objections(records, artifacts, values, evidence_validator):
@@ -165,6 +208,7 @@ def _validate_staged_final(records, artifacts, assignment, packet, epoch, output
             if expected is not None and output['objection_id'] != expected:
                 raise ResearchError('review_adjudication_mismatch', 'Disposition must concern the assigned objection')
             evidence(records, artifacts, output['evidence'])
+        validate_source_links_contract(records, output, (packet, frame))
         return
     from .research_decisions import _validate_value
     from .problem_rubric import PROBLEM_CHECKS
@@ -179,6 +223,7 @@ def _validate_staged_final(records, artifacts, assignment, packet, epoch, output
                         evidence_validator=evidence)
         strings(output['limitations'], 'Independent assessment limitations', nonempty=True)
     _validate_staged_objections(records, artifacts, output['objections'], evidence)
+    validate_source_links_contract(records, output, (packet, frame))
     with contract_check('review.support'):
         if output['support'] is not None:
             raise ResearchError('invalid_value_review', 'A problem review supplies problem assurances, not native proof acceptance')
@@ -291,7 +336,17 @@ def record_refusal_on_error(record_function):
     def wrapped(store, payload, *, expected_revision, request_id):
         try:
             return record_function(store, payload, expected_revision=expected_revision, request_id=request_id)
-        except ResearchError:
+        except ResearchError as error:
+            if error.code == 'source_link_not_fulltext':
+                from .review_reading import collect_missing_readings
+                try:
+                    snapshot = store.snapshot()
+                    evaluation = store.build_artifact_store()
+                    error.details['readings'] = collect_missing_readings(snapshot['records'], evaluation, payload)
+                except (_CheckEffectRequired, ResearchError):
+                    # Optional store-state details cannot replace a pure refusal
+                    # or prevent its independent certificate attempt below.
+                    pass
             try:
                 _record_refusal(store, payload, expected_revision=expected_revision, request_id=request_id + ':refusal')
             except (_CheckEffectRequired, ResearchError, ValueError, TypeError, KeyError):

@@ -289,6 +289,27 @@ def _plan_recording(records, artifacts, assignment, state):
                              'manuscript': 'manuscript-review', 'standalone': 'export'}.get(role, 'review'),
                     details=dict(assignment_id=assignment['id'], role=role,
                                  **(dict(kind='outputs') if role == 'standalone' else {})))
+    from .review_reading import list_source_citations, plan_readings
+    attempt = records.get('review_attempt', {}).get(state.get('attempt_id'))
+    try:
+        if not list_source_citations(output):
+            handoff = None
+        elif command == 'value-review':
+            from .research_decisions import validate_review_contract
+            validate_review_contract(records, artifacts, assignment, output, attempt=attempt)
+            handoff = plan_readings(records, artifacts, assignment, output)
+        elif assignment.get('subject', {}).get('kind') == 'problem':
+            packet = protocol._read_json(artifacts, assignment['packet'])
+            protocol.validate_adjudication_contract(records, artifacts, assignment, packet, output, attempt=attempt)
+            handoff = plan_readings(records, artifacts, assignment, output)
+        else:
+            handoff = None
+    except (ResearchError, KeyError, TypeError, AttributeError):
+        # The recording command owns every non-reading failure and its durable
+        # refusal. An invalid observation must not ask the agent to read first.
+        handoff = None
+    if handoff is not None:
+        return handoff
     payload = dict(output, id=_find_unused_id(records, 'review:' + assignment['id']),
                    assignment_id=assignment['id'])
     if command == 'value-review':

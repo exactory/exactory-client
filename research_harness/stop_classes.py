@@ -16,6 +16,10 @@ STOP_REGISTRY = {
         'store_busy', 'lock_timeout', 'review_provider_unavailable', 'review_sequence_wait')
 }
 STOP_REGISTRY.update({
+    'reading_missing': dict(code='reading_missing', **{'class': 'decision'}, owner='D2', replan=True,
+        next=dict(kind='handoff', step=13, command='read')),
+    'source_link_not_fulltext': dict(code='source_link_not_fulltext', **{'class': 'decision'}, owner='D2',
+        next=dict(kind='continue', command='review-run')),
     'review_series_no_progress': dict(code='review_series_no_progress', **{'class': 'harness_defect'},
         owner='D2', proof='test_automatic_gate_override.RecordedSeriesStopTests.'
                          'test_unchanged_repeat_records_the_harness_stop_and_ended_schedule',
