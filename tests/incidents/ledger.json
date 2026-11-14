@@ -4711,7 +4711,7 @@
       "record": "20261113074000-openness-packet-cannot-deliver-what-its-searches-cite",
       "class": "accepted result review provenance",
       "summary": "Search records cite an accepted solver result, but the delivered attempt does not identify the review that accepted it. Two approving reviews of the same checkpoint cannot be distinguished by that summary.",
-      "fixed_in": "0.87.0",
+      "fixed_in": "open",
       "expected": "An audited attempt delivery writes immutable links from every observed accepted acceptance to its own review and terminal output. Repeating a legacy delivery adds missing links while retaining the attempt digest, record and current pointer. Unobserved and invalidated acceptances produce no new links. Openness result binding and proof delivery are the following unit's work.",
       "test_kind": "real_shape",
       "tests": [
