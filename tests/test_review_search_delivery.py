@@ -134,3 +134,42 @@ class SearchDeliveryTests(unittest.TestCase):
         residual['fields']['scope'] = 'Forged overlapping inline scope.'
         with self.assertRaises(ResearchError):
             self.delivery.rebuild_search_record(entry, serialize_record(residual), shared, original)
+
+
+class V7SearchDeliveryTests(unittest.TestCase):
+    setUp = SearchDeliveryTests.setUp
+    delivered = SearchDeliveryTests.delivered
+
+    def test_v7_shares_every_equal_field_and_rebuilds_exact_originals(self):
+        bindings = build_fifteen_searches()
+        plan = self.delivery.plan_search_delivery(bindings, share_all_fields=True)
+        fields = {row['field'] for row in plan['manifest']['shared_fields']}
+        self.assertTrue({'profile', 'purpose', 'question'} <= fields)
+        originals = {row['search_digest']: serialize_record(row['search']) for row in bindings}
+        for entry, binding in zip(plan['manifest']['searches'], bindings):
+            residual = json.loads(plan['bodies'][entry['residual']['sha256']])
+            expected = {key for key, value in binding['search'].items() if sum(
+                key in other['search'] and serialize_record(other['search'][key]) == serialize_record(value)
+                for other in bindings) < 2}
+            self.assertEqual(set(residual['fields']), expected)
+        receipts = self.delivery.verify_search_deliveries(plan['manifest'], self.delivered(plan), originals)
+        self.assertEqual([row['search_digest'] for row in receipts], list(originals))
+
+    def test_v7_missing_null_and_repeated_bindings_remain_distinct(self):
+        bindings = [dict(formulation='target', search_digest=digest(search), search=search) for search in (
+            {'id': 'a', 'extra': None, 'flag': False}, {'id': 'b', 'extra': None, 'flag': 0}, {'id': 'c'})]
+        plan = self.delivery.plan_search_delivery(bindings + [bindings[0]], share_all_fields=True)
+        self.assertEqual([row['shared_fields'] for row in plan['manifest']['searches']],
+                         [{'extra': digest(None)}, {'extra': digest(None)}, {}])
+        self.assertEqual(len(plan['manifest']['shared_fields']), 1)
+
+    def test_v7_opt_in_preserves_the_stored_v5_manifest_and_bodies(self):
+        bindings = build_fifteen_searches()
+        legacy = self.delivery.plan_search_delivery(bindings)
+        self.assertEqual(digest(legacy['manifest']), '0b7632ba5198162ba92b3fa80d34b1c6d47a3cece9e2a221e4e20296c85d0a12')
+        self.assertEqual(digest({key: value.decode() for key, value in legacy['bodies'].items()}),
+                         'ba7e5854fe5f7a86599923b820a443d6e0848fc81be5cb9d6ae6847f66296b36')
+        self.delivery.plan_search_delivery(bindings, share_all_fields=True)
+        self.assertEqual(self.delivery.plan_search_delivery(bindings), legacy)
+        self.assertEqual({row['field'] for row in legacy['manifest']['shared_fields']},
+                         {'scope', 'queries', 'dispositions'})

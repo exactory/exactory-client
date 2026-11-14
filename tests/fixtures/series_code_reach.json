@@ -3922,6 +3922,7 @@
     "research_harness/ocr.py",
     "research_harness/openness_minimum.py",
     "research_harness/openness_reading.py",
+    "research_harness/openness_reading_v7.py",
     "research_harness/operations.py",
     "research_harness/output_views.py",
     "research_harness/overrides.py",

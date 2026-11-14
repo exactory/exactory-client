@@ -1,4 +1,4 @@
-"""Exact search-field delivery plans and reconstruction for problem openness v5.
+"""Exact search-field delivery plans and reconstruction for problem openness.
 
 Planning does not publish artifacts. Delivery verification consumes only bodies and receipts that the caller has
 derived from authenticated requests of one chain. A manifest or an artifact on disk supplies no delivery credit.
@@ -15,12 +15,13 @@ SHARED_FIELDS = ('dispositions', 'queries', 'responses', 'scope')
 MEDIA_TYPE = 'application/json'
 
 
-def plan_search_delivery(bindings):
+def plan_search_delivery(bindings, *, share_all_fields=False):
     """Factor field values shared by at least two distinct bound originals, in first-use order.
 
     The manifest keeps every original binding. Unaffected records retain their original body; an affected record has
     one residual envelope with disjoint inline fields and explicit shared-field references. Bodies are canonical UTF-8
-    JSON bytes keyed by digest, ready to materialize after preflight succeeds.
+    JSON bytes keyed by digest, ready to materialize after preflight succeeds. V7 opts into all fields; the default
+    keeps the field order and bytes of the v5/v6 manifest and residuals.
     """
     searches, values = {}, {}
     for binding in bindings:
@@ -29,7 +30,7 @@ def plan_search_delivery(bindings):
             searches[sha256] = dict(record_id=search['id'], search_digest=sha256,
                                     artifact=describe_artifact(serialize_record(search), MEDIA_TYPE),
                                     formulations=[], search=search)
-            for field in SHARED_FIELDS:
+            for field in sorted(search) if share_all_fields else SHARED_FIELDS:
                 if field in search:
                     content = serialize_record(search[field])
                     values.setdefault((field, content), []).append(sha256)

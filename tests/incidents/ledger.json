@@ -5761,6 +5761,23 @@
       "tests": [
         "test_registry_citation_names.RegistryCitationExportTests.test_named_arxiv_versions_choose_their_own_locators_titles_and_check_records"
       ]
+    },
+    {
+      "id": "v7-reading-inventory-and-carried-state",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "reading inventory and authenticated carried state",
+      "summary": "Repeated metadata and growing turn records consumed input capacity; restarting a chain also lost verified source readings.",
+      "expected": "The v7 state foundation stores growing inventory and turn collections as digest-bound artifacts, factors every equal search field, projects selected authenticated v5/v6 items, and measures carried entries in their new serialized form. Overflow entries and affected notes become carried_reading units. V7 turn integration remains a later release.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_state.V7InventoryTests.test_q2_ten_thousand_units_keep_only_one_body_per_sha256",
+        "test_openness_reading_v7_state.V7ProjectionTests.test_q1_state_digest_rebuilds_sixty_turns_and_latest_current_notes",
+        "test_openness_reading_v7_state.V7ProjectionTests.test_q12_incident_57_turns_spill_only_carried_entries_at_starting_final",
+        "test_openness_reading_v7_state.LegacyV5ProjectionTests.test_v5_checked_spans_project_with_original_request_bytes_unchanged",
+        "test_openness_reading_v7_state.StoredV5ProjectionTests.test_real_shape_v5_stopped_chain_uses_its_pending_capture_binding",
+        "test_openness_reading_v7_state.V6ProjectionTests.test_real_shape_v6_observation_projects_checked_excerpts_and_passages"
+      ]
     }
   ]
 }
