@@ -4876,6 +4876,23 @@
         "test_research_check_claims.ResearchCheckClaimsTests.test_absolute_candidate_artifact_paths_match_relative_evidence_without_changing_store",
         "test_research_import_scaling.ImportInputTests.test_workspace_response_reads_keep_missing_and_nonregular_input_refusals"
       ]
+    },
+    {
+      "id": "result-review-account-search-record-units",
+      "record": "20261112150500-result-review-frame-holds-cited-search-records",
+      "class": "review capacity (cited search records in the result frame)",
+      "summary": "Account-cited searches and their captured responses stayed in every result turn, even when openness also bound the same searches.",
+      "fixed_in": "open",
+      "expected": "New result series deliver each stored record once by kind, id and digest, reconstruct both account and openness occurrences exactly, and give each captured response one owner. Ten searches of 160000 characters plus their captures leave a frame below 1300000 characters. Stored series keep their original inventory rule and authenticated hashes. Size reports remain a separate unit.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_account_record_units.AccountRecordUnitTests.test_ten_large_searches_and_captures_leave_a_small_frame_and_arrive_once",
+        "test_review_account_record_units.AccountRecordUnitTests.test_search_and_source_records_have_one_identity_and_exact_occurrences",
+        "test_review_account_record_units.AccountRecordUnitTests.test_recorded_inventory_turn_prompt_and_request_keep_their_hashes",
+        "test_review_account_record_units.AccountRecordJourneyTests.test_authenticated_series_rebuilds_accounts_and_openness_for_coverage_and_citations",
+        "test_review_account_record_units.AccountRecordUnitTests.test_assessment_and_objection_occurrences_share_the_search_unit",
+        "test_review_account_record_units.AccountRecordUnitTests.test_imported_account_duplicates_rebuild_without_local_record_units"
+      ]
     }
   ]
 }

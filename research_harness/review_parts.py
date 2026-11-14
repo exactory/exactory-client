@@ -60,6 +60,20 @@ def _find_address(occurrence):
     return occurrence['index'] if 'index' in occurrence else occurrence['key']
 
 
+def _find_unit_identity(unit):
+    if 'record_identity' in unit:
+        return digest(unit['record_identity'])
+    return unit['digest'] if 'digest' in unit else digest(unit['item'])
+
+
+def _find_unit_rule(adapter, previous):
+    from .review_parts_roles import get_adapter
+    rule = previous.get('unit_rule') if previous is not None else get_adapter(adapter).get('unit_rule')
+    _require(rule is None or rule == get_adapter(adapter).get('unit_rule'),
+             'The inventory names an unknown unit rule', 'review_parts_inventory_changed')
+    return rule
+
+
 def enumerate_units(packet, adapter, previous=None):
     """Deduplicate canonical items, retaining every list index or object key."""
     from .review_parts_roles import get_adapter
@@ -67,16 +81,21 @@ def enumerate_units(packet, adapter, previous=None):
     units = []
     by_digest = {}
     definition = get_adapter(adapter)
-    for source in definition['enumerate_units'](packet):
+    rule = _find_unit_rule(adapter, previous)
+    enumerator = definition['enumerate_record_units'] if rule else definition['enumerate_units']
+    for source in enumerator(packet):
         item_digest = digest(source['item'])
-        unit = by_digest.get(item_digest)
+        identity = _find_unit_identity(source)
+        unit = by_digest.get(identity)
         if unit is None:
             unit = dict(item=copy.deepcopy(source['item']), digest=item_digest,
                         occurrences=[], bodies=[], citations=[])
             if source.get('carded_under'):
                 unit['carded_under'] = source['carded_under']
+            if 'record_identity' in source:
+                unit['record_identity'] = copy.deepcopy(source['record_identity'])
             units.append(unit)
-            by_digest[item_digest] = unit
+            by_digest[identity] = unit
         citations = (definition['citations'](source) if 'citations' in definition
                      else source.get('citations', []))
         for citation in citations:
@@ -93,14 +112,29 @@ def enumerate_units(packet, adapter, previous=None):
             elif existing['artifact'] != body['artifact']:
                 existing.setdefault('aliases', []).append(copy.deepcopy(body['artifact']))
     earlier = (previous or {}).get('units', [])
-    previous_digests = {row['digest'] for row in earlier}
-    if any(row['digest'] not in by_digest for row in earlier):
+    previous_digests = {_find_unit_identity(row) for row in earlier}
+    if any(_find_unit_identity(row) not in by_digest for row in earlier):
         raise ResearchError('review_parts_inventory_changed', 'An earlier unit disappeared')
-    units = [by_digest[row['digest']] for row in earlier] + [
-        unit for unit in units if unit['digest'] not in previous_digests]
-    handles = {unit['digest']: 'u' + str(index + 1) for index, unit in enumerate(units)}
+    units = [by_digest[_find_unit_identity(row)] for row in earlier] + [
+        unit for unit in units if _find_unit_identity(unit) not in previous_digests]
+    if rule:
+        owners = {}
+        for unit in sorted(units, key=lambda value: value.get('record_identity', {}).get('record_kind') != 'source'):
+            bodies = []
+            for body in unit['bodies']:
+                identity = body['artifact']['sha256']
+                if identity not in owners:
+                    owners[identity] = body
+                    bodies.append(body)
+                else:
+                    owner = owners[identity]
+                    for reference in [body['artifact']] + body.get('aliases', []):
+                        if reference != owner['artifact'] and reference not in owner.get('aliases', []):
+                            owner.setdefault('aliases', []).append(copy.deepcopy(reference))
+            unit['bodies'] = bodies
+    handles = {_find_unit_identity(unit): 'u' + str(index + 1) for index, unit in enumerate(units)}
     for unit in units:
-        unit['handle'] = handles[unit['digest']]
+        unit['handle'] = handles[_find_unit_identity(unit)]
         unit['text'] = render_json(unit['item'])
         unit['item_characters'] = len(unit['text'])
         if unit.get('carded_under'):
@@ -120,6 +154,8 @@ def _describe_unit(unit):
                      for body in unit['bodies']]
     if unit.get('carded_under'):
         row['carded_under'] = unit['carded_under']
+    if 'record_identity' in unit:
+        row['record_identity'] = copy.deepcopy(unit['record_identity'])
     return row
 
 
@@ -151,8 +187,12 @@ def build_inventory(packet, adapter, previous=None):
             if identity not in seen_bodies:
                 characters += len(render_json(body['content']))
                 seen_bodies.add(identity)
-    return dict(protocol=PROTOCOL, adapter=adapter, units=rows, characters=characters,
-                additional_occurrences=additional)
+    inventory = dict(protocol=PROTOCOL, adapter=adapter, units=rows, characters=characters,
+                     additional_occurrences=additional)
+    rule = _find_unit_rule(adapter, previous)
+    if rule:
+        inventory['unit_rule'] = rule
+    return inventory
 
 
 def build_frame(packet, units):
@@ -334,9 +374,13 @@ def project_packet(frame, units, selections, header, state, *, parent_characters
             entry = _make_segment(unit, unit['text'], selection['start'], selection['end'])
             body_entries[digest(entry)] = entry
         elif not selection.get('omit_item') and (not selection.get('body') or selection.get('repeat_item')):
-            occurrence = unit['occurrences'][0]
-            path = tuple(occurrence['path'])
-            positions.setdefault(path, {})[_find_address(occurrence)] = unit
+            if 'record_identity' in unit:
+                entry = _make_segment(unit, unit['text'], 0, unit['item_characters'])
+                body_entries[digest(entry)] = entry
+            else:
+                occurrence = unit['occurrences'][0]
+                path = tuple(occurrence['path'])
+                positions.setdefault(path, {})[_find_address(occurrence)] = unit
         if selection.get('item_only') or selection.get('item'):
             continue
         for body in unit['bodies']:
@@ -435,7 +479,7 @@ def select_originals(units, allowance, packets=(), requests=None, *, distinct=Fa
                         entry['whole_item'] = start == 0 and end == unit['item_characters']
                     elif body['encoding'] == 'utf-8' and start < end:
                         entry['body'] = body['artifact']['sha256']
-                        entry['repeat_item'] = unit['item_characters'] <= allowance
+                        entry['repeat_item'] = 'record_identity' not in unit and unit['item_characters'] <= allowance
                     else:
                         entry = dict(unit=unit['handle'], body=body['artifact']['sha256'])
                     selected.append(entry)
@@ -462,7 +506,7 @@ def select_originals(units, allowance, packets=(), requests=None, *, distinct=Fa
                 entry['whole_item'] = start == 0 and stop == unit['item_characters']
             else:
                 entry['body'] = body['artifact']['sha256']
-                entry['repeat_item'] = unit['item_characters'] <= allowance
+                entry['repeat_item'] = 'record_identity' not in unit and unit['item_characters'] <= allowance
             selected.append(entry)
             used += stop - start if kind == 'item' else len(render_json(content[start:stop]))
             if stop < end:
@@ -595,6 +639,8 @@ def prepare_plan(packet, inventory, observations, *, series_id, input_limit, mea
                   plan=dict(kind='final', turn=turn, units_carded=len(units) - len(remaining),
                             units_remaining=len(remaining), unit_allowance=allowance, card_allowance=0,
                             remaining_turns={kind: dict(estimate=int(kind == 'final')) for kind in KINDS}))
+    if 'unit_rule' in inventory:
+        header['unit_rule'] = inventory['unit_rule']
     if inventory_reference is not None:
         header['inventory'] = inventory_reference
     if logical_reference is not None:
@@ -1344,6 +1390,27 @@ def _join_segments(entries, length):
     return ''.join(pieces) if position == length else None
 
 
+def _rebuild_occurrences(items, inventory):
+    records = {digest(unit['record_identity']): items[unit['handle']]
+               for unit in inventory['units'] if 'record_identity' in unit and unit['handle'] in items}
+    for unit in inventory['units']:
+        if unit['handle'] not in items:
+            continue
+        occurrences = unit['occurrences'] + [entry['occurrence'] for entry in
+                       inventory.get('additional_occurrences', []) if entry['unit'] == unit['handle']]
+        for occurrence in occurrences:
+            item = items[unit['handle']]
+            if 'record_field' in occurrence:
+                item = dict(occurrence['fields'], **{occurrence['record_field']: item})
+                if 'sources' in occurrence:
+                    if any(digest(identity) not in records for identity in occurrence['sources']):
+                        continue
+                    item['sources'] = [records[digest(identity)] for identity in occurrence['sources']]
+                if digest(item) != occurrence['digest']:
+                    continue
+            yield occurrence, item
+
+
 def covers_items(packets, expected, key, inventory=None, *, path=None):
     """Credit each frozen occurrence, including item segments and equal duplicates."""
     reads = [packet for packet in packets if find_kind(packet) == 'read']
@@ -1355,14 +1422,9 @@ def covers_items(packets, expected, key, inventory=None, *, path=None):
         inventory = dict(units=list(rows.values()), additional_occurrences=[])
     items = _reconstruct_items(reads, inventory)
     delivered = {}
-    for unit in inventory['units']:
-        if unit['handle'] not in items:
-            continue
-        occurrences = unit['occurrences'] + [entry['occurrence'] for entry in
-                       inventory.get('additional_occurrences', []) if entry['unit'] == unit['handle']]
-        for occurrence in occurrences:
-            if occurrence['path'] == (path if path is not None else ['problem_evidence', key]):
-                delivered[_find_address(occurrence)] = items[unit['handle']]
+    for occurrence, item in _rebuild_occurrences(items, inventory):
+        if occurrence['path'] == (path if path is not None else ['problem_evidence', key]):
+            delivered[_find_address(occurrence)] = item
     collection = expected[key]
     entries = enumerate(collection) if isinstance(collection, list) else collection.items()
     return all(delivered.get(address) == item for address, item in entries)
@@ -1497,6 +1559,8 @@ def _read_observed_turn(records, artifacts, assignment, frozen):
     packet = packets[-1]
     header = packet[KEY]
     inventory = read_inventory(artifacts, header['inventory'], header['inventory_digest'])
+    if header.get('unit_rule') != inventory.get('unit_rule'):
+        return None
     logical = read_logical_packet(artifacts, header)
     if get_adapter(header['adapter'])['series_key'](logical) != header['series_key']:
         return None
@@ -1604,14 +1668,38 @@ def read_series_delivery(records, artifacts, assignment_id=None, *, packets=None
         items = _reconstruct_items(reads, inventory)
         logical = read_logical_packet(artifacts, fresh_packets[-1][KEY])
         units = enumerate_units(logical, inventory['adapter'], inventory)
+        # Record wrappers are rebuilt below from the authenticated item segments.
         complete = [dict(unit=unit['handle'], item_only=True) for unit in units
-                    if unit['handle'] in items]
+                    if unit['handle'] in items and 'record_identity' not in unit]
         header = dict(reads[-1][KEY], delivery_projection=True)
         reconstructed = project_packet(build_frame(logical, units), units, complete, header,
                                         dict(cards=[], combinations=[], findings=[]))
+        if inventory.get('unit_rule'):
+            occurrences = list(_rebuild_occurrences(items, inventory))
+            collections = {tuple(occurrence['path']): {} for occurrence, item in occurrences
+                           if 'record_field' in occurrence
+                           or occurrence['path'] == ['problem_evidence', 'account_records']}
+            for occurrence, item in occurrences:
+                path = tuple(occurrence['path'])
+                if path in collections:
+                    collections[path][_find_address(occurrence)] = item
+            for path, entries in collections.items():
+                collection = _find_collection(reconstructed, path)
+                collection.clear()
+                if isinstance(collection, list):
+                    addresses = sorted(entries)
+                    collection.extend(copy.deepcopy(entries[index]) for index in addresses)
+                    for row in reconstructed[KEY]['delivered_items']:
+                        if tuple(row['path']) == path:
+                            row['position'] = addresses.index(row['index'])
+                else:
+                    collection.update(copy.deepcopy(entries))
         # Its occurrence map is that of the final inventory, including late aliases.
         reconstructed[KEY]['units'] = copy.deepcopy(inventory['units'])
         reconstructed[KEY]['additional_occurrences'] = copy.deepcopy(inventory.get('additional_occurrences', []))
+        if inventory.get('unit_rule'):
+            reconstructed.pop('digest', None)
+            reconstructed['digest'] = digest(reconstructed)
         projected.append(reconstructed)
     delivery = project_delivery_view(records, artifacts, projected)
     segments = [copy.deepcopy(entry) for packet in actual for entry in packet.get('evidence', [])

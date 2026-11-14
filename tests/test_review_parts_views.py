@@ -101,7 +101,12 @@ class PartsStatusTests(PartsViewCase):
         self.assertEqual(progress['next'][0]['scope']['assignment_id'], first['id'])
         self.invoke(first)
         report, progress = self.read_progress(first)
-        delivered = len(self.packet(first)[parts.KEY]['delivered_items'])
+        packet = self.packet(first)
+        delivered = len(packet[parts.KEY]['delivered_items']) + sum(
+            1 for entry in packet['evidence']
+            if entry.get('item') and entry['segment']['start'] == 0
+            and entry['segment']['end'] == entry['segment']['length']
+        )
         self.assertEqual((progress['units_carded'], progress['units_remaining']),
                          (delivered, 6 - delivered))
         self.assertEqual(progress['next'][0]['workflow'], 'review-assignment')

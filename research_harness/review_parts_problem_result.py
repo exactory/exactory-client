@@ -8,6 +8,8 @@ from .evidence import digest
 from .errors import ResearchError
 from .problem_rubric import ITEMS, PROBLEM_CHECKS
 
+RECORD_UNIT_RULE = 'exactory-result-record-units-v1'
+
 
 def applies(value, packet):
     return (value.get('role') == 'result'
@@ -59,8 +61,65 @@ def list_historical_objections(packet):
             yield objection, path + ['objections', index, 'version_evidence']
 
 
+def describe_record_identity(kind, identifier, record):
+    return dict(record_kind=kind, id=identifier, digest=digest(record))
+
+
+def list_record_units(packet):
+    """Separate stored records from their occurrence fields and captured bodies."""
+    from .review_protocol import collect_references
+
+    evidence = {entry['artifact']['sha256']: entry for entry in packet.get('evidence', [])}
+
+    def describe_record(kind, identifier, record, occurrences):
+        identity = describe_record_identity(kind, identifier, record)
+        bodies = []
+        if kind == 'source':
+            for reference in collect_references(record):
+                if reference['sha256'] in evidence:
+                    bodies.append(dict(evidence[reference['sha256']], artifact=reference))
+        return dict(item=record, record_identity=identity, occurrences=occurrences,
+                    citations=[dict(kind='record', **identity)], bodies=bodies)
+
+    units = []
+    for unit in list_units(packet):
+        occurrence = unit['occurrences'][0]
+        item = unit['item']
+        if occurrence['path'] != ['problem_evidence', 'openness_searches'] or 'search' not in item:
+            if (item.get('kind') == 'record' and {'record_kind', 'id', 'digest', 'record'} <= item.keys()
+                    and 'origin' not in item and digest(item['record']) == item['digest']):
+                occurrence = dict(occurrence, record_field='record', digest=digest(item),
+                    fields={key: value for key, value in item.items() if key != 'record'})
+                record_unit = describe_record(item['record_kind'], item['id'], item['record'], [occurrence])
+                record_unit['bodies'].extend(unit['bodies'])
+                record_unit['citations'] = list_citations(unit)
+                units.append(record_unit)
+            else:
+                units.append(unit)
+            continue
+        search = item['search']
+        sources = item['sources']
+        occurrence = dict(occurrence, record_field='search', digest=digest(item),
+                          fields={key: value for key, value in item.items() if key not in ('search', 'sources')},
+                          sources=[describe_record_identity('source', source['id'], source) for source in sources])
+        units.append(describe_record('literature_search', search['id'], search, [occurrence]))
+        units.extend(describe_record('source', source['id'], source, []) for source in sources)
+    for index, item in enumerate(packet.get('problem_evidence', {}).get('account_records', [])):
+        occurrence = dict(path=['problem_evidence', 'account_records'], index=index)
+        cite = item['cite']
+        if 'origin' in cite:
+            units.append(dict(item=item, occurrences=[occurrence], bodies=[]))
+            continue
+        occurrence.update(record_field='record', digest=digest(item),
+                          fields={key: value for key, value in item.items() if key != 'record'})
+        units.append(describe_record(cite['record_kind'], cite['id'], item['record'], [occurrence]))
+    return units
+
+
 def list_citations(source):
     """Copy the reference forms accepted by the ordinary result validator."""
+    if 'record_identity' in source:
+        return source['citations']
     item = source['item']
     citations = []
     pending = [item]
@@ -128,6 +187,7 @@ def covers_items(packets, expected, key):
 
 
 ADAPTER = dict(applies=applies, enumerate_units=list_units, targets=list_targets,
+               unit_rule=RECORD_UNIT_RULE, enumerate_record_units=list_record_units,
                series_key=compute_series_key, citations=list_citations, validate_final=validate_final,
                covers_items=covers_items, final_prompt=prompts.FINAL_RESULT,
                source_requests=True)

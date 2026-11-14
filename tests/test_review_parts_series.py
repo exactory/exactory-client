@@ -89,12 +89,14 @@ class SeriesTests(PartsResultCase):
         self.assertEqual(self.packet(second)['review_parts']['kind'],'read')
 
     def test_forged_item_manifest_is_not_credited(self):
-        self.oversized();turns,final=self.finish_series();self.record_final(final)
-        records=self.case.read_records()
-        packet=self.packet(turns[0]); packet['review_parts']['delivered_items'][0]['digest']='0'*64
+        self.oversized()
+        self.case.expected['assessment_evidence'] = [self.case.supporting]
+        turns,final=self.finish_series();self.record_final(final)
+        target = next(turn for turn in turns if self.packet(turn)['review_parts']['delivered_items'])
+        packet=self.packet(target); packet['review_parts']['delivered_items'][0]['digest']='0'*64
         inventory=parts.read_inventory(self.case.artifacts,packet['review_parts']['inventory'])
         with self.assertRaises(__import__('research_harness.errors',fromlist=['ResearchError']).ResearchError):
-            parts.validate_output(packet,self.output(turns[0]),inventory)
+            parts.validate_output(packet,self.output(target),inventory)
 
     def test_citation_reader_authenticates_current_attempt_once(self):
         from unittest.mock import patch
