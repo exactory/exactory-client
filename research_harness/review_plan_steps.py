@@ -291,6 +291,10 @@ def complete_plan(records, artifacts, assignment, plan):
         if command == 'review-output-correction':
             payload['route_id'] = assignment['route_id']
             chooses = ['id']
+        elif command == 'search':
+            payload = dict(profile='research', purpose='direct')
+            chooses = ['id', 'question', 'scope', 'queries', 'responses', 'captured_at',
+                       'found_work_ids', 'verdict', 'cited_work_ids', 'impact', 'gaps', 'dispositions']
         elif command == 'search accept':
             payload = {}
             chooses = ['target', 'acceptance', 'digest']

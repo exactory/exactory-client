@@ -1,0 +1,18 @@
+{
+  "stored_state": {
+    "proofs": {
+      "content": [
+        "test_registry_rows_first.RegistryRowsFirstTests.test_stored_content_proof_keeps_the_last_line_and_first_record_check_failure"
+      ]
+    },
+    "members": {
+      "review_input_unreadable": {
+        "research_harness/review_continuation.py:plan_next": "content",
+        "research_harness/review_delivered_evidence.py:_read_authenticated_delivery.project": "content",
+        "research_harness/review_input_projection.py:_require_review_packet": "content",
+        "research_harness/review_input_projection.py:packets_from_request": "content",
+        "research_harness/review_input_projection.py:project_evidence": "content"
+      }
+    }
+  }
+}

@@ -61,6 +61,8 @@ for _code, _step, _command in (
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
                                 next=dict(kind='handoff', step=_step, command=_command))
 for _code, _command in (
+        ('openness_search_stale', 'search'),
+        ('review_staged_scale_unsupported', 'review-series'),
         ('review_source_no_progress', 'fulltext'),
         ('native_review_acceptance_required', 'search accept'),
         ('verification_verdict_body_required', 'bind-verdict'),
@@ -69,13 +71,29 @@ for _code, _command in (
         ('assessment_incomplete', 'review-assignment')):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
                                 next=dict(kind='handoff', command=_command))
-for _code in ('review_turn_failures_exhausted', 'review_parts_budget_exhausted',
+_STORED_STATE_CODES_FIRST = ('review_input_unreadable',)
+
+for _code in _STORED_STATE_CODES_FIRST + ('review_turn_failures_exhausted', 'review_parts_budget_exhausted',
               'review_quality_measurement_pending', 'review_invocation_unverified',
               'review_output_unavailable', 'review_inventory_mismatch', 'review_source_parent_unverified',
               'review_history_invalid', 'artifact_missing', 'artifact_corrupt', 'review_budget_exhausted'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
         next=dict(kind='decision', owner_decides='How should this review boundary be resolved?',
                   then=[dict(answer='Check the retained record', steps=[dict(command='record-check')])]))
+for _code in _STORED_STATE_CODES_FIRST:
+    STOP_REGISTRY[_code]['group'] = 'stored_state'
+STOP_REGISTRY.update({
+    'openness_minimum_gaps': dict(code='openness_minimum_gaps', **{'class': 'decision'}, owner='D3',
+        next=dict(kind='handoff', command='export', payload=dict(kind='problem-openness'),
+                  chooses=['spec', 'accept_gaps'], prerequisites=[dict(condition=
+                      'Repair the gaps named in the refusal, or export with --accept-gaps.')])),
+    'gate_override_condition_unmet': dict(code='gate_override_condition_unmet', **{'class': 'decision'}, owner='D3',
+        next=dict(kind='decision', owner_decides='Whether the action proceeds without the unmet condition.',
+                  then=[dict(answer='Proceed without the condition', steps=[dict(command='gate-override',
+                            chooses=['id', 'gate', 'instruction', 'lifts'])]),
+                        dict(answer='Meet the condition', steps=[], prerequisites=[dict(condition=
+                            'Complete the work named by the condition-check obligations.')])])),
+})
 STOP_REGISTRY['problem_already_posted'] = dict(code='problem_already_posted', **{'class': 'decision'},
                                              owner='D2', next=dict(kind='done'))
 from .openness_reading import PROJECTION_STOP, PROBLEM_PROJECTION_DECISION, WAIT_PROBLEM_ANSWER, SMALLER_PACKET_ANSWER
@@ -85,7 +103,7 @@ STOP_REGISTRY[PROJECTION_STOP] = dict(code=PROJECTION_STOP, **{'class': 'decisio
                     prerequisites=[dict(condition='Install a bounded reading protocol for this packet.')])]),
                     dict(answer=SMALLER_PACKET_ANSWER, steps=[dict(id=4, command='export'),
                          dict(command='review-assignment', check=True)])]))
-for _code in ('stale_revision', 'review_task_dependency_changed'):
+for _code in ('stale_revision', 'review_task_dependency_changed', 'review_output_pending', 'review_sources_pending'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2', next=dict(kind='continue'))
 
 
