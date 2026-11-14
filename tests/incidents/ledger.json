@@ -15,7 +15,8 @@
         "test_review_task_size.RecoveryRowsTests.test_c_exhaustion_returns_a_decision_and_names_the_untried_level",
         "test_review_task_size.RecoveryRowsTests.test_a19_reduced_context_cap_replaces_a_read_and_real_assignment_halves_it",
         "test_review_task_size.RecoveryRowsTests.test_a21_timeout_and_provider_refusal_use_the_lower_read_after_their_retries",
-        "test_review_single_request.FrozenSingleTests.test_opus_max_128000_output_replacement_reaches_a_recorded_native_final"
+        "test_review_single_request.FrozenSingleTests.test_opus_max_128000_output_replacement_reaches_a_recorded_native_final",
+        "test_review_parts_planning.RevisedPlanningTests.test_replacement_uses_slot_series_key_and_normalized_identity"
       ]
     },
     {

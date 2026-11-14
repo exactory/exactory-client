@@ -64,21 +64,37 @@ class ResultBindingTests(OpennessReadingCase):
                 output_id='certificate', locator=dict(kind='artifact'), artifact=row['artifact'])
                 for row in packet['evidence'] if row['artifact']['media_type'] == 'application/octet-stream']
         reference = self.pin_json(packet)
-        self.mutate(protocol.record_assignment, dict(id=identifier, route_id='route', dossier_id=None,
+        assignment = self.mutate(protocol.record_assignment, dict(id=identifier, route_id='route', dossier_id=None,
             role='native_math', reviewer_id=packet['reviewer']['actor_id'], author_id='problem-author',
-            context=dict(native_packet=reference)))
+            context=dict(native_packet=reference)))['result']
+        from research_harness import review_parts as parts
+        from review_parts_fixtures import make_output
         output = self.output(packet)
-        invoke_codex(self, identifier, output)
-        return packet
+        for number in range(40):
+            turn = protocol._read_json(self.artifacts, assignment['packet'])
+            kind = parts.find_kind(turn)
+            invoke_codex(self, assignment['id'], output if kind in (None, 'final') else make_output(turn))
+            if kind in (None, 'final'):
+                return packet
+            assignment = self.mutate(protocol.record_assignment, dict(
+                id=identifier + '-part-' + str(number + 2), route_id='route', dossier_id=None,
+                role='native_math', reviewer_id=packet['reviewer']['actor_id'], author_id='problem-author',
+                context=dict(native_packet=reference, prior_assignment_id=assignment['id'])))['result']
+        self.fail('The accepted-result review did not finish its parts series')
 
     def put_link(self, identifier):
-        state = protocol.assignment_state(self.store.snapshot()['records'], self.artifacts, identifier)
+        from research_harness import review_parts as parts, review_parts_native
+        records = self.store.snapshot()['records']
+        assignment = records['review_assignment'][identifier]
+        final = (review_parts_native.find_final_assignment(records, self.artifacts, identifier)
+                 if parts.KEY in assignment else assignment)
+        state = protocol.assignment_state(records, self.artifacts, final['id'])
         self.assertTrue(state['ready'], state['obligations'])
         key = dict(attack_root=self.native['attack_root'], objective_id=self.native['objective_id'],
                    acceptance_digest=digest(dict(self.acceptance, review=identifier)))
         link = dict(key, acceptance_id=self.acceptance['id'], checkpoint_id=self.checkpoint['id'],
             evidence_digests=self.acceptance['evidence_digests'],
-            review=dict(assignment_id=identifier, final_assignment_id=identifier,
+            review=dict(assignment_id=identifier, final_assignment_id=final['id'],
                 attempt_id=state['attempt_id'], output_digest=state['output_digest']),
             provenance=dict(source='operator', actor_id='search-controller', attestation_id='audited-delivery'))
         self.put('native_acceptance_review', digest(key), link)
@@ -273,7 +289,14 @@ class ResultBindingTests(OpennessReadingCase):
         self.native['checkpoints'][0]['claim'] = self.checkpoint['claim']
         self.manifest['claim_digest'] = digest(self.checkpoint['claim'])
         proof = ('Synthetic argument.\n\n' * (3 * allowance // 20 + 1)).encode()
-        self.replace_result(proof)
+        from research_harness import review_route_capacity as capacity
+        from test_review_output_profile import build_row
+        # Keep this delivery test focused on UB5 while the supporting native review uses parts.
+        with patch.object(capacity, 'read_output_profile', return_value=dict(rows=[
+                build_row(level=None, kind='read', thinking=1000)])):
+            self.replace_result(proof)
+        link = self.store.snapshot()['records']['native_acceptance_review'][self.link_id]
+        self.assertNotEqual(link['review']['assignment_id'], link['review']['final_assignment_id'])
         _, _, deliveries, _ = self.drive_result()
         for kind in ('result_text', 'accepted_result'):
             selected = [row for row in deliveries if row.get('record_kind', row['kind']) == kind

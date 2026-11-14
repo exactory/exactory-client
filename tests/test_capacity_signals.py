@@ -280,9 +280,16 @@ class ResponseLimitJourneyTests(unittest.TestCase):
             route_id='serving', reviewer_id=assignment['reviewer_id']))['result']
         output = dict(verdict=case.verdict(), checks=[dict(dimension=kind, reason='Checked the exact evidence.',
             evidence=fixture.references) for kind in ('soundness', 'novelty', 'impact')])
-        self.drive(case, 'new', lambda packet: output)
+        def respond(packet):
+            if packet.get('review_parts', {}).get('kind') not in (None, 'final'):
+                from review_parts_fixtures import make_output
+                return make_output(packet)
+            return output
+        self.assertEqual(self.drive(case, 'new', respond), 3)
+        terminal = plan_next(case.store.snapshot()['records'], case.artifacts, 'new')
+        self.assertEqual((terminal['state'], terminal['command']), ('handoff', 'bind-verdict'))
         # The role's terminal handoff requires the owner's supplied verdict body.
         payload = case.build_bind_payload(fixture.task['digest'], case.verdict(), observed=False)
-        payload['assessment'].update(assignment_id=following['id'], checks=output['checks'])
+        payload['assessment'].update(assignment_id=terminal['head_id'], checks=output['checks'])
         bound = self.execute(case, 'bind-verdict', payload)
         self.assertIn('result', bound)

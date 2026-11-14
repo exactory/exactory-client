@@ -444,8 +444,12 @@ class RevisedPlanningTests(unittest.TestCase):
                                        series_key=series_key, unit_characters=30000)}
         artifacts = Mock()
         artifacts.read.return_value = json.dumps(packet).encode()
-        attempt = dict(assignment_id='failed', output=None, usage={}, error=dict(code='review_incomplete'))
-        records = dict(review_assignment={'failed': failed}, review_attempt={'attempt': attempt})
+        from test_review_route_capacity import build_route
+        attempt = dict(id='attempt', assignment_id='failed', status='failed', origin='instrumented',
+                       response=None, output=None, usage={}, error=dict(code='review_incomplete'),
+                       recorded_revision=2)
+        records = dict(review_route={'route': build_route()}, review_assignment={'failed': failed},
+                       review_attempt={'attempt': attempt})
         result = parts.find_failed_replacement(records, artifacts, value, 'problem_result', series_key,
                                          'slot-A', None, 128000)
         self.assertEqual(result, dict(unit_characters=30000, over_cap=True))
