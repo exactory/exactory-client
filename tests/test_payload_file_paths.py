@@ -5,11 +5,13 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 from test_research_check_mode import CheckCommandMixin
-from research_harness import cli, operations
+from research_harness import cli, operations, storage
 from research_harness.artifacts import ArtifactStore
 from research_harness.evidence import digest
+from research_harness.errors import ResearchError
 from research_harness.storage import Store
 
 
@@ -27,6 +29,122 @@ class PayloadFilePathTests(CheckCommandMixin, unittest.TestCase):
 
     def build_artifact_payload(self, path):
         return dict(id='input', path=path, media_type='text/plain')
+
+    def test_every_file_payload_command_keeps_its_validation_count(self):
+        from research_harness.payload_paths import iterate_payload_paths, PAYLOAD_FILE_FIELDS
+        from test_research_oai_cohort import article, page
+
+        examples = json.loads((ROOT / 'docs/research-cli-examples.json').read_bytes())
+        examples['artifact'] = self.build_artifact_payload('work/input.txt')
+        examples['review-attempt']['output'] = dict(path='work/input.txt', sha256='a' * 64,
+                                                   size=23, media_type='text/plain')
+        examples['check-claims'] = [{'claim_id': 'claim', 'evidence': [examples['review-attempt']['output']]}]
+        # Exercise real command preparation on an empty store. Most examples
+        # refuse missing prerequisites; artifact registration completes its CAS.
+        expected_errors = {
+            'problem-posted': 'orchestration_conflict', 'gate-override': 'gate_override_transition',
+            'publication-scope': 'configuration_not_ready', 'scoped-review': 'publication_scope_missing',
+            'adopt': 'artifact_missing', 'import-response': 'invalid_import', 'bundle': 'unknown_work',
+            'read': 'unknown_work', 'visual': 'artifact_missing', 'standards': 'configuration_missing',
+            'rationale': 'configuration_missing', 'innovation': 'configuration_missing',
+            'context': 'configuration_missing', 'grand-challenge': 'configuration_missing',
+            'cycle': 'configuration_not_ready', 'admit': 'unknown_cycle', 'result': 'unknown_cycle',
+            'assess': 'configuration_not_ready', 'review': 'configuration_not_ready',
+            'manuscript': 'readiness_required', 'manuscript-review': 'publication_bundle_missing',
+            'round': 'configuration_not_ready', 'round-review': 'configuration_not_ready',
+            'round-assess': 'configuration_not_ready', 'manuscript-prediction': 'publication_bundle_missing',
+            'contribution-analysis': 'publication_bundle_missing', 'bind-verdict': 'verification_task_required',
+            'import-oai-cohort': 'unknown_collection', 'defer-source': 'unknown_work',
+            'strategy': 'research_intent_missing', 'research-lead': 'research_intent_missing',
+            'value-review': 'strategy_reference_missing', 'review-assignment': 'review_record_missing',
+            'review-attempt': 'review_record_missing', 'review-context': 'review_record_missing',
+            'review-adjudication': 'review_adjudication_unverified', 'probe-intent': 'configuration_missing',
+            'probe': 'probe_intent_missing', 'check-claims': 'candidate_checkpoint_missing',
+        }
+        extra_reads = {'round', 'round-review', 'round-assess', 'value-review',
+                       'review-adjudication', 'import-oai-cohort'}
+        selected = {command: payload for command, payload in examples.items()
+                    if any(iterate_payload_paths(command, payload))}
+        self.assertEqual(set(selected), set(expected_errors) | {'artifact'})
+        self.assertTrue(set(PAYLOAD_FILE_FIELDS) <= set(selected))
+        validate = storage._validate
+        for command, payload in selected.items():
+            for absolute in (False, True):
+                with self.subTest(command=command, absolute=absolute):
+                    root = self.root.parent / (command + ('-absolute' if absolute else '-relative'))
+                    Store(root, create=True)
+                    if command == 'artifact':
+                        (root / 'work').mkdir()
+                        (root / 'work/input.txt').write_bytes(b'Captured source bytes.\n')
+                    elif command == 'import-response':
+                        (root / payload['response_file']).write_bytes(b'{"meta": {"count": 0}, "results": []}')
+                    elif command == 'import-oai-cohort':
+                        for item in payload['pages']:
+                            path = root / item['response_file']
+                            path.parent.mkdir(parents=True, exist_ok=True)
+                            path.write_bytes(page([article()])['response'])
+                    value = copy.deepcopy(payload)
+                    if absolute:
+                        for parent, key in iterate_payload_paths(command, value):
+                            if not parent[key].startswith('/'):
+                                parent[key] = str(root / parent[key])
+                    payload_path = self.root.parent / 'count-input.json'
+                    payload_path.write_text(json.dumps(value))
+                    arguments = [command, '--workspace', str(root), '--file', str(payload_path)]
+                    if command != 'check-claims':
+                        arguments += ['--expected-revision', '0', '--request-id', 'fresh']
+                    args = cli.build_parser().parse_args(arguments)
+                    calls = []
+
+                    def count_validation(connection, **kwargs):
+                        calls.append((kwargs.get('replay', True),
+                                      connection.execute('PRAGMA query_only').fetchone()[0]))
+                        return validate(connection, **kwargs)
+
+                    expected = [(False, 1), (True, 1)]
+                    if command == 'adopt':
+                        expected[0] = (False, 0)  # Explicit adoption opens a writable store.
+                    elif command == 'artifact':
+                        expected.append((True, 0))
+                    elif command == 'import-response':
+                        # Response imports already read their receipt before W2.
+                        expected *= 2
+                    elif command in extra_reads:
+                        expected.append((True, 1))
+                    with mock.patch.object(storage, '_validate', side_effect=count_validation):
+                        if command in expected_errors:
+                            with self.assertRaises(ResearchError) as caught:
+                                cli.run(args)
+                            self.assertEqual(caught.exception.code, expected_errors[command])
+                        else:
+                            self.assertEqual(cli.run(args)['revision'], 1)
+                    self.assertEqual(calls, expected)
+
+    def test_artifact_replays_keep_two_full_validations_without_reopening_input(self):
+        payload = self.build_artifact_payload('work/input.txt')
+        written = self.invoke_command('artifact', payload, check=False, revision=0)
+        self.assertEqual(written[0], 0, written[2])
+        before = self.store.snapshot()
+        (self.root / 'work/input.txt').unlink()
+        validate = storage._validate
+        for path in (payload['path'], str(self.root / payload['path'])):
+            with self.subTest(path=path):
+                payload_path = self.root.parent / 'replay-input.json'
+                payload_path.write_text(json.dumps(dict(payload, path=path)))
+                args = cli.build_parser().parse_args(['artifact', '--workspace', str(self.root),
+                    '--file', str(payload_path), '--expected-revision', '0', '--request-id', 'check-request'])
+                calls = []
+
+                def count_validation(connection, **kwargs):
+                    calls.append((kwargs.get('replay', True),
+                                  connection.execute('PRAGMA query_only').fetchone()[0]))
+                    return validate(connection, **kwargs)
+
+                with mock.patch.object(storage, '_validate', side_effect=count_validation):
+                    replay = cli.run(args)
+                self.assertEqual(replay, json.loads(written[1]))
+                self.assertEqual(calls, [(False, 1), (True, 1), (True, 0)])
+                self.assertEqual(self.store.snapshot(), before)
 
     def test_absolute_and_relative_artifact_paths_store_identical_payload_record_and_check_digest(self):
         relative = self.build_artifact_payload('work/input.txt')

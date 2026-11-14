@@ -3,6 +3,8 @@
 Each version has a full release note in [docs/releases](docs/releases/). The
 newest version comes first.
 
+Version [0.88.1](docs/releases/0.88.1.md) removes a store validation that 0.88.0 added before every command with a payload file. A command now reads the committed receipt of its request only when a path is refused with `unsafe_path`, so an artifact registration again makes two full validations of the history and one structural check. No reviewer route becomes stale.
+
 Version [0.88.0](docs/releases/0.88.0.md) carries the first wave of fixes for the open harness-improvement records. Citations with TeX braces match their registry titles, and the problem exports carry a reference list. A post moves the obligations of its stopped review chains to `after_post`, and payload paths are recorded in their workspace-relative form. A safeguards notice of the provider is retried, usage windows are shown, search receipts give their gaps, packets are reused, and exports keep a history. A result series delivers each cited search record once, an openness chain reads the main capture that its packet bound, and an openness export assesses its minimum first. Every Claude route recorded before 0.88.0 needs a new probe.
 
 Version [0.87.0](docs/releases/0.87.0.md) keeps a compact full text when the layout mode of PDF extraction pads it. A default PDF extraction whose layout text has a whitespace fraction above 0.90 or an expansion above 2.0 is extracted again without layout mode, and the complete plain text is kept, with both measurements in `extraction.layout_selection`. The new command `select-main-capture` records which available capture of an original the next deliveries use, without changing any capture or reading. No reviewer route becomes stale.
