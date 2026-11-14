@@ -1192,7 +1192,11 @@ still be proved as an obligation inside it.
    for the statement, the whole `statement` field, with its `---` line and details when they
    are present; for a neighbour, the text declared in `neighbours`. A new search record can
    reuse the captured responses of an earlier search and carry the new `question`, without a
-   new capture. Give each search a date and bounded or complete coverage.
+   new capture. Give each search a date and bounded or complete coverage. Capture each OpenAlex
+   list request that a search will bind with the `select` parameter of
+   [Literature tools](../../docs/research-workflow.md#literature-tools-search-read-expand-and-synthesize),
+   on every page of the query, so that the captured response holds only the fields that the
+   import reads.
 2. Read every decisive prior or settling work in full. Keep an unavailable source as a gap.
 3. Write the openness spec `{assignment_id, reviewer_id, minimum: {searches: [{formulation,
    search_id}], settling_work_id, duplicate_resolutions}}`. Each `searches` entry binds one
@@ -1234,7 +1238,8 @@ still be proved as an obligation inside it.
 4. Run `exactory-research export --kind problem-openness --spec openness-spec.json`. Without
    `--destination` the export writes the packet to
    `intermediate/reviews/packets/<assignment id>/` (`<assignment id>-2`, `-3`, ... when that
-   folder exists) and names the directory under `destination` in its output; give
+   folder exists) and names the directory under `destination` in its output. An export whose
+   packet a folder already holds returns that folder and writes no second one. Give
    `--destination` only to place the packet outside the workspace, for a reviewer that must
    not see it. Before it writes anything, the export checks the declaration against the
    store. A refusal names what to repair in its details:
@@ -2114,10 +2119,9 @@ accounts with the parts that the harness derives, and the records that their ent
    space, its main capture holds a PDF text that layout mode padded. Acquire the PDF again and
    choose the new capture with `select-main-capture` (the CLI reference gives its conditions):
    the next continuation delivers the chosen text, and the parts already delivered stay
-   delivered. For a version that the openness review binds, also record a new `bundle` and a
-   full reading on the chosen capture before the openness export, so that its packet carries the
-   chosen text. A choice after a recorded openness finding that read the earlier text makes that
-   finding stale (`problem_openness_stale`).
+   delivered. An openness export after the choice carries the chosen text without a new
+   reading. An openness chain that was exported before the choice, and a recorded openness
+   finding, keep the text of their packet and stay current.
 5. Repair a below-threshold rubric grade with evidence, or obtain a focused adjudication. A grade
    repaired with evidence changes the evidence digest, and the result reviews are refreshed for
    the same reviewers. A value record with accounts becomes stale when the record gains a later

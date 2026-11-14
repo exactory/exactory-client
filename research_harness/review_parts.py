@@ -70,7 +70,10 @@ def _find_unit_rule(adapter, previous):
     from .review_parts_roles import get_adapter
     rule = previous.get('unit_rule') if previous is not None else get_adapter(adapter).get('unit_rule')
     _require(rule is None or rule == get_adapter(adapter).get('unit_rule'),
-             'The inventory names an unknown unit rule', 'review_parts_inventory_changed')
+             f'The inventory of this series names the unit rule {rule!r}, and this version of the harness has no '
+             f'such rule for the adapter {adapter}. The rule states how the series forms its units, so this version '
+             'cannot read the series. Use the harness version that recorded the series.',
+             'review_parts_inventory_changed')
     return rule
 
 

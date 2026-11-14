@@ -217,8 +217,10 @@ def find_capture_interval_warnings(pages):
             page_numbers = {page["position"]: page["position"] // page["size"] + 1
                             for page in members if page["size"]}
         warnings.append({"code": "search_page_capture_interval", "message":
-            "Pages of this query were captured more than 15 minutes apart; changed results can produce "
-            "search_results_duplicate and search_totals_inconsistent.",
+            "The pages of this query were captured more than 15 minutes apart. If the provider's results changed "
+            "between the captures, the search has search_results_duplicate or search_totals_inconsistent among "
+            "its pending items. These are integrity errors, and a recorded search keeps them. If the search is "
+            "not recorded yet, capture the pages of this query again in one run. Then bind the new captures.",
             "group_id": key, "query": members[0]["group"]["query"], "provider": members[0]["group"]["provider"],
             "pages": [{"source_id": page["source_id"], "position": page["position"],
                        "page_number": page_numbers.get(page["position"]),

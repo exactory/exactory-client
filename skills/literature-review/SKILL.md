@@ -82,7 +82,7 @@ padded capture of a PDF (a whitespace fraction above 0.90 or an expansion
 ratio above 2.0), acquire the PDF again and then choose the new capture with
 `select-main-capture`: until that choice the first capture of an original
 stays its main capture, whose text a review chain delivers. The CLI reference
-gives the conditions of that command and its effect on an openness review.
+gives the conditions of that command.
 Acquire a
 large PDF original, or a PDF transfer or extraction that a single `fulltext`
 call cannot finish within its limits, as a full-text job: `fulltext-start`

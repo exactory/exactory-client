@@ -801,7 +801,11 @@ def _import_page(provider, response, source_url, captured_at, media_type, mappin
                                 "and the text after a semicolon must be non-empty printable ASCII") from error
         record_mappings, query_binding = bind_import_query(mappings, source_url)
         if query_binding is not None and provider != "web":
-            raise ResearchError("invalid_import", "URL path query bindings require a web capture")
+            raise ResearchError("invalid_import",
+                                "query_path binds a path segment of the URL of a web capture, and the provider of "
+                                "this import is not web. Give mappings as the list of record mappings. A search "
+                                "then binds the query of this capture through a query parameter of its URL or "
+                                "through query_locator.")
         page = parse_mapped(response, media_type, record_mappings)
         page.query_binding = query_binding
     else:
