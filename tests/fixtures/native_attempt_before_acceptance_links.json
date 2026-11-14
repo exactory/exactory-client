@@ -1,0 +1,188 @@
+{
+  "baseline_commit": "100bbd0",
+  "source_incident": "20261113074000-openness-packet-cannot-deliver-what-its-searches-cite",
+  "summary": {
+    "acceptances": [
+      {
+        "checkpoint_id": "checkpoint-000001",
+        "claims_openness": false,
+        "classification": "analytical",
+        "evidence_digests": [
+          "0799f7c232bf93831789dfcf8cd1ebc15339f4d1135d7286a570e36ee8f972be"
+        ],
+        "id": "acceptance-000001",
+        "obligation_id": "obligation-000002",
+        "outcome": "reduction",
+        "standard": "reviewed",
+        "status": "accepted"
+      }
+    ],
+    "attack_root": "$ATTACK_ROOT",
+    "checkpoints": [
+      {
+        "claim": {
+          "assumption_ids": [],
+          "proof_policy": "reviewed",
+          "quantifiers": "For n in {5, 6}",
+          "scope": {
+            "kind": "integer_interval",
+            "lower": 5,
+            "lower_inclusive": true,
+            "upper": 6,
+            "upper_inclusive": true
+          },
+          "statement": "P(5) and P(6)"
+        },
+        "id": "checkpoint-000001",
+        "kind": "reduction",
+        "origin_kind": "external_result",
+        "verification_status": "pending"
+      },
+      {
+        "claim": {
+          "assumption_ids": [],
+          "proof_policy": "reviewed",
+          "quantifiers": "For every integer n with 5 <= n <= 15",
+          "scope": {
+            "kind": "integer_interval",
+            "lower": 5,
+            "lower_inclusive": true,
+            "upper": 15,
+            "upper_inclusive": true
+          },
+          "statement": "For every integer n from 5 to 15, P(n)"
+        },
+        "id": "checkpoint-000002",
+        "kind": "hypothesis",
+        "origin_kind": "external_result",
+        "verification_status": "pending"
+      }
+    ],
+    "contract": {
+      "assumption_ids": [],
+      "original_claim": {
+        "assumption_ids": [],
+        "proof_policy": "reviewed",
+        "quantifiers": "For every integer n with 5 <= n <= 15",
+        "scope": {
+          "kind": "integer_interval",
+          "lower": 5,
+          "lower_inclusive": true,
+          "upper": 15,
+          "upper_inclusive": true
+        },
+        "statement": "For every integer n from 5 to 15, P(n)"
+      },
+      "proof_policy": "reviewed",
+      "requested_outcome": "proof",
+      "required_deliverables": [
+        "Conventional proof with all dimension cases"
+      ],
+      "resource_policy": {
+        "max_total_moves": null,
+        "max_total_runs": null,
+        "max_workers": 1
+      },
+      "root_attack_slug": "root",
+      "root_obligation": "obligation-000001",
+      "schema_version": 1
+    },
+    "failed_strategies": [],
+    "nodes": [
+      {
+        "cashout_action": null,
+        "finish_receipt": null,
+        "id": "node-000001",
+        "status": "admitted"
+      }
+    ],
+    "objective_id": "objective-000001",
+    "obligations": [
+      {
+        "claim": {
+          "assumption_ids": [],
+          "proof_policy": "reviewed",
+          "quantifiers": "For every integer n with 5 <= n <= 15",
+          "scope": {
+            "kind": "integer_interval",
+            "lower": 5,
+            "lower_inclusive": true,
+            "upper": 15,
+            "upper_inclusive": true
+          },
+          "statement": "For every integer n from 5 to 15, P(n)"
+        },
+        "id": "obligation-000001",
+        "status": "open"
+      },
+      {
+        "claim": {
+          "assumption_ids": [],
+          "proof_policy": "reviewed",
+          "quantifiers": "For n in {5, 6}",
+          "scope": {
+            "kind": "integer_interval",
+            "lower": 5,
+            "lower_inclusive": true,
+            "upper": 6,
+            "upper_inclusive": true
+          },
+          "statement": "P(5) and P(6)"
+        },
+        "id": "obligation-000002",
+        "status": "open"
+      },
+      {
+        "claim": {
+          "assumption_ids": [],
+          "proof_policy": "reviewed",
+          "quantifiers": "For every integer 7 <= n <= 15",
+          "scope": {
+            "kind": "integer_interval",
+            "lower": 7,
+            "lower_inclusive": true,
+            "upper": 15,
+            "upper_inclusive": true
+          },
+          "statement": "P(n) for every integer 7 <= n <= 15"
+        },
+        "id": "obligation-000003",
+        "status": "open"
+      },
+      {
+        "claim": {
+          "assumption_ids": [],
+          "proof_policy": "reviewed",
+          "quantifiers": "For every integer n with 5 <= n <= 15",
+          "scope": {
+            "kind": "named",
+            "name": "partition-deduction"
+          },
+          "statement": "The base cases and remaining cases imply the full objective"
+        },
+        "id": "obligation-000004",
+        "status": "open"
+      }
+    ],
+    "retreats": [],
+    "schema_version": 1,
+    "state": {
+      "closure_digest": null,
+      "execution_status": "needs_replan",
+      "openness": {
+        "outcome": "unresolved",
+        "statement_digest": "05c36b9d68773d2df4c995f080897b6953e717acab0e179dd658c4ce98f79e50",
+        "status": "pending"
+      },
+      "proof_status": "open"
+    },
+    "totals": {
+      "elapsed_seconds": null,
+      "historical_usage": "known",
+      "moves": 0,
+      "runs": 0,
+      "timeout_seconds": 300,
+      "workers": 1
+    }
+  }
+}

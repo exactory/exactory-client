@@ -82,6 +82,34 @@ def deliver_attempt(controller, spec, expected_revision, request_id):
                                 audit_state, "Accepted native attempt audit failed")
 
 
+def build_acceptance_review_links(controller, state, records):
+    """Project each audited acceptance's own observed review into an immutable link."""
+    from research_harness.artifacts import ArtifactStore
+    from research_harness.native_review import ATTESTATION_PREFIX
+    from research_harness.review_protocol import assignment_state
+
+    artifacts = ArtifactStore(common_root(controller.root, state))
+    links = []
+    for acceptance in state["acceptances"].values():
+        attestation = acceptance["review"]["reviewer"]["attestation_id"]
+        if acceptance["status"] != "accepted" or not attestation.startswith(ATTESTATION_PREFIX):
+            continue
+        assignment_id = attestation[len(ATTESTATION_PREFIX):]
+        # The delivery audit authenticated these receipts against the complete series.
+        turns = acceptance.get("reading_turns")
+        final_id = turns[-1]["assignment_id"] if turns else assignment_id
+        observed = assignment_state(records, artifacts, final_id)
+        key = {"attack_root": str(controller.root), "objective_id": state["objective_id"],
+               "acceptance_digest": s.digest(acceptance)}
+        value = dict(key, acceptance_id=acceptance["id"], checkpoint_id=acceptance["checkpoint_id"],
+                     evidence_digests=acceptance["audit"]["evidence_digests"],
+                     review={"assignment_id": assignment_id, "final_assignment_id": final_id,
+                             "attempt_id": observed["attempt_id"], "output_digest": observed["output_digest"]},
+                     provenance=controller.provenance("deliver-attempt"))
+        links.append(immutable_record(records, "native_acceptance_review", s.digest(key), value))
+    return links
+
+
 def deliver_snapshot(controller, state, common, kind, identity, value, result, audit, audit_message):
     """Audit a revision-protected common snapshot and retry competing common writes."""
     def audit_snapshot(records):
@@ -89,6 +117,7 @@ def deliver_snapshot(controller, state, common, kind, identity, value, result, a
         failures = audit(controller.root, state, ContentSink(controller.store), common_guard=snapshot, fresh=True)
         if failures:
             raise SearchError("audit_failed", audit_message, failures)
+        return build_acceptance_review_links(controller, state, records) if kind == "native_attempt" else []
 
     key = {name: value[name] for name in ("attack_root", "objective_id")}
     pointer_id = s.digest(key)
@@ -99,16 +128,17 @@ def deliver_snapshot(controller, state, common, kind, identity, value, result, a
             existing = snapshot["records"].get(kind, {}).get(identity)
             current = snapshot["records"].get("native_attempt_current", {}).get(pointer_id)
             pointer_current = current is not None and current["native_attempt_digest"] == identity
-            # Exact current repeats freshly audit without adding a record or receipt.
+            # A current repeat freshly audits and recovers only missing acceptance links.
             if existing is not None and (kind != "native_attempt" or pointer_current):
-                audit_snapshot(snapshot["records"])
+                links = audit_snapshot(snapshot["records"])
                 expected = (dict(value, recorded_revision=existing["recorded_revision"])
                             if kind == "native_attempt" and "recorded_revision" in existing else value)
                 immutable_record(snapshot["records"], kind, identity, expected)
-                return result
+                if all(key in snapshot["records"].get(link_kind, {}) for link_kind, key, _ in links):
+                    return result
 
             def prepare(records, payload):
-                audit_snapshot(records)
+                links = audit_snapshot(records)
                 record = payload
                 if kind == "native_attempt":
                     revision = snapshot["revision"] + 1 if existing is None else existing.get("recorded_revision")
@@ -116,7 +146,8 @@ def deliver_snapshot(controller, state, common, kind, identity, value, result, a
                         record = dict(payload, recorded_revision=revision)
                 checked = immutable_record(records, kind, identity, record)
                 changes = [checked] if existing is None else []
-                if kind == "native_attempt":
+                changes.extend(link for link in links if link[1] not in records.get(link[0], {}))
+                if kind == "native_attempt" and not pointer_current:
                     pointer = dict(key, native_attempt_digest=identity, recorded_revision=snapshot["revision"] + 1)
                     changes.append(("native_attempt_current", pointer_id, pointer))
                 return changes, result

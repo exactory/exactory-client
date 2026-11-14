@@ -998,6 +998,7 @@ _UNPLACED_KINDS = (
     "cohort_partition_member", "cohort_sample", "cohort_sample_selection", "cohort_seen", "collection",
     "collection_page", "configuration", "constitution", "fulltext_requirement", "literature_operation",
     "literature_scope", "literature_search", "loop_closure", "loop_closure_selection", "native_import_identity",
+    "native_acceptance_review",
     "problem_citation_metadata", "citation_locator", "reading", "reading_batch", "reference_occurrence",
     # Carried proof/evidence is retained in the authority store and delivered
     # through reviewer packets, like the native evidence records above.

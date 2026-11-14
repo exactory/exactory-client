@@ -650,7 +650,15 @@ class FinalRecordTests(ViewCase):
 
     def test_evidence_records_have_no_view(self):
         self.put(("work", "work-1", {"id": "work-1"}), ("reading", "reading-1", {"id": "reading-1"}),
-                 ("research_intent", "intent-1", {"id": "intent-1"}), ("grand_challenge", "challenge-1", {"id": "c"}))
+                 ("research_intent", "intent-1", {"id": "intent-1"}), ("grand_challenge", "challenge-1", {"id": "c"}),
+                 ("native_acceptance_review", "a" * 64, {
+                     "attack_root": "synthetic-attack", "objective_id": "objective-000001",
+                     "acceptance_id": "acceptance-000001", "acceptance_digest": "b" * 64,
+                     "checkpoint_id": "checkpoint-000001", "evidence_digests": ["c" * 64],
+                     "review": {"assignment_id": "result-review", "final_assignment_id": "result-review",
+                                "attempt_id": "observed-result", "output_digest": "d" * 64},
+                     "provenance": {"source": "operator", "actor_id": "search-controller",
+                                    "attestation_id": "filesystem-audit:deliver-attempt"}}))
         self.render()
         for folder in ("final", "intermediate"):
             self.assertEqual(self.read_json(folder + "/index.json")["files"], [])

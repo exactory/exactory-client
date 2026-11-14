@@ -19,6 +19,21 @@ from search_controller.storage import ContentSink
 
 
 class NativePartsAcceptanceTests(MathOpennessChainCase, unittest.TestCase):
+    def test_attempt_links_the_attested_parts_series_to_its_observed_final(self):
+        from research_harness.evidence import digest
+        from research_harness.record_check import check_authentication
+        self.build_native_fixture()
+        turns = self.finish_native_series()
+        self.accept_result()
+        state = self.controller.status()
+        self.controller.command('deliver-attempt', {}, state['revision'], 'deliver-parts-result')
+        links = list(self.store.snapshot()['records'].get('native_acceptance_review', {}).values())
+        self.assertEqual(len(links), 1)
+        expected = dict(assignment_id=turns[0], final_assignment_id=turns[-1],
+                        attempt_id='attempt-' + turns[-1], output_digest=digest(self.review))
+        self.assertEqual(links[0]['review'], expected)
+        self.assertEqual(list(check_authentication(self.store)['acceptance_reviews'].values()), [expected])
+
     def build_native_fixture(self):
         self.initialize()
         specification = self.external_checkpoint()

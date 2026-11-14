@@ -19,6 +19,28 @@ from tests.openness_chain_support import MathOpennessChainCase, OBJECTIVE_PACKET
 
 
 class MathOpennessReadingTests(MathOpennessChainCase, unittest.TestCase):
+    def test_attempt_links_the_attested_reading_chain_to_its_observed_final(self):
+        self.build_fixture(response_sizes=(70000, 60000), text_sizes=())
+        turns = self.run_chain()
+        self.accept_result()
+        state = self.controller.status()
+        self.controller.command('deliver-attempt', {}, state['revision'], 'deliver-reading-result')
+        records = self.store.snapshot()['records']
+        links = list(records.get('native_acceptance_review', {}).values())
+        self.assertEqual(len(links), 1)
+        expected = dict(assignment_id=turns[0], final_assignment_id=turns[-1],
+                        attempt_id='attempt-' + turns[-1], output_digest=digest(self.review))
+        self.assertEqual(links[0]['review'], expected)
+        from research_harness.record_check import check_authentication
+        self.assertEqual(list(check_authentication(self.store)['acceptance_reviews'].values()), [expected])
+        changed = copy.deepcopy(self.store.snapshot())
+        link = next(iter(changed['records']['native_acceptance_review'].values()))
+        link['review']['assignment_id'] = turns[-1]
+        with patch.object(self.store, 'snapshot', return_value=changed):
+            with self.assertRaises(ResearchError) as caught:
+                check_authentication(self.store)
+        self.assertEqual(caught.exception.code, 'record_acceptance_review_changed')
+
     def check_review(self, subject, review=None, **options):
         state = self.controller.status()
         return require_review(self.root, state, ContentSink(self.controller.store),

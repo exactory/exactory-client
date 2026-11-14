@@ -4707,6 +4707,24 @@
       ]
     },
     {
+      "id": "openness-packet-cannot-deliver-an-accepted-result-of-the-record",
+      "record": "20261113074000-openness-packet-cannot-deliver-what-its-searches-cite",
+      "class": "accepted result review provenance",
+      "summary": "Search records cite an accepted solver result, but the delivered attempt does not identify the review that accepted it. Two approving reviews of the same checkpoint cannot be distinguished by that summary.",
+      "fixed_in": "0.87.0",
+      "expected": "An audited attempt delivery writes immutable links from every observed accepted acceptance to its own review and terminal output. Repeating a legacy delivery adds missing links while retaining the attempt digest, record and current pointer. Unobserved and invalidated acceptances produce no new links. Openness result binding and proof delivery are the following unit's work.",
+      "test_kind": "real_shape",
+      "tests": [
+        "tests.test_search_acceptance_links.AcceptanceLinkTests.test_two_approvals_link_each_acceptance_to_its_own_review",
+        "tests.test_search_acceptance_links.AcceptanceLinkTests.test_stored_attempt_digest_survives_link_recovery_without_moving_its_pointer",
+        "tests.test_search_acceptance_links.AcceptanceLinkTests.test_conflicting_link_refuses_the_whole_delivery",
+        "tests.test_search_acceptance_links.AcceptanceLinkTests.test_corrupt_proof_blocks_link_recovery_and_preserves_the_stored_attempt",
+        "tests.test_search_acceptance_links.AcceptanceLinkTests.test_qualification_authenticates_the_link_and_refuses_changed_references",
+        "tests.test_openness_reading_chain.MathOpennessReadingTests.test_attempt_links_the_attested_reading_chain_to_its_observed_final",
+        "tests.test_review_parts_native.NativePartsAcceptanceTests.test_attempt_links_the_attested_parts_series_to_its_observed_final"
+      ]
+    },
+    {
       "id": "layout-extraction-inflates-fulltext-delivery",
       "record": "20261111223126-layout-extraction-inflates-fulltext-delivery",
       "class": "source extraction and review continuation",
