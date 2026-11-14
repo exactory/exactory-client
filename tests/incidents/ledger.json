@@ -5532,6 +5532,19 @@
         "test_review_capacity_notice.CapacityChainTests.test_legacy_parts_chain_adds_current_turn_bounds_and_authenticates_old_turn",
         "test_review_capacity_notice.CapacityChainTests.test_fitted_session_keeps_capacity_and_delivery_notices_together"
       ]
+    },
+    {
+      "id": "certified-probe-result-reaches-problem-boundary-accounts",
+      "record": "20261114043000-certified-computation-has-no-light-path-into-problem-accounts",
+      "class": "problem certificate evidence journey",
+      "summary": "A problem record held an exploratory certificate but had no worked solver path from the stored probe through native verification and acceptance to a boundary result reference.",
+      "fixed_in": "open",
+      "expected": "A once-produced probe certificate keeps its provenance, receives one admitted native certificate run and a proof-candidate interpretation, is accepted at certificate standard with four stubbed reviewer assignments, is delivered to the problem store and supports a boundary through a result reference. Probe-backed contract evidence, an already-determined research proposal, an analytical wrapper, a missing interpretation and direct probe boundary credit stay refused.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_certificate_path_example.CertificatePathExampleTests.test_native_certificate_journey_and_six_refusals",
+        "test_certificate_path_example.CertificatePathExampleTests.test_common_probe_examples_retain_the_residue_certificate"
+      ]
     }
   ]
 }
