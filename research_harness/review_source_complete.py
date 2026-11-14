@@ -8,7 +8,7 @@ from . import bar_sources
 from .errors import ResearchError
 from .review_bodies import read_history
 from .evidence import digest
-from .source_links import captured_source
+from .source_links import admits_capture_class, captured_source
 from .bar_sources import descriptor
 
 MODE = 'complete-visible-v1'
@@ -34,7 +34,7 @@ def _native_alternative(records, artifacts, version, row):
     from .fulltext import extraction_measures
     from .graph import main_captures
     source = captured_source(records, artifacts, row['source_id'])
-    _require(source.get('origin_verified') is True and source.get('capture_method') in ('http', 'http_range_v1')
+    _require(admits_capture_class(source, 'complete_source_route')
              and source.get('observed_identifier') == version and row['version_id'] == version,
              'Every alternative must retain an authenticated exact observed version')
     work = records['work'][version]
