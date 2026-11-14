@@ -230,14 +230,18 @@ class ResponseLimitJourneyTests(unittest.TestCase):
         self.execute(case, 'review-route', dict(id='https', adapter='openai_responses_v1',
             endpoint='https://example.test/responses', model='fixture-model',
             configuration=dict(max_output_tokens=1000, timeout_seconds=5)))
+        from visual_capacity_fixtures import install_bounded_binary_backend
+        install_bounded_binary_backend(case, [case.store.snapshot()['records']['review_route']['https']])
         def respond_to_probe(route, request, credential):
             packet = review_excerpts.read_sent_packet(request)
-            return dict(id='positive', status='completed', usage=dict(input_tokens=37, output_tokens=12),
+            tokens = capacity.measure_request(route, request)['tokens_upper']
+            return dict(id='positive', status='completed', usage=dict(input_tokens=tokens, output_tokens=12),
                 output=[dict(type='message', content=[dict(type='output_text', text=json.dumps(dict(
                     allowed_control=packet['allowed_control'], evidence_control=packet['evidence_control'], excluded_controls=[])))])])
         with patch.dict(os.environ, {'OPENAI_API_KEY': 'fixture'}), patch.object(
                 protocol.transport, 'send_request', side_effect=respond_to_probe):
-            self.execute(case, 'review-probe', dict(id='https-probe', route_id='https'))
+            self.execute(case, 'review-probe', dict(id='https-probe', route_id='https',
+                capacity=dict(input_tokens=2000000)))
 
     def stop_response(self, case, identifier):
         records = case.store.snapshot()['records']

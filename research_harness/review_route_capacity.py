@@ -492,11 +492,11 @@ def find_serving_routes(records, role, packet, *, artifacts, assignment, prompt,
             continue
         if visual and route['adapter'] != 'codex_cli_visual_v1':
             continue
+        if route_state(records, artifacts, route['id'])['context_status'] != 'verified_for_route':
+            continue
         try:
             _require_route_runtime(route)
         except ResearchError:
-            continue
-        if route_state(records, artifacts, route['id'])['context_status'] != 'verified_for_route':
             continue
         delivery = 'single'
         candidate_packet = copy.deepcopy(packet)

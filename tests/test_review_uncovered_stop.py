@@ -16,6 +16,17 @@ class UncoveredReviewTests(LiteratureCase):
     response = fixtures.ReviewProtocolTests.response
     records = fixtures.ReviewProtocolTests.records
 
+    def test_unverified_route_is_rejected_before_validating_its_runtime(self):
+        from test_review_route_capacity import build_route
+        route = dict(build_route(), id='legacy-route')
+        records = dict(review_route={route['id']: route})
+        assignment = dict(id='head', role='standalone', context={})
+        with patch.object(protocol, '_require_route_runtime', side_effect=AssertionError('Unverified runtime validation')) as runtime, \
+                patch.object(transport, 'runtime', return_value=dict(adapter='claude_cli_v1', fixture='legacy-route')):
+            self.assertEqual(capacity.find_serving_routes(records, 'standalone', dict(evidence=[]),
+                artifacts=self.artifacts, assignment=assignment, prompt='Return JSON.'), [])
+        runtime.assert_not_called()
+
     def build_assignment(self, text='Evidence', pdf=False):
         evidence = [self.artifacts.put(text.encode(), 'text/plain')]
         if pdf:
