@@ -32,15 +32,19 @@ class SeriesJourneyTests(unittest.TestCase):
         self.addCleanup(case.doCleanups)
         return case
 
-    def drive_codex(self, case, head, output, expected_exit=0):
+    def drive_codex(self, case, head, output, expected_exit=0, observe=None):
         steps, calls, kinds = [], [], []
+        def emit(row):
+            if observe is not None:
+                observe(row)
+            steps.append(row)
         def provider(route, request, credential):
             packet = review_excerpts.read_sent_packet(request)
             calls.append(request)
             kinds.append(parts.find_kind(packet))
             return codex_fixtures.build_codex_response(route, request, output(packet))
         with patch.object(protocol.transport, 'send_request', side_effect=provider):
-            code = run_series(case.store, head, emit=steps.append)
+            code = run_series(case.store, head, emit=emit)
         self.assertEqual(code, expected_exit, steps[-1])
         self.assertEqual(len(calls), len(case.store.snapshot()['records'].get('review_attempt', {}))
                          - getattr(self, 'earlier_calls', 0))
@@ -96,6 +100,30 @@ class SeriesJourneyTests(unittest.TestCase):
         self.assertEqual(steps[-2]['command'], 'problem-openness')
         self.assertEqual(steps[-2]['payload'], dict(assignment_id=steps[-2]['head_id']))
         self.assertEqual(len([step for step in steps if step['state'] == 'continue']), 3)
+
+    def test_openness_chain_renders_native_views_before_the_next_turn(self):
+        fixture = self.prepare(reading_fixtures.OpennessReadingCase)
+        fixture.limit_input(24000)
+        reference = fixture.export(assignment_id='first')
+        fixture.assign('first', reference)
+        turns = []
+
+        def observe(row):
+            path = fixture.root / 'intermediate/reviews/native_math/first/series.json'
+            self.assertTrue(path.is_file())
+            marker = json.loads((fixture.root / '.exactory/output-views.json').read_text())
+            self.assertEqual(marker['revision'], fixture.store.revision)
+            if row['state'] == 'run':
+                turns.append(len(json.loads(path.read_text())['turns']))
+
+        def output(packet):
+            return (fixture.build_reading_response(packet) if 'reading_turn' in packet
+                    else fixture.build_native_result(packet))
+
+        steps, _ = self.drive_codex(fixture, 'first', output, observe=observe)
+        self.assertEqual(steps[-1]['state'], 'done')
+        self.assertEqual(turns, [1, 2, 3, 4])
+        self.assertTrue(list((fixture.root / 'final/problem/openness').glob('*.json')))
 
     def test_native_parts_retains_packet_and_hands_off_final(self):
         fixture = self.prepare(native_fixtures.NativePartsTests)

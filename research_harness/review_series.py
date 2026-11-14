@@ -9,6 +9,7 @@ import uuid
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evidence import digest
+from .output_views import render_workspace_views
 from .review_continuation import plan_next, plan_route_handoff
 
 
@@ -82,6 +83,8 @@ def run_series(store, assignment_id, *, emit=_emit_json):
                 recording_error = (error.as_dict() if isinstance(error, ResearchError) else
                                    dict(code='stop_record_error', message=str(error)))
                 row = dict(row, stop_record_error=recording_error)
+            finally:
+                render_workspace_views(store.root)
         if row.get('state') in ('stop', 'wait') and row.get('code'):
             from .stop_classes import classify_stop
             row = dict(row, stop_class=classify_stop(row['code']))
@@ -155,8 +158,13 @@ def run_series(store, assignment_id, *, emit=_emit_json):
             return 3
         request_id = plan.get('request_id') or 'review-series:' + uuid.uuid4().hex
         try:
-            OPERATIONS[plan['command']](store, plan['payload'],
-                expected_revision=snapshot['revision'], request_id=request_id)
+            try:
+                OPERATIONS[plan['command']](store, plan['payload'],
+                    expected_revision=snapshot['revision'], request_id=request_id)
+            finally:
+                # Operations can commit before refusing. Match the CLI boundary
+                # after each action, once its store locks have been released.
+                render_workspace_views(store.root)
         except ResearchError as error:
             if error.code == 'review_route_runtime_stale':
                 assignment = snapshot['records']['review_assignment'][plan['head_id']]

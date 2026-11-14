@@ -2,6 +2,62 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "openness-series-views-between-turns",
+      "record": "20261112143000-openness-chain-ends-unresolved-on-search-integrity-gaps",
+      "summary": "T5: one review-series process advanced several turns while series.json and adopted-output views stayed behind.",
+      "expected": "Every operation renders outside store locks, including durable refusals; the recorded terminal stop and final adoption advance the output views before the next emitted step.",
+      "tests": [
+        "test_review_series.SeriesTests.test_views_are_current_between_turns_and_after_adoption",
+        "test_review_series.SeriesTests.test_refused_turns_and_terminal_stop_render_the_committed_views",
+        "test_review_series.SeriesTests.test_recorded_terminal_stop_advances_the_view_revision",
+        "test_review_series_journeys.SeriesJourneyTests.test_openness_chain_renders_native_views_before_the_next_turn"
+      ],
+      "class": "generated output views and export delivery",
+      "fixed_in": "open",
+      "test_kind": "real_shape"
+    },
+    {
+      "id": "openness-packet-identical-export-reuse",
+      "record": "20261113074000-openness-packet-cannot-deliver-what-its-searches-cite",
+      "summary": "T4: exporting one openness specification twice created two identical packet folders.",
+      "expected": "An identical packet reuses the existing delivery without rewriting it, after verifying the delivered artifacts; changed packets retain separate folders and explicit destination conflicts stay refusals. A frozen 0.85.3 packet remains byte-identical.",
+      "tests": [
+        "test_research_problem_openness.ProblemOpennessTests.test_identical_packet_reuses_default_and_explicit_deliveries_without_writes",
+        "test_research_problem_openness.ProblemOpennessTests.test_changed_packet_gets_another_default_and_old_packet_still_reuses",
+        "test_research_problem_openness.ProblemOpennessTests.test_reuse_verifies_the_delivered_artifacts",
+        "test_research_problem_openness.ProblemOpennessTests.test_0853_packet_reuses_frozen_delivery_without_changing_packet_bytes"
+      ],
+      "class": "generated output views and export delivery",
+      "fixed_in": "open",
+      "test_kind": "real_shape"
+    },
+    {
+      "id": "post-export-current-history-and-delivered-digest",
+      "record": "20261113074500-post-on-user-order-instruction-condition-export-and-chain-stop",
+      "summary": "T5: superseded exports stayed current and an external post could name no exported file set.",
+      "expected": "Changed source records retire intact problem exports into final/history while retaining their bytes and digest. An optional external-post export_digest records which file set was posted and appears in status. Old post receipts replay and render without inventing an export identity.",
+      "tests": [
+        "test_problem_export_history.OverrideExportHistoryTests.test_changed_value_archives_the_first_export_and_post_names_the_second",
+        "test_problem_export_history.OverrideExportHistoryTests.test_new_source_identity_retires_an_export_even_when_its_text_is_unchanged",
+        "test_problem_export_history.OverrideExportHistoryTests.test_history_conflict_preserves_both_folders_and_reports_the_view_error",
+        "test_problem_export_history.OverrideExportHistoryTests.test_0853_override_export_keeps_bytes_and_digest_then_retires_on_change",
+        "test_problem_export_history.ReviewedExportHistoryTests.test_changed_evidence_retires_an_approved_export_without_changing_its_bytes",
+        "test_problem_post_external.ExternalPostTests.test_export_digest_is_validated_recorded_rendered_and_replayed",
+        "test_problem_post_external.ExternalPostTests.test_0853_post_without_an_export_digest_keeps_receipt_digest_and_view",
+        "test_problem_export_history.OverrideExportHistoryTests.test_a_recreated_equal_export_can_be_retired_again",
+        "test_problem_export_history.OverrideExportHistoryTests.test_source_change_during_export_returns_its_retained_history_destination",
+        "test_problem_export_history.OverrideExportHistoryTests.test_old_equal_snapshot_does_not_replace_the_newer_exports_source_receipt",
+        "test_problem_export_history.OverrideExportHistoryTests.test_busy_renderer_refuses_export_before_writing_its_file_set",
+        "test_problem_export_history.OverrideExportHistoryTests.test_renderer_never_moves_an_export_through_a_symlinked_parent",
+        "test_problem_export_history.OverrideExportHistoryTests.test_forming_imports_are_present_in_the_renderers_export_source_snapshot",
+        "test_problem_export_history.OverrideExportHistoryTests.test_default_export_refuses_a_symlinked_exports_folder_before_writing",
+        "test_problem_export_history.OverrideExportHistoryTests.test_default_export_keeps_its_workspace_anchor_when_a_parent_changes_before_writing"
+      ],
+      "class": "generated output views and export delivery",
+      "fixed_in": "open",
+      "test_kind": "real_shape"
+    },
+    {
       "id": "override-automatic-harness-defect",
       "record": "20261106085323-override-of-harness-stops",
       "class": "controller continuation (harness defect)",

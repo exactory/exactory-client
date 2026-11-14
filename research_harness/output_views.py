@@ -32,6 +32,7 @@ from .graph import obligation
 from .problem_claims import find_current_statement, find_latest
 from .problem_delivery import find_post
 from .problem_evidence import BINDING_RECORD_KINDS, collect_binding_record_kinds, find_formal_checks
+from .problem_export_history import archive_problem_exports
 from .provenance import plugin_version
 from .publication import latest_reviews
 from .review_context_repair import _lineage, _parent, historical_reviews, slot_id
@@ -47,6 +48,7 @@ _RENDERING_PATH = ".exactory/output-views-rendering.json"
 _RENDER_LOCK_SECONDS = 1.0
 # The folders that the export commands own, from the workspace root.
 PROBLEM_EXPORTS_FOLDER = "final/problem/exports"
+PROBLEM_EXPORT_HISTORY_FOLDER = "final/history/problem/exports"
 PACKETS_FOLDER = "intermediate/reviews/packets"
 LITERATURE_EXPORTS_FOLDER = "intermediate/literature/exports"
 COPY_LIMIT_BYTES = 1 << 20
@@ -70,7 +72,8 @@ _STATUS_FOLDERS = {"current": "final/", "superseded": "final/history/", "histori
 # folder once.
 _CONTROLLER_FOLDERS = ("final/math/", "final/history/math/", "intermediate/math/")
 _DELIVERIES_FOLDERS = ("final/math/deliveries/", "final/history/math/deliveries/")
-_EXPORT_FOLDERS = tuple(folder + "/" for folder in (PROBLEM_EXPORTS_FOLDER, PACKETS_FOLDER, LITERATURE_EXPORTS_FOLDER))
+_EXPORT_FOLDERS = tuple(folder + "/" for folder in (PROBLEM_EXPORTS_FOLDER, PROBLEM_EXPORT_HISTORY_FOLDER,
+                                                  PACKETS_FOLDER, LITERATURE_EXPORTS_FOLDER))
 _LEGACY_FOLDER = "intermediate/legacy/"
 _CHECK_REPORT_PATHS = (".exactory/citation-check.json", ".exactory/derivation-check.json")
 _FOLDER_FILE_NAMES = ("README.md", "index.json")
@@ -363,7 +366,7 @@ _RECORD_TREES = {
 # The selection pointers and other records that the rules above read.
 _RECORD_TREE_READS = ("development_selection", "scoped_review_selection", "problem_selection", "strategy_selection",
                       "cycle", "verification_selection", "native_attempt_current", "publication_selection",
-                      "publication_bundle")
+                      "publication_bundle", "problem_forming_import")
 
 
 def _find_latest_ids(records, kind):
@@ -1142,13 +1145,13 @@ def find_view_advisories(store, revision):
     return advise("behind", rendered) if rendered < revision else []
 
 
-def render_workspace_views(store_root):
+def render_workspace_views(store_root, *, full=False):
     """Render the views of the research store at store_root after a command, once its last commit is made and every
     store and controller lock is released. store_root is the directory that holds .exactory/research.sqlite3; None,
     or a directory without a store, renders nothing. A failure prints one warning line on stderr, records the failing
     path and error in the marker and never raises, so the command's response and exit status stay as they are.
     Returns the summary of the render, or None when nothing was rendered."""
-    return _render_safely(lambda: store_root)
+    return _render_safely(lambda: store_root, full=full)
 
 
 def render_views_after_command(start):
@@ -1158,13 +1161,13 @@ def render_views_after_command(start):
     return _render_safely(lambda: find_workspace(start, required=False))
 
 
-def _render_safely(find_store_root):
+def _render_safely(find_store_root, *, full=False):
     store_root = None
     try:
         store_root = find_store_root()
         if store_root is None or find_entry_kind(store_root, ".exactory/research.sqlite3") != "regular":
             return None
-        return render_pending(Store(store_root))
+        return (render_all if full else render_pending)(Store(store_root))
     except Exception as error:  # The command's own result stands whatever its views do.
         failure = _describe_failure(error)
         place = " at " + failure["path"] if failure["path"] else ""
@@ -1259,7 +1262,7 @@ def _render_locked(store, *, full):
             return _summarize(marker)
     revision, event_digest, records = store.read_kinds(sorted(_VIEW_KINDS))
     evidence_kinds = set()
-    while records.get("review_epoch"):
+    while records.get("review_epoch") or records.get("problem_selection"):
         evidence_kinds = collect_binding_record_kinds(records)
         if evidence_kinds <= set(records):
             break
@@ -1267,7 +1270,8 @@ def _render_locked(store, *, full):
         revision, event_digest, records = store.read_kinds(sorted(set(records) | evidence_kinds))
     artifacts = store.build_artifact_store()
     model = compute_view_model(records, artifacts, inputs)
-    files, errors = _write_views(workspace_root, store.root, marker, model, artifacts)
+    export_errors = archive_problem_exports(store.root, workspace_root, records, artifacts)
+    files, errors = _write_views(workspace_root, store.root, marker, model, artifacts, export_errors)
     marker = {"schema": _MARKER_SCHEMA_NAME, "revision": revision, "event_digest": event_digest,
               "plugin_version": version, "inputs": input_digests, "files": files, "errors": errors,
               "failure": None, "evidence_kinds": sorted(evidence_kinds)}
@@ -1277,11 +1281,11 @@ def _render_locked(store, *, full):
     return _summarize(marker, model)
 
 
-def _write_views(workspace_root, store_root, marker, model, artifacts):
+def _write_views(workspace_root, store_root, marker, model, artifacts, export_errors=None):
     """Write the files of the model whose bytes differ from the owned files, remove the owned files that the model no
     longer produces, then write both indexes. Returns ({path: size, mtime and digest} of the owned files, {path: error}
     of the files that could not be written)."""
-    owned, errors = marker["files"], {}
+    owned, errors = marker["files"], dict(export_errors or {})
     added = sorted(set(model) - set(owned))
     for path in added:
         if find_entry_kind(workspace_root, path) != "absent":

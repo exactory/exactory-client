@@ -285,8 +285,8 @@ def export_openness(store, spec, destination=None):
     load_packet(artifacts, reference, spec["reviewer_id"])
     from .review_delivery import deliver_packet, find_packet_destination
     if destination is None:
-        destination = find_packet_destination(store, spec["assignment_id"])
-    delivered = deliver_packet(store, destination, packet, transitive=True)
+        destination = find_packet_destination(store, spec["assignment_id"], packet=packet)
+    delivered = deliver_packet(store, destination, packet, transitive=True, reuse=True)
     result = dict(delivered, native_packet=reference, subject_digest=packet["subject_digest"], claim_digest=packet["claim_digest"])
     if not spec["minimum"].get("text_priority"):
         # A lower bound of the reviewer input: the packet and its text evidence bodies as JSON strings. Without a

@@ -44,6 +44,66 @@ class SeriesTests(unittest.TestCase):
         self.assertEqual(steps[-1]['state'], 'done')
         self.assertEqual(len(self.case.read_records()['value_review']), 1)
 
+    def test_views_are_current_between_turns_and_after_adoption(self):
+        from research_harness.review_series import run_series
+        folder = self.case.root / 'intermediate/reviews/bar/bar-first'
+        observations = []
+
+        def observe(row):
+            self.assertTrue((self.case.root / '.exactory/output-views.json').is_file())
+            marker = json.loads((self.case.root / '.exactory/output-views.json').read_text())
+            self.assertEqual(marker['revision'], self.case.store.revision)
+            self.assertEqual(marker['errors'], {})
+            series = json.loads((folder / 'series.json').read_text())
+            observations.append((row['state'], len(series['turns'])))
+
+        responses = []
+        for index in range(3):
+            output = self.case.build_review_output('bar')
+            if index < 2:
+                output['source_requests'] = [dict(id='page-' + str(index), kind='inventory_page', page=0)]
+                output['value']['status'] = 'unresolved'
+            responses.append(self.case.build_provider_response(output))
+        with patch('research_harness.review_transport.send_request', side_effect=responses):
+            self.assertEqual(run_series(self.case.store, 'bar-first', emit=observe), 0)
+        self.assertEqual(observations, [('run', 1), ('continue', 2), ('run', 2),
+                                       ('continue', 3), ('run', 3), ('record', 3), ('done', 3)])
+        self.assertEqual(len(list(folder.glob('*.json'))), 4)
+        self.assertTrue(list((self.case.root / 'final/reviews/bar').glob('*.json')))
+
+    def test_refused_turns_and_terminal_stop_render_the_committed_views(self):
+        from research_harness.review_series import run_series
+        observed = []
+
+        def observe(row):
+            self.assertTrue((self.case.root / '.exactory/output-views.json').is_file())
+            marker = json.loads((self.case.root / '.exactory/output-views.json').read_text())
+            self.assertEqual(marker['revision'], self.case.store.revision)
+            self.assertEqual(marker['errors'], {})
+            observed.append(row)
+
+        output = self.case.build_review_output('bar')
+        output['value']['status'] = 'invalid'
+        with patch('research_harness.review_transport.send_request',
+                   return_value=self.case.build_provider_response(output)):
+            self.assertEqual(run_series(self.case.store, 'bar-first', emit=observe), 3)
+        self.assertEqual(observed[-1]['code'], 'review_slot_exhausted')
+        self.assertEqual(len(self.case.read_records()['review_output_refusal']), 2)
+        turns = [turn for path in (self.case.root / 'intermediate/reviews/bar').rglob('series.json')
+                 for turn in json.loads(path.read_text())['turns']]
+        self.assertEqual(sum(len(turn['runs']) for turn in turns), 2)
+        self.assertTrue(all(turn['runs'] for turn in turns))
+
+    def test_recorded_terminal_stop_advances_the_view_revision(self):
+        def unrelated_change(store, payload, **identity):
+            return store.mutate('fixture.unrelated', {}, lambda tx: tx.put('unrelated', 'entry', {}), **identity)
+        with patch.dict(cli.OPERATIONS, {'review-run': unrelated_change}):
+            code, steps = self.drive()
+        self.assertEqual(code, 3)
+        self.assertIn(steps[-1]['stop_id'], self.case.read_records()['review_series_stop'])
+        marker = json.loads((self.case.root / '.exactory/output-views.json').read_text())
+        self.assertEqual(marker['revision'], steps[-1]['revision_after_stop'])
+
     def test_busy_and_dependency_refusals_are_replanned(self):
         original = cli.OPERATIONS['review-run']
         calls = []
