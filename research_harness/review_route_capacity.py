@@ -158,9 +158,9 @@ def _read_text_parts(content):
     )
 
 
-def measure_request(route, request):
+def measure_request(route, request, *, records=None, artifacts=None):
     """Measure the exact native text, excluding unmeasured binary inputs."""
-    capacity = describe_route_capacity(route)
+    capacity = describe_route_capacity(route, records=records, artifacts=artifacts)
     adapter = transport._local_adapter(route)
     representation = 'adapter_packet_text' if adapter is not None else 'serialized_request'
     native_images = None
@@ -829,7 +829,7 @@ def find_serving_routes(records, role, packet, *, artifacts, assignment, prompt,
             continue
         try:
             request = transport.request_body(route, prompt, packet, history)
-            measure = measure_request(route, request)
+            measure = measure_request(route, request, records=records, artifacts=artifacts)
         except ResearchError:
             continue
         if measure['fits']:

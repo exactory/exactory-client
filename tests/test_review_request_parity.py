@@ -15,7 +15,7 @@ import unittest
 from unittest import mock
 
 import review_request_parity_fixtures as fixtures
-from research_harness import review_continuation
+from research_harness import bar_sources, review_continuation
 from research_harness.evidence import digest
 
 
@@ -56,6 +56,18 @@ class ReviewRequestParityTests(unittest.TestCase):
                 self.assertNotIn(key, result)
                 result[key] = value
         return result
+
+    def test_result_parts_v2_preserves_stored_inputs_under_the_v3_default(self):
+        with mock.patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL_V3):
+            actual = build_without_actions(fixtures.CASE_BUILDERS['result-parts-v2'])
+            self.assertEqual(bar_sources.SESSION_PROTOCOL, bar_sources.PROTOCOL_V3)
+        expected = self.frozen['cases']['result-parts-v2']
+        for field in ('stored_packets', 'stored_requests', 'emitted_requests', 'rebuilt_requests', 'authentication'):
+            with self.subTest(field=field):
+                self.assertEqual(actual[field], expected[field])
+        for identifier, state in actual['states'].items():
+            with self.subTest(assignment=identifier):
+                self.assertEqual(state['value']['prompt_hash'], expected['states'][identifier]['value']['prompt_hash'])
 
     def extend_expected_capacity(self, name, field, expected):
         if field == 'attempts':

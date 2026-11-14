@@ -5436,6 +5436,32 @@
         "test_review_capacity_closure.ClosureStartTests.test_session_v4_uses_request_rows_and_counts_its_whole_request",
         "test_review_capacity_closure.ClosureStartTests.test_ruling27_starts_below_an_own_risky_range_beside_step5"
       ]
+    },
+    {
+      "id": "serving-route-choices-read-keyed-capacity",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "route-capacity",
+      "summary": "Serving-route selection measured without the stored evidence, and its fixture supplied only a small isolation probe.",
+      "expected": "A verified route without sufficient keyed input evidence stays excluded. After a verified probe observes 200000 input tokens, its 128000 output reservation leaves 72000 tokens and the route becomes a serving choice. Retired, unverified, unsupported and oversized routes stay excluded.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_capacity_signals.ResponseLimitJourneyTests.test_response_choices_require_capacity_evidence_after_the_route_probe",
+        "test_capacity_signals.ResponseLimitJourneyTests.test_response_choices_exclude_unverified_retired_and_unsupported_routes"
+      ]
+    },
+    {
+      "id": "result-parity-pins-stored-session-rules",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "stored-review-replay",
+      "summary": "The historical result-parts fixture inherited the new session-rules default when constructing its supporting bar reviews.",
+      "expected": "Construct the stored result fixture under its original v2 session rules even when the current default is v3. Preserve the frozen packet, prompt and request bytes and their authentication without replacing either oracle.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_request_parity.ReviewRequestParityTests.test_result_parts_v2_preserves_stored_inputs_under_the_v3_default",
+        "test_review_request_parity.ReviewRequestParityTests.test_result_parts_v2"
+      ]
     }
   ]
 }
