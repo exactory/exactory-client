@@ -2,6 +2,21 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "payload-path-admission-repeats-store-validation",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "payload admission (redundant store authentication)",
+      "summary": "W2 read a receipt through a separate Store before file-payload command preparation, adding a full history validation and structural check before artifact preparation and commit.",
+      "fixed_in": "0.88.1",
+      "expected": "Ordinary file admission leaves authentication to the command. Artifact registration and canonical replays use two full validations and one structural check. Refused paths still authenticate historical receipts before replay, and all file payload commands retain their existing domain checks.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_store_preparation.ResearchStorePreparationTests.test_register_artifact_with_two_full_validations_and_one_structural_check",
+        "test_payload_file_paths.PayloadFilePathTests.test_every_file_payload_command_keeps_its_validation_count",
+        "test_payload_file_paths.PayloadFilePathTests.test_artifact_replays_keep_two_full_validations_without_reopening_input",
+        "test_payload_file_paths.PayloadFilePathTests.test_0853_artifact_receipt_replays_without_reopening_the_old_input"
+      ]
+    },
+    {
       "id": "problem-reference-exports-retain-current-and-history-formats",
       "record": "20261113110022-every-open-record-and-review-capacity",
       "class": "generated output views and export delivery",

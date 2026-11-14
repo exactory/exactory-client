@@ -818,8 +818,24 @@ def read_payload_receipt(root, request_id):
     return Store(root).committed_request(request_id)
 
 
-def normalize_request_payload(root, command, payload, committed=None):
+def normalize_request_payload(root, command, payload, committed=None, *, request_id=None):
     """Admit fresh file inputs while retaining authenticated historical retries."""
+    if committed is None and request_id:
+        try:
+            return normalize_payload_paths(root, command, payload)
+        except ResearchError as error:
+            if error.code != 'unsafe_path':
+                raise
+            # Ordinary inputs need only the operation's preparation and commit
+            # reads. Authenticate a receipt here only to replay an old input
+            # whose path can no longer pass admission.
+            try:
+                committed = read_payload_receipt(root, request_id)
+            except ResearchError as receipt_error:
+                if command != 'gate-override' or receipt_error.code not in ('corrupt_state', 'storage_io'):
+                    raise
+            if committed is None:
+                raise error
     if committed is not None and payload == committed['payload']:
         return payload
     if committed is not None and command not in ACQUISITION:
@@ -882,16 +898,12 @@ def run(args):
         committed = None
         if args.command == 'import-response':
             committed = original
-        elif not checking and existing_workspace is not None and args.request_id:
-            try:
-                committed = read_payload_receipt(existing_workspace, args.request_id)
-            except ResearchError as error:
-                if args.command != 'gate-override' or error.code not in ('corrupt_state', 'storage_io'):
-                    raise
         # Historical receipts replay their original payload without reopening inputs.
         # Equivalent new spellings use the same normalized payload and receipt too.
         if has_paths and not checking:
-            payload = normalize_request_payload(existing_workspace or root, args.command, payload, committed)
+            payload = normalize_request_payload(existing_workspace or root, args.command, payload, committed,
+                request_id=(args.request_id if existing_workspace is not None and args.command != 'import-response'
+                            else None))
             bounded_payload = (review_protocol.drop_repeated_bundle(payload)
                                if args.command == "review-assignment" else payload)
         if checking:
