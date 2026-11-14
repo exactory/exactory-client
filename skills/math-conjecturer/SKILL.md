@@ -2301,12 +2301,18 @@ Check every citation locator before posting, exactly as `/exactory:propose-grand
    post waits: keep the report, and report the entry, its `detail` and the result of your
    comparison to the user.
    An entry of the exported list without `doi` and without `arxivId` is a work whose locator
-   is an https URL. The check searches Crossref and OpenAlex for its title. It reports the
-   entry `unresolved` when neither lists a work with that title, and `author_mismatch` when
-   a work that they list under that title has other authors. For either status, fetch the
-   locator under step 4 and compare the title and every author of the entry with the
-   document that it returns. An `unresolved` entry whose title and authors agree with that
-   document does not hold the post back. When the title or the authors of the entry differ
+   is an https URL. The check searches Crossref and OpenAlex for its title and compares the
+   authors of each work that it finds under that title. A work whose authors agree verifies
+   the entry, also when another work under that title has other authors. When no work
+   verifies the entry and a search is not complete, the entry is incomplete (`network_error`
+   or `search_incomplete`, as above), also when a work under that title with other authors
+   was found. When no work verifies the entry and both searches are complete, the entry is
+   `unresolved` if neither lists a work with that title, and `author_mismatch` if every work
+   that they list under that title has other authors. For `unresolved` and for
+   `author_mismatch`, fetch the locator under step 4 and compare the title and every author
+   of the entry with the document that it returns. An `unresolved` entry whose title and
+   authors agree with that document does not hold the post back. When the title or the
+   authors of the entry differ
    from the document, the record holds wrong metadata. For a `url:` work, record the title
    and the authors of the document with `problem-citation-metadata` (a correction is a new
    id with the complete payload; the CLI reference gives its conditions). The new record
