@@ -121,10 +121,33 @@ def check_search_coverage(search):
                 and not find_search_integrity_errors(search) and not search.get("gaps"))
 
 
-def find_material_searches(records, formulations):
-    """Find searches whose judgments can change the declared openness claim."""
-    return [search for search in records.get("literature_search", {}).values()
-            if (search.get("question") in formulations or set(formulations).intersection(search["queries"]))
+def list_search_completions(records, bound):
+    """Keep every pinned completion edge and the search that made its statements."""
+    searches = records.get("literature_search", {})
+    completions, visited = [], set()
+    pending = list(bound)
+    while pending:
+        search = pending.pop()
+        if search["id"] in visited:
+            continue
+        visited.add(search["id"])
+        for entry in search.get("completes", []):
+            earlier = searches.get(entry["search_id"])
+            if earlier is not None and digest(earlier) == entry["search_digest"]:
+                completions.append(dict(entry, completing_search_id=search["id"]))
+                pending.append(earlier)
+    return completions
+
+
+def find_material_searches(records, formulations, bound=()):
+    """Find material searches except ancestors of the searches this minimum binds."""
+    searches = records.get("literature_search", {})
+    bound = set(bound)
+    selected = [search for search in searches.values() if bound and digest(search) in bound]
+    completed = {entry["search_id"] for entry in list_search_completions(records, selected)}
+    return [search for search in searches.values()
+            if search["id"] not in completed
+            and (search.get("question") in formulations or set(formulations).intersection(search["queries"]))
             and (search.get("gaps") or any(row["disposition"] in {
                 "relevant", "contradictory", "potentially_relevant", "unresolved", "duplicate"}
                 for row in search["dispositions"]))]
@@ -160,7 +183,7 @@ def validate_minimum_bindings(minimum, statement, records):
              "openness_statement_mismatch")
     formulations = {minimum["statement"], *minimum["neighbours"]}
     bound = {item["search_digest"] for item in minimum["searches"]}
-    unbound = sorted(search["id"] for search in find_material_searches(records, formulations)
+    unbound = sorted(search["id"] for search in find_material_searches(records, formulations, bound)
                      if digest(search) not in bound)
     _require(not unbound, "Bind each search in search_ids to the declared formulation it addresses: a search with a "
              "relevant, contradictory, potentially_relevant, unresolved or duplicate result, or with gaps, can change "
@@ -417,7 +440,7 @@ def list_minimum_notices(minimum, records, artifacts):
                 pages.append(dict(page, captured_at=source["captured_at"]))
         receipt = build_search_receipt(search, search["found_work_ids"], search.get("pending", []),
                                        search.get("page_groups", []), pages)
-        notices.append(dict(binding, search_id=search["id"], coverage=search.get("coverage", []),
+        notices.append(dict(binding, **({"completes": list_search_completions(records, [search])} if search.get("completes") else {}), search_id=search["id"], coverage=search.get("coverage", []),
                             incomplete_responses=receipt["incomplete_responses"],
                             excluded_item_count=receipt["excluded_item_count"], excluded_items=receipt["excluded_items"],
                             warnings=receipt["warnings"]))

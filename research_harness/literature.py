@@ -41,7 +41,7 @@ results and does not establish universal novelty.
 
 import copy
 import json
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 from .artifacts import ArtifactStore, _Workspace
 from .cohort_evidence import cohort_report
@@ -356,7 +356,7 @@ def _search_evidence_digest(evaluation, scope, found, cited=()):
     return digest([scope, works])
 
 
-def _dispositions(records, value):
+def validate_search_dispositions(value):
     found = set(value["found_work_ids"])
     judged = {}
     for item in _items_list(value["dispositions"], "Dispositions"):
@@ -375,6 +375,10 @@ def _dispositions(records, value):
         text(item["work_id"], "Resolved work", code="invalid_search")
         text(item["reason"], "Resolution", code="invalid_search")
         resolved[item["work_id"]] = item["reason"]
+    return judged, resolved
+
+
+def check_carried_search_findings(records, value, judged, resolved):
     selection = records.get("search_selection", {}).get(value["profile"] + ":" + value["purpose"])
     previous = records.get("literature_search", {}).get(selection["search_id"]) if selection else None
     for item in (previous or {}).get("dispositions", []):
@@ -382,7 +386,6 @@ def _dispositions(records, value):
         if item["disposition"] in CARRIED_DISPOSITIONS and not carried and item["work_id"] not in resolved:
             raise ResearchError("search_findings_dropped", "Carry forward or explicitly resolve the selected search's contradictory and unresolved findings",
                                 {"work_id": item["work_id"], "disposition": item["disposition"], "search_id": previous["id"]})
-    return judged
 
 
 def _build_judged_records(records, value):
@@ -522,11 +525,198 @@ def build_search_receipt(value, found, pending, page_groups, pages):
             "warnings": find_capture_interval_warnings(pages)}
 
 
+SEARCH_COMPLETION_PAYLOAD_MESSAGE = ('Give completes as an array of distinct earlier search_id entries with '
+    'closed_gaps: [{text, how}]; use stored searches and nonempty gap statements. Repair the payload or record '
+    'the search without completes.')
+SEARCH_COMPLETION_FORMULATION_MESSAGE = ('The completing search must have the same profile and question as the '
+    'completed search. Repair the formulation or record the search without completes.')
+SEARCH_COMPLETION_TIME_MESSAGE = ('The completing search must not predate the completed search. Repair the '
+    'capture time or record the search without completes.')
+SEARCH_COMPLETION_QUERIES_MESSAGE = ('The completing search must retain every earlier query and its captured '
+    'query identity. Capture the same queries or record the search without completes.')
+SEARCH_COMPLETION_CLEAN_MESSAGE = ('The completing search must pass search coverage checks and retain coverage '
+    'at least as strong for every earlier query. Repair its coverage or record the search without completes.')
+SEARCH_COMPLETION_PAGES_MESSAGE = ('The earlier registry pages do not form a verified whole or prefix. Capture '
+    'a complete enumeration or verified top_k prefix for this query, or record the search without completes.')
+SEARCH_COMPLETION_ROWS_MESSAGE = ('An earlier returned row is unaccounted for. Import it, exclude it under a '
+    'recorded rule, or capture a complete enumeration that no longer returns it; an unidentified row requires '
+    'complete enumeration. Repair the capture or record the search without completes.')
+SEARCH_COMPLETION_WORKS_MESSAGE = ('The completing search must find every work found by the completed search. '
+    'Restore the missing work or record the search without completes.')
+SEARCH_COMPLETION_JUDGMENTS_MESSAGE = ('A changed material judgment needs the work and a reason under resolved. '
+    'Explain the change or record the search without completes.')
+SEARCH_COMPLETION_GAPS_MESSAGE = ('Each earlier gap needs its exact text and the author\'s account of how it '
+    'was closed under closed_gaps. Supply that statement or record the search without completes.')
+SEARCH_COMPLETION_DIGEST_MESSAGE = ('A stored completion must name an existing search with its exact digest. '
+    'Inspect the retained completion and its target with record-check.')
+
+
+def refuse_search_completion(condition, message, search_id, **details):
+    raise ResearchError("search_completion_invalid", message,
+                        dict(search_id=search_id, condition=condition, **details))
+
+
+def validate_search_completion_payload(records, value):
+    entries = value["completes"]
+    seen = set()
+    if not isinstance(entries, list):
+        refuse_search_completion("payload", SEARCH_COMPLETION_PAYLOAD_MESSAGE, None)
+    for entry in entries:
+        identifier = entry.get("search_id") if isinstance(entry, dict) else None
+        try:
+            fields(entry, ("search_id", "closed_gaps"))
+            text(identifier, "Completed search")
+            if identifier == value["id"] or identifier in seen or identifier not in records.get("literature_search", {}):
+                raise ResearchError("invalid_search", "Use a distinct stored earlier search")
+            seen.add(identifier)
+            if not isinstance(entry["closed_gaps"], list):
+                raise ResearchError("invalid_search", "Give an array of gap statements")
+            texts = set()
+            for gap in entry["closed_gaps"]:
+                fields(gap, ("text", "how"))
+                text(gap["text"], "Earlier gap")
+                text(gap["how"], "How the author closed the gap")
+                if gap["text"] in texts:
+                    raise ResearchError("invalid_search", "State each closed gap once")
+                texts.add(gap["text"])
+        except ResearchError:
+            refuse_search_completion("payload", SEARCH_COMPLETION_PAYLOAD_MESSAGE, identifier)
+
+
+def read_search_capture_facts(records, artifacts, search):
+    """Read each immutable search's completion evidence once per evaluation."""
+    evaluation = Evaluation.of(records, artifacts)
+    return evaluation.once(("search_completion_capture_facts", digest(search)),
+                           lambda: _read_search_capture_facts(records, evaluation, search))
+
+
+def _read_search_capture_facts(records, artifacts, search):
+    """Read the identities and raw rows needed only when a search completes another."""
+    from .search_pages import compute_query_identity, read_search_row_ids
+    facts = {}
+    for response in search["responses"]:
+        source = records["source"][response["source_id"]]
+        query = response["query"]
+        identity = compute_query_identity(source)
+        if identity is None:
+            identity = dict(provider=source["provider"], address=urlunsplit(urlsplit(source["url"])._replace(query="")), query=query)
+        fact = facts.setdefault(query, dict(identities=set(), rows=[], pages=[]))
+        fact["identities"].add(digest(identity))
+        fact["rows"].extend(read_search_row_ids(records, artifacts, source, response))
+        if source["provider"] in {"openalex", "crossref", "arxiv"}:
+            fact["pages"].append(native_page(source, artifacts.read(source["response"]), query, search["scope"],
+                                           parse_version=search.get("native_parse_version", 1)))
+    return facts
+
+
+def normalize_search_row_id(identifier):
+    from .identities import normalize_identifier
+    if identifier is None:
+        return None
+    try:
+        return normalize_identifier(identifier)
+    except ResearchError:
+        if identifier.startswith("https://"):
+            try:
+                return normalize_identifier("url:" + identifier)
+            except ResearchError:
+                pass
+        return identifier
+
+
+def build_search_completions(records, artifacts, search):
+    """Check R38 in order and compute immutable pins and missing-row notices."""
+    from .openness_minimum import check_search_coverage
+    from .search_pages import check_search_page_prefix
+
+    result = []
+    later_facts = None
+    later_coverage = {row["query"]: row["kind"] for row in search["coverage"]}
+    strength = {"complete": 3, "top_k": 2, "bounded_unordered": 1, "unspecified": 0}
+    imported = {normalize_search_row_id(alias) for work_id in search["found_work_ids"]
+                for alias in [work_id] + records["work"][work_id].get("aliases", [])}
+    judged = {row["work_id"]: row["disposition"] for row in search["dispositions"]}
+    resolved = {row["work_id"] for row in search.get("resolved", []) if row.get("reason", "").strip()}
+    for entry in search["completes"]:
+        earlier = records["literature_search"][entry["search_id"]]
+        def require(condition, name, message, **details):
+            if not condition:
+                refuse_search_completion(name, message, earlier["id"], **details)
+        require(earlier["profile"] == search["profile"] and earlier.get("question") == search.get("question"),
+                "formulation", SEARCH_COMPLETION_FORMULATION_MESSAGE)
+        require(timestamp(search["captured_at"]) >= timestamp(earlier["captured_at"]),
+                "time", SEARCH_COMPLETION_TIME_MESSAGE)
+        if later_facts is None:
+            later_facts = read_search_capture_facts(records, artifacts, search)
+        earlier_facts = read_search_capture_facts(records, artifacts, earlier)
+        for query in earlier["queries"]:
+            require(query in later_facts and earlier_facts[query]["identities"] == later_facts[query]["identities"],
+                    "queries", SEARCH_COMPLETION_QUERIES_MESSAGE, query=query)
+        require(check_search_coverage(search), "clean", SEARCH_COMPLETION_CLEAN_MESSAGE)
+        for coverage in find_search_coverage(earlier, records, artifacts):
+            query = coverage["query"]
+            require(strength[later_coverage[query]] >= strength[coverage["kind"]],
+                    "clean", SEARCH_COMPLETION_CLEAN_MESSAGE, query=query)
+        for query in earlier["queries"]:
+            require(check_search_page_prefix(earlier_facts[query]["pages"]) or later_coverage[query] in {"complete", "top_k"},
+                    "pages", SEARCH_COMPLETION_PAGES_MESSAGE, query=query)
+        not_returned = []
+        for query in earlier["queries"]:
+            facts = later_facts[query]
+            returned = {normalize_search_row_id(row) for row in facts["rows"]}
+            excluded = {normalize_search_row_id(item["id"]) for page in facts["pages"]
+                        for item in page.get("excluded_items", [])}
+            for row in earlier_facts[query]["rows"]:
+                identity = normalize_search_row_id(row)
+                if identity is not None and (identity in imported or identity in excluded):
+                    continue
+                require(later_coverage[query] == "complete" and (identity is None or identity not in returned),
+                        "rows", SEARCH_COMPLETION_ROWS_MESSAGE, query=query, row_id=row)
+                item = dict(query=query, row_id=row)
+                if item not in not_returned:
+                    not_returned.append(item)
+        for work_id in earlier["found_work_ids"]:
+            require(work_id in search["found_work_ids"], "works", SEARCH_COMPLETION_WORKS_MESSAGE, work_id=work_id)
+        for judgment in earlier["dispositions"]:
+            work_id = judgment["work_id"]
+            require(judgment["disposition"] not in {"relevant", "contradictory", "potentially_relevant", "unresolved"}
+                    or judgment["disposition"] == judged.get(work_id) or work_id in resolved,
+                    "judgments", SEARCH_COMPLETION_JUDGMENTS_MESSAGE, work_id=work_id)
+        closed = {gap["text"] for gap in entry["closed_gaps"]}
+        for gap in earlier["gaps"]:
+            require(gap in closed, "gaps", SEARCH_COMPLETION_GAPS_MESSAGE, text=gap)
+        result.append(dict(search_id=earlier["id"], search_digest=digest(earlier),
+                           not_returned=not_returned, closed_gaps=entry["closed_gaps"]))
+    return result
+
+
+def check_search_completion_pins(records):
+    """Authenticate every completion edge without reinterpreting stored searches."""
+    searches = records.get("literature_search", {})
+    checked = []
+    for search in searches.values():
+        entries = search.get("completes", [])
+        if not isinstance(entries, list):
+            refuse_search_completion("search_digest", SEARCH_COMPLETION_DIGEST_MESSAGE, None,
+                                    completing_search_id=search["id"])
+        for entry in entries:
+            identifier = entry.get("search_id") if isinstance(entry, dict) else None
+            earlier = searches.get(identifier) if isinstance(identifier, str) else None
+            if earlier is None or digest(earlier) != entry.get("search_digest"):
+                refuse_search_completion("search_digest", SEARCH_COMPLETION_DIGEST_MESSAGE, identifier,
+                                        completing_search_id=search["id"])
+        if entries:
+            checked.append(search["id"])
+    return sorted(checked)
+
+
 def record_search(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         fields(value, ("id", "profile", "purpose", "queries", "responses", "captured_at", "found_work_ids", "verdict",
                        "cited_work_ids", "impact", "gaps", "dispositions"),
-               ("resolved", "scope", "question", "binding", "depth", "hits_per_query"), code="invalid_search")
+               ("resolved", "scope", "question", "binding", "depth", "hits_per_query", "completes"), code="invalid_search")
+        if "completes" in value:
+            validate_search_completion_payload(records, value)
         profile_name(value["profile"])
         current_scope = records.get("literature_scope", {}).get(value["profile"])
         provisional = current_scope is None
@@ -584,12 +774,15 @@ def record_search(store, payload, *, expected_revision, request_id):
             raise ResearchError("invalid_search", "Search results and queries must account for every saved response")
         if not set(value["cited_work_ids"]) <= found or value["verdict"] == "replicate-extend" and not value["cited_work_ids"]:
             raise ResearchError("invalid_search", "A replicate-extend verdict must cite acquired work from the search")
-        _dispositions(dict(records, search_selection={}) if provisional else records, value)
+        judged, resolved = validate_search_dispositions(value)
         coverage = build_search_coverage(value["queries"], amount, captures, page_groups, pending)
         base = dict(value, hits_per_query=amount, coverage=coverage, pending=pending, page_groups=page_groups,
                     integrity_errors=find_search_integrity_errors({"pending": pending}))
         if pages:
             base["native_parse_version"] = NATIVE_PARSE_VERSION
+        if "completes" in value:
+            base["completes"] = build_search_completions(records, evaluation, base)
+        check_carried_search_findings(dict(records, search_selection={}) if provisional else records, value, judged, resolved)
         result = build_search_receipt(value, found, pending, page_groups, pages)
         if provisional:
             record = dict(base, scope_digest=None, provisional=True)

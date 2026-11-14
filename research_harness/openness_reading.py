@@ -435,6 +435,11 @@ SEARCH_FIELD_GUIDE_TEXT = '\n\nSearch record field guide:\n' + '\n'.join(
 SUPPORTING_READING_SENTENCE = (' [X2 R20: A supporting reading is delivered as its reading record, with role '
     '"supporting" and citing searches in cited_by; a work whose full text the openness judgment needs must be '
     'judged relevant so that its reading is decisive and its text is a unit.]')
+SEARCH_COMPLETION_SENTENCE = (' For completes, the harness checked matching profile and question, capture time '
+    'not earlier than the completed search, retained query identities, clean coverage at least as strong, complete '
+    'or prefix coverage where earlier pages do not join, every returned row and found work, reasons for changed '
+    'material judgments and a closure statement for every earlier gap; completed searches omitted from this packet '
+    'contribute no gaps to this review, and closed_gaps is the author\'s statement of how the gaps were closed.')
 RECORD_ALLOWANCE_SENTENCE = (' The third allowance, record, counts serialized characters of every retained excerpt, '
     'passage answer and extra final reading turn, including fields and escapes.')
 RECORD_PASSAGE_LIMIT_MESSAGE = 'The record allowance cannot retain another final reading turn and a delivered passage; return the finding.'
@@ -442,12 +447,12 @@ RECORD_NOT_RETAINED_SENTENCE = (' An entry beyond the remaining record total is 
     'allowances.record.not_retained and is absent from later inputs; it uses no other allowance.')
 PROMPTS[PROTOCOL_V6] = {
     'reading': READING_PROMPT + SEARCH_READING_RULE + V6_READING_PARAGRAPH + SUPPORTING_READING_SENTENCE
-               + SEARCH_FIELD_GUIDE_TEXT
+               + SEARCH_FIELD_GUIDE_TEXT + SEARCH_COMPLETION_SENTENCE
                + RECORD_ALLOWANCE_SENTENCE + RECORD_NOT_RETAINED_SENTENCE,
     'final': (FINAL_PROMPT + FINAL_PROGRESS_RULE + SEARCH_FINAL_RULE).replace(
         'native result review described above', 'finding described above').replace(
         'native result review', 'finding described above') + V6_FINAL_PARAGRAPH + SUPPORTING_READING_SENTENCE
-        + SEARCH_FIELD_GUIDE_TEXT,
+        + SEARCH_FIELD_GUIDE_TEXT + SEARCH_COMPLETION_SENTENCE,
 }
 
 

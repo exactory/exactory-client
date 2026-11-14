@@ -5617,6 +5617,20 @@
         "test_openness_search_field_guide.SearchFieldGuideTests.test_g5_table_matches_keys_recorded_by_search_including_optional_fields",
         "test_openness_search_field_guide.SearchFieldGuideTests.test_all_provisional_v6_packet_carries_the_guide_in_reading_and_final_prompts"
       ]
+    },
+    {
+      "id": "openness-search-with-gaps-cannot-be-left-out-of-a-minimum",
+      "record": "20261112143000-openness-chain-ends-unresolved-on-search-integrity-gaps",
+      "class": "openness-search-completion",
+      "summary": "A minimum could not omit an earlier search with invalid rows and incomplete responses after capturing a repair.",
+      "expected": "A later search may complete an earlier one only after all nine R38 conditions hold. Bound completions omit their pinned ancestors, preserve missing-row notices in export and v6, and authenticate every target digest.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_search_completes.SearchCompletionExportTests.test_two_query_repair_binds_only_later_search_and_delivers_notice_to_v6",
+        "test_search_completes.SearchCompletionTests.test_rows_refuses_invalid_row_lost_to_a_smaller_bound_or_changed_order",
+        "test_search_completes.SearchCompletionTests.test_only_bound_completers_remove_transitive_ancestors_and_explicit_binding_is_allowed"
+      ]
     }
   ]
 }

@@ -1229,7 +1229,18 @@
         "reason": "The retrieved work addresses the same bound under the same assumptions."
       }
     ],
-    "resolved": []
+    "resolved": [],
+    "completes": [
+      {
+        "search_id": "EARLIER_SEARCH_ID",
+        "closed_gaps": [
+          {
+            "text": "Exact text of a gap in the earlier search.",
+            "how": "The complete later capture includes the missing page."
+          }
+        ]
+      }
+    ]
   },
   "loop-close": {
     "id": "loop-closure-1",

@@ -317,6 +317,8 @@ def rebuild_staged_request(records, artifacts, assignment, record):
 def check_authentication(store):
     snapshot = store.snapshot()
     records = snapshot['records']
+    from .literature import check_search_completion_pins
+    completions = check_search_completion_pins(records)
     artifacts = Evaluation(records, store.build_artifact_store())
     from .review_state_evaluation import runtime_scope
     with runtime_scope(records, artifacts):
@@ -383,6 +385,8 @@ def check_authentication(store):
         result['acceptance_reviews'] = links
     from .acquisition import check_supplied_sources
     supplied_texts = check_supplied_sources(records)
+    if completions:
+        result['search_completions'] = completions
     if supplied_texts:
         result['supplied_texts'] = supplied_texts
     return result

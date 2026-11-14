@@ -212,7 +212,7 @@ def assess_openness(records, artifacts):
         bound_searches = {row["search_digest"] for row in minimum.get("searches", [])}
         searches = {digest(row) for row in records.get("literature_search", {}).values()}
         readings = {digest(row) for row in records.get("reading", {}).values()}
-        unbound = [row["id"] for row in find_material_searches(records, expected) if digest(row) not in bound_searches]
+        unbound = [row["id"] for row in find_material_searches(records, expected, bound_searches) if digest(row) not in bound_searches]
         if (unbound or not bound_searches <= searches or not set(minimum.get("reading_digests", [])) <= readings):
             return [obligation("problem_openness_stale", "Reassess changed or newly material search and reading evidence.",
                                search_ids=unbound, **affected)]

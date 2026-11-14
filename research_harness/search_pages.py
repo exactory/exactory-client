@@ -296,3 +296,54 @@ def build_search_coverage(queries, requested_k, captures, page_groups, pending):
                          "inspected_count": len(found), "page_positions": positions,
                          "provider": provider, "ordering": ordering, "kind": kind})
     return coverage
+
+
+def read_search_row_ids(records, artifacts, source, response):
+    """Read provider row identifiers, including rows that could not become works.
+
+    Keep the provider spelling in notices. None retains an unidentified row;
+    it must never disappear merely because the work parser rejected it.
+    """
+    import xml.etree.ElementTree as ET
+    from .providers import _json, _MetadataTreeBuilder
+    from .imports import _pointer
+
+    data = artifacts.read(source["response"])
+    provider = source["provider"]
+    if provider == "arxiv":
+        root = ET.fromstring(data, parser=ET.XMLParser(target=_MetadataTreeBuilder()))
+        return [node.findtext("{http://www.w3.org/2005/Atom}id") or None
+                for node in root.findall("{http://www.w3.org/2005/Atom}entry")]
+    document = _json(data, require_object=False)
+    if provider in ("openalex", "crossref"):
+        rows = document["results"] if provider == "openalex" else document["message"]["items"]
+        key = "id" if provider == "openalex" else "DOI"
+        return [row.get(key) if isinstance(row, dict) and isinstance(row.get(key), str) and row[key] else None
+                for row in rows]
+    imported = next(row for row in records["source_import"].values() if row["source_id"] == source["id"])
+    mappings = imported["mappings"]
+    if isinstance(mappings, dict):
+        mappings = mappings["records"]
+    prefix = response["results_pointer"].rstrip("/") + "/"
+    by_index = {mapping["id"][len(prefix):].partition("/")[0]: _pointer(document, mapping["id"])
+                for mapping in mappings if mapping["id"].startswith(prefix)}
+    return [by_index.get(str(index)) for index, _ in enumerate(_pointer(document, response["results_pointer"]))]
+
+
+def check_search_page_prefix(pages):
+    """Whether saved registry pages form one verified whole or prefix."""
+    if not pages:
+        return True
+    groups, pending = enumerate_pages(pages)
+    if len(groups) != 1 or any(item["code"] not in {"invalid_work", "search_response_incomplete"} for item in pending):
+        return False
+    position = "*" if groups[0]["mode"] == "cursor" else 0
+    positions = {page["position"]: page for page in pages}
+    visited = set()
+    while position in positions and position not in visited:
+        page = positions[position]
+        visited.add(position)
+        position = page["next_cursor"] if groups[0]["mode"] == "cursor" else position + page["count"]
+        if page["count"] == 0:
+            break
+    return visited == set(positions)
