@@ -47,6 +47,7 @@ from .problem_areas import record_area
 from .problem_reports import describe_report_advisories, record_report
 from .problem_candidate_transfers import record_candidate_transfer
 from .capture_selection import select_main_capture
+from .payload_paths import iterate_payload_paths, normalize_payload_paths
 
 
 OPERATIONS = {
@@ -504,7 +505,8 @@ def acquisition_command(store, command, payload, identity, *, preview=False, res
             return acquisition.preview_import_response(store, **values)
         return acquisition.import_response(store, **values, **identity)
     if preview:
-        values["response"] = read_import_input(values.pop("response_file"), input_kind="response")
+        values["response"] = read_import_input(values.pop("response_file"), input_kind="response",
+                                               workspace_root=store.root)
         return acquisition.preview_import_response(store, **values)
     return acquisition.import_response_file(store, **values, **identity)
 
@@ -617,6 +619,7 @@ def status_report(store, *, counters=False):
                            for assignment in records.get('review_assignment', {}).values())):
                 report = dict(report, obligations=order_obligations(report["obligations"]))
             slate, current_slate = problem_candidates.find_slate(records), problem_candidates.find_current_slate(records)
+            export_required = {"code": "problem_export_required", "explanation": "Export the reviewed parts with exactory-research export --kind problem, then post and record the delivery."}
             # A stale slate decides nothing; its stale obligation leads the report instead.
             if report.get("post") is not None:
                 upcoming = report["obligations"][0]
@@ -626,7 +629,7 @@ def status_report(store, *, counters=False):
             elif report["obligations"]:
                 upcoming = report["obligations"][0]
             else:
-                upcoming = {"code": "problem_export_required", "explanation": "Export the reviewed parts with exactory-research export --kind problem, then post and record the delivery."}
+                upcoming = export_required
             result = dict(report, revision=snapshot["revision"], profile="research", runtime=runtime,
                         problem=records["workspace"]["problem"], resources=resources.account_report(records, "research"),
                         limits={"depth": describe_depth(records)}, source_deferrals=assess_deferrals(records, evaluation, "research"),
@@ -644,6 +647,8 @@ def status_report(store, *, counters=False):
                 result['evaluation'] = dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3),
                                             retention=evaluation.retention_report())
             result = annotate_review_obligations(records, evaluation, result)
+            if result['next'] is None:
+                result['next'] = export_required
             upcoming = result['next']
             if upcoming.get('code') == 'review_task_pending' and not upcoming.get('next'):
                 pending_slots = {head['slot_id'] for head in slots.get('pending', [])}
@@ -801,6 +806,31 @@ def describe_review_budget_refusal(error):
     return error
 
 
+def read_payload_receipt(root, request_id):
+    """Read a retry only from an existing store, leaving legacy adoption available."""
+    if root is None:
+        return None
+    database = root / '.exactory' / 'research.sqlite3'
+    if not database.exists() and not database.is_symlink():
+        return None
+    return Store(root).committed_request(request_id)
+
+
+def normalize_request_payload(root, command, payload, committed=None):
+    """Admit fresh file inputs while retaining authenticated historical retries."""
+    if committed is not None and payload == committed['payload']:
+        return payload
+    if committed is not None and command not in ACQUISITION:
+        # A retry returns its receipt or conflict without reopening old inputs.
+        try:
+            return normalize_payload_paths(root, command, payload, check_filesystem=False)
+        except ResearchError as error:
+            if error.code != 'unsafe_path':
+                raise
+            return payload
+    return normalize_payload_paths(root, command, payload)
+
+
 def run(args):
     if args.command == "record-check":
         from .record_check import check_record
@@ -817,11 +847,12 @@ def run(args):
             and (args.expected_revision is None or args.request_id is None)):
         raise ResearchError("invalid_input", "An import requires --expected-revision and --request-id")
     root = Path(args.workspace).absolute()
+    checking = getattr(args, 'check', False)
     response_bytes = None
     if args.command in OPERATIONS or args.command in ACQUISITION:
         if args.command == "import-response":
             existing = find_workspace(root, required=False)
-            original = (Store(existing).committed_request(args.request_id)
+            original = (read_payload_receipt(existing, args.request_id)
                         if not preview and existing is not None and args.request_id else None)
             if original is not None and original["operation"] != "response.import":
                 raise ResearchError("request_id_conflict", "Request ID was committed for another operation")
@@ -831,7 +862,42 @@ def run(args):
             payload = strict_json(Path(args.file).read_bytes())
         bounded_payload = (review_protocol.drop_repeated_bundle(payload)
                            if args.command == "review-assignment" else payload)
-        if getattr(args, "check", False):
+        within_bounds = True
+        if not checking:
+            try:
+                check_command_bounds(bounded_payload)
+            except ResearchError:
+                if preview:
+                    raise
+                # Oversized historical requests still replay their original receipt.
+                existing_workspace = find_workspace(root, required=False)
+                if read_payload_receipt(existing_workspace, args.request_id) is None:
+                    raise
+                within_bounds = False
+        has_paths = (not checking and within_bounds
+                     and any(True for _ in iterate_payload_paths(args.command, bounded_payload)))
+        existing_workspace = find_workspace(root, required=False) if has_paths else None
+        committed = None
+        if args.command == 'import-response':
+            committed = original
+        elif not checking and existing_workspace is not None and args.request_id:
+            try:
+                committed = read_payload_receipt(existing_workspace, args.request_id)
+            except ResearchError as error:
+                if args.command != 'gate-override' or error.code not in ('corrupt_state', 'storage_io'):
+                    raise
+        # Historical receipts replay their original payload without reopening inputs.
+        # Equivalent new spellings use the same normalized payload and receipt too.
+        if has_paths and not checking:
+            payload = normalize_request_payload(existing_workspace or root, args.command, payload, committed)
+            bounded_payload = (review_protocol.drop_repeated_bundle(payload)
+                               if args.command == "review-assignment" else payload)
+        if checking:
+            def normalize_check_payload(store, value):
+                if any(True for _ in iterate_payload_paths(args.command, value)):
+                    return normalize_request_payload(find_workspace(root), args.command, value,
+                                                     store.committed_request(args.request_id))
+                return value
             operation, replay = OPERATIONS.get(args.command), None
             if args.command == "gate-auto-pass":
                 def operation(store, value, **identity):
@@ -849,23 +915,11 @@ def run(args):
             try:
                 return check_mutation(Store(find_workspace(root)), operation, payload,
                                       expected_revision=args.expected_revision, request_id=args.request_id,
-                                      bounded_payload=bounded_payload, replay=replay)
+                                      bounded_payload=bounded_payload, replay=replay,
+                                      prepare_payload=normalize_check_payload)
             except ResearchError as error:
                 if args.command == "review-budget":
                     describe_review_budget_refusal(error)
-                raise
-        try:
-            # A paper review assignment repeats a stored bundle, which the store bounds already hold.
-            check_command_bounds(bounded_payload)
-        except ResearchError:
-            if preview:
-                raise
-            # The store returns a committed request's receipt before it checks the payload, so a retry of a request
-            # that an earlier release committed beyond this bound still gets its original receipt. Only an existing
-            # store holds such a request, and init, adopt and acquisition create a store only after this check.
-            existing_workspace = find_workspace(root, required=False)
-            if (existing_workspace is None or not (existing_workspace / ".exactory/research.sqlite3").exists()
-                    or Store(existing_workspace).committed_request(args.request_id) is None):
                 raise
     if args.command == "gate-override":
         root = find_workspace(root)
@@ -879,7 +933,8 @@ def run(args):
     if args.command == "import-response" and original is None:
         fields(payload, ("provider", "response_file", "source_url", "captured_at"), ("media_type", "mappings", "publisher_capture"))
         text(payload["response_file"], "Response file")
-        response_bytes = read_import_input(payload["response_file"], input_kind="response")
+        response_bytes = read_import_input(payload["response_file"], input_kind="response",
+                                           workspace_root=find_workspace(root, required=False) or root)
     if args.command in ("init", "adopt", "problem-init"):
         root = find_workspace(root, required=False) or root
         store = Store(root, create=True)
@@ -943,6 +998,7 @@ def run(args):
     if args.command == "check-claims":
         payload = strict_json(Path(args.file).read_bytes())
         check_command_bounds(payload)
+        payload = normalize_payload_paths(root, args.command, payload)
         ledger = payload.get("claim_evidence") if isinstance(payload, dict) else payload
         return check_claims(store, ledger)
     if args.command == "batches":

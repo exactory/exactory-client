@@ -4818,6 +4818,50 @@
         "test_fulltext_timeout.FulltextTimeoutTests.test_resume_assembly_deadline_reports_invocation_limit_and_received_bytes",
         "test_review_provider_usage.ProviderUsageTests.test_terminal_usage_does_not_change_the_recorded_stop_plan"
       ]
+    },
+    {
+      "id": "posted-stopped-review-obligations",
+      "record": "20261113074404-next-after-post-keeps-a-stopped-turn-obligation",
+      "class": "review scheduling (harness defect)",
+      "summary": "A stopped or superseded review chain adds an invocation diagnostic after the posted-statement obligations have been moved to after_post.",
+      "expected": "The posted statement keeps only problem_already_posted as its main obligation; all its review findings remain under after_post without next actions, including an invocation without an attempt and an unverified stopped chain.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_external.ExternalPostTests.test_graph_shaped_server_post_is_recorded_without_export_or_new_reviews",
+        "test_after_post_review_obligations.AfterPostReviewTests.test_stopped_invocation_without_attempt_moves_after_external_post",
+        "test_after_post_review_obligations.AfterPostReviewTests.test_unverified_stopped_chain_moves_after_replacement_export_and_external_post",
+        "test_after_post_review_obligations.AfterPostReviewTests.test_stopped_invocation_without_attempt_moves_after_passed_post",
+        "test_after_post_review_obligations.AfterPostReviewTests.test_closed_review_stays_after_post_when_another_statement_is_selected",
+        "test_after_post_review_obligations.AfterPostReviewTests.test_closed_review_already_named_by_gate_moves_after_post_for_another_current_statement",
+        "test_posted_closure_entrypoints.PostedClosureEntrypointTests.test_status_closes_the_pending_openness_head_without_mutation",
+        "test_posted_closure_entrypoints.PostedClosureEntrypointTests.test_next_exposes_no_review_command_or_navigation",
+        "test_after_post_review_obligations.AfterPostReviewTests.test_closing_an_old_review_preserves_a_current_no_post_decision",
+        "test_after_post_review_obligations.AfterPostReviewTests.test_closing_the_last_old_review_preserves_the_export_decision"
+      ]
+    },
+    {
+      "id": "payload-file-path-consistency",
+      "record": "20261113074404-next-after-post-keeps-a-stopped-turn-obligation",
+      "class": "payload admission (harness defect)",
+      "summary": "Artifact and response payloads accept different path forms and interpret relative paths from different roots.",
+      "expected": "Every payload file field accepts canonical workspace-relative or in-workspace absolute paths and stores the relative form; escapes, links and noncanonical paths share unsafe_path and one explanation.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_input_validation.ResearchPayloadValidationTests.test_import_response_preview_refuses_a_non_path_before_opening_it",
+        "test_research_check_mode_audit.CommandTableCheckTests.test_check_preserves_every_command_workspace",
+        "test_payload_file_paths.PayloadFilePathTests.test_repeated_paper_bundle_keeps_frozen_paths_outside_new_input_admission",
+        "test_payload_file_paths.PayloadFilePathTests.test_absolute_input_keeps_the_workspace_parent_alias_in_both_modes",
+        "test_research_check_mode.ResearchCheckModeTests.test_check_authenticates_exactly_one_snapshot_and_never_opens_a_writer",
+        "test_payload_file_paths.PayloadFilePathTests.test_absolute_and_relative_artifact_paths_store_identical_payload_record_and_check_digest",
+        "test_payload_file_paths.PayloadFilePathTests.test_every_payload_file_field_refuses_escape_before_preparation_with_one_message",
+        "test_payload_file_paths.PayloadFilePathTests.test_noncanonical_and_symlink_paths_have_the_same_refusal_in_both_modes",
+        "test_payload_file_paths.PayloadFilePathTests.test_import_response_is_workspace_relative_and_absolute_replay_keeps_stored_bytes",
+        "test_gate_override.StudyOverrideTests.test_absolute_instruction_pins_the_same_relative_record_and_replays_without_the_file",
+        "test_research_check_claims.ResearchCheckClaimsTests.test_absolute_candidate_artifact_paths_match_relative_evidence_without_changing_store",
+        "test_research_import_scaling.ImportInputTests.test_workspace_response_reads_keep_missing_and_nonregular_input_refusals"
+      ]
     }
   ]
 }

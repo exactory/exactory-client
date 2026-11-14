@@ -102,7 +102,7 @@ from .fulltext import GENERIC_BINARY_MEDIA_TYPES, XML_MEDIA_TYPES, parse_base_me
 from .http import HttpClient, HttpFailure, RequestBudget, safe_url
 from .identities import family_id, find_doi_family_conflicts, normalize_identifier, version_of
 from .imports import bind_import_query, parse_mapped, parse_publisher_capture
-from .import_io import read_import_input, validate_import_size
+from .import_io import open_import_descriptor, read_import_input, validate_import_size
 from .workspace import checked_parent
 from .operations import text
 from .providers import Arxiv, Crossref, OpenAlex
@@ -854,18 +854,21 @@ def build_import_payload(provider, response_sha256, *, source_url, captured_at, 
 
 def import_response_file(store, provider, response_file, *, source_url, captured_at, request_id, expected_revision,
                          media_type=None, mappings=None, publisher_capture=None):
+    if isinstance(response_file, str) and response_file.startswith('/'):
+        from .payload_paths import normalize_payload_path
+        response_file = normalize_payload_path(store.root, response_file)
     if store.committed_request(request_id) is not None:
         hasher = hashlib.sha256()
-        descriptor = os.open(response_file, os.O_RDONLY | os.O_NONBLOCK)
-        with os.fdopen(descriptor, "rb") as source:
-            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+        with open_import_descriptor(response_file, workspace_root=store.root) as descriptor:
+            if not stat.S_ISREG(os.fstat(descriptor).st_mode):
                 raise ResearchError("invalid_import", "Import response must be a regular file")
-            for block in iter(lambda: source.read(65536), b""):
-                hasher.update(block)
+            with os.fdopen(descriptor, "rb", closefd=False) as source:
+                for block in iter(lambda: source.read(65536), b""):
+                    hasher.update(block)
         payload = build_import_payload(provider, hasher.hexdigest(), source_url=source_url, captured_at=captured_at,
                                        media_type=media_type, mappings=mappings, publisher_capture=publisher_capture)
         return _begin(store, "response.import", payload, request_id, expected_revision, target=payload["source_url"])
-    response = read_import_input(response_file, input_kind="response")
+    response = read_import_input(response_file, input_kind="response", workspace_root=store.root)
     return import_response(store, provider, response, source_url=source_url, captured_at=captured_at,
                            media_type=media_type, mappings=mappings, publisher_capture=publisher_capture,
                            request_id=request_id, expected_revision=expected_revision)

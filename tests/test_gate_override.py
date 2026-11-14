@@ -242,8 +242,8 @@ class StudyOverrideTests(OverrideCommandMixin, ProblemCase):
         self.assertEqual(first["instruction"], second["instruction"])
         self.assert_override_refused(dict(self.build_override(), reason="Different content"))
 
-    def test_refuses_missing_empty_absolute_parent_symlink_outside_and_oversized_instructions(self):
-        paths = {"missing": "context/missing.txt", "absolute": str(self.root / "context/instruction.txt"),
+    def test_refuses_missing_empty_parent_symlink_outside_and_oversized_instructions(self):
+        paths = {"missing": "context/missing.txt",
                  "parent": "context/../context/instruction.txt", "outside": "instruction.txt",
                  "empty": "context/empty.txt", "oversized": "context/large.txt",
                  "symlink": "context/link.txt", "linked-parent": "context/linked/instruction.txt",
@@ -258,11 +258,27 @@ class StudyOverrideTests(OverrideCommandMixin, ProblemCase):
             with self.subTest(name=name):
                 payload = self.build_override()
                 payload["instruction"] = path
-                self.assert_override_refused(payload)
+                self.assert_override_refused(payload, code='unsafe_path'
+                                             if name in ('parent', 'symlink', 'linked-parent') else None)
         for missing in ("id", "gate", "instruction", "reason"):
             payload = self.build_override()
             del payload[missing]
             self.assert_override_refused(payload)
+
+    def test_absolute_instruction_pins_the_same_relative_record_and_replays_without_the_file(self):
+        relative = self.build_override()
+        absolute = dict(relative, instruction=str(self.root / relative['instruction']))
+        revision = self.store.revision
+        first = self.assert_accepted_check(self.invoke_command('gate-override', relative), revision)
+        second = self.assert_accepted_check(self.invoke_command('gate-override', absolute), revision)
+        self.assertEqual(first['payload_digest'], second['payload_digest'])
+        receipt = self.record_override(absolute, request='absolute-instruction')
+        self.assertEqual(receipt['result']['instruction']['path'], relative['instruction'])
+        (self.root / relative['instruction']).unlink()
+        replay = self.invoke_command('gate-override', relative, check=False, revision=revision,
+                                     request='absolute-instruction')
+        self.assertEqual(replay[0], 0, replay[2])
+        self.assertEqual(json.loads(replay[1]), receipt)
 
     def test_refuses_unknown_gate_backward_wrong_source_and_unknown_stage(self):
         self.assert_override_refused(self.build_override(gate="unknown"))

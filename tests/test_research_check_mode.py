@@ -154,12 +154,15 @@ class ResearchCheckModeTests(CheckCommandMixin, unittest.TestCase):
             self.assertFalse(writable)
             return connection(store, writable=writable)
 
-        with mock.patch.object(storage, "_validate", side_effect=record_validation), \
-                mock.patch.object(Store, "_connection", open_reader), \
-                mock.patch.object(Store, "mutate", side_effect=AssertionError("Check reached a writer")):
-            response = self.invoke_command("artifact", self.payload, revision=0)
-        self.assert_accepted_check(response, 0)
-        self.assertEqual(validations.count(True), 1)
+        for path in (self.payload['path'], str(self.root / self.payload['path'])):
+            with self.subTest(path=path):
+                validations.clear()
+                with mock.patch.object(storage, "_validate", side_effect=record_validation), \
+                        mock.patch.object(Store, "_connection", open_reader), \
+                        mock.patch.object(Store, "mutate", side_effect=AssertionError("Check reached a writer")):
+                    response = self.invoke_command("artifact", dict(self.payload, path=path), revision=0)
+                self.assert_accepted_check(response, 0)
+                self.assertEqual(validations.count(True), 1)
 
     def test_check_detects_same_revision_record_tampering(self):
         self.store.mutate("fixture.seed", {}, lambda tx: tx.put("fixture", "one", {"value": 1}),

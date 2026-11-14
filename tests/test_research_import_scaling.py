@@ -107,6 +107,15 @@ class ImportInputTests(unittest.TestCase):
         path.write_bytes(b"x")
         self.assert_oversized(lambda: self.io.read_import_input(path, input_kind="payload", limit_bytes=0), "payload", 0)
 
+    def test_workspace_response_reads_keep_missing_and_nonregular_input_refusals(self):
+        (self.root / 'directory').mkdir()
+        os.mkfifo(self.root / 'fifo')
+        for name in ('missing', 'directory', 'fifo'):
+            with self.subTest(path=name):
+                with self.assertRaises(ResearchError) as caught:
+                    self.io.read_import_input(name, input_kind='response', workspace_root=self.root)
+                self.assertEqual(caught.exception.code, 'invalid_input')
+
     def test_directories_and_fifos_are_refused_as_nonregular_files(self):
         fifo = self.root / "fifo"
         os.mkfifo(fifo)

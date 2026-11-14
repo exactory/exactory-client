@@ -92,13 +92,18 @@ class _CheckingStore:
         raise _CheckComplete(response)
 
 
-def check_mutation(store, operation, payload, *, expected_revision, request_id, bounded_payload, replay=None):
+def check_mutation(store, operation, payload, *, expected_revision, request_id, bounded_payload, replay=None,
+                   prepare_payload=None):
     checking_store = _CheckingStore(store, request_id)
+    within_bounds = True
     try:
         check_command_bounds(bounded_payload)
     except ResearchError:
         if checking_store.committed_request(request_id) is None:
             raise
+        within_bounds = False
+    if prepare_payload is not None and within_bounds:
+        payload = prepare_payload(checking_store, payload)
     if replay is not None:
         if checking_store._read_preparation()._original_request is None:
             raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects")
