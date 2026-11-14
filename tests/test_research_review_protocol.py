@@ -117,16 +117,20 @@ class ReviewProtocolTests(LiteratureCase):
         self.seed('reading','reading',{'id':'reading','version_id':'source','depth':'fulltext'})
         return evidence
 
-    def route(self):
+    def route(self, model='fixture-model'):
         p = self.protocol()
-        return self.mutate(p.record_route, {'id':'route','adapter':'openai_responses_v1',
-            'model':'fixture-model','endpoint':'https://api.openai.com/v1/responses',
+        receipt = self.mutate(p.record_route, {'id':'route','adapter':'openai_responses_v1',
+            'model':model,'endpoint':'https://api.openai.com/v1/responses',
             'configuration':{'max_output_tokens':1000,'timeout_seconds':5}})
+        if model == 'fixture-model':
+            from visual_capacity_fixtures import install_bounded_binary_backend
+            install_bounded_binary_backend(self, [self.store.snapshot()['records']['review_route']['route']])
+        return receipt
 
     def response(self, output):
         return {'id':'provider-response','model':'fixture-model','status':'completed',
             'output':[{'type':'message','role':'assistant','content':[{'type':'output_text','text':json.dumps(output)}]}],
-            'usage':{'input_tokens':37,'output_tokens':12}}
+            'usage':{'input_tokens':1000000 if 'allowed_control' in output else 37,'output_tokens':12}}
 
     def run_probe(self, positive=True):
         p = self.protocol()
@@ -200,7 +204,7 @@ class ReviewProtocolTests(LiteratureCase):
             p.build_packet(self.records(),self.artifacts,'dossier','slate','reviewer')
 
     def test_standalone_review_needs_no_strategic_dossier(self):
-        p = self.protocol(); self.route(); self.assign()
+        p = self.protocol(); self.route(model='gpt-6-astra'); self.assign()
         state = p.assignment_state(self.records(),self.artifacts,'assignment')
         self.assertFalse(state['ready'])
         self.assertEqual(state['role'],'standalone')
@@ -214,7 +218,7 @@ class ReviewProtocolTests(LiteratureCase):
                 'context_status':'verified_for_route'})
 
     def test_allowed_positive_controls_are_required_even_when_canary_absent(self):
-        p = self.protocol(); self.route(); self.run_probe(False); self.assign(); self.invoke({'verdict':'sound'})
+        p = self.protocol(); self.route(model='gpt-6-astra'); self.run_probe(False); self.assign(); self.invoke({'verdict':'sound'})
         state = p.assignment_state(self.records(),self.artifacts,'assignment')
         self.assertFalse(state['ready']); self.assertEqual(state['context_status'],'unverified')
 
@@ -559,7 +563,7 @@ class ReviewProtocolTests(LiteratureCase):
                 self.assertEqual(self.store.snapshot(), before)
 
     def test_assignment_created_before_route_probe_never_becomes_independent_retroactively(self):
-        p = self.protocol(); self.route(); self.assign(); self.run_probe(); self.invoke({'verdict':'sound'})
+        p = self.protocol(); self.route(model='gpt-6-astra'); self.assign(); self.run_probe(); self.invoke({'verdict':'sound'})
         self.assertFalse(p.assignment_state(self.records(),self.artifacts,'assignment')['ready'])
 
     def test_case_and_spacing_cannot_disguise_the_author_identity(self):
@@ -741,7 +745,7 @@ class ReviewProtocolTests(LiteratureCase):
         self.assertFalse(p.assignment_state(self.records(),self.artifacts,'assignment')['ready'])
 
     def test_contamination_event_requires_actual_evidence_not_only_a_sentence(self):
-        p=self.protocol(); self.route(); self.assign()
+        p=self.protocol(); self.route(model='gpt-6-astra'); self.assign()
         with self.assertRaises(ResearchError):
             self.mutate(p.record_context_event,{'id':'event','assignment_id':'assignment','kind':'contamination',
                 'source':'startup_memory','reason':'A reported issue','evidence':['No evidence artifact supplied']})

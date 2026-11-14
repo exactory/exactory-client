@@ -19,12 +19,17 @@ class VisualAssignmentIntegrationTests(unittest.TestCase):
         self.addCleanup(self.case.doCleanups)
         self.case.setUp()
         self.records = self.case.records
+        from visual_capacity_fixtures import install_bounded_visual_backend
+        install_bounded_visual_backend(self, [self.records['review_route']['visual']])
         self.records['workspace'] = {'problem': {'orchestration': 'problem_creation', 'authors': ['Author']}}
         self.case.prior['session_id'] = 'original-session'
         self.value = {'id': 'visual-result', 'route_id': 'visual', 'dossier_id': None, 'role': 'result',
                       'reviewer_id': 'Astra', 'author_id': 'Author', 'context': {'prior_assignment_id': 'prior'}}
         self.packet = copy.deepcopy(self.case.packet)
         self.packet['evidence'] = []
+        self.packet['complete_source_delivery'].update(
+            history_digest=digest(self.case.context['history']), sources=[],
+            alternate_body_sha256=[], protected_sha256=[], restored_evidence=[])
         self.packet['digest'] = digest(self.packet)
         self.store = SimpleNamespace(root=self.case.fixture.root, build_artifact_store=lambda: self.case.artifacts)
         def prepare_only(store, operation, value, prepare, **options):

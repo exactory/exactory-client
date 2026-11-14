@@ -31,8 +31,8 @@ class CampaignStopTests(unittest.TestCase):
         self.addCleanup(boundary.stop)
 
     def make_route(self, adapter='claude_cli_v1'):
-        return dict(id='route', adapter=adapter, model='fixed-model',
-                    configuration=dict(effort='xhigh', max_output_tokens=128000))
+        from test_review_route_capacity import build_route
+        return build_route(adapter, 'fixed-model', effort='xhigh')
 
     def make_limit_response(self, answer, thread='quota-thread'):
         return dict(id=thread, model='fixed-model', status='incomplete',

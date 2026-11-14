@@ -1089,7 +1089,7 @@ class ProblemResultHistoryTests(ResultPartsCase):
         self.addCleanup(self.case.doCleanups)
         case = self.case
         case.supporting = case.artifacts.put(b'A captured field standard.', 'text/plain')
-        case.mutate(protocol.record_route, {'id': 'route', 'adapter': 'claude_cli_v1', 'model': 'fixture-model',
+        case.mutate(protocol.record_route, {'id': 'route', 'adapter': 'claude_cli_v1', 'model': 'claude-opus-5-5',
             'endpoint': 'claude://local', 'configuration': {'effort': 'xhigh', 'max_output_tokens': 20000, 'timeout_seconds': 5}})
 
         def respond(route, request, output):

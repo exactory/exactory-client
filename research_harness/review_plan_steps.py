@@ -42,6 +42,11 @@ PLAN_STEPS = {
     13: dict(command='read', roles=('bar', 'slate', 'result', 'adjudicator'),
              chooses=('id', 'inspections', 'notes'),
              prerequisites=('Acquire a complete full-text capture.', 'Declare its required-unit bundle.')),
+    16: dict(command='review-probe', roles=protocol.ROLES, chooses=('id',),
+             prerequisites=('Authorize the paid capacity probe.',)),
+    14: dict(command='review-assignment', roles=protocol.ROLES, chooses=(), prerequisites=()),
+    15: dict(command='artifact', roles=protocol.ROLES, chooses=('id', 'path'),
+             prerequisites=('Create a faithful text form of the named original body in the workspace.',)),
 }
 
 
@@ -129,10 +134,63 @@ def describe_step(records, artifacts, assignment, number, *, stop_id=None, readi
             result['chooses'].append('bundle_id')
         result['captures'] = copy.deepcopy(captures)
         result['prerequisites'] = [copy.deepcopy(step) for capture in captures for step in capture['prerequisites']]
+    elif number == 16:
+        payload = dict(route_id=assignment['route_id'])
+    elif number == 14:
+        payload = {key: copy.deepcopy(assignment[key]) for key in
+                   ('id', 'role', 'route_id', 'dossier_id', 'reviewer_id', 'author_id', 'context')}
+    elif number == 15:
+        payload = dict(media_type='text/plain')
     else:
         payload = {}
     result['payload'] = payload
     return result
+
+
+CAPACITY_ROUTE_RETIRE_REASON = 'Retire this route to continue the preserved review on the serving route.'
+
+
+def find_capacity_parent(records, assignment, packet):
+    context = assignment.get('context', {})
+    parent_id = context.get('prior_assignment_id') or context.get('context_repair', {}).get('assignment_id')
+    if parent_id is None and (packet or {}).get('own_bars'):
+        parent_id = packet['own_bars'][-1]['assignment_id']
+    return records.get('review_assignment', {}).get(parent_id)
+
+
+def describe_capacity_steps(records, artifacts, assignment, serving_routes, probe_tokens=None, *, body=None, packet=None):
+    """Resume a refused first assignment without inventing a slot or a repair event."""
+    answers = []
+    if body is not None:
+        capture = describe_step(records, artifacts, assignment, 15)
+        capture['body'] = copy.deepcopy(body)
+        resume = describe_step(records, artifacts, assignment, 14)
+        resume['chooses'] = ['context']
+        resume['prerequisites'].append(dict(condition='Bind the captured text form in the review inputs.'))
+        answers.append(dict(answer='Capture a text form', steps=[capture, resume]))
+    if probe_tokens is not None:
+        probe = describe_step(records, artifacts, assignment, 16)
+        probe['payload']['capacity'] = dict(input_tokens=probe_tokens)
+        answers.append(dict(answer='Probe this route', steps=[probe, describe_step(records, artifacts, assignment, 14)]))
+    for route in serving_routes:
+        parent = find_capacity_parent(records, assignment, packet)
+        if parent is None:
+            steps = [describe_step(records, artifacts, dict(assignment, route_id=route['route_id']), 14)]
+        else:
+            steps = [describe_step(records, artifacts, parent, number)
+                     for number in select_route_steps(records, artifacts, parent)]
+            serving = records['review_route'][route['route_id']]
+            for step in steps:
+                if step['id'] == 8:
+                    step['payload']['reason'] = CAPACITY_ROUTE_RETIRE_REASON
+                    step['chooses'].remove('reason')
+                if step['command'] == 'review-route':
+                    step['payload'] = {key: copy.deepcopy(serving[key]) for key in
+                                       ('adapter', 'model', 'endpoint', 'configuration')}
+                if step['id'] == 6:
+                    step['payload']['context'].pop('prior_assignment_id', None)
+        answers.append(dict(answer='Use a serving route', route_id=route['route_id'], steps=steps))
+    return answers
 
 
 def select_route_steps(records, artifacts, assignment):

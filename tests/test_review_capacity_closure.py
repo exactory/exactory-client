@@ -317,7 +317,8 @@ class CapacityEvidenceTests(unittest.TestCase):
             return dict(original(output), usage=dict(input_tokens=30000, output_tokens=500))
         with patch.object(case, 'response', side_effect=respond):
             attempt = case.invoke(dict(finding='Synthetic finding.'))['result']
-        records = case.records()
+        # Isolate the ordinary attempt from the fixture's larger admission probe.
+        records = dict(case.records(), review_route_probe={})
         route = records['review_route']['route']
         self.assertEqual(attempt['capacity_evidence']['key'], load_evidence().describe_capacity_key(route))
         self.assertEqual(capacity.describe_route_capacity(route, records=records)['input_tokens']['value'], 29000)
@@ -372,8 +373,8 @@ class CapacityEvidenceTests(unittest.TestCase):
         other = build_evidence_route('claude_cli_v1', 'claude-sonnet-5-5', 128000)
         other['runtime']['implementation_sha256'] = 'b' * 64
         self.assertEqual(self.describe(other, priors=(prior,))['input_tokens']['value'], 687640)
-        with patch.object(capacity, 'MODEL_LIMITS', capacity.MODEL_LIMITS + (('synthetic-small', 200000, 167000, 128000, 'https://example.test/model'),)):
-            other['model'] = 'synthetic-small'
+        with patch.object(capacity, 'MODEL_LIMITS', capacity.MODEL_LIMITS + (('claude-synthetic-small', 200000, 167000, 128000, 'https://example.test/model'),)):
+            other['model'] = 'claude-synthetic-small'
             self.assertEqual(self.describe(other, priors=(prior,))['input_tokens']['value'], 0)
 
 

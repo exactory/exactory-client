@@ -3,7 +3,7 @@
 Regenerate with tests/generate_review_request_parity.py, never from the harness
 under test. Every case compares full reports and states, ordered obligations,
 selected attempts, refusal details and fingerprints of exact serialized bytes.
-The separate r4 fixture pins only added advisory fields and cannot replace any
+The separate r5 fixture pins only added advisory fields and cannot replace any
 field authenticated by the original oracle.
 """
 
@@ -19,7 +19,7 @@ from research_harness import bar_sources, review_continuation
 from research_harness.evidence import digest
 
 
-CAPACITY_PATH = fixtures.FROZEN_PATH.with_name('review-capacity-advisory-r4.json')
+CAPACITY_PATH = fixtures.FROZEN_PATH.with_name('review-capacity-advisory-r5.json')
 
 
 class ReviewRequestParityTests(unittest.TestCase):
@@ -80,6 +80,7 @@ class ReviewRequestParityTests(unittest.TestCase):
                     selection['value'] = [self.extend_expected_attempt(name, binding), refused,
                                           [self.extend_expected_attempt(name, value) for value in completed]]
         if field == 'status' and 'value' in expected:
+            expected['value']['review']['outside_solved_part'] = copy.deepcopy(self.capacity['outside_solved_part'])
             routes = self.capacity['cases'][name]['routes']
             if routes is not None:
                 self.assertNotIn('routes', expected['value']['review'])

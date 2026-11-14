@@ -81,6 +81,8 @@ class VisualResultDeliveryTests(unittest.TestCase):
         case.mutate(protocol.record_route, {'id': 'visual-route', 'adapter': visual.ADAPTER,
             'model': 'fixture-model', 'endpoint': 'codex://local',
             'configuration': {'max_output_tokens': 1000, 'timeout_seconds': 5}})
+        from visual_capacity_fixtures import install_bounded_visual_backend
+        install_bounded_visual_backend(self, [case.read_records()['review_route']['visual-route']])
         def respond_probe(route, request, credential):
             positive = case.read_records()['review_probe_invocation']['visual-probe']['positive_controls']
             return self.response(route, request, {key: positive[key] for key in ('allowed_control', 'evidence_control')}

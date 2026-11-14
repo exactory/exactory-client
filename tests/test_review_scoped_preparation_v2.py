@@ -27,7 +27,7 @@ class ScopedPreparationTests(LiteratureCase):
 
     def setUp(self):
         super().setUp()
-        self.route()
+        self.route(model='gpt-6-astra')
 
     def refuse(self, code, action):
         with self.assertRaises(ResearchError) as raised:

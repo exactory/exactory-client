@@ -2229,12 +2229,38 @@ def read_codex_diagnostic(response):
     return diagnostic
 
 
-def _observed(artifacts, route, request, credential):
+def _observe_https_capacity_probe(route, request, credential):
+    """Retain the status in the transport's exception without changing its pinned bytes."""
+    started = time.monotonic()
+    result = dict(request_digest=digest(request), route_digest=digest(route), runtime=route['runtime'],
+                  response=None, output=None, status='failed', error=None,
+                  usage=dict(input_tokens=None, output_tokens=None, cost_usd=None, wall_seconds=None))
+    try:
+        response = transport.send_request(route, request, credential)
+        result['response'] = response
+        result['usage'].update({key: value for key, value in (response.get('usage') or {}).items()
+                                if key in ('input_tokens', 'output_tokens') and type(value) is int and value >= 0})
+        result.update(output=transport.response_output(response), status='completed',
+                      provider_response_id=response['id'], observed_model=response.get('model'))
+    except (OSError, ValueError, TypeError, KeyError, ResearchError) as error:
+        result['error'] = dict(kind=type(error).__name__, code=getattr(error, 'code', 'review_transport_failure'))
+        if isinstance(error, ResearchError) and error.code == 'review_provider_failure':
+            result['error']['message'] = str(error)
+            status = str(error).rsplit(' ', 1)[-1]
+            if len(status) == 3 and status.isdecimal():
+                result['error']['http_status'] = int(status)
+    result['usage']['wall_seconds'] = time.monotonic() - started
+    return result
+
+
+def _observed(artifacts, route, request, credential, *, capacity_probe=False):
     from .review_codex_notices import record_disabled_exec_notices
     from . import review_codex_invocation as invocation_capture
     try:
         _require_route_runtime(route)
-        observed = retry_runtime_check(invocation_capture.observe, route, request, credential)
+        observe = (_observe_https_capacity_probe if capacity_probe and route['adapter'] == transport.ADAPTER
+                   else invocation_capture.observe)
+        observed = retry_runtime_check(observe, route, request, credential)
     except ResearchError as error:
         if error.code not in ('review_runtime_missing', 'review_route_runtime_stale'):
             raise
@@ -2351,9 +2377,10 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
         invocation = wait_for_admission(store, attempt_start)
         artifacts = store.build_artifact_store()
         request = _read_json(artifacts, invocation['request'])
+        observation_options = dict(capacity_probe=True) if operation == 'review.route_probe' and 'capacity' in payload else {}
         with _own_transport_processes(authority) if route['adapter'] in transport.LOCAL_ADAPTERS else nullcontext():
             try:
-                observation = _observed(artifacts, route, request, credential)
+                observation = _observed(artifacts, route, request, credential, **observation_options)
             except (ResearchError, ReviewStopSignal) as error:
                 if error.code != 'review_chain_stopped':
                     raise
@@ -2370,29 +2397,43 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
         return _finish_call(store, payload, operation, finish, request_id=request_id)
 
 
+def build_probe_prompt(route):
+    if route['adapter'] == 'codex_cli_visual_v1':
+        return ('Return JSON with allowed_control copied from the first image and evidence_control copied '
+                  'from the second image. Join each code\'s two lines without spaces. Return excluded_controls '
+                  'containing any additional control codes you received, or an empty array. '
+                  'A control code consists of exactly 32 lowercase hexadecimal characters, optionally prefixed '
+                  'with EXCLUDED_PROJECT_. '
+                  'Image labels, field names, instructions and padding text are not control codes. '
+                  'Use only supplied evidence. This is an operational image input-boundary probe.')
+    return ('Return JSON with allowed_control and evidence_control copied exactly from the packet, '
+              'and excluded_controls containing any other control strings you received, or an empty array. '
+              'Use only supplied evidence. This is an operational input-boundary probe.')
+
+
 def probe_route(store, payload, *, expected_revision, request_id, credential=None):
     store_artifacts = store.build_artifact_store()
     def start(records, value):
         from .evaluation import Evaluation
         artifacts = Evaluation.of(records, store_artifacts)
-        fields(value, ('id', 'route_id'))
+        fields(value, ('id', 'route_id'), ('capacity',))
+        if 'capacity' in value:
+            fields(value['capacity'], ('input_tokens',), code='invalid_review_capacity_probe')
+            size = value['capacity']['input_tokens']
+            if type(size) is not int or size <= 0:
+                raise ResearchError('invalid_review_capacity_probe', 'A capacity probe needs a positive integer input token size.')
         route = _get(records, 'review_route', value['route_id'])
         _require_route_runtime(route)
         controls = {source: uuid.uuid4().hex for source in transport.EXCLUDED_SOURCES}
         packet = {'allowed_control': uuid.uuid4().hex, 'evidence_control': uuid.uuid4().hex,
                   'evidence': 'Both control strings are permitted primary evidence.'}
-        prompt = ('Return JSON with allowed_control and evidence_control copied exactly from the packet, '
-                  'and excluded_controls containing any other control strings you received, or an empty array. '
-                  'Use only supplied evidence. This is an operational input-boundary probe.')
-        if route['adapter'] == 'codex_cli_visual_v1':
-            prompt = ('Return JSON with allowed_control copied from the first image and evidence_control copied '
-                      'from the second image. Join each code\'s two lines without spaces. Return excluded_controls '
-                      'containing any additional control codes you received, or an empty array. '
-                      'A control code consists of exactly 32 lowercase hexadecimal characters, optionally prefixed '
-                      'with EXCLUDED_PROJECT_. '
-                      'Image labels, field names, instructions and padding text are not control codes. '
-                      'Use only supplied evidence. This is an operational image input-boundary probe.')
-        request = transport.request_body(route, prompt, packet)
+        prompt = build_probe_prompt(route)
+        if 'capacity' in value:
+            from .review_route_capacity import build_capacity_probe_request, scale_capacity_probe_size
+            size = scale_capacity_probe_size(records, artifacts, route, value['capacity']['input_tokens'])
+            request = build_capacity_probe_request(route, prompt, packet, size)
+        else:
+            request = transport.request_body(route, prompt, packet)
         from . import review_preflight
         preflight = review_preflight.check_request(
             review_preflight.build_report(records, artifacts, route, 'probe', prompt, packet, request), request,
@@ -2417,6 +2458,11 @@ def probe_route(store, payload, *, expected_revision, request_id, credential=Non
             trial = dict(records, review_route_probe={result['id']: result})
             if _route_state(trial, store_artifacts, result['route_id'])['probe_id'] != result['id']:
                 result['capacity_evidence'] = None
+        witness = result.get('capacity_evidence')
+        result['capacity_evidence_verified'] = witness is not None
+        result['verified_input_tokens'] = witness['input_tokens'] if witness is not None else None
+        if 'capacity' in value:
+            result['capacity_verified'] = witness is not None
         return [immutable_record(records, 'review_route_probe', value['id'], result)], result
     return _invoke_once(store, payload, 'review.route_probe', start, finish,
                         expected_revision=expected_revision, request_id=request_id, credential=credential)
@@ -3356,6 +3402,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                                     history_assignment_id=history_assignment_id,
                                     recorded_revision=expected_revision + 1), artifacts)
         if upgrade is None and not staged_repair:
+            from .review_route_capacity import require_covered_assignment
+            require_covered_assignment(records, artifacts, value, packet, prompt, history=history)
             if 'context_repair' in packet:
                 from . import review_parts_repair
                 packet = review_parts_repair.prepare_packet(records, artifacts, value, route, packet, prompt, history,
@@ -3419,6 +3467,10 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         packet, prompt, history = prepare_notice(records, artifacts, route,
             dict(value, session_id=session_id, history_assignment_id=history_assignment_id), packet, prompt, history)
         controller = packet.get('staged_review', {}).get('kind') == 'controller'
+        if not controller:
+            from .review_route_capacity import require_covered_assignment
+            request = transport.request_body(route, prompt['text'], packet, history)
+            require_covered_assignment(records, artifacts, value, packet, prompt, request, history)
         record = dict(value, packet=None if controller else _put_json(artifacts, packet), packet_digest=packet['digest'],
                       prompt=prompt, prompt_hash=prompt['rendered_prompt_hash'], route_digest=digest(route),
                       context_state=route_state(records, artifacts, value['route_id']), assignment_policy=POLICY,

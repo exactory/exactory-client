@@ -5505,6 +5505,33 @@
         "test_review_stop_queue.QueueTests.test_stop_withdraws_only_its_waits_and_no_call_starts",
         "test_review_stop_queue.QueueTests.test_dead_wait_is_abandoned_but_a_live_slow_wait_keeps_its_place"
       ]
+    },
+    {
+      "id": "review-uncovered-capacity-before-first-call",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "summary": "D1: binary attachments and unlisted endpoint runtimes were admitted without a bound for the complete request.",
+      "expected": "Refuse before the first generation, retain the measured parts and executable route or probe steps, and admit only documented binary bounds or capacity evidence under the same key with output room reserved.",
+      "tests": [
+        "test_review_binary_capacity.BinaryCapacityTests.test_individually_valid_attachments_pass_the_combined_capacity",
+        "test_review_capacity_probe.CapacityProbeTests.test_verified_probe_raises_limit_and_refusal_keeps_http_status_and_halves_next_size",
+        "test_review_capacity_probe.CapacityProbeTests.test_incomplete_probe_cannot_borrow_an_earlier_probes_verified_capacity",
+        "test_automatic_gate_override.RecordedSeriesStopTests.test_malformed_packet_keeps_the_cli_terminal_stop_and_exit_code",
+        "test_review_capacity_probe.CapacityEvidenceTests.test_codex_prior_applies_only_to_its_version_file_and_controls",
+        "test_review_capacity_probe.CapacityEvidenceTests.test_a_larger_ordinary_review_preserves_the_verified_claude_capacity_probe",
+        "test_review_capacity_probe.LocalCapacityProbeTests.test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review",
+        "test_review_uncovered_stop.UncoveredReviewTests.test_pdf_attachment_stops_and_text_route_completes_same_review",
+        "test_review_binary_capacity.BinaryCapacityTests.test_verified_visual_observations_stay_estimates_without_an_admission_rule",
+        "test_review_capacity_probe.CapacityProbeTests.test_short_answer_evidence_reserves_the_routes_full_output_before_assignment",
+        "test_review_capacity_probe.LocalCapacityProbeTests.test_compacted_or_repeated_native_probe_input_changes_no_capacity",
+        "test_review_uncovered_stop.UncoveredReviewTests.test_equal_page_pdfs_stop_before_call_with_the_same_estimate",
+        "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+        "test_review_uncovered_stop.UncoveredReviewTests.test_the_prescribed_probe_uses_utf8_to_fit_then_records_the_same_assignment",
+        "test_review_uncovered_stop.UncoveredReviewTests.test_an_unrepresentable_probe_retains_the_prescribed_size_without_an_invalid_step",
+        "test_review_capacity_probe.CapacityProbeSizingTests.test_unkeyed_probe_cannot_schedule_or_scale_a_new_runtime"
+      ],
+      "class": "review capacity by construction",
+      "fixed_in": "open",
+      "test_kind": "real_shape"
     }
   ]
 }

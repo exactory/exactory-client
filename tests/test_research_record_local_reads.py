@@ -49,6 +49,13 @@ class LocalReadTests(unittest.TestCase):
         if adapter == 'claude_cli_v1':
             route = dict(claude_fixtures.ROUTE, id='route')
         else:
+            from research_harness import review_codex_transport as codex
+            # Keep the real version read while retaining the synthetic sender's inspected rollout.
+            for active in (patch.object(codex, '_rollout', return_value=[]),
+                           patch.object(codex, 'NATIVE_DECLARATIONS', ()),
+                           patch.object(codex, 'NATIVE_DECLARATION_SETS', {()})):
+                active.start()
+                case.addCleanup(active.stop)
             route = dict(id='route', adapter=adapter, model='fixture-model', endpoint='codex://local',
                          configuration=dict(max_output_tokens=1000, timeout_seconds=5))
         case.mutate(protocol.record_route, route)
@@ -67,6 +74,8 @@ class LocalReadTests(unittest.TestCase):
 
         with patch.object(transport, 'send_request', side_effect=respond):
             case.mutate(protocol.probe_route, dict(id='probe', route_id='route'), credential='fixture')
+        if adapter == 'codex_cli_v1':
+            self.assertTrue(case.records()['review_route_probe']['probe']['capacity_evidence_verified'])
         return case
 
     def test_claude_and_codex_assignment_checks_plan_without_workspace_changes(self):

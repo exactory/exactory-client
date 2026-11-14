@@ -1319,6 +1319,10 @@ class ProblemObjectionCarryDeliveryTests(unittest.TestCase):
             source.mutate(protocol.record_route, dict(id='visual-route', adapter=visual.ADAPTER,
                 model='fixture-model', endpoint='codex://local', configuration=dict(max_output_tokens=128000, timeout_seconds=600)))
 
+            from visual_capacity_fixtures import install_bounded_visual_backend
+            install_bounded_visual_backend(self, [source.store.snapshot()['records']['review_route']['visual-route'],
+                                                   destination.store.snapshot()['records']['review_route']['route']])
+
             def respond_probe(route, request, credential):
                 positive = source.store.snapshot()['records']['review_probe_invocation']['visual-probe']['positive_controls']
                 return sender.response(route, request, dict(allowed_control=positive['allowed_control'],

@@ -589,7 +589,9 @@ def _review_status(records, artifacts):
         progress = result['assignments'][identifier]['review_parts']
         if progress['next']:
             progress['next'] = describe_next_actions(records, artifacts, identifier, progress['next'])
-    from .review_route_capacity import describe_open_route_reports
+    from .review_route_capacity import describe_open_route_reports, describe_unsolved_reviews
+    if records.get('review_route'):
+        result['outside_solved_part'] = describe_unsolved_reviews()
     routes = describe_open_route_reports(records, artifacts)
     if routes:
         result['routes'] = routes

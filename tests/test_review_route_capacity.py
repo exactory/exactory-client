@@ -35,10 +35,8 @@ class RouteLimitTests(unittest.TestCase):
                 self.assertTrue(value['listed'])
                 self.assertEqual(route, before)
                 self.assertIn(value['input_tokens']['source'], ('documented', 'observed'))
-                self.assertEqual(
-                    value['binary_inputs'],
-                    'unmeasured' if adapter in (transport.ADAPTER, 'codex_cli_visual_v1') else 'unsupported',
-                )
+                self.assertEqual(isinstance(value['binary_inputs'], dict),
+                                 adapter in (transport.ADAPTER, 'codex_cli_visual_v1'))
                 unknown = self.capacity.describe_route_capacity(build_route(adapter, 'unlisted-model'))
                 self.assertFalse(unknown['listed'])
                 self.assertEqual(unknown['input_tokens']['source'], 'default' if adapter == 'claude_cli_v1' else 'observed')
@@ -125,7 +123,7 @@ class RouteLimitTests(unittest.TestCase):
         result = self.capacity.measure_request(route, request)
         self.assertIsNone(result['character_limit'])
         self.assertEqual(result['measure'], 'bytes')
-        self.assertEqual(result['binary_inputs'], 'unmeasured')
+        self.assertEqual(result['binary_inputs'], [])
         self.assertGreater(result['text_characters'], 5)
 
 
@@ -274,11 +272,12 @@ class RecordedRequestMeasureTests(unittest.TestCase):
                 measured = capacity.measure_request(route, request)
                 self.assertEqual(measured['characters'], row['characters'])
                 self.assertEqual(measured['text_characters'], row['text_characters'])
-                self.assertEqual(measured['tokens_upper'], row['tokens_upper'])
-                self.assertGreaterEqual(measured['tokens_upper'], row['input_tokens'])
+                self.assertEqual(measured['text_tokens_upper'], row['tokens_upper'])
+                self.assertGreaterEqual(measured['text_tokens_upper'], row['input_tokens'])
                 if row['adapter'] == 'codex_cli_visual_v1':
                     self.assertEqual(measured['native_images'], 1)
-                    self.assertEqual(measured['binary_inputs'], 'unmeasured')
+                    self.assertIsNone(measured['tokens_upper'])
+                    self.assertEqual(measured['reason'], 'binary_input_without_bound')
 
     def test_exact_visible_request_counts_encoded_wire_text(self):
         from research_harness import review_route_capacity as capacity, review_exact_text_v2 as codec

@@ -9,11 +9,12 @@ import heapq
 import json
 import math
 import os
+import struct
 from pathlib import Path
 import tempfile
 from . import review_transport as transport
 from .review_capacity_evidence import (DEFAULT_PROBE_INPUT_TOKENS as DEFAULT_INPUT_TOKENS,
-                                       has_capacity_key, read_capacity_priors)
+                                       describe_capacity_key, has_capacity_key, read_capacity_priors)
 from .evidence import digest
 POLICY = 'exactory-route-capacity-policy-v1'
 VERIFICATION_CALLS_PER_OVER_LIMIT = 20
@@ -63,6 +64,86 @@ CLAUDE_MODELS_URL = 'https://platform.claude.com/docs/en/models/overview'
 CLAUDE_WINDOW_URL = 'https://code.claude.com/docs/en/model-config'
 CLAUDE_OUTPUT_URL = 'https://code.claude.com/docs/en/env-vars'
 OPENAI_MODELS_URL = 'https://developers.openai.com/api/docs/models/'
+IMAGE_INPUTS_URL = 'https://developers.openai.com/api/docs/guides/images-vision'
+PDF_INPUTS_URL = 'https://developers.openai.com/api/docs/guides/file-inputs'
+BINARY_RULE_DATE = '2026-11-14'
+
+
+def describe_binary_rules(route):
+    """Report rules only for the documented adapter, model and input settings."""
+    adapter = route['adapter']
+    if adapter not in (transport.ADAPTER, 'codex_cli_visual_v1'):
+        return 'unsupported'
+    image = dict(input_limits={}, request_limits={}, token_rule=None,
+                 estimate=dict(kind='estimate', source_record=MEASUREMENT_SOURCE,
+                               largest_request_input_tokens=None))
+    if adapter == 'codex_cli_visual_v1':
+        image['input_limits'] = dict(
+            bytes=_describe_limit(33554432, 'transport', file='research_harness/review_codex_visual_transport.py'),
+            pixels=_describe_limit(16777216, 'transport', file='research_harness/review_codex_visual_transport.py'))
+        # The API's billing rules do not document the Codex subscription backend.
+        image['estimate'].update(largest_bytes=474410, largest_pixels=2236350,
+                                 largest_request_bytes=6832558, largest_request_images=19,
+                                 largest_request_input_tokens=364458,
+                                 basis='whole_request_usage_including_text',
+                                 tokens_per_image=364458 / 19,
+                                 tokens_per_byte=364458 / 6832558,
+                                 tokens_per_pixel=364458 / 41138674)
+        return dict(image=image)
+    if route['endpoint'] != 'https://api.openai.com/v1/responses':
+        return dict(image=image, pdf=copy.deepcopy(image))
+    image['request_limits'] = dict(bytes=_describe_limit(512000000, 'documented', url=IMAGE_INPUTS_URL, date=BINARY_RULE_DATE),
+                                   count=_describe_limit(1500, 'documented', url=IMAGE_INPUTS_URL, date=BINARY_RULE_DATE))
+    if route['endpoint'] == 'https://api.openai.com/v1/responses' and route['model'] == 'gpt-6-astra':
+        image['input_limits']['processed_patches'] = _describe_limit(30000, 'documented', url=IMAGE_INPUTS_URL, date=BINARY_RULE_DATE)
+        image['token_rule'] = dict(source='documented', url=IMAGE_INPUTS_URL, date=BINARY_RULE_DATE,
+                                   rule='patch_budget', patch_pixels=32, multiplier=1.2,
+                                   detail_budgets=dict(low=256, high=2500, original=30000, auto=30000),
+                                   maximum_dimension=65535, rounding_margin_tokens=1)
+    pdf = dict(input_limits=dict(bytes=_describe_limit(50000000, 'documented', url=PDF_INPUTS_URL,
+                                                      exclusive=True, date=BINARY_RULE_DATE)),
+               request_limits=dict(bytes=_describe_limit(50000000, 'documented', url=PDF_INPUTS_URL, date=BINARY_RULE_DATE)),
+               token_rule=None, estimate=dict(kind='estimate', source_record=MEASUREMENT_SOURCE,
+                                              largest_request_input_tokens=None))
+    return dict(image=image, pdf=pdf)
+
+
+def _read_binary_parts(route, request):
+    if route['adapter'] == 'codex_cli_visual_v1':
+        return [('image', row['data_url'], 'high') for row in request.get('exactory_image_inputs', [])]
+    if route['adapter'] != transport.ADAPTER:
+        return []
+    return [('pdf' if part['type'] == 'input_file' else 'image',
+             part.get('file_data') or part.get('image_url'), part.get('detail', 'auto'))
+            for message in request['input'] if isinstance(message['content'], list)
+            for part in message['content'] if part['type'] in ('input_file', 'input_image')]
+
+
+def _measure_binary_parts(route, request, rules):
+    measured = []
+    for kind, url, detail in _read_binary_parts(route, request):
+        rule = rules[kind]
+        data = base64.b64decode(url.split(',', 1)[1]) if isinstance(url, str) and url.startswith('data:') else None
+        values = dict(bytes=len(data) if data is not None else None)
+        if data is not None and data.startswith(b'\x89PNG\r\n\x1a\n') and len(data) >= 24:
+            width, height = struct.unpack('>II', data[16:24])
+            values.update(width=width, height=height, pixels=width * height)
+        token_rule = rule['token_rule']
+        tokens = token_rule['tokens_upper'] if token_rule is not None and token_rule['rule'] == 'fixed_budget' else None
+        if token_rule is not None and token_rule['rule'] == 'patch_budget' and detail in token_rule['detail_budgets'] and values.get('pixels'):
+            # A full budget bounds any documented resizing; one extra token covers billing rounding.
+            tokens = math.ceil(token_rule['detail_budgets'][detail] * token_rule['multiplier']) + token_rule['rounding_margin_tokens']
+        if token_rule is not None and token_rule['rule'] == 'patch_budget' and detail in ('auto', 'original') and values.get('pixels'):
+            scale = min(1, token_rule['maximum_dimension'] / max(width, height))
+            patch = token_rule['patch_pixels']
+            values['processed_patches'] = math.ceil(math.ceil(width * scale) / patch) * math.ceil(math.ceil(height * scale) / patch)
+        over = any(values.get(name) is not None and
+                   (values[name] >= limit['value'] if limit.get('exclusive') else values[name] > limit['value'])
+                   for name, limit in rule['input_limits'].items())
+        measured.append(dict(kind=kind, detail=detail, **values, tokens_upper=tokens,
+                             token_rule=copy.deepcopy(token_rule), over_limit=over,
+                             estimate=copy.deepcopy(rule['estimate'])))
+    return measured
 # API limits are documented; local Codex input room is established by verified sends.
 MODEL_LIMITS = (
     ('claude-opus-5-5', 1000000, 967000, 128000, CLAUDE_MODELS_URL),
@@ -75,9 +156,9 @@ MODEL_LIMITS = (
         'https://platform.claude.com/docs/en/models/fable-5-1/overview',
     ),
     ('claude-sonnet-5-5', 1000000, 967000, 128000, CLAUDE_MODELS_URL),
-    ('gpt-6-astra', 1050000, None, 128000, OPENAI_MODELS_URL + 'gpt-6-astra'),
-    ('gpt-6.1-sol', 1050000, None, 128000, OPENAI_MODELS_URL + 'gpt-6.1-sol'),
-    ('gpt-6-luna', 1050000, None, 128000, OPENAI_MODELS_URL + 'gpt-6-luna'),
+    ('gpt-6-astra', 1050000, 922000, 128000, OPENAI_MODELS_URL + 'gpt-6-astra'),
+    ('gpt-6.1-sol', 1050000, 922000, 128000, OPENAI_MODELS_URL + 'gpt-6.1-sol'),
+    ('gpt-6-luna', 1050000, 922000, 128000, OPENAI_MODELS_URL + 'gpt-6-luna'),
 )
 # Legacy D1 values remain available for calibration and reports, not as unkeyed admission.
 VERIFIED_INPUT_TOKENS = tuple(
@@ -97,12 +178,77 @@ def _describe_limit(value, source, **evidence):
     return dict(value=value, source=source, **evidence)
 
 
+def select_capacity_probe_size(records, route, request_tokens, *, artifacts=None):
+    key = describe_capacity_key(route)
+    probes = [row for row in records.get('review_route_probe', {}).values()
+              if key is not None and 'capacity' in row and describe_capacity_key(records['review_route'][row['route_id']]) == describe_capacity_key(route)]
+    last = max(probes, key=lambda row: row['recorded_revision'], default=None)
+    if last is not None:
+        return request_tokens + route['configuration']['max_output_tokens'] if last.get('capacity_verified') else max(1, last['capacity']['input_tokens'] // 2)
+    from .review_capacity_evidence import read_capacity_evidence
+    return read_capacity_evidence(route, records, artifacts=artifacts)['probe_input_tokens']
+
+
+def build_capacity_probe_request(route, prompt, packet, tokens):
+    """Fill only evidence, keeping both controls in the unchanged three-member packet."""
+    from .errors import ResearchError
+    if route['adapter'] == 'codex_cli_visual_v1':
+        raise ResearchError('invalid_review_capacity_probe', 'A capacity probe requires a text adapter.')
+    pattern = 'capacity!probe:0123;'
+    def build(size, use_utf8=False):
+        # Four-byte code points and a one-code-point tail represent each byte size exactly.
+        packet['evidence'] = ('🧪' * (size // 4) + ('', '!', 'é', '界')[size % 4] if use_utf8 else
+            (pattern * ((size + len(pattern) - 1) // len(pattern)))[:size])
+        request = transport.request_body(route, prompt, packet)
+        return request, measure_request(route, request)
+    _, empty = build(0)
+    limit = describe_route_capacity(route)['input_characters']['value']
+    room = max(0, limit - empty['characters']) if limit is not None else tokens * 3
+    for use_utf8 in (False, True):
+        low, high = 0, min(room * (4 if use_utf8 else 1), tokens * (4 if use_utf8 else 3))
+        while low <= high:
+            middle = (low + high) // 2
+            try:
+                request, measure = build(middle, use_utf8)
+            except ResearchError as error:
+                if error.code != 'review_input_too_large':
+                    raise
+                high = middle - 1
+                continue
+            if limit is not None and measure['characters'] > limit:
+                high = middle - 1
+            elif measure['tokens_upper'] == tokens:
+                return request
+            elif measure['tokens_upper'] < tokens:
+                low = middle + 1
+            else:
+                high = middle - 1
+    raise ResearchError('invalid_review_capacity_probe', 'The requested probe size could not be constructed within this transport.',
+                        dict(input_tokens=tokens, character_limit=limit))
+
+
+def scale_capacity_probe_size(records, artifacts, route, tokens):
+    """Keep the requested token target while correcting padding from an exact earlier send."""
+    key = describe_capacity_key(route)
+    previous = max((row for row in records.get('review_route_probe', {}).values()
+                    if key is not None and row.get('capacity_verified') and (row.get('usage', {}).get('input_tokens') or 0) > 0
+                    and describe_capacity_key(records['review_route'][row['route_id']]) == key),
+                   key=lambda row: row['recorded_revision'], default=None)
+    if previous is None:
+        return tokens
+    request = json.loads(artifacts.read(previous['request']))
+    measured = measure_request(route, request)['tokens_upper']
+    actual = previous['usage']['input_tokens']
+    return (tokens * measured + actual - 1) // actual
+
+
 def describe_route_capacity(route, profile=None, *, records=None, artifacts=None):
     """Keep input-evidence keys separate from the class of the output profile."""
     from . import review_capacity_evidence
     adapter, config = route['adapter'], route['configuration']
+    provider_prefix = 'claude-' if adapter == 'claude_cli_v1' else 'gpt-'
     model = next((row for row in MODEL_LIMITS if row[0] == route['model']
-                  and (adapter != 'claude_cli_v1' or row[2] is not None)), None)
+                  and row[0].startswith(provider_prefix)), None)
     output = min(config['max_output_tokens'], model[3] if model else 128000) if adapter == 'claude_cli_v1' else config['max_output_tokens']
     output_limit = _describe_limit(output, 'route_configuration', field='max_output_tokens')
     if adapter == 'claude_cli_v1' and config['max_output_tokens'] >= output:
@@ -132,11 +278,13 @@ def describe_route_capacity(route, profile=None, *, records=None, artifacts=None
     else:
         characters = _describe_limit(None, 'transport', file='research_harness/review_transport.py')
         if model is not None:
-            documented = _describe_limit(max(0, model[1] - output), 'documented', url=model[4], date=MEASUREMENT_DATE)
+            documented = _describe_limit(max(0, min(model[2] or model[1], model[1] - output)), 'documented', url=model[4], date=MEASUREMENT_DATE)
             tokens = dict(documented)
         else:
             tokens = dict(observed)
     reservation_basis = 'compaction_threshold' if adapter == 'claude_cli_v1' and model is not None else 'model_window' if tokens['source'] == 'documented' else 'verified_input' if tokens['source'] == 'observed' else 'adapter_default'
+    if evidence.get('verified_capacity_probe'):
+        tokens['probe_id'] = evidence['verified_capacity_probe']['id']
     tokens.update(output_reservation_tokens=output, reservation_basis=reservation_basis)
     calibrated = model is not None and (adapter == 'claude_cli_v1' or any((name, name_model) == (adapter, route['model']) for name, name_model, _ in VERIFIED_INPUT_TOKENS))
     ratio = CLAUDE_CHARACTERS_PER_TOKEN if adapter == 'claude_cli_v1' else CODEX_CHARACTERS_PER_TOKEN
@@ -146,7 +294,7 @@ def describe_route_capacity(route, profile=None, *, records=None, artifacts=None
                 input_characters=characters, input_tokens=tokens, input_limits=dict(documented=documented, observed=observed),
                 capacity_evidence=evidence, output_tokens=output_limit, effort=describe_route_class(route)['effort'],
                 request_measure='calibrated' if calibrated else 'bytes', provider_enforces_output=not adapter.startswith('codex_cli_'),
-                binary_inputs='unmeasured' if adapter in (transport.ADAPTER, 'codex_cli_visual_v1') else 'unsupported',
+                binary_inputs=describe_binary_rules(route),
                 raises_capacity=['Add documented model limits with their URLs.', 'Record a verified capacity probe under this execution key to raise its observed input limit.'])
 
 
@@ -158,9 +306,10 @@ def _read_text_parts(content):
     )
 
 
-def measure_request(route, request, *, records=None, artifacts=None):
-    """Measure the exact native text, excluding unmeasured binary inputs."""
-    capacity = describe_route_capacity(route, records=records, artifacts=artifacts)
+def measure_request(route, request, profile=None, *, records=None, artifacts=None):
+    """Bound the exact text and every binary input in the same request."""
+    capacity = describe_route_capacity(route, profile, records=records, artifacts=artifacts)
+    binaries = _measure_binary_parts(route, request, capacity['binary_inputs'])
     adapter = transport._local_adapter(route)
     representation = 'adapter_packet_text' if adapter is not None else 'serialized_request'
     native_images = None
@@ -168,7 +317,7 @@ def measure_request(route, request, *, records=None, artifacts=None):
         from . import review_codex_transport as codex
         environment = codex.clean_environment(os.environ)
         directory = Path(environment.get('TMPDIR') or tempfile.gettempdir()).resolve() / ('review-visual-' + 'x' * 8)
-        native_images = len(adapter.validated_images(request))
+        native_images = len(binaries)
         packet = adapter.packet_text(request) + ''.join(
             ('<image name=[Image #' + str(index) + '] path="' + str(directory / ('image-' + str(index).zfill(3) + '.png')) + '"></image>' for index in range(1, native_images + 1)),
         )
@@ -195,7 +344,10 @@ def measure_request(route, request, *, records=None, artifacts=None):
         character_limit=limit,
         token_limit=capacity['input_tokens']['value'],
         representation=representation,
-        binary_inputs=capacity['binary_inputs'],
+        binary_inputs=binaries,
+        text_tokens_upper=tokens_upper,
+        binary_tokens_upper=0,
+        output_reservation_tokens=capacity['input_tokens']['output_reservation_tokens'],
         token_estimate=True,
         ratio_margin=TOKEN_RATIO_MARGIN if calibrated else None,
         characters_per_token=ratio if calibrated else None,
@@ -203,7 +355,256 @@ def measure_request(route, request, *, records=None, artifacts=None):
     )
     if native_images is not None:
         result['native_images'] = native_images
+    reason = None
+    if binaries:
+        for kind, rule in capacity['binary_inputs'].items():
+            selected = [row for row in binaries if row['kind'] == kind]
+            if not selected:
+                continue
+            totals = dict(count=len(selected), bytes=sum(row['bytes'] or 0 for row in selected))
+            if kind == 'image' and route['adapter'] == transport.ADAPTER:
+                totals['bytes'] = len(json.dumps(request, ensure_ascii=False).encode('utf-8'))
+            if any(totals[name] > limit['value'] for name, limit in rule['request_limits'].items()):
+                reason = 'binary_input_over_measure'
+        if any(row['over_limit'] for row in binaries):
+            reason = 'binary_input_over_measure'
+        unknown = any(row['tokens_upper'] is None for row in binaries)
+        result['binary_tokens_upper'] = None if unknown else sum(row['tokens_upper'] for row in binaries)
+        result['tokens_upper'] = None if unknown else tokens_upper + result['binary_tokens_upper']
+        if unknown:
+            reason = reason or 'binary_input_without_bound'
+        elif result['tokens_upper'] > result['token_limit']:
+            reason = reason or 'binary_input_over_measure'
+    if reason is not None:
+        result.update(fits=False, reason=reason)
     return result
+
+
+CAPACITY_STOP_MESSAGE = 'This review has no bounded delivery on the selected route. Use a listed next step when one is available.'
+UNSERVED_REVIEW_MESSAGE = 'No registered verified route serves this review; it is outside the solved part on the routes currently available.'
+CAPACITY_OWNER_DECISION = 'Whether to authorize a listed recovery step or leave this review outside the solved part.'
+UNSOLVED_REVIEW_ITEMS = (
+    ('https_parts', 'https-series', 'Delivery in parts on the HTTPS route.'),
+    ('binary_inputs', 'visual-series', 'Binary inputs without a documented or counted token bound, or above one request.'),
+    ('body_without_text_form', 'visual-series', 'A body without a text form above one read turn.'),
+    ('staged_scale', None, 'A staged review above its supported scale; the slot retains its ordinary delivery.'),
+)
+
+
+def describe_unsolved_reviews():
+    from .review_protocol import ROLES
+    result = {role: [dict(reason=reason, unit=unit, message=message)
+                     for reason, unit, message in UNSOLVED_REVIEW_ITEMS] for role in ROLES}
+    for role in ('manuscript', 'standalone'):
+        result[role].append(dict(reason='no_parts_delivery', unit='paper-series',
+                                 message='This role has no delivery in parts.'))
+    result['native_math'].append(dict(reason='math_reading_v1', unit='reading-math-v2',
+                                      message='Math reading protocol v1 has no finite final projection.'))
+    return result
+
+
+def _can_deliver_parts(assignment, packet, route):
+    from .review_parts_roles import find_adapter
+    return (route['adapter'] in ('claude_cli_v1', 'codex_cli_v1', 'codex_cli_framed_v1')
+            and find_adapter(assignment, packet) is not None)
+
+
+def _build_serving_parts(records, artifacts, assignment, route, packet, prompt):
+    from . import review_parts, review_prompt_paragraphs
+    from .review_staged_protocol import ControllerArtifacts
+    staged = ControllerArtifacts(artifacts)
+    parameters = prompt.get('parameters', {})
+    base = dict(orchestration=parameters.get('orchestration'), repair=bool(parameters.get('context_repair')),
+                excerpts='reviewer_excerpts' in parameters, common_version=parameters.get('common_prompt_version'))
+    base.update(review_prompt_paragraphs.read_paragraph_parameters(prompt))
+    if assignment['role'] in ('bar', 'slate', 'result'):
+        base['excerpts'] = True
+    planned = review_parts.prepare_packet(records, staged, dict(assignment, route_id=route['id']),
+        route, copy.deepcopy(packet), prompt, [], base_prompt_parameters=base)
+    if review_parts.find_kind(planned) is None:
+        return None
+    turn_prompt = review_parts.build_turn_prompt(assignment['role'], base, planned[review_parts.KEY])
+    return transport.request_body(route, turn_prompt['text'], planned, [])
+
+
+
+def _build_serving_repair(records, artifacts, assignment, parent, route):
+    """Measure the reassessment that the preserved-slot steps will create, with buffered writes."""
+    from . import review_context_repair as repair_context, review_protocol, review_parts, review_parts_repair
+    from . import review_prompt_paragraphs, bar_sources
+    from .evaluation import Evaluation
+    from .review_staged_protocol import ControllerArtifacts
+    from .review_delivery_notice import prepare_notice
+    from .review_plan_steps import CAPACITY_ROUTE_RETIRE_REASON
+    if parent.get('staged_review'):
+        return None
+    event = dict(id='capacity-retirement', assignment_id=parent['id'], kind='route_retired',
+                 source='owner', reason=CAPACITY_ROUTE_RETIRE_REASON, evidence=[],
+                 recorded_revision=parent['recorded_revision'] + 1)
+    prospective = dict(records, review_context_event=dict(records.get('review_context_event', {}),
+                        **{event['id']: event}))
+    staged = Evaluation.of(prospective, ControllerArtifacts(artifacts))
+    chain = repair_context._exposure_lineage(prospective, parent)
+    roles = repair_context.ROLES + ('adjudicator',)
+    scientific = repair_context.collect_scientific_history(prospective, staged, chain, roles)
+    state = review_protocol.assignment_state(prospective, staged, parent['id'])
+    events = repair_context.cause_events(prospective, {row['id'] for row in chain})
+    repair = dict(predecessor=parent, slot_id=repair_context.slot_id(prospective, parent),
+        packet=next(row['packet'] for row in scientific if row['assignment_id'] == parent['id']),
+        predecessor_binding=repair_context.bind_predecessor(prospective, parent, state, scientific),
+        historical_reviews=repair_context._reviews(prospective, {row['id'] for row in chain if row['role'] == parent['role']}),
+        scientific_history=scientific, event_ids=[row['id'] for row in events], probe_id='capacity-probe',
+        cause=[{key: row[key] for key in ('id', 'kind', 'source', 'reason')} for row in events])
+    value = dict(parent, id=assignment['id'], route_id=route['id'], context={})
+    if 'subject' in assignment:
+        value['subject'] = assignment['subject']
+    with transport.text_only_delivery(route['adapter'] in transport.TEXT_ONLY_ADAPTERS):
+        packet = review_protocol._repair_packet(prospective, staged, value, repair)
+    parameters = dict(repair=parent['role'] != 'adjudicator',
+        orchestration='problem_creation' if value.get('subject', {}).get('kind') == 'problem' else None,
+        excerpts=parent['role'] in bar_sources.ROLES)
+    parameters.update(review_prompt_paragraphs.select_prompt_parameters(parent['role'], packet))
+    prompt = review_protocol.canonical_prompt(parent['role'], **parameters)
+    packet = review_parts_repair.prepare_packet(prospective, staged, value, route, packet, prompt, [],
+        base_prompt_parameters=parameters, slot_id=repair['slot_id'], repair=repair)
+    if review_parts.find_kind(packet) is not None:
+        prompt = review_parts.build_turn_prompt(parent['role'], parameters, packet[review_parts.KEY])
+    packet, prompt, history = prepare_notice(prospective, staged, route,
+        dict(value, session_id=value['id'], history_assignment_id=None), packet, prompt, [])
+    return transport.request_body(route, prompt['text'], packet, history)
+
+
+def find_serving_routes(records, role, packet, *, artifacts, assignment, prompt, history=()):
+    """List verified routes for this role and input without sending or changing a record."""
+    from .errors import ResearchError
+    from .review_protocol import route_state, retired_routes, canonical_prompt, _require_route_runtime
+    from .review_excerpts import read_sent_packet
+    from .review_problem_parts import preserves_ordinary_packet
+    from .review_plan_steps import find_capacity_parent, select_route_steps
+    parent = find_capacity_parent(records, assignment, packet)
+    result = []
+    prompt_record = prompt if isinstance(prompt, dict) else dict(canonical_prompt(role), text=prompt)
+    if _find_body_without_text(records, packet) is not None:
+        return result
+    visual = bool(packet.get('visual_source_delivery') or packet.get('visual_context_repair'))
+    for route in records.get('review_route', {}).values():
+        if route['id'] in retired_routes(records):
+            continue
+        if visual and route['adapter'] != 'codex_cli_visual_v1':
+            continue
+        try:
+            _require_route_runtime(route)
+        except ResearchError:
+            continue
+        if route_state(records, artifacts, route['id'])['context_status'] != 'verified_for_route':
+            continue
+        delivery = 'single'
+        candidate_packet = copy.deepcopy(packet)
+        profile = read_output_profile(records, route)
+        try:
+            if parent is not None and 1 in select_route_steps(records, artifacts, parent):
+                request = _build_serving_repair(records, artifacts, assignment, parent, route)
+                if request is not None:
+                    measure = measure_request(route, request, profile, records=records, artifacts=artifacts)
+                    if measure['fits']:
+                        result.append(dict(route_id=route['id'], delivery='reassessment', measure=measure))
+                continue
+            try:
+                request = transport.request_body(route, prompt_record['text'], packet, history)
+            except ResearchError as error:
+                if error.code != 'review_input_too_large':
+                    raise
+                request = None
+            if request is not None:
+                sent = read_sent_packet(request) or packet
+                if route['adapter'] in transport.TEXT_ONLY_ADAPTERS:
+                    omitted = {row['artifact']['sha256']: row for row in sent.get('evidence', [])
+                               if row.get('encoding') == 'omitted'}
+                    candidate_packet['evidence'] = [omitted.get(row['artifact']['sha256'], row)
+                        if row.get('encoding') == 'base64' else row for row in packet.get('evidence', [])]
+                if _find_body_without_text(records, sent) is not None:
+                    continue
+                if not preserves_ordinary_packet(artifacts, candidate_packet, request):
+                    request = None
+                elif not measure_request(route, request, profile, records=records, artifacts=artifacts)['fits']:
+                    request = None
+            if request is None:
+                if not _can_deliver_parts(assignment, packet, route):
+                    continue
+                request = _build_serving_parts(records, artifacts, assignment, route, candidate_packet, prompt_record)
+                if request is None:
+                    continue
+                delivery = 'parts'
+            measure = measure_request(route, request, profile, records=records, artifacts=artifacts)
+            if measure['fits']:
+                result.append(dict(route_id=route['id'], delivery=delivery, measure=measure))
+        except ResearchError:
+            continue
+    return result
+
+
+def _find_body_without_text(records, packet):
+    from .review_parts import READ_CHARACTERS
+    delivered = {row['artifact']['sha256'] for row in packet.get('evidence', []) if row.get('encoding') == 'utf-8'}
+    represented = {capture['original']['sha256']
+                   for work in records.get('work', {}).values() for capture in work.get('fulltexts', [])
+                   if capture.get('original') and capture.get('text') and capture['text']['sha256'] in delivered}
+    return next((row['artifact'] for row in packet.get('evidence', [])
+                 if (row.get('delivery') == transport.RESULT_BYTES_DELIVERY or row.get('encoding') == 'omitted')
+                 and 4 * ((row['artifact']['size'] + 2) // 3) + 2 > READ_CHARACTERS
+                 and row['artifact']['sha256'] not in represented), None)
+
+
+def require_covered_assignment(records, artifacts, assignment, packet, prompt, request=None, history=()):
+    """Refuse an uncovered assignment before any review call or assignment is recorded."""
+    from .errors import ResearchError
+    from .review_plan_steps import describe_capacity_steps
+    from . import openness_reading
+    prompt_text = prompt['text'] if isinstance(prompt, dict) else prompt
+    body = _find_body_without_text(records, packet)
+    if request is None:
+        if body is None:
+            return
+        request = transport.request_body(records['review_route'][assignment['route_id']], prompt_text, packet, history)
+    route = records['review_route'][assignment['route_id']]
+    # Running protocols retain their character admission; a zero-capacity runtime still needs its probe.
+    earlier_reading = openness_reading.find_protocol(packet) is not None
+    capacity = describe_route_capacity(route, records=records, artifacts=artifacts)
+    measure = measure_request(route, request, records=records, artifacts=artifacts)
+    if body is None and (measure['fits'] or (earlier_reading and measure['token_limit'] > 0 and not measure['binary_inputs']
+                          and (measure['character_limit'] is None or measure['characters'] <= measure['character_limit']))):
+        return
+    reason = 'body_without_text_form' if body is not None else measure.get('reason', 'no_parts_delivery')
+    serving = find_serving_routes(records, assignment['role'], packet, artifacts=artifacts,
+                                  assignment=assignment, prompt=prompt, history=history)
+    probe = None
+    unavailable_probe = None
+    if (reason == 'no_parts_delivery' and route['adapter'] != 'codex_cli_visual_v1'
+            and capacity['input_tokens']['source'] in ('observed', 'default')):
+        probe = select_capacity_probe_size(records, route, measure['tokens_upper'] or measure['text_tokens_upper'], artifacts=artifacts)
+        from .review_protocol import build_probe_prompt
+        size = scale_capacity_probe_size(records, artifacts, route, probe)
+        try:
+            build_capacity_probe_request(route, build_probe_prompt(route),
+                dict(allowed_control='a'*32, evidence_control='b'*32, evidence=''), size)
+        except ResearchError as error:
+            if error.code != 'invalid_review_capacity_probe':
+                raise
+            unavailable_probe = dict(input_tokens=probe, measure_tokens=size,
+                                     code=error.code, message=error.message, details=error.details)
+            probe = None
+    details = dict(reason=reason, measure=measure, capacity_source=capacity['input_tokens']['source'],
+                   serving_routes=serving, owner_decides=CAPACITY_OWNER_DECISION,
+                   then=describe_capacity_steps(records, artifacts, assignment, serving, probe, body=body, packet=packet))
+    if unavailable_probe is not None:
+        details['probe_unavailable'] = unavailable_probe
+    details['closing_unit'] = ('capacity-probe' if probe is not None or unavailable_probe is not None else 'visual-series'
+        if reason != 'no_parts_delivery' else 'paper-series' if assignment['role'] in ('manuscript', 'standalone')
+        else 'https-series' if route['adapter'] == transport.ADAPTER else 'single-request-series')
+    if not serving:
+        details['coverage'] = UNSERVED_REVIEW_MESSAGE
+    raise ResearchError('review_route_capacity_below_floor', CAPACITY_STOP_MESSAGE, details)
+
 TASK_LEVELS = (15000, 30000, 60000, 120000, 240000, 480000, None)
 TURN_KINDS = (
     'reading',
@@ -607,7 +1008,10 @@ def describe_attempt(route, role, packet, request, response, *, operation='revie
         completed_generation=completed,
         cli_version=context.get('cli_version') or (context.get('runtime') or {}).get('version') or execution.get('cli_version'),
         observed_at=observed_at,
-        verified_input_tokens=usage.get('input_tokens') if completed and context.get('input_verified') is True and (sends == 1) and (type(usage.get('input_tokens')) is int) and (usage['input_tokens'] >= 0) else None,
+        verified_input_tokens=usage.get('input_tokens') if completed
+        and (context.get('input_verified') is True or route['adapter'] == transport.ADAPTER
+             and transport.context_verified(route, request, response) and 'previous_response_id' not in request)
+        and sends == 1 and type(usage.get('input_tokens')) is int and usage['input_tokens'] >= 0 else None,
     )
 
 
@@ -763,25 +1167,29 @@ def describe_frame_policy(route):
     )
 
 
+
+
 def read_output_profile(records, route, *, priors=None):
     route_class = describe_route_class(route)
     assignments = records.get('review_assignment', {})
     routes = records.get('review_route', {})
     recent_heap = []
     verified = 0
+    from .review_capacity_evidence import read_capacity_evidence
+    probe = read_capacity_evidence(route, records).get('verified_capacity_probe')
+    probe_id = probe['id'] if probe is not None else None
     completions = ((kind, attempt) for kind in ('review_attempt', 'review_route_probe', 'review_output_correction') for attempt in records.get(kind, {}).values())
     for completion_kind, attempt in completions:
         if not qualifies_for_output_profile(attempt):
             continue
         if completion_kind != 'review_route_probe' and attempt.get('origin') != 'instrumented':
             continue
-        if not all((name in attempt for name in ('task', 'answer'))):
-            continue
-        if 'characters' not in attempt['task']:
-            continue
         assignment = assignments.get(attempt.get('assignment_id'), {})
         candidate = routes.get(attempt.get('route_id') or assignment.get('route_id'))
-        if candidate is None or describe_route_class(candidate) != route_class:
+        if candidate is None:
+            continue
+        if (describe_route_class(candidate) != route_class or not all(name in attempt for name in ('task', 'answer'))
+                or 'characters' not in attempt['task']):
             continue
         if attempt.get('completed_generation'):
             verified = max(verified, attempt.get('verified_input_tokens') or 0)
@@ -804,41 +1212,12 @@ def read_output_profile(records, route, *, priors=None):
         digest=digest(rows),
         store_attempts=len(samples),
         verified_input_tokens=verified,
+        capacity_probe_id=probe_id,
         frame_policy=describe_frame_policy(route),
         frame_measurements=frame_rows,
     )
 
 
-def find_serving_routes(records, role, packet, *, artifacts, assignment, prompt, history=()):
-    """Prove registered route choices using their probes and the shared request measure.
-
-    Binary requests await the documented bounds of binary-input-measure; a text
-    adapter must never qualify by silently omitting bytes from this packet.
-    """
-    from .errors import ResearchError
-    from .review_protocol import route_state, retired_routes
-    from .review_parts_roles import find_adapter
-    result = []
-    retired = retired_routes(records)
-    binary = any(row.get('encoding') == 'base64' for row in packet.get('evidence', []))
-    visual = bool(packet.get('visual_source_delivery') or packet.get('visual_context_repair'))
-    for route in records.get('review_route', {}).values():
-        if route['id'] in retired or binary or visual and route['adapter'] != 'codex_cli_visual_v1':
-            continue
-        if route_state(records, artifacts, route['id'])['context_status'] != 'verified_for_route':
-            continue
-        try:
-            request = transport.request_body(route, prompt, packet, history)
-            measure = measure_request(route, request, records=records, artifacts=artifacts)
-        except ResearchError:
-            continue
-        if measure['fits']:
-            result.append(dict(route_id=route['id'], delivery='single', measure=measure))
-        elif (route['adapter'] in ('claude_cli_v1', 'codex_cli_v1', 'codex_cli_framed_v1')
-              and find_adapter(assignment, packet) is not None
-              and measure['token_limit'] > 15000 + math.ceil(len(prompt) / CLAUDE_CHARACTERS_PER_TOKEN)):
-            result.append(dict(route_id=route['id'], delivery='parts', measure=measure))
-    return result
 
 
 def describe_material_levels(kind, *, block_room=480000):
@@ -1070,6 +1449,7 @@ def describe_route_report(records, route, artifacts=None):
     limits = {kind: select_task_limits(route, profile, kind) for kind in TURN_KINDS}
     result = dict(
         route_capacity=describe_route_capacity(route, profile, records=records, artifacts=artifacts),
+        outside_solved_part=describe_unsolved_reviews(),
         output_profile=profile,
         task_limits=limits,
         final_reference_projection=describe_final_projection(limits['final'], limits['reading']),
@@ -1165,6 +1545,7 @@ def describe_open_route_reports(records, artifacts=None):
     for route_id in sorted(routes):
         report = describe_route_report(records, records['review_route'][route_id], artifacts)
         report.pop('capacity_warning', None)
+        report.pop('outside_solved_part', None)
         selected = {}
         for head in heads:
             if head['route_id'] != route_id:

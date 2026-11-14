@@ -1,0 +1,90 @@
+{
+  "source": "20261113110022-every-open-record-and-review-capacity",
+  "date": "2026-11-14",
+  "rows": [
+    {
+      "kind": "review",
+      "adapter": "codex_cli_visual_v1",
+      "model": "gpt-6-astra",
+      "images": 19,
+      "total_bytes": 6832558,
+      "largest_bytes": 474410,
+      "largest_pixels": 2176714,
+      "total_pixels": 41138674,
+      "input_tokens": 364458,
+      "token_rule": null,
+      "tokens_upper": null,
+      "covered": false
+    },
+    {
+      "kind": "review",
+      "adapter": "codex_cli_visual_v1",
+      "model": "gpt-6-astra",
+      "images": 19,
+      "total_bytes": 6832558,
+      "largest_bytes": 474410,
+      "largest_pixels": 2176714,
+      "total_pixels": 41138674,
+      "input_tokens": 364437,
+      "token_rule": null,
+      "tokens_upper": null,
+      "covered": false
+    },
+    {
+      "kind": "review",
+      "adapter": "codex_cli_visual_v1",
+      "model": "gpt-6.1-sol",
+      "images": 19,
+      "total_bytes": 6832558,
+      "largest_bytes": 474410,
+      "largest_pixels": 2176714,
+      "total_pixels": 41138674,
+      "input_tokens": 358029,
+      "token_rule": null,
+      "tokens_upper": null,
+      "covered": false
+    },
+    {
+      "kind": "probe",
+      "adapter": "codex_cli_visual_v1",
+      "model": "gpt-6-astra",
+      "images": 19,
+      "total_bytes": 338548,
+      "largest_bytes": 27703,
+      "largest_pixels": 2236350,
+      "total_pixels": 42490650,
+      "input_tokens": 57829,
+      "token_rule": null,
+      "tokens_upper": null,
+      "covered": false
+    },
+    {
+      "kind": "probe",
+      "adapter": "codex_cli_visual_v1",
+      "model": "gpt-6-astra",
+      "images": 19,
+      "total_bytes": 338686,
+      "largest_bytes": 28409,
+      "largest_pixels": 2236350,
+      "total_pixels": 42490650,
+      "input_tokens": 57850,
+      "token_rule": null,
+      "tokens_upper": null,
+      "covered": false
+    },
+    {
+      "kind": "probe",
+      "adapter": "codex_cli_visual_v1",
+      "model": "gpt-6.1-sol",
+      "images": 19,
+      "total_bytes": 340615,
+      "largest_bytes": 28795,
+      "largest_pixels": 2236350,
+      "total_pixels": 42490650,
+      "input_tokens": 57871,
+      "token_rule": null,
+      "tokens_upper": null,
+      "covered": false
+    }
+  ]
+}
