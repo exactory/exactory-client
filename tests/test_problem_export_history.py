@@ -244,8 +244,101 @@ class OverrideExportHistoryTests(override_fixtures.OverrideCommandMixin, Problem
         archived = self.root / 'final/history/problem/exports/legacy-export'
         self.assertEqual({path.name: path.read_bytes() for path in archived.iterdir()}, legacy_files)
 
+    def test_stored_legacy_and_new_v2_override_exports_retire_on_source_identity_change(self):
+        fixture = Path(__file__).parent / 'fixtures/problem_override_export_0_85_3.py.txt'
+        namespace = vars(problem_delivery).copy()
+        namespace['write_problem_export'] = lambda store, files, manifest, destination: (files, manifest)
+        exec(compile(fixture.read_bytes(), str(fixture), 'exec'), namespace)
+        legacy_files, _ = namespace['export_problem_override'](self.store)
+        legacy = self.root / 'final/problem/exports/legacy-export'
+        legacy.mkdir(parents=True)
+        for name, data in legacy_files.items():
+            (legacy / name).write_bytes(data)
+        current = self.export()
+        manifest = json.loads((current / 'problem-export.json').read_bytes())
+        self.assertEqual(manifest['schema'], 'exactory-problem-export-v2')
+        self.assertEqual(json.loads((current / 'citation-refs.json').read_bytes()), [{
+            'referenceString': 'A. Researcher. An authored example',
+            'bibliography': {'arxivId': '2601.00001v1', 'title': 'An authored example',
+                             'authors': ['A. Researcher']}}])
+        current_files = {path.name: path.read_bytes() for path in current.iterdir()}
+        render_all(self.store)
+        self.assertTrue(legacy.is_dir())
+        self.assertEqual({path.name: path.read_bytes() for path in legacy.iterdir()}, legacy_files)
+        self.assertEqual({path.name: path.read_bytes() for path in current.iterdir()}, current_files)
+        self.assertEqual(problem_delivery.compute_export_digest(current_files), current.name)
+        self.change_value()
+        for directory, files in [(legacy, legacy_files), (current, current_files)]:
+            self.assertFalse(directory.exists())
+            historical = self.root / 'final/history/problem/exports' / directory.name
+            retained = {path.name: path.read_bytes() for path in historical.iterdir()}
+            self.assertEqual(retained, files)
+            self.assertEqual(problem_delivery.compute_export_digest(retained),
+                             problem_delivery.compute_export_digest(files))
+
+    def test_retirement_leaves_unknown_or_incomplete_v2_exports_in_place(self):
+        current = self.export()
+        original = {path.name: path.read_bytes() for path in current.iterdir()}
+        altered = []
+        for kind in ['unknown-schema', 'unversioned-refs', 'missing-refs', 'changed-refs', 'extra-file']:
+            files = dict(original)
+            manifest = json.loads(files['problem-export.json'])
+            if kind == 'unknown-schema':
+                manifest['schema'] = 'unsupported-export-schema'
+            elif kind == 'unversioned-refs':
+                del manifest['schema']
+            elif kind == 'missing-refs':
+                del manifest['files']['citation-refs.json']
+                del files['citation-refs.json']
+            elif kind == 'changed-refs':
+                files['citation-refs.json'] = b'[]\n'
+            else:
+                files['notes.txt'] = b'Author-owned notes.\n'
+                manifest['files']['notes.txt'] = hashlib.sha256(files['notes.txt']).hexdigest()
+            files['problem-export.json'] = (json.dumps(manifest, sort_keys=True, indent=2) + '\n').encode()
+            directory = current.parent / kind
+            directory.mkdir()
+            for name, data in files.items():
+                (directory / name).write_bytes(data)
+            altered.append((directory, files))
+        self.change_value('A changed value retires only the complete supported export.')
+        self.assertFalse(current.exists())
+        historical = self.root / 'final/history/problem/exports' / current.name
+        self.assertEqual({path.name: path.read_bytes() for path in historical.iterdir()}, original)
+        for directory, files in altered:
+            with self.subTest(export=directory.name):
+                self.assertEqual({path.name: path.read_bytes() for path in directory.iterdir()}, files)
+                self.assertFalse((historical.parent / directory.name).exists())
+
 
 class ReviewedExportHistoryTests(ProblemDeliveryCase):
+    def test_stored_legacy_and_new_v2_reviewed_exports_retire_without_changing_bytes(self):
+        self.prepare_ready()
+        self.record_post_decision()
+        records = self.store.snapshot()['records']
+        legacy_files, _ = problem_delivery.build_projection(records, self.artifacts)
+        legacy = self.root / 'final/problem/exports/legacy-export'
+        legacy.mkdir(parents=True)
+        for name, data in legacy_files.items():
+            (legacy / name).write_bytes(data)
+        current = Path(problem_delivery.export_problem(self.store)['destination'])
+        current_files = {path.name: path.read_bytes() for path in current.iterdir()}
+        self.assertEqual(json.loads(current_files['problem-export.json'])['schema'], 'exactory-problem-export-v2')
+        self.assertIn('citation-refs.json', current_files)
+        render_all(self.store)
+        self.assertEqual({path.name: path.read_bytes() for path in legacy.iterdir()}, legacy_files)
+        self.assertEqual({path.name: path.read_bytes() for path in current.iterdir()}, current_files)
+        value = copy.deepcopy(problem_claims.find_value(records))
+        value.pop('recorded_revision')
+        value['id'] = 'later-value'
+        value['current_state'][0]['text'] = 'A later source changes the current state.'
+        self.mutate(problem_claims.record_value, value)
+        render_all(self.store)
+        for directory, files in [(legacy, legacy_files), (current, current_files)]:
+            self.assertFalse(directory.exists())
+            historical = self.root / 'final/history/problem/exports' / directory.name
+            self.assertEqual({path.name: path.read_bytes() for path in historical.iterdir()}, files)
+
     def test_changed_evidence_retires_an_approved_export_without_changing_its_bytes(self):
         self.prepare_ready()
         self.record_post_decision()

@@ -527,7 +527,7 @@ class ProblemOverrideTests(OverrideCommandMixin, ProblemCase):
         files["problem-export.json"] = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
         old_digest = problem_delivery.compute_export_digest(files)
         directory = self.root / "final/problem/exports" / old_digest
-        problem_delivery.write_problem_export(self.store, files, manifest, directory)
+        problem_delivery.write_problem_export(self.store, records, files, manifest, directory)
         current = problem_delivery.export_problem_override(self.store)
         self.assertNotEqual(Path(current["destination"]), directory)
         self.assertIn("citation-refs.json", current["files"])
