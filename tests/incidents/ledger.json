@@ -5612,6 +5612,27 @@
         "test_stop_rows_review_b.ReviewBRowTests.test_stale_bar_handoff_refreshes_the_named_bar_in_its_original_slot",
         "test_stop_rows_review_b.ReviewBRowTests.test_pending_evidence_part_handoff_accepts_the_series_continuation"
       ]
+    },
+    {
+      "id": "series-store-codes-have-reviewed-next-steps",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "review series store-code continuation",
+      "summary": "Reachable store, transfer and math-controller refusals lacked reviewed registry rows.",
+      "expected": "Stored-state members end with the shared record-check decision; documented recovery rows admit their public commands without rewriting earlier records; render contention waits and malformed review identifiers retain authenticated output-refusal recovery.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_d2_rows_store.StoreRowTests.test_public_handoff_roots_follow_the_cli_dispatch_paths",
+        "test_d2_rows_store.StoreRowTests.test_every_stored_state_member_ends_the_series_with_the_group_decision",
+        "test_d2_rows_store.StoreRowTests.test_renderer_contention_waits_for_the_render_lock",
+        "test_d2_rows_store.StoreRowTests.test_malformed_identifiers_and_urls_are_authenticated_output_refusals",
+        "test_d2_rows_store.StoreRowTests.test_fulltext_rows_acquire_another_capture_and_preserve_the_pending_one",
+        "test_d2_rows_store.StoreRowTests.test_missing_and_stale_loop_closures_accept_the_documented_command",
+        "test_d2_rows_store.StoreRowTests.test_stale_search_rows_accept_a_current_judgment",
+        "test_d2_rows_store.StoreRowTests.test_ambiguous_reference_accepts_a_bundle_resolution_without_rewriting_the_old_one",
+        "test_d2_rows_store.StoreRowTests.test_hot_journal_recovery_preserves_committed_history",
+        "test_d2_rows_store.StoreRowTests.test_public_write_refusal_accepts_the_named_instruction_command"
+      ]
     }
   ]
 }

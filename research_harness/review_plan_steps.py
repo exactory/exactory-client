@@ -283,6 +283,10 @@ def complete_plan(records, artifacts, assignment, plan):
             details.setdefault('decision', terminal['details'].get('decision', dict(
                 owner_decides='How should the retained review record be repaired?',
                 then=[dict(answer='Inspect the record', steps=[dict(command='record-check')])])))
+    elif 'step' not in details and 'payload' in terminal['details'].get('next', {}):
+        rule = terminal['details']['next']
+        details['step'] = dict(id=plan['command'], command=plan['command'],
+            payload=copy.deepcopy(rule['payload']), chooses=copy.deepcopy(rule['chooses']), prerequisites=[])
     elif 'step' not in details:
         # Existing recording boundaries retain their command-specific input choices.
         command = plan.get('command')

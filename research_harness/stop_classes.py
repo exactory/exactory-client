@@ -136,6 +136,26 @@ for _code, _command in (
                                 next=dict(kind='handoff', command=_command))
 _STORED_STATE_CODES_FIRST = ('review_input_unreadable',)
 
+
+for _code, _command in (
+        ('xml_depth_limit', 'fulltext'), ('xml_element_limit', 'fulltext'),
+        ('xml_external_entity', 'fulltext'), ('xml_internal_entity', 'fulltext'),
+        ('xml_text_limit', 'fulltext'),
+        ('loop_closure_missing', 'loop-close'), ('loop_closure_stale', 'loop-close'),
+        ('search_dispositions_missing', 'search'), ('search_evidence_stale', 'search'),
+        ('search_frontier_stale', 'search'), ('search_scope_stale', 'search'),
+        ('reference_identity_ambiguous', 'bundle'),
+        ('store_recovery_required', 'recover'),
+        ('gate_override_public_write', 'gate-override')):
+    STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
+        next=dict(kind='handoff', command=_command, payload={},
+                  chooses=[] if _command == 'recover' else ['command inputs']))
+STOP_REGISTRY['output_view_render_deferred'] = dict(code='output_view_render_deferred',
+    **{'class': 'waiting'}, owner='D2',
+    next=dict(kind='wait', ends='The output renderer releases the workspace render lock.'))
+for _code in ('invalid_identifier', 'unsafe_url'):
+    STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
+                                next=dict(kind='outcome', outcome='scientific_refused'))
 for _code in ('review_turn_failures_exhausted', 'review_parts_budget_exhausted',
               'review_quality_measurement_pending', 'review_invocation_unverified',
               'review_output_unavailable', 'review_inventory_mismatch', 'review_source_parent_unverified',
@@ -164,6 +184,15 @@ STOP_REGISTRY['problem_bar_calibration_required'] = dict(code='problem_bar_calib
             chooses=['id', 'dossier_id', 'author_id', 'reviewer_id', 'route_id'],
             prerequisites=[dict(condition=(
                 'Use the reviewer, route, author and dossier of the bar named by review_id.'))])])]))
+
+
+_STORED_STATE_CODES_STORE = (
+    'constitution_archive_missing', 'contract_changed', 'corrupt_artifact', 'corrupt_blob',
+    'corrupt_state', 'invalid_digest', 'invalid_profile', 'request_conflict', 'unsupported_schema',
+)
+for _code in _STORED_STATE_CODES_STORE:
+    STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2', group='stored_state',
+        next=copy.deepcopy(STOP_REGISTRY['review_history_invalid']['next']))
 STOP_REGISTRY['problem_already_posted'] = dict(code='problem_already_posted', **{'class': 'decision'},
                                              owner='D2', next=dict(kind='done'))
 from .openness_reading import PROJECTION_STOP, PROBLEM_PROJECTION_DECISION, WAIT_PROBLEM_ANSWER, SMALLER_PACKET_ANSWER

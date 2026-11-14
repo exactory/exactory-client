@@ -214,6 +214,7 @@ EXTERNAL_COMMAND_ROOTS = {
                'research_harness/native_export.py:export_native'),
     'record-check': ('research_harness/record_check.py:check_record',),
     'fulltext': ('research_harness/acquisition.py:acquire_fulltext',),
+    'recover': ('research_harness/cli.py:run',),
 }
 SERIES_COMMANDS = (
     'review-run', 'review-assignment', 'review-attempt', 'review-output-correction',

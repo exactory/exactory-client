@@ -1,0 +1,44 @@
+{
+  "stored_state": {
+    "members": {
+      "constitution_archive_missing": {
+        "research_harness/principles.py:_configuration_state": "content"
+      },
+      "contract_changed": {
+        "skills/math-solver/harness/search_controller/model.py:_reduce_event": "content"
+      },
+      "corrupt_artifact": {
+        "skills/math-solver/harness/search_controller/evidence.py:audit_verification": "content",
+        "skills/math-solver/harness/search_controller/storage.py:Store.get_artifact": "store"
+      },
+      "corrupt_blob": {
+        "skills/math-solver/harness/search_controller/storage.py:ContentSink.get_blob": "store",
+        "skills/math-solver/harness/search_controller/storage.py:Store.get_blob": "store"
+      },
+      "corrupt_state": {
+        "research_harness/storage.py:Store._check_files": "store",
+        "research_harness/storage.py:_commit_mutation": "store",
+        "research_harness/storage.py:_load": "store",
+        "research_harness/storage.py:_sql_error": "store",
+        "research_harness/storage.py:_validate": "store",
+        "skills/math-solver/harness/search_controller/admission.py:_current_account": "content",
+        "skills/math-solver/harness/search_controller/storage.py:Store._read_document": "store",
+        "skills/math-solver/harness/search_controller/storage.py:Store.append": "store",
+        "skills/math-solver/harness/search_controller/storage.py:_validate_document": "store",
+        "skills/math-solver/harness/search_controller/storage.py:_validate_event": "store"
+      },
+      "invalid_digest": {
+        "skills/math-solver/harness/search_controller/storage.py:Store._validate_digest": "store"
+      },
+      "invalid_profile": {
+        "research_harness/operations.py:profile_name": "content"
+      },
+      "request_conflict": {
+        "skills/math-solver/harness/search_controller/model.py:_reduce_event": "store"
+      },
+      "unsupported_schema": {
+        "research_harness/storage.py:_validate": "store"
+      }
+    }
+  }
+}
