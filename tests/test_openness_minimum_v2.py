@@ -170,7 +170,7 @@ class MinimumV2StoreTests(ProblemCase):
         self.assertEqual(again["native_packet"], result["native_packet"])
         self.assertEqual(self.artifacts.read(again["native_packet"]), original)
 
-    def test_nonempty_v2_spec_bindings_are_refused_before_writes_until_their_delivery_ships(self):
+    def test_invalid_or_unshipped_v2_spec_bindings_are_refused_before_writes(self):
         search = self.search()
         # Empty fields are valid during schema staging. New evidence cannot be silently omitted.
         spec = self.build_spec([search])
@@ -178,7 +178,6 @@ class MinimumV2StoreTests(ProblemCase):
             spec["minimum"][field] = []
         problem_openness.export_openness(self.store, spec, self.root / "packet")
         for field, row in (("family_readings", build_v2_minimum()["family_readings"][0]),
-                           ("supporting_reading_ids", "supporting-reading"),
                            ("results", {"native_attempt_digest": "d" * 64,
                                         "acceptance_id": "acceptance-1", "cited_as": "Lemma A"})):
             for value in ([row], None, {}, "invalid", False):
@@ -187,7 +186,8 @@ class MinimumV2StoreTests(ProblemCase):
                 before = sorted(self.root.rglob("*"))
                 with self.subTest(field=field, value=value), self.assertRaises(ResearchError) as caught:
                     problem_openness.export_openness(self.store, candidate, self.root / "refused")
-                self.assertEqual(caught.exception.code, "invalid_input")
+                expected = "openness_reading_gap" if field == "family_readings" and value == [row] else "invalid_input"
+                self.assertEqual(caught.exception.code, expected)
                 self.assertEqual(sorted(self.root.rglob("*")), before)
 
     def test_v2_search_date_uses_latest_instant_in_utc_while_v1_keeps_local_calendar_dates(self):

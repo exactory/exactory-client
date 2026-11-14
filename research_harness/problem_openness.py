@@ -2,6 +2,7 @@
 
 import copy
 import json
+import re
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
@@ -251,6 +252,12 @@ def build_minimum(statement, bound, readings, spec, *, records, artifacts, schem
         from .openness_minimum import validate_minimum
         validate_minimum(minimum)
         bind_family_readings(minimum, records, artifacts)
+        decisive = set(minimum["reading_digests"])
+        explicit = set(spec.get("supporting_reading_ids", []))
+        minimum["supporting_reading_digests"] = sorted(
+            digest(row) for row in records.get("reading", {}).values()
+            if digest(row) not in decisive and (row["id"] in explicit
+                or list_reading_citations(row["id"], [search for _, search in bound])))
     elif spec.get("family_readings"):
         raise ResearchError("invalid_input", FAMILY_READING_V1_REFUSAL, {"field": "family_readings"})
     return minimum
@@ -322,6 +329,26 @@ def describe_family_readings(minimum, records, spec):
     return report
 
 
+def list_reading_citations(reading_id, searches):
+    """Name the bound searches and text fields containing an exact reading id."""
+    # Unicode alphanumeric characters exclude underscore; reject boundaries as part of the match so an
+    # invalid occurrence cannot consume a later, overlapping valid occurrence of the same id.
+    pattern = re.compile(r'(?<![^\W_])' + re.escape(reading_id) + r'(?![^\W_])')
+    citations = {}
+    for search in searches:
+        texts = [("dispositions.reason", [row["reason"] for row in search["dispositions"]]),
+                 ("resolved.reason", [row["reason"] for row in search.get("resolved", [])]),
+                 ("impact", [search["impact"]]), ("scope", [search["scope"]]), ("gaps", search["gaps"])]
+        fields = []
+        for field, bodies in texts:
+            if any(pattern.search(body) for body in bodies):
+                fields.append(field)
+        if fields:
+            identity = digest(search)
+            citations.setdefault(identity, dict(search_id=search["id"], search_digest=identity, fields=fields))
+    return list(citations.values())
+
+
 def export_openness(store, spec, destination=None, *, accept_gaps=False):
     records = store.snapshot()["records"]
     marker = require_problem(records)
@@ -332,10 +359,14 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
            ("text_priority", "family_readings", "supporting_reading_ids", "results"))
     if "family_readings" in spec["minimum"] and not isinstance(spec["minimum"]["family_readings"], list):
         raise ResearchError("invalid_input", FAMILY_READING_LIST_REFUSAL, {"field": "family_readings"})
-    for field in ("supporting_reading_ids", "results"):
-        if field in spec["minimum"] and spec["minimum"][field] != []:
-            raise ResearchError("invalid_input", "The additional minimum bindings must be empty until their "
-                                "delivery ships with protocol v6.", {"field": field})
+    strings(spec["minimum"].get("supporting_reading_ids", []), "Supporting reading IDs")
+    missing = sorted(set(spec["minimum"].get("supporting_reading_ids", [])) - set(records.get("reading", {})))
+    if missing:
+        raise ResearchError("openness_reading_gap", "Bind supporting reading IDs recorded in this store.",
+                            {"reading_ids": missing})
+    if spec["minimum"].get("results", []) != []:
+        raise ResearchError("invalid_input", "The additional minimum bindings must be empty until their "
+                            "delivery ships with protocol v6.", {"field": "results"})
     statement = find_current_statement(records)
     if statement is None:
         raise ResearchError("problem_statement_missing", "Record the exact statement before openness review")
@@ -392,6 +423,10 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
         include_record(reading)
         for artifact in collect_reading_artifacts(records, artifacts, reading):
             evidence[artifact["sha256"]] = {"digest": artifact["sha256"], "kind": "artifact", "artifact": artifact}
+    supporting = [row for row in records.get("reading", {}).values()
+                  if digest(row) in minimum.get("supporting_reading_digests", [])]
+    for reading in supporting:
+        include_record(reading)
     include_record(statement)
     from .capture_selection import describe_capture_selections
     scientific_context = {"openness_minimum": minimum, "minimum_gaps": gaps, "audit_forecast": forecast,
@@ -447,6 +482,9 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
                   audit_forecast=forecast)
     if minimum["schema_version"] == 2:
         result[FAMILY_READING_REPORT_FIELD] = describe_family_readings(minimum, records, spec["minimum"])
+        result["supporting_readings"] = [dict(reading_id=row["id"], reading_digest=digest(row),
+            cited_by=list_reading_citations(row["id"], [search for _, search in bound]))
+            for row in sorted(supporting, key=lambda row: row["id"])]
     if blocked:
         result["warnings"] = [{"code": "openness_minimum_gaps", "message": GAPPED_EXPORT_MESSAGE, "details": forecast}]
     if not spec["minimum"].get("text_priority"):

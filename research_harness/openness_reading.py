@@ -398,19 +398,56 @@ PROMPTS = {PROTOCOL_V1: {'reading': READING_PROMPT_V1, 'final': FINAL_PROMPT_V1}
            MATH_PROTOCOL: {'reading': MATH_READING_PROMPT, 'final': MATH_FINAL_PROMPT}}
 
 
-V6_READING_PARAGRAPH = (' [X2: v6 reading guide, family and supporting readings, accepted results, and supplied origin.]')
-V6_FINAL_PARAGRAPH = (' [X2: v6 final guide to the delivered evidence and result units.]')
+V6_READING_PARAGRAPH = (' [X2: v6 family readings, accepted results, and supplied origin.]')
+V6_FINAL_PARAGRAPH = (' [X2: v6 delivered family readings, accepted results, and supplied origin.]')
+# Each recorded search key has one class and one writer-pass placeholder. Both v6 prompts use these lines.
+SEARCH_FIELD_GUIDE = {
+    'id': {'class': 'identity', 'line': '[X2 R42: identity; the search record identifier.]'},
+    'profile': {'class': 'identity', 'line': '[X2 R42: identity; the literature profile.]'},
+    'purpose': {'class': 'identity', 'line': '[X2 R42: identity; the purpose of the search.]'},
+    'question': {'class': 'scope_binding', 'line': '[X2 R42: scope_binding; the question searched.]'},
+    'scope': {'class': 'scope_binding', 'line': '[X2 R42: scope_binding; the declared bounds of this search.]'},
+    'queries': {'class': 'capture', 'line': '[X2 R42: capture; the recorded query texts.]'},
+    'responses': {'class': 'capture', 'line': '[X2 R42: capture; the captured responses and their query bindings.]'},
+    'captured_at': {'class': 'capture', 'line': '[X2 R42: capture; the date of the recorded search.]'},
+    'found_work_ids': {'class': 'capture', 'line': '[X2 R42: capture; the imported works found in the responses.]'},
+    'cited_work_ids': {'class': 'author_judgment', 'line': '[X2 R42: author_judgment; works cited by the author.]'},
+    'verdict': {'class': 'author_judgment', 'line': '[X2 R42: author_judgment; the author verdict is no coverage finding.]'},
+    'impact': {'class': 'author_judgment', 'line': '[X2 R42: author_judgment; the author impact assessment is no coverage finding.]'},
+    'dispositions': {'class': 'coverage', 'line': '[X2 R42: coverage; the relevance judgment and reason for each found work.]'},
+    'resolved': {'class': 'coverage', 'line': '[X2 R42: coverage; explicit resolutions of earlier work judgments.]'},
+    'gaps': {'class': 'coverage', 'line': '[X2 R42: coverage; the declared remaining gaps.]'},
+    'coverage': {'class': 'coverage', 'line': '[X2 R42: coverage; per-query complete, top_k, bounded_unordered or unspecified coverage.]'},
+    'pending': {'class': 'coverage', 'line': '[X2 R42: coverage; pending capture, parsing or enumeration issues.]'},
+    'integrity_errors': {'class': 'coverage', 'line': '[X2 R42: coverage; errors in the captured search evidence.]'},
+    'page_groups': {'class': 'capture', 'line': '[X2 R42: capture; pagination, enumeration and excluded rows of captured responses.]'},
+    'hits_per_query': {'class': 'author_bound', 'line': '[X2 R42: author_bound; the author-chosen bound is no coverage finding.]'},
+    'depth': {'class': 'author_bound', 'line': '[X2 R42: author_bound; the requested search depth overrides.]'},
+    'binding': {'class': 'scope_binding', 'line': '[X2 R42: scope_binding; an unchanged provisional search rebound to a literature scope.]'},
+    'scope_digest': {'class': 'scope_binding', 'line': '[X2 R42: scope_binding; null when recorded without a literature scope; no coverage finding.]'},
+    'provisional': {'class': 'scope_binding', 'line': '[X2 R42: scope_binding; no literature scope existed, so the search was recorded by question; says nothing about coverage or outstanding readings.]'},
+    'evidence_digest': {'class': 'scope_binding', 'line': '[X2 R42: scope_binding; the evidence digest at scope binding.]'},
+    'frontier_digest': {'class': 'scope_binding', 'line': '[X2 R42: scope_binding; the frontier digest at scope binding.]'},
+    'native_parse_version': {'class': 'capture', 'line': '[X2 R42: capture; the parser version used for native responses.]'},
+}
+SEARCH_FIELD_GUIDE_TEXT = '\n\nSearch record field guide:\n' + '\n'.join(
+    key + ': ' + row['line'] for key, row in SEARCH_FIELD_GUIDE.items()) + '\n\n'
+SUPPORTING_READING_SENTENCE = (' [X2 R20: A supporting reading is delivered as its reading record, with role '
+    '"supporting" and citing searches in cited_by; a work whose full text the openness judgment needs must be '
+    'judged relevant so that its reading is decisive and its text is a unit.]')
 RECORD_ALLOWANCE_SENTENCE = (' The third allowance, record, counts serialized characters of every retained excerpt, '
     'passage answer and extra final reading turn, including fields and escapes.')
 RECORD_PASSAGE_LIMIT_MESSAGE = 'The record allowance cannot retain another final reading turn and a delivered passage; return the finding.'
 RECORD_NOT_RETAINED_SENTENCE = (' An entry beyond the remaining record total is counted by kind in '
     'allowances.record.not_retained and is absent from later inputs; it uses no other allowance.')
 PROMPTS[PROTOCOL_V6] = {
-    'reading': READING_PROMPT + SEARCH_READING_RULE + V6_READING_PARAGRAPH
+    'reading': READING_PROMPT + SEARCH_READING_RULE + V6_READING_PARAGRAPH + SUPPORTING_READING_SENTENCE
+               + SEARCH_FIELD_GUIDE_TEXT
                + RECORD_ALLOWANCE_SENTENCE + RECORD_NOT_RETAINED_SENTENCE,
     'final': (FINAL_PROMPT + FINAL_PROGRESS_RULE + SEARCH_FINAL_RULE).replace(
         'native result review described above', 'finding described above').replace(
-        'native result review', 'finding described above') + V6_FINAL_PARAGRAPH,
+        'native result review', 'finding described above') + V6_FINAL_PARAGRAPH + SUPPORTING_READING_SENTENCE
+        + SEARCH_FIELD_GUIDE_TEXT,
 }
 
 
@@ -571,17 +608,23 @@ def list_record_rows(artifacts, native):
                   for row in minimum.get('results', [])}
     if is_openness_packet(native):
         bound.append(('problem_statement', native['subject_digest']))
+    searches = []
     rows = {}
     for record_kind, sha256 in bound:
         reference = carried.get(sha256)
         if reference is None:
             raise ResearchError('openness_reading_incomplete', 'The openness packet does not carry a record that it '
                                 'binds', {'record_kind': record_kind, 'sha256': sha256})
-        record_id = (result_ids[sha256] if record_kind == 'accepted_result'
-                     else json.loads(artifacts.read(reference))['id'])
+        record = None if record_kind == 'accepted_result' else json.loads(artifacts.read(reference))
+        record_id = result_ids[sha256] if record is None else record['id']
+        if record_kind == 'literature_search' and minimum.get('supporting_reading_digests'):
+            searches.append(record)
         row = {'kind': 'record', 'record_kind': record_kind, 'record_id': record_id, 'artifact': reference}
         if minimum['schema_version'] == 2 and record_kind == 'reading':
             row['role'] = 'decisive' if sha256 in minimum['reading_digests'] else 'supporting'
+            if row['role'] == 'supporting':
+                from .problem_openness import list_reading_citations
+                row['cited_by'] = list_reading_citations(record_id, searches)
         rows.setdefault((record_kind, record_id), row)
     rows = list(rows.values())
     return ([row for row in rows if row['record_kind'] == 'literature_search']
