@@ -377,6 +377,8 @@ def run_series(store, assignment_id, *, emit=_emit_json):
             _record_omission(row, 'diagnostics', read_error)
         try:
             emit(row)
+        except ResearchError:
+            raise
         except BaseException as output_error:
             raise _ProgressOutputFailure(output_error) from output_error
 

@@ -165,7 +165,8 @@ class ContinuationRegressionTests(unittest.TestCase):
         stops = after['records']['review_series_stop']
         self.assertEqual(len(stops), 1)
         stop = next(iter(stops.values()))
-        self.assertEqual(stop['plan'], plan)
+        for member in ('state', 'chain', 'head_id', 'progress', 'code'):
+            self.assertEqual(stop['plan'][member], plan[member])
         self.assertIsNone(stop['retry'])
         self.assertEqual(after['revision'], before['revision'] + 1)
         expected_records = dict(before['records'], review_series_stop=stops)
@@ -174,14 +175,16 @@ class ContinuationRegressionTests(unittest.TestCase):
             operation='review.series_stop', runtime=case.store.describe_runtime())
         self.assertEqual(after['records'], expected_records)
         lines = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(stop['plan'], {key: value for key, value in lines[-1].items() if key != 'provider_usage'})
         warning = lines[0]['capacity_warning']
         self.assertEqual({key: warning['output'][key] for key in (
             'state', 'sample_size', 'at_or_over_limit_share', 'kinds')},
             dict(state='unmeasured', sample_size=0, at_or_over_limit_share=None, kinds=['single']))
-        self.assertEqual(lines,
-                         [dict(plan, stop_id=stop['id'], revision_after_stop=after['revision'],
-                               provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0),
-                               stop_class='decision', capacity_warning=warning)])
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]['provider_usage'], dict(windows=[], warnings=[], planned_remaining_turns=0))
+        self.assertEqual(lines[0]['stop_id'], stop['id'])
+        self.assertEqual(lines[0]['revision_after_stop'], after['revision'])
+        self.assertEqual(lines[0]['stop_class'], 'decision')
         receipt = case.store.committed_request(stop['request_id'])
         self.assertEqual(receipt['operation'], 'review.series_stop')
         self.assertEqual(receipt['payload'], {'stop': stop})

@@ -519,28 +519,42 @@ class SeriesEndingTests(unittest.TestCase):
         import ast
         import collections
         import inspect
-        # Memory-only assembly cannot read a store or construct a refusal.
-        memory = {'_describe_stop', '_record_omission', '_complete_ending_step', '_use_fallback_step',
-                  'classify_stop', '_identify_action', 'digest', 'ResearchError'}
+        # Package calls include memory-only assembly and ResearchError.as_dict;
+        # only standard-library functions and built-in value methods are omitted.
         standard = {'copy.deepcopy', 'datetime.fromisoformat', 'datetime.now', 'uuid.uuid4', 'json.dumps',
-                    'ValueError', 'dict', 'isinstance', 'type', 'str', 'range', 'max', 'time.time_ns'}
-        value_methods = {'get', 'setdefault', 'pop', 'update', 'replace', 'total_seconds', 'as_dict', 'items',
-                         'encode', 'isoformat'}
+                    'ValueError', 'dict', 'isinstance', 'type', 'str', 'range', 'max', 'time.time_ns', 'timedelta'}
+        value_methods = {'get', 'setdefault', 'pop', 'update', 'replace', 'total_seconds', 'items',
+                         'encode', 'isoformat', 'startswith', 'append'}
         cases = {
-            '_render_views': {'render_workspace_views': 1, '_read_marker': 1},
-            '_read_plan': {'store.snapshot': 1, 'Evaluation': 1, 'plan_next': 1, 'ArtifactStore': 1, 'describe_usage': 1},
+            '_emit_json': {'print': 1},
+            '_identify_action': {'digest': 1},
+            '_describe_stop': {'describe_terminal': 1},
+            '_record_omission': {'error.as_dict': 1},
+            '_render_views': {'render_workspace_views': 1, '_read_marker': 1, '_record_omission': 1},
+            '_read_plan': {'store.snapshot': 1, 'Evaluation': 1, 'plan_next': 1, 'ArtifactStore': 1,
+                'describe_usage': 1, '_record_omission': 1},
             '_enrich_line': {'Evaluation': 1, 'describe_usage': 1, 'describe_assignment_warning': 1,
                 'store.snapshot': 1, 'ArtifactStore': 1, 'describe_assignment_capacity': 1,
                 'store.build_artifact_store': 3, 'review_protocol._read_json': 1,
                 'review_protocol.build_packet': 1, 'review_protocol.build_assignment_request': 1,
-                'openness_reading.describe_reading_receipt': 1},
+                'openness_reading.describe_reading_receipt': 1, '_record_omission': 5, 'classify_stop': 1},
+            '_build_check_step': {},
+            '_use_fallback_step': {'_build_check_step': 1},
+            '_complete_ending_step': {},
+            '_identify_ending': {'_identify_action': 1},
+            '_recover_ending_line': {},
             '_write_ending_file': {'checked_parent': 1, 'write_atomic': 1},
             '_end_series': {'_enrich_line': 1, '_render_views': 1, 'output': 2, '_recover_ending_line': 1, 'print': 1, 'store.snapshot': 1,
                 'complete_plan': 1, 'plan_route_handoff': 1, 'Evaluation': 1, 'record_series_stop': 1,
-                '_write_ending_file': 1, 'ArtifactStore': 1},
+                '_write_ending_file': 1, 'ArtifactStore': 1, '_describe_stop': 2, 'classify_stop': 1,
+                '_complete_ending_step': 3, '_use_fallback_step': 6, '_record_omission': 7,
+                'error.as_dict': 1, 'recording_error.as_dict': 1},
             'run_series': {'_end_series': 1, '_render_views': 1, 'emit': 1, '_enrich_line': 1,
                 'emit_progress': 8, '_ProgressOutputFailure': 1, "OPERATIONS[plan['command']]": 1, '_read_plan': 3,
-                'time.sleep': 2, 'store.snapshot': 1}}
+                'time.sleep': 2, 'store.snapshot': 1, '_identify_action': 3, 'digest': 1, 'ResearchError': 1,
+                '_record_omission': 4, 'error.as_dict': 2, 'read_error.as_dict': 1}}
+        module = ast.parse(inspect.getsource(review_series))
+        self.assertEqual(set(cases), {node.name for node in module.body if isinstance(node, ast.FunctionDef)})
         for name, expected in cases.items():
             tree = ast.parse(inspect.getsource(getattr(review_series, name)))
             actual = collections.Counter()
@@ -548,7 +562,7 @@ class SeriesEndingTests(unittest.TestCase):
                 if isinstance(call.func, ast.Attribute) and call.func.attr in value_methods:
                     continue
                 callee = ast.unparse(call.func)
-                if callee not in memory | standard:
+                if callee not in standard:
                     actual[callee] += 1
             self.assertEqual(dict(actual), expected, name)
         tree = ast.parse(inspect.getsource(review_series.run_series))
@@ -734,18 +748,47 @@ class SeriesEndingTests(unittest.TestCase):
         def succeed(store, payload, **identity):
             requests.append(identity['request_id'])
             return store.mutate('fixture.executed', {}, lambda tx: None, **identity)
+        failure = RuntimeError('Synthetic nonterminal output failure.')
+        def fail_output(row):
+            raise failure
         with patch.dict(cli.OPERATIONS, {'review-run': succeed}):
-            with self.assertRaises(ResearchError) as caught:
-                review_series.run_series(self.case.store, 'bar-first', emit=lambda row: self.raise_error())
-        self.assertEqual(caught.exception.code, INJECTED_CODE)
+            with self.assertRaises(RuntimeError) as caught:
+                review_series.run_series(self.case.store, 'bar-first', emit=fail_output)
+        self.assertIs(caught.exception, failure)
         self.assertIsNotNone(self.case.store.committed_request(requests[0]))
         self.assertNotIn('review_series_stop', self.case.read_records())
         self.assertEqual(self.check_copy()['series_stops'], [])
+
+    def test_nonending_output_refusal_enters_the_ending_after_its_committed_step(self):
+        requests, rows = [], []
+        failure = self.build_error()
+        def succeed(store, payload, **identity):
+            requests.append(identity['request_id'])
+            return store.mutate('fixture.executed', {}, lambda tx: None, **identity)
+        def output(row):
+            if not rows:
+                rows.append(copy.deepcopy(row))
+                raise failure
+            rows.append(copy.deepcopy(row))
+        with patch.dict(cli.OPERATIONS, {'review-run': succeed}):
+            result = review_series.run_series(self.case.store, 'bar-first', emit=output)
+        self.assertEqual(result, 3)
+        self.assertEqual(len(requests), 1)
+        self.assertIsNotNone(self.case.store.committed_request(requests[0]))
+        self.assertEqual(len(rows), 2)
+        self.assertNotIn(rows[0]['state'], ('stop', 'handoff', 'done'))
+        self.assert_unlisted(rows[-1])
+        self.assertEqual(rows[-1]['error'], dict(code=INJECTED_CODE, message='Synthetic refusal.',
+                                               details=dict(marker='retained')))
+        stops = self.case.read_records()['review_series_stop']
+        self.assertEqual(len(stops), 1)
+        self.assertEqual(stops[rows[-1]['stop_id']]['plan']['error'], rows[-1]['error'])
 
     def test_partial_output_recovers_exact_mandatory_values_for_row_and_fallback(self):
         for fallback in (False, True):
             with self.subTest(fallback=fallback), ExitStack() as stack:
                 output, printed = io.StringIO(), []
+                before_stops = self.case.read_records().get('review_series_stop', {})
                 def print_partial_once(row):
                     if not printed:
                         printed.append(copy.deepcopy(row))
@@ -765,8 +808,19 @@ class SeriesEndingTests(unittest.TestCase):
                 self.assertEqual(recovered, expected)
                 self.assertEqual(recovered['details']['step']['command'], 'record-check' if fallback else 'fulltext')
                 self.assertEqual('intended_step' in recovered['details'], fallback)
-                stored = self.case.read_records()['review_series_stop'][printed[0]['stop_id']]['plan']
+                stops = self.case.read_records()['review_series_stop']
+                self.assertEqual(len(stops), len(before_stops) + 1)
+                stored = stops[printed[0]['stop_id']]['plan']
                 self.assertEqual(review_series._recover_ending_line(stored), review_series._recover_ending_line(printed[0]))
+                self.assertEqual(stored['code'], recovered['code'])
+                for member in ('refused_action', 'step', 'intended_step'):
+                    self.assertEqual(stored['details'].get(member), recovered['details'].get(member))
+                stored_omissions = stored['details'].get('omitted', {})
+                self.assertNotIn('output', stored_omissions)
+                self.assertEqual(recovered['details']['omitted'], dict(stored_omissions,
+                    output=dict(code='RuntimeError', message='Synthetic partial write.')))
+                if fallback:
+                    self.assertEqual(stored_omissions['step']['code'], INJECTED_CODE)
 
     def test_store_only_receipt_is_explicitly_unread_when_snapshot_fails(self):
         line = self.run_refusal()
@@ -784,6 +838,8 @@ class SeriesEndingTests(unittest.TestCase):
                 patch.object(self.case.store, 'build_artifact_store', side_effect=self.build_error()):
             row = review_series._describe_stop(self.plan, INJECTED_CODE, {})
             self.assertEqual(stop_classes.classify_stop(INJECTED_CODE), 'decision')
+            self.assertEqual(self.build_error().as_dict(), dict(code=INJECTED_CODE,
+                message='Synthetic refusal.', details=dict(marker='retained')))
         self.assertTrue(row['details']['unlisted'])
         self.assertNotIn('refused_action', row['details'])
 

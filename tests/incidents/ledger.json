@@ -5688,7 +5688,7 @@
       "record": "20261113110022-every-open-record-and-review-capacity",
       "class": "review series ending",
       "summary": "Wait rereads, step completion and capacity diagnostics could escape without a final line; record-check did not read retained stops.",
-      "expected": "Every unanswered refusal prints its class, step and refused action, with diagnostic omissions and a receipt in the store or workspace; record-check lists receipts independently of replay and blocks unlisted codes.",
+      "expected": "Every unanswered refusal, including a nonterminal output refusal, enters the ending; other nonterminal output exceptions leave the command. The receipt freezes before output, whose failure is added only to the recovered line. record-check lists receipts independently of replay and blocks unlisted codes.",
       "fixed_in": "open",
       "test_kind": "real_shape",
       "tests": [
@@ -5702,7 +5702,11 @@
         "test_series_ending.SeriesEndingTests.test_row_step_and_fallback_at_one_progress_get_distinct_receipts",
         "test_series_ending.SeriesEndingTests.test_partial_output_recovers_exact_mandatory_values_for_row_and_fallback",
         "test_series_ending.SeriesEndingTests.test_store_only_receipt_is_explicitly_unread_when_snapshot_fails",
-        "test_series_ending.SeriesEndingTests.test_nonending_print_failure_leaves_the_command_after_its_committed_step"
+        "test_series_ending.SeriesEndingTests.test_nonending_print_failure_leaves_the_command_after_its_committed_step",
+        "test_series_ending.SeriesEndingTests.test_nonending_output_refusal_enters_the_ending_after_its_committed_step",
+        "test_series_ending.SeriesEndingTests.test_phase_call_inventory_covers_the_driver_and_ending",
+        "test_series_ending.SeriesEndingTests.test_memory_only_stop_description_and_classification_need_no_store",
+        "test_review_continuation_regressions.ContinuationRegressionTests.test_series_ends_with_the_exhausted_fixed_slot_stop"
       ]
     }
   ]
