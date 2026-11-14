@@ -21,6 +21,17 @@ PROBE_REQUEST_CHARACTERS = (
     ('Q4', 72237),
 )
 PROBE_FRAME_CHARACTERS = 38614
+# Native body deltas from the copied source dry run, measured 2026-11-14.
+# Runtime frames retain the evidence descriptors; the calibration frame above does not.
+PROBE_MATERIAL_CHARACTERS = (
+    ('W', 136190),
+    ('H1', 67484),
+    ('H2', 68706),
+    ('Q1', 32846),
+    ('Q2', 34638),
+    ('Q3', 35605),
+    ('Q4', 33101),
+)
 COMPLETION_OPERATIONS = (
     ('review_attempt', 'review.invoke'),
     ('review_route_probe', 'review.route_probe'),
@@ -132,9 +143,9 @@ def _has_thinking_estimate(row):
     return row.get('thinking_tokens') is not None and (not row.get('thinking_truncated', False))
 
 
-def _describe_probe_sample(row, characters, carried=0, *, date=capacity.MEASUREMENT_DATE, count_carried_state=False):
+def _describe_probe_sample(row, characters, carried=0, *, material_characters, date=capacity.MEASUREMENT_DATE, count_carried_state=False):
     complete = _is_completed_generation(row)
-    material = row['delivered_characters']
+    material = material_characters
     return dict(
         route_class=dict(adapter='claude_cli_v1', model='claude-opus-5-5', effort=row['effort']),
         task=dict(
@@ -161,9 +172,11 @@ def _describe_probe_sample(row, characters, carried=0, *, date=capacity.MEASUREM
 
 def read_probe_samples(summary, *, date=capacity.MEASUREMENT_DATE):
     sizes = dict(PROBE_REQUEST_CHARACTERS)
+    materials = dict(PROBE_MATERIAL_CHARACTERS)
     return [_describe_probe_sample(
         row,
         row.get('text_characters') or sizes.get(row.get('arm')) or row['request_characters'],
+        material_characters=materials[row['arm']],
         date=date,
     ) for row in read_summary_rows(summary)]
 
@@ -200,6 +213,7 @@ def read_frame_probe_samples(summary, base_rows, *, date=capacity.MEASUREMENT_DA
                 ),
             )
     samples = []
+    materials = dict(PROBE_MATERIAL_CHARACTERS)
     for row in rows:
         carried = max(0, row['text_characters'] - row['base_text_characters']) if row['part'] == 'record' else 0
         characters = row['text_characters'] if row['part'] == 'lists' else row['base_text_characters']
@@ -209,7 +223,9 @@ def read_frame_probe_samples(summary, base_rows, *, date=capacity.MEASUREMENT_DA
             answer_characters=row.get('answer_characters', 0),
         )
         samples.append(
-            _describe_probe_sample(item, characters, carried, date=date, count_carried_state=False),
+            _describe_probe_sample(item, characters, carried,
+                                   material_characters=materials[row['arm'].rsplit('-', 1)[-1]],
+                                   date=date, count_carried_state=False),
         )
     summary_digest = hashlib.sha256(raw).hexdigest() if raw is not None else None
     return (samples, dict(count_carried_state=True, evidence=evidence, summary_sha256=summary_digest))

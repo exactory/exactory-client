@@ -47,7 +47,7 @@
           },
           "near_limit_attempts": [],
           "output_profile": {
-            "digest": "57949f77bba2be8b7c01b49d3c7a71ed23991b0d19b08f8ac3885f51d59ab7d2",
+            "digest": "411b9f2467b66f5a6f18bd248e4a88cdf7dca223e849658835bd283ea72361f1",
             "frame_measurements": [
               {
                 "at_or_over_limit": 0,
@@ -144,7 +144,7 @@
             "priors": [
               {
                 "at_or_over_limit": 0,
-                "attempts": 4,
+                "attempts": 3,
                 "cli_versions": [
                   {
                     "attempts": 2,
@@ -157,15 +157,9 @@
                     "first_date": null,
                     "last_date": null,
                     "version": "2.1.317 (Claude Code)"
-                  },
-                  {
-                    "attempts": 1,
-                    "first_date": null,
-                    "last_date": null,
-                    "version": "2.1.318 (Claude Code)"
                   }
                 ],
-                "completed_attempts": 4,
+                "completed_attempts": 3,
                 "date": "2026-11-13",
                 "kind": "reading",
                 "largest_answer_tokens": null,
@@ -176,45 +170,33 @@
                 "source": "live-records",
                 "source_record": "20261113110022-every-open-record-and-review-capacity",
                 "task_level": 60000,
-                "thinking_attempts": 4,
+                "thinking_attempts": 3,
                 "thinking_method": "cli_estimate"
               },
               {
                 "at_or_over_limit": 0,
-                "attempts": 108,
+                "attempts": 73,
                 "cli_versions": [
                   {
-                    "attempts": 33,
+                    "attempts": 30,
                     "first_date": null,
                     "last_date": null,
                     "version": "2.1.316 (Claude Code)"
                   },
                   {
-                    "attempts": 58,
+                    "attempts": 38,
                     "first_date": null,
                     "last_date": null,
                     "version": "2.1.317 (Claude Code)"
                   },
                   {
-                    "attempts": 10,
+                    "attempts": 5,
                     "first_date": null,
                     "last_date": null,
                     "version": "2.1.318 (Claude Code)"
-                  },
-                  {
-                    "attempts": 1,
-                    "first_date": "2026-11-12",
-                    "last_date": "2026-11-12",
-                    "version": "2.1.322 (Claude Code)"
-                  },
-                  {
-                    "attempts": 6,
-                    "first_date": "2026-11-12",
-                    "last_date": "2026-11-12",
-                    "version": "2.1.323 (Claude Code)"
                   }
                 ],
-                "completed_attempts": 107,
+                "completed_attempts": 72,
                 "date": "2026-11-13",
                 "kind": "reading",
                 "largest_answer_tokens": null,
@@ -225,101 +207,101 @@
                 "source": "live-records",
                 "source_record": "20261113110022-every-open-record-and-review-capacity",
                 "task_level": 120000,
-                "thinking_attempts": 107,
+                "thinking_attempts": 72,
                 "thinking_method": "cli_estimate"
               },
               {
                 "at_or_over_limit": 0,
-                "attempts": 256,
+                "attempts": 244,
                 "cli_versions": [
                   {
-                    "attempts": 60,
+                    "attempts": 63,
                     "first_date": null,
                     "last_date": null,
                     "version": "2.1.316 (Claude Code)"
                   },
                   {
-                    "attempts": 88,
+                    "attempts": 108,
                     "first_date": null,
                     "last_date": null,
                     "version": "2.1.317 (Claude Code)"
                   },
                   {
-                    "attempts": 44,
+                    "attempts": 50,
                     "first_date": null,
                     "last_date": null,
                     "version": "2.1.318 (Claude Code)"
                   },
                   {
-                    "attempts": 45,
+                    "attempts": 15,
                     "first_date": "2026-11-12",
                     "last_date": "2026-11-12",
                     "version": "2.1.322 (Claude Code)"
                   },
                   {
-                    "attempts": 19,
+                    "attempts": 8,
                     "first_date": "2026-11-12",
-                    "last_date": "2026-11-13",
+                    "last_date": "2026-11-12",
                     "version": "2.1.323 (Claude Code)"
                   }
                 ],
-                "completed_attempts": 242,
+                "completed_attempts": 232,
                 "date": "2026-11-13",
                 "kind": "reading",
                 "largest_answer_tokens": null,
                 "largest_output_tokens": 50297,
                 "largest_thinking_tokens": 37850,
                 "measurement_attempts": 0,
-                "other_attempts": 14,
+                "other_attempts": 12,
                 "source": "live-records",
                 "source_record": "20261113110022-every-open-record-and-review-capacity",
                 "task_level": 240000,
-                "thinking_attempts": 242,
+                "thinking_attempts": 232,
                 "thinking_method": "cli_estimate"
               },
               {
                 "at_or_over_limit": 0,
-                "attempts": 129,
+                "attempts": 163,
                 "cli_versions": [
                   {
-                    "attempts": 68,
+                    "attempts": 99,
                     "first_date": "2026-11-12",
                     "last_date": "2026-11-12",
                     "version": "2.1.322 (Claude Code)"
                   },
                   {
-                    "attempts": 61,
-                    "first_date": "2026-11-13",
+                    "attempts": 64,
+                    "first_date": "2026-11-12",
                     "last_date": "2026-11-13",
                     "version": "2.1.323 (Claude Code)"
                   }
                 ],
-                "completed_attempts": 126,
+                "completed_attempts": 158,
                 "date": "2026-11-13",
                 "kind": "reading",
                 "largest_answer_tokens": null,
                 "largest_output_tokens": 66578,
                 "largest_thinking_tokens": 56500,
                 "measurement_attempts": 0,
-                "other_attempts": 3,
+                "other_attempts": 5,
                 "source": "live-records",
                 "source_record": "20261113110022-every-open-record-and-review-capacity",
                 "task_level": 480000,
-                "thinking_attempts": 126,
+                "thinking_attempts": 158,
                 "thinking_method": "cli_estimate"
               },
               {
                 "at_or_over_limit": 0,
-                "attempts": 13,
+                "attempts": 27,
                 "cli_versions": [
                   {
-                    "attempts": 13,
+                    "attempts": 27,
                     "first_date": "2026-11-13",
                     "last_date": "2026-11-13",
                     "version": "2.1.323 (Claude Code)"
                   }
                 ],
-                "completed_attempts": 13,
+                "completed_attempts": 27,
                 "date": "2026-11-13",
                 "kind": "reading",
                 "largest_answer_tokens": null,
@@ -330,7 +312,7 @@
                 "source": "live-records",
                 "source_record": "20261113110022-every-open-record-and-review-capacity",
                 "task_level": null,
-                "thinking_attempts": 13,
+                "thinking_attempts": 27,
                 "thinking_method": "cli_estimate"
               },
               {
@@ -992,7 +974,7 @@
             "rows": [
               {
                 "at_or_over_limit": 0,
-                "attempts": 4,
+                "attempts": 3,
                 "cli_versions": [
                   {
                     "attempts": 2,
@@ -1005,15 +987,9 @@
                     "first_date": null,
                     "last_date": null,
                     "version": "2.1.317 (Claude Code)"
-                  },
-                  {
-                    "attempts": 1,
-                    "first_date": null,
-                    "last_date": null,
-                    "version": "2.1.318 (Claude Code)"
                   }
                 ],
-                "completed_attempts": 4,
+                "completed_attempts": 3,
                 "kind": "reading",
                 "largest_answer_tokens": null,
                 "largest_output_tokens": 40406,
@@ -1021,41 +997,29 @@
                 "measurement_attempts": 0,
                 "other_attempts": 0,
                 "task_level": 60000,
-                "thinking_attempts": 4
+                "thinking_attempts": 3
               },
               {
                 "at_or_over_limit": 0,
-                "attempts": 112,
+                "attempts": 77,
                 "cli_versions": [
                   {
-                    "attempts": 33,
+                    "attempts": 30,
                     "first_date": null,
                     "last_date": null,
                     "version": "2.1.316 (Claude Code)"
                   },
                   {
-                    "attempts": 58,
+                    "attempts": 38,
                     "first_date": null,
                     "last_date": null,
                     "version": "2.1.317 (Claude Code)"
                   },
                   {
-                    "attempts": 10,
+                    "attempts": 5,
                     "first_date": null,
                     "last_date": null,
                     "version": "2.1.318 (Claude Code)"
-                  },
-                  {
-                    "attempts": 1,
-                    "first_date": "2026-11-12",
-                    "last_date": "2026-11-12",
-                    "version": "2.1.322 (Claude Code)"
-                  },
-                  {
-                    "attempts": 6,
-                    "first_date": "2026-11-12",
-                    "last_date": "2026-11-12",
-                    "version": "2.1.323 (Claude Code)"
                   },
                   {
                     "attempts": 4,
@@ -1064,7 +1028,7 @@
                     "version": "2.1.325 (Claude Code)"
                   }
                 ],
-                "completed_attempts": 111,
+                "completed_attempts": 76,
                 "kind": "reading",
                 "largest_answer_tokens": null,
                 "largest_output_tokens": 62066,
@@ -1072,40 +1036,40 @@
                 "measurement_attempts": 4,
                 "other_attempts": 1,
                 "task_level": 120000,
-                "thinking_attempts": 111
+                "thinking_attempts": 76
               },
               {
                 "at_or_over_limit": 0,
-                "attempts": 258,
+                "attempts": 246,
                 "cli_versions": [
                   {
-                    "attempts": 60,
+                    "attempts": 63,
                     "first_date": null,
                     "last_date": null,
                     "version": "2.1.316 (Claude Code)"
                   },
                   {
-                    "attempts": 88,
+                    "attempts": 108,
                     "first_date": null,
                     "last_date": null,
                     "version": "2.1.317 (Claude Code)"
                   },
                   {
-                    "attempts": 44,
+                    "attempts": 50,
                     "first_date": null,
                     "last_date": null,
                     "version": "2.1.318 (Claude Code)"
                   },
                   {
-                    "attempts": 45,
+                    "attempts": 15,
                     "first_date": "2026-11-12",
                     "last_date": "2026-11-12",
                     "version": "2.1.322 (Claude Code)"
                   },
                   {
-                    "attempts": 19,
+                    "attempts": 8,
                     "first_date": "2026-11-12",
-                    "last_date": "2026-11-13",
+                    "last_date": "2026-11-12",
                     "version": "2.1.323 (Claude Code)"
                   },
                   {
@@ -1115,55 +1079,55 @@
                     "version": "2.1.325 (Claude Code)"
                   }
                 ],
-                "completed_attempts": 244,
+                "completed_attempts": 234,
                 "kind": "reading",
                 "largest_answer_tokens": null,
                 "largest_output_tokens": 50297,
                 "largest_thinking_tokens": 37850,
                 "measurement_attempts": 2,
-                "other_attempts": 14,
+                "other_attempts": 12,
                 "task_level": 240000,
-                "thinking_attempts": 244
+                "thinking_attempts": 234
               },
               {
                 "at_or_over_limit": 0,
-                "attempts": 129,
+                "attempts": 163,
                 "cli_versions": [
                   {
-                    "attempts": 68,
+                    "attempts": 99,
                     "first_date": "2026-11-12",
                     "last_date": "2026-11-12",
                     "version": "2.1.322 (Claude Code)"
                   },
                   {
-                    "attempts": 61,
-                    "first_date": "2026-11-13",
+                    "attempts": 64,
+                    "first_date": "2026-11-12",
                     "last_date": "2026-11-13",
                     "version": "2.1.323 (Claude Code)"
                   }
                 ],
-                "completed_attempts": 126,
+                "completed_attempts": 158,
                 "kind": "reading",
                 "largest_answer_tokens": null,
                 "largest_output_tokens": 66578,
                 "largest_thinking_tokens": 56500,
                 "measurement_attempts": 0,
-                "other_attempts": 3,
+                "other_attempts": 5,
                 "task_level": 480000,
-                "thinking_attempts": 126
+                "thinking_attempts": 158
               },
               {
                 "at_or_over_limit": 0,
-                "attempts": 13,
+                "attempts": 27,
                 "cli_versions": [
                   {
-                    "attempts": 13,
+                    "attempts": 27,
                     "first_date": "2026-11-13",
                     "last_date": "2026-11-13",
                     "version": "2.1.323 (Claude Code)"
                   }
                 ],
-                "completed_attempts": 13,
+                "completed_attempts": 27,
                 "kind": "reading",
                 "largest_answer_tokens": null,
                 "largest_output_tokens": 51314,
@@ -1171,7 +1135,7 @@
                 "measurement_attempts": 0,
                 "other_attempts": 0,
                 "task_level": null,
-                "thinking_attempts": 13
+                "thinking_attempts": 27
               },
               {
                 "at_or_over_limit": 0,
@@ -2789,33 +2753,33 @@
               "borrowed_kind": null,
               "cli_versions": [
                 {
-                  "attempts": 60,
+                  "attempts": 63,
                   "first_date": null,
                   "last_date": null,
                   "version": "2.1.316 (Claude Code)"
                 },
                 {
-                  "attempts": 88,
+                  "attempts": 108,
                   "first_date": null,
                   "last_date": null,
                   "version": "2.1.317 (Claude Code)"
                 },
                 {
-                  "attempts": 44,
+                  "attempts": 50,
                   "first_date": null,
                   "last_date": null,
                   "version": "2.1.318 (Claude Code)"
                 },
                 {
-                  "attempts": 45,
+                  "attempts": 15,
                   "first_date": "2026-11-12",
                   "last_date": "2026-11-12",
                   "version": "2.1.322 (Claude Code)"
                 },
                 {
-                  "attempts": 19,
+                  "attempts": 8,
                   "first_date": "2026-11-12",
-                  "last_date": "2026-11-13",
+                  "last_date": "2026-11-12",
                   "version": "2.1.323 (Claude Code)"
                 },
                 {
@@ -2836,33 +2800,33 @@
                   "at_or_over_limit_share": 0.0,
                   "cli_versions": [
                     {
-                      "attempts": 60,
+                      "attempts": 63,
                       "first_date": null,
                       "last_date": null,
                       "version": "2.1.316 (Claude Code)"
                     },
                     {
-                      "attempts": 88,
+                      "attempts": 108,
                       "first_date": null,
                       "last_date": null,
                       "version": "2.1.317 (Claude Code)"
                     },
                     {
-                      "attempts": 44,
+                      "attempts": 50,
                       "first_date": null,
                       "last_date": null,
                       "version": "2.1.318 (Claude Code)"
                     },
                     {
-                      "attempts": 45,
+                      "attempts": 15,
                       "first_date": "2026-11-12",
                       "last_date": "2026-11-12",
                       "version": "2.1.322 (Claude Code)"
                     },
                     {
-                      "attempts": 19,
+                      "attempts": 8,
                       "first_date": "2026-11-12",
-                      "last_date": "2026-11-13",
+                      "last_date": "2026-11-12",
                       "version": "2.1.323 (Claude Code)"
                     },
                     {
@@ -2879,7 +2843,7 @@
                   "material_allowance": 120000,
                   "measurement_attempts": 2,
                   "qualifies": false,
-                  "sample_size": 258,
+                  "sample_size": 246,
                   "smallest_answer_bound": 18000,
                   "state": "over_limit_expected",
                   "target_allowance": 0,
@@ -2893,34 +2857,22 @@
                   "at_or_over_limit_share": 0.0,
                   "cli_versions": [
                     {
-                      "attempts": 33,
+                      "attempts": 30,
                       "first_date": null,
                       "last_date": null,
                       "version": "2.1.316 (Claude Code)"
                     },
                     {
-                      "attempts": 58,
+                      "attempts": 38,
                       "first_date": null,
                       "last_date": null,
                       "version": "2.1.317 (Claude Code)"
                     },
                     {
-                      "attempts": 10,
+                      "attempts": 5,
                       "first_date": null,
                       "last_date": null,
                       "version": "2.1.318 (Claude Code)"
-                    },
-                    {
-                      "attempts": 1,
-                      "first_date": "2026-11-12",
-                      "last_date": "2026-11-12",
-                      "version": "2.1.322 (Claude Code)"
-                    },
-                    {
-                      "attempts": 6,
-                      "first_date": "2026-11-12",
-                      "last_date": "2026-11-12",
-                      "version": "2.1.323 (Claude Code)"
                     },
                     {
                       "attempts": 4,
@@ -2936,7 +2888,7 @@
                   "material_allowance": 60000,
                   "measurement_attempts": 4,
                   "qualifies": false,
-                  "sample_size": 112,
+                  "sample_size": 77,
                   "smallest_answer_bound": 18000,
                   "state": "over_limit_expected",
                   "target_allowance": 0,
@@ -2950,34 +2902,22 @@
                   "at_or_over_limit_share": 0.0,
                   "cli_versions": [
                     {
-                      "attempts": 33,
+                      "attempts": 30,
                       "first_date": null,
                       "last_date": null,
                       "version": "2.1.316 (Claude Code)"
                     },
                     {
-                      "attempts": 58,
+                      "attempts": 38,
                       "first_date": null,
                       "last_date": null,
                       "version": "2.1.317 (Claude Code)"
                     },
                     {
-                      "attempts": 10,
+                      "attempts": 5,
                       "first_date": null,
                       "last_date": null,
                       "version": "2.1.318 (Claude Code)"
-                    },
-                    {
-                      "attempts": 1,
-                      "first_date": "2026-11-12",
-                      "last_date": "2026-11-12",
-                      "version": "2.1.322 (Claude Code)"
-                    },
-                    {
-                      "attempts": 6,
-                      "first_date": "2026-11-12",
-                      "last_date": "2026-11-12",
-                      "version": "2.1.323 (Claude Code)"
                     },
                     {
                       "attempts": 4,
@@ -2993,7 +2933,7 @@
                   "material_allowance": 30000,
                   "measurement_attempts": 4,
                   "qualifies": false,
-                  "sample_size": 112,
+                  "sample_size": 77,
                   "smallest_answer_bound": 18000,
                   "state": "over_limit_expected",
                   "target_allowance": 0,
@@ -3002,50 +2942,56 @@
                   "thinking_reserve_tokens": 58650
                 },
                 {
-                  "answer_room_characters": -29931,
+                  "answer_room_characters": -69570,
                   "at_or_over_limit": 0,
                   "at_or_over_limit_share": 0.0,
                   "cli_versions": [
                     {
-                      "attempts": 2,
+                      "attempts": 30,
                       "first_date": null,
                       "last_date": null,
                       "version": "2.1.316 (Claude Code)"
                     },
                     {
-                      "attempts": 1,
+                      "attempts": 38,
                       "first_date": null,
                       "last_date": null,
                       "version": "2.1.317 (Claude Code)"
                     },
                     {
-                      "attempts": 1,
+                      "attempts": 5,
                       "first_date": null,
                       "last_date": null,
                       "version": "2.1.318 (Claude Code)"
+                    },
+                    {
+                      "attempts": 4,
+                      "first_date": "2026-11-13",
+                      "last_date": "2026-11-13",
+                      "version": "2.1.325 (Claude Code)"
                     }
                   ],
                   "default_answer_bound": 67000,
                   "frame_characters": 40000,
-                  "largest_output_tokens": 40406,
-                  "largest_thinking_tokens": 31850,
+                  "largest_output_tokens": 62066,
+                  "largest_thinking_tokens": 51000,
                   "material_allowance": 15000,
-                  "measurement_attempts": 0,
+                  "measurement_attempts": 4,
                   "qualifies": false,
-                  "sample_size": 4,
+                  "sample_size": 77,
                   "smallest_answer_bound": 18000,
                   "state": "over_limit_expected",
                   "target_allowance": 0,
                   "task_characters": 55000,
-                  "task_level": 60000,
-                  "thinking_reserve_tokens": 36628
+                  "task_level": 120000,
+                  "thinking_reserve_tokens": 58650
                 }
               ],
               "material_allowance": 120000,
               "measurement_attempts": 2,
               "policy": "exactory-route-capacity-policy-v1",
               "qualifies": false,
-              "sample_size": 258,
+              "sample_size": 246,
               "smallest_answer_bound": 18000,
               "state": "over_limit_expected",
               "target_allowance": 0,
@@ -18719,11 +18665,11 @@
           "cli_version": null,
           "completed_generation": true,
           "task": {
-            "carried_characters": 2316,
-            "characters": 17471,
+            "carried_characters": 1365,
+            "characters": 18422,
             "count_carried_state": false,
             "duplicate_characters": 0,
-            "frame_characters": 9879,
+            "frame_characters": 10830,
             "kind": "reading",
             "material_characters": 7592,
             "targets": 0
@@ -20094,11 +20040,11 @@
           "cli_version": null,
           "completed_generation": true,
           "task": {
-            "carried_characters": 4759,
-            "characters": 170040,
+            "carried_characters": 880,
+            "characters": 173919,
             "count_carried_state": false,
             "duplicate_characters": 0,
-            "frame_characters": 21231,
+            "frame_characters": 25110,
             "kind": "reading",
             "material_characters": 148809,
             "targets": 0
@@ -20120,11 +20066,11 @@
           "cli_version": null,
           "completed_generation": true,
           "task": {
-            "carried_characters": 6246,
-            "characters": 169067,
+            "carried_characters": 1403,
+            "characters": 173910,
             "count_carried_state": false,
             "duplicate_characters": 0,
-            "frame_characters": 20267,
+            "frame_characters": 25110,
             "kind": "reading",
             "material_characters": 148800,
             "targets": 0
@@ -20146,11 +20092,11 @@
           "cli_version": null,
           "completed_generation": true,
           "task": {
-            "carried_characters": 7743,
-            "characters": 90716,
+            "carried_characters": 1931,
+            "characters": 96528,
             "count_carried_state": false,
             "duplicate_characters": 0,
-            "frame_characters": 20738,
+            "frame_characters": 26550,
             "kind": "reading",
             "material_characters": 69978,
             "targets": 0

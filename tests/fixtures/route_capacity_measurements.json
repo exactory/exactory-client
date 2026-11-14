@@ -458,5 +458,53 @@
     "input_tokens": 25101,
     "removed_frame_characters": 38614,
     "removed_frame_tokens": 20168
+  },
+  "probe_task_partitions": {
+    "source": "20261113110022-every-open-record-and-review-capacity",
+    "date": "2026-11-14",
+    "rows": [
+      {
+        "arm": "W",
+        "characters": 173774,
+        "material_characters": 136190,
+        "frame_characters": 37584
+      },
+      {
+        "arm": "H1",
+        "characters": 105584,
+        "material_characters": 67484,
+        "frame_characters": 38100
+      },
+      {
+        "arm": "H2",
+        "characters": 106804,
+        "material_characters": 68706,
+        "frame_characters": 38098
+      },
+      {
+        "arm": "Q1",
+        "characters": 71984,
+        "material_characters": 32846,
+        "frame_characters": 39138
+      },
+      {
+        "arm": "Q2",
+        "characters": 73774,
+        "material_characters": 34638,
+        "frame_characters": 39136
+      },
+      {
+        "arm": "Q3",
+        "characters": 74741,
+        "material_characters": 35605,
+        "frame_characters": 39136
+      },
+      {
+        "arm": "Q4",
+        "characters": 72237,
+        "material_characters": 33101,
+        "frame_characters": 39136
+      }
+    ]
   }
 }

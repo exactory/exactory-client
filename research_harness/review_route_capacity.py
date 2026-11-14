@@ -279,9 +279,8 @@ OUTPUT_PROFILE_PRIORS = (
     ('claude_cli_v1', 'claude-opus-5-5', 'high', 'single', 480000, 5, 5, 0, 0, 0, 0, None, 7591, None, (('2.1.306 (Claude Code)', 1, None, None), ('2.1.310 (Claude Code)', 4, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
     ('claude_cli_v1', 'claude-opus-5-5', 'high', 'single', None, 10, 9, 1, 0, 0, 0, None, 25787, None, ((None, 1, None, None), ('2.1.306 (Claude Code)', 7, None, None), ('2.1.307 (Claude Code)', 2, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
     ('claude_cli_v1', 'claude-opus-5-5', 'high', 'probe', 15000, 3, 3, 0, 0, 0, 0, None, 126, None, (('2.1.306 (Claude Code)', 2, None, None), ('2.1.310 (Claude Code)', 1, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
-    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'reading', 60000, 1, 1, 0, 0, 0, 1, 76800, 86759, None, (('2.1.316 (Claude Code)', 1, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
-    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'reading', 120000, 13, 9, 3, 0, 1, 9, 109100, 122697, None, (('2.1.314 (Claude Code)', 5, None, None), ('2.1.316 (Claude Code)', 8, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
-    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'reading', 240000, 23, 20, 1, 0, 2, 20, 110150, 123372, None, (('2.1.314 (Claude Code)', 8, None, None), ('2.1.316 (Claude Code)', 15, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'reading', 120000, 10, 7, 2, 0, 1, 7, 96500, 110979, None, (('2.1.314 (Claude Code)', 5, None, None), ('2.1.316 (Claude Code)', 5, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'reading', 240000, 27, 23, 2, 0, 2, 23, 110150, 123372, None, (('2.1.314 (Claude Code)', 8, None, None), ('2.1.316 (Claude Code)', 19, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
     ('claude_cli_v1', 'claude-opus-5-5', 'max', 'read', None, 19, 19, 0, 0, 0, 19, 101150, 123721, None, (('2.1.316 (Claude Code)', 19, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
     ('claude_cli_v1', 'claude-opus-5-5', 'max', 'final', None, 1, 1, 0, 0, 0, 1, 95350, 110191, None, (('2.1.316 (Claude Code)', 1, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
     ('claude_cli_v1', 'claude-opus-5-5', 'max', 'request', 240000, 3, 2, 1, 0, 0, 2, 87100, 98481, None, (('2.1.322 (Claude Code)', 3, '2026-11-12', '2026-11-12'),), 'live-records', '2026-11-13', 'cli_estimate'),
@@ -294,11 +293,11 @@ OUTPUT_PROFILE_PRIORS = (
     ('claude_cli_v1', 'claude-opus-5-5', 'max', 'single', 480000, 12, 12, 0, 0, 0, 0, None, 117571, None, (('2.1.310 (Claude Code)', 12, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
     ('claude_cli_v1', 'claude-opus-5-5', 'max', 'single', None, 10, 6, 3, 0, 1, 0, None, 103372, None, ((None, 3, None, None), ('2.1.306 (Claude Code)', 1, None, None), ('2.1.310 (Claude Code)', 6, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
     ('claude_cli_v1', 'claude-opus-5-5', 'max', 'probe', 15000, 15, 15, 0, 0, 0, 6, 517, 633, None, (('2.1.306 (Claude Code)', 3, None, None), ('2.1.310 (Claude Code)', 6, None, None), ('2.1.314 (Claude Code)', 2, None, None), ('2.1.316 (Claude Code)', 2, None, None), ('2.1.322 (Claude Code)', 2, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
-    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', 60000, 4, 4, 0, 0, 0, 4, 31850, 40406, None, (('2.1.316 (Claude Code)', 2, None, None), ('2.1.317 (Claude Code)', 1, None, None), ('2.1.318 (Claude Code)', 1, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
-    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', 120000, 108, 107, 1, 0, 0, 107, 51000, 62066, None, (('2.1.316 (Claude Code)', 33, None, None), ('2.1.317 (Claude Code)', 58, None, None), ('2.1.318 (Claude Code)', 10, None, None), ('2.1.322 (Claude Code)', 1, '2026-11-12', '2026-11-12'), ('2.1.323 (Claude Code)', 6, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
-    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', 240000, 256, 242, 14, 0, 0, 242, 37850, 50297, None, (('2.1.316 (Claude Code)', 60, None, None), ('2.1.317 (Claude Code)', 88, None, None), ('2.1.318 (Claude Code)', 44, None, None), ('2.1.322 (Claude Code)', 45, '2026-11-12', '2026-11-12'), ('2.1.323 (Claude Code)', 19, '2026-11-12', '2026-11-13')), 'live-records', '2026-11-13', 'cli_estimate'),
-    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', 480000, 129, 126, 3, 0, 0, 126, 56500, 66578, None, (('2.1.322 (Claude Code)', 68, '2026-11-12', '2026-11-12'), ('2.1.323 (Claude Code)', 61, '2026-11-13', '2026-11-13')), 'live-records', '2026-11-13', 'cli_estimate'),
-    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', None, 13, 13, 0, 0, 0, 13, 36750, 51314, None, (('2.1.323 (Claude Code)', 13, '2026-11-13', '2026-11-13'),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', 60000, 3, 3, 0, 0, 0, 3, 31850, 40406, None, (('2.1.316 (Claude Code)', 2, None, None), ('2.1.317 (Claude Code)', 1, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', 120000, 73, 72, 1, 0, 0, 72, 51000, 62066, None, (('2.1.316 (Claude Code)', 30, None, None), ('2.1.317 (Claude Code)', 38, None, None), ('2.1.318 (Claude Code)', 5, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', 240000, 244, 232, 12, 0, 0, 232, 37850, 50297, None, (('2.1.316 (Claude Code)', 63, None, None), ('2.1.317 (Claude Code)', 108, None, None), ('2.1.318 (Claude Code)', 50, None, None), ('2.1.322 (Claude Code)', 15, '2026-11-12', '2026-11-12'), ('2.1.323 (Claude Code)', 8, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', 480000, 163, 158, 5, 0, 0, 158, 56500, 66578, None, (('2.1.322 (Claude Code)', 99, '2026-11-12', '2026-11-12'), ('2.1.323 (Claude Code)', 64, '2026-11-12', '2026-11-13')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', None, 27, 27, 0, 0, 0, 27, 36750, 51314, None, (('2.1.323 (Claude Code)', 27, '2026-11-13', '2026-11-13'),), 'live-records', '2026-11-13', 'cli_estimate'),
     ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'read', None, 191, 180, 11, 0, 0, 180, 53450, 68664, None, ((None, 1, None, None), ('2.1.316 (Claude Code)', 93, None, None), ('2.1.318 (Claude Code)', 95, None, None), ('2.1.322 (Claude Code)', 2, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
     ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'combine', 480000, 1, 1, 0, 0, 0, 1, 17300, 25926, None, (('2.1.322 (Claude Code)', 1, '2026-11-12', '2026-11-12'),), 'live-records', '2026-11-13', 'cli_estimate'),
     ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'check', None, 1, 1, 0, 0, 0, 1, 62200, 76858, None, (('2.1.322 (Claude Code)', 1, '2026-11-12', '2026-11-12'),), 'live-records', '2026-11-13', 'cli_estimate'),
@@ -318,10 +317,9 @@ OUTPUT_PROFILE_PRIORS = (
     ('claude_cli_v1', 'claude-sonnet-5-5', 'high', 'probe', 15000, 2, 2, 0, 0, 0, 0, None, 225, None, (('2.1.306 (Claude Code)', 1, None, None), ('2.1.307 (Claude Code)', 1, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
     ('codex_cli_framed_v1', 'gpt-6-astra', 'high', 'single', None, 1, 1, 0, 0, 0, 1, 317, 4732, 4415, (('codex-cli 0.163.0', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
     ('codex_cli_framed_v1', 'gpt-6-astra', 'high', 'probe', 15000, 1, 1, 0, 0, 0, 1, 0, 54, 54, (('codex-cli 0.163.0', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
-    ('codex_cli_v1', 'gpt-6-astra', 'high', 'reading', 30000, 2, 2, 0, 0, 0, 2, 108, 996, 900, (('codex-cli 0.163.0', 2, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
-    ('codex_cli_v1', 'gpt-6-astra', 'high', 'reading', 60000, 5, 0, 5, 0, 0, 0, None, None, None, (('codex-cli 0.163.0', 5, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
-    ('codex_cli_v1', 'gpt-6-astra', 'high', 'reading', 120000, 39, 39, 0, 0, 0, 39, 853, 11563, 11061, (('codex-cli 0.163.0', 39, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
-    ('codex_cli_v1', 'gpt-6-astra', 'high', 'reading', 240000, 82, 79, 3, 0, 0, 79, 1034, 15030, 14514, (('codex-cli 0.163.0', 82, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'reading', 60000, 2, 2, 0, 0, 0, 2, 108, 996, 900, (('codex-cli 0.163.0', 2, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'reading', 120000, 36, 31, 5, 0, 0, 31, 853, 11563, 11061, (('codex-cli 0.163.0', 36, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'reading', 240000, 90, 87, 3, 0, 0, 87, 1034, 15030, 14514, (('codex-cli 0.163.0', 90, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
     ('codex_cli_v1', 'gpt-6-astra', 'high', 'reading', None, 1, 0, 1, 0, 0, 0, None, None, None, (('codex-cli 0.163.0', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
     ('codex_cli_v1', 'gpt-6-astra', 'high', 'final', None, 2, 2, 0, 0, 0, 2, 1331, 1583, 597, (('codex-cli 0.163.0', 2, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
     ('codex_cli_v1', 'gpt-6-astra', 'high', 'request', 240000, 2, 2, 0, 0, 0, 2, 271, 5344, 5083, (('codex-cli 0.163.0', 2, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
@@ -479,14 +477,11 @@ def _project_request(request, packet):
 def _clear_carried_answers(packet, kind):
     record = packet.get('reading_turn', {}).get('reading_record') if kind == 'reading' else packet.get('reading_record')
     if record is not None:
-        has_turns = bool(record.get('turns'))
         for key in ('turns', 'sources', 'excerpts', 'passages', 'search_receipts'):
             if key in record:
                 record[key] = []
         for allowance in record.get('allowances', {}).values():
             allowance['used'] = 0
-        if kind == 'reading' and has_turns:
-            packet['reading_turn'].get('reading_plan', {})['delivered_before'] = []
     state = packet.get('review_parts_state')
     if state is not None:
         for key in state:

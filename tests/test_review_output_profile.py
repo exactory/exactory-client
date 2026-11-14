@@ -156,7 +156,8 @@ class TaskMeasurementTests(unittest.TestCase):
         body = 'synthetic body ' * 100
         packet = dict(
             reading_turn=dict(
-                reading_plan=dict(delivered_now=[dict(characters=len(body))]),
+                reading_plan=dict(delivered_now=[dict(characters=len(body))],
+                                  delivered_before=[dict(unit_id='earlier', digest='a' * 64)]),
                 reading_record=dict(turns=[dict(notes='carried note ' * 100)], excerpts=[], passages=[]),
             ),
             evidence=[dict(artifact=dict(sha256='body'), encoding='utf-8', content=body)],
@@ -173,6 +174,11 @@ class TaskMeasurementTests(unittest.TestCase):
         )
         self.assertGreater(task['carried_characters'], 1000)
         self.assertGreater(task['material_characters'], len(body) - 1)
+        without_answers = copy.deepcopy(packet)
+        without_answers['reading_turn']['reading_record']['turns'] = []
+        fresh, _ = self.describe(without_answers)
+        self.assertEqual(task['characters'], fresh['characters'])
+        self.assertEqual(task['frame_characters'], fresh['frame_characters'])
         larger, _ = self.describe(packet, instructions='I' * 200000)
         rows = load_capacity().build_profile_rows(
             [dict(build_sample(), task=task), dict(build_sample(), task=larger)],
@@ -367,6 +373,7 @@ class ProbeReaderTests(unittest.TestCase):
     def test_corrected_retried_probe_is_counted_by_task_and_last_send_thinking(self):
         from ci import route_capacity_profile as recompute
         rows = [dict(
+            arm='W',
             status='completed',
             user_events=1,
             assistant_events=2,
@@ -385,11 +392,26 @@ class ProbeReaderTests(unittest.TestCase):
             path = Path(directory) / 'summary.jsonl'
             path.write_text(json.dumps(rows[0]) + '\n')
             samples = recompute.read_probe_samples(path)
+        self.assertEqual(samples[0]['task']['material_characters'], 136190)
+        self.assertEqual(samples[0]['task']['frame_characters'], 37584)
         profile = recompute.build_prior_rows(samples, source='probe', date='2026-11-13')
         self.assertEqual(profile[0]['attempts'], 1)
         self.assertEqual(profile[0]['task_level'], 240000)
         self.assertEqual(profile[0]['largest_thinking_tokens'], 84400)
         self.assertEqual(profile[0]['measurement_attempts'], 1)
+        fixture = json.loads((Path(__file__).with_name('fixtures') / 'route_capacity_measurements.json').read_text())
+        measured = fixture['probe_task_partitions']['rows']
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'summary.jsonl'
+            path.write_text(''.join(json.dumps(dict(rows[0], arm=row['arm'],
+                                                     request_characters=row['characters'])) + '\n'
+                                    for row in measured))
+            measured_samples = recompute.read_probe_samples(path)
+        for sample, expected in zip(measured_samples, measured):
+            with self.subTest(arm=expected['arm']):
+                self.assertEqual({key: sample['task'][key] for key in
+                                  ('characters', 'material_characters', 'frame_characters')},
+                                 {key: value for key, value in expected.items() if key != 'arm'})
 
     def test_partial_frame_rows_keep_attempt_tasks_separate_and_plans_conservative(self):
         from ci import route_capacity_profile as recompute
@@ -407,7 +429,7 @@ class ProbeReaderTests(unittest.TestCase):
             arm='R-Q1',
             text_characters=584965,
             base_text_characters=71984,
-            delivered_characters=29914,
+            delivered_characters=29260,
             status='completed',
             assistant_events=2,
             user_events=1,
@@ -424,6 +446,16 @@ class ProbeReaderTests(unittest.TestCase):
         self.assertEqual(policy['evidence'][0]['reading'], 'inconclusive')
         self.assertEqual(samples[0]['task']['characters'], 71984)
         self.assertEqual(samples[0]['task']['carried_characters'], 512981)
+        self.assertEqual(samples[0]['task']['material_characters'], 32846)
+        self.assertEqual(samples[0]['task']['frame_characters'], 39138)
+        lists = dict(frame[0], part='lists', arm='L-Q1', text_characters=392548)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'summary.jsonl'
+            path.write_text(json.dumps(lists) + '\n')
+            list_samples, _ = recompute.read_frame_probe_samples(path, base)
+        self.assertEqual(list_samples[0]['task']['material_characters'], 32846)
+        self.assertEqual(list_samples[0]['task']['frame_characters'], 359702)
+        self.assertEqual(list_samples[0]['task']['carried_characters'], 0)
         frame[0]['thinking_tokens'] = 90000
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'summary.jsonl'
