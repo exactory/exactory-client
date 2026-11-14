@@ -84,9 +84,12 @@ class _CheckingStore:
             transaction._active = False
         snapshot_digest = _digest(_canonical({"database": self._snapshot._identity, "revision": self.revision,
                                               "history": self._snapshot._fingerprint.hex()}))
-        raise _CheckComplete({"check": "accepted", "revision": self.revision, "recorded": False,
+        response = {"check": "accepted", "revision": self.revision, "recorded": False,
                               "operation": operation, "payload_digest": _digest(encoded_payload),
-                              "snapshot_digest": snapshot_digest, "artifact_digests": self._artifacts.read_digests()})
+                              "snapshot_digest": snapshot_digest, "artifact_digests": self._artifacts.read_digests()}
+        if operation == "literature.search" and result["warnings"]:
+            response["warnings"] = result["warnings"]
+        raise _CheckComplete(response)
 
 
 def check_mutation(store, operation, payload, *, expected_revision, request_id, bounded_payload, replay=None):

@@ -19,11 +19,37 @@ registry response instead uses that provider's documented metadata parser.
 import json
 import re
 from datetime import date, datetime
+from urllib.parse import unquote, urlsplit
 
 from .errors import ResearchError
 from .fulltext import parse_base_media_type
 from .identities import normalize_identifier
 from .providers import Page, _json, _reference, _references, _work
+
+
+def bind_import_query(mappings, source_url):
+    """Read the declared named URL segment, retaining ordinary list mappings."""
+    if isinstance(mappings, list):
+        return mappings, None
+    if not isinstance(mappings, dict) or set(mappings) != {"records", "query_path"}:
+        raise ResearchError("invalid_import", "Mappings must be a record list or declare records and query_path")
+    path = mappings["query_path"]
+    if (not isinstance(path, dict) or set(path) != {"template", "segment"}
+            or not isinstance(path["template"], str) or not path["template"].startswith("/")
+            or not isinstance(path["segment"], str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", path["segment"])):
+        raise ResearchError("invalid_import", "query_path requires a URL path template and its named segment")
+    parts = path["template"].split("/")
+    placeholder = "{" + path["segment"] + "}"
+    if (parts.count(placeholder) != 1
+            or any("{" in part or "}" in part for part in parts if part != placeholder)):
+        raise ResearchError("invalid_import", "The path template must contain exactly one named query segment")
+    actual = urlsplit(source_url).path.split("/")
+    if len(parts) != len(actual) or any(part != value for part, value in zip(parts, actual) if part != placeholder):
+        raise ResearchError("invalid_import", "The captured URL must match the declared query path template")
+    query = unquote(actual[parts.index(placeholder)])
+    if not query.strip():
+        raise ResearchError("invalid_import", "The captured query path segment must be nonempty")
+    return mappings["records"], dict(path, kind="url_path", value=query)
 
 
 def _pointer(document, pointer):
