@@ -3,6 +3,7 @@
 import copy
 import json
 import re
+from collections import Counter
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
@@ -15,6 +16,9 @@ from .reading import fulltext_coverage
 
 GAPPED_EXPORT_MESSAGE = ("Both resolved outcomes are blocked by this minimum. Protocol v6 can record an "
                          "unresolved finding with these gaps.")
+OUTDATED_PACKET_MESSAGE = ("The current records no longer support this packet's minimum and gap forecast. "
+                           "Export a new problem-openness packet. The added and removed entries name the "
+                           "changed R10 facts; verified reading turns remain verified.")
 
 
 FAMILY_READING_REPORT_FIELD = "derived_family_readings"
@@ -22,6 +26,63 @@ FAMILY_READING_LINK_FIELD = "link"
 FAMILY_READING_AUTHOR_COMPARISON_FIELD = "authors_compared"
 FAMILY_READING_V1_REFUSAL = "Family readings require a version 2 openness minimum delivered with protocol v6."
 FAMILY_READING_LIST_REFUSAL = "Family reading selections must be a list."
+
+
+def describe_gap_fact(gap, packet, family_failures):
+    """Name the R10 dependency exposed by a changed forecast entry."""
+    condition, details = gap["condition"], gap["details"]
+    if condition == "reading_deferred":
+        return "source_deferrals"
+    if condition == "reading_missing":
+        error = details.get("assessment_error", {})
+        if (gap["search_digest"], gap.get("work_id")) in family_failures:
+            return "family_reading"
+        if error.get("code") == "invalid_reading":
+            return "required_bundle"
+        if error.get("code") in {"unknown_work", "missing_version"}:
+            return "decisive_captures"
+        if error:
+            return "inspection_bytes"
+        missing = details.get("missing", [])
+        delivered = {row["digest"] for row in packet["evidence"]}
+        if any(row.get("bundle_id") is not None or row.get("original_sha256") in delivered for row in missing):
+            return "required_bundle"
+        return "decisive_captures"
+    return "bound_records"
+
+
+def assess_packet_freshness(records, artifacts, packet):
+    """Compare a packet's forecast with R10 facts, without changing its evidence."""
+    from .openness_minimum import FAMILY_READING_SPEC_REFUSAL, list_minimum_gaps, validate_minimum_bindings
+
+    context = packet["scientific_context"]
+    if "minimum_gaps" not in context:
+        return dict(current=True, added=[], removed=[])
+    minimum = context["openness_minimum"]
+    statement = find_current_statement(records)
+    try:
+        if (statement is None or packet["subject"] != statement
+                or packet["claim_digest"] != compute_statement_digest(statement)
+                or minimum["neighbours"] != statement["neighbours"]):
+            raise ResearchError("openness_statement_mismatch", "The current statement or its neighbours changed.")
+        validate_minimum_bindings(minimum, statement["statement"], records)
+    except ResearchError as error:
+        row = ("current_statement" if error.code == "openness_statement_mismatch" else
+               "material_searches" if error.code == "openness_search_stale"
+               else "bound_records")
+        return dict(current=False, added=[dict(row=row, entry=error.as_dict())], removed=[])
+    gaps = list_minimum_gaps(minimum, statement["statement"], records, artifacts)
+    family_failures = {(gap["search_digest"], gap.get("work_id")) for gap in context["minimum_gaps"] + gaps
+                       if gap["details"].get("assessment_error", {}).get("message") == FAMILY_READING_SPEC_REFUSAL}
+    # Canonical entry bytes make both dictionary and list enumeration irrelevant.
+    entries = {serialize_record(gap): gap for gap in context["minimum_gaps"] + gaps}
+    previous = Counter(serialize_record(gap) for gap in context["minimum_gaps"])
+    current = Counter(serialize_record(gap) for gap in gaps)
+    added = [dict(row=describe_gap_fact(entries[key], packet, family_failures), entry=entries[key])
+             for key in sorted((current - previous).elements())]
+    removed = [dict(row=describe_gap_fact(entries[key], packet, family_failures), entry=entries[key])
+               for key in sorted((previous - current).elements())]
+    return dict(current=not added and not removed, added=added, removed=removed)
 
 
 def collect_reading_artifacts(records, artifacts, reading):

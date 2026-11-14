@@ -283,6 +283,10 @@ def _plan_recording(records, artifacts, assignment, state):
                                  assignment['recorded_revision'] + 1)
             except ResearchError as error:
                 if uses_finding_contract(assignment):
+                    if output['findings']['openness']['outcome'] != 'unresolved':
+                        outdated = _plan_openness_freshness(records, artifacts, assignment, packet)
+                        if outdated is not None:
+                            return outdated
                     return dict(state='handoff', code=error.code, command='export',
                                 details=dict(error.details or {}, assignment_id=assignment['id'],
                                              kind='problem-openness', message=error.message))
@@ -380,6 +384,24 @@ def _plan_staged(records, artifacts, assignment, state):
     return dict(state='plan', command=action['command'], payload=action['payload'])
 
 
+def _plan_openness_freshness(records, artifacts, assignment, packet=None):
+    if assignment['role'] != 'native_math':
+        return None
+    if packet is None:
+        packet = protocol._read_json(artifacts, assignment['packet'])
+        if openness_reading.find_protocol(packet) != openness_reading.PROTOCOL_V6:
+            return None
+        packet = protocol._read_json(artifacts, assignment['context']['native_packet'])
+    from .problem_openness import assess_packet_freshness, OUTDATED_PACKET_MESSAGE
+    freshness = assess_packet_freshness(records, artifacts, packet)
+    if freshness['current']:
+        return None
+    return dict(state='handoff', command='export', code='openness_packet_outdated',
+                details=dict(assignment_id=assignment['id'], kind='problem-openness',
+                             message=OUTDATED_PACKET_MESSAGE,
+                             added=freshness['added'], removed=freshness['removed']))
+
+
 def _plan_head(records, artifacts, assignment):
     pending = _plan_pending_call(records, assignment)
     if pending is not None:
@@ -462,6 +484,9 @@ def _plan_head(records, artifacts, assignment):
         position = set(list_turn_assignments(records, assignment))
         failed = any(row['assignment_id'] in position for row in records.get('review_attempt', {}).values())
     if failed or unverified:
+        outdated = _plan_openness_freshness(records, artifacts, assignment)
+        if outdated is not None:
+            return outdated
         from .review_failure_class import plan_after_failure
         result = copy.deepcopy(plan_after_failure(records, artifacts, assignment['id']))
         if result['state'] == 'stop' and result.get('code') == 'review_route_runtime_stale':
@@ -506,6 +531,9 @@ def _plan_head(records, artifacts, assignment):
         return dict(state='handoff' if repair else 'stop', code=item['code'], details=item,
                     **(dict(command='review-assignment') if repair else {}))
     if state.get('output') is None:
+        outdated = _plan_openness_freshness(records, artifacts, assignment)
+        if outdated is not None:
+            return outdated
         return _plan_capacity(records, assignment, dict(state='run', command='review-run',
                               payload=_build_run_payload(records, assignment)))
     packet = protocol._read_json(artifacts, assignment['packet'])
@@ -520,6 +548,9 @@ def _plan_head(records, artifacts, assignment):
                       and _list_recorded_finals(records, {assignment['id']})
                       and protocol._is_problem_refresh(records, artifacts, assignment, packet)))
     if continuing:
+        outdated = _plan_openness_freshness(records, artifacts, assignment)
+        if outdated is not None:
+            return outdated
         return dict(state='continue', command='review-assignment',
                     payload=_build_assignment_payload(records, assignment))
     return _plan_recording(records, artifacts, assignment, state)

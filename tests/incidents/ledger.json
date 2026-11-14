@@ -5083,14 +5083,18 @@
       "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
       "class": "openness minimum assessment before export",
       "summary": "Reading chains ran to unresolved findings although the bound search integrity and reading gaps already blocked both resolved outcomes at export.",
-      "expected": "One gap list drives the record-side audit and forecast. Export refuses before writing when both resolved outcomes are blocked, and --accept-gaps exports with the same forecast as a warning. Bounded enumeration remains a notice. Stored v1 audits and v5 packets retain their interpretation and bytes.",
+      "expected": "One gap list drives the record-side audit and forecast. Export refuses before writing when both resolved outcomes are blocked, and --accept-gaps exports with the same forecast as a warning. Bounded enumeration remains a notice. A v6 packet whose current R10 facts change its bindings or gap list hands off to export before another turn and after a resolved answer that the audit refuses, without refusing that answer or invalidating its reading turns. Stored v1 audits and v5 packets retain their interpretation and bytes.",
       "fixed_in": "0.88.0",
       "test_kind": "real_shape",
       "tests": [
         "test_minimum_assessment.MinimumAssessmentTests.test_g1_forecast_and_audit_share_every_record_condition_and_legacy_order",
         "test_minimum_assessment.MinimumAssessmentTests.test_g1_audit_has_no_record_condition_outside_the_gap_list",
         "test_minimum_assessment.MinimumAssessmentTests.test_g2_incident_shape_refuses_without_writes_and_accepts_with_identical_warning",
-        "test_minimum_assessment.MinimumAssessmentTests.test_g2_bounded_enumeration_is_a_notice_and_keeps_stored_packet_bytes"
+        "test_minimum_assessment.MinimumAssessmentTests.test_g2_bounded_enumeration_is_a_notice_and_keeps_stored_packet_bytes",
+        "test_openness_packet_freshness.ChainFreshnessTests.test_g12_incident_new_search_after_two_turns_exports_and_keeps_verified_readings",
+        "test_openness_packet_freshness.ChainFreshnessTests.test_g12_stale_final_chain_keeps_the_answer_and_reading_turns_verified",
+        "test_openness_packet_freshness.PacketFreshnessTests.test_g12_only_decisive_source_deferrals_are_assessed",
+        "test_openness_packet_freshness.FamilyFreshnessTests.test_g12_family_authors_and_third_family_alias_change_currency"
       ]
     },
     {

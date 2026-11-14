@@ -1,6 +1,7 @@
 """Mechanical openness minimum over exact common search and reading records."""
 
 from datetime import timezone
+from collections import ChainMap
 import re
 
 from .errors import ResearchError
@@ -282,7 +283,7 @@ def list_minimum_gaps(minimum, statement, records, artifacts):
     from .literature import find_search_integrity_errors
     from .evaluation import Evaluation
     from .reading import fulltext_coverage
-    from .source_deferrals import assess_deferrals
+    from .source_deferrals import _check_artifact, assess_deferrals
     from .identities import find_work_family_link
 
     artifacts = Evaluation.of(records, artifacts)
@@ -365,12 +366,29 @@ def list_minimum_gaps(minimum, statement, records, artifacts):
                         assessment_error={"code": "openness_reading_gap", "message": FAMILY_READING_SPEC_REFUSAL})
             else:
                 family_versions[(identity, work)] = version
-    pinned = dict(records, reading={key: row for key, row in records.get("reading", {}).items()
-                                   if digest(row) in minimum["reading_digests"]})
+    # Nested component checks also consume readings. Keep the pinned view all
+    # the way down without enumerating any other record kind (R10).
+    pinned = ChainMap({"reading": {key: row for key, row in records.get("reading", {}).items()
+                                   if digest(row) in minimum["reading_digests"]}}, records)
     pinned_artifacts = Evaluation.of(pinned, artifacts)
     try:
-        deferred = {row["version_id"]: row for row in assess_deferrals(records, artifacts)
-                    if row["status"] in {"active", "stale"}}
+        if minimum["schema_version"] == 1:
+            deferred = {row["version_id"]: row for row in assess_deferrals(records, artifacts)
+                        if row["status"] in {"active", "stale"}}
+        else:
+            # Both active and stale decisions block a resolved finding. Their
+            # wider research-graph dependency status is outside R10; only the
+            # selected, unresumed decisions of decisive works matter here.
+            deferred = {}
+            versions = set(required) | set(family_versions.values())
+            for version in sorted(versions):
+                selection = records.get("source_deferral_selection", {}).get(version, {})
+                saved = records.get("source_deferral", {}).get(selection.get("deferral_id"))
+                if saved is None or selection.get("resume_id") or saved["profile"] != "research":
+                    continue
+                for reference in [saved["authorization"]] + saved["acquisition_evidence"]:
+                    _check_artifact(artifacts, reference)
+                deferred[version] = dict(saved, status="active")
     except ResearchError as error:
         # Retain the store's error at the historic reading-check position. An
         # unresolved finding can still report it without failing status/next.
