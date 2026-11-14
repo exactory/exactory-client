@@ -7,6 +7,7 @@
     "manuscript-review": "reachable",
     "plan_next": "reachable",
     "problem-openness": "reachable",
+    "read": "reachable",
     "record-check": "reachable",
     "review": "reachable",
     "review-adjudication": "reachable",
@@ -146,6 +147,12 @@
     "research_harness/acquisition.py:acquire_fulltext:extracted[\"status\"]": {
       "sources": [
         "research_harness/acquisition.py:acquire_fulltext"
+      ],
+      "values": "reachable"
+    },
+    "research_harness/acquisition.py:import_fulltext:extracted['status']": {
+      "sources": [
+        "research_harness/acquisition.py:import_fulltext"
       ],
       "values": "reachable"
     },
@@ -758,6 +765,8 @@
     "fulltext_unit_limit",
     "gate_inapplicable",
     "gate_override_budget_exhausted",
+    "gate_override_condition_met",
+    "gate_override_condition_unmet",
     "gate_override_conflict",
     "gate_override_gate",
     "gate_override_gate_ready",
@@ -847,6 +856,7 @@
     "invalid_reading_response",
     "invalid_record",
     "invalid_redirect",
+    "invalid_reference_handle",
     "invalid_research_decision",
     "invalid_response",
     "invalid_review",
@@ -854,6 +864,7 @@
     "invalid_review_attempt",
     "invalid_review_context",
     "invalid_review_correction",
+    "invalid_review_material",
     "invalid_review_prompt_version",
     "invalid_review_role",
     "invalid_review_route",
@@ -1079,6 +1090,7 @@
     "problem_openness_missing",
     "problem_openness_stale",
     "problem_openness_unresolved",
+    "problem_post_condition_unmet",
     "problem_post_fact",
     "problem_post_missing",
     "problem_post_revision_missing",
@@ -1288,6 +1300,7 @@
     "review_capacity_wait",
     "review_card_pending",
     "review_card_question_pending",
+    "review_chain_projection_over_limit",
     "review_chain_stopped",
     "review_claim_cell_pending",
     "review_claim_unresolved",
@@ -1377,12 +1390,15 @@
     "review_reassessment_missing",
     "review_record_missing",
     "review_recording_required",
+    "review_refusal_notice_metadata_too_large",
     "review_request_changed",
     "review_request_policy_mismatch",
     "review_resampling_forbidden",
     "review_response_too_large",
     "review_result_pending",
     "review_retrieval_pending",
+    "review_route_capacity_below_floor",
+    "review_route_capacity_plan_violated",
     "review_route_changed",
     "review_route_retired",
     "review_route_runtime_stale",
@@ -1494,6 +1510,7 @@
     "source_bundle_missing",
     "source_deferral_inapplicable",
     "source_deferred",
+    "source_link_not_fulltext",
     "source_mismatch",
     "source_pending",
     "stale_cursor",
@@ -1895,6 +1912,8 @@
     "fulltext_unit_limit",
     "gate_inapplicable",
     "gate_override_budget_exhausted",
+    "gate_override_condition_met",
+    "gate_override_condition_unmet",
     "gate_override_conflict",
     "gate_override_gate",
     "gate_override_gate_ready",
@@ -1984,6 +2003,7 @@
     "invalid_reading_response",
     "invalid_record",
     "invalid_redirect",
+    "invalid_reference_handle",
     "invalid_research_decision",
     "invalid_response",
     "invalid_review",
@@ -1991,6 +2011,7 @@
     "invalid_review_attempt",
     "invalid_review_context",
     "invalid_review_correction",
+    "invalid_review_material",
     "invalid_review_prompt_version",
     "invalid_review_role",
     "invalid_review_route",
@@ -2212,6 +2233,7 @@
     "problem_openness_missing",
     "problem_openness_stale",
     "problem_openness_unresolved",
+    "problem_post_condition_unmet",
     "problem_post_fact",
     "problem_post_missing",
     "problem_post_revision_missing",
@@ -2416,6 +2438,7 @@
     "review_capacity_wait",
     "review_card_pending",
     "review_card_question_pending",
+    "review_chain_projection_over_limit",
     "review_chain_stopped",
     "review_claim_cell_pending",
     "review_claim_unresolved",
@@ -2511,6 +2534,8 @@
     "review_response_too_large",
     "review_result_pending",
     "review_retrieval_pending",
+    "review_route_capacity_below_floor",
+    "review_route_capacity_plan_violated",
     "review_route_changed",
     "review_route_retired",
     "review_route_runtime_stale",
@@ -2620,6 +2645,7 @@
     "source_bundle_missing",
     "source_deferral_inapplicable",
     "source_deferred",
+    "source_link_not_fulltext",
     "source_mismatch",
     "source_pending",
     "stale_cursor",
@@ -2755,6 +2781,7 @@
     "manuscript-review",
     "plan_next",
     "problem-openness",
+    "read",
     "record-check",
     "review",
     "review-adjudication",
@@ -2959,6 +2986,8 @@
     "fulltext_unit_limit",
     "gate_inapplicable",
     "gate_override_budget_exhausted",
+    "gate_override_condition_met",
+    "gate_override_condition_unmet",
     "gate_override_conflict",
     "gate_override_gate",
     "gate_override_gate_ready",
@@ -3048,6 +3077,7 @@
     "invalid_reading_response",
     "invalid_record",
     "invalid_redirect",
+    "invalid_reference_handle",
     "invalid_research_decision",
     "invalid_response",
     "invalid_review",
@@ -3055,6 +3085,7 @@
     "invalid_review_attempt",
     "invalid_review_context",
     "invalid_review_correction",
+    "invalid_review_material",
     "invalid_review_prompt_version",
     "invalid_review_role",
     "invalid_review_route",
@@ -3276,6 +3307,7 @@
     "problem_openness_missing",
     "problem_openness_stale",
     "problem_openness_unresolved",
+    "problem_post_condition_unmet",
     "problem_post_fact",
     "problem_post_missing",
     "problem_post_revision_missing",
@@ -3480,6 +3512,7 @@
     "review_capacity_wait",
     "review_card_pending",
     "review_card_question_pending",
+    "review_chain_projection_over_limit",
     "review_chain_stopped",
     "review_claim_cell_pending",
     "review_claim_unresolved",
@@ -3575,6 +3608,8 @@
     "review_response_too_large",
     "review_result_pending",
     "review_retrieval_pending",
+    "review_route_capacity_below_floor",
+    "review_route_capacity_plan_violated",
     "review_route_changed",
     "review_route_retired",
     "review_route_runtime_stale",
@@ -3684,6 +3719,7 @@
     "source_bundle_missing",
     "source_deferral_inapplicable",
     "source_deferred",
+    "source_link_not_fulltext",
     "source_mismatch",
     "source_pending",
     "stale_cursor",
@@ -3944,6 +3980,7 @@
     "research_harness/review_excerpts.py",
     "research_harness/review_failed_request_history.py",
     "research_harness/review_failure_class.py",
+    "research_harness/review_handles.py",
     "research_harness/review_input_projection.py",
     "research_harness/review_objection_evidence.py",
     "research_harness/review_output_correction.py",
@@ -3964,10 +4001,13 @@
     "research_harness/review_prompt_paragraphs.py",
     "research_harness/review_protocol.py",
     "research_harness/review_provider_usage.py",
+    "research_harness/review_reading.py",
     "research_harness/review_refusal.py",
+    "research_harness/review_refusal_notice.py",
     "research_harness/review_request_evaluation.py",
     "research_harness/review_request_fit.py",
     "research_harness/review_request_restoration.py",
+    "research_harness/review_route_capacity.py",
     "research_harness/review_search_delivery.py",
     "research_harness/review_series.py",
     "research_harness/review_source_batches.py",
@@ -4590,6 +4630,12 @@
     "gate_override_budget_exhausted": {
       "unit": "registry-rows"
     },
+    "gate_override_condition_met": {
+      "unit": "registry-rows"
+    },
+    "gate_override_condition_unmet": {
+      "unit": "registry-rows"
+    },
     "gate_override_conflict": {
       "unit": "registry-rows"
     },
@@ -4857,6 +4903,9 @@
     "invalid_redirect": {
       "unit": "registry-rows"
     },
+    "invalid_reference_handle": {
+      "unit": "registry-rows"
+    },
     "invalid_research_decision": {
       "unit": "registry-rows"
     },
@@ -4876,6 +4925,9 @@
       "unit": "registry-rows"
     },
     "invalid_review_correction": {
+      "unit": "registry-rows"
+    },
+    "invalid_review_material": {
       "unit": "registry-rows"
     },
     "invalid_review_prompt_version": {
@@ -5526,6 +5578,9 @@
     "problem_openness_unresolved": {
       "unit": "registry-rows"
     },
+    "problem_post_condition_unmet": {
+      "unit": "registry-rows"
+    },
     "problem_post_fact": {
       "unit": "registry-rows"
     },
@@ -5758,9 +5813,6 @@
       "unit": "registry-rows"
     },
     "reading_bundle_stale": {
-      "unit": "registry-rows"
-    },
-    "reading_missing": {
       "unit": "registry-rows"
     },
     "record_acceptance_review_changed": {
@@ -6313,9 +6365,6 @@
       "unit": "registry-rows"
     },
     "review_request_policy_mismatch": {
-      "unit": "registry-rows"
-    },
-    "review_response_too_large": {
       "unit": "registry-rows"
     },
     "review_result_pending": {

@@ -123,6 +123,8 @@ COMPUTED_CODE_SITES = {
         'sources': ['research_harness/acquisition.py:_page_update']},
     'research_harness/acquisition.py:acquire_fulltext:extracted["status"]': {
         'sources': ['research_harness/acquisition.py:acquire_fulltext']},
+    "research_harness/acquisition.py:import_fulltext:extracted['status']": {
+        'sources': ['research_harness/acquisition.py:import_fulltext']},
     'research_harness/automatic_overrides.py:record_series_stop:code': {
         'sources': ['research_harness/review_continuation.py:plan_next']},
     'research_harness/cli.py:run:args.code': {
