@@ -5718,6 +5718,20 @@
         "test_series_ending.SeriesEndingTests.test_memory_only_stop_description_and_classification_need_no_store",
         "test_review_continuation_regressions.ContinuationRegressionTests.test_series_ends_with_the_exhausted_fixed_slot_stop"
       ]
+    },
+    {
+      "id": "series-entry-codes-have-reviewed-named-cause-decisions",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "review series entry code membership",
+      "summary": "Codes written as report, obligation, parser, warning or line entries could end a series without a reviewed registry row.",
+      "expected": "All audited entry members end at the named_cause decision inside the reach recorder. Both printed inspections run on a supported retained state, and writing-place evidence covers every member with the entry condition.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_series_rows_close_entry.EntryRowTests.test_every_entry_member_ends_with_the_named_cause_decision_inside_the_recorder",
+        "test_series_rows_close_entry.EntryRowTests.test_both_printed_answers_run_on_a_supported_retained_state",
+        "test_series_rows_close_entry.EntryRowTests.test_entry_evidence_passes_writing_place_and_condition_group_guards"
+      ]
     }
   ]
 }

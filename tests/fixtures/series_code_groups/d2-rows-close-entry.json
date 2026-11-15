@@ -1,0 +1,893 @@
+{
+  "named_cause": {
+    "members": {
+      "abstract_reading_incomplete": {
+        "research_harness/reading.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "abstract_reading_missing": {
+        "research_harness/screening.py:reference_obligations#1": [
+          "entry"
+        ]
+      },
+      "and_context_not_established": {
+        "research_harness/synthesis.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "bibliography_incomplete": {
+        "research_harness/graph.py:citation_graph#1": [
+          "entry"
+        ]
+      },
+      "branch_disposition_missing": {
+        "research_harness/development.py:_compose_candidate#1": [
+          "entry"
+        ],
+        "research_harness/development.py:_development#1": [
+          "entry"
+        ]
+      },
+      "branch_resolution_unverified": {
+        "research_harness/development.py:_compose_candidate#1": [
+          "entry"
+        ]
+      },
+      "candidate_checkpoint_stale": {
+        "research_harness/development.py:_compose_candidate#1": [
+          "entry"
+        ]
+      },
+      "case_field_conflict": {
+        "research_harness/synthesis.py:_innovation#1": [
+          "entry"
+        ]
+      },
+      "claim_source_support_unresolved": {
+        "research_harness/synthesis.py:_Assessment.claim#1": [
+          "entry"
+        ]
+      },
+      "cohort_abstract_reading_missing": {
+        "research_harness/cohort_evidence.py:_cohort_report#1": [
+          "entry"
+        ],
+        "research_harness/screening.py:member_obligations#1": [
+          "entry"
+        ]
+      },
+      "cohort_missing": {
+        "research_harness/cohort_evidence.py:_cohort_report#1": [
+          "entry"
+        ],
+        "research_harness/cohort_evidence.py:_cohort_report#2": [
+          "entry"
+        ]
+      },
+      "collection_incomplete": {
+        "research_harness/acquisition.py:_collection_summary#1": [
+          "entry"
+        ]
+      },
+      "collection_pending": {
+        "research_harness/cohort_evidence.py:_cohort_report#1": [
+          "entry"
+        ]
+      },
+      "component_page_missing": {
+        "research_harness/components.py:find_component_page_obligations#1": [
+          "entry"
+        ]
+      },
+      "context_missing": {
+        "research_harness/synthesis.py:_synthesis_state#1": [
+          "entry"
+        ]
+      },
+      "contribution_evidence_missing": {
+        "research_harness/development.py:_development#1": [
+          "entry"
+        ]
+      },
+      "critical_source_unavailable": {
+        "research_harness/literature.py:_foundation_state#1": [
+          "entry"
+        ]
+      },
+      "development_assessment_missing": {
+        "research_harness/development.py:_compose_candidate#1": [
+          "entry"
+        ],
+        "research_harness/development.py:_development#1": [
+          "entry"
+        ],
+        "research_harness/development.py:assess_readiness#1": [
+          "entry"
+        ],
+        "research_harness/publication_scope.py:_assess_manuscript_readiness#1": [
+          "entry"
+        ]
+      },
+      "development_dependencies_stale": {
+        "research_harness/development.py:_Context.assess_record#1": [
+          "entry"
+        ]
+      },
+      "direction_reading_missing": {
+        "research_harness/claim_minimums.py:describe_direction#1": [
+          "entry"
+        ]
+      },
+      "direction_root_reading_missing": {
+        "research_harness/claim_minimums.py:describe_direction#1": [
+          "entry"
+        ]
+      },
+      "direction_search_incomplete": {
+        "research_harness/claim_minimums.py:describe_direction#1": [
+          "entry"
+        ]
+      },
+      "direction_search_missing": {
+        "research_harness/claim_minimums.py:describe_direction#1": [
+          "entry"
+        ]
+      },
+      "direction_standards_missing": {
+        "research_harness/claim_minimums.py:describe_direction#1": [
+          "entry"
+        ]
+      },
+      "direction_standards_unresolved": {
+        "research_harness/claim_minimums.py:describe_direction#1": [
+          "entry"
+        ]
+      },
+      "doctrine_coverage_missing": {
+        "research_harness/screening.py:member_obligations#1": [
+          "entry"
+        ]
+      },
+      "dynamic_visual_unsupported": {
+        "research_harness/html_visuals.py:resource_inventory#1": [
+          "entry"
+        ]
+      },
+      "embedded_visual_dependency_unsupported": {
+        "research_harness/html_visuals.py:resource_inventory.resource#1": [
+          "entry"
+        ]
+      },
+      "embedded_visual_unsupported": {
+        "research_harness/html_visuals.py:resource_inventory.resource#1": [
+          "entry"
+        ]
+      },
+      "execution_coverage_missing": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "execution_pending": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ],
+        "research_harness/development.py:_compose_candidate#1": [
+          "entry"
+        ]
+      },
+      "expected_outcome_unresolved": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "external_case_within_field": {
+        "research_harness/synthesis.py:_innovation#1": [
+          "entry"
+        ]
+      },
+      "external_cases_excess": {
+        "research_harness/synthesis.py:_innovation#1": [
+          "entry"
+        ],
+        "research_harness/synthesis.py:_innovation#2": [
+          "entry"
+        ]
+      },
+      "external_cases_insufficient": {
+        "research_harness/synthesis.py:_innovation#1": [
+          "entry"
+        ],
+        "research_harness/synthesis.py:_innovation#2": [
+          "entry"
+        ]
+      },
+      "failure_signal_unresolved": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "fulltext_reading_missing": {
+        "research_harness/literature.py:_foundation_state#1": [
+          "entry"
+        ]
+      },
+      "historical_version_unresolved": {
+        "research_harness/literature.py:_foundation_state#1": [
+          "entry"
+        ],
+        "research_harness/synthesis.py:_Assessment.claim#1": [
+          "entry"
+        ]
+      },
+      "independent_review_missing": {
+        "research_harness/development.py:assess_readiness#1": [
+          "entry"
+        ]
+      },
+      "independent_review_pending": {
+        "research_harness/development.py:_review#1": [
+          "entry"
+        ],
+        "research_harness/development.py:_review#2": [
+          "entry"
+        ]
+      },
+      "innovation_candidates_missing": {
+        "research_harness/synthesis.py:_innovation#1": [
+          "entry"
+        ]
+      },
+      "innovation_case_not_candidate": {
+        "research_harness/synthesis.py:_innovation#1": [
+          "entry"
+        ]
+      },
+      "innovation_event_order_unresolved": {
+        "research_harness/synthesis.py:_innovation#1": [
+          "entry"
+        ]
+      },
+      "innovation_missing": {
+        "research_harness/synthesis.py:_synthesis_state#1": [
+          "entry"
+        ]
+      },
+      "innovation_paper_type_unresolved": {
+        "research_harness/synthesis.py:_innovation#1": [
+          "entry"
+        ]
+      },
+      "invalid_alias": {
+        "research_harness/oai_records.py:parse_record#1": [
+          "entry"
+        ],
+        "research_harness/providers.py:Arxiv.parse#1": [
+          "entry"
+        ]
+      },
+      "invalid_primary_category": {
+        "research_harness/providers.py:Arxiv.parse#1": [
+          "entry"
+        ]
+      },
+      "invalid_work": {
+        "research_harness/providers.py:Crossref.parse#1": [
+          "entry"
+        ],
+        "research_harness/providers.py:OpenAlex.parse#1": [
+          "entry"
+        ]
+      },
+      "missing_abstract": {
+        "research_harness/acquisition.py:_collection_summary#1": [
+          "entry"
+        ]
+      },
+      "missing_primary_category": {
+        "research_harness/providers.py:Arxiv.parse#1": [
+          "entry"
+        ]
+      },
+      "nonmonotone_version_dates": {
+        "research_harness/oai_records.py:parse_record#1": [
+          "entry"
+        ]
+      },
+      "novelty_comparison_stale": {
+        "research_harness/development.py:_development#1": [
+          "entry"
+        ]
+      },
+      "novelty_source_missing": {
+        "research_harness/development.py:_development#1": [
+          "entry"
+        ]
+      },
+      "objective_incomplete": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "objective_missing": {
+        "research_harness/principles.py:_configuration_state#1": [
+          "entry"
+        ]
+      },
+      "objective_scope_incomplete": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "placement_missing": {
+        "research_harness/sampling.py:sample_obligations#1": [
+          "entry"
+        ]
+      },
+      "population_changed": {
+        "research_harness/acquisition.py:_collection_summary#1": [
+          "entry"
+        ]
+      },
+      "primary_category_conflict": {
+        "research_harness/acquisition.py:_collection_summary#1": [
+          "entry"
+        ]
+      },
+      "primary_category_unasserted": {
+        "research_harness/oai_records.py:parse_record#1": [
+          "entry"
+        ]
+      },
+      "problem_already_solved": {
+        "research_harness/problem_openness.py:assess_openness#1": [
+          "entry"
+        ]
+      },
+      "problem_openness_missing": {
+        "research_harness/problem_openness.py:assess_openness#1": [
+          "entry"
+        ]
+      },
+      "problem_openness_stale": {
+        "research_harness/problem_openness.py:assess_openness#1": [
+          "entry"
+        ],
+        "research_harness/problem_openness.py:assess_openness#2": [
+          "entry"
+        ],
+        "research_harness/problem_openness.py:assess_openness#3": [
+          "entry"
+        ],
+        "research_harness/problem_openness.py:assess_openness#4": [
+          "entry"
+        ],
+        "research_harness/problem_openness.py:assess_openness#5": [
+          "entry"
+        ]
+      },
+      "problem_openness_unresolved": {
+        "research_harness/problem_openness.py:assess_openness#1": [
+          "entry"
+        ],
+        "research_harness/problem_openness.py:assess_openness#2": [
+          "entry"
+        ]
+      },
+      "profile_mismatch": {
+        "research_harness/principles.py:_configuration_state#1": [
+          "entry"
+        ]
+      },
+      "prospective_execution_missing": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "rationale_missing": {
+        "research_harness/synthesis.py:_synthesis_state#1": [
+          "entry"
+        ]
+      },
+      "reading_bundle_stale": {
+        "research_harness/reading.py:current_readings.compute#1": [
+          "entry"
+        ]
+      },
+      "reference_unresolved": {
+        "research_harness/graph.py:citation_graph#1": [
+          "entry"
+        ]
+      },
+      "remaining_obligations": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "required_evidence_missing": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "required_result_unverified": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "required_unit_incomplete": {
+        "research_harness/reading.py:required_unit_obligations#1": [
+          "entry"
+        ]
+      },
+      "required_unit_missing": {
+        "research_harness/reading.py:required_unit_obligations#1": [
+          "entry"
+        ]
+      },
+      "required_unit_uninspected": {
+        "research_harness/reading.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "required_validation_unverified": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "resource_limit_exceeded": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "result_evidence_missing": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "result_execution_incomplete": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "result_scope_unplanned": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "review_adjudication_evidence_undelivered": {
+        "research_harness/review_protocol.py:adjudication_state#1": [
+          "entry"
+        ]
+      },
+      "review_adjudication_missing": {
+        "research_harness/review_protocol.py:adjudication_state#1": [
+          "entry"
+        ]
+      },
+      "review_assignment_missing": {
+        "research_harness/review_protocol.py:_assignment_state#1": [
+          "entry"
+        ]
+      },
+      "review_assurance_dependency_pending": {
+        "research_harness/review_staged.py:_check_completion_assurances#1": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_assurances#2": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_assurances#3": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_assurances#4": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_assurances#5": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_assurances#6": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_decisions#1": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_decisions#2": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_decisions#3": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_decisions#4": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_terminal_identity#1": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_terminal_identity#2": [
+          "entry"
+        ]
+      },
+      "review_card_pending": {
+        "research_harness/review_staged.py:_check_completion_card_reconciliation#1": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_card_reconciliation#2": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_card_reconciliation#3": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_card_reconciliation#4": [
+          "entry"
+        ]
+      },
+      "review_card_question_pending": {
+        "research_harness/review_staged.py:_check_completion_finding_answers#1": [
+          "entry"
+        ]
+      },
+      "review_claim_cell_pending": {
+        "research_harness/review_staged.py:_iter_completion_issue_rows#1": [
+          "entry"
+        ]
+      },
+      "review_claim_unresolved": {
+        "research_harness/review_staged.py:_check_completion_card_reconciliation#1": [
+          "entry"
+        ]
+      },
+      "review_combination_pending": {
+        "research_harness/review_staged.py:_check_completion_combinations#1": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_combinations#2": [
+          "entry"
+        ]
+      },
+      "review_correction_inadmissible": {
+        "research_harness/review_protocol.py:adjudication_state#1": [
+          "entry"
+        ]
+      },
+      "review_finding_answer_pending": {
+        "research_harness/review_staged.py:_check_completion_finding_answers#1": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_requirements#1": [
+          "entry"
+        ]
+      },
+      "review_frame_unresolved": {
+        "research_harness/review_staged.py:_check_completion_finding_answers#1": [
+          "entry"
+        ]
+      },
+      "review_integration_pending": {
+        "research_harness/review_staged.py:_check_completion_integration_accounting#1": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_integration_accounting#2": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_integration_accounting#3": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_terminal_integration#1": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_terminal_integration#2": [
+          "entry"
+        ]
+      },
+      "review_integration_unresolved": {
+        "research_harness/review_staged.py:_check_completion_integration_accounting#1": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_integration_accounting#2": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_integration_accounting#3": [
+          "entry"
+        ]
+      },
+      "review_objection_evidence_pending": {
+        "research_harness/review_staged.py:_check_completion_objection_evidence#1": [
+          "entry"
+        ]
+      },
+      "review_original_check_pending": {
+        "research_harness/review_staged.py:_check_completion_original_checks#1": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_requirements#1": [
+          "entry"
+        ]
+      },
+      "review_output_refused": {
+        "research_harness/review_protocol.py:_assignment_state#1": [
+          "entry"
+        ]
+      },
+      "review_retrieval_pending": {
+        "research_harness/review_staged.py:_check_completion_retrievals#1": [
+          "entry"
+        ]
+      },
+      "review_source_coverage_pending": {
+        "research_harness/review_staged.py:_check_completion_coverage#1": [
+          "entry"
+        ],
+        "research_harness/review_staged.py:_check_completion_coverage#2": [
+          "entry"
+        ]
+      },
+      "review_task_exhausted": {
+        "research_harness/review_task_execution.py:_consume_resources#1": [
+          "entry"
+        ]
+      },
+      "review_terminal_pending": {
+        "research_harness/review_staged.py:_check_completion_terminal#1": [
+          "entry"
+        ]
+      },
+      "review_transport_failure": {
+        "research_harness/review_answer_recovery.py:recover_answer#1": [
+          "entry"
+        ],
+        "research_harness/review_transport.py:observe#1": [
+          "entry"
+        ]
+      },
+      "review_usage_window_insufficient": {
+        "research_harness/review_provider_usage.py:describe_usage#1": [
+          "entry"
+        ]
+      },
+      "root_missing": {
+        "research_harness/graph.py:citation_graph#1": [
+          "entry"
+        ]
+      },
+      "roots_missing": {
+        "research_harness/graph.py:citation_graph#1": [
+          "entry"
+        ]
+      },
+      "sample_reading_missing": {
+        "research_harness/sampling.py:sample_obligations#1": [
+          "entry"
+        ]
+      },
+      "sample_stale": {
+        "research_harness/sampling.py:sample_obligations#1": [
+          "entry"
+        ]
+      },
+      "scoped_review_missing": {
+        "research_harness/publication_scope.py:_assess_manuscript_readiness#1": [
+          "entry"
+        ]
+      },
+      "scoped_review_pending": {
+        "research_harness/publication_scope.py:_assess_manuscript_readiness#1": [
+          "entry"
+        ]
+      },
+      "scoped_target_rejected": {
+        "research_harness/publication_scope.py:_assess_manuscript_readiness#1": [
+          "entry"
+        ]
+      },
+      "screening_audit_failed": {
+        "research_harness/screening.py:_audit_obligations#1": [
+          "entry"
+        ],
+        "research_harness/screening.py:_audit_obligations#2": [
+          "entry"
+        ]
+      },
+      "screening_audit_reading_missing": {
+        "research_harness/screening.py:_audit_obligations#1": [
+          "entry"
+        ]
+      },
+      "screening_missing": {
+        "research_harness/screening.py:member_obligations#1": [
+          "entry"
+        ],
+        "research_harness/screening.py:reference_obligations#1": [
+          "entry"
+        ]
+      },
+      "search_page_metadata_mismatch": {
+        "research_harness/search_pages.py:native_page#1": [
+          "entry"
+        ]
+      },
+      "search_pagination_unsupported": {
+        "research_harness/search_pages.py:native_page#1": [
+          "entry"
+        ]
+      },
+      "search_pending": {
+        "research_harness/literature.py:_foundation_state#1": [
+          "entry"
+        ]
+      },
+      "search_purpose_missing": {
+        "research_harness/literature.py:_foundation_state#1": [
+          "entry"
+        ]
+      },
+      "source_bundle_incomplete": {
+        "research_harness/bar_sources.py:_declared_units#1": [
+          "entry"
+        ],
+        "research_harness/reading.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "source_bundle_missing": {
+        "research_harness/literature.py:_foundation_state#1": [
+          "entry"
+        ],
+        "research_harness/literature.py:_foundation_state#2": [
+          "entry"
+        ]
+      },
+      "standards_applicability_unresolved": {
+        "research_harness/synthesis.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "standards_missing": {
+        "research_harness/synthesis.py:_synthesis_state#1": [
+          "entry"
+        ]
+      },
+      "stop_record_error": {
+        "research_harness/review_series.py:_end_series#1": [
+          "entry"
+        ]
+      },
+      "synthesis_dependencies_stale": {
+        "research_harness/synthesis.py:_synthesis_state#1": [
+          "entry"
+        ]
+      },
+      "target_mismatch": {
+        "research_harness/literature.py:_foundation_state#1": [
+          "entry"
+        ],
+        "research_harness/principles.py:_configuration_state#1": [
+          "entry"
+        ]
+      },
+      "target_source_pin_invalid": {
+        "research_harness/literature.py:_foundation_state#1": [
+          "entry"
+        ]
+      },
+      "target_source_pin_missing": {
+        "research_harness/literature.py:_foundation_state#1": [
+          "entry"
+        ],
+        "research_harness/principles.py:_configuration_state#1": [
+          "entry"
+        ]
+      },
+      "unstructured_authors": {
+        "research_harness/oai_records.py:parse_record#1": [
+          "entry"
+        ]
+      },
+      "useful_branch_remaining": {
+        "research_harness/development.py:_development#1": [
+          "entry"
+        ]
+      },
+      "useful_development_remaining": {
+        "research_harness/development.py:_development#1": [
+          "entry"
+        ],
+        "research_harness/development.py:_development#2": [
+          "entry"
+        ]
+      },
+      "validity_check_missing": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "validity_evidence_unbound": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "validity_unresolved": {
+        "research_harness/development.py:_assess#1": [
+          "entry"
+        ]
+      },
+      "visual_asset_missing": {
+        "research_harness/visual_assets.py:visual_context#1": [
+          "entry"
+        ]
+      },
+      "visual_asset_pending": {
+        "research_harness/visual_assets.py:visual_context#1": [
+          "entry"
+        ],
+        "research_harness/visual_assets.py:visual_context#2": [
+          "entry"
+        ],
+        "research_harness/visual_assets.py:visual_context#3": [
+          "entry"
+        ]
+      },
+      "visual_asset_stale": {
+        "research_harness/visual_assets.py:visual_context#1": [
+          "entry"
+        ]
+      },
+      "visual_asset_unlinked": {
+        "research_harness/visual_assets.py:visual_context#1": [
+          "entry"
+        ]
+      },
+      "visual_document_style_unsupported": {
+        "research_harness/html_visuals.py:resource_inventory#1": [
+          "entry"
+        ]
+      },
+      "visual_markup_ambiguous": {
+        "research_harness/html_visuals.py:resource_inventory#1": [
+          "entry"
+        ]
+      },
+      "visual_resource_missing": {
+        "research_harness/html_visuals.py:resource_inventory#1": [
+          "entry"
+        ],
+        "research_harness/html_visuals.py:resource_inventory.resource#1": [
+          "entry"
+        ]
+      },
+      "visual_scope_unresolved": {
+        "research_harness/html_visuals.py:resource_inventory#1": [
+          "entry"
+        ]
+      },
+      "visual_srcset_unsupported": {
+        "research_harness/html_visuals.py:resource_inventory#1": [
+          "entry"
+        ],
+        "research_harness/html_visuals.py:resource_inventory#2": [
+          "entry"
+        ]
+      },
+      "visual_style_unsupported": {
+        "research_harness/html_visuals.py:resource_inventory#1": [
+          "entry"
+        ]
+      },
+      "visual_url_unsupported": {
+        "research_harness/html_visuals.py:resource_inventory.resource#1": [
+          "entry"
+        ]
+      },
+      "within_field_case_missing": {
+        "research_harness/synthesis.py:_innovation#1": [
+          "entry"
+        ]
+      },
+      "work_missing": {
+        "research_harness/literature.py:_foundation_state#1": [
+          "entry"
+        ]
+      }
+    }
+  }
+}
