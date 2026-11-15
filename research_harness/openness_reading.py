@@ -43,6 +43,7 @@ PROTOCOL_V6 = 'exactory-openness-reading-v6'
 PROTOCOL_V7 = 'exactory-openness-reading-v7'
 NEW_PROBLEM_CHAIN_PROTOCOLS = (PROTOCOL_V6,)
 PROTOCOL_SELECTION_TEXT = 'The chain uses {protocol}; earlier admission refusals: {refusals}.'
+NEW_PROBLEM_CHAIN_TEXT = 'New problem chains try {protocols} in order, using the first protocol that admits the packet.'
 # The protocol of a math-solver result review's chain: the units of v3 in the math order, no statement record, and a
 # final passage request that must deliver characters.
 MATH_PROTOCOL = 'exactory-openness-reading-math-v1'
@@ -2669,6 +2670,9 @@ def verify_problem_coverage(records, artifacts, assignment, *, final=False):
     only reading turns of this chain. Unit receipts likewise describe complete earlier reading delivery, with the
     original artifact and exact contributing assignments, attempts and parts.
     """
+    if find_protocol(json.loads(artifacts.read(assignment['packet']))) == PROTOCOL_V7:
+        from .openness_reading_v7 import verify_problem_coverage as verify_v7_coverage
+        return verify_v7_coverage(records, artifacts, assignment, final=final)
     from .native_review import load_packet
     native = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
     rows = list_reading_rows(records, artifacts, native, review=assignment)
@@ -2708,6 +2712,9 @@ def verify_chain(records, artifacts, assignment):
     _require_math_continuity states. A final turn that 0.64.2 to 0.66.2 built is verified by the rules of those
     releases."""
     packet = json.loads(artifacts.read(assignment['packet']))
+    if find_protocol(packet) == PROTOCOL_V7:
+        from .openness_reading_v7 import verify_chain as verify_v7_chain
+        return verify_v7_chain(records, artifacts, assignment)
     if packet[RECORD_KEY]['protocol'] in (PROTOCOL_V5, PROTOCOL_V6):
         return verify_problem_coverage(records, artifacts, assignment, final=True)['turns']
     if packet[RECORD_KEY]['protocol'] not in GENERIC_UNIT_PROTOCOLS:

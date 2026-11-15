@@ -594,6 +594,10 @@ def _review_status(records, artifacts):
                    if _matches_call_scope(records, row['scope'], dict(assignment_id=identifier))]
         if drivers:
             entry['drivers'] = drivers
+    if any('protocol_selection' in assignment for assignment in records.get('review_assignment', {}).values()):
+        from .openness_reading import NEW_PROBLEM_CHAIN_PROTOCOLS, NEW_PROBLEM_CHAIN_TEXT
+        result['new_problem_chain_protocols'] = dict(protocols=list(NEW_PROBLEM_CHAIN_PROTOCOLS),
+            message=NEW_PROBLEM_CHAIN_TEXT.format(protocols=', '.join(NEW_PROBLEM_CHAIN_PROTOCOLS)))
     from .review_provider_usage import describe_usage
     usage = describe_usage(records, artifacts)
     if usage['windows']:

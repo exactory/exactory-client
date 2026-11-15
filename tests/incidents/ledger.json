@@ -6679,6 +6679,21 @@
         "test_openness_carried_integration.FallbackCarriedIntegrationTests.test_a4_floor_final_with_one_extra_target_uses_v6_and_names_would_carry",
         "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery"
       ]
+    },
+    {
+      "id": "v7-carried-chain-verifies-and-records-finding",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "mixed-protocol reading verification",
+      "summary": "The earlier reading chain could not fit its final after reading all required units.",
+      "expected": "A v7 final verifies the stored carried selection and every own state, records its finding with origin turns, and becomes stale if an origin no longer authenticates.",
+      "fixed_in": "0.91.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+        "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+        "test_openness_reading_v7_verification.V5VerificationTests.test_carried_contamination_makes_recorded_finding_stale",
+        "test_openness_reading_v7_verification.AffectedNoteVerificationTests.test_required_two_notes_need_both_ranges_but_on_request_note_can_be_undelivered"
+      ]
     }
   ]
 }

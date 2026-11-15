@@ -400,6 +400,8 @@ def status_summary(report):
         result["review_slots"] = dict(occupied=slots["occupied"],
             **{key: len(slots[key]) for key in ("complete", "incomplete", "pending")})
     assignments = report.get('review', {}).get('assignments', {})
+    if 'new_problem_chain_protocols' in report.get('review', {}):
+        result['new_problem_chain_protocols'] = report['review']['new_problem_chain_protocols']
     series = {}
     for identifier, assignment in assignments.items():
         progress = assignment.get('review_parts')

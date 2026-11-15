@@ -23,6 +23,7 @@ SELECTION_PROTOCOL = 'exactory-openness-carried-selection-v1'
 CHAIN_OBSERVERS = MappingProxyType({
     'exactory-openness-reading-v5': v7.observe_carried_chain,
     'exactory-openness-reading-v6': v7.observe_carried_chain,
+    'exactory-openness-reading-v7': v7.observe_v7_chain,
 })
 
 
@@ -159,6 +160,7 @@ def classify_carried_notes(inventory, observations, *, search_dependencies=None)
     dependencies, result, received_passages = {}, [], []
     for observation in observations:
         sources = [dict(identity=row['identity'], sha256=row['sha256']) for row in observation['deliveries']]
+        sources += observation.get('dependencies', [])
         sources += received_passages
         for source in sources:
             originals = (search_dependencies or {}).get((digest(source['identity']), source['sha256']), [source])

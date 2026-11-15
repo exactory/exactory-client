@@ -2767,10 +2767,8 @@ def _prompt_matches(assignment, packet=None):
     if source_rules is not None and packet is not None and packet.get('source_rules') != source_rules:
         return False
     if envelope.get('template_id', '').startswith(READING_V7_PROTOCOL + '/'):
-        parameters = envelope['parameters']
-        return envelope == canonical_prompt('native_math', reading_stage=parameters['reading_stage'],
-            reading_protocol=READING_V7_PROTOCOL, common_version=find_common_prompt_version(envelope),
-            capacity=parameters.get('capacity'))
+        from .openness_reading_v7 import matches_turn_prompt
+        return matches_turn_prompt(assignment, packet)
     base = prompt_paragraphs.strip_prompt_paragraphs(envelope, assignment['role'])
     if base is None:
         return False

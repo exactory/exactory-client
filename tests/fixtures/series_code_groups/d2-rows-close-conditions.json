@@ -919,6 +919,9 @@
         ]
       },
       "openness_native_evidence_undelivered": {
+        "research_harness/openness_reading_v7.py:project_native_delivery#1": [
+          "content"
+        ],
         "research_harness/problem_openness_reviews.py:actual_delivery#1": [
           "form"
         ],

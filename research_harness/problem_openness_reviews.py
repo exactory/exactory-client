@@ -404,6 +404,10 @@ def actual_delivery(records, artifacts, state, packet, required):
     require(isinstance(content, str) and content.startswith(PACKET_LABEL),
             "The observed request must identify its supplied packet", UNDELIVERED)
     supplied = strict_json(content[len(PACKET_LABEL):].encode())
+    if supplied.get('reading_final', {}).get('protocol') == 'exactory-openness-reading-v7':
+        from .openness_reading_v7 import project_native_delivery
+        assignment = records['review_assignment'][attempt['assignment_id']]
+        return project_native_delivery(records, artifacts, assignment, packet, required)
     actual = supplied.get("native", {})
     # Artifact descriptor presentation can differ, but scientific identities and findings cannot.
     require(all(actual.get(key) == packet[key] for key in

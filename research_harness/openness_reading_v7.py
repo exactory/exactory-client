@@ -60,11 +60,17 @@ class _PlanningArtifacts:
     """An invocation-local overlay makes admission pure, including derivative artifacts."""
     def __init__(self, source):
         self.source = source
+        self.root = getattr(source, 'root', None)
         self.bodies = {}
 
     def read(self, reference):
         content = self.bodies.get(reference['sha256'])
         return self.source.read(reference) if content is None else content
+
+    def require_local_read(self, purpose):
+        from .evaluation import Evaluation
+        source = self.source.store if isinstance(self.source, Evaluation) else self.source
+        source.require_local_read(purpose)
 
     def put(self, content, media_type):
         reference = describe_artifact(content, media_type)
@@ -324,7 +330,14 @@ def _find_largest_one_request_targets(records, artifacts, route, native):
 
 def _check_v7_admission(records, artifacts, route, native, *, include_largest):
     overlay = _PlanningArtifacts(artifacts)
-    original = build_inventory(records, artifacts, native)
+    if has_binary_native_evidence(artifacts, native):
+        return dict(state='stop', protocol=PROTOCOL, reason='binary_required_evidence',
+                    largest_one_request_targets=0)
+    try:
+        original = build_inventory(records, artifacts, native)
+    except UnicodeDecodeError:
+        return dict(state='stop', protocol=PROTOCOL, reason='binary_required_evidence',
+                    largest_one_request_targets=0)
     labels = list_target_labels(native)
     fixed_bounds = dict(statement=100000, formulations=TARGET_LABELS_CHARACTERS, native_frame=100000)
     try:
@@ -455,6 +468,26 @@ def plan_inventory(rows, bodies, *, search_bindings=()):
     return dict(inventory=inventory, artifact=_describe_json(inventory), bodies=content)
 
 
+def _list_native_evidence(native):
+    from .problem_openness_sources import required_proof
+    from .problem_openness_screening import required_evidence
+    required = required_proof(native) | required_evidence(native['scientific_context'])
+    return [row for row in native.get('evidence', []) if row['digest'] in required]
+
+
+def has_binary_native_evidence(artifacts, native):
+    from .review_transport import is_binary_evidence
+    for row in _list_native_evidence(native):
+        content = artifacts.read(row['artifact'])
+        if is_binary_evidence(content, row['artifact']['media_type']):
+            return True
+        try:
+            content.decode('utf-8')
+        except UnicodeDecodeError:
+            return True
+    return False
+
+
 def build_inventory(records, artifacts, native, *, review=None):
     """Read v6 logical units with the common capture derivation, plus the v7 minimum/gap/notice units (D3 I2).
 
@@ -462,13 +495,21 @@ def build_inventory(records, artifacts, native, *, review=None):
     authenticated stored plans. No second capture-selection algorithm lives here.
     """
     rows = reading.list_reading_rows(records, artifacts, native, review=review)
-    bodies = {row['artifact']['sha256']: artifacts.read(row['artifact']) for row in rows}
     context = native['scientific_context']
+    included = {row['artifact']['sha256'] for row in rows}
+    for row in _list_native_evidence(native):
+        if row['digest'] not in included:
+            rows.append(dict(kind='record', record_kind='native_evidence', record_id=row['digest'],
+                             artifact=row['artifact']))
+            included.add(row['digest'])
+    bodies = {row['artifact']['sha256']: artifacts.read(row['artifact']) for row in rows}
     bindings = [dict(binding, search=json.loads(bodies[binding['search_digest']]))
                 for binding in context['openness_minimum']['searches']]
     for field, value in [('openness_minimum', context['openness_minimum']),
                          ('minimum_gaps', context.get('minimum_gaps', [])),
-                         ('audit_notices', context.get('audit_forecast', {}).get('notices', []))]:
+                         ('audit_notices', context.get('audit_forecast', {}).get('notices', []))] + [
+                             (field, context[field]) for field in ('native_reviews', 'openness_delivery', 'source_evidence')
+                             if field in context]:
         content = serialize_record(value)
         reference = describe_artifact(content, 'application/json')
         rows.append(dict(kind='record', record_kind=field, record_id=field, artifact=reference))
@@ -1138,6 +1179,8 @@ def prepare_carried_assignment(records, artifacts, value, route, logical, admiss
 
 def describe_uncarried_chains(records, artifacts, value, route, native):
     """Report the selection v7 would carry when admission instead chooses v6; credit nothing."""
+    if has_binary_native_evidence(artifacts, native):
+        return dict(chains=[], would_carry=[], passed_over=[])
     from .openness_carried import build_carried_selection, describe_carried_selection
     overlay = _PlanningArtifacts(artifacts)
     built = build_inventory(records, overlay, native, review=value)
@@ -1434,6 +1477,31 @@ def build_handle_packet(packet, artifacts, assignment):
                 material_state=copy.deepcopy(state.get('material_state', dict(arguments={}, pending=None))))
 
 
+def _project_observed_turn(records, artifacts, member, frozen, output, attempt_id, inventory, route, before):
+    """Project one authenticated own response, including completed material references."""
+    projection = project_own_turn(artifacts, route, frozen, output, member['id'], attempt_id,
+                                 state=before, inventory=inventory)
+    if output.get('stage') == 'material':
+        from .review_handles import advance_material
+        material = advance_material(build_handle_packet(frozen, artifacts, member), output, artifacts)
+        projection.update(material_state=material['material_state'], material_request=material['material_request'])
+        allowances = {row['handle']: dict(row, remaining=row['characters'] - row['used'])
+                      for row in before['allowances']['targets']}
+        old_arguments = before.get('material_state', {}).get('arguments', {})
+        for key, argument in material['material_state']['arguments'].items():
+            if argument['complete'] and not old_arguments.get(key, {}).get('complete'):
+                row = dict(handle=key, title=argument['title'], reference=material['handle_table'][key]['reference'])
+                status = _charge_reference_row(route, dict(row, handle='m999999999'), list(allowances),
+                                               allowances, projection['allowance_use']['targets'])
+                argument['status'] = status
+                if status == 'verified':
+                    projection['references'][key] = material['handle_table'][key]
+    # Excerpt descriptors and gap details are immutable objects too.
+    for entry in projection['entries']:
+        artifacts.put(entry['text'].encode('utf-8'), 'text/plain; charset=utf-8')
+    return projection
+
+
 def _rebuild_own_state(records, artifacts, prior, inventory, plan, route):
     from .review_protocol import assignment_state
     projections = []
@@ -1448,26 +1516,8 @@ def _rebuild_own_state(records, artifacts, prior, inventory, plan, route):
         if output.get('stage') not in ('reading', 'material'):
             raise ResearchError('review_resampling_forbidden', 'A final finding ends the v7 chain.')
         _, _, before = read_bound_state(artifacts, member, frozen)
-        projection = project_own_turn(artifacts, route, frozen, output, member['id'], observed['attempt_id'],
-                                     state=before, inventory=inventory)
-        if output.get('stage') == 'material':
-            from .review_handles import advance_material
-            material = advance_material(build_handle_packet(frozen, artifacts, member), output, artifacts)
-            projection.update(material_state=material['material_state'], material_request=material['material_request'])
-            allowances = {row['handle']: dict(row, remaining=row['characters'] - row['used'])
-                          for row in before['allowances']['targets']}
-            old_arguments = before.get('material_state', {}).get('arguments', {})
-            for key, argument in material['material_state']['arguments'].items():
-                if argument['complete'] and not old_arguments.get(key, {}).get('complete'):
-                    row = dict(handle=key, title=argument['title'], reference=material['handle_table'][key]['reference'])
-                    status = _charge_reference_row(route, dict(row, handle='m999999999'), list(allowances),
-                                                   allowances, projection['allowance_use']['targets'])
-                    argument['status'] = status
-                    if status == 'verified':
-                        projection['references'][key] = material['handle_table'][key]
-        # Excerpt descriptors and gap details are immutable objects too.
-        for entry in projection['entries']:
-            artifacts.put(entry['text'].encode('utf-8'), 'text/plain; charset=utf-8')
+        projection = _project_observed_turn(records, artifacts, member, frozen, output,
+                                            observed['attempt_id'], inventory, route, before)
         projections.append(projection)
     first = records['review_assignment'][prior['reading_chain']['first_assignment_id']]
     initial = json.loads(artifacts.read(first['reading_chain']['state']))
@@ -1678,3 +1728,286 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
     bounds = packet.get('reading_turn', packet.get('reading_final'))['capacity']
     return dict(kind='replace', reason='capacity', payload=value, preflight=preflight,
                 details=dict(material_allowance=bounds['material_allowance'], answer_bound=bounds['answer_bound']))
+
+
+# Writer placeholders: each condition has one refusal message.
+ORIGIN_VERIFICATION_MESSAGE = 'A carried origin prefix must verify under its own protocol.'
+STATE_VERIFICATION_MESSAGE = 'The stored selection and every v7 state must equal their authenticated reconstruction.'
+BINDING_VERIFICATION_MESSAGE = 'Every v7 turn must keep its first binding, prompt, allowances and undelivered ranges.'
+COVERAGE_VERIFICATION_MESSAGE = 'Deliver every required range and affected note, and reconstruct every bound search.'
+FINAL_VERIFICATION_MESSAGE = 'End the v7 chain with one authenticated final finding.'
+
+
+def _require_verification(condition, message, **details):
+    if not condition:
+        raise ResearchError('openness_reading_incomplete', message, details)
+
+
+def _verify_carried_origins(records, artifacts, first, native, route, plan):
+    """Condition 1: authenticate named origin prefixes through their protocol observers.
+
+    The selection verifier also checks each stored item. It never selects again.
+    Origin observers recurse only into assignments recorded before this first turn.
+    """
+    from .openness_carried import SELECTION_PROTOCOL, verify_carried_selection
+    reference = first['carried_selection']
+    selection = json.loads(artifacts.read(reference['artifact']))
+    _require_verification(reference['protocol'] == SELECTION_PROTOCOL and reference['digest'] == digest(selection),
+                          ORIGIN_VERIFICATION_MESSAGE)
+    base = read_carried_inventory(artifacts, first)
+    identity = _describe_carried_identity(records, first, route, native)
+    projections = verify_carried_selection(records, artifacts, base, identity, selection, plan=plan)
+    return selection, projections
+
+
+def _verify_rebuilt_state(artifacts, assignment, packet, rebuilt):
+    """Condition 2: compare the entire projected state, rather than trusting its digest alone."""
+    binding = packet.get('reading_turn', packet.get('reading_final', {}))
+    stored = json.loads(artifacts.read(assignment['reading_chain']['state']))
+    _require_verification(stored == rebuilt and binding.get('state_digest') == digest(rebuilt),
+                          STATE_VERIFICATION_MESSAGE, assignment_id=assignment['id'])
+
+
+def _verify_turn_binding(records, artifacts, first, assignment, packet, native, route,
+                         inventory, state, plan, number):
+    """Condition 3: rebuild the turn at its historical allowance with its recorded prompt ids."""
+    from . import review_protocol as protocol
+    from .operations import normalized_text
+    kind = reading.find_stage(packet)
+    binding = packet.get('reading_turn', packet.get('reading_final', {}))
+    chain = assignment['reading_chain']
+    _require_verification(kind in ('reading', 'final') and reading.find_protocol(packet) == PROTOCOL
+        and assignment['role'] == first['role'] == 'native_math'
+        and assignment['context']['native_packet'] == first['context']['native_packet']
+        and assignment['route_id'] == first['route_id']
+        and all(normalized_text(assignment[key]) == normalized_text(first[key]) for key in ('reviewer_id', 'author_id'))
+        and chain['first_assignment_id'] == first['id'] and chain['turn'] == number
+        and chain['inventory'] == first['reading_chain']['inventory']
+        and assignment['capacity_plan'] == first['capacity_plan']
+        and binding.get('plan_digest') == digest(plan) and binding.get('inventory_digest') == digest(inventory),
+        BINDING_VERIFICATION_MESSAGE, assignment_id=assignment['id'])
+    prior_id = assignment.get('capacity_replacement_of') or assignment['context'].get('prior_assignment_id')
+    if prior_id is None:
+        limits = capacity.derive_plan_task_limits(plan, kind)
+    else:
+        # The current output and later measurements cannot alter this request's grants.
+        historical = dict(records, review_attempt={key: row for key, row in records.get('review_attempt', {}).items()
+            if row['recorded_revision'] < assignment['recorded_revision']})
+        prior = records['review_assignment'][prior_id]
+        limits = capacity.derive_turn_task_limits(historical, artifacts, prior, kind=kind)
+        if (assignment.get('capacity_replacement_of') and kind == 'final'
+                and state.get('material_state', {}).get('pending')):
+            frozen = json.loads(artifacts.read(prior['packet']))
+            limits['answer_bound'] = max(plan['task']['final']['smallest_answer_bound'],
+                                        frozen['reading_final']['capacity']['answer_bound'] // 2)
+    logical = dict(protocol=protocol.PROTOCOL, role=first['role'], reviewer_id=first['reviewer_id'],
+                   dossier_id=first['dossier_id'], native=native)
+    expected = build_turn_packet(artifacts, route, logical, first['id'], number, inventory, state, plan,
+                                 limits, kind, requests=state.get('pending_requests', []))
+    _require_verification(packet == expected and protocol._prompt_matches(assignment, packet)
+        and assignment['prompt']['parameters'].get('reading_stage') == kind
+        and assignment['prompt']['parameters'].get('capacity') == binding['capacity'],
+        BINDING_VERIFICATION_MESSAGE, assignment_id=assignment['id'])
+
+
+def _verify_required_coverage(artifacts, inventory, state, plan, selection):
+    """Condition 4: ranges, required affected notes and reconstructed original searches."""
+    required = {row['handle'] for row in list_required_affected_notes(plan, selection)['required']}
+    remaining = _find_remaining_ranges(inventory, state)
+    missing = [dict(unit=body['handle'], start=start, end=end) for body, start, end in remaining]
+    # Read the selection policy directly: do not infer required notes from delivery priority.
+    for body in inventory['material']:
+        if body['handle'] in required and not _has_complete_body(inventory, state, body):
+            if not any(row['unit'] == body['handle'] for row in missing):
+                missing.append(dict(unit=body['handle'], start=0, end=body['characters']))
+    searches = _collect_completed_searches(artifacts, inventory, state, [])
+    expected = {row['search_digest'] for row in inventory['search_delivery']['searches']}
+    _require_verification(not missing and expected <= set(searches), COVERAGE_VERIFICATION_MESSAGE,
+                          ranges=missing, searches=sorted(expected - set(searches)))
+    return searches
+
+
+def _has_complete_body(inventory, state, body):
+    spans = [(row['start'], row['end']) for row in state['deliveries']
+             if row['unit'] == body['handle'] or row['unit'] in body['units']]
+    end = 0
+    for left, right in sorted(spans):
+        if left > end:
+            return False
+        end = max(end, right)
+    return end >= body['characters']
+
+
+def _verify_final_attempt(records, artifacts, assignment, observed, packet, *, final):
+    """Condition 5: a final is one observed authenticated finding, ending this prefix."""
+    from .review_protocol import authenticate_attempt
+    terminal = reading.find_stage(packet) == 'final' and observed['output'].get('stage') not in ('reading', 'material')
+    _require_verification(terminal == final and authenticate_attempt(records, artifacts, assignment,
+        records['review_attempt'][observed['attempt_id']]), FINAL_VERIFICATION_MESSAGE,
+        assignment_id=assignment['id'])
+
+
+def verify_problem_coverage(records, artifacts, assignment, *, final=False):
+    """Verify a v7 prefix/final from its stored selection and plan, without admission or planning."""
+    from .native_review import load_packet
+    from .review_protocol import assignment_state
+    overlay = _PlanningArtifacts(artifacts)
+    chain = reading._list_chain(records, assignment)
+    first = records['review_assignment'][assignment['reading_chain']['first_assignment_id']]
+    route = records['review_route'][first['route_id']]
+    native = load_packet(overlay, first['context']['native_packet'], first['reviewer_id'])
+    plan = capacity.read_chain_capacity_plan(overlay, first)
+    inventory = json.loads(overlay.read(first['reading_chain']['inventory']))
+    base = read_carried_inventory(overlay, first)
+    # Inventory reconstruction authenticates its native source bindings; no capacity plan is computed.
+    built = prepare_inventory(build_inventory(records, overlay, native, review=first), native, route,
+                              fixed_bounds=base['fixed_bounds'])
+    _publish_bodies(overlay, built['bodies'])
+    _require_verification(built['inventory'] == base, STATE_VERIFICATION_MESSAGE)
+    selection, projections = _verify_carried_origins(records, overlay, first, native, route, plan)
+    rebuilt = build_chain_state(base, projections, route=route, plan=plan)
+    _require_verification(rebuilt['inventory'] == inventory, STATE_VERIFICATION_MESSAGE)
+    state = rebuilt['state']
+    _publish_bodies(overlay, rebuilt['bodies'])
+    turns = [copy.deepcopy(row['turn']) for row in projections]
+    own = []
+    for number, member in enumerate(chain, 1):
+        packet = json.loads(overlay.read(member['packet']))
+        _verify_rebuilt_state(overlay, member, packet, state)
+        _verify_turn_binding(records, overlay, first, member, packet, native, route, inventory, state, plan, number)
+        observed = assignment_state(records, overlay, member['id'])
+        _require_verification(observed['ready'], FINAL_VERIFICATION_MESSAGE,
+                              assignment_id=member['id'], obligations=observed['obligations'])
+        terminal = final and number == len(chain)
+        _verify_final_attempt(records, overlay, member, observed, packet, final=terminal)
+        projected = _project_observed_turn(records, overlay, member, packet, observed['output'],
+                                          observed['attempt_id'], inventory, route, state)
+        own.append(dict(assignment=member, packet=packet, projection=projected))
+        turns.append(dict(projected['turn'], number=number))
+        state = build_chain_state(inventory, [projected], route=route, plan=plan, initial_state=state)['state']
+    searches = _verify_required_coverage(overlay, inventory, state, plan, selection) if final else state['searches']
+    units = [dict(row['identity'], artifact=row['artifact']) for row in inventory['units']
+             if (row['sha256'] in searches if row['identity'].get('record_kind') == 'literature_search'
+                 else all(_has_complete_body(inventory, state, body) for body in inventory['material']
+                          if body['handle'] in row['bodies']))]
+    return dict(turns=turns, searches=searches, units=units, inventory=inventory, state=state, own=own, native=native)
+
+
+def verify_chain(records, artifacts, assignment):
+    """Return carried turns first with their origin, then this chain's own turns and final."""
+    return verify_problem_coverage(records, artifacts, assignment, final=True)['turns']
+
+
+def observe_v7_chain(records, artifacts, assignment):
+    """Expose only this v7 chain's ready reading turns; carried turns keep their own origin."""
+    packet = json.loads(artifacts.read(assignment['packet']))
+    from .review_protocol import assignment_state
+    terminal = assignment_state(records, artifacts, assignment['id'])
+    final = reading.find_stage(packet) == 'final' and terminal['output'] is not None and terminal['output'].get('stage') not in ('reading', 'material')
+    verified = verify_problem_coverage(records, artifacts, assignment, final=final)
+    inventory = verified['inventory']
+    units = {row['handle']: row for row in inventory['units']}
+    materials = {row['handle']: row for row in inventory['material']}
+    result = []
+    for own in verified['own']:
+        projected = own['projection']
+        if projected['turn']['kind'] != 'reading':
+            continue
+        member = own['assignment']
+        before = json.loads(artifacts.read(member['reading_chain']['state']))
+        searches = [sha256 for sha256 in projected['searches'] if sha256 not in before['searches']]
+        dependencies = {}
+        for span in before['deliveries'] + projected['deliveries']:
+            handles = [span['unit']] if span['unit'] in units else materials[span['unit']]['units']
+            for handle in handles:
+                unit = units[handle]
+                if unit['kind'] not in ('carried_reading', 'target_page', 'fixed_field'):
+                    dependencies[digest(unit['identity'])] = dict(identity=unit['identity'], sha256=unit['sha256'])
+        for entry in before['entries']:
+            if entry['handle'] not in before['pool'] and not entry['targets']:
+                continue
+            handles = [entry['unit']] if entry['unit'] in units else materials[entry['unit']]['units']
+            for handle in handles:
+                unit = units[handle]
+                if unit['kind'] not in ('carried_reading', 'target_page', 'fixed_field'):
+                    dependencies[digest(unit['identity'])] = dict(identity=unit['identity'], sha256=unit['sha256'])
+        deliveries = []
+        for span in projected['deliveries']:
+            body = materials[span['unit']]
+            for handle in body['units']:
+                unit = units[handle]
+                if unit['kind'] == 'carried_reading' or unit['bodies'] != [body['handle']]:
+                    continue
+                text = artifacts.read(body['artifact']).decode('utf-8')[span['start']:span['end']]
+                # V7 names a range's part by start + 1; the whole character
+                # count bounds those ids in the legacy observer vocabulary.
+                deliveries.append(dict(identity=unit['identity'], sha256=unit['sha256'], part=span['part'],
+                    parts=unit['characters'],
+                    start=span['start'], end=span['end'], span_sha256=hashlib.sha256(text.encode('utf-8')).hexdigest(), text=text))
+        entries = []
+        for entry in projected['entries']:
+            if 'handle' in entry or entry['status'] != 'verified':
+                continue
+            source = materials[entry['unit']]
+            for handle in source['units']:
+                unit = units[handle]
+                if unit['bodies'] == [source['handle']] and unit['kind'] != 'carried_reading':
+                    entries.append(dict(identity=unit['identity'], source_sha256=unit['sha256'],
+                        **{key: entry[key] for key in ('start', 'end', 'sha256', 'text', 'purpose', 'status')}))
+        for sha256 in searches:
+            unit = next(row for row in inventory['units'] if row['sha256'] == sha256
+                        and row['identity'].get('record_kind') == 'literature_search')
+            text = artifacts.read(unit['artifact']).decode('utf-8')
+            deliveries.append(dict(identity=unit['identity'], sha256=sha256, part=1, parts=1,
+                start=0, end=len(text), span_sha256=sha256, text=text))
+        origin = dict(chain=member['reading_chain']['first_assignment_id'], protocol=PROTOCOL,
+                      assignment_id=member['id'], attempt_id=projected['turn']['attempt_id'])
+        result.append(dict(origin=origin, turn=dict(projected['turn'], number=member['reading_chain']['turn']),
+            deliveries=deliveries, notes=projected['notes']['text'], excerpts=entries, passages=[],
+            searches=searches, dependencies=list(dependencies.values())))
+    return result
+
+
+def project_native_delivery(records, artifacts, assignment, native, required):
+    """Supply scientific validators a transient projection of authenticated complete v7 delivery.
+
+    The compact final binds the full native packet; source bodies are authenticated by
+    the chain rather than repeated in its last request. Uncovered bytes gain no credit.
+    """
+    from .problem_openness_reviews import require, UNDELIVERED
+    from .problem_openness_sources import apply_delivery
+    verified = verify_problem_coverage(records, artifacts, assignment, final=True)
+    complete = {row['artifact']['sha256'] for row in verified['units']}
+    require(native == verified['native'] and set(required) <= complete, COVERAGE_VERIFICATION_MESSAGE, UNDELIVERED,
+            digests=sorted(set(required) - complete))
+    evidence = []
+    for row in native['evidence']:
+        reference = row['artifact']
+        if row['digest'] in complete:
+            evidence.append(dict(artifact=reference, content=artifacts.read(reference).decode('utf-8'), encoding='utf-8'))
+        else:
+            evidence.append(dict(artifact=reference, content='', encoding='omitted'))
+    supplied = dict(native=native, evidence=evidence)
+    apply_delivery(supplied)
+    return supplied
+
+
+def matches_turn_prompt(assignment, packet=None):
+    """Match the kind's template and applicable paragraphs under their recorded version ids."""
+    from . import review_protocol as protocol, review_prompt_paragraphs as paragraphs
+    envelope = copy.deepcopy(assignment['prompt'])
+    envelope['parameters'].pop('capacity', None)
+    base = paragraphs.strip_prompt_paragraphs(envelope, assignment['role'])
+    if base is None:
+        return False
+    kind = base['parameters'].get('reading_stage')
+    if packet is not None:
+        binding = packet.get('reading_turn', packet.get('reading_final', {}))
+        if (kind != reading.find_stage(packet)
+                or assignment['prompt']['parameters'].get('capacity') != binding.get('capacity')
+                or not paragraphs.matches_packet_paragraphs(envelope, assignment['role'],
+                    dict(packet, subject=dict(kind='problem')))):
+            return False
+    return kind in ('reading', 'final') and base == protocol.canonical_prompt('native_math',
+        reading_stage=kind, reading_protocol=PROTOCOL,
+        common_version=protocol.find_common_prompt_version(envelope))
