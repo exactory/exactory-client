@@ -9,9 +9,11 @@ import tempfile
 from unittest.mock import patch
 
 from codex_route_fixtures import install_codex_runtime, limit_codex_input
+from capacity_evidence_fixtures import build_capacity_prior, build_capacity_runtime
 from openness_reading_fixtures import OpennessReadingCase, INPUT_LIMIT_CHARACTERS
 from research_harness.artifacts import ArtifactStore
 from research_harness.storage import Store
+from research_harness import review_capacity_evidence, review_route_capacity, review_codex_transport
 
 FIXTURE_DIRECTORY = Path(__file__).parent / 'fixtures/openness_0870_choice'
 
@@ -51,6 +53,28 @@ class StoredReadingCase(OpennessReadingCase):
         return super().build_native_result(packet, outcome)
 
 
+def install_stored_backend(case, route):
+    """Declare the historical synthetic executor without changing its stored runtime or receipts."""
+    complete_route = dict(route, runtime=build_capacity_runtime(
+        route['adapter'], fixture=route['runtime']['fixture']))
+    describe_key = review_capacity_evidence.describe_capacity_key
+
+    def describe_stored_key(candidate):
+        if all(candidate.get(key) == route.get(key) for key in ('adapter', 'endpoint', 'model', 'runtime')):
+            candidate = dict(candidate, runtime=complete_route['runtime'])
+        return describe_key(candidate)
+
+    priors = tuple(review_capacity_evidence.read_capacity_priors()) + (
+        build_capacity_prior(complete_route, 2000000, 'stored-synthetic-executor'),)
+    for patcher in (
+            patch.object(review_codex_transport, 'runtime', return_value=route['runtime']),
+            patch.object(review_capacity_evidence, 'describe_capacity_key', describe_stored_key),
+            patch.object(review_route_capacity, 'describe_capacity_key', describe_stored_key),
+            patch.object(review_capacity_evidence, 'CAPACITY_PRIORS', priors)):
+        patcher.start()
+        case.addCleanup(patcher.stop)
+
+
 def open_stored_case(owner, version, scenario):
     prefix = 'v%d' % version if isinstance(version, int) else version
     root, metadata = copy_stored_store(owner, prefix + '-' + scenario)
@@ -66,6 +90,7 @@ def open_stored_case(owner, version, scenario):
     case.selected = records.get('problem_statement', {}).get('statement-1')
     case.searches = list(records['literature_search'].values())
     install_codex_runtime(case)
+    install_stored_backend(case, records['review_route']['route'])
     if version == 4:
         patcher = patch('research_harness.openness_reading.find_chain_protocol',
                         return_value='exactory-openness-reading-v4')

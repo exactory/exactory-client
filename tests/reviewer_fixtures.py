@@ -27,16 +27,16 @@ def manuscript_assignment(case, bundle, assessor, core, prediction, reasons):
                              'evidence_control':packet['evidence_control'],'excluded_controls':[]})
         with patch('research_harness.review_transport.send_request', side_effect=positive):
             case.mutate(review_protocol.probe_route, {'id':'fixture-paper-probe','route_id':route_id}, credential='fixture')
-    from visual_capacity_fixtures import install_bounded_binary_backend
-    install_bounded_binary_backend(case, [case.store.snapshot()['records']['review_route'][route_id]])
-    identifier = 'paper-' + str(case.store.revision) + '-' + normalized_text(assessor)
-    author = bundle['candidate']['authors'][0] if bundle['candidate']['authors'] else 'fixture-author'
-    case.mutate(review_protocol.record_assignment, {'id':identifier,'route_id':route_id,'dossier_id':None,
-        'role':'manuscript','reviewer_id':assessor,'author_id':author,'context':{'bundle':bundle}})
-    with patch('research_harness.review_transport.send_request', return_value=response({
-            'review':core, 'prediction':prediction, 'reasons':reasons})):
-        case.mutate(review_protocol.invoke_assignment, {'id':identifier+'-attempt','assignment_id':identifier}, credential='fixture')
-    return identifier
+    from visual_capacity_fixtures import patch_bounded_binary_backend
+    with patch_bounded_binary_backend([case.store.snapshot()['records']['review_route'][route_id]]):
+        identifier = 'paper-' + str(case.store.revision) + '-' + normalized_text(assessor)
+        author = bundle['candidate']['authors'][0] if bundle['candidate']['authors'] else 'fixture-author'
+        case.mutate(review_protocol.record_assignment, {'id':identifier,'route_id':route_id,'dossier_id':None,
+            'role':'manuscript','reviewer_id':assessor,'author_id':author,'context':{'bundle':bundle}})
+        with patch('research_harness.review_transport.send_request', return_value=response({
+                'review':core, 'prediction':prediction, 'reasons':reasons})):
+            case.mutate(review_protocol.invoke_assignment, {'id':identifier+'-attempt','assignment_id':identifier}, credential='fixture')
+        return identifier
 
 
 def response(output):
@@ -59,15 +59,15 @@ def verdict_assignment(case, payload):
         with patch('research_harness.review_transport.send_request', side_effect=positive):
             case.mutate(review_protocol.probe_route, {'id': 'fixture-verdict-probe',
                 'route_id': route_id}, credential='fixture')
-    from visual_capacity_fixtures import install_bounded_binary_backend
-    install_bounded_binary_backend(case, [case.store.snapshot()['records']['review_route'][route_id]])
-    identifier = 'verifier-' + str(case.store.revision)
-    case.mutate(review_protocol.record_assignment, {'id': identifier, 'route_id': route_id,
-        'dossier_id': None, 'role': 'verification', 'reviewer_id': payload['assessment']['assessor'],
-        'author_id': 'external-paper-author', 'context': {'verification_task_id': payload['task_digest']}})
-    observed = {'verdict': json.loads(case.artifacts.read(payload['body'])),
-                'checks': payload['assessment']['checks']}
-    with patch('research_harness.review_transport.send_request', return_value=response(observed)):
-        case.mutate(review_protocol.invoke_assignment, {'id': identifier + '-attempt',
-            'assignment_id': identifier}, credential='fixture')
-    return identifier
+    from visual_capacity_fixtures import patch_bounded_binary_backend
+    with patch_bounded_binary_backend([case.store.snapshot()['records']['review_route'][route_id]]):
+        identifier = 'verifier-' + str(case.store.revision)
+        case.mutate(review_protocol.record_assignment, {'id': identifier, 'route_id': route_id,
+            'dossier_id': None, 'role': 'verification', 'reviewer_id': payload['assessment']['assessor'],
+            'author_id': 'external-paper-author', 'context': {'verification_task_id': payload['task_digest']}})
+        observed = {'verdict': json.loads(case.artifacts.read(payload['body'])),
+                    'checks': payload['assessment']['checks']}
+        with patch('research_harness.review_transport.send_request', return_value=response(observed)):
+            case.mutate(review_protocol.invoke_assignment, {'id': identifier + '-attempt',
+                'assignment_id': identifier}, credential='fixture')
+        return identifier

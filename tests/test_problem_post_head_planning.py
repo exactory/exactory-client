@@ -18,8 +18,8 @@ from research_harness.output_views import render_all
 class PostedHeadPlanningTests(unittest.TestCase):
     def setUp(self):
         self.fixture = ResultPartsCase()
-        self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
         self.case = self.fixture.case
         self.assignment = self.fixture.assign('result-first')
 

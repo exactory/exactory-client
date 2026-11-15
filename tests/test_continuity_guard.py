@@ -40,8 +40,8 @@ class StagedPartsCase(parts_fixtures.ResultPartsCase):
 class ContinuityGuardTests(unittest.TestCase):
     def prepare(self, cls):
         case = cls()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         return case
 
     def test_other_installed_parts_execute_the_refusal_replacement(self):
