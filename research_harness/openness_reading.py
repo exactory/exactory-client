@@ -2176,9 +2176,9 @@ def prepare_packet(records, artifacts, value, route, packet):
                 raise ResearchError('review_route_capacity_below_floor', stop['message'], stop)
             protocol = selection['protocol']
             if protocol == PROTOCOL_V7:
-                from .openness_reading_v7 import prepare_first_assignment
-                prepared, chain = prepare_first_assignment(records, artifacts, value, route, packet, [],
-                                                           admission=selection['result'])
+                from .openness_reading_v7 import prepare_carried_assignment
+                prepared, chain = prepare_carried_assignment(records, artifacts, value, route, packet,
+                                                             selection['result'])
                 chain['protocol_selection'] = {key: item for key, item in selection.items() if key != 'result'}
                 return prepared, chain
         require_reserved_identifier(value['id'], protocol)
@@ -2191,6 +2191,9 @@ def prepare_packet(records, artifacts, value, route, packet):
         chain = {'first_assignment_id': value['id'], 'turn': 1}
         if selection is not None:
             chain['protocol_selection'] = {key: item for key, item in selection.items() if key != 'result'}
+            if PROTOCOL_V7 in NEW_PROBLEM_CHAIN_PROTOCOLS:
+                from .openness_reading_v7 import describe_uncarried_chains
+                chain['carried_readings'] = describe_uncarried_chains(records, artifacts, value, route, native)
         if protocol == PROTOCOL_V6:
             record['planned_reading_turns'] = sum(len(parts) for parts in
                 _compute_spans(artifacts, list_delivery_rows(rows, record['search_delivery'])).values())

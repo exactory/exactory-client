@@ -254,13 +254,18 @@ class TurnPacketTests(unittest.TestCase):
             report = capacity.describe_plan_preflight({}, self.route, request, plan, 'reading')
             self.assertTrue(report['plan_comparison']['fits'], report['plan_comparison'])
             sizes.append(report['request_measure']['text_characters'])
+            if number == 1:
+                without_index = copy.deepcopy(current['reading_turn'])
+                without_index['affected_notes'].pop('index')
+                index_cost = capacity.measure_capacity_value(self.route, current['reading_turn']) - capacity.measure_capacity_value(
+                    self.route, without_index)
             self.assertLessEqual(capacity.measure_capacity_value(self.route, current['evidence']) +
                 capacity.measure_capacity_value(self.route, current['reading_turn']['plan']['now']),
                 limits['material_allowance'])
             self.assertNotIn('handle_table', current)
             for name in ('turns', 'receipts', 'inventory', 'attempt_id', 'run'):
                 self.assertNotIn(name, current['reading_turn'])
-        self.assertLessEqual(abs(sizes[1] - sizes[0]), 1)
+        self.assertLessEqual(abs(sizes[1] - sizes[0] + index_cost), 1)
 
     def test_exact_preflight_refuses_a_request_above_the_pinned_kind_bound(self):
         from research_harness import review_preflight, review_protocol
@@ -502,17 +507,21 @@ class TurnPacketTests(unittest.TestCase):
 
     def test_denser_own_measurement_lowers_reading_while_final_still_fits(self):
         from research_harness import review_failure_class
-        packet, chain = self.prepare()
+        from test_review_capacity_closure import build_capacity_records
+        witnessed = build_capacity_records(self.route, tokens=487900, capacity_probe=True)
+        with patch.object(v7, 'build_inventory', return_value=self.built):
+            packet, chain = v7.prepare_first_assignment(witnessed, self.artifacts, self.value,
+                                                       self.route, self.packet, [])
         assignment = dict(self.value, capacity_plan=chain['capacity_plan'],
                           capacity_plan_kind='reading', reading_chain=dict(first_assignment_id='chain', turn=1), recorded_revision=1)
-        records = dict(review_assignment={'chain': assignment}, review_route={'route': self.route}, review_attempt={
+        records = dict(witnessed, review_assignment={'chain': assignment}, review_route={'route': self.route}, review_attempt={
             'dense': dict(id='dense', assignment_id='chain', recorded_revision=2,
                 task=dict(kind='reading', level_material_allowance=120000),
                 usage=dict(sends=1, request_characters=100000, input_tokens=250000, output_tokens=50000))})
         with patch.object(review_failure_class, 'classify_attempt', return_value=None):
             limits = capacity.derive_turn_task_limits(records, self.artifacts, assignment)
-        # The keyed input prior reserves the 128,000-token answer before applying the denser ratio.
-        self.assertEqual(limits['material_allowance'], 15000)
+        # The witnessed capacity reserves the answer, then the index reserve lowers this turn to 30,000.
+        self.assertEqual(limits['material_allowance'], 30000)
 
     def test_exact_target_and_notes_grants_reserve_final_collection_overhead(self):
         from test_review_output_profile import build_row

@@ -37,6 +37,13 @@ LIST_ROW_CHARACTERS = 2000
 PURPOSE_CHARACTERS = 200
 GAP_CHARACTERS = 600
 PASSAGE_REQUESTS = 10
+AFFECTED_INDEX_CHARACTERS = 10000
+CARRIED_READINGS_TEXT = 'Carried turns are your own authenticated earlier readings. '
+CARRIED_KEEP_TEXT = 'For an entry in a delivered carried_reading unit, return {keep:entry_handle,targets} to retain it within each named target allowance. '
+AFFECTED_NOTES_TEXT = ('Affected notes are earlier notes whose sources changed or left; read required carried_reading units first and renew your notes. '
+    'affected_notes gives the count and characters on request; its first-turn index is bounded, with omitted rows available through list_page affected_notes. Request a note by its handle. ')
+KEEP_REVIEWER_TEXT = 'Keep the same reviewer_id when starting another chain for the same statement and route.'
+PASSED_OVER_TEXT = 'Earlier chain {chain} was passed over because its reviewer_id differs.'
 FINAL_MATERIAL_FIELDS = ('notes', 'entries', 'gaps', 'material', 'sources', 'fill')
 TARGET_PAGE_SENTENCE = 'Read target_page units first; each row binds a target handle to its formulation.'
 LIST_PAGE_SENTENCE = 'A list page follows the fixed row order; request its stated next cursor to continue, and stop at null.'
@@ -120,12 +127,70 @@ def _supply_allowance_rows(plan, state, artifacts):
     return [dict(id=handle, **by_handle[handle]) for handle in plan['targets']['handles']]
 
 
+def list_required_affected_notes(plan, selection):
+    """Return {required, on_request} descriptors in newest-first recorded order.
+
+    Delivery costs are pinned from the actual serialized units at first assignment.
+    The stored start level alone divides the longest fitting prefix; attempts and
+    the current level never change it. Even an oversized first note is required.
+    """
+    rows = selection.get('affected_notes', [])
+    allowance = plan['task']['reading']['material_allowance']
+    used, count = 0, 0
+    for row in rows:
+        if count and used + row['delivery_characters'] > allowance:
+            break
+        used += row['delivery_characters']
+        count += 1
+        if used > allowance:
+            break
+    return dict(required=copy.deepcopy(rows[:count]), on_request=copy.deepcopy(rows[count:]))
+
+
+def _supply_affected_note_rows(plan, state, artifacts):
+    rows = list_required_affected_notes(plan, state)['on_request']
+    chains = {}
+    for row in rows:
+        chain = row['origin']['chain']
+        if chain not in chains:
+            chains[chain] = dict(id=chain, chain=chain, first=row['handle'], last=row['handle'], notes=0, characters=0)
+        item = chains[chain]
+        item.update(last=row['handle'], notes=item['notes'] + 1, characters=item['characters'] + row['characters'])
+    return list(chains.values())
+
+
+def _describe_affected_note_index(plan, state):
+    rows = _supply_affected_note_rows(plan, state, None)
+    result = dict(rows=[], omitted=len(rows))
+    for row in rows:
+        candidate = dict(rows=result['rows'] + [{key: row[key] for key in
+            ('chain', 'first', 'last', 'notes', 'characters')}], omitted=result['omitted'] - 1)
+        if len(serialize_record(candidate).decode('utf-8')) > AFFECTED_INDEX_CHARACTERS:
+            break
+        result = candidate
+    return result
+
+
+def describe_affected_note_delivery(route, origin, notes, handle):
+    """Pin the exact cost of one complete note unit, including delivery metadata."""
+    content = serialize_record(dict(origin=origin, notes=notes))
+    reference = describe_artifact(content, 'application/json')
+    body = dict(handle=handle, kind='carried_reading', artifact=reference, characters=len(content.decode('utf-8')))
+    overlay = _PlanningArtifacts(None)
+    overlay.bodies[reference['sha256']] = content
+    row, item = _build_delivery(overlay, body, 0, body['characters'])
+    return dict(handle=handle, origin=copy.deepcopy(origin), characters=body['characters'],
+                delivery_characters=capacity.measure_capacity_value(route, row)
+                    + capacity.measure_capacity_value(route, item) + 4)
+
+
 # Later lanes add suppliers, not cursor rules. allowances/affected_notes fix order
 # at first assignment; unread/unread_attempts fix it at unread-final admission.
 # Each supplier returns rows with unique immutable string ids in that fixed order,
 # with a serialized row bound measured at reserved identifier lengths (<=2000).
 LIST_PAGE_SUPPLIERS = {
     'allowances': dict(supply=_supply_allowance_rows, row_characters=512, fixed_at='first_assignment'),
+    'affected_notes': dict(supply=_supply_affected_note_rows, row_characters=LIST_ROW_CHARACTERS, fixed_at='first_assignment'),
 }
 
 
@@ -227,6 +292,8 @@ def measure_turn_frames(route, native, *, fixed_bounds=None):
                 route, value) <= fixed_bounds.get('native_frame', 100000) else dict(unit='native_frame'))
             fields['material_envelope'] = capacity.measure_capacity_value(route, {
                 key: '' if key == 'notes' else [] for key in FINAL_MATERIAL_FIELDS})
+        else:
+            fields['affected_notes_index'] = AFFECTED_INDEX_CHARACTERS * 2
         # Bound envelope keys, capacity/allowance scalars, handles and counters;
         # evidence rows and plan.now are charged as material with their text.
         fields.update(envelope=3000, instructions=len(canonical_prompt(
@@ -537,8 +604,9 @@ def describe_carried_pool(plan):
     room = min(allocation['page_room'], plan['task']['final']['material_allowance'])
     parts = allocation['carried']['parts']
     reserved = parts[0]['minimum'] + max((part['minimum'] for part in parts[1:]), default=0)
-    return divide_room(room, [dict(id='minimums', minimum=reserved, preferred=reserved, maximum=reserved),
+    allowance = divide_room(room, [dict(id='minimums', minimum=reserved, preferred=reserved, maximum=reserved),
                              dict(id='pool', minimum=0, preferred=room, maximum=room)])['parts'][1]['allowance']
+    return min(allowance, allocation.get('pool_characters', allowance))
 
 
 def _append_carried_reading(inventory, bodies, origin, content_kind, value):
@@ -558,7 +626,7 @@ def _append_carried_reading(inventory, bodies, origin, content_kind, value):
     return unit['handle']
 
 
-def build_chain_state(inventory, turns, *, route, plan):
+def build_chain_state(inventory, turns, *, route, plan, initial_state=None):
     """Rebuild canonical state from ordered authenticated turn projections, without storage or current selection.
 
     Returns {state, artifact, inventory, inventory_artifact, bodies}. The returned inventory appends deterministic
@@ -576,8 +644,10 @@ def build_chain_state(inventory, turns, *, route, plan):
                              for row in plan['allocation']['targets']],
                     passages=dict(characters=review_excerpts.SESSION_PASSAGE_CHARACTERS, used=0),
                     pool=dict(characters=pool_characters, used=0)))
+    if initial_state is not None:
+        state = copy.deepcopy(initial_state)
     bodies, pool, affected_notes, entry_units = {}, [], [], []
-    for number, projected in enumerate(turns, 1):
+    for number, projected in enumerate(turns, len(state['turns']) + 1):
         turn = dict(copy.deepcopy(projected['turn']), number=number)
         state['turns'].append(turn)
         state['deliveries'].extend(dict(copy.deepcopy(row), turn=number) for row in projected['deliveries'])
@@ -589,10 +659,20 @@ def build_chain_state(inventory, turns, *, route, plan):
             state['latest_notes'] = note['text']
         overflow = []
         for value in projected['entries']:
+            if 'handle' in value:
+                index = next(index for index, row in enumerate(state['entries']) if row['handle'] == value['handle'])
+                state['entries'][index] = copy.deepcopy(value)
+                continue
             entry = dict(copy.deepcopy(value), handle='e%d' % (len(state['entries']) + 1))
             state['entries'].append(entry)
             if turn['origin'] is not None:
                 charge = reading.measure_record_entries(route, pool + [entry])
+                if plan['allocation'].get('pool_sources'):
+                    by_handle = {row['handle']: row for row in inventory['units']}
+                    sources = [dict(handle=handle, kind=by_handle[handle]['kind'], label=by_handle[handle]['label'])
+                        for handle in dict.fromkeys(row['unit'] for row in pool + [entry])]
+                    charge = _measure_final_material(route, dict(notes='', entries=pool + [entry],
+                        gaps=[], material=[], sources=sources, fill=[]))
                 if charge <= pool_characters:
                     pool.append(entry)
                     state['pool'].append(entry['handle'])
@@ -629,7 +709,19 @@ def build_chain_state(inventory, turns, *, route, plan):
         for target in state['allowances']['targets']:
             target['used'] += projected['allowance_use']['targets'].get(target['handle'], 0)
         state['allowances']['passages']['used'] += projected['allowance_use']['passages']
-    state['carried_readings'] = list(reversed(affected_notes)) + entry_units
+    if initial_state is None:
+        state['affected_notes'] = []
+        units = {row['handle']: row for row in inventory['units']}
+        materials = {row['handle']: row for row in inventory['material']}
+        for handle in reversed(affected_notes):
+            unit = units[handle]
+            body = materials[unit['bodies'][0]]
+            value = json.loads(bodies[body['sha256']])
+            state['affected_notes'].append(describe_affected_note_delivery(
+                route, value['origin'], value['notes'], body['handle']))
+        required = list_required_affected_notes(plan, state)['required']
+        state['carried_readings'] = [next(unit['handle'] for unit in inventory['units']
+            if row['handle'] in unit['bodies']) for row in required] + entry_units
     inventory_artifact = _describe_json(inventory)
     state['inventory_digest'] = inventory_artifact['sha256']
     return dict(state=state, artifact=_describe_json(state), inventory=inventory,
@@ -724,10 +816,16 @@ def _find_remaining_ranges(inventory, state):
     deliveries = {}
     for row in state['deliveries']:
         deliveries.setdefault(row['unit'], []).append((row['start'], row['end']))
+    units = {row['handle']: row for row in inventory['units']}
+    priority = {body: index for index, handle in enumerate(state['carried_readings'])
+                for body in units[handle]['bodies']}
     rows = sorted(enumerate(inventory['material']), key=lambda item:
-                  (item[1]['kind'] not in ('target_page', 'fixed_field'), item[0]))
+                  (0 if item[1]['handle'] in priority else 1 if item[1]['kind'] in ('target_page', 'fixed_field') else 2,
+                   priority.get(item[1]['handle'], item[0])))
     result = []
     for _, row in rows:
+        if row['kind'] == 'carried_reading' and row['handle'] not in priority:
+            continue
         start = 0
         # Own deliveries name physical bodies, carried projections logical units.
         spans = list(deliveries.get(row['handle'], []))
@@ -770,6 +868,9 @@ def _build_delivery(artifacts, body, start, end, *, passage=None):
 def _pack_deliveries(artifacts, route, inventory, state, allowance, requests):
     now, evidence, pages = [], [], []
     remaining = _find_remaining_ranges(inventory, state)
+    required = {row['handle'] for row in list_required_affected_notes(state['_plan'], state)['required']}
+    if any(body['handle'] in required for body, _, _ in remaining):
+        requests = ()
     by_handle = {row['handle']: row for row in inventory['material']}
     requested_ranges = []
     passage_room = max(0, state['allowances']['passages']['characters'] - state['allowances']['passages']['used'])
@@ -848,6 +949,11 @@ def build_turn_packet(artifacts, route, logical, chain, number, inventory, state
     if state.get('material_state', {}).get('pending'):
         binding['material_request'] = copy.deepcopy(state['material_request'])
     if kind == 'reading':
+        optional_notes = list_required_affected_notes(plan, state)['on_request']
+        binding['affected_notes'] = dict(notes=len(optional_notes),
+            characters=sum(row['characters'] for row in optional_notes))
+        if number == 1:
+            binding['affected_notes']['index'] = _describe_affected_note_index(plan, state)
         labels = list_target_labels(native)
         fixed_bounds = inventory.get('fixed_bounds', dict(formulations=TARGET_LABELS_CHARACTERS, statement=100000))
         binding['formulations'] = (labels if capacity.measure_capacity_value(route, labels) <= fixed_bounds['formulations']
@@ -885,7 +991,8 @@ def build_turn_packet(artifacts, route, logical, chain, number, inventory, state
             if key in native:
                 frame[key] = dict(count=len(native[key]))
         binding.update(page=dict(number=1, pages=1, targets=plan['targets']['handles']),
-            entries=[copy.deepcopy(row) for row in state['entries'] if row['status'] in ('verified', 'delivered')],
+            entries=[copy.deepcopy(row) for row in state['entries'] if row['status'] in ('verified', 'delivered')
+                     and (row['handle'] in state['pool'] or row['targets'])],
             gaps=[dict(handle=handle, reference=row['reference']) for handle, row in inventory.get('references', {}).items()
                   if handle.startswith('g')] + [dict(handle=row['handle'], formulation=row['formulation'],
                     reference=state['references'][row['handle']]['reference'])
@@ -901,6 +1008,8 @@ def build_turn_packet(artifacts, route, logical, chain, number, inventory, state
         material = {key: binding[key] for key in FINAL_MATERIAL_FIELDS}
         used = _measure_final_material(route, material)
         for note in reversed(state['notes'][:-1]):
+            if note['classification'] != 'current':
+                continue
             candidate = dict(material, fill=binding['fill'] + [dict(handle='n%d' % note['turn'], text=note['text'])])
             if _measure_final_material(route, candidate) > limits['material_allowance']:
                 break
@@ -921,14 +1030,66 @@ def _measure_final_material(route, material):
     return capacity.measure_capacity_value(route, material) - capacity.measure_capacity_value(route, empty)
 
 
-def prepare_first_assignment(records, artifacts, value, route, logical, carried_projections, *, admission=None):
+def _reserve_initial_notes(route, plan, text):
+    """Reserve legacy current notes at their actual serialized cost before sizing own turns."""
+    cost = capacity.measure_capacity_value(route, text) - capacity.measure_capacity_value(route, '')
+    extra = max(0, cost - plan['allocation']['notes'])
+    if not extra:
+        return
+    from .review_refusal_notice import BOUNDED_NOTICE_CHARACTERS
+    prior = plan['task']['reading']
+    carried = prior['carried_characters'] + extra
+    room = min(plan['limits']['input_text_characters']['value'], math.floor(
+        plan['limits']['input_tokens']['value'] * plan['measure']['characters_per_token']))
+    selected = capacity.select_task_limits(route, plan['profile'], 'reading',
+        targets=len(plan['targets']['handles']), frame_characters=prior['frame_characters'],
+        carried_characters=carried, calibrated=plan['limits']['request_measure'] == 'calibrated', text_room=room)
+    fitting = [row['material_allowance'] for row in selected['levels'] if row['task_characters'] <= room]
+    if not fitting:
+        raise ResearchError('review_route_capacity_below_floor', capacity.BELOW_FLOOR_MESSAGE,
+            dict(kind='reading', initial_notes_characters=cost, room=room,
+                 minimum=plan['frame']['reading']['bound'] + BOUNDED_NOTICE_CHARACTERS + carried +
+                     capacity.describe_material_levels('reading')[-1], command='review-route'))
+    selected.update(carried_characters=carried, notice_characters=prior['notice_characters'],
+        adaptation=dict(prior['adaptation'], ceiling=min(prior['adaptation']['ceiling'], max(fitting))),
+        request_bound=dict(prior['request_bound'], text_characters=selected['task_characters']))
+    plan['task']['reading'] = selected
+    plan['allocation']['initial_notes_characters'] = cost
+
+
+def prepare_first_assignment(records, artifacts, value, route, logical, carried_projections, *, admission=None,
+                             carried_selection=None):
     """Build inventory, stored plan and initial state; D2 supplies the projections."""
     reading.require_reserved_identifier(value['id'], PROTOCOL)
     admission = admission or check_v7_admission(records, artifacts, route, logical['native'])
     if admission['state'] != 'record':
         raise ResearchError('review_route_capacity_below_floor', capacity.BELOW_FLOOR_MESSAGE, admission)
-    built, plan = admission['inventory'], admission['capacity_plan']
+    built, plan = admission['inventory'], copy.deepcopy(admission['capacity_plan'])
+    latest = next((row['notes']['text'] for row in reversed(carried_projections)
+                   if row['notes']['classification'] == 'current'), None)
+    if latest is not None:
+        _reserve_initial_notes(route, plan, latest)
+    if carried_projections:
+        parts = plan['allocation']['carried']['parts']
+        # This release admits a final in one request, hence all target minimums
+        # must coexist with the shared pool and the standing notes.
+        plan['allocation']['pool_characters'] = max(0, plan['task']['final']['material_allowance']
+            - plan['allocation']['notes'] - sum(row['minimum'] for row in parts[1:]))
+        plan['allocation']['pool_sources'] = True
     state = build_chain_state(built['inventory'], carried_projections, route=route, plan=plan)
+    if carried_projections:
+        room = plan['task']['final']['material_allowance'] - state['state']['allowances']['pool']['used']
+        parts = copy.deepcopy(plan['allocation']['carried']['parts'])
+        for part in parts:
+            part['preferred'] = part['maximum'] = part['allowance']
+        parts[0]['minimum'] = parts[0]['allowance']
+        divided = divide_room(room, parts)
+        for target, part in zip(plan['allocation']['targets'], divided['parts'][1:]):
+            target.update(allowance=part['allowance'], excerpts=part['allowance'] - part['overhead'])
+        state['state']['allowances']['targets'] = [dict(handle=row['handle'], characters=row['excerpts'], used=0)
+            for row in plan['allocation']['targets']]
+        plan['allocation']['carried'] = divided
+        plan['allocation']['pool_used'] = state['state']['allowances']['pool']['used']
     _publish_bodies(artifacts, dict(built['bodies'], **state['bodies']))
     for note in state['state']['notes']:
         artifacts.put(note['text'].encode('utf-8'), 'text/plain; charset=utf-8')
@@ -938,10 +1099,66 @@ def prepare_first_assignment(records, artifacts, value, route, logical, carried_
     plan_ref = dict(protocol=capacity.CAPACITY_PLAN_PROTOCOL, digest=digest(plan), artifact=_put_json(artifacts, plan))
     chain = dict(first_assignment_id=value['id'], turn=1, inventory=inventory_ref, state=state_ref,
                  capacity_plan=plan_ref, capacity_plan_kind='reading')
+    from .openness_carried import SELECTION_PROTOCOL
+    selection = copy.deepcopy(carried_selection) if carried_selection is not None else dict(
+        protocol=SELECTION_PROTOCOL, inventory_digest=digest(built['inventory']), turns=[])
+    selection['affected_notes'] = copy.deepcopy(state['state']['affected_notes'])
+    chain['carried_selection'] = dict(protocol=SELECTION_PROTOCOL, digest=digest(selection),
+        artifact=artifacts.put(serialize_record(selection), 'application/json'))
     packet = build_turn_packet(artifacts, route, logical, value['id'], 1, state['inventory'], state['state'],
                                plan, capacity.derive_plan_task_limits(plan, 'reading'), 'reading')
     _publish_deliveries(artifacts, packet)
     return packet, chain
+
+
+def _describe_carried_identity(records, value, route, native):
+    minimum = native['scientific_context']['openness_minimum']
+    return dict(reviewer_id=value['reviewer_id'], author_id=value['author_id'], route=route,
+        subject_digest=native['subject_digest'], claim_digest=native['claim_digest'],
+        formulations=dict(statement=minimum['statement'], neighbours=minimum['neighbours']),
+        recorded_revision=value.get('recorded_revision', 1 + max(
+            (row.get('recorded_revision', 0) for group in records.values() for row in group.values()), default=0)))
+
+
+def prepare_carried_assignment(records, artifacts, value, route, logical, admission):
+    """Select and authenticate the earlier readings once, before publishing the first v7 assignment."""
+    from .openness_carried import build_carried_selection, describe_carried_selection, verify_carried_selection
+    inventory = admission['inventory']['inventory']
+    identity = _describe_carried_identity(records, value, route, logical['native'])
+    selection = build_carried_selection(records, artifacts, inventory, identity)['selection']
+    projections = verify_carried_selection(records, artifacts, inventory, identity, selection)
+    report = describe_carried_selection(records, artifacts, inventory, identity, selection)
+    packet, chain = prepare_first_assignment(records, artifacts, value, route, logical, projections,
+        admission=admission, carried_selection=selection)
+    for row in report['passed_over']:
+        row['message'] = PASSED_OVER_TEXT.format(chain=row['chain'])
+    chain['carried_readings'] = report
+    return packet, chain
+
+
+def describe_uncarried_chains(records, artifacts, value, route, native):
+    """Report the selection v7 would carry when admission instead chooses v6; credit nothing."""
+    from .openness_carried import build_carried_selection, describe_carried_selection
+    overlay = _PlanningArtifacts(artifacts)
+    built = build_inventory(records, overlay, native, review=value)
+    built = prepare_inventory(built, native, route)
+    _publish_bodies(overlay, built['bodies'])
+    identity = _describe_carried_identity(records, value, route, native)
+    selection = build_carried_selection(records, artifacts, built['inventory'], identity)['selection']
+    report = describe_carried_selection(records, artifacts, built['inventory'], identity, selection)
+    return dict(chains=[], would_carry=[row['chain'] for row in report['chains']],
+                passed_over=[dict(row, message=PASSED_OVER_TEXT.format(chain=row['chain'])) for row in report['passed_over']])
+
+
+def read_carried_inventory(artifacts, first):
+    """Recover the frozen pre-carried inventory without rerunning an inventory planner."""
+    inventory = json.loads(artifacts.read(first['reading_chain']['inventory']))
+    inventory['units'] = [row for row in inventory['units'] if row['kind'] != 'carried_reading']
+    handles = {row['handle'] for row in inventory['units']}
+    for body in inventory['material']:
+        body['units'] = [handle for handle in body['units'] if handle in handles]
+    inventory['material'] = [row for row in inventory['material'] if row['units']]
+    return inventory
 
 
 def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
@@ -977,11 +1194,22 @@ def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
     if targets is None:
         count = binding.get('formulations', {}).get('count')
         targets = {'t%d' % number for number in range(1, count + 1)} if count is not None else set(binding['page']['targets'])
+    kept = set()
+    available = None
     for row in output['excerpts']:
-        _require_reading(isinstance(row, dict) and set(row) == {'unit', 'text', 'purpose', 'targets'})
-        _require_reading(isinstance(row['unit'], str) and isinstance(row['text'], str) and bool(row['text'])
-                         and _find_excerpt_span(packet, row['unit'], row['text']) is not None)
-        _require_reading(isinstance(row['purpose'], str) and len(row['purpose']) <= PURPOSE_CHARACTERS)
+        _require_reading(isinstance(row, dict))
+        if 'keep' in row:
+            _require_reading(set(row) == {'keep', 'targets'} and isinstance(row['keep'], str)
+                             and row['keep'] not in kept and artifacts is not None)
+            if available is None:
+                available = _list_delivered_carried_entries(packet, artifacts, assignment)
+            _require_reading(row['keep'] in available)
+            kept.add(row['keep'])
+        else:
+            _require_reading(set(row) == {'unit', 'text', 'purpose', 'targets'})
+            _require_reading(isinstance(row['unit'], str) and isinstance(row['text'], str) and bool(row['text'])
+                             and _find_excerpt_span(packet, row['unit'], row['text']) is not None)
+            _require_reading(isinstance(row['purpose'], str) and len(row['purpose']) <= PURPOSE_CHARACTERS)
         _require_reading(isinstance(row['targets'], list) and bool(row['targets'])
                          and all(isinstance(target, str) and target in targets for target in row['targets'])
                          and len(row['targets']) == len(set(row['targets'])))
@@ -1058,13 +1286,19 @@ def project_own_turn(artifacts, route, packet, output, assignment_id, attempt_id
                   {row['handle']: row for row in binding['allowances']['targets']})
     usage, entries = {}, []
     for value in output.get('excerpts', []):
-        start = _find_excerpt_span(packet, value['unit'], value['text'])
-        entry = dict(kind='excerpt', unit=value['unit'], targets=value['targets'], start=start,
-            end=start + len(value['text']), sha256=hashlib.sha256(value['text'].encode('utf-8')).hexdigest(),
-            text=value['text'], purpose=value['purpose'], status='verified')
+        if 'keep' in value:
+            entry = dict(next(row for row in state['entries'] if row['handle'] == value['keep']),
+                         targets=copy.deepcopy(value['targets']))
+            source = next(row for row in inventory['units'] + inventory['material'] if row['handle'] == entry['unit'])
+        else:
+            start = _find_excerpt_span(packet, value['unit'], value['text'])
+            entry = dict(kind='excerpt', unit=value['unit'], targets=value['targets'], start=start,
+                end=start + len(value['text']), sha256=hashlib.sha256(value['text'].encode('utf-8')).hexdigest(),
+                text=value['text'], purpose=value['purpose'], status='verified')
+            source = next(row for row in rows if row['handle'] == value['unit'])
         charge = capacity.measure_capacity_value(route, dict(entry, handle='e999999999'))
-        source = next(row for row in rows if row['handle'] == value['unit'])
-        charge += capacity.measure_capacity_value(route, dict(handle=source['handle'], kind=source['kind'], label=source['label']))
+        charge += capacity.measure_capacity_value(route, dict(handle=source['handle'], kind=source['kind'],
+            label=source.get('label', source['kind'])))
         if any(usage.get(target, 0) + charge > allowances[target]['remaining'] for target in value['targets']):
             entry['status'] = 'over_allowance'
         else:
@@ -1100,6 +1334,30 @@ def project_own_turn(artifacts, route, packet, output, assignment_id, attempt_id
     return projected
 
 
+def _list_delivered_carried_entries(packet, artifacts, assignment):
+    """Resolve keep handles only after their complete carried-reading unit was delivered."""
+    _, inventory, state = read_bound_state(artifacts, assignment, packet)
+    binding = packet.get('reading_turn', packet.get('reading_final'))
+    deliveries = state['deliveries'] + [dict(unit=row['handle'], start=row['start'], end=row['end'])
+        for row in binding.get('plan', {}).get('now', []) if row['kind'] != 'list_page']
+    entries = {row['handle']: row for row in state['entries'] if not row['targets'] and row['handle'] not in state['pool']}
+    result = {}
+    for unit in inventory['units']:
+        if unit['kind'] != 'carried_reading' or unit['identity']['content_kind'] != 'entries':
+            continue
+        spans = sorted((row['start'], row['end']) for row in deliveries if row['unit'] in unit['bodies'])
+        end = 0
+        for left, right in spans:
+            if left > end:
+                break
+            end = max(end, right)
+        if end < unit['characters']:
+            continue
+        value = json.loads(artifacts.read(unit['artifact']))
+        result.update({row['handle']: entries[row['handle']] for row in value['entries'] if row['handle'] in entries})
+    return result
+
+
 def _collect_completed_searches(artifacts, inventory, state, current):
     from .review_search_delivery import verify_search_deliveries
     combined = dict(state, deliveries=state['deliveries'] + current)
@@ -1107,8 +1365,13 @@ def _collect_completed_searches(artifacts, inventory, state, current):
     manifest = inventory['search_delivery']
     required = {row['artifact']['sha256'] for row in manifest['shared_fields']}
     required.update((row['residual'] or row['artifact'])['sha256'] for row in manifest['searches'])
+    credited_searches = {row['handle'] for row in inventory['units']
+        if row['identity'].get('record_kind') == 'literature_search' and row['sha256'] in state['searches']}
     delivered = {row['sha256']: dict(content=artifacts.read(row['artifact']), deliveries=[
-        value for value in combined['deliveries'] if value['unit'] == row['handle']])
+        dict(value, unit=row['handle'], start=0, end=row['characters'], sha256=row['sha256'])
+        if value['unit'] in credited_searches else value
+        for value in combined['deliveries'] if value['unit'] == row['handle']
+            or value['unit'] in credited_searches.intersection(row['units'])])
         for row in inventory['material'] if row['handle'] not in incomplete and row['sha256'] in required}
     originals = {row['search_digest']: artifacts.read(row['artifact']) for row in manifest['searches']}
     return [row['search_digest'] for row in verify_search_deliveries(manifest, delivered, originals)]
@@ -1206,7 +1469,9 @@ def _rebuild_own_state(records, artifacts, prior, inventory, plan, route):
         for entry in projection['entries']:
             artifacts.put(entry['text'].encode('utf-8'), 'text/plain; charset=utf-8')
         projections.append(projection)
-    return build_chain_state(inventory, projections, route=route, plan=plan)
+    first = records['review_assignment'][prior['reading_chain']['first_assignment_id']]
+    initial = json.loads(artifacts.read(first['reading_chain']['state']))
+    return build_chain_state(inventory, projections, route=route, plan=plan, initial_state=initial)
 
 
 def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_replacement=True):
@@ -1252,7 +1517,10 @@ def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_
         rebuilt = _rebuild_own_state(records, artifacts, prior, inventory, plan, route)
         state = rebuilt['state']
         requests = state.get('pending_requests', [])
-        kind = 'reading' if _find_remaining_ranges(inventory, state) or requests else 'final'
+        notes_cost = (capacity.measure_capacity_value(route, state['latest_notes'])
+                      - capacity.measure_capacity_value(route, '')) if state['latest_notes'] is not None else 0
+        kind = 'reading' if (_find_remaining_ranges(inventory, state) or requests
+                             or notes_cost > state['allowances']['notes']) else 'final'
         number = prior['reading_chain']['turn'] + 1
     limits = capacity.derive_turn_task_limits(records, artifacts, prior, kind=kind)
     if replacement and kind == 'final' and state.get('material_state', {}).get('pending'):
@@ -1301,7 +1569,8 @@ def describe_ratio_handoff(records, artifacts, assignment):
         return None
     room = math.floor(plan['limits']['input_tokens']['value'] * inherited['characters_per_token'])
     from .review_refusal_notice import BOUNDED_NOTICE_CHARACTERS
-    granted = plan['allocation']['notes'] + sum(row['allowance'] for row in plan['allocation']['targets'])
+    granted = (plan['allocation']['notes'] + sum(row['allowance'] for row in plan['allocation']['targets'])
+               + plan['allocation'].get('pool_used', 0))
     required = plan['frame']['final']['bound'] + BOUNDED_NOTICE_CHARACTERS + max(
         capacity.describe_material_levels('final')[-1], granted)
     final_limits = capacity.derive_turn_task_limits(records, artifacts, assignment, kind='final')

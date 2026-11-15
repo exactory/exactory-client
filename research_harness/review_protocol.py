@@ -31,7 +31,8 @@ from .review_answer_recovery import derive_output, extract_answer_text, recover_
 from . import bar_sources
 from . import openness_reading
 from .openness_reading_v7 import (PROTOCOL as READING_V7_PROTOCOL, TARGET_PAGE_SENTENCE,
-                                  LIST_PAGE_SENTENCE, NOTES_COST_TEXT)
+                                  LIST_PAGE_SENTENCE, NOTES_COST_TEXT, CARRIED_READINGS_TEXT,
+                                  CARRIED_KEEP_TEXT, AFFECTED_NOTES_TEXT)
 
 # Writer placeholders. These texts are pinned by the v7 template and must be
 # revised before NEW_PROBLEM_CHAIN_PROTOCOLS enables v7 by default.
@@ -51,7 +52,8 @@ V7_READING_PROMPT = ('Read reading_turn.plan.now and evidence. Return exactly {s
     'and at least one target; their serialized cost is charged to every target. Gaps are {formulation,text}, '
     'text at most 600 characters. Request at most ten passages as {id,unit,anchor,characters} or '
     '{id,kind:list_page,list,after}. ' + NOTES_COST_TEXT + ' ' + TARGET_PAGE_SENTENCE + ' ' + LIST_PAGE_SENTENCE
-    + ' ' + V7_LIMITS_TEXT + V7_HANDLES_TEXT + V7_MATERIAL_TEXT)
+    + ' ' + CARRIED_READINGS_TEXT + CARRIED_KEEP_TEXT + AFFECTED_NOTES_TEXT
+    + V7_LIMITS_TEXT + V7_HANDLES_TEXT + V7_MATERIAL_TEXT)
 V7_FINAL_PROMPT = ('Assess reading_final.page from its notes, entries, gaps, material and fill. '
     'Return exactly {schema_version:3,subject_digest,claim_digest,reviewer,findings:{statement,assumptions,scope,'
     'dependencies,policy,openness:{outcome,coverage,reason,grounds}}}. Use the supplied bindings. '
@@ -3420,6 +3422,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 slot_identifier = context_repair.slot_id(records, latest)
         diagnostics = {}
         reading_logical = None
+        carried_report = None
         # Derived PNG pages do not deliver original PDFs. Add their explicit native
         # image bindings after constructing the same truthful source text packet.
         with transport.text_only_delivery(route['adapter'] in transport.TEXT_ONLY_ADAPTERS
@@ -3443,7 +3446,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 else:
                     reading_logical = packet
                     try:
-                        packet, reading_chain = openness_reading.prepare_packet(records, artifacts, value, route, packet)
+                        packet, reading_chain = openness_reading.prepare_packet(records, artifacts,
+                            dict(value, recorded_revision=expected_revision + 1), route, packet)
                     except ResearchError as error:
                         if error.code == reading_capacity.PROJECTION_STOP:
                             protocol = reading_capacity.find_chain_protocol(reading_logical['native'])
@@ -3454,8 +3458,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                         raise
                     if reading_chain is not None:
                         diagnostics = reading_chain.pop('diagnostics', {})
+                        carried_report = reading_chain.pop('carried_readings', None)
                         for key in ('capacity_plan', 'capacity_plan_kind', 'protocol_selection',
-                                    'capacity_replacement_of', 'slot_id'):
+                                    'capacity_replacement_of', 'slot_id', 'carried_selection'):
                             if key in reading_chain:
                                 value = dict(value, **{key: reading_chain.pop(key)})
                         value = dict(value, reading_chain=reading_chain)
@@ -3785,6 +3790,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             return changes + [immutable_record(records, 'review_assignment', value['id'], record)], dict(
                 record, next=[describe_planning_command(record['id'])])
         receipt = dict(record, diagnostics=diagnostics) if diagnostics else record
+        if reading_logical is not None and carried_report is not None:
+            receipt = dict(receipt, carried_readings=carried_report)
         if value.get('reading_chain') and reading_logical is not None:
             request = build_assignment_request(records, artifacts, record)
             receipt = dict(receipt, **reading_capacity.describe_reading_receipt(

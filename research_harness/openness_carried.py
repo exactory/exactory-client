@@ -248,7 +248,7 @@ def _verify_entry_spans(inventory, artifacts, observation, selected):
         v7._require_selected(text == entry['text'] and hashlib.sha256(text.encode('utf-8')).hexdigest() == entry['sha256'])
 
 
-def verify_carried_selection(records, artifacts, inventory, identity, selection):
+def verify_carried_selection(records, artifacts, inventory, identity, selection, *, plan=None):
     """Verify a stored JSON selection item by item and return its turn projections, without selecting.
 
     selection is its stored JSON value or artifact reference. Only named origin prefixes are authenticated.
@@ -260,7 +260,8 @@ def verify_carried_selection(records, artifacts, inventory, identity, selection)
             content = artifacts.read(selection)
             selection = json.loads(content)
             v7._require_selected(serialize_record(selection) == content)
-        _require_shape(selection, ('protocol', 'inventory_digest', 'turns'))
+        keys = ('protocol', 'inventory_digest', 'turns')
+        _require_shape(selection, keys + ('affected_notes',) if 'affected_notes' in selection else keys)
         v7._require_selected(selection['protocol'] == SELECTION_PROTOCOL
                              and selection['inventory_digest'] == digest(inventory)
                              and isinstance(selection['turns'], list))
@@ -306,6 +307,14 @@ def verify_carried_selection(records, artifacts, inventory, identity, selection)
             projection = v7.project_carried_turn(inventory, observation, selected)
             _verify_entry_spans(inventory, artifacts, observation, selected)
             projections.append(projection)
+        if 'affected_notes' in selection:
+            v7._require_selected(isinstance(selection['affected_notes'], list))
+            if selection['affected_notes']:
+                v7._require_selected(plan is not None)
+                rebuilt = v7.build_chain_state(inventory, projections, route=identity['route'], plan=plan)
+                v7._require_selected(selection['affected_notes'] == rebuilt['state']['affected_notes'])
+            else:
+                v7._require_selected(not any(row['notes']['classification'] == 'affected' for row in projections))
         return projections
     except (ResearchError, KeyError, TypeError, ValueError, IndexError):
         v7._require_selected(False)
@@ -322,14 +331,14 @@ def _describe_missing_ranges(unit, spans):
     return dict(unit=unit['handle'], ranges=missing, characters=sum(row['characters'] for row in missing))
 
 
-def describe_carried_selection(records, artifacts, inventory, identity, selection):
+def describe_carried_selection(records, artifacts, inventory, identity, selection, *, plan=None):
     """Describe stored selection JSON, with logical credit and the physical work the new chain still reads.
 
     Counts use unions of ranges. Completed original searches cover their current physical components;
     components give no credit independently. Equal material bodies are counted once by the inventory.
     No scientific text enters the report.
     """
-    projections = verify_carried_selection(records, artifacts, inventory, identity, selection)
+    projections = verify_carried_selection(records, artifacts, inventory, identity, selection, plan=plan)
     ranges, material_ranges, chains, searches, entries = {}, {}, {}, [], []
     units = {row['handle']: row for row in inventory['units']}
     material = {row['handle']: row for row in inventory['material']}
