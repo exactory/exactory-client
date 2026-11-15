@@ -850,7 +850,7 @@ def validate_replacement(records, artifacts, accounts, entries):
                             {"form_ids": sorted(required_forms - covered_forms), "conjecture_ids": sorted(conjectures - covered_conjectures)})
 
 
-def describe_account_records(records, accounts, derived=None):
+def describe_account_records(records, accounts, derived=None, *, accounts_version=1):
     """Deliver the exact searches, plans and forming provenance cited by accounts."""
     from .problem_evidence import cite_record
     held = {}
@@ -920,6 +920,31 @@ def describe_account_records(records, accounts, derived=None):
         for response in search["responses"]:
             identifier = response["source_id"]
             held[("source", identifier)] = records["source"][identifier]
+    if accounts_version == 2:
+        probe_ids = {reference["id"] for reference in collect_account_evidence(accounts)
+                     if reference["kind"] == "probe" and "origin" not in reference}
+        for (kind, _), record in held.items():
+            if kind == "forming_call":
+                probe_ids.update(probe["probe_id"] for probe in record["probes"])
+                grounds = record["question"]["places"] + record["inputs"]
+                grounds += [ground for form in record["forms"] for ground in form["grounds"]]
+                references = [reference for ground in grounds for reference in ground["evidence"]]
+            elif kind == "form_outcome":
+                references = [item["reference"] for item in record["evidence"]]
+            else:
+                continue
+            probe_ids.update(reference["id"] for reference in references if "origin" not in reference
+                             and (reference["kind"] == "probe" or reference["kind"] == "record"
+                                  and reference["record_kind"] == "probe"))
+        for identifier in probe_ids:
+            held[("probe", identifier)] = records["probe"][identifier]
+        # Include intents for probes from the older delivery routes as well.
+        for kind, identifier in list(held):
+            if kind == "probe" and identifier in records.get("probe_intent", {}):
+                held[("probe_intent", identifier)] = records["probe_intent"][identifier]
+        from .problem_forming_import import project_imported_record
+        return [{"record": project_imported_record(record), "cite": cite_record(kind, identifier, record)}
+                for (kind, identifier), record in sorted(held.items())]
     return [{"record": record, "cite": cite_record(kind, identifier, record)} for (kind, identifier), record in sorted(held.items())]
 
 

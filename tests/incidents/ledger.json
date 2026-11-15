@@ -2,6 +2,21 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "phenomenon-account-probe-delivery",
+      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
+      "class": "account probe provenance undelivered",
+      "summary": "Result reviewers received checks that cited probes without the probe questions, programs and observations.",
+      "expected": "Version 2 values deliver every native probe cited by accounts, delivered forming calls or outcomes, with its intent when held. Binding, delivery and size reports agree; stored version 1 reviews keep their records, digests and prompts.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_probe_delivery.ProbeDeliveryTests.test_eight_independent_routes_deliver_both_records_once_with_original_digests",
+        "test_problem_probe_delivery.ProbeDeliveryTests.test_base_assignment_with_native_probes_keeps_records_digest_prompt_and_state",
+        "test_problem_probe_delivery.ProbeDeliveryTests.test_native_and_imported_probe_of_one_id_keep_four_distinct_entries",
+        "test_problem_probe_delivery.ProbeDeliveryTests.test_public_value_check_and_record_count_both_probe_records"
+      ]
+    },
+    {
       "id": "phenomenon-result-delivery-date",
       "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
       "class": "accepted result date unavailable",

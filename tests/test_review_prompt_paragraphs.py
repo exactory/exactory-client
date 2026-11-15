@@ -141,6 +141,7 @@ class OptionalParagraphTests(unittest.TestCase):
     def test_writer_placeholders_have_pinned_bytes_and_one_home(self):
         expected = {
             'exactory-problem-accounts-v1': 'c2e3eb3807d4ff247ad26a6abf716b02a58188968080195afeba16354c3a686d',
+            'exactory-problem-account-probes-v1': '3a364dc4b2a6d1c311c3213d299607fef4ba3b10dcf896b3831c758cab14b6f6',
             'exactory-problem-slate-forming-v2': '13c788192070b3fa9d16cf8abf3ab36a81d381f248a7a7333c3f69648aa9849d',
             'exactory-problem-slate-forming-v1': 'e14ff7ce5d6f1a0bd2d03b1f2fd7f45c596e14902eea5083dd7bc66d78f78d2b',
             'exactory-problem-replacement-v1': '92d8d0ace0a5c7dbd61d340f2fe6e6c5f93760ca1b7764853b7217f1dbbd12c0',

@@ -1789,6 +1789,7 @@
       "classification": "listed module",
       "reason": "The paragraph condition comes from the named functions in the finite PARAGRAPHS tuple; each function and constructor site are source-certified.",
       "targets": [
+        "research_harness.review_prompt_paragraphs._has_account_probes",
         "research_harness.review_prompt_paragraphs._has_accounts",
         "research_harness.review_prompt_paragraphs._has_areas",
         "research_harness.review_prompt_paragraphs._has_bounded_refusal",
@@ -17876,6 +17877,24 @@
       "targets": [
         "research_harness.openness_reading_v7.plan_turn_recovery"
       ]
+    },
+    {
+      "ast_sha256": "2ace3d717dcaff4a923e4f9fca036cfbb35a4736aa737d11a173fe9dd9dc2866",
+      "callee": "research_harness.review_prompt_paragraphs._has_accounts",
+      "caller": "research_harness.review_prompt_paragraphs._has_account_probes",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_prompt_paragraphs._has_accounts"
+      ]
+    },
+    {
+      "ast_sha256": "1e6e18a6d8dd46f15b89694699b8b6df227d01743023230aca9daf2e17a55f40",
+      "callee": "any",
+      "caller": "research_harness.review_prompt_paragraphs._has_account_probes",
+      "classification": "standard library",
+      "targets": [
+        "any"
+      ]
     }
   ],
   "certificates": {
@@ -19694,7 +19713,7 @@
         "collect_entries": "718669b36f7aec6eb2fa118393a6a973bfca86bb257e56b95a641110020e6a8c",
         "collect_entry_evidence": "5c3963d0f1f1020b41b03476ebd2630a3704f5ebc9d1b32b9844da3cd2f04975",
         "derive_evidence_date": "c3c5a98dde67045c33c3ef304aeac7c10ae629bcc61e2f3081c994311da3e69f",
-        "describe_account_records": "f9da8c5696bd3754db7bc6c1236dd1f1792d222802702bfee3a48b12ab98f8f8",
+        "describe_account_records": "aeb8901cb588d430edf4d75b98f355e1637bcbc1713cacbb12950f94a4a37af5",
         "find_evidence_availability": "4f8939e6ab4ad4b320e73419ea7583d0588bd39da9171bad1e56685bcbf3aaa3",
         "find_result_revision": "f54154a5679ddf170f43776424ce5ebaf66c5dd24f6776342c62f5f71e333257",
         "precedes_evidence_date": "44cb047571e3d7d5f2676674d117386c69a9fccce3277e42f83aa130b09c8031",
@@ -19711,7 +19730,7 @@
         "validate_tier_two": "388300b4d0ef8d081b22cf8691a710ec55850ca090a57353ffd69a99af840ce6"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in describe_account_records; version 1 follows its existing projection. Unrelated earlier certificate drift is retained."
     },
     "research_harness.problem_areas": {
       "ast_sha256": "bd7409ab6ad4c0cb5283bf7676cc985299d034a8e2829f5791537dd87e65faaa",
@@ -19792,7 +19811,7 @@
         "compute_problem_evidence_digest": "a3db49acd6cc12448c855b12c7f0cac6923493ae6aeb259a09577f8a0436c834",
         "compute_statement_digest": "753d1fdacd8b16179713c088b29065f03b80a5286d74781f9278cdb23a624385",
         "describe_problem_evidence": "afe442ba1eb04c8b94aa74ca18e965a77295defb21372bb608ab87fd9aa65a1c",
-        "describe_value_size": "b9ec1e4b3d3b0c368c1115c0e895bc4b0ef8d899563f6303799e9e30294e0322",
+        "describe_value_size": "4cc97a61a45c6da1a96c63077925a176a1080847513f2e7f430e0e417644ea67",
         "find_assessment": "1d536e15c6e6204ea2cccb461be52d84804749966b890b97b9636a40d3fcf2e0",
         "find_current_statement": "1f2ac2a8a87dedf93a4c11f32c7c674b1b01d3510b4427a7d87f081eea343e39",
         "find_latest": "9b6b43dfabd018326d757a49312e155db0b492f915f7cd0f930b0f28574cfbea",
@@ -19811,7 +19830,7 @@
         "validate_area": "169a62a8bd4e54e05e164ae4ad900ff23b22296f199fbdb9f77f66ebae85a75a"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in describe_value_size; version 1 follows its existing projection. Unrelated earlier certificate drift is retained."
     },
     "research_harness.problem_delivery": {
       "ast_sha256": "c6e8c40b94f967970ce8cdab7296eaa8d09e1e3d354fce9973700f599e317f54",
@@ -19856,20 +19875,20 @@
       "reason": "Reviewed optional per-head posted-call status isolation with strict default behavior and no scientific-record changes. Changed AST requires declaration review."
     },
     "research_harness.problem_evidence": {
-      "ast_sha256": "bfa8da38cda032fa74d948fc1ecf94c52648e9ec8e53355ab47b506eba29a4b8",
+      "ast_sha256": "c8cd6c3750ee2be5346da67aaa72dd83dec5596e3120c57b0736dffa586bc16f",
       "functions": {
         "assess_formal_checks": "84e5b9a8cf0c65c76a297d029c5507be6742eebdf8b8f7537bd77ab2fa20f75b",
         "bind_formal_check": "b1572b21240e3889f4e6b74c1d5d1676a10cf861ad47ba8bca6c2d0c7a4a3bb4",
         "cite_record": "3f4b6aeb29b726cab44c4cc23f0785c95b741a7c13d4dd1404a473a6afc5e1ce",
-        "collect_binding_record_kinds": "41f33bea7e02c1f6d70a780af7275524ad242e6c8771eeb25957de45328e6c0e",
+        "collect_binding_record_kinds": "9f4710f2f3f9e1b2900b86cbf7eb4820ce5e2add7aedbd4bf23b994ae29a5c0c",
         "collect_override_readings": "f1600ce0d9b2a5c342a0b5d465038b4695339a3b1b0bef89a66cc7930c291bee",
         "collect_readings": "6420b5431ca0d0ec42bd008a300c96e0f54fabe790f396d68538c6ee92eb0eab",
         "collect_results": "7880ce5d20cc9611849e08cf653dac956ce3fdf219cf21115324e85df63af24e",
         "collect_value_items": "3f395fbe4c470726e6534ae69463a0060e606a0ff3cbe38c81e469f56d888928",
         "compose_citations": "8e17d0f5879398b0b920a2f9826a8b5a6b681f3796737fe41d819c6c73094025",
         "compute_override_source_digest": "ac5e9b297c9ec08f3837e7712204447d2202f8b78086b4652320a1a30e0b9c62",
-        "describe_binding": "6244e6c24dd8c806639404aa486fb2933b580e3414c3fd4ce42092fff972b290",
-        "describe_evidence": "162d41fe1356b129dcf5d2059491d51157609ddd695813f8662dbacc352618f4",
+        "describe_binding": "d353d3b9b0065ba751cf999a8aabccd046457be7cbaa6171bd9a3eab3dea25cd",
+        "describe_evidence": "463ff79b933fc128ddfdd8e6c77d8024bbed72755faa9b5cd6631f2d74bdfb99",
         "describe_openness_searches": "158e6dad9fd8de74750a33176ea4ff97f86fe1335a36ac59601fe2dc4f13ee6f",
         "describe_result": "70339550a4e89544ba09dd5279b5eda3366aa9e023b4f4517001f6d9d241aa68",
         "find_citation_locator": "a2ae52cb7fd590c058125eb8bc189de75ccb33625355a3c7c44e374171b05408",
@@ -19891,7 +19910,7 @@
         "validate_value": "7721a554357c56a335ab7a0ad5ddccebcfa72106a082211f9a33a9858570cb19"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in collect_binding_record_kinds, describe_binding, describe_evidence; version 1 follows its existing projection. Unrelated earlier certificate drift is retained."
     },
     "research_harness.problem_export_history": {
       "ast_sha256": "426d0b2ce54278194bee532b81d36c526bb02fc79de0969ab980bca4efaea471",
@@ -22180,10 +22199,11 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_prompt_paragraphs": {
-      "ast_sha256": "cae06c2d24b9027377a560e1a370d52b7a53c731558779950d5db000b34a4603",
+      "ast_sha256": "e672d48f58a35a105df8197a33f96fceaab52d5b667e0982a125cc6cfefe79de",
       "functions": {
         "_append_selected_paragraphs": "b463ad8836dd7f7e2c0961c4c64ade4a0ed5bfbbce62519f3b113f910050ffd6",
         "_describe_template_suffix": "c3800a380dad412ec2eabb656c368209f4434960ad3366bc2706d64ad49d51b1",
+        "_has_account_probes": "fa5759bc282453f036b806caf0a3f57c03dabfe500a96a0c2233333da02febac",
         "_has_accounts": "2c1535199e1d3ff7182d77d55bef95c7c2d0a8c03ff0f7484f9c52044b810eff",
         "_has_areas": "284eb21e3b6c2f47949968d1ee6dedcb554fab432d604c37e03dcc3eaf8aec88",
         "_has_bounded_refusal": "32f8bf44558932af05afd0e1c716c740d2b016cb13b6ac6b8ca63c9a997abf40",
@@ -22208,8 +22228,10 @@
       "packet_call_digests": [
         "01a34f9df49bbc15a460085772b354d6a7d94e0fe03fb1ad7eb8fd9222218a8d",
         "091155472eb9dd7815df3a139de9aed4f55f27c1ed95bbecb3e8b6bd95edf526",
+        "1e6e18a6d8dd46f15b89694699b8b6df227d01743023230aca9daf2e17a55f40",
         "22496c1e2b959e66d2a7877428cb815f9288f13d531d294351a10a223d47b56f",
         "29392c391793937bf813b1967665b65006ff7c1b7e23bfbbed66cff8b581116e",
+        "2ace3d717dcaff4a923e4f9fca036cfbb35a4736aa737d11a173fe9dd9dc2866",
         "34a892323dce119be61887a741f9b784fb5aaea5cde439cc2028ae1d8d925296",
         "3b44f26e0d5fa8c11de43f548e0e8aa5daabd8a7bd7b2e36fda318e902062067",
         "41e919b1fc414802c0d32eba55653575729e286eef013cbc5688c7e7287dc68c",
@@ -22222,7 +22244,7 @@
         "bd01b36e067355a8f0c1e765513e33161679a741f0cc47e75c8ba682741d2e43",
         "c028215c5274d690c4dbc9e561a96faefb9da20033afaeee3184646b0134c60e"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection."
     },
     "research_harness.review_protocol": {
       "ast_sha256": "82b0faf94b96bb740579dcef577e5f8dd9bf555a4b8df077338dbafc54ad0ddd",
@@ -34766,6 +34788,9 @@
       "members": {
         "accounts": {
           "$ref": "field_51f07a1d61eb"
+        },
+        "accounts_version": {
+          "class": "fixed"
         },
         "cite": {
           "$ref": "field_3ff3645b576a"
@@ -106176,6 +106201,9 @@
                           "sample": "x"
                         }
                       }
+                    },
+                    "accounts_version": {
+                      "class": "fixed"
                     },
                     "cite": {
                       "$ref": "q6_a546aa9e4e23"

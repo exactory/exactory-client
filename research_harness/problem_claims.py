@@ -215,7 +215,8 @@ def describe_value_size(records, artifacts, value):
     from .problem_accounts import describe_account_records
     from .problem_account_derivations import describe_account_derivations
     from .review_route_capacity import describe_material_size, SIZE_REPORT_VALUE_LABEL
-    material = describe_account_records(records, value['accounts'], describe_account_derivations(records, value))
+    material = describe_account_records(records, value['accounts'], describe_account_derivations(records, value),
+                                        accounts_version=value.get('accounts_version', 1))
     return describe_material_size(records, artifacts, material, label=SIZE_REPORT_VALUE_LABEL,
                                   records_field='account_records_characters')
 

@@ -111,6 +111,15 @@ SLATE_FORMING_PROMPT = (
     'does not establish the claimed gain.')
 
 
+# Placeholder for the writer's pass. A text change requires a new registered version.
+ACCOUNT_PROBES_PROMPT = (
+    '\n\nAccount probes (exactory-problem-account-probes-v1). '
+    'The account records deliver a probe outcome and, where held, its probe_intent with the question and program. '
+    'Program and output descriptors identify bytes by digest; they do not deliver those bytes. '
+    'A probe is exploratory and supports no fact, answer or gain in a grade. '
+    'Use these records to check what the account entry says about the observation.')
+
+
 def _has_carry(role, packet):
     return CARRY_PARAMETER in packet
 
@@ -120,6 +129,13 @@ def _has_accounts(role, packet):
     return (isinstance(accounts, dict) and bool(accounts)
             and (role != 'adjudicator' or packet.get('rubric_definition', {}).get('item') in
                  ('A3', 'priority', 'calibration', 'significance')))
+
+
+def _has_account_probes(role, packet):
+    evidence = packet.get('problem_evidence', {})
+    return (_has_accounts(role, packet) and (evidence.get('value') or {}).get('accounts_version') == 2
+            and any(entry['cite']['record_kind'] == 'probe' and 'origin' not in entry['cite']
+                    for entry in evidence.get('account_records', [])))
 
 
 def _has_forming_candidates(role, packet):
@@ -323,6 +339,8 @@ PARAGRAPHS = (
           'and the gain part does not claim. '
           'An adjudicator who receives this paragraph with a rubric definition applies it to the one item that it '
           'decides and keeps its own response shape.'),)),
+    PromptParagraph('account-probes', ('result', 'adjudicator'), _has_account_probes,
+                    (('exactory-problem-account-probes-v1', ACCOUNT_PROBES_PROMPT),)),
     PromptParagraph('slate-forming', ('slate',), _has_forming_candidates,
         (('exactory-problem-slate-forming-v1',
           '\n\nCandidates formed in the record (exactory-problem-slate-forming-v1). '

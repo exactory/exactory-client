@@ -55,6 +55,8 @@ def collect_binding_record_kinds(records):
     value = find_value(records)
     if value is not None and "accounts" in value:
         account_kinds.update(("cycle_plan", "forming_call", "form_outcome", "problem_candidate"))
+        if value.get("accounts_version") == 2:
+            account_kinds.add("probe_intent")
         account_kinds.update(reference["record_kind"] for entry in value["accounts"]["refuted_conjectures"]
                              for reference in entry["sources"] if reference.get("kind") == "record")
     return set(BINDING_RECORD_KINDS) | account_kinds | {
@@ -851,7 +853,8 @@ def describe_binding(records, artifacts):
         from .problem_accounts import describe_account_records
         from .problem_account_derivations import describe_account_derivations
         binding["derived_accounts"] = describe_account_derivations(records, value)
-        binding["account_records"] = describe_account_records(records, value["accounts"], binding["derived_accounts"])
+        binding["account_records"] = describe_account_records(records, value["accounts"], binding["derived_accounts"],
+                                                             accounts_version=value.get("accounts_version", 1))
     if pending:
         binding["obligations"] = pending
     if records.get('problem_forming_import'):
@@ -964,10 +967,13 @@ def describe_evidence(records, artifacts):
                 for item in (collect_entry_evidence(entries, reference["id"]) if reference["kind"] == "account" else [reference])])
                 for paragraph in value[section]]
         delivered["value"]["accounts"] = value["accounts"]
+        if value.get("accounts_version") == 2:
+            delivered["value"]["accounts_version"] = 2
         from .problem_account_derivations import describe_account_derivations
         derived = describe_account_derivations(records, value)
         delivered["value"]["derived_accounts"] = derived
-        delivered["account_records"] = describe_account_records(records, value["accounts"], derived)
+        delivered["account_records"] = describe_account_records(records, value["accounts"], derived,
+                                                               accounts_version=value.get("accounts_version", 1))
     if pending:
         delivered["obligations"] = pending
     # Each projected record names how a reviewer cites it, by kind and id.
