@@ -7282,6 +7282,19 @@
         "test_review_pending_views.PendingViewTests.test_lock_acquisition_failure_keeps_stale_advisory_until_successful_repair",
         "test_review_pending_views.PendingViewTests.test_failure_before_lock_marks_new_work_beside_another_renderers_claimed_marker"
       ]
+    },
+    {
+      "id": "foreground-write-stale-during-review-call",
+      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
+      "class": "explicit whole-store optimistic revision check during reviewer completion",
+      "summary": "T7: a foreground problem-value expected revision 698 while a review route probe completed at 699. The measurement retained stale_revision without retrying.",
+      "expected": "Reviewer completion between the foreground revision read and preparation or commit refuses stale_revision without a value or request receipt. The registry says to continue and the message says to read the current revision; retrying the same payload and request ID at that revision succeeds and replays without another mutation. This is the documented whole-store optimistic check, not a change to revision protection.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_foreground_write_stale_during_review_call.ForegroundWriteStaleDuringReviewCallTests.test_refuse_revision_read_before_review_completion_and_retry",
+        "test_foreground_write_stale_during_review_call.ForegroundWriteStaleDuringReviewCallTests.test_refuse_prepared_value_after_review_completion_and_retry"
+      ]
     }
   ]
 }
