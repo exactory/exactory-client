@@ -78,8 +78,8 @@ def build_scaled_record_units(quantity, size):
     """Build exact search/source records before the canonical result builder."""
     from review_parts_fixtures import PartsResultCase
     case = PartsResultCase()
-    case.setUp()
     try:
+        case.setUp()
         fixture = case.case
         count = size if quantity in ('units', 'searches', 'sources', 'identifiers') else 1
         text = 'x' * size if quantity == 'texts' else 'A captured finite result.'

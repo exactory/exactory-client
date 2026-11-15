@@ -33,8 +33,8 @@ from research_harness.review_series import run_series
 class CapacitySignalTests(unittest.TestCase):
     def setUp(self):
         self.case = failure_fixtures.FailureClassTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.case.records['review_route']['route'] = build_route()
 
     def test_claude_output_maximum_reduced_and_fallback_have_distinct_details(self):
@@ -228,8 +228,8 @@ class ResponseLimitJourneyTests(unittest.TestCase):
 
     def prepare(self, cls):
         fixture = cls()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         return fixture
 
     def execute(self, case, command, payload, **options):

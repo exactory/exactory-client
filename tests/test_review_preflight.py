@@ -43,8 +43,8 @@ class DispatchTests(unittest.TestCase):
     def build_case(self):
         from test_research_review_protocol import ReviewProtocolTests
         case = ReviewProtocolTests()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         record_codex_route(case)
         return case
 
@@ -119,8 +119,8 @@ class DispatchTests(unittest.TestCase):
     def test_missing_mandatory_current_body_refuses_before_dispatch(self):
         from test_research_adjudicator_current_sources import AdjudicatorCurrentSourceTests
         case = AdjudicatorCurrentSourceTests()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         assignment, packet = case.prepare_current_comparator()
         build = transport.request_body
         def omit_body(route, prompt, packet, history=(), *args, **kwargs):
@@ -160,8 +160,8 @@ class CorrectionAdmissionTests(unittest.TestCase):
     def setUp(self):
         from test_review_output_correction import CorrectionTests
         self.case = CorrectionTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.case.prepare_refused()
         self.fixture = self.case.fixture
 
@@ -262,8 +262,8 @@ class HistoricalAdmissionTests(unittest.TestCase):
     def test_historical_final_prompt_keeps_a_sound_native_input_floor(self):
         from research_harness import openness_reading
         case = OpennessReadingCase()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         native = case.export()
         assignment = copy.deepcopy(case.assign('turn-1', native))
         packet = case.read_packet('turn-1')
@@ -287,8 +287,8 @@ class HistoricalAdmissionTests(unittest.TestCase):
     def test_single_turn_native_review_has_no_hypothetical_chain_floor(self):
         from research_harness import openness_reading
         case = OpennessReadingCase()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         native = case.export()
         assignment = case.assign('turn-1', native)
         self.assertIsNone(openness_reading.find_stage(case.read_packet('turn-1')))
@@ -301,8 +301,8 @@ class HistoricalAdmissionTests(unittest.TestCase):
         from test_openness_final_preflight import FinalPreflightCase, build_before_preflight
         from research_harness import openness_reading
         case = FinalPreflightCase()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         case.limit_input(case.input_limit)
         native, _ = case.build_native(proof_characters=200000)
         with patch.object(openness_reading, 'prepare_packet', side_effect=build_before_preflight):

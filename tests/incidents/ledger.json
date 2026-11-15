@@ -5716,6 +5716,34 @@
       ],
       "fixed_in": "0.89.2",
       "test_kind": "real_shape"
+    },
+    {
+      "id": "release-0892-shared-fixture-state",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "CI shared test process state",
+      "summary": "Synthetic binary backends escaped integration helpers; nested setup failures then left claim modules, Codex runtime declarations and historical openness protocols patched. Reviewer subprocesses also lost the fixture import path.",
+      "expected": "Review helpers scope backend patches, nested fixtures clean up even after setup fails, and reviewer children import their fixture dependencies without inherited PYTHONPATH.",
+      "fixed_in": "0.89.3",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_fixture_isolation.FixtureIsolationTests.test_managed_research_and_manuscript_restore_binary_backend",
+        "test_fixture_isolation.FixtureIsolationTests.test_failed_nested_setup_restores_claims_and_codex_runtime",
+        "test_fixture_isolation.FixtureIsolationTests.test_failed_openness_setup_restores_current_protocol",
+        "test_review_queue_triage.QueueTriageTests.test_reviewer_child_imports_fixtures_without_inherited_pythonpath"
+      ]
+    },
+    {
+      "id": "release-0892-synthetic-capacity-drift",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "historical synthetic review backend",
+      "summary": "Archived synthetic routes lacked the newly explicit fixture runtime capacity contract, and a source-rule comparison unintentionally entered multipart review under the default output profile.",
+      "expected": "Historical synthetic executors declare keyed capacity without rewriting stored bytes, and ordinary source-rule comparisons declare their synthetic single-output profile.",
+      "fixed_in": "0.89.3",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_observed_stopped_plans_keep_pending_capture_and_delivery_credit",
+        "test_session_rules_v3.SessionRulesTests.test_result_support_source_citations_require_v3_delivery_without_changing_v2"
+      ]
     }
   ]
 }

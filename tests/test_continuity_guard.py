@@ -40,8 +40,8 @@ class StagedPartsCase(parts_fixtures.ResultPartsCase):
 class ContinuityGuardTests(unittest.TestCase):
     def prepare(self, cls):
         case = cls()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         return case
 
     def test_registration_alone_cannot_finish_an_existing_head_stop(self):

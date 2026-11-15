@@ -30,6 +30,13 @@ def install_bounded_visual_backend(case, routes):
 
 def install_bounded_binary_backend(case, routes, *, tokens_upper=50000):
     """Declare a fixed input budget for this synthetic byte-reading provider, including its PDF converter."""
+    active = patch_bounded_binary_backend(routes, tokens_upper=tokens_upper)
+    active.start()
+    case.addCleanup(active.stop)
+
+
+def patch_bounded_binary_backend(routes, *, tokens_upper=50000):
+    """Scope the synthetic provider rule to one operation when there is no owning test case."""
     keys = [capacity.describe_capacity_key(route) for route in routes]
     original = capacity.describe_binary_rules
 
@@ -41,6 +48,4 @@ def install_bounded_binary_backend(case, routes, *, tokens_upper=50000):
                     url='https://provider.example/fixture-binary-rule')
         return result
 
-    active = patch.object(capacity, 'describe_binary_rules', side_effect=describe_fixture_rules)
-    active.start()
-    case.addCleanup(active.stop)
+    return patch.object(capacity, 'describe_binary_rules', side_effect=describe_fixture_rules)
