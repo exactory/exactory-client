@@ -5,6 +5,8 @@ Unknown codes retain the decision class used by stored records.
 """
 
 import copy
+from .openness_reading_v7 import ADMISSION_QUESTION, ADMISSION_SMALLER_ANSWER, ADMISSION_ROUTE_ANSWER
+from .openness_reading_v7 import VISUAL_TEXT_ROUTE_CODE, VISUAL_TEXT_ROUTE_QUESTION, VISUAL_TEXT_ROUTE_ANSWER
 
 
 _STORED_CONTENT_CODES_REVIEW_A = (
@@ -78,6 +80,12 @@ STOP_REGISTRY.update({
         proof='test_review_capacity_plan.CapacityPlanTests.test_exact_request_above_pinned_bound_is_harness_defect',
         next=copy.deepcopy(STOP_REGISTRY['review_series_no_progress']['next'])),
 })
+STOP_REGISTRY['review_route_capacity_below_floor']['problem_chain_next'] = dict(
+    kind='decision', owner_decides=ADMISSION_QUESTION,
+    then=[dict(answer=ADMISSION_SMALLER_ANSWER, steps=[dict(id=4, command='export'),
+                 dict(command='review-assignment', check=True)]),
+          dict(answer=ADMISSION_ROUTE_ANSWER, steps=[dict(id=7, command='review-route'),
+                 dict(command='review-probe'), dict(id=4, command='export')])])
 for _code, _outcome in (
         ('review_provider_refused', 'provider_refused'), ('review_output_over_cap', 'output_over_cap'),
         ('review_response_too_large', 'response_over_limit'),
@@ -446,6 +454,7 @@ _NAMED_CAUSE_CODES_ENTRY = (
     'screening_audit_failed',
     'screening_audit_reading_missing',
     'screening_missing',
+    'search_page_capture_interval',
     'search_page_metadata_mismatch',
     'search_pagination_unsupported',
     'search_pending',
@@ -740,8 +749,17 @@ STOP_GROUPS['named_cause'] = dict(id='named_cause', **{'class': 'decision'}, own
         **STOP_GROUPS['stored_state']['conditions']))
 
 
+STOP_GROUPS['visual_text_reading'] = dict(id='visual_text_reading', **{'class': 'decision'}, owner='D1',
+    next=dict(kind='decision', owner_decides=VISUAL_TEXT_ROUTE_QUESTION,
+        then=[dict(answer=VISUAL_TEXT_ROUTE_ANSWER, steps=[
+            dict(command='review-route'), dict(command='review-probe'), dict(command='export'),
+            dict(command='review-assignment', check=True), dict(command='review-assignment')])]),
+    conditions=dict(route='A v7 problem reading delivers text units on a route whose native contract requires page images.'))
+
+
 # Each review lane adds its own (group, codes) tuple here with its evidence file.
 for _group, _codes in (
+        ('visual_text_reading', (VISUAL_TEXT_ROUTE_CODE,)),
         ('named_cause', _NAMED_CAUSE_CODES_ENTRY),
         ('named_cause', _NAMED_CAUSE_CODES_RECORD),
         ('named_cause', _NAMED_CAUSE_CODES_CONDITIONS),

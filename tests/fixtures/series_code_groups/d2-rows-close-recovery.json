@@ -395,6 +395,13 @@
         "research_harness/openness_reading.py:verify_problem_coverage#1": [
           "content"
         ],
+        "research_harness/openness_reading_v7.py:_require_selected#1": [
+          "content"
+        ],
+        "research_harness/openness_reading_v7.py:_require_verification#1": [
+          "content",
+          "record"
+        ],
         "research_harness/problem_openness.py:assess_openness#1": [
           "record"
         ],
@@ -436,6 +443,9 @@
       },
       "review_assignment_replaced": {
         "research_harness/openness_reading.py:_read_prior#1": [
+          "record"
+        ],
+        "research_harness/openness_reading_v7.py:prepare_next_assignment#1": [
           "record"
         ],
         "research_harness/review_parts_native.py:read_prior_assignment#1": [
@@ -587,6 +597,9 @@
         "research_harness/openness_reading.py:_read_prior#1": [
           "form"
         ],
+        "research_harness/openness_reading_v7.py:prepare_next_assignment#1": [
+          "form"
+        ],
         "research_harness/review_parts_native.py:read_prior_assignment#1": [
           "form"
         ],
@@ -614,6 +627,12 @@
       },
       "review_source_continuation_unverified": {
         "research_harness/openness_reading.py:_read_prior#1": [
+          "record"
+        ],
+        "research_harness/openness_reading_v7.py:_rebuild_own_state#1": [
+          "record"
+        ],
+        "research_harness/openness_reading_v7.py:prepare_next_assignment#1": [
           "record"
         ],
         "research_harness/review_parts_native.py:read_prior_assignment#1": [

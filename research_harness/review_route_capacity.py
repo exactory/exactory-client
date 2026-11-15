@@ -170,6 +170,21 @@ VERIFIED_INPUT_TOKENS = tuple(
 )
 
 
+def apply_token_ratio_margin(characters, input_tokens, *, margin=None):
+    """Apply the pinned raw-measurement margin once, rounded down to hundredths."""
+    percent = round((1 - (TOKEN_RATIO_MARGIN if margin is None else margin)) * 100)
+    return (characters * percent // input_tokens) / 100
+
+
+def measure_attempt_ratio(attempt, *, margin=None):
+    usage = attempt.get('usage') or {}
+    tokens, characters = usage.get('input_tokens'), usage.get('request_characters')
+    if (usage.get('sends') == 1 and type(tokens) is int and tokens > 0
+            and type(characters) is int and characters > 0):
+        return apply_token_ratio_margin(characters, tokens, margin=margin)
+    return None
+
+
 def describe_route_class(route):
     adapter = route['adapter']
     effort = 'high' if adapter.startswith('codex_cli_') else route['configuration'].get('effort') if adapter == 'claude_cli_v1' else None
@@ -773,7 +788,7 @@ def describe_task_kind(role, packet, operation='review.invoke'):
         return 'request'
     if 'reading_turn' in packet:
         return 'reading'
-    if 'reading_record' in packet:
+    if 'reading_record' in packet or 'reading_final' in packet:
         return 'final'
     return 'single'
 
@@ -850,6 +865,11 @@ def _project_request(request, packet):
 
 
 def _clear_carried_answers(packet, kind):
+    if packet.get('reading_turn', {}).get('protocol') == 'exactory-openness-reading-v7':
+        packet['reading_turn']['notes'] = None
+    if 'reading_final' in packet:
+        for key in ('notes', 'entries', 'gaps', 'material', 'sources', 'fill'):
+            packet['reading_final'][key] = None if key == 'notes' else []
     record = packet.get('reading_turn', {}).get('reading_record') if kind == 'reading' else packet.get('reading_record')
     if record is not None:
         for key in ('turns', 'sources', 'excerpts', 'passages', 'search_receipts'):
@@ -924,6 +944,8 @@ def describe_task(role, packet, *, route, request, operation='review.invoke', co
     notice = actual.get('output_refusal')
     notice_fields = ({'notice_characters': len(json.dumps(notice, ensure_ascii=False, sort_keys=True, allow_nan=False))}
                      if notice is not None else {})
+    if 'reading_final' in actual:
+        targets = len(actual['reading_final']['page']['targets'])
     return dict(
         kind=kind,
         characters=characters,
@@ -990,7 +1012,7 @@ def describe_attempt(route, role, packet, request, response, *, operation='revie
     from .review_capacity_evidence import describe_capacity_observation
     capacity_evidence = describe_capacity_observation(route, response, sends=sends, request=request,
         probe_controls=packet if 'allowed_control' in packet and 'evidence_control' in packet else None)
-    return dict(
+    result = dict(
         **(dict(output_profile_eligible=False) if excluded else {}),
         **(dict(outcome=signal['outcome']) if signal is not None else {}),
         capacity_evidence=capacity_evidence,
@@ -1022,6 +1044,18 @@ def describe_attempt(route, role, packet, request, response, *, operation='revie
              and transport.context_verified(route, request, response) and 'previous_response_id' not in request)
         and sends == 1 and type(usage.get('input_tokens')) is int and usage['input_tokens'] >= 0 else None,
     )
+    binding = packet.get('reading_turn', packet.get('reading_final', {}))
+    if binding.get('protocol') == 'exactory-openness-reading-v7':
+        bound = binding['capacity']
+        result['task'].update(material_allowance=bound['material_allowance'],
+                              level_material_allowance=bound.get('level_material_allowance', bound['material_allowance']),
+                              notice_characters=0)
+        if packet.get('output_refusal'):
+            notice_characters = len(json.dumps(packet['output_refusal'], ensure_ascii=False,
+                                               sort_keys=True, allow_nan=False))
+            result['task']['notice_characters'] = notice_characters
+        result['answer']['bound'] = bound['answer_bound']
+    return result
 
 
 def _find_task_level(characters):
@@ -1255,7 +1289,7 @@ def _describe_answer_bounds(kind, targets, card_minimum):
     return (60000, 15000)
 
 
-def select_task_limits(route, profile, kind, *, targets=1, card_minimum=4000, calibrated=None, block_room=480000, frame_characters=40000, carried_characters=0, frame_matches_reading=False):
+def select_task_limits(route, profile, kind, *, targets=1, card_minimum=4000, calibrated=None, block_room=480000, frame_characters=40000, carried_characters=0, frame_matches_reading=False, text_room=None, minimum_targets=1):
     """Report each material level against its serialized frame plus task, at unchanged effort."""
     if kind == 'staged':
         return dict(
@@ -1272,8 +1306,8 @@ def select_task_limits(route, profile, kind, *, targets=1, card_minimum=4000, ca
     if calibrated is None:
         calibrated = describe_route_capacity(route)['request_measure'] == 'calibrated'
     target_levels = [max(1, targets)] if kind in ('final', 'single') else [0]
-    while target_levels[-1] > 1:
-        target_levels.append(max(1, target_levels[-1] // 2))
+    while target_levels[-1] > minimum_targets:
+        target_levels.append(max(minimum_targets, target_levels[-1] // 2))
     usable = [row for row in profile['rows'] if row['kind'] == kind and row['task_level'] != 'unmeasured' and (row['attempts'] >= 4) and (row['completed_attempts'] >= 4 or row['at_or_over_limit'] > 0)]
     borrowed = None
     frame_policy = profile.get('frame_policy', {})
@@ -1301,7 +1335,8 @@ def select_task_limits(route, profile, kind, *, targets=1, card_minimum=4000, ca
             default, minimum = _describe_answer_bounds(kind, target_count, card_minimum)
             attempts = row['attempts'] if row is not None else 0
             over = row['at_or_over_limit'] if row is not None else 0
-            qualifies = row is not None and over == 0 and (room is not None) and (room >= minimum)
+            qualifies = (row is not None and over == 0 and (room is not None) and (room >= minimum)
+                         and (text_room is None or task_characters <= text_room))
             state = 'fits' if qualifies else 'over_limit_expected' if row is not None else 'unmeasured'
             candidates.append(
                 dict(
@@ -1330,7 +1365,8 @@ def select_task_limits(route, profile, kind, *, targets=1, card_minimum=4000, ca
     step5 = selected
     if selected is None:
         measured = [row for row in candidates if row['sample_size']]
-        viable = [row for row in measured if row['at_or_over_limit_share'] < 1]
+        viable = [row for row in measured if row['at_or_over_limit_share'] < 1
+                  and (text_room is None or row['task_characters'] <= text_room)]
         step5 = min(
             viable,
             key=lambda row: 1 / ((1 - row['at_or_over_limit_share']) * max(1, row['material_allowance'])),
@@ -1631,7 +1667,8 @@ def describe_work_units(role, packet):
         return {
             'type': 'openness_reading',
             'unit': 'reading_unit',
-            'count': len(turn['reading_plan']['delivered_now']),
+            'count': len(turn['plan']['now'] if turn.get('protocol') == openness_reading.PROTOCOL_V7
+                         else turn['reading_plan']['delivered_now']),
         }
     kind = 'result_final' if plan else 'openness_final' if openness_reading.RECORD_KEY in packet else 'probe' if role == 'probe' else 'ordinary'
     if kind == 'ordinary' and role == 'native_math':
@@ -1712,15 +1749,23 @@ def _summarize_capacity_inventory(inventory):
 
 
 def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_budget=None,
-                        records=None, artifacts=None):
+                        records=None, artifacts=None, measure=None, allowance_rows_bound=None):
     """Pin a chain's budgets; builders supply serialized field sizes and stable target handles.
 
-    No current packet protocol opts in. The fixture declaration is consumed at assignment preparation;
-    future protocol builders call this function and bind the returned artifact under their own version.
+    Fixture declarations and v7 assignment builders bind the returned artifact
+    under their own protocol version.
     """
     from .review_refusal_notice import BOUNDED_NOTICE_CHARACTERS
     from .errors import ResearchError
     limits = describe_route_capacity(route, profile, records=records, artifacts=artifacts)
+    if measure is not None:
+        limits['request_measure'] = measure['rule']
+        ratio = measure['characters_per_token']
+        room = math.floor(limits['input_tokens']['value'] * ratio)
+        if limits['input_characters']['value'] is not None:
+            room = min(room, limits['input_characters']['value'])
+        limits['input_text_characters'].update(
+            value=room, characters_per_token=ratio)
     text_room = limits['input_text_characters']['value']
     handles = [row if isinstance(row, str) else row['handle'] for row in targets]
     inventory_summary = _summarize_capacity_inventory(inventory)
@@ -1731,7 +1776,8 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
         overhead = counts.get('gap_rows', 0) * GAP_ROW_CHARACTERS + counts.get('source_rows', 0) * CITED_SOURCE_CHARACTERS
         maximum_rows.append(dict(handle=handle, excerpts=TARGET_MAXIMUM_CHARACTERS, rows=overhead,
                                  allowance=TARGET_MAXIMUM_CHARACTERS + overhead))
-    carried_bound = NOTES_MAXIMUM_CHARACTERS + measure_capacity_value(route, maximum_rows)
+    carried_bound = NOTES_MAXIMUM_CHARACTERS + (allowance_rows_bound if allowance_rows_bound is not None
+                                               else measure_capacity_value(route, maximum_rows))
     frame = {}
     rooms = {}
     for kind, fields in frames.items():
@@ -1769,11 +1815,18 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
     admission_room = rooms.get('final', min(rooms.values()))
     if 'final' in frame:
         final = select_task_limits(route, profile, 'final', targets=len(handles),
-            frame_characters=frame['final']['bound'] + BOUNDED_NOTICE_CHARACTERS)
+            frame_characters=frame['final']['bound'] + BOUNDED_NOTICE_CHARACTERS, text_room=text_room,
+            minimum_targets=len(handles) if allowance_rows_bound is not None else 1)
         page_room = min(admission_room, final['material_allowance'])
     else:
         page_room = admission_room
     pool = min(admission_room, carried_budget) if carried_budget is not None else admission_room
+    if allowance_rows_bound is not None:
+        # A one-request builder grants the room of its starting final, retaining the
+        # minimums across pages for admission to report the required page count.
+        target_minimums = sum(EXCERPT_TEXT_CHARACTERS + EXCERPT_FIELDS_CHARACTERS + row['rows']
+                              for row in maximum_rows)
+        pool = min(pool, max(page_room, NOTES_MINIMUM_CHARACTERS + target_minimums))
     parts = [dict(id='notes', minimum=NOTES_MINIMUM_CHARACTERS,
                   preferred=NOTES_MAXIMUM_CHARACTERS, maximum=NOTES_MAXIMUM_CHARACTERS)]
     for handle, target in zip(handles, targets):
@@ -1790,7 +1843,8 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
     allocations = [dict(handle=row['id'], excerpts=row['allowance'] - row['overhead'],
                         rows=row['overhead'], allowance=row['allowance']) for row in carried['parts'][1:]]
     notes = carried['parts'][0]['allowance']
-    allowance_rows = measure_capacity_value(route, allocations)
+    allowance_rows = (allowance_rows_bound if allowance_rows_bound is not None
+                      else measure_capacity_value(route, allocations))
     # Splitting all units to the floor gives the largest card count, independent of the planned turn count.
     unique_units = {row.get('sha256', row['handle']): row for row in inventory}
     cards = sum(max(1, math.ceil(row['characters'] / describe_material_levels('read')[-1]))
@@ -1803,10 +1857,15 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
         carried_characters = notes + allowance_rows if kind in ('reading', 'read') else 0
         selected = select_task_limits(route, profile, kind, targets=len(handles),
             frame_characters=value['bound'] + BOUNDED_NOTICE_CHARACTERS,
-            carried_characters=carried_characters, calibrated=limits['request_measure'] == 'calibrated')
+            carried_characters=carried_characters, calibrated=limits['request_measure'] == 'calibrated', text_room=text_room)
+        if allowance_rows_bound is not None and kind == 'final':
+            selected = select_task_limits(route, profile, kind, targets=len(handles),
+                frame_characters=value['bound'] + BOUNDED_NOTICE_CHARACTERS,
+                calibrated=limits['request_measure'] == 'calibrated', text_room=text_room, minimum_targets=len(handles))
         level_limits = select_task_limits(route, profile, kind, targets=selected['target_allowance'],
             frame_characters=value['bound'] + BOUNDED_NOTICE_CHARACTERS,
-            carried_characters=carried_characters, calibrated=limits['request_measure'] == 'calibrated')
+            carried_characters=carried_characters, calibrated=limits['request_measure'] == 'calibrated', text_room=text_room,
+            minimum_targets=len(handles) if allowance_rows_bound is not None and kind == 'final' else 1)
         selected['levels'] = level_limits['levels']
         tasks[kind] = dict(selected, carried_characters=carried_characters,
                            notice_characters=BOUNDED_NOTICE_CHARACTERS)
@@ -1823,11 +1882,14 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
             raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
                                 dict(kind=kind, room=text_room, minimum=minimum, command='review-route'))
     pinned_profile = dict(copy.deepcopy(profile), states={kind: task['state'] for kind, task in tasks.items()})
-    return dict(protocol=CAPACITY_PLAN_PROTOCOL, policy=POLICY, route_class=describe_route_class(route),
-        limits=copy.deepcopy(limits), measure=dict(rule=limits['request_measure'],
+    measure_rule = dict(rule=limits['request_measure'],
             characters_per_token=(CLAUDE_CHARACTERS_PER_TOKEN if route['adapter'] == 'claude_cli_v1'
                                   else CODEX_CHARACTERS_PER_TOKEN) if limits['request_measure'] == 'calibrated' else None,
-            count_carried_state=COUNT_CARRIED_STATE, non_ascii_limit=0.05, ratio_margin=TOKEN_RATIO_MARGIN),
+            count_carried_state=COUNT_CARRIED_STATE, non_ascii_limit=0.05, ratio_margin=TOKEN_RATIO_MARGIN)
+    if measure is not None:
+        measure_rule.update(copy.deepcopy(measure))
+    return dict(protocol=CAPACITY_PLAN_PROTOCOL, policy=POLICY, route_class=describe_route_class(route),
+        limits=copy.deepcopy(limits), measure=measure_rule,
         profile=pinned_profile, frame=frame, inventory=inventory_summary,
         targets=dict(handles=handles, digest=digest(handles)),
         allocation=dict(rooms=rooms, admission_room=admission_room, page_room=page_room, carried=carried, targets=allocations, notes=notes,
@@ -1911,6 +1973,12 @@ def describe_plan_preflight(records, route, request, plan, kind, *, observations
                                 if calibrated else measured['utf8_bytes'])
     measured['measure'] = 'calibrated' if calibrated else 'bytes'
     measured['characters_per_token'] = rule['characters_per_token'] if calibrated else None
+    from .review_excerpts import read_sent_packet
+    sent = read_sent_packet(request) or {}
+    binding = sent.get('reading_turn', sent.get('reading_final', {}))
+    if binding.get('protocol') == 'exactory-openness-reading-v7':
+        bounds = binding['capacity']
+        observations = [dict(material_allowance=bounds.get('level_material_allowance', bounds['material_allowance']))]
     bounds = derive_plan_task_limits(plan, kind, observations)['request_bound']
     comparisons = {name: dict(value=measured[name], bound=value,
                               fits=value is None or measured[name] <= value)
@@ -1927,7 +1995,8 @@ def prepare_assignment_capacity(records, artifacts, route, declaration):
     """Validate a builder declaration once at assignment admission and publish or reuse its plan."""
     from .operations import fields, text
     from .errors import ResearchError
-    fields(declaration, ('kind',), ('plan', 'frames', 'inventory', 'targets', 'carried_budget'))
+    fields(declaration, ('kind',), ('plan', 'frames', 'inventory', 'targets', 'carried_budget',
+                                  'measure', 'allowance_rows_bound'))
     if 'plan' in declaration:
         fields(declaration, ('kind', 'plan'))
         reference = declaration['plan']
@@ -1936,7 +2005,8 @@ def prepare_assignment_capacity(records, artifacts, route, declaration):
         if plan['route_class'] != describe_route_class(route):
             raise ResearchError('invalid_input', 'A continued capacity plan keeps its route class.')
     else:
-        fields(declaration, ('kind', 'frames', 'inventory', 'targets'), ('carried_budget',))
+        fields(declaration, ('kind', 'frames', 'inventory', 'targets'),
+               ('carried_budget', 'measure', 'allowance_rows_bound'))
         frames, inventory, targets = (declaration[key] for key in ('frames', 'inventory', 'targets'))
         if not isinstance(frames, dict) or not frames or any(kind not in TURN_KINDS or kind == 'staged' for kind in frames):
             raise ResearchError('invalid_input', 'A capacity declaration needs bounded frames for supported turn kinds.')
@@ -1972,7 +2042,10 @@ def prepare_assignment_capacity(records, artifacts, route, declaration):
         if budget is not None and (type(budget) is not int or budget < 0):
             raise ResearchError('invalid_input', 'The carried budget must be a nonnegative integer.')
         plan = plan_chain_capacity(route, read_output_profile(records, route), frames=frames,
-                                   inventory=inventory, targets=targets, carried_budget=budget, records=records, artifacts=artifacts)
+                                   inventory=inventory, targets=targets, carried_budget=budget,
+                                   measure=declaration.get('measure'),
+                                   allowance_rows_bound=declaration.get('allowance_rows_bound'),
+                                   records=records, artifacts=artifacts)
         from .review_protocol import _put_json
         reference = dict(protocol=CAPACITY_PLAN_PROTOCOL, digest=digest(plan), artifact=_put_json(artifacts, plan))
     if declaration['kind'] not in plan['task']:
@@ -1997,7 +2070,8 @@ def derive_plan_task_limits(plan, kind, observations=(), *, notice_characters=0)
     output_limit = plan['limits']['output_tokens']['value']
     for observation in observations:
         outcome = observation.get('outcome')
-        if outcome is not None and outcome not in ('output_over_cap', 'input_over_limit', 'timeout', 'provider_refused'):
+        if outcome is not None and outcome not in (
+                'output_over_cap', 'input_over_limit', 'response_over_limit', 'timeout', 'provider_refused'):
             continue
         value = observation.get('material_allowance', observation.get('material_characters', allowance))
         index = next((index for index in range(len(levels) - 1, -1, -1) if levels[index] >= value), 0)
@@ -2022,7 +2096,8 @@ def derive_plan_task_limits(plan, kind, observations=(), *, notice_characters=0)
     return task
 
 
-def derive_turn_task_limits(records, artifacts, assignment, *, kind=None, notice_characters=0):
+def derive_turn_task_limits(records, artifacts, assignment, *, kind=None, notice_characters=0,
+                            response_replacement=None):
     """Read the chain's attempts against its stored plan; later profiles cannot change an allowance."""
     from . import openness_reading, review_failure_class as failures
 
@@ -2031,6 +2106,14 @@ def derive_turn_task_limits(records, artifacts, assignment, *, kind=None, notice
     identifiers = set()
     for member in openness_reading._list_chain(records, assignment):
         identifiers.update(failures.list_turn_assignments(records, member))
+    # Older identical retries and refusal replacements did not consume response
+    # limits. Only explicit capacity replacements apply the new reduction.
+    response_origins = {response_replacement}
+    for identifier in identifiers:
+        member = records['review_assignment'][identifier]
+        if (member.get('capacity_replacement_of')
+                and member.get('recorded_revision', 0) <= assignment.get('recorded_revision', 0)):
+            response_origins.add(member['capacity_replacement_of'])
     observations = []
     for attempt in sorted(records.get('review_attempt', {}).values(),
                           key=lambda row: (row.get('recorded_revision', 0), row['id'])):
@@ -2041,13 +2124,37 @@ def derive_turn_task_limits(records, artifacts, assignment, *, kind=None, notice
         if member.get('capacity_plan_kind', task['kind']) != kind or member['route_id'] != assignment['route_id']:
             continue
         classification = failures.classify_attempt(records, artifacts, attempt)
+        if (classification and classification['outcome'] == 'response_over_limit'
+                and member['id'] not in response_origins):
+            continue
         observation = dict(output_tokens=(attempt.get('usage') or {}).get('output_tokens'),
                            outcome=classification['outcome'] if classification else None)
+        if kind == 'final' and plan['measure'].get('margin_applied'):
+            packet = json.loads(artifacts.read(member['packet']))
+            if attempt.get('material') or packet.get('reading_final', {}).get('material_request'):
+                # This release retries a material part by halving its text
+                # bound. It keeps the final's already granted input material.
+                observation.update(output_tokens=None, outcome=None)
         value = task.get('level_material_allowance', task.get('material_allowance', task.get('material_characters')))
         if value is not None:
             observation['material_allowance'] = value
         observations.append(observation)
-    return derive_plan_task_limits(plan, kind, observations, notice_characters=notice_characters)
+    selected = derive_plan_task_limits(plan, kind, observations, notice_characters=notice_characters)
+    if plan['measure'].get('margin_applied'):
+        ratio = plan['measure']['characters_per_token']
+        for attempt in records.get('review_attempt', {}).values():
+            if attempt['assignment_id'] in identifiers:
+                measured = measure_attempt_ratio(attempt, margin=plan['measure']['ratio_margin'])
+                if measured is not None:
+                    ratio = min(ratio, measured)
+        room = math.floor(plan['limits']['input_tokens']['value'] * ratio)
+        ceiling = selected.get('level_material_allowance', selected['material_allowance'])
+        fitting = [row['material_allowance'] for row in plan['task'][kind]['levels']
+                   if row['task_characters'] <= room and row['material_allowance'] <= ceiling]
+        if fitting and max(fitting) < ceiling:
+            selected = derive_plan_task_limits(plan, kind, [dict(material_allowance=max(fitting))],
+                                                notice_characters=notice_characters)
+    return selected
 
 
 CAPACITY_EFFORT_MESSAGE = ('The harness keeps this review on its route and at its effort. Only the owner changes the '
@@ -2077,6 +2184,8 @@ def list_capacity_recovery_rows():
         unit = 'reading-math-v2' if version == openness_reading.MATH_PROTOCOL else 'reading-v7-turns'
         for kind in ('reading', 'final'):
             rows.append(dict(kind=kind, protocol=version, handler='nothing', required_unit=unit))
+    for kind in ('reading', 'final'):
+        rows.append(dict(kind=kind, protocol=openness_reading.PROTOCOL_V7, handler=kind + '_v7'))
     for kind in review_parts.KINDS:
         rows.append(dict(kind=kind, protocol=review_parts.PROTOCOL,
                          handler='parts_v2_read' if kind == 'read' else 'nothing'))
@@ -2144,9 +2253,19 @@ def describe_capacity_decision(records, artifacts, assignment, outcome, details)
                 step['prerequisites'].insert(0, dict(condition='The installed release holds ' + details['required_unit'] + '.'))
     details = dict(details, message=(OUTPUT_OVER_CAP_DECISION_MESSAGE if outcome == 'output_over_cap'
                                     else CAPACITY_DECISION_MESSAGE))
+    answers = [dict(answer='Move to another route', steps=steps)]
+    if outcome == 'output_over_cap' and assignment.get('reading_chain'):
+        from . import openness_reading as reading, review_protocol as protocol
+        packet = protocol._read_json(artifacts, assignment['packet'])
+        if reading.find_protocol(packet) in (reading.PROTOCOL_V5, reading.PROTOCOL_V6):
+            from .openness_successor import describe_successor_handoff, OUTPUT_CAP_EXPORT_MESSAGE
+            handoff = describe_successor_handoff(records, artifacts, assignment, OUTCOME_CODES[outcome])
+            if handoff is not None and handoff['state'] == 'handoff':
+                details['successor'] = handoff['details']['successor']
+                details['export_message'] = OUTPUT_CAP_EXPORT_MESSAGE
+                answers.insert(0, dict(answer=OUTPUT_CAP_EXPORT_MESSAGE, steps=[handoff['details']['step']]))
     return dict(kind='decision', code=details.get('code', OUTCOME_CODES[outcome]),
-                owner_decides=ROUTE_DECISION_QUESTION,
-                then=[dict(answer='Move to another route', steps=steps)], details=details)
+                owner_decides=ROUTE_DECISION_QUESTION, then=answers, details=details)
 
 
 def plan_capacity_recovery(records, artifacts, assignment, outcome) -> 'RecoveryResult':
@@ -2184,6 +2303,14 @@ def plan_capacity_recovery(records, artifacts, assignment, outcome) -> 'Recovery
     details = dict(row, route_id=assignment['route_id'], effort=describe_route_class(route)['effort'],
                    effort_message=CAPACITY_EFFORT_MESSAGE,
                    at_or_over_limit_share=share, profile_rows=profile_rows, attempts=attempts)
+    if row['handler'] in ('reading_v7', 'final_v7'):
+        from .openness_reading_v7 import plan_turn_recovery, FINAL_PAGES_STATEMENT
+        replacement = plan_turn_recovery(records, artifacts, assignment, outcome)
+        if replacement is not None:
+            replacement['details'].update(details)
+            return replacement
+        details['range_not_served'] = FINAL_PAGES_STATEMENT
+        return describe_capacity_decision(records, artifacts, assignment, outcome, details)
     replacement = (failures.plan_output_replacement(records, artifacts, assignment,
                     allow_single=outcome == 'output_over_cap', outcome=outcome)
                    if row['handler'] in ('single_request_series', 'parts_v2_read', 'context_repair')

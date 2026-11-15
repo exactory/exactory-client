@@ -186,6 +186,9 @@
         "research_harness/ocr.py:OcrPdfExtractor.extract_page#1": [
           "form"
         ],
+        "research_harness/openness_reading.py:choose_chain_protocol#1": [
+          "form"
+        ],
         "research_harness/openness_reading.py:require_reserved_identifier#1": [
           "limit"
         ],
@@ -281,6 +284,9 @@
           "form"
         ],
         "research_harness/problem_evidence.py:validate_override_citation_spec#2": [
+          "form"
+        ],
+        "research_harness/problem_openness.py:build_minimum#1": [
           "form"
         ],
         "research_harness/problem_openness.py:prepare_openness#1": [
@@ -496,6 +502,13 @@
           "form"
         ],
         "research_harness/review_handles.py:validate_material#3": [
+          "form"
+        ],
+        "research_harness/review_handles.py:validate_material#4": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_handles.py:validate_material#5": [
           "form",
           "limit"
         ]
@@ -590,6 +603,13 @@
       },
       "openness_reading_gap": {
         "research_harness/openness_minimum.py:require_unblocked_outcome#1": [
+          "record"
+        ],
+        "research_harness/problem_openness.py:bind_family_readings#1": [
+          "form",
+          "record"
+        ],
+        "research_harness/problem_openness.py:bind_family_readings#2": [
           "record"
         ]
       },
@@ -764,6 +784,9 @@
           "content"
         ],
         "research_harness/direction_reviews.py:_collect_task_graph#5": [
+          "content"
+        ],
+        "research_harness/openness_reading_v7.py:read_bound_state#1": [
           "content"
         ],
         "research_harness/research_decisions.py:validate_review_contract#1": [

@@ -280,15 +280,29 @@ def complete_plan(records, artifacts, assignment, plan):
         return dict(plan, state='handoff', command='read')
     if (code in ('review_input_too_large', 'review_chain_projection_over_limit')
             and assignment.get('reading_chain')):
-        # Reading-v7 changes the problem-chain row to export when it can carry these verified turns.
-        from .openness_reading import describe_projection_decision, find_protocol
+        from .openness_successor import describe_successor_handoff
+        successor = describe_successor_handoff(records, artifacts, assignment, code, details)
+        if successor is not None:
+            plan.pop('command', None)
+            plan.pop('payload', None)
+            return dict(plan, **successor)
+        from .openness_reading import describe_projection_decision, find_protocol, PROTOCOL_V7
         packet = protocol._read_json(artifacts, assignment['packet'])
+        if find_protocol(packet) == PROTOCOL_V7:
+            return plan
         details['decision'] = describe_projection_decision(find_protocol(packet), records=records,
                                                            artifacts=artifacts, assignment=assignment)
         plan['state'] = 'stop'
         plan.pop('command', None)
         return plan
     terminal = describe_terminal(code)
+    if code in ('review_slot_exhausted', 'review_refusal_notice_metadata_too_large') and assignment.get('reading_chain'):
+        from .openness_successor import describe_successor_handoff
+        successor = describe_successor_handoff(records, artifacts, assignment, code, details)
+        if successor is not None:
+            plan.pop('command', None)
+            plan.pop('payload', None)
+            return dict(plan, **successor)
     if terminal['details'].get('next', {}).get('kind') == 'role' and plan.get('command') != 'review-output-correction':
         return dict(plan, **describe_role_handoff(records, artifacts, assignment, code, details))
     context_status = assignment.get('context_state', {}).get('context_status')
@@ -398,6 +412,19 @@ def complete_plan(records, artifacts, assignment, plan):
                 answers.append(dict(answer='Keep this route', steps=[
                     describe_step(records, artifacts, assignment, 9),
                     dict(command='review-series', assignment_id=assignment['id'])]))
+            if code == 'review_turn_failures_exhausted' and details.get('outcome') == 'provider_refused':
+                from .openness_reading import find_protocol, PROTOCOL_V5, PROTOCOL_V6
+                packet = protocol._read_json(artifacts, assignment['packet'])
+                if find_protocol(packet) in (PROTOCOL_V5, PROTOCOL_V6):
+                    from .openness_successor import describe_successor_handoff
+                    successor = describe_successor_handoff(records, artifacts, assignment, code)
+                    if successor is not None:
+                        details['successor'] = successor['details']['successor']
+                        step = successor['details'].get('step')
+                        if step is not None:
+                            details['row'] = 4
+                            answers.append(dict(
+                                answer='Export a new packet and start a new chain on this route', steps=[step]))
             details['decision'] = dict(owner_decides=question, then=answers)
             if code == 'review_response_too_large':
                 from .review_route_capacity import find_serving_routes

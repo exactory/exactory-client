@@ -533,7 +533,7 @@ class SeriesReadingForecastTests(FinalPreflightCase):
             self.assertEqual(rows[-1]['code'], 'artifact_missing')
             self.assertEqual(rows[-1]['capacity_forecast']['status'], 'unavailable')
 
-    def test_v5_turn_50_cannot_fit_and_series_stops_before_a_call(self):
+    def test_v5_turn_50_cannot_fit_and_series_stops_with_executable_answers(self):
         from research_harness.review_series import run_series
         from research_harness import review_excerpts
         self.limit_input(500000)
@@ -558,7 +558,11 @@ class SeriesReadingForecastTests(FinalPreflightCase):
             terminal = rows[-1]
             self.assertEqual(terminal['code'], reading.PROJECTION_STOP)
             self.assertEqual(terminal['stop_class'], 'decision')
-            self.assertIn('decision', terminal['details'])
+            self.assertEqual(terminal['state'], 'stop')
+            self.assertIsNone(terminal['details']['successor']['protocol'])
+            self.assertEqual(len(terminal['details']['decision']['then']), 2)
+            self.assertNotIn(reading.WAIT_PROBLEM_ANSWER,
+                             [answer['answer'] for answer in terminal['details']['decision']['then']])
             self.assertIn('input', terminal['capacity_warning'])
             self.assertTrue(all('capacity_forecast' in row for row in rows))
             self.assertEqual(len(self.store.snapshot()['records']['review_attempt']), 49)
@@ -575,8 +579,10 @@ class SeriesReadingForecastTests(FinalPreflightCase):
                 self.mutate(protocol.invoke_assignment, dict(id='failed-input', assignment_id='turn-1'), credential='fixture')
             plan = plan_next(self.store.snapshot()['records'], self.artifacts, 'turn-1')
         self.assertEqual((plan['state'], plan['code']), ('stop', 'review_input_too_large'))
-        self.assertEqual(plan['details']['decision']['owner_decides'], reading.PROBLEM_PROJECTION_DECISION)
+        self.assertIsNone(plan['details']['successor']['protocol'])
         self.assertEqual(len(plan['details']['decision']['then']), 2)
+        self.assertNotIn(reading.WAIT_PROBLEM_ANSWER,
+                         [answer['answer'] for answer in plan['details']['decision']['then']])
 
 
 if __name__ == '__main__':

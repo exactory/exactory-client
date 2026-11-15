@@ -348,6 +348,29 @@ class QuantityFactoryTests(unittest.TestCase):
         self.assertTrue(any(value.get('canonical', {}).get('entry') == 'Q6'
                             for value in registry['quantity_contracts'].values()))
 
+    def test_legacy_turns_use_the_v6_builder_and_other_role_frames_keep_their_owner(self):
+        from capacity_packet_fixtures import build_scaled_v6_reading_records
+        packet = build_scaled_v6_reading_records('turns', 8)
+        record = packet['reading_turn']['reading_record']
+        self.assertEqual(record['protocol'], 'exactory-openness-reading-v6')
+        self.assertEqual(len(record['turns']), 8)
+        self.assertEqual(len({(row['assignment_id'], row['attempt_id'])
+                              for row in record['turns']}), 8)
+        registry = read_packet_registry()
+        self.assertEqual(validate_packet('native_math', packet, registry), [])
+        contracts = registry['quantity_contracts']
+        lineage = contracts['native_math/exactory-independent-review-v1:reading_turn.reading_record.turns']
+        self.assertEqual(lineage['canonical']['factory'], 'v6_reading_records')
+        for path, owner in (
+                ('manuscript/:evidence.work', 'A1_frame_metadata'),
+                ('readiness/:inputs.branches', 'A1_frame_metadata'),
+                ('native_math/exactory-independent-review-v1:native.contract', 'A1_frame_metadata'),
+                ('result/exactory-problem-review-v2:context_repair.predecessor_binding.attempt_ids',
+                 'Q10_frame_metadata')):
+            with self.subTest(property=path):
+                self.assertEqual(contracts[path]['gap'], owner)
+                self.assertEqual(registry['quantity_gaps'][owner]['closing_unit'], 'field-classes')
+
     def test_missing_factory_and_merged_closing_unit_fail_before_execution(self):
         from ci.capacity_guard import read_matrix
         from capacity_packet_fixtures import FACTORIES

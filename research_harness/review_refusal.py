@@ -305,9 +305,10 @@ def classify_observed_output(records, artifacts, attempt_id):
         output = protocol.read_raw_observation(records, artifacts, attempt_id)['raw_output']
         packet = json.loads(artifacts.read(assignment['packet']))
         from .review_handles import expand_handles, is_material_output, validate_material
-        output = expand_handles(packet, output)
+        output = expand_handles(packet, output, artifacts=artifacts, assignment=assignment,
+                                raw='handle_expansion' not in attempt)
         if is_material_output(packet, output):
-            validate_material(packet, output)
+            validate_material(packet, output, artifacts=artifacts, assignment=assignment)
             return None
         staged = packet.get('staged_review')
         if staged is not None:
@@ -349,7 +350,7 @@ def classify_observed_output(records, artifacts, attempt_id):
                     else:
                         validate_output(packet['native'], output)
                 else:
-                    validate_turn_output(packet, output)
+                    validate_turn_output(packet, output, artifacts=artifacts, assignment=assignment)
             # Reading the bound bodies stays outside the contract check: an unavailable body is not an output failure.
             if not has_deliverable_passage(records, artifacts, packet, output, assignment=assignment, attempt=attempt):
                 with contract_check('native.output'):

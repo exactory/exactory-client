@@ -46,7 +46,7 @@ def _find_parent(records, assignment):
     if not isinstance(assignment.get('staged_review', {}), dict):
         raise ResearchError('invalid_review_context', 'Review staging requires an object binding')
     has_posts = bool(records.get('problem_post'))
-    for key in ('context_repair', 'staged_upgrade', 'output_refusal'):
+    for key in ('context_repair', 'staged_upgrade', 'output_refusal', 'unread'):
         binding = context.get(key)
         if binding is not None or (key == 'output_refusal' and key in context):
             if not isinstance(binding, dict) or ((has_posts or key == 'output_refusal')
@@ -64,6 +64,7 @@ def _find_parent(records, assignment):
     if history_parent.get('role') != assignment['role']:
         history_id = None
     return (assignment.get('capacity_replacement_of') or context.get('prior_assignment_id') or history_id
+            or (context.get('unread') or {}).get('assignment_id')
             or (context.get('context_repair') or {}).get('assignment_id')
             or (context.get('staged_upgrade') or {}).get('assignment_id'))
 
@@ -128,6 +129,11 @@ def _find_head(records, artifacts, identifier, *, context_failures=None):
         assignment = assignments.get(identifier)
         if not isinstance(assignment, dict):
             raise ResearchError('invalid_review_context', 'The review controller is missing')
+    if assignment.get('capacity_plan') and assignment.get('reading_chain'):
+        replacement = protocol.find_replacement(records, assignment)
+        while replacement is not None:
+            identifier, assignment = replacement['id'], replacement
+            replacement = protocol.find_replacement(records, assignment)
     candidates = []
     for head in list_chain_heads(records, artifacts, context_failures=context_failures):
         row = assignments[head]
@@ -184,7 +190,7 @@ def _build_assignment_payload(records, assignment, *, replace=False):
                     'correction', 'source_delivery')}
         context['prior_assignment_id'] = assignment['id']
     maximum = (openness_reading.RESERVED_IDENTIFIER_CHARACTERS if assignment['prompt']['template_id'].startswith(
-        openness_reading.PROTOCOL_V6 + '/') else None)
+        (openness_reading.PROTOCOL_V6 + '/', 'exactory-openness-reading-v7/')) else None)
     payload.update(id=_find_unused_id(records, lineage[0]['id'] + '-t' + str(len(lineage) + 1), maximum=maximum),
                    context=context)
     return payload
@@ -197,7 +203,7 @@ def _build_run_payload(records, assignment):
                    if row['assignment_id'] == assignment['id']]
     count = len({row['id'] for row in attempts + invocations}) + 1
     maximum = (openness_reading.RESERVED_IDENTIFIER_CHARACTERS if assignment['prompt']['template_id'].startswith(
-        openness_reading.PROTOCOL_V6 + '/') else None)
+        (openness_reading.PROTOCOL_V6 + '/', openness_reading.PROTOCOL_V7 + '/')) else None)
     return dict(id=_find_unused_id(records, assignment['id'] + '-run-' + str(count), maximum=maximum),
                 assignment_id=assignment['id'])
 
@@ -459,7 +465,7 @@ def _plan_openness_freshness(records, artifacts, assignment, packet=None):
         return None
     if packet is None:
         packet = protocol._read_json(artifacts, assignment['packet'])
-        if openness_reading.find_protocol(packet) != openness_reading.PROTOCOL_V6:
+        if openness_reading.find_protocol(packet) not in (openness_reading.PROTOCOL_V6, openness_reading.PROTOCOL_V7):
             return None
         packet = protocol._read_json(artifacts, assignment['context']['native_packet'])
     from .problem_openness import assess_packet_freshness, OUTDATED_PACKET_MESSAGE
@@ -476,6 +482,11 @@ def _plan_head(records, artifacts, assignment):
     pending = _plan_pending_call(records, assignment)
     if pending is not None:
         return pending
+    if assignment.get('capacity_plan') and assignment.get('reading_chain'):
+        from .openness_reading_v7 import describe_ratio_handoff
+        handoff = describe_ratio_handoff(records, artifacts, assignment)
+        if handoff is not None:
+            return handoff
     if assignment['context_state']['context_status'] != 'verified_for_route':
         if assignment.get('staged_review', {}).get('kind') == 'controller':
             from .problem_delivery import describe_review_tasks
@@ -557,6 +568,7 @@ def _plan_head(records, artifacts, assignment):
             capacity_replacement = (recovery.get('kind') == 'replace'
                 and recovery.get('payload', {}).get('context', {}).get('capacity_replacement') == assignment['id'])
             if (not single_replacement and not capacity_replacement and assignment['role'] == 'native_math'
+                    and not assignment.get('capacity_plan')
                     and not assignment.get('context', {}).get('prior_assignment_id')):
                 from .native_review import load_packet
                 packet = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
@@ -569,6 +581,7 @@ def _plan_head(records, artifacts, assignment):
                     and not assignment.get('context', {}).get('prior_assignment_id')
                     and not assignment.get('context', {}).get('context_repair')
                     and not result.get('payload', {}).get('context', {}).get('output_refusal')
+                    and not result.get('payload', {}).get('context', {}).get('unread')
                     and not (initial and protocol._initial_size_failure(
                         records, artifacts, assignment, assignment))):
                 return dict(state='handoff', command='review-assignment',
@@ -599,6 +612,10 @@ def _plan_head(records, artifacts, assignment):
         outdated = _plan_openness_freshness(records, artifacts, assignment)
         if outdated is not None:
             return outdated
+        from .openness_successor import describe_input_handoff
+        handoff = describe_input_handoff(records, artifacts, assignment)
+        if handoff is not None:
+            return handoff
         return _plan_capacity(records, assignment, dict(state='run', command='review-run',
                               payload=_build_run_payload(records, assignment)), artifacts)
     packet = protocol._read_json(artifacts, assignment['packet'])
@@ -606,7 +623,7 @@ def _plan_head(records, artifacts, assignment):
     continuing = (is_parts and (assignment[review_parts.KEY]['kind'] != 'final'
                                 or state['output'].get('kind') == 'requests')
                   or review_problem_parts.find_stage(packet) == 'part'
-                  or openness_reading.find_stage(packet) is not None and state['output'].get('stage') == 'reading'
+                  or openness_reading.find_stage(packet) is not None and state['output'].get('stage') in ('reading', 'material')
                   or bool(state.get('pending_source_requests'))
                   or bool(state['output'].get('settled_requests'))
                   or (assignment.get('subject', {}).get('kind') == 'problem'
@@ -617,8 +634,10 @@ def _plan_head(records, artifacts, assignment):
         outdated = _plan_openness_freshness(records, artifacts, assignment)
         if outdated is not None:
             return outdated
-        return dict(state='continue', command='review-assignment',
-                    payload=_build_assignment_payload(records, assignment))
+        payload = _build_assignment_payload(records, assignment)
+        from .openness_successor import describe_input_handoff
+        handoff = describe_input_handoff(records, artifacts, assignment, continuation=payload)
+        return handoff or dict(state='continue', command='review-assignment', payload=payload)
     return _plan_recording(records, artifacts, assignment, state)
 
 

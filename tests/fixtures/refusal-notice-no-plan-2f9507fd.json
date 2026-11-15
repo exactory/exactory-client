@@ -1,0 +1,87 @@
+{
+  "behavior": {
+    "bounded_descriptor_above_45000": {
+      "accepted": true,
+      "sha256": "c4ea0b6896d39159d3ed701969ad32c49c39a1edeab3668385003245096f7279"
+    },
+    "entry_metadata_above_6000": {
+      "accepted": false,
+      "error": {
+        "code": "review_refusal_notice_metadata_too_large",
+        "details": {
+          "characters": 7503,
+          "limit_characters": 6000,
+          "refusal_digest": "0a674a3c620d51f656812daecc4dcb93faae164310a1bec7fff98af8d208cff9"
+        },
+        "message": "The entry of one refusal still exceeds 6,000 characters after its details are shortened. Its identifiers, its path and its message stay unchanged, so no replacement can carry this refusal. Run review-series on the head and take the step of its role."
+      }
+    }
+  },
+  "notices": {
+    "backslashes-10000": {
+      "bounded": "2bd15a4ea74cfd79e1f1b143c95a118143c29138c9f8f73b3c368ed9e6bd1063",
+      "whole": "bc07128bf0d29d32cebd779c06adc97816669b606358acca2f7b4b2076ca3d9e"
+    },
+    "backslashes-100000": {
+      "bounded": "9ee78522f95feca8a7070481ff028525286d7cab811f3f647214ec31cebc06ca",
+      "whole": "0e4edc35d46204832271a3c7a22b4789dbc32e13510edd06c1b6f9324e05ded1"
+    },
+    "backslashes-1000000": {
+      "bounded": "3c8596d9857bc5f1bb4a2e5240249d683fc51060a749f94e8f8ea968d2e19bca",
+      "whole": "eb42e9a2938e2b2ee46132e501256a9d1705105a11b1cf2724b59044abc381d5"
+    },
+    "backslashes-5000000": {
+      "bounded": "864ce4e89627db30cb7ef32d65e6bd335a3d055d319213d31e158da61a3aa338",
+      "whole": "fe12075d99ae04d34e5bebc4ac11052e9e325ea6fb107ef0eed5f880aa995f66"
+    },
+    "json-10000": {
+      "bounded": "cb980a8b64fa3193a4e2f97533a9e16ba861dab72f62474377fca4f69304e830",
+      "whole": "0b3ab64c914d65f7f2cc3c9f3f474b7445eb621cfa0d838fb2ef0cc584777036"
+    },
+    "json-100000": {
+      "bounded": "f47048ae1823a3b8c87268839fee3caacb5ff11e4a607c6356f22a10448369d5",
+      "whole": "ef58213cff4b74e7d2017c618bb7cdd44d9c50c63bc94eca1482c5731db5a571"
+    },
+    "json-1000000": {
+      "bounded": "0dbadad25408a36c2e828370d53907732fe5719c1b86f7bff5c453a6d1161f92",
+      "whole": "72e867055d05b7cabd01a334093d2fe3278153cf7229b791a56a1fe02c3bed10"
+    },
+    "json-5000000": {
+      "bounded": "1973eab3ff409523e697ba8bff02431e03d8084aea186840c5d8d041ffb7c36b",
+      "whole": "9ccf635c8ecb46e8fd2b3ad215d3931d0d14f1cb367d19a58b959e1095b2d942"
+    },
+    "newlines-10000": {
+      "bounded": "de3de607ac46e43f06bad4b67ffa87e28148314573e4f56c179a95570d02183e",
+      "whole": "7f9b8dee462771495ae10e770351d9ca547d6727a8cc4a648190b02a40a29357"
+    },
+    "newlines-100000": {
+      "bounded": "267e9b7c7b59d258f978867bbfdde1f217db5f73b6ed3fc3ba5dcd99ded079f5",
+      "whole": "8a56e111837015a17c8c15cd5fad084efc4efaf2bbbc6f8dcb9775cc4f5f7562"
+    },
+    "newlines-1000000": {
+      "bounded": "6ec8b5d1ed548bf7d4bb5d3c7ee61e05c6799df5b861eaab878b4eac205672bd",
+      "whole": "88097edebb342315d650fa49f7ed5ce421ef1cae069a029ab3a2201e5c8cd7ba"
+    },
+    "newlines-5000000": {
+      "bounded": "c0778f81e312c93cb0ac401a51f33a4147aafa9e5e753a0ef1c7077e17d893d0",
+      "whole": "cd4177a96bb73de2244d044379ffd9dadaf63c319bca7c139142da0ad982caba"
+    },
+    "quotes-10000": {
+      "bounded": "ee2d0f701ce3fbcd54c957a061e2f8764b600147f50b0162a400e6736c512432",
+      "whole": "6d4b3eb8eb2cc619f7783c82c79f64580452e63274a6bffe82b86591add8ef65"
+    },
+    "quotes-100000": {
+      "bounded": "44bc11d08e31ba2569ca5e88c13cb7db68d7106c7c924ef1a0e7bc1d6c403640",
+      "whole": "c602cd752a759b7ca38ae408d48a9d7a8efee26aaa489d36e082fb88ef6d4d86"
+    },
+    "quotes-1000000": {
+      "bounded": "0f41ec54c17176f9b3b6bfef80a2828ab56e92d1e8b1ac512f078d7e0be80453",
+      "whole": "adb3a1da5b9539ca4b08c01353f2d7e83eb1fb5af4bc711edfdb999234e1facc"
+    },
+    "quotes-5000000": {
+      "bounded": "5d2467547710b7bc06ad220a461abf1481de86109a6336ae79252f167f55c2d1",
+      "whole": "45ac7ca7338eb9044e3604b02884610e11c943aba32aff7e063e98c07c1efafd"
+    }
+  },
+  "source": "2f9507fd"
+}

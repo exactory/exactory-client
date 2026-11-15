@@ -1,6 +1,7 @@
 """Canonical native mathematical review packets, without strategic-value gates."""
 
 from datetime import date
+import json
 import re
 
 from .artifacts import validate_reference
@@ -210,7 +211,8 @@ PROBLEM_OPENNESS_PROMPT = render_finding_prompt()
 def uses_finding_contract(assignment):
     """The saved prompt, rather than today's packet shape, selects the answer contract."""
     template = assignment.get("prompt", {}).get("template_id", "")
-    return template in ("exactory-openness-reading-v6/final", "exactory-review-v7/native_math")
+    return template in ("exactory-openness-reading-v6/final", "exactory-openness-reading-v7/final",
+                        "exactory-review-v7/native_math")
 
 
 def _require_finding(condition, rule, path, forecast):
@@ -219,12 +221,28 @@ def _require_finding(condition, rule, path, forecast):
                             dict(rule=rule, path=path, forecast=forecast))
 
 
-def validate_finding(packet, output):
+# The three rules of a final over unread ranges (reading_final.unread). Each refusal reaches the reviewer in the
+# refusal notice of the replacement, so each text states the rule and the correction.
+UNREAD_OUTCOME_MESSAGE = (
+    'This final turn holds unread ranges under reading_final.unread, so the harness records no outcome other than '
+    'unresolved. Return the finding with the outcome unresolved.')
+UNREAD_SET_REFERENCE_MESSAGE = (
+    'A finding over unread ranges needs a ground of the kind reviewer_gap whose refs holds {ref:"x1"}, the citation '
+    'of the complete set of unread ranges. Add that ground.')
+UNREAD_UNIT_REFERENCE_MESSAGE = (
+    'A ground of this finding cites a unit that does not match a row of the unread set: its u handle is not the unit '
+    'of a row, or its artifact is not the artifact of that row. In a '
+    'finding over unread ranges a u handle cites an unread unit: take it from the member unit of a row of '
+    'reading_final.unread or of a page of the list unread, or remove the citation.')
+
+
+def validate_finding(packet, output, *, artifacts=None):
     """Check a v3 answer using only its immutable assignment packet and output."""
     from .review_refusal import contract_check
     native = packet.get("native", packet)
     context = native["scientific_context"]
     forecast = context["audit_forecast"]
+    v7 = packet.get('reading_final', {}).get('protocol') == 'exactory-openness-reading-v7'
     with contract_check("openness.finding"):
         def require(condition, rule, path):
             _require_finding(condition, rule, path, forecast)
@@ -247,8 +265,14 @@ def validate_finding(packet, output):
         require(_nonempty(openness["reason"]), "nonempty_text", base + "/reason")
         coverage = openness["coverage"]
         minimum = context["openness_minimum"]
+        target_count = len(packet['reading_final']['page']['targets']) if v7 else 1 + len(minimum['neighbours'])
         require(_nonempty(coverage) or isinstance(coverage, list)
-                and len(coverage) == 1 + len(minimum["neighbours"]), "coverage", base + "/coverage")
+                and len(coverage) == target_count, "coverage", base + "/coverage")
+        if v7:
+            require(len(openness['reason']) <= 4000, 'reason_bound', base + '/reason')
+            require(all(len(json.dumps(row, ensure_ascii=False, separators=(',', ':'))) <= 800 for row in coverage)
+                    if isinstance(coverage, list) else len(coverage) <= 800 * target_count,
+                    'coverage_bound', base + '/coverage')
         grounds = openness["grounds"]
         require(isinstance(grounds, list), "grounds_list", base + "/grounds")
         turns = {row["assignment_id"] for row in packet.get("reading_record", {}).get("turns", [])
@@ -256,9 +280,17 @@ def validate_finding(packet, output):
         for index, ground in enumerate(grounds):
             path = base + "/grounds/" + str(index)
             require(isinstance(ground, dict) and {"kind", "text"} <= set(ground)
-                    and set(ground) <= {"kind", "text", "work_id", "turns"}, "ground_fields", path)
+                    and set(ground) <= ({"kind", "text", "work_id", "refs"} if v7
+                                        else {"kind", "text", "work_id", "turns"}), "ground_fields", path)
             require(isinstance(ground["kind"], str) and ground["kind"] in GROUND_NEXT_STEPS, "ground_kind", path + "/kind")
             require(_nonempty(ground["text"]), "nonempty_text", path + "/text")
+            if v7:
+                require(len(ground['text']) <= 600, 'ground_bound', path + '/text')
+            if 'refs' in ground:
+                references = ground['refs']
+                require(isinstance(references, list), 'recorded_references', path + '/refs')
+                for reference in references:
+                    validate_reference(reference)
             if "work_id" in ground:
                 require(_nonempty(ground["work_id"]), "work_id", path + "/work_id")
             if ground["kind"] == "source_settles":
@@ -268,6 +300,23 @@ def validate_finding(packet, output):
                 require(isinstance(references, list) and all(isinstance(item, str) for item in references)
                         and len(set(references)) == len(references) and set(references) <= turns,
                         "reading_turns", path + "/turns")
+        unread = packet.get('reading_final', {}).get('unread') if v7 else None
+        if unread is not None:
+            def require_unread(condition, rule, message, path):
+                if not condition:
+                    raise ResearchError('openness_finding_invalid', message,
+                                        dict(rule=rule, path=path, forecast=forecast))
+            require_unread(openness['outcome'] == 'unresolved', 'unread_outcome',
+                           UNREAD_OUTCOME_MESSAGE, base + '/outcome')
+            require_unread(any(ground['kind'] == 'reviewer_gap'
+                and unread['artifact'] in ground.get('refs', []) for ground in grounds),
+                'unread_set_reference', UNREAD_SET_REFERENCE_MESSAGE, base + '/grounds')
+            rows = json.loads(artifacts.read(unread['artifact']))['rows']
+            units = {row['unit']: row['artifact'] for row in rows}
+            require_unread(all(reference['unit'] in units and
+                {key: value for key, value in reference.items() if key != 'unit'} == units[reference['unit']]
+                for ground in grounds for reference in ground.get('refs', []) if 'unit' in reference),
+                'unread_unit_reference', UNREAD_UNIT_REFERENCE_MESSAGE, base + '/grounds')
         outcomes = forecast["outcomes"]
         rule = next((row for row in FINDING_RULES if row["outcome"] == openness["outcome"]), None)
         require(rule is not None, "outcome", base + "/outcome")

@@ -30,6 +30,295 @@ from . import review_transport as transport
 from .review_answer_recovery import derive_output, extract_answer_text, recover_answer
 from . import bar_sources
 from . import openness_reading
+from .openness_reading_v7 import (PROTOCOL as READING_V7_PROTOCOL, TARGET_PAGE_SENTENCE,
+                                  LIST_PAGE_SENTENCE, NOTES_COST_TEXT, CARRIED_READINGS_TEXT,
+                                  CARRIED_KEEP_TEXT, AFFECTED_NOTES_TEXT)
+from .native_review import FINDING_RULES, render_finding_rule
+
+# The prompts of exactory-openness-reading-v7. A chain keeps the prompt of each kind of turn from its first assignment
+# to its end, so NEW_PROBLEM_CHAIN_PROTOCOLS admits v7 only with these texts, and a later change of one of them needs
+# a new protocol or a registered paragraph version. Each text names the place where its reader finds a fact.
+V7_LIMITS_TEXT = (
+    '\n\nLimits. capacity, under reading_turn or reading_final, states the limits of this turn. output_tokens is the '
+    'output limit of the route in tokens, and reasoning and answer share this limit. An answer cut at the limit is '
+    'lost: the harness can use no part of it. Keep the whole answer of this turn within answer_bound characters. '
+    'material_allowance is the room of this turn for delivered material, its rows and their text, in characters as '
+    'the request carries them. level_material_allowance, where it is present, is the level of the plan from which '
+    'the refusal notice of this turn was taken; a reading turn keeps at least the lowest level of the plan.')
+V7_HANDLES_TEXT = (
+    '\n\nHandles. A handle names one thing of this chain, and every turn shows the same thing under the same handle: '
+    'u a unit of text, t a target, e a retained excerpt or passage answer, g a gap of '
+    'the record minimum_gaps, h a gap that you returned, n the notes of one turn, m a completed argument of yours, '
+    'and x1 the set of unread ranges. Copy a handle exactly. The harness reads every object with a member ref as the '
+    'citation of a handle, so write ref only in the refs of a ground of the finding.')
+V7_MATERIAL_TEXT = (
+    '\n\nArguments. An argument of your own that is too long for a ground of the finding can be stored in '
+    'parts. The answer of a final turn is then one part and nothing else: '
+    '{stage:"material",title,part,text,more}. title is a nonblank text of at most 120 characters and is '
+    'the same in every part. part is 1 for the first part and rises by one. text is nonblank and has at '
+    'most capacity.answer_bound characters. more is true while a part follows and false in the last part, '
+    'and an argument has at most eight parts. After a part with more true, the next turn is again a final '
+    'turn and holds reading_final.material_request with the title and the number of the part that it '
+    'expects, and its answer must be that part. The harness names completed arguments m1, m2 and so on. A '
+    'final turn lists a completed argument under reading_final.material, where a ground can cite it. A '
+    'row for the argument is charged to the allowance of every target, and an argument that an allowance '
+    'cannot hold is not listed and cannot be cited.')
+V7_READING_PROMPT = (
+    'This is one reading turn of an openness review under exactory-openness-reading-v7, a fresh input without '
+    'earlier conversation. The review asks what the evidence establishes about whether the exact statement of '
+    'reading_turn.statement is open. Read everything that this turn delivers completely. Do not judge openness in '
+    'this turn: the finding is the answer of the final turn, which holds your latest notes and the excerpts, gaps '
+    'and arguments that the chain retained, so everything '
+    'that the judgment needs must pass through them.\n\n'
+    'reading_turn holds these members. statement is the statement record. formulations lists the targets of the '
+    'review as {handle,formulation}: t1 is the statement, and t2, t3 and so on are its neighbours. minimum gives the '
+    'digest of the minimum that the packet binds (the record openness_minimum, below), the numbers of its searches, '
+    'decisive readings, results and gaps, outcomes and searched_through. notes is the text of your latest notes '
+    'and notes_handle is its handle; both are null while '
+    'the chain holds no notes. plan.now lists what this turn delivers, and evidence holds the text of each row in '
+    'the same order, as {handle,artifact,encoding,content}. plan.delivered and plan.remaining give, as units and '
+    'characters, the number and the size of the ranges that earlier turns delivered and of the ranges that the chain '
+    'had still to deliver by itself before this turn. A passage that you requested, a list page and an affected note '
+    'on request can arrive in plan.now without being among the remaining ranges. allowances, capacity and '
+    'affected_notes are described below.\n\n'
+    'A row of plan.now is {handle,kind,label,part,start,end,characters,artifact,sha256}; the row of a list page '
+    'holds page in place of sha256. handle names the unit in '
+    'this chain. kind is fulltext for the extracted full text of a read version, whose label is its version id; '
+    'result_text for a text of an accepted result; record for a record of the packet as its exact JSON text, whose '
+    'label is its record id, and also for a part of a factored search record (below) and for a required body of '
+    'evidence; fixed_field for the Search delivery manifest and, with target_page, for a part of the packet that is '
+    'too long for the fixed part of a request; carried_reading for readings of an earlier chain; and list_page for a '
+    'page of a list. A label is cut at 120 characters. A unit '
+    'that is '
+    'longer than the room of a turn arrives as consecutive ranges over several turns: start and end are character '
+    'offsets in the whole unit, characters is the length of the range that this turn delivers, and part is start '
+    'plus one. sha256 is the digest of the whole unit, and artifact describes the delivered range. A range that a '
+    'turn delivered is not delivered again, except as a passage that you request. A row that answers a request also '
+    'holds request, the id of that request, and the row of a passage holds request_end, the offset at which the '
+    'passage ends.'
+    + TARGET_PAGE_SENTENCE +
+    '\n\nThe bound search records arrive factored. A field value that two or more bound searches hold '
+    'identically arrives once, as a unit with the label Shared search fields followed by the names of the '
+    'fields. A search that shares a value arrives as its residual, the JSON text '
+    '{fields,record_id,search_digest,shared_fields}: fields holds its fields that are not shared, and '
+    'shared_fields maps the name of each shared field to the SHA-256 of the unit that holds its value. A '
+    'search that shares no value arrives as its whole record. The unit of kind fixed_field with the label '
+    'Search delivery manifest lists each search with its record_id, search_digest, formulations, residual '
+    'and shared_fields, and each shared value with its field and its owners. Read a shared value as a '
+    'field of every search that owns it. Assess every formulation separately: equal field values do not '
+    'show that two searches are equally relevant to different formulations.\n\nThree record units hold what '
+    'the harness computed from the records when it built the packet. openness_minimum is the declaration '
+    'that the packet binds: statement, neighbours, the bound searches by formulation, reading_digests, '
+    'supporting_reading_digests, settling_work_id, family_readings and results. minimum_gaps lists each '
+    'condition that blocks an outcome, with the outcomes that it blocks, the search and the work that it '
+    'concerns, and details. audit_notices lists facts that block no outcome, such as the coverage of each '
+    'search, responses that hold fewer results than the registry reports, and rows that an import rule '
+    'leaves out. reading_turn.minimum.outcomes states for supported_open and for already_solved whether '
+    'the harness can record that outcome: possible or blocked. You cannot remove a gap. What your own '
+    'assessment of the evidence adds enters the finding of the final turn. The final turn lists each gap '
+    'of minimum_gaps under the handle g followed by its position in the list, counted from zero, with its '
+    'condition, the outcomes that it blocks and its target; the other details of a gap stay in this '
+    'record.\n\nReturn exactly '
+    '{schema_version:2,stage:"reading",subject_digest,claim_digest,reviewer,notes,excerpts,gaps,passage_requests}. '
+    'Copy subject_digest, claim_digest and reviewer exactly from reading_turn.\n\n'
+    'notes is a nonblank string (one that holds more than white space) of at most '
+    'allowances.notes characters.' + NOTES_COST_TEXT +
+    ' Your notes replace the notes of the earlier turn, and the next turn holds no other memory of this '
+    'one. Say in them what each unit that you have read establishes and leaves open, and how it bears on '
+    'the statement and on every target. Carry forward from reading_turn.notes everything that still '
+    'matters: conclusions, unresolved questions, the ids of the works and versions that they concern, the '
+    'handle and the label of each unit that you can need again, and the details of the gaps of '
+    'minimum_gaps that the judgment needs.\n\nexcerpts is a list, which can be empty. An excerpt '
+    '{unit,text,purpose,targets} keeps a verbatim quotation for the final turn. unit is the handle of a '
+    'row of plan.now of this turn that is no list page. text is an exact copy of consecutive characters '
+    'of the content that this turn delivers for that row; for a record, copy from the JSON text, with the '
+    'escapes inside its strings. purpose says in at most 200 characters why the quotation matters. '
+    'targets is a nonempty list of distinct target handles that the quotation bears on. Quote '
+    'definitions, normalizations, relevant results with every hypothesis, statements that a source calls '
+    'open or solved, and details of records such as queries, coverage and dispositions. The harness '
+    'charges the size of the excerpt as later requests carry it, with a row for its source, to the '
+    'allowance of every named target. allowances.targets gives characters, used and remaining for each '
+    'target handle. An excerpt that the remaining allowance of one of its targets cannot hold is recorded '
+    'with the status over_allowance and does not reach the final turn. allowances.excerpts is the part of '
+    'the answer bound of this turn that is meant for excerpts. When the targets are too many for one '
+    'view, allowances.targets shows the most used rows, omitted counts the rows that it leaves out, '
+    'unused_target_allowance is the smallest allowance of a target without use, and the list allowances '
+    'holds every row.\n\ngaps is a list, which can be empty. A gap {formulation,text} states in 1 to 600 '
+    'characters something that the evidence lacks for one target and that minimum_gaps does not list; '
+    'formulation is the handle of that target. The harness names the gaps of the chain h1, h2 and so on, '
+    'in the order in which its accepted answers return them, and charges each gap, with its text, to the '
+    'allowance of its target. A gap that the remaining allowance of its target cannot hold is recorded with the '
+    'status over_allowance and does not reach the final turn; when that allowance is nearly used, state the gap in '
+    'your notes as well. The final turn shows every other gap with its '
+    'handle, its target and its text.\n\npassage_requests is a list of at most ten requests; give the empty '
+    'list when you need none. A request {id,unit,anchor,characters} asks for text of a unit again. unit '
+    'is a u handle of this chain, and the unit need not have been delivered before: a row of plan.now, of this turn '
+    'or of an earlier one, gives such a handle, and so do the unit of an entry and a row of the index or of the list '
+    'affected_notes. The handle of a search that arrived factored names all its parts: the passage then comes from '
+    'the first part that holds the anchor, or from the first part when anchor is null, and it ends with that part, '
+    'so take the anchor from inside one field. The row that answers the request has the handle of the part that it '
+    'delivers. anchor is a phrase of 1 to 600 characters that occurs verbatim in the unit, or null for the start of '
+    'the unit, and characters is an integer from 1 to 100,000. The next turn delivers the text from the first '
+    'occurrence of the anchor, or from the start of the unit, up to that length and to the end of the '
+    'unit, as rows of plan.now; when its room is short, the turns after it deliver the rest. Passages are '
+    'charged to allowances.passages, which holds 100,000 characters for the chain, and a request takes the smaller '
+    'of its characters and the text from the start of the passage to the end of the unit or, for a factored search, '
+    'of that part. What the allowance has left for new '
+    'requests is characters less used, less the passage text that this turn delivers, less what is still to be '
+    'delivered of your earlier requests: for each, its characters less the text that has arrived. Keep the id and '
+    'the characters of a request in your notes until its text has arrived in full, which a row shows when its end '
+    'equals request_end. The harness refuses an answer with a request whose unit it does not know, whose anchor does '
+    'not occur, or which takes more than the allowance has left. id is a string of 1 to 120 characters, unique in '
+    'the answer and different from the id of a request that is still being delivered.'
+    + LIST_PAGE_SENTENCE + CARRIED_READINGS_TEXT + CARRIED_KEEP_TEXT
+    + AFFECTED_NOTES_TEXT + V7_LIMITS_TEXT + V7_HANDLES_TEXT +
+    '\n\nArguments. An argument of your own that is too long for your notes is written in the final turn, '
+    'which stores it in parts. The harness refuses a part of an argument as the answer of a reading turn. '
+    'Put the outline of the argument into your notes.\n\nA full text can stand for another record of the '
+    'same work. A bound search can judge a work relevant or contradictory under an identifier whose own '
+    'record has no complete full reading, for example an arXiv identifier without a version number, or '
+    'the DOI record of a paper whose arXiv version was read. When the store holds a complete full reading '
+    'of a linked version of that work, the packet can bind that reading, and this chain then delivers the '
+    'text of that version under its own version id. family_readings of the record openness_minimum lists '
+    'these pairs as {search_digest,work_id,version_id}. Without such a reading the minimum keeps a gap '
+    'with the condition reading_missing. The harness links the two records in one of three ways: the '
+    'found record is the arXiv identifier of the read version without its version number; a DOI of the '
+    'found record is the DOI that arXiv registered for the read paper; or both records carry the same '
+    'DOI. For the two DOI links it compares the author lists when both records hold authors. It compares '
+    'no title and no text, and the texts of two versions of one work can differ. When a judgment rests on '
+    'such a text, name in your notes the version that you read.\n\nA reading record of the packet is '
+    'decisive or supporting. A decisive reading is a full reading of a work that a bound search judges '
+    'relevant or contradictory, or of the declared settling work, and this chain delivers the text that '
+    'it read. reading_digests of the record openness_minimum lists the digests of the decisive readings, '
+    'and the sha256 of the row of a reading record is its digest. A supporting reading is another reading '
+    'record of the store that a text of a bound search names by its id (the reason of a disposition, of a '
+    'resolved entry or of a row disposition, impact, scope, or a text of gaps), or that the author bound '
+    'by its id; supporting_reading_digests lists the digests of the supporting readings. Binding a '
+    'supporting reading adds its reading record and not the text that it read. A supporting reading shows '
+    'what the author recorded about a work; it does not show that this review read the work. When the '
+    'judgment needs a full text that no unit delivers, return a gap that says so. The author then judges '
+    'the work relevant in a search record, which makes its full reading decisive and its text a part of '
+    'the review.\n\nA full text can be a file that a person saved and gave '
+    'to the harness. For a decisive reading of such a text, the record audit_notices holds an entry of '
+    'kind supplied_text with the version id and with supplied: '
+    '{saved_by,obtained_from,obtained_at,statement,evidence,note}. The first four members hold what the author '
+    'reported. The harness sets evidence and note and kept the bytes of the file; it neither fetched the text nor '
+    'verified where it came from. A complete full reading of such a text counts as a full reading. When a decisive '
+    'judgment rests on it, say so in your notes, with the version, so that the reason of the finding can say '
+    'so.\n\nThe packet binds each accepted result of a solver objective of this '
+    'record that the author selected for it, for example a theorem that a bound search cites. results of '
+    'the record openness_minimum lists them as '
+    '{native_attempt_digest,acceptance_id,cited_as,link_digest,result_digest}. cited_as is the label that '
+    'the author gave the result; check in the search records whether and how they cite it. A unit of kind '
+    'result_text holds one text of the evidence of the result: a manifest, an artifact that is UTF-8 '
+    'text, or the text that the harness extracted from a PDF artifact. A record unit with the label '
+    '<native_attempt_digest>:<acceptance_id> holds the exact JSON text of '
+    '{cited_as,native_attempt_digest,objective_id,objective_claim,acceptance,checkpoint,review,manifests,artifacts,note}: '
+    'the claim of the accepted checkpoint, the review that the acceptance rests on, and one row for each '
+    'part of the evidence. A manifest of kind certificate or lean holds the record of its verification. '
+    'Each row of artifacts states delivery. text and pdf_text mean that a result_text unit delivers the '
+    'part; for pdf_text the row gives sha256, the digest of the PDF, and text_sha256, the digest of the '
+    'extracted text. described means that the row gives path, role, media type, size and digest, and that '
+    'the bytes are not delivered. A described artifact of role proof or theorem is a gap of the review, '
+    'with the condition result_undelivered. A described executable, toolchain or other binary part is no '
+    'scientific text and is no gap. The acceptance is a fact about the solver objective. It is no finding '
+    'about the openness of the statement under review: read the result and note what it proves.'
+    + openness_reading.SEARCH_FIELD_GUIDE_TEXT + openness_reading.SEARCH_COMPLETION_SENTENCE)
+V7_FINAL_PROMPT = (
+    'This is the final turn of an openness review under exactory-openness-reading-v7. It answers one '
+    'question: what does the evidence that this chain read establish about whether the exact statement in '
+    'native.subject is open? Your answer is a finding. It is no judgment of the worth of the problem, and '
+    'it gives no permission to post it. An unresolved finding that states its grounds is a complete and '
+    'correct answer.\n\n'
+    'This turn delivers no source text, except text that you requested in a chain that ends over unread ranges. '
+    'reading_final holds what the reading turns of this chain kept. notes is the text of your latest '
+    'notes, and notes_handle is its handle. fill holds notes of earlier turns as {handle,text}, the '
+    'newest first, as far as the room of this turn allows. entries lists the excerpts and passage answers '
+    'that the chain retained, as {handle,kind,unit,targets,start,end,sha256,text,purpose,status}: text is '
+    'an exact span of the unit, and start and end are its character offsets there. sources gives '
+    '{handle,kind,label} for each unit that an entry quotes. gaps lists the gaps of the forecast under g '
+    'handles, each as {handle,condition,outcomes,target}, and the gaps that you returned under h handles, '
+    'each as {handle,formulation,text}, where formulation is the handle of the target. A gap that you returned and '
+    'that the allowance of its target could not hold is not listed. minimum.gaps_unit '
+    'is the handle of the record unit minimum_gaps, which holds the other details of the gaps of the '
+    'forecast; a passage request for it returns them. material lists your completed arguments as '
+    '{handle,title,reference}. page.targets lists the handle of every target: t1 is the statement of '
+    'native.subject, and t2, t3 and so on are its neighbours in their order there. minimum gives the '
+    'digest of the minimum that the packet binds, the numbers of its searches, decisive readings, results '
+    'and gaps, outcomes and searched_through. native holds the fixed fields of the native packet: '
+    'subject, the binding fields, and under scientific_context counts in place of its lists, except '
+    'decisive_work_ids, the list of the ids of the decisive works. Where native shows {unit:"statement"}, '
+    'context_unit, or decisive_work_ids as {count,unit}, that part stands in a unit of its own: context_unit and the '
+    'unit of decisive_work_ids are u handles, and the statement is the unit with the label statement, whose handle '
+    'your notes, a row of sources or a row of reading_final.unread can give. The reading turns deliver these units '
+    'before the full texts and the records, and in a chain that ends over unread ranges such a unit can be among the '
+    'unread ranges. A passage request for the unit returns it. Judge from your notes and the entries, and do not '
+    'assume that a text which this input does not hold is available.\n\nReturn exactly '
+    '{schema_version:3,subject_digest,claim_digest,reviewer,findings:{statement,assumptions,scope,dependencies,policy,openness:{outcome,coverage,reason,grounds:[{kind,text,work_id?,refs?}]}}}. '
+    'Copy subject_digest, claim_digest and reviewer exactly from reading_final. findings.statement, '
+    'findings.assumptions, findings.scope, findings.dependencies and findings.policy are nonblank strings (a '
+    'nonblank string holds more than white space): your assessment of the statement as it is written, of its '
+    'assumptions, of its scope, of the results and sources that the judgment depends on, and of how the evidence '
+    'meets the rules of this prompt. outcome is supported_open, already_solved or unresolved. coverage states for '
+    'each formulation which searches covered it, when, and how far. It is a list with exactly one entry for '
+    'each handle of reading_final.page.targets, in that order, each entry of at most 800 characters as '
+    'JSON text, or it is one nonblank string of at most 800 characters times the number of targets. reason is a '
+    'nonblank string of at most 4,000 characters that explains the outcome. Where your notes '
+    'say that a decisive judgment rests on a text that a person supplied, or on the text of a linked '
+    'version of a work, say so in reason and name the version. grounds is a '
+    'list.\n\nnative.scientific_context.audit_forecast.outcomes, which reading_final.minimum.outcomes '
+    'repeats, holds what the harness computed from the records when it built the packet: for '
+    'supported_open and for already_solved, whether the harness can record that outcome, "possible" or '
+    '"blocked". Each g row of reading_final.gaps states one condition that blocks an outcome, with the '
+    'outcomes that it blocks and its target. Its handle is g followed by the position of the gap in the '
+    'record minimum_gaps, counted from zero. You cannot remove a gap: the harness refuses an outcome that '
+    'the forecast states as blocked, whatever the evidence shows. Your own assessment of the evidence can '
+    'add grounds. The harness adds the statement digest, the evidence list, the search date and the '
+    'minimum to the recorded finding, so the answer holds none of them.\n\nThe outcome follows three rules, '
+    'read in order. '
+    + ' '.join(render_finding_rule(row) for row in FINDING_RULES) +
+    '\n\nIn a ground, text is a nonblank string of at most 600 characters, and kind is one of the following. '
+    'reviewer_gap: The evidence lacks something that the judgment needs and that the gaps of the forecast do not '
+    'list: for example a work that no reading of the packet read in full, a search that is too narrow for a '
+    'formulation, or a source that could not be read. text names what is missing. source_settles: A decisive work of '
+    'the packet, read in full, proves or refutes the statement, and the forecast does not state '
+    'already_solved as possible. work_id is required and is one of '
+    'native.scientific_context.decisive_work_ids. text states the result and where the work proves it. '
+    'settling_source_rejected: The declared settling work, settling_work_id of the record '
+    'openness_minimum, does not settle the statement. text states why. own_argument: An argument of your '
+    'own, which no source of the packet holds, proves or refutes the statement. text states the argument, '
+    'or refs cites the argument or the notes that hold it. packet_defect: The packet lacks or contradicts '
+    'something that a finding needs. text names the defect.\n\nrefs is a list of citations, each exactly '
+    '{ref:<handle>}. The handle is one that this packet shows: a g or h handle of reading_final.gaps, the '
+    'n handle of notes_handle or of a row of fill, or an m handle of reading_final.material. The harness '
+    'replaces each citation by the reference of the stored text, so that a ground need not repeat that '
+    'text.\n\nWhen you need text again before you judge, return in place of the finding exactly '
+    '{schema_version:2,stage:"reading",subject_digest,claim_digest,reviewer,notes,excerpts,gaps,passage_requests}, '
+    'with one to ten passage requests. notes is a nonblank string of at most allowances.notes '
+    'characters, also as the next request carries it, and it replaces your notes: repeat in it everything '
+    'that the judgment needs. gaps is a list of {formulation,text}, each with the handle of a target and '
+    '1 to 600 characters; it can be empty. excerpts is a list of {unit,text,purpose,targets}: unit is the handle of '
+    'a row of reading_final.plan.now that is no list page, text is an exact copy of consecutive characters of the '
+    'content that evidence holds for that row, purpose has at most 200 characters, and targets is a nonempty list of '
+    'distinct target handles. When this turn delivers no such row, excerpts is the empty list. A request '
+    '{id,unit,anchor,characters} names a unit by a u handle of this chain, as a row of sources, the unit of an '
+    'entry, your notes or, in a chain that ends over unread ranges, the unit of a row of reading_final.unread give '
+    'it, and the unit need not have been delivered before; anchor is a phrase of 1 '
+    'to 600 characters that occurs verbatim in the unit, or null for the start of the unit, and '
+    'characters is an integer from 1 to 100,000. The handle of a bound search can stand for several parts (its own '
+    'fields, and each field value that it shares with other searches): the passage then comes from the first part '
+    'that holds the anchor, or from the first part when anchor is null, and it ends with that part, so take the '
+    'anchor from inside one field. A request takes the smaller of its characters and the text from the start of the '
+    'passage to the end of the unit or of that part, and the requests of an answer stay within what '
+    'allowances.passages has left: characters less used, less the passage text that this turn delivers and what is '
+    'still to be delivered of your earlier requests. id is a string of 1 to 120 characters, unique in the answer and '
+    'different from the id of a request that is still being delivered.'
+    + LIST_PAGE_SENTENCE +
+    ' The turn after this answer delivers what you requested. It is a reading turn, whose own instructions state '
+    'the rules of notes, excerpts and gaps, and a final turn follows it; in a chain that ends over unread ranges '
+    'it is another final turn. The harness refuses a reading response in which no request can deliver anything. '
+    'When no text can help you judge, return the finding.'
+    + V7_LIMITS_TEXT + V7_HANDLES_TEXT + V7_MATERIAL_TEXT)
 from . import review_excerpts
 from . import review_problem_parts, review_parts
 from . import review_handles
@@ -872,6 +1161,11 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
     reading or final turn of a native openness reading chain, and reading_protocol the
     protocol of its prompts, by default the current one. common_version names the common text that opens the prompt,
     by default the current one; it is independent of version, which names the scientific contract."""
+    if reading_protocol == READING_V7_PROTOCOL and capacity is not None:
+        result = canonical_prompt(role, reading_stage=reading_stage, reading_protocol=reading_protocol,
+                                  common_version=common_version, problem_paragraphs=problem_paragraphs)
+        result['parameters']['capacity'] = copy.deepcopy(capacity)
+        return result
     if problem_objection_carry is not None or problem_paragraphs is not None or capacity is not None:
         if (problem_paragraphs and orchestration != 'problem_creation'
                 and not prompt_paragraphs.has_only_shared_paragraphs(problem_paragraphs)):
@@ -960,6 +1254,10 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
             raise ResearchError('invalid_review_context', 'A reading stage belongs to a native openness reading chain')
         from .native_review import PROMPT
         reading_protocol = reading_protocol or openness_reading.PROTOCOL
+        if reading_protocol == 'exactory-openness-reading-v7':
+            prompt = common + (V7_READING_PROMPT if reading_stage == 'reading' else V7_FINAL_PROMPT)
+            return _build_prompt(reading_protocol + '/' + reading_stage, prompt,
+                                 {'role': role, 'reading_stage': reading_stage}, common_version)
         texts = openness_reading.PROMPTS[reading_protocol]
         from .openness_reading import PROTOCOL_V6
         if reading_protocol == PROTOCOL_V6:
@@ -1820,7 +2118,7 @@ def _find_session_bodies(records, artifacts, prior, *, evaluate_states=True):
 def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
     """Build the role allowlist; caller-authored prompts and narrative substitutes are rejected."""
     canonical_prompt(role)
-    fields(context, (), ('artifact_refs', 'bundle', 'objection_id', 'review_ids', 'correction', 'prior_assignment_id', 'source_links', 'context_repair', 'verification_task_id', 'native_packet', 'source_delivery'))
+    fields(context, (), ('artifact_refs', 'bundle', 'objection_id', 'review_ids', 'correction', 'prior_assignment_id', 'source_links', 'context_repair', 'verification_task_id', 'native_packet', 'source_delivery', 'reading_replacement', 'unread'))
     if 'source_delivery' in context:
         from .review_source_complete import MODE
         if context['source_delivery'] != MODE or role != 'result' or 'prior_assignment_id' not in context:
@@ -1980,7 +2278,10 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 add_problem_objections(records, artifacts, packet, bars)
                 packet['problem_review_currency'] = compute_problem_review_currency(records, artifacts)
     elif role == 'native_math':
-        fields(context, ('native_packet',), ('prior_assignment_id',))
+        fields(context, ('native_packet',), ('prior_assignment_id', 'reading_replacement', 'unread'))
+        if 'unread' in context:
+            fields(context['unread'], ('assignment_id',), code='invalid_review_context')
+            text(context['unread']['assignment_id'], 'Unread position', code='invalid_review_context')
         if dossier_id is not None:
             raise ResearchError('invalid_review_context', 'Native mathematics has no strategic dossier prerequisite')
         from .native_review import load_packet
@@ -2430,7 +2731,7 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
                     request_digest=digest(request), route_digest=digest(route), runtime=route.get('runtime'),
                     usage={}, error=error_row)
         if packet is not None:
-            observation = review_handles.record_handle_output(packet, observation, artifacts)
+            observation = review_handles.record_handle_output(packet, observation, artifacts, assignment=assignment)
         capture_call(store, operation, payload, invocation, route, observation,
                      request_id=request_id, _authority=authority)
         authority.finish_transport()
@@ -2724,6 +3025,9 @@ def _prompt_matches(assignment, packet=None):
     source_rules = envelope.get('parameters', {}).get('source_rules')
     if source_rules is not None and packet is not None and packet.get('source_rules') != source_rules:
         return False
+    if envelope.get('template_id', '').startswith(READING_V7_PROTOCOL + '/'):
+        from .openness_reading_v7 import matches_turn_prompt
+        return matches_turn_prompt(assignment, packet)
     base = prompt_paragraphs.strip_prompt_paragraphs(envelope, assignment['role'])
     if base is None:
         return False
@@ -2968,6 +3272,12 @@ def find_replacement(records, assignment):
         and other.get('recorded_revision', 0) > assignment.get('recorded_revision', 0)), None)
     if successor is not None:
         return successor
+    unread = next((other for other in read_filtered_records(records, 'review_assignment',
+        **{'context.unread.assignment_id': assignment['id']}).values()
+        if other.get('context', {}).get('unread') == dict(assignment_id=assignment['id'])
+        and other.get('recorded_revision', 0) > assignment.get('recorded_revision', 0)), None)
+    if unread is not None:
+        return unread
     parent = assignment.get('context', {}).get('prior_assignment_id')
     if parent is None:
         if (assignment['role'] != 'adjudicator'
@@ -2985,6 +3295,7 @@ def find_replacement(records, assignment):
                  role=assignment['role'], **{'context.prior_assignment_id': parent}).values()
                  if other['id'] != assignment['id'] and other['role'] == assignment['role']
                  and other.get('context', {}).get('prior_assignment_id') == parent
+                 and other.get('context', {}).get('unread') == assignment.get('context', {}).get('unread')
                  and other.get('recorded_revision', 0) > assignment.get('recorded_revision', 0)), None)
 
 
@@ -3349,6 +3660,13 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             raise ResearchError('review_complete_source_route', 'Complete visible source input retains the existing Codex local route')
         staged_repair = repair is not None and repair['predecessor'].get('staged_review') is not None
         visual_repair = route['adapter'] == 'codex_cli_visual_v1' and repair is not None and not staged_repair
+        if (route['adapter'] == 'codex_cli_visual_v1' and value['role'] == 'native_math'
+                and openness_reading.PROTOCOL_V7 in openness_reading.NEW_PROBLEM_CHAIN_PROTOCOLS):
+            from .native_review import load_packet
+            if openness_reading.is_openness_packet(load_packet(
+                    artifacts, value['context']['native_packet'], value['reviewer_id'])):
+                from .openness_reading_v7 import require_text_reading_route
+                require_text_reading_route(records, route, value)
         if route['adapter'] == 'codex_cli_visual_v1':
             if visual_repair:
                 from .review_visual_context_repair import eligible
@@ -3375,6 +3693,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 slot_identifier = context_repair.slot_id(records, latest)
         diagnostics = {}
         reading_logical = None
+        carried_report = None
         # Derived PNG pages do not deliver original PDFs. Add their explicit native
         # image bindings after constructing the same truthful source text packet.
         with transport.text_only_delivery(route['adapter'] in transport.TEXT_ONLY_ADAPTERS
@@ -3398,7 +3717,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 else:
                     reading_logical = packet
                     try:
-                        packet, reading_chain = openness_reading.prepare_packet(records, artifacts, value, route, packet)
+                        packet, reading_chain = openness_reading.prepare_packet(records, artifacts,
+                            dict(value, recorded_revision=expected_revision + 1), route, packet)
                     except ResearchError as error:
                         if error.code == reading_capacity.PROJECTION_STOP:
                             protocol = reading_capacity.find_chain_protocol(reading_logical['native'])
@@ -3409,6 +3729,11 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                         raise
                     if reading_chain is not None:
                         diagnostics = reading_chain.pop('diagnostics', {})
+                        carried_report = reading_chain.pop('carried_readings', None)
+                        for key in ('capacity_plan', 'capacity_plan_kind', 'protocol_selection',
+                                    'capacity_replacement_of', 'slot_id', 'carried_selection'):
+                            if key in reading_chain:
+                                value = dict(value, **{key: reading_chain.pop(key)})
                         value = dict(value, reading_chain=reading_chain)
         if staged_repair:
             from . import review_parts_repair
@@ -3562,6 +3887,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         if prompt_parent is not None:
             base_prompt_parameters['common_version'] = find_common_prompt_version(prompt_parent['prompt'])
         base_prompt_parameters.update(prompt_paragraphs.select_prompt_parameters(value['role'], packet))
+        if openness_reading.find_protocol(packet) == READING_V7_PROTOCOL:
+            binding = packet.get('reading_turn', packet.get('reading_final'))
+            base_prompt_parameters['capacity'] = binding['capacity']
         if (value['role'] == 'native_math' and openness_reading.find_stage(packet) is None
                 and openness_reading.is_openness_packet(packet['native'])
                 and packet['native']['scientific_context']['openness_minimum']['schema_version'] == 2):
@@ -3660,8 +3988,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         # that turn's bound without changing the recorded paragraphs of ancestors.
         packet = prepare_capacity_notice(records, route, value['role'], packet)
         parameters = prompt_paragraphs.select_prompt_parameters(value['role'], packet)
-        if (prompt_paragraphs.CAPACITY_PARAMETER in parameters
-                or prompt_paragraphs.CAPACITY_PARAMETER in prompt['parameters']):
+        if (openness_reading.find_protocol(packet) != READING_V7_PROTOCOL
+                and (prompt_paragraphs.CAPACITY_PARAMETER in parameters
+                     or prompt_paragraphs.CAPACITY_PARAMETER in prompt['parameters'])):
             base = prompt_paragraphs.strip_prompt_paragraphs(prompt, value['role'])
             recorded = prompt_paragraphs.read_paragraph_parameters(prompt)
             prompt = prompt_paragraphs.append_prompt_paragraphs(base, value['role'],
@@ -3676,6 +4005,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             packet['digest'] = digest(packet)
         from .review_route_capacity import CAPACITY_REQUEST_KEY, prepare_assignment_capacity
         capacity_members = {}
+        if value.get('capacity_plan'):
+            capacity_members = {key: value[key] for key in ('capacity_plan', 'capacity_plan_kind')}
         if CAPACITY_REQUEST_KEY in packet:
             declaration = packet.pop(CAPACITY_REQUEST_KEY)
             capacity_members = prepare_assignment_capacity(records, artifacts, route, declaration)
@@ -3730,6 +4061,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             return changes + [immutable_record(records, 'review_assignment', value['id'], record)], dict(
                 record, next=[describe_planning_command(record['id'])])
         receipt = dict(record, diagnostics=diagnostics) if diagnostics else record
+        if reading_logical is not None and carried_report is not None:
+            receipt = dict(receipt, carried_readings=carried_report)
         if value.get('reading_chain') and reading_logical is not None:
             request = build_assignment_request(records, artifacts, record)
             receipt = dict(receipt, **reading_capacity.describe_reading_receipt(
@@ -3880,6 +4213,11 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         packet = _read_json(artifacts, assignment['packet'])
         if not _prompt_matches(assignment, packet=packet):
             raise ResearchError('review_prompt_mismatch', 'Invoke the recorded canonical reviewer prompt')
+        if openness_reading.find_protocol(packet) == READING_V7_PROTOCOL:
+            from .openness_reading_v7 import describe_ratio_handoff, RATIO_EXPORT_MESSAGE
+            handoff = describe_ratio_handoff(records, artifacts, assignment)
+            if handoff is not None:
+                raise ResearchError(openness_reading.PROJECTION_STOP, RATIO_EXPORT_MESSAGE, handoff['details'])
         from .review_source_complete import validate
         validate(records, artifacts, assignment, packet)
         validate_assignment_inventories(records, artifacts, assignment['id'])
@@ -3970,7 +4308,7 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
         material_matches = True
         if review_handles.is_material_output(packet, output):
             material = _read_json(artifacts, attempt['material']) if 'material' in attempt else None
-            material_matches = review_handles.authenticate_material(packet, output, material, artifacts)
+            material_matches = review_handles.authenticate_material(packet, output, material, artifacts, assignment=assignment)
         elif 'material' in attempt:
             material_matches = False
         return (has_supported_binding(assignment, attempt)
@@ -3982,7 +4320,8 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
                     policy=assignment.get('request_policy')))
                 and attempt.get('packet_digest') == assignment['packet_digest']
                 and attempt.get('prompt_hash') == assignment['prompt_hash']
-                and review_handles.derive_expanded_output(packet, dict(attempt, output=output), response) == output
+                and review_handles.derive_expanded_output(packet, dict(attempt, output=output), response,
+                                                          artifacts=artifacts, assignment=assignment) == output
                 and material_matches)
     except (ResearchError, ValueError, TypeError, KeyError):
         return False
@@ -4278,9 +4617,9 @@ def collect_adjudication_evidence(output):
 def validate_adjudication_contract(records, artifacts, assignment, packet, output, *, attempt=None):
     """Validate only the focused output and the adjudicator's frozen delivery."""
     from .review_handles import expand_handles, is_material_output, validate_material
-    output = expand_handles(packet, output)
+    output = expand_handles(packet, output, artifacts=artifacts, assignment=assignment)
     if is_material_output(packet, output):
-        validate_material(packet, output)
+        validate_material(packet, output, artifacts=artifacts, assignment=assignment)
         return
     from .review_refusal import contract_check, validate_evidence_contract
     parts_kind = review_parts.find_kind(packet)

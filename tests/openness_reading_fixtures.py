@@ -55,6 +55,12 @@ class OpennessReadingCase(ProblemCase):
             patcher = patch('research_harness.openness_reading.find_chain_protocol', return_value=self.reading_protocol)
             patcher.start()
             self.addCleanup(patcher.stop)
+        # These fixtures exercise released protocols. Activation cases opt into
+        # the installed default; v7 command cases enable it explicitly themselves.
+        if not getattr(self, 'use_released_chain_default', False):
+            protocols = patch.object(openness_reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (openness_reading.PROTOCOL_V6,))
+            protocols.start()
+            self.addCleanup(protocols.stop)
         self.initialize_problem()
         self.put_selecting_slate()
         self.selected = self.select_statement(candidate_id='candidate-1')
@@ -74,7 +80,7 @@ class OpennessReadingCase(ProblemCase):
             self.texts[version] = capture['text']
         self.searches = self.record_searches()
         self.search = self.searches[0]
-        record_codex_route(self, model=self.route_model)
+        record_codex_route(self, model=self.route_model, output_tokens=getattr(self, 'route_output_tokens', 1000))
 
     def record_searches(self):
         """The searches that the openness minimum binds: one search that finds every read work."""

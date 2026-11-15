@@ -727,6 +727,7 @@ _FILTER_FIELDS = {
     'review_route_probe': {'route_id'},
     'review_assignment': {'id', 'dossier_id', 'role', 'subject', 'slot_id', 'route_id', 'context',
                           'context.prior_assignment_id', 'context.output_refusal.assignment_id',
+                          'context.unread.assignment_id',
                           'context.context_repair.assignment_id', 'staged_review.controller_assignment_id',
                           'staged_review.epoch_id'},
     'review_context_event': {'assignment_id', 'kind'},

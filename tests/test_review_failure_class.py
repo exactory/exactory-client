@@ -723,6 +723,23 @@ class SafeguardNoticeTests(unittest.TestCase):
                  'review_provider_refused' if count < limit else 'review_sequence_wait'))
 
 
+class V7SizeRecoveryTests(unittest.TestCase):
+    def test_response_limit_visits_each_smaller_reading_level_before_stopping(self):
+        from test_openness_reading_v7_refusal import V7RefusalTests
+        fixture = V7RefusalTests()
+        self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
+        fixture.check_size_recovery('reading', 'response_over_limit')
+        for replacement in (False, True):
+            with self.subTest(capacity_replacement=replacement):
+                history = V7RefusalTests()
+                try:
+                    history.setUp()
+                    history.check_response_refusal_history(capacity_replacement=replacement)
+                finally:
+                    history.doCleanups()
+
+
 class ScientificRecoveryTests(unittest.TestCase):
     def test_first_refusal_after_provider_failure_executes_authenticated_replacement(self):
         from test_review_refusal_replacement import RefusalReplacementTests

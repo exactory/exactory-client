@@ -363,6 +363,10 @@ def classify_attempt(records, artifacts, attempt):
 def list_turn_assignments(records, assignment):
     """Group replacements of the same initial context or the same continuation parent."""
     from .review_refusal_replacement import read_position_context
+    capacity_chain = assignment.get('capacity_plan') and assignment.get('reading_chain')
+    if capacity_chain:
+        while assignment.get('capacity_replacement_of'):
+            assignment = records['review_assignment'][assignment['capacity_replacement_of']]
     parent = assignment.get('context', {}).get('prior_assignment_id')
     result = []
     for other in records.get('review_assignment', {}).values():
@@ -372,7 +376,8 @@ def list_turn_assignments(records, assignment):
         if parent is not None:
             # find_replacement groups same-parent continuations, including the
             # supported prospective change from the Codex text to visual route.
-            if context.get('prior_assignment_id') == parent:
+            if (context.get('prior_assignment_id') == parent
+                    and context.get('unread') == assignment.get('context', {}).get('unread')):
                 result.append(other['id'])
             continue
         if any(other.get(key) != assignment.get(key) for key in ('route_id', 'dossier_id', 'subject')):
@@ -382,6 +387,11 @@ def list_turn_assignments(records, assignment):
             continue
         if read_position_context(other) == read_position_context(assignment):
             result.append(other['id'])
+    if capacity_chain:
+        for other in sorted(records.get('review_assignment', {}).values(),
+                            key=lambda row: row['recorded_revision']):
+            if other.get('capacity_replacement_of') in result and other['id'] not in result:
+                result.append(other['id'])
     return result
 
 
@@ -553,6 +563,11 @@ def has_smaller_task(artifacts, previous, assignment):
     """
     old = protocol._read_json(artifacts, previous['packet'])
     new = protocol._read_json(artifacts, assignment['packet'])
+    if assignment.get('capacity_plan') and assignment.get('reading_chain'):
+        before = old.get('reading_turn', old.get('reading_final', {})).get('capacity', {})
+        after = new.get('reading_turn', new.get('reading_final', {})).get('capacity', {})
+        return (after.get('material_allowance', float('inf')) < before.get('material_allowance', 0)
+                or after.get('answer_bound', float('inf')) < before.get('answer_bound', 0))
     if parts.find_kind(new) != 'read':
         return False
     return (parts.find_kind(old) != 'read'
@@ -583,13 +598,13 @@ def count_position(records, artifacts, assignment):
         reason, _ = read_replacement_link(member)
         replacements[reason] += 1
     counts, provider_count, eligible = {}, 0, False
-    sequence_ends = {}
+    sequence_ends, attempt_rows = {}, []
     for revision, kind, row in ordered:
         if kind == 'assignment':
             if previous_member is not None and has_smaller_task(artifacts, previous_member, row):
                 level += 1
                 if ended and len(failures) < TURN_FAILURE_LIMIT and failures[-1][1]['outcome'] in (
-                        'provider_refused', 'output_over_cap', 'input_over_limit', 'timeout'):
+                        'provider_refused', 'output_over_cap', 'input_over_limit', 'response_over_limit', 'timeout'):
                     ended = False
                     sequence_ends.pop(sequence, None)
             levels[row['id']] = level
@@ -600,6 +615,9 @@ def count_position(records, artifacts, assignment):
                 permitted += 1
             continue
         classification = classify_attempt(records, artifacts, row)
+        attempt_rows.append(dict(attempt_id=row['id'], assignment_id=row['assignment_id'],
+            sequence=sequence + int(ended), outcome=classification['outcome'] if classification else 'completed',
+            time=row.get('observed_at')))
         if classification is None:
             if row['assignment_id'] != assignment['id']:
                 continue
@@ -626,7 +644,7 @@ def count_position(records, artifacts, assignment):
         ended = len(failures) >= TURN_FAILURE_LIMIT or used >= limit
         if ended:
             sequence_ends[sequence] = revision
-    return dict(sequence=sequence, failures=failures, failures_by_outcome=counts,
+    return dict(sequence=sequence, attempts=attempt_rows, failures=failures, failures_by_outcome=counts,
                 failed_attempts=len(failures), sequence_ended=ended,
                 sequences_remaining=max(0, permitted - sequence), permitted_sequences=permitted,
                 provider_count=provider_count, provider_eligible=eligible, complete=complete,
@@ -650,8 +668,10 @@ def _plan_sequence_end(last, classification, position):
 
 
 REFUSAL_NOTICE_HANDOFF_MSG = (
-    'The notice entry of one refusal of this position still exceeds 6,000 characters after its details are '
-    'shortened, so no replacement can carry the refusal. Take the step in the details; it continues the slot as '
+    'The refusal notice of this position cannot be brought within its bounds: the notice entry of one refusal '
+    'still exceeds 6,000 characters after its details are shortened, or, in a chain with a capacity plan, the '
+    'bounded notice still exceeds 45,000 characters after its details and its refused part are shortened. No '
+    'replacement can carry the refusal. Take the step in the details; it continues the slot or the chain as '
     'the step of an exhausted position does.')
 
 
@@ -701,6 +721,10 @@ def plan_refusal_recovery(records, artifacts, assignment):
     payload['id'] = assignment['id'] + '-refusal'
     while payload['id'] in records.get('review_assignment', {}):
         payload['id'] += '-next'
+    if assignment.get('capacity_plan') and assignment.get('reading_chain'):
+        from .review_continuation import _find_unused_id
+        payload['id'] = _find_unused_id(records, assignment['id'] + '-refusal',
+                                       maximum=protocol.openness_reading.RESERVED_IDENTIFIER_CHARACTERS)
     payload['context']['output_refusal'] = {'assignment_id': assignment['id']}
     value = dict(payload)
     if 'subject' in assignment:
@@ -746,6 +770,12 @@ def plan_after_failure(records, artifacts, assignment_id):
         recovery = plan_refusal_recovery(records, artifacts, assignment)
         recovery['details'] = dict(details, **recovery['details'])
         return dict(result, **recovery)
+    if (outcome == 'provider_refused' and position['sequence_ended']
+            and position['sequences_remaining'] == 0):
+        from .openness_reading_v7 import plan_unread_final
+        unread = plan_unread_final(records, artifacts, assignment, position)
+        if unread is not None:
+            return dict(result, **unread)
     if position['sequence'] > position['permitted_sequences']:
         result.update(state='stop', code='review_turn_failures_exhausted')
         return result
@@ -757,7 +787,8 @@ def plan_after_failure(records, artifacts, assignment_id):
     if (assignment.get('recorded_revision', 0) > last.get('recorded_revision', 0)
             and not position['sequence_ended']):
         return result
-    if outcome in ('output_over_cap', 'input_over_limit', 'timeout', 'provider_refused'):
+    if (outcome in ('output_over_cap', 'input_over_limit', 'response_over_limit', 'timeout', 'provider_refused')
+            and (outcome != 'response_over_limit' or assignment.get('capacity_plan'))):
         recovery = plan_capacity_recovery(records, artifacts, assignment, outcome)
         details.update(recovery['details'])
         if outcome == 'output_over_cap':
@@ -770,7 +801,8 @@ def plan_after_failure(records, artifacts, assignment_id):
                 outcome != 'timeout' or used >= 2):
             allowance = calculate_over_cap_allowance(recovery['details']['at_or_over_limit_share'])
             if recovery['kind'] == 'replace' and (position['failed_attempts'] >= TURN_FAILURE_LIMIT
-                    or outcome == 'output_over_cap' and len(position['over_cap_by_level']) >= allowance):
+                    or outcome == 'output_over_cap' and len(position['over_cap_by_level']) >= allowance
+                    and recovery['details']['handler'] not in ('reading_v7', 'final_v7')):
                 from .review_route_capacity import describe_capacity_decision
                 recovery = describe_capacity_decision(records, artifacts, assignment, outcome,
                     dict(recovery['details'], over_cap_allowance=allowance,
@@ -789,7 +821,7 @@ def plan_after_failure(records, artifacts, assignment_id):
             result['state'] = 'replace'
             details['context'] = copy.deepcopy(assignment['context'])
             return result
-        if outcome in ('output_over_cap', 'input_over_limit', 'timeout'):
+        if outcome in ('output_over_cap', 'input_over_limit', 'response_over_limit', 'timeout'):
             # A parts floor retains its existing terminal code. Otherwise at most
             # one identical retry is allowed, independent of a profile's c.
             floor = recovery['kind'] == 'decision' and recovery['code'] == 'review_parts_budget_exhausted'
@@ -817,4 +849,6 @@ def plan_after_failure(records, artifacts, assignment_id):
         result.update(state=state, not_before=deadline)
     if result['state'] == 'wait' and datetime.now(timezone.utc) >= datetime.fromisoformat(result['not_before']):
         result['state'] = 'run'
+    if result['state'] == 'stop' and outcome == 'provider_refused':
+        result['stop_class'] = 'decision'
     return result

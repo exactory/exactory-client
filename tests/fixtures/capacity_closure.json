@@ -62,7 +62,14 @@
     "task-size",
     "unbound-packet-captures",
     "uncovered-review-stop",
-    "verification-criterion"
+    "verification-criterion",
+    "capacity-guard-2",
+    "carried-integration",
+    "carried-selection",
+    "reading-v7-turns",
+    "reading-v7-verification",
+    "unread-final",
+    "v7-refusal-turn"
   ],
   "entries": [
     {
@@ -333,7 +340,7 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
           "test_import_fulltext.ImportFulltextTests.test_0853_source_and_capture_keep_their_fields_and_digests_after_import",
@@ -369,7 +376,14 @@
           "test_openness_v6_guard.FindingQualificationTests.test_check_one_reports_every_finding_including_an_older_stale_one",
           "test_openness_v6_guard.FindingQualificationTests.test_check_one_keeps_legacy_v1_finding_and_every_stored_byte",
           "test_continuity_guard.ContinuityGuardTests.test_scientific_refused_reading_executes_the_problem_export_handoff",
-          "test_openness_v6_guard.V6GuardTests.test_ub10_presence_requires_its_executed_evidence_in_the_matrix"
+          "test_openness_v6_guard.V6GuardTests.test_ub10_presence_requires_its_executed_evidence_in_the_matrix",
+          "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+          "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+          "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+          "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+          "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+          "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+          "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records"
         ],
         "reports": []
       },
@@ -382,7 +396,14 @@
         "test_openness_v6_guard.FindingQualificationTests.test_check_one_reports_every_finding_including_an_older_stale_one",
         "test_openness_v6_guard.FindingQualificationTests.test_check_one_keeps_legacy_v1_finding_and_every_stored_byte",
         "test_continuity_guard.ContinuityGuardTests.test_scientific_refused_reading_executes_the_problem_export_handoff",
-        "test_openness_v6_guard.V6GuardTests.test_ub10_presence_requires_its_executed_evidence_in_the_matrix"
+        "test_openness_v6_guard.V6GuardTests.test_ub10_presence_requires_its_executed_evidence_in_the_matrix",
+        "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+        "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+        "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+        "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+        "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records"
       ],
       "required_stops": [
         {
@@ -396,7 +417,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "Installed v6 path evidence; its G3 family row still requires R17 and R18 from the concurrent family-fixes lane. Construction remains incomplete pending: carried-integration, carried-selection, reading-v7-turns, reading-v7-verification."
+      "coverage_scope": "Constructed v6 path with UB10 executed evidence and constructed v7 reading/retention path, with command-level authenticated and recorded findings. Final-pages and unrelated role constructions retain their own gaps."
     },
     {
       "id": "A5",
@@ -963,12 +984,23 @@
       "no_construction_ruling": null,
       "coverage": "stop_before_call",
       "evidence": {
-        "tests": [],
+        "tests": [
+          "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+          "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records",
+          "test_openness_reading_v7_turns.V7CommandTests.test_a13_real_commands_reach_one_request_final_with_expanded_handles",
+          "test_openness_reading_v7_turns.V7CommandTests.test_valid_complete_answer_twice_its_bound_keeps_over_allowance_entries_in_state",
+          "test_openness_reading_v7_turns.IncidentV7CommandTests.test_a13_incident_twenty_searches_twenty_nine_texts_uses_allowances_and_authenticates_final"
+        ],
         "reports": []
       },
       "tests": [
         "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers",
-        "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry"
+        "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records",
+        "test_openness_reading_v7_turns.V7CommandTests.test_a13_real_commands_reach_one_request_final_with_expanded_handles",
+        "test_openness_reading_v7_turns.V7CommandTests.test_valid_complete_answer_twice_its_bound_keeps_over_allowance_entries_in_state",
+        "test_openness_reading_v7_turns.IncidentV7CommandTests.test_a13_incident_twenty_searches_twenty_nine_texts_uses_allowances_and_authenticates_final"
       ],
       "required_stops": [
         {
@@ -979,7 +1011,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+      "coverage_scope": "The reading/final command acceptances record findings, but the planner stops at 60000 before its 30000 and 15000 floor levels. Keep stop_before_call until the owning lane repairs the failing capacity property and ruling 39 is merged."
     },
     {
       "id": "A14",
@@ -1690,19 +1722,31 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
-          "test_openness_reading_v7_state.V7ProjectionTests.test_q1_state_digest_rebuilds_sixty_turns_and_latest_current_notes"
+          "test_openness_reading_v7_state.V7ProjectionTests.test_q1_state_digest_rebuilds_sixty_turns_and_latest_current_notes",
+          "test_openness_reading_v7_turns.TurnPacketTests.test_q1_turn_one_and_sixty_have_bounded_reading_requests",
+          "test_openness_reading_v7_turns.TurnPacketTests.test_q1_every_allowance_shortest_and_longest_excerpts_reaches_final_after_sixty_turns",
+          "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+          "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records",
+          "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+          "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_twenty_percent_denser_measurement_keeps_fitting_turns_and_records"
         ],
         "reports": []
       },
       "tests": [
-        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity",
+        "test_openness_reading_v7_turns.TurnPacketTests.test_q1_turn_one_and_sixty_have_bounded_reading_requests",
+        "test_openness_reading_v7_turns.TurnPacketTests.test_q1_every_allowance_shortest_and_longest_excerpts_reaches_final_after_sixty_turns",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records",
+        "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_twenty_percent_denser_measurement_keeps_fitting_turns_and_records"
       ],
       "required_stops": [],
       "verification_required": false,
-      "coverage_scope": "Installed path evidence only. Construction remains incomplete pending: reading-v7-turns."
+      "coverage_scope": "Constructed v7 reading/retention path, with command-level authenticated and recorded findings. The installed v6 path keeps its executed admission and retained-stop evidence. Final-pages and unrelated role constructions retain their own gaps."
     },
     {
       "id": "Q2",
@@ -1811,17 +1855,28 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
-        "tests": [],
+        "tests": [
+          "test_openness_reading_v7_turns.TurnPacketTests.test_q1_every_allowance_shortest_and_longest_excerpts_reaches_final_after_sixty_turns",
+          "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+          "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records",
+          "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_twenty_percent_denser_measurement_keeps_fitting_turns_and_records",
+          "test_openness_reading_v7_turns.IncidentV7CommandTests.test_a13_incident_twenty_searches_twenty_nine_texts_uses_allowances_and_authenticates_final"
+        ],
         "reports": []
       },
       "tests": [
-        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity",
+        "test_openness_reading_v7_turns.TurnPacketTests.test_q1_every_allowance_shortest_and_longest_excerpts_reaches_final_after_sixty_turns",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_twenty_percent_denser_measurement_keeps_fitting_turns_and_records",
+        "test_openness_reading_v7_turns.IncidentV7CommandTests.test_a13_incident_twenty_searches_twenty_nine_texts_uses_allowances_and_authenticates_final"
       ],
       "required_stops": [],
       "verification_required": false,
-      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+      "coverage_scope": "Constructed v7 reading/retention path, with command-level authenticated and recorded findings. The installed v6 path keeps its executed admission and retained-stop evidence. Final-pages and unrelated role constructions retain their own gaps."
     },
     {
       "id": "Q5",
@@ -1858,12 +1913,18 @@
           "test_session_forecast.SessionForecastTests.test_forecast_uses_keyed_input_evidence_instead_of_output_profile",
           "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
           "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
-          "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review"
+          "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+          "test_openness_reading_v7_turns.TurnPacketTests.test_q1_every_allowance_shortest_and_longest_excerpts_reaches_final_after_sixty_turns",
+          "test_openness_carried_integration.ManyNotesIntegrationTests.test_q12_four_hundred_on_request_origins_have_bounded_index_and_complete_pages",
+          "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_twenty_percent_denser_measurement_keeps_fitting_turns_and_records"
         ],
         "reports": []
       },
       "tests": [
-        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity",
+        "test_openness_reading_v7_turns.TurnPacketTests.test_q1_every_allowance_shortest_and_longest_excerpts_reaches_final_after_sixty_turns",
+        "test_openness_carried_integration.ManyNotesIntegrationTests.test_q12_four_hundred_on_request_origins_have_bounded_index_and_complete_pages",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_twenty_percent_denser_measurement_keeps_fitting_turns_and_records"
       ],
       "required_stops": [
         {
@@ -1878,7 +1939,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+      "coverage_scope": "The v7 part has executed evidence. Overall coverage remains stop_before_call until the remaining 0.92.0 construction ships."
     },
     {
       "id": "Q6",
@@ -1948,15 +2009,20 @@
       "no_construction_ruling": null,
       "coverage": "stop_before_call",
       "evidence": {
-        "tests": [],
+        "tests": [
+          "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_nine_targets_v7_refuses_v6_exports_reads_again_and_records",
+          "test_route_capacity_properties.ReadingCapacityCommandTests.test_final_pages_five_and_twenty_thousand_targets_stop_both_admissions_then_execute_smaller_answer"
+        ],
         "reports": []
       },
       "tests": [
-        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity",
+        "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_nine_targets_v7_refuses_v6_exports_reads_again_and_records",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_final_pages_five_and_twenty_thousand_targets_stop_both_admissions_then_execute_smaller_answer"
       ],
       "required_stops": [],
       "verification_required": false,
-      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+      "coverage_scope": "The v7 part has executed evidence. Overall coverage remains stop_before_call until the remaining 0.92.0 construction ships."
     },
     {
       "id": "Q8",
@@ -1988,15 +2054,20 @@
       "no_construction_ruling": null,
       "coverage": "stop_before_call",
       "evidence": {
-        "tests": [],
+        "tests": [
+          "test_openness_unread_final.UnreadArtifactTests.test_large_both_cause_set_pages_reproduce_the_complete_canonical_artifact",
+          "test_openness_unread_final.UnreadPagingTests.test_fixed_artifact_order_survives_pages_and_replacement_and_rejects_omitted_tampering"
+        ],
         "reports": []
       },
       "tests": [
-        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity",
+        "test_openness_unread_final.UnreadArtifactTests.test_large_both_cause_set_pages_reproduce_the_complete_canonical_artifact",
+        "test_openness_unread_final.UnreadPagingTests.test_fixed_artifact_order_survives_pages_and_replacement_and_rejects_omitted_tampering"
       ],
       "required_stops": [],
       "verification_required": false,
-      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+      "coverage_scope": "The v7 part has executed evidence. Overall coverage remains stop_before_call until the remaining 0.92.0 construction ships."
     },
     {
       "id": "Q9",
@@ -2191,20 +2262,32 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
           "test_openness_reading_v7_state.LegacyV5ProjectionTests.test_v5_checked_spans_project_with_original_request_bytes_unchanged",
-          "test_openness_reading_v7_state.V7ProjectionTests.test_q12_pool_uses_serialized_cost_spills_entries_and_renews_affected_notes"
+          "test_openness_reading_v7_state.V7ProjectionTests.test_q12_pool_uses_serialized_cost_spills_entries_and_renews_affected_notes",
+          "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+          "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+          "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+          "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+          "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+          "test_openness_carried_integration.V6CarriedIntegrationTests.test_q12_pool_overflow_is_delivered_and_keep_preserves_handle_span_and_target_charge"
         ],
         "reports": []
       },
       "tests": [
-        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity",
+        "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+        "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+        "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+        "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+        "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+        "test_openness_carried_integration.V6CarriedIntegrationTests.test_q12_pool_overflow_is_delivered_and_keep_preserves_handle_span_and_target_charge"
       ],
       "required_stops": [],
       "verification_required": false,
-      "coverage_scope": "Installed path evidence only. Construction remains incomplete pending: carried-integration, carried-selection."
+      "coverage_scope": "Constructed v7 reading/retention path, with command-level authenticated and recorded findings. The installed v6 path keeps its executed admission and retained-stop evidence. Final-pages and unrelated role constructions retain their own gaps."
     },
     {
       "id": "Q13",
@@ -2470,16 +2553,18 @@
           "test_openness_v6_chain.V6ChainTests.test_g15_long_purposes_are_bounded_before_record_charging",
           "test_openness_v6_chain.V6ChainTests.test_g15_reserved_identifiers_and_failed_attempts_fit_the_projection",
           "test_search_completes.SearchCompletionExportTests.test_two_query_repair_binds_only_later_search_and_delivers_notice_to_v6",
-          "test_supplied_eligibility.SuppliedEligibilityTests.test_supplied_reading_journey_keeps_origin_in_chain_session_export_and_post"
+          "test_supplied_eligibility.SuppliedEligibilityTests.test_supplied_reading_journey_keeps_origin_in_chain_session_export_and_post",
+          "test_route_capacity_properties.ReadingCapacityPropertyTests.test_k6_each_source_inventory_kind_delivers_three_material_allowances"
         ],
         "reports": []
       },
       "tests": [
-        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity",
+        "test_route_capacity_properties.ReadingCapacityPropertyTests.test_k6_each_source_inventory_kind_delivers_three_material_allowances"
       ],
       "required_stops": [],
       "verification_required": false,
-      "coverage_scope": "Installed path evidence only. Construction remains incomplete pending: capacity-guard-2."
+      "coverage_scope": "Reading unit delivery rules and segmented stress are installed. Q16 retains stop_before_call: each source kind still needs command-to-recorded-review evidence at three material allowances."
     },
     {
       "id": "Q17",
@@ -4207,6 +4292,246 @@
           "stops": []
         }
       }
+    },
+    {
+      "unit": "carried-selection",
+      "entries": [
+        "A4",
+        "Q12"
+      ],
+      "stops": [],
+      "tests": [
+        "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+        "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+        "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+        "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+        "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records",
+        "test_openness_carried_integration.V6CarriedIntegrationTests.test_q12_pool_overflow_is_delivered_and_keep_preserves_handle_span_and_target_charge"
+      ],
+      "presence": {
+        "module": "research_harness/openness_carried.py",
+        "name": "select_carried_readings",
+        "kind": "function"
+      },
+      "per_entry": {
+        "A4": {
+          "tests": [
+            "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+            "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+            "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+            "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+            "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+            "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+            "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records"
+          ],
+          "stops": []
+        },
+        "Q12": {
+          "tests": [
+            "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+            "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+            "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+            "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+            "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+            "test_openness_carried_integration.V6CarriedIntegrationTests.test_q12_pool_overflow_is_delivered_and_keep_preserves_handle_span_and_target_charge"
+          ],
+          "stops": []
+        }
+      }
+    },
+    {
+      "unit": "reading-v7-turns",
+      "entries": [
+        "A4",
+        "A13",
+        "Q1",
+        "Q4",
+        "Q5",
+        "Q7",
+        "Q8"
+      ],
+      "stops": [],
+      "tests": [
+        "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+        "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+        "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+        "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+        "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records",
+        "test_openness_reading_v7_turns.V7CommandTests.test_a13_real_commands_reach_one_request_final_with_expanded_handles",
+        "test_openness_reading_v7_turns.V7CommandTests.test_valid_complete_answer_twice_its_bound_keeps_over_allowance_entries_in_state",
+        "test_openness_reading_v7_turns.TurnPacketTests.test_q1_turn_one_and_sixty_have_bounded_reading_requests",
+        "test_openness_reading_v7_turns.TurnPacketTests.test_q1_every_allowance_shortest_and_longest_excerpts_reaches_final_after_sixty_turns",
+        "test_openness_carried_integration.ManyNotesIntegrationTests.test_q12_four_hundred_on_request_origins_have_bounded_index_and_complete_pages",
+        "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_nine_targets_v7_refuses_v6_exports_reads_again_and_records",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_final_pages_five_and_twenty_thousand_targets_stop_both_admissions_then_execute_smaller_answer",
+        "test_openness_unread_final.UnreadArtifactTests.test_large_both_cause_set_pages_reproduce_the_complete_canonical_artifact"
+      ],
+      "presence": {
+        "module": "research_harness/openness_reading_v7.py",
+        "name": "build_turn_packet",
+        "kind": "function"
+      },
+      "per_entry": {
+        "A4": {
+          "tests": [
+            "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+            "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+            "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+            "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+            "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+            "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+            "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records"
+          ],
+          "stops": []
+        },
+        "A13": {
+          "tests": [
+            "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+            "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records",
+            "test_openness_reading_v7_turns.V7CommandTests.test_a13_real_commands_reach_one_request_final_with_expanded_handles",
+            "test_openness_reading_v7_turns.V7CommandTests.test_valid_complete_answer_twice_its_bound_keeps_over_allowance_entries_in_state"
+          ],
+          "stops": []
+        },
+        "Q1": {
+          "tests": [
+            "test_openness_reading_v7_turns.TurnPacketTests.test_q1_turn_one_and_sixty_have_bounded_reading_requests",
+            "test_openness_reading_v7_turns.TurnPacketTests.test_q1_every_allowance_shortest_and_longest_excerpts_reaches_final_after_sixty_turns",
+            "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+            "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records",
+            "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery"
+          ],
+          "stops": []
+        },
+        "Q4": {
+          "tests": [
+            "test_openness_reading_v7_turns.TurnPacketTests.test_q1_every_allowance_shortest_and_longest_excerpts_reaches_final_after_sixty_turns",
+            "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+            "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records"
+          ],
+          "stops": []
+        },
+        "Q5": {
+          "tests": [
+            "test_openness_reading_v7_turns.TurnPacketTests.test_q1_every_allowance_shortest_and_longest_excerpts_reaches_final_after_sixty_turns",
+            "test_openness_carried_integration.ManyNotesIntegrationTests.test_q12_four_hundred_on_request_origins_have_bounded_index_and_complete_pages"
+          ],
+          "stops": []
+        },
+        "Q7": {
+          "tests": [
+            "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_nine_targets_v7_refuses_v6_exports_reads_again_and_records",
+            "test_route_capacity_properties.ReadingCapacityCommandTests.test_final_pages_five_and_twenty_thousand_targets_stop_both_admissions_then_execute_smaller_answer"
+          ],
+          "stops": []
+        },
+        "Q8": {
+          "tests": [
+            "test_openness_unread_final.UnreadArtifactTests.test_large_both_cause_set_pages_reproduce_the_complete_canonical_artifact"
+          ],
+          "stops": []
+        }
+      }
+    },
+    {
+      "unit": "carried-integration",
+      "entries": [
+        "A4",
+        "Q12"
+      ],
+      "stops": [],
+      "tests": [
+        "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+        "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+        "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+        "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+        "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records",
+        "test_openness_carried_integration.V6CarriedIntegrationTests.test_q12_pool_overflow_is_delivered_and_keep_preserves_handle_span_and_target_charge"
+      ],
+      "presence": {
+        "module": "research_harness/openness_reading_v7.py",
+        "name": "prepare_carried_assignment",
+        "kind": "function"
+      },
+      "per_entry": {
+        "A4": {
+          "tests": [
+            "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+            "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+            "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+            "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+            "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+            "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+            "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records"
+          ],
+          "stops": []
+        },
+        "Q12": {
+          "tests": [
+            "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+            "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+            "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+            "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+            "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+            "test_openness_carried_integration.V6CarriedIntegrationTests.test_q12_pool_overflow_is_delivered_and_keep_preserves_handle_span_and_target_charge"
+          ],
+          "stops": []
+        }
+      }
+    },
+    {
+      "unit": "reading-v7-verification",
+      "entries": [
+        "A4",
+        "Q12"
+      ],
+      "stops": [],
+      "tests": [
+        "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+        "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+        "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+        "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+        "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records",
+        "test_openness_carried_integration.V6CarriedIntegrationTests.test_q12_pool_overflow_is_delivered_and_keep_preserves_handle_span_and_target_charge"
+      ],
+      "presence": {
+        "module": "research_harness/openness_reading_v7.py",
+        "name": "verify_chain",
+        "kind": "function"
+      },
+      "per_entry": {
+        "A4": {
+          "tests": [
+            "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+            "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+            "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+            "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+            "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+            "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding",
+            "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_thirty_failed_attempts_with_sixty_character_ids_then_records"
+          ],
+          "stops": []
+        },
+        "Q12": {
+          "tests": [
+            "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+            "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+            "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+            "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+            "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+            "test_openness_carried_integration.V6CarriedIntegrationTests.test_q12_pool_overflow_is_delivered_and_keep_preserves_handle_span_and_target_charge"
+          ],
+          "stops": []
+        }
+      }
     }
   ],
   "external_evidence": {
@@ -4350,5 +4675,55 @@
     ],
     "T3": []
   },
-  "verification_reports": {}
+  "verification_reports": {},
+  "reading_property_ends": {
+    "targets_5000": {
+      "end": "review_route_capacity_below_floor",
+      "closing_unit": "final-pages",
+      "entry": "Q7",
+      "tests": [
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_final_pages_five_and_twenty_thousand_targets_stop_both_admissions_then_execute_smaller_answer"
+      ]
+    },
+    "targets_20000": {
+      "end": "review_route_capacity_below_floor",
+      "closing_unit": "final-pages",
+      "entry": "Q7",
+      "tests": [
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_final_pages_five_and_twenty_thousand_targets_stop_both_admissions_then_execute_smaller_answer"
+      ]
+    },
+    "gaps_2000": {
+      "end": "review_route_capacity_below_floor",
+      "closing_unit": "final-pages",
+      "entry": "Q8",
+      "tests": [
+        "test_openness_reading_v7_turns.TurnPacketTests.test_gap_bodies_are_units_and_non_ascii_material_fits_token_bound"
+      ]
+    },
+    "v7_refused_v6_admitted": {
+      "end": "recorded_finding_v6",
+      "tests": [
+        "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_nine_targets_v7_refuses_v6_exports_reads_again_and_records"
+      ]
+    },
+    "denser_final": {
+      "end": "export_then_recorded_finding",
+      "tests": [
+        "test_openness_reading_v7_refusal.V7RefusalTests.test_k7_dense_failed_final_carries_ratio_through_check_assignment_and_finding"
+      ]
+    },
+    "affected_notes_400_origins": {
+      "end": "authenticated_final",
+      "tests": [
+        "test_openness_carried_integration.ManyNotesIntegrationTests.test_q12_four_hundred_on_request_origins_have_bounded_index_and_complete_pages"
+      ]
+    },
+    "unread_over_30000": {
+      "end": "recorded_finding",
+      "tests": [
+        "test_openness_unread_final.UnreadPagingTests.test_fixed_artifact_order_survives_pages_and_replacement_and_rejects_omitted_tampering"
+      ]
+    }
+  }
 }

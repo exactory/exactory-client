@@ -90,6 +90,10 @@ class _CheckingStore:
         if operation == 'review.assignment' and 'capacity_plan' in result:
             from .review_route_capacity import describe_assignment_capacity
             response.update(describe_assignment_capacity(self._records, self._artifacts, result))
+        if operation == 'review.assignment' and 'protocol_selection' in result:
+            response['protocol_selection'] = result['protocol_selection']
+        if operation == 'review.assignment':
+            response.update({key: result[key] for key in ('carried_selection', 'carried_readings') if key in result})
         if operation == "literature.search":
             response.update(result)
         if operation == "research.gate_override":

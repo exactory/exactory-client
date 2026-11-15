@@ -1404,11 +1404,21 @@ each of these refusals.
 5. Put the exported packet in the `context` of a `review-assignment` with that assignment id and
    reviewer id, `role: "native_math"`, `dossier_id: null`, a verified route and an author from
    the record. Run it with `review-run`.
-6. When the receipt of that assignment shows `reading_chain`, one input of the route cannot hold
-   every unit of the packet complete, or the units together exceed the 120,000 characters of one
-   turn, and the reviewer reads them in a chain of turns. Since 0.90.0 a new chain records
-   the protocol `exactory-openness-reading-v6` (prompt templates
-   `exactory-openness-reading-v6/reading` and `exactory-openness-reading-v6/final`), which
+6. When the receipt of that assignment shows `reading_chain`, the reviewer reads the units of
+   the packet in a chain of turns. Since 0.91.0 `review-assignment` chooses the protocol of a
+   new chain by admission, in the order of the release, and `protocol_selection` in the
+   receipt names the protocol and the result of each admission. Where that order holds
+   `exactory-openness-reading-v7`, a new openness review on `claude_cli_v1`, `codex_cli_v1` or
+   `codex_cli_framed_v1` is a chain also when its packet fits one input: under v7 when that
+   protocol accepts the packet on the route, under `exactory-openness-reading-v6` when v7
+   refuses it and v6 accepts it, and with the decision stop of step 6b when neither accepts
+   it. Where the order holds v6 alone, a review that fits one turn stays one request, and a
+   larger one is a chain under v6 when v6 accepts it. `review-assignment --check` shows which
+   case holds without writing a record: its receipt carries `protocol_selection` when the
+   review is a chain.
+   On another adapter the review stays one request. Step 6b states what a v7 chain does.
+   A v6 chain (prompt templates `exactory-openness-reading-v6/reading` and
+   `exactory-openness-reading-v6/final`)
    keeps the rules of v5 that this step describes and adds those of step 6a. A chain that an
    earlier release started under `exactory-openness-reading-v5` (prompt templates
    `exactory-openness-reading-v5/reading` and `exactory-openness-reading-v5/final`) continues
@@ -1476,14 +1486,19 @@ each of these refusals.
      states the failed rule, `path` points into the answer, for example
      `/passage_requests/0/anchor`, `request_id` names the passage request when its id is valid,
      and a measurement stands against its limit, such as `normalized_characters: 18` against
-     `minimum_characters: 20`. `review-series` runs the same turn once more: it sends the exact
+     `minimum_characters: 20`. In a chain under v4, v5 or v6, `review-series` runs the same
+     turn once more: it sends the exact
      same request, and the reviewer learns nothing about the refusal. A second refusal exhausts
      the turn, and the command ends with the handoff `review_slot_exhausted` (exit status 3),
-     whose command for an openness chain is `export`, kind `problem-openness`. The chain cannot
-     continue from a refused turn (`review_source_continuation_unverified`), and a turn with a
-     refused output is not replaced by a sibling turn (`review_source_continuation_fork`):
-     export the packet again under a new assignment id and start a new chain, and keep both
-     diagnostics in your report.
+     whose command for an openness chain is `export`, kind `problem-openness`. Since 0.91.0,
+     for a chain under v5 or v6, that handoff carries `details.successor`, `details.message`
+     and `details.step` when a new chain is admitted, and the command ends with a decision
+     stop when none is (step 6b); a v4 chain keeps the handoff without them. A v7 chain
+     answers a refused output with a replacement that tells the reviewer about the refusal
+     (step 6b). Do not continue from a refused turn yourself
+     (`review_source_continuation_unverified`), and do not assign a sibling turn
+     (`review_source_continuation_fork`): run `review-series`, take the handoff or report the
+     decision stop that it gives, and keep the diagnostics of both refusals in your report.
    - The assignment after the last reading turn is the final turn (prompt template
      `exactory-openness-reading-v5/final`, or `exactory-openness-reading-v4/final` in a v4
      chain): the native packet with the reading record of the earlier turns. A v5 final turn
@@ -1550,7 +1565,10 @@ each of these refusals.
      `details.decision` states the question for the user and the steps of each answer
      (wait for a reading protocol that bounds the record, or run over a packet that binds
      less material). Report the stop with its details, and do not choose an answer
-     yourself.
+     yourself. Since 0.91.0 the first assignment of a new chain that no protocol admits is
+     refused with `review_route_capacity_below_floor` in its place. For a stored v5 or v6
+     chain whose next request does not fit, `review-series` gives the handoff `export` when
+     a new chain is admitted, and a decision stop when none is (step 6b).
    - The answer of the final turn is a finding without a decision:
      `{schema_version: 3, subject_digest, claim_digest, reviewer, findings: {statement,
      assumptions, scope, dependencies, policy, openness: {outcome, coverage, reason,
@@ -1581,6 +1599,67 @@ each of these refusals.
      `capacity_forecast` and `capacity_warning.input` beside `diagnostics.final_input`. In a
      v6 chain the projection is a limit that the harness enforces
      (`capacity_forecast.is_bound: true`).
+6b. What a chain under `exactory-openness-reading-v7` does (since 0.91.0). Run it with
+   `review-series`, as every chain. The [CLI reference](../../docs/research-cli.md#problem-creation)
+   states its packets and answers under "The reading protocol v7".
+   - The chain has a stored capacity plan. Each turn delivers as much text as one level of
+     that plan holds, the reviewer keeps notes, excerpts and gaps for each formulation
+     within stated allowances, and the final turn holds what the chain kept. Before the
+     reviewer returns the finding, it can ask for passages again, and `review-series` runs
+     the turns that deliver them. The final answer is the finding of step 6a; a ground cites
+     notes, gaps and arguments by handle (`refs`).
+   - Keep the `reviewer_id`, the author and the route of the earlier chain when you export
+     again for the same statement and formulations. A new v7 chain then carries the verified
+     reading turns of the earlier chains under v5, v6 or v7 and reads only what they did not
+     read. The receipt of the first assignment carries `carried_readings`: the chains and
+     turns that it took over, the ranges that remain, and `passed_over`, the earlier chains
+     that differ only in the `reviewer_id`. Run `review-assignment --check` first to see the
+     protocol and this report without writing a record. The harness looks at every earlier
+     chain of the record with the same reviewer, author, statement, formulations and route
+     identity. The route identity is the adapter, the model, the endpoint and the
+     configuration, so a new route record with these four unchanged keeps it.
+   - When a reading turn fails for its size or its time (`output_over_cap`,
+     `input_over_limit`, `response_over_limit`, a second `timeout`) or the provider refuses
+     it three times in a sequence, `review-series` looks for a smaller reading request on
+     the same route, at a lower level of the plan and within the recovery allowance of the
+     turn. A final turn has a smaller task only while it waits for a part of an argument,
+     whose answer bound is then halved. When no smaller task is admitted, the command
+     follows the retry and wait rules of the outcome, assigns the final over unread ranges
+     (below), or ends with a decision stop. Report a decision stop with its details.
+   - When the answer of a turn is refused (`output_refusal` in the receipt), `review-series`
+     assigns a replacement whose request tells the reviewer which check failed and where, at
+     most two for one turn. After that the position is exhausted, and the item below on a
+     chain that cannot go on applies: the command ends with the handoff `export` when a new
+     chain is admitted, or with a decision stop when none is.
+   - When the permitted failure sequences of a reading turn are used up, its last failure is
+     a refusal by the provider and the turn is at the lowest level, `review-series` assigns
+     the final over the unread ranges (`context.unread`). Earlier sequences can have ended
+     for other reasons. Its finding is `unresolved`, with a `reviewer_gap` ground that cites
+     the unread set, and the recorded finding lists the unread ranges and the whole attempt
+     history of that turn under `unread`. Report them. A later export with the same
+     `reviewer_id`, author, formulations and route identity carries the turns that were
+     read, when its admission selects v7.
+   - In three cases a problem chain under v5, v6 or v7 that cannot go on checks whether a
+     new export is admitted: a chain under v5 or v6 whose next request does not fit
+     (`review_input_too_large` or `review_chain_projection_over_limit`), a turn position
+     that is exhausted (`review_slot_exhausted` or
+     `review_refusal_notice_metadata_too_large`), and a v7 chain whose denser measured
+     ratio leaves its final, with the allowances that the chain has granted, without room
+     in one request (`review_chain_projection_over_limit` with `details.ratio`). When a new
+     chain is admitted, the command ends with the handoff `export`, which states that chain:
+     `details.successor.protocol`, `details.successor.carried_readings` for a v7 chain or
+     `details.successor.planned_reading_turns` for a v6 chain that reads again, and
+     `details.message`. Take `details.step`: export under a new assignment id with the same
+     `reviewer_id`, check the assignment, and assign it on the same route. When none is
+     admitted, the command ends with the decision stop of the next item. Every other handoff
+     `export`, for example `openness_packet_outdated` or `openness_review_not_approved`,
+     keeps the instructions of its own code and carries no `details.successor`.
+   - When no protocol admits a packet on the route, the first assignment is refused with
+     `review_route_capacity_below_floor`, a decision stop. A chain that cannot go on, and
+     whose new export no protocol admits, ends in a stop under its own code with the same
+     details. `details.admissions` gives the refusal of each protocol, and `details.decision`
+     asks whether the review runs over a statement with fewer neighbours or on another route.
+     Report the stop with its details, and do not choose an answer yourself.
 7. Record the observed finding with `exactory-research problem-openness` and
    `{assignment_id}`: the single assignment, or the final turn of a reading chain that returned the
    native result. For a chain that `review-series` ran, the command records the finding itself
@@ -2223,7 +2302,7 @@ accounts with the parts that the harness derives, and the records that their ent
      head and its request fits the route (the one metadata correction of a problem result
      reassessment; replacements can then remain). Otherwise the turn position is exhausted, and
      the code names the step of the role of the head: `export`, kind `problem-openness`, for an
-     openness chain (Openness, step 6), `review-assignment` of a new eligible reviewer for a bar
+     openness chain (Openness, steps 6 and 6b), `review-assignment` of a new eligible reviewer for a bar
      and for an adjudicator, and `review-assignment` of a context repair with the member
      `exhaustion` for a slate and for a result. `review_refusal_notice_metadata_too_large` names
      the same step of the role. `details.step` holds the payload, the fields that you choose and the

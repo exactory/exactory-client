@@ -142,6 +142,11 @@ EXHAUSTION_PROMPT_V1 = (
 )
 
 
+def is_same_route(first, second):
+    """Compare the reviewer route identity of Ruling 2, excluding its id and runtime."""
+    return all(first[key] == second[key] for key in ('adapter', 'model', 'endpoint', 'configuration'))
+
+
 def build_exhaustion_binding(records, artifacts, assignment, *, before_revision=None):
     """Freeze the stored position without rechecking its scientific outputs."""
     from .review_failure_class import list_turn_assignments

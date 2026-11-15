@@ -148,6 +148,7 @@ class OptionalParagraphTests(unittest.TestCase):
             'exactory-review-delivery-notice-v1': '56dea5b68d33ecb400797772300180198ecafafa1bd1b2b77fb1ba4053284825',
             'exactory-route-capacity-notice-v1': '236975ce56b6cd564d0cb30faa61eaedff10fb2a4570c2b8b460538e4850bf98',
             'exactory-review-output-refusal-whole-v1': 'a88f7b5fbe7e14971371e9e7b6956202ccb49a2a207e74d8946502884e8d0b75',
+            'exactory-openness-unread-final-v1': 'e6c89ffba735d8f0b45f6cd274dde987ae0c96fa7a1073a431d08b20aaebf58d',
             'exactory-review-output-refusal-bounded-v1': '61d96ac0b67b91f1890d4c5c8216fc7e995b85859e1afeaf744f2dedafa4db65'}
         actual = {version: hashlib.sha256(text.encode()).hexdigest()
                   for paragraph in paragraphs.PARAGRAPHS[1:] for version, text in paragraph.versions}

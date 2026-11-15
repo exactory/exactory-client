@@ -510,6 +510,15 @@
         "research_harness/bar_sources.py:prior_context#2": [
           "form"
         ],
+        "research_harness/openness_reading_v7.py:prepare_next_assignment#1": [
+          "payload"
+        ],
+        "research_harness/openness_reading_v7.py:prepare_unread_assignment#1": [
+          "entry"
+        ],
+        "research_harness/openness_reading_v7.py:prepare_unread_assignment#2": [
+          "entry"
+        ],
         "research_harness/problem_delivery.py:_read_review_binding#1": [
           "content"
         ],
@@ -639,15 +648,21 @@
           "payload"
         ],
         "research_harness/review_protocol.py:build_packet#4": [
-          "payload"
+          "entry"
         ],
         "research_harness/review_protocol.py:build_packet#5": [
-          "form"
+          "entry"
         ],
         "research_harness/review_protocol.py:build_packet#6": [
-          "form"
+          "payload"
         ],
         "research_harness/review_protocol.py:build_packet#7": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:build_packet#8": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:build_packet#9": [
           "form"
         ],
         "research_harness/review_protocol.py:canonical_prompt#1": [
@@ -916,6 +931,9 @@
         ]
       },
       "openness_native_evidence_undelivered": {
+        "research_harness/openness_reading_v7.py:project_native_delivery#1": [
+          "content"
+        ],
         "research_harness/problem_openness_reviews.py:actual_delivery#1": [
           "form"
         ],
@@ -1360,6 +1378,9 @@
       },
       "review_source_continuation_fork": {
         "research_harness/openness_reading.py:_read_prior#1": [
+          "record"
+        ],
+        "research_harness/openness_reading_v7.py:prepare_next_assignment#1": [
           "record"
         ],
         "research_harness/review_continuation.py:_find_head#1": [

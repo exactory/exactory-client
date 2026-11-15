@@ -135,7 +135,7 @@ def prepare_openness(records, artifacts, value, revision):
         raise ResearchError("review_context_unverified", "Obtain the observed native_math openness result", {"obligations": state["obligations"]})
     packet = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
     output = state["output"]
-    from .openness_reading import PROTOCOL_V5, PROTOCOL_V6, find_protocol, find_stage, verify_chain, verify_problem_coverage
+    from .openness_reading import PROTOCOL_V5, PROTOCOL_V6, PROTOCOL_V7, find_protocol, find_stage, verify_chain, verify_problem_coverage
     supplied = json.loads(artifacts.read(assignment["packet"]))
     stage = find_stage(supplied)
     if stage == "reading" or (stage == "final" and output.get("stage") == "reading"):
@@ -182,11 +182,17 @@ def prepare_openness(records, artifacts, value, revision):
         raise ResearchError("openness_statement_mismatch", "The finding must name the exact current problem claim")
     delivered = {entry["digest"] for entry in packet["evidence"]}
     verified = None
-    if stage == "final" and find_protocol(supplied) in (PROTOCOL_V5, PROTOCOL_V6):
+    if stage == "final" and find_protocol(supplied) in (PROTOCOL_V5, PROTOCOL_V6, PROTOCOL_V7):
         verified = verify_problem_coverage(records, artifacts, assignment, final=True)
         delivered.difference_update(row["search_digest"] for row in
                                     packet["scientific_context"]["openness_minimum"]["searches"])
         delivered.update(verified["searches"])
+    if (verified is not None and find_protocol(supplied) == PROTOCOL_V7
+            and 'unread' in verified['state']):
+        reference = verified['state']['unread']['artifact']
+        delivered.intersection_update(row['artifact']['sha256'] for row in verified['units'])
+        finding['unread'] = dict(artifact=reference, digest=reference['sha256'],
+                                **json.loads(artifacts.read(reference)))
     if finding_contract:
         # Whole-body receipt credit covers split reading units and reconstructed original searches.
         # The packet's remaining artifacts are delivered whole by the ordinary native evidence boundary.
@@ -259,8 +265,8 @@ def assess_openness(records, artifacts):
         try:
             assignment, state, packet = observed_review(records, artifacts, finding["assignment_id"])
             if "reading_turns" in finding:
-                from .openness_reading import PROTOCOL_V5, PROTOCOL_V6, find_protocol, verify_chain, verify_problem_coverage
-                if find_protocol(json.loads(artifacts.read(assignment["packet"]))) in (PROTOCOL_V5, PROTOCOL_V6):
+                from .openness_reading import PROTOCOL_V5, PROTOCOL_V6, PROTOCOL_V7, find_protocol, verify_chain, verify_problem_coverage
+                if find_protocol(json.loads(artifacts.read(assignment["packet"]))) in (PROTOCOL_V5, PROTOCOL_V6, PROTOCOL_V7):
                     verified = verify_problem_coverage(records, artifacts, assignment, final=True)
                 turns = verified["turns"] if verified is not None else verify_chain(records, artifacts, assignment)
                 if turns != finding["reading_turns"]:
