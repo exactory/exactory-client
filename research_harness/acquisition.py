@@ -724,7 +724,9 @@ def read_supplied_fulltext(root, file):
                 or re.search(r'<(?:!doctype\s+html|html|head|body|article)(?:\s|>)', content, re.IGNORECASE)):
             raise ValueError()
     except (UnicodeError, ValueError) as error:
-        raise ResearchError('invalid_input', 'Supply a PDF or a UTF-8 text file; supplied HTML is not supported') from error
+        raise ResearchError('invalid_input', 'The file is not a PDF and not a UTF-8 text file, or it is an HTML '
+                            'document. Supply the PDF or a UTF-8 text file of the source; import-fulltext takes no '
+                            'HTML.') from error
     return file, data, 'text/plain; charset=utf-8'
 
 
@@ -734,7 +736,8 @@ def import_fulltext(store, identifier, file, origin, *, request_id, expected_rev
     """Retain a supplied original and extraction with explicitly reported provenance."""
     identifier = normalize_identifier(identifier)
     if not identifier.startswith(('doi:', 'openalex:', 'url:')):
-        raise ResearchError('invalid_input', 'Import full text for an acquired DOI, OpenAlex or url: identifier')
+        raise ResearchError('invalid_input', 'import-fulltext takes a work whose identifier is a DOI, an OpenAlex id '
+                            'or a url: identifier. Acquire the work under such an identifier and give that identifier.')
     origin = validate_supplied_origin(origin)
     options = _extraction_options(extraction_options)
     file, data, media_type = read_supplied_fulltext(store.root, file)
@@ -744,7 +747,10 @@ def import_fulltext(store, identifier, file, origin, *, request_id, expected_rev
 
     def admit(transaction):
         if transaction.get('work', identifier) is None:
-            raise ResearchError('unknown_work', 'Acquire metadata for the work before importing its full text')
+            raise ResearchError('unknown_work', 'This store holds no work with this identifier. For a DOI or an '
+                                'OpenAlex id, acquire the work with acquire. For a url: identifier, use '
+                                'import-response with a mapping that creates the work under that identifier. Then '
+                                'run import-fulltext again.')
 
     replay = _begin(store, 'fulltext.import', payload, request_id, expected_revision,
                     target=identifier, apply=admit, reserved_requests=0)

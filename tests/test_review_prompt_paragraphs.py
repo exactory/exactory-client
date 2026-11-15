@@ -146,7 +146,7 @@ class OptionalParagraphTests(unittest.TestCase):
             'exactory-problem-replacement-v1': '92d8d0ace0a5c7dbd61d340f2fe6e6c5f93760ca1b7764853b7217f1dbbd12c0',
             'exactory-problem-areas-v1': 'e9a1aa5a8fa12579bbaff0cc1902f1f012c6bb7e872c02dff25131afab93da05',
             'exactory-review-delivery-notice-v1': '56dea5b68d33ecb400797772300180198ecafafa1bd1b2b77fb1ba4053284825',
-            'exactory-route-capacity-notice-v1': 'be3da5b20146135957a8d1b5d4f275a4cbedc6ce4085df533f44ccb65b9df9f1',
+            'exactory-route-capacity-notice-v1': '236975ce56b6cd564d0cb30faa61eaedff10fb2a4570c2b8b460538e4850bf98',
             'exactory-review-output-refusal-whole-v1': 'f07d6dc263caa65c6f078eeddc4befde49a23ef05778e3429a1cdd6527aac6c0',
             'exactory-review-output-refusal-bounded-v1': '15a205f27ba5bfb3d761612d1f7eb7c21967ce8fe4a6d5e814f0413ef799b336'}
         actual = {version: hashlib.sha256(text.encode()).hexdigest()

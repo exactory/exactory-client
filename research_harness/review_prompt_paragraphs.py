@@ -24,12 +24,15 @@ DELIVERY_NOTICE_PROTOCOL = 'exactory-review-delivery-notice-v1'
 CAPACITY_NOTICE_KEY = 'route_capacity'
 CAPACITY_NOTICE_PROTOCOL = 'exactory-route-capacity-notice-v1'
 CAPACITY_PARAMETER = 'capacity'
-INVALID_CAPACITY_NOTICE = 'Use the registered capacity notice with its turn kind, positive output tokens and positive answer bound'
-# Placeholder for the writer's pass. A text change requires a new registered version.
+INVALID_CAPACITY_NOTICE = ('The capacity parameter does not match the capacity notice of this prompt. Where the prompt '
+                           'holds the notice, give {protocol, kind, output_tokens, answer_bound} with the registered '
+                           'protocol, a turn kind and two positive integers. Where it does not, give no capacity.')
+# Written in the writer's pass of 0.90.0. A later text change requires a new registered version.
 CAPACITY_NOTICE_PROMPT = (
     '\n\nRoute capacity (exactory-route-capacity-notice-v1). '
-    'The route output limit is {output_tokens} tokens; reasoning and answer share this limit. '
-    'The answer bound of this turn is {answer_bound} characters. An answer cut at the limit is lost.')
+    'The output allowance of this route is {output_tokens} tokens, and reasoning and answer share this limit. '
+    'An answer cut at the limit is lost: the harness can use no part of it. '
+    'Keep the whole answer of this turn within {answer_bound} characters.')
 # Placeholder for the writer's pass. A text change requires a new registered version.
 DELIVERY_NOTICE_PROMPT = (
     '\n\nDelivery notice (exactory-review-delivery-notice-v1). '

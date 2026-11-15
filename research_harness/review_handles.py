@@ -33,10 +33,18 @@ HANDLE_TABLE = 'handle_table'
 EXPANSION_PROTOCOL = 'exactory-review-handle-expansion-v1'
 MATERIAL_PART_LIMIT = 8
 INVALID_REFERENCE_HANDLE_MESSAGE = (
-    'Cite a handle supplied in this packet. For a span, use start and end offsets within the text delivered under that handle.'
+    'A citation of this answer is not valid; details.path names its place. A citation is {ref}, or {ref,start,end} '
+    'for a span, each with an optional part. ref is a handle of handle_table in this packet. part is a positive '
+    'integer that names a delivered part of a split unit. start and end are integer character offsets in the text '
+    'that this packet delivers for that handle or part, with 0 <= start < end <= the length of that text, and '
+    'only a handle of a source takes a span. Correct the citation.'
 )
 INVALID_MATERIAL_MESSAGE = (
-    'Return material with title, part, text and more. Continue the same title with consecutive parts, up to eight parts, within this turn\'s answer bound.'
+    'The answer is not the part of an argument that this turn expects. Return {stage:"material",title,part,text,more}. '
+    'part is the next part number, which starts at 1, and a later part keeps the title of the first part. text has '
+    'at most the characters of the answer bound of this turn. more is true while a part follows and false in the '
+    'last part, and an argument has at most eight parts. While material_state.pending names an argument, the answer '
+    'of the turn is its next part.'
 )
 
 

@@ -658,8 +658,20 @@ The `record` action of an openness chain is `problem-openness` with the
 head's `assignment_id`, planned only when `problem-openness` accepts the
 final output by its own checks (an approved version 2 native result with an
 openness finding, whatever the openness outcome); any other final output is
-the handoff `openness_review_not_approved` (the handoffs below). The final of
-a staged bar, slate or result review is a `record` action (`value-review`).
+the handoff `openness_review_not_approved` (the handoffs below). Since 0.90.0
+the final output of a chain under `exactory-openness-reading-v6`, and of a
+problem openness review of one turn, is a finding without a decision (the
+reading protocol v6, under [Problem creation](#problem-creation)). The plan is
+`record` when `problem-openness` accepts the finding. When it refuses a
+finding with a resolved outcome over a packet that is no longer current, the
+plan is the handoff `openness_packet_outdated`. Any other refusal of
+`problem-openness` keeps its code, and the planner applies the recovery rule
+that the registry of stops holds for that code. `openness_statement_mismatch`
+and `openness_evidence_mismatch`, for example, are decision stops whose
+answers name `record-check` and `status`; a code without a rule of its own is
+a handoff with the command `export`. Follow the returned plan. Such a review
+never gives `openness_review_not_approved`. The final
+of a staged bar, slate or result review is a `record` action (`value-review`).
 
 The driver. `review-series --assignment HEAD` (`--workspace` defaults to `.`,
 and any assignment of the chain resolves to the chain's current head) executes
@@ -887,6 +899,7 @@ The handoffs:
 | `review_route_runtime_stale` | `review-route` | The head's route pins another reviewer runtime. The planner keeps the route of the chain, so `review-series` on the same head gives this handoff again. Record a new route with a new id and the same adapter, model, endpoint and configuration, probe it, and then follow the stale-route procedure of the [route instructions](research-decisions.md#commands-and-shared-state): assign the role again on the new route, or, for a slot with history, retire the stale route and continue the slot through a context repair; then run `review-series` with the new assignment. |
 | `review_chain_stopped` | `review-stop` | A review stop stands for the chain or for the store; `details.step` is its release (The stop, above). `review-series` prints this plan as a `stop`. |
 | `openness_review_not_approved` | `export`, kind `problem-openness` | The final turn of an openness chain returned a result that `problem-openness` does not accept (for example the decision `revise` or `reject`, or an approved finding whose evidence or statement does not match); `details` hold `assignment_id`, `decision`, `reason`, `kind` and `refusal` (the `code` and `message` of the `problem-openness` refusal). Obtain a new finding after the reviewer's reason and the refusal are addressed. |
+| `openness_packet_outdated` | `export`, kind `problem-openness` | Since 0.90.0, for a chain under `exactory-openness-reading-v6`. The records changed after the packet was exported: a binding check of its minimum now fails, or the gaps that the harness computes from the records of now differ from `minimum_gaps` of the packet. The planner compares before it runs, replaces or continues a turn, and again when `problem-openness` refuses a final finding with a resolved outcome. `details` hold `assignment_id`, `kind`, `message`, `added` and `removed`; each changed entry is `{row, entry}`, where `entry` is the gap or the binding error and `row` names the fact that changed: `current_statement`, `material_searches`, `bound_records`, `decisive_captures`, `required_bundle`, `inspection_bytes`, `source_deferrals` or `family_reading`. No refusal is recorded against the reviewer's answer, and the reading turns of the chain stay verified. Export a new packet and start a new chain. A final finding with the outcome `unresolved` skips the audit of the minimum, so it is recorded also after the searches or the gaps of the minimum changed. It still passes the other checks of the recording, among them that its statement is the current statement of the problem (`openness_statement_mismatch`). |
 
 After a handoff, the agent performs the step that the handoff names.
 `review-series` sees a chain as done only through a final recorded in the
@@ -927,8 +940,8 @@ starts a new sequence.
 | `usage_limit` | an answer that starts "You've hit your ... limit" or "You've reached your ... limit", or the Codex diagnostic `usage_limit_exceeded` | `wait` until the stated reset (Claude: "resets <Mon> <d> at <h>[:<mm>]am/pm (<zone>)"; Codex: "try again at <Mon> <d>th, <yyyy> <h>:<mm> AM/PM.", local time), else the provider schedule | `review_provider_unavailable` |
 | `model_at_capacity` | the Codex diagnostic `server_overloaded` | the provider schedule | `review_provider_unavailable` |
 | `provider_unavailable` | an answer that starts "API Error:" (other than the two rows below), or the error code `review_provider_failure` | the provider schedule | `review_provider_unavailable` |
-| `provider_refused` | the Claude Code CLI's notice that the model's safeguards stopped the answer (a safeguards notice, below), or an "API Error:" answer that names safeguards | one more call after the first and after the second of this outcome; the third stops | `review_provider_refused` |
-| `output_over_cap` | the adaptive handlers' own predicates, output tokens at or over the route cap, or an "API Error:" answer that states an exceeded output token maximum | a replacement when the existing handler proves a smaller admissible request (a parts v2 read turn at half its unit characters; a context repair into parts v2); otherwise stop with the measured tokens | `review_output_over_cap`, with `handler_error` naming the handler's refusal; a parts v2 read at the floor stops with `review_parts_budget_exhausted` and its measurements ([Reviews in fresh parts](#reviews-in-fresh-parts)) |
+| `provider_refused` | the Claude Code CLI's notice that the model's safeguards stopped the answer (a safeguards notice, below), or an "API Error:" answer that names safeguards | one more call after the first and after the second of this outcome; the third ends the failure sequence: the plan waits until 30 minutes after the observation of the last attempt and then starts the next permitted sequence, and it stops with `review_turn_failures_exhausted` when no sequence remains. Since 0.90.0, from the third refusal the plan is a replacement at a smaller task where the turn has an admissible one (the smaller task after a capacity event, below) | `review_sequence_wait` while a further sequence remains, then `review_turn_failures_exhausted` |
+| `output_over_cap` | the adaptive handlers' own predicates, output tokens at or over the route cap, or an "API Error:" answer that states an exceeded output token maximum | an admissible replacement while the recovery allowance remains: a parts v2 read turn at half its unit characters or a context repair into parts v2, each of which must measure smaller than the request that failed, and since 0.90.0 an eligible single review as the first read of a parts v2 series, with a read allowance of at most half the characters of the inventory (its whole request can measure larger); otherwise the retry and stop rules of the smaller task after a capacity event, below | `review_output_over_cap`, with `handler_error` naming the handler's refusal where the handler gives one; when the recovery of a parts v2 read returns `review_parts_budget_exhausted`, the plan stops at once with that code and its measurements ([Reviews in fresh parts](#reviews-in-fresh-parts)) |
 | `execution_incomplete` | an interrupted invocation, an incomplete or injected turn, or an incomplete response with text | one more call; the second of this outcome stops | `review_execution_incomplete` |
 | `answer_malformed` | a completed response whose answer is not one object and is not recovered (the answer recovery below) | one more call; the second of this outcome stops | `review_answer_malformed` |
 | `context_unverified` | a completed attempt whose context was not verified | one more call; the second of this outcome stops | `review_context_unverified` |
@@ -936,7 +949,7 @@ starts a new sequence.
 | `input_over_limit` | the error code `review_input_too_large` | the existing initial-size replacement when it applies, else stop | `review_input_too_large` |
 | `runtime_unavailable` | the error code `review_runtime_missing` | the provider schedule with its own count; an attempt without `observed_at` runs at once | `review_runtime_missing` |
 | `runtime_stale` | the error code `review_route_runtime_stale` | the handoff `review-route` | `review_route_runtime_stale` |
-| `timeout` | an execution timeout | stop | `review_timeout` |
+| `timeout` | an execution timeout | stop; since 0.90.0 one more call, and from the second timeout of the failure sequence a replacement at a smaller task where the turn has an admissible one, else stop (the smaller task after a capacity event, below) | `review_timeout` |
 | `format_unsupported` | the error code `review_format_unsupported` | stop | `review_format_unsupported` |
 | `unknown` | none of the above | on a Codex route, the provider schedule while every failed call of the turn position had no answer and at most 120 seconds of wall time; otherwise stop | `review_failure_unknown` |
 
@@ -960,6 +973,92 @@ eligible for the provider schedule, so its plan stops with
 `review_failure_unknown`. An uncaptured current call that the reconciliation
 ends is recorded with the error `review_invocation_interrupted`: the outcome
 `execution_incomplete`, one more call.
+
+The smaller task after a capacity event. Since 0.90.0 four outcomes share one
+rule: `output_over_cap`, `input_over_limit`, `timeout` from the second timeout
+of the failure sequence and `provider_refused` from the third refusal. The
+harness keeps the review on its route and at its effort, and it looks for a
+smaller task of the same turn. A parts v2 read turn is assigned again with
+fewer unit characters. A context repair enters parts v2. For `output_over_cap`
+alone, a single review of a role with a parts adapter on a supported text
+route can become the first read turn of a parts v2 series over the same
+frozen packet (a single review as a series, below); a timeout, a provider
+refusal or an input overflow of a single review has no such conversion. The
+planner gives `replace` only when the proposed request passes the preflight
+of the route. A replacement of a parts read turn or of a context repair must
+also measure smaller than the request that failed. The first conversion of a
+single review limits the read allowance to at most half the characters of
+the inventory, and its whole request can measure larger than the single
+request, because a read turn carries more metadata. Every other kind of turn
+has no smaller task in this release: a reading turn or a final turn of an
+openness chain, a combine, check or final turn of a series, a session
+request, a correction and a probe. A staged review keeps the rule of its
+planner. Where a turn has no admissible smaller task and failed attempts
+remain, an `output_over_cap` is run once more at the same size, and the
+second at that size stops. An `output_over_cap` stops at once with
+`review_parts_budget_exhausted` when the recovery handler of a parts v2 read
+returns that code. For the first read turn with `entry: "output"`, a
+replacement that fails its admission follows the retry and stop rules of
+`output_over_cap` instead. A `timeout` stops when the failure sequence
+holds two timeouts, and a replacement at a smaller task does not reset that
+count. An `input_over_limit` stops, unless the initial-size replacement of
+the table applies. For `output_over_cap`, replacements at smaller sizes also
+end at an allowance of sizes, 2 to 7, that the harness derives from the share
+of the profiled attempts of that kind at or over the output limit
+(`over_cap_allowance`). Each stop keeps the final code of its outcome. Where
+the recovery ends in a decision about the route, `details.decision` is
+`{owner_decides, then}` with the question "Whether this slot or chain moves
+to a route with another effort or limit." and the answer `Move to another
+route`, whose steps name the commands for the new route and for the
+assignment on it. A reading chain that stops with `review_input_too_large`
+carries the decision of the projection of a reading chain instead (under
+[Problem creation](#problem-creation)). Follow the steps of the returned
+decision. `details` also hold the row of the turn (`kind`,
+`protocol`, `handler`, and `required_unit` where a unit of a later release
+gives that protocol a smaller task), `route_id`, `effort`, `effort_message`,
+`at_or_over_limit_share`, `profile_rows`, `attempts` (each with its output
+tokens and its task size) and `message`. The harness never changes the effort
+of a route: a review moves to another effort only through a new route that
+the owner decides on.
+
+A single review as a series. Since 0.90.0 a review can run as a parts v2
+series for the size of its answer, and not only for the size of its input.
+When `review-assignment` records a review whose single request fits the input
+limit, it also compares the text of that request with the task size at which
+the output profile of the route starts a review of that kind. On a supported
+text route, a larger request of a role with a parts adapter enters a parts v2
+series when that series passes its admission: the assignment is recorded as
+the first read turn; its header carries `entry: "task"`, and the common text of its
+prompts states that the review runs as a series for the size of its answers.
+A single review that was recorded as one request keeps that form. When its
+request is above that task size, its receipt carries
+`capacity_warning.output.above_start: true` and a `message`. `state` there is
+`above_start`, or `unmeasured` or `over_limit_expected` where a warning of
+the output profile already gives one. After an attempt of it reaches the
+output limit, the planner offers a replacement while one is admissible and
+the recovery allowance remains: `replace` with a `review-assignment` payload
+whose `context.capacity_replacement` names the assignment, the first read
+turn of a series over the same packet, with `entry: "output"`. The replacement keeps
+the role, the route, the dossier, the reviewer and the author of the
+assignment (`review_source_continuation_mismatch` otherwise). An assignment
+has at most one replacement (`review_source_continuation_fork`). A replacement of
+the single review needs an attempt at the output limit. A replacement of its
+first read turn with `entry: "output"` needs the failure planner to select
+it. Both need no pending call and no attempt whose output can still be used
+(`invalid_review_context`).
+
+The capacity notice of a review prompt. Since 0.90.0 the prompt of a bar,
+slate or result review of a problem record holds the paragraph
+`exactory-route-capacity-notice-v1` when the route has an output
+profile (a row of the built-in priors for its adapter, model and effort, or a
+measured row). The paragraph states the output allowance of the route in tokens
+and the answer bound of the turn in characters, and that an answer cut at the
+limit is lost. The packet carries the two numbers as `route_capacity:
+{protocol, kind, output_tokens, answer_bound}`, and the prompt records them
+under `parameters.capacity`. A staged controller, a staged task and a
+`native_math` review carry no notice. A prompt with the notice and without a
+valid capacity, or with a capacity and without the notice, is refused with
+`invalid_review_context`.
 
 A safeguards notice. When the provider's safeguards stop an answer, the Claude
 Code CLI does not end the call with an error. It writes a system event of
@@ -2812,11 +2911,12 @@ File paths in a payload. These fields name a file or a directory of the workspac
 | `artifact` | `id`, `path`, `media_type` | `path` follows the rule for file paths in a payload (above). |
 | `collect` | `definition: {corpus, primaryCategory, windowStart, windowEnd}` | `max_requests`, `page_size`; current corpus is `arxiv`. Dates are ISO calendar dates. |
 | `resume` | `collection_id` | `max_requests`, `recheck`; resumes retained collection/page evidence. A partition at the minimum width (one minute) whose reported total still reaches the provider's query ceiling keeps a permanent `query_ceiling` diagnosis in `pending`, and an ordinary `resume` leaves it as it is; `recheck: true` asks the provider for that partition again, from its first page. |
-| `acquire`, `expand` | `identifier` | `provider`, `max_requests`; expansion acquires an unresolved identifier without asserting its bibliography has been read. An old arXiv archive name without its hyphen, as in `arxiv:astroph/0410063`, is read as the hyphenated archive (`arxiv:astro-ph/0410063`). An OpenAlex record of type `paratext`, for example the front matter of a journal issue, is acquired as a work like any other record, and the work keeps the type `paratext`. The rule that leaves such a record out applies to a list response, that is, to the pages of a search and to a list that `import-response` reads (the excluded items in the search coverage section). |
+| `acquire`, `expand` | `identifier` | `provider`, `max_requests`; expansion acquires an unresolved identifier without asserting its bibliography has been read. An old arXiv archive name without its hyphen, as in `arxiv:astroph/0410063`, is read as the hyphenated archive (`arxiv:astro-ph/0410063`). An OpenAlex record of type `paratext`, for example the front matter of a journal issue, is acquired as a work like any other record, and the work keeps the type `paratext`. The rule that leaves such a record out applies to a list response, that is, to the pages of a search and to a list that `import-response` reads (the excluded items in the search coverage section). Since 0.90.0 `provider` can be `datacite`, which reads the record of a DOI from the DataCite REST API (`https://api.datacite.org/dois/<doi>`); another identifier is refused with `invalid_identifier`. Without `provider`, a DOI goes to Crossref, and when Crossref answers with HTTP 404 the same command asks DataCite, within the same `max_requests`; the source records of both requests are kept. A DOI that Crossref does not hold, for example the DataCite DOI of an arXiv paper, is acquired in this way. For a citation with a DOI or an arXiv id, a problem export takes the title and the names from a captured registry record of that identifier where the store holds one; without one it uses the recorded citation metadata or the work record and reports the citation (the registry text of a citation, under [Problem creation](#problem-creation)). |
 | `fulltext` | `identifier`, `url` | Optional `component` declares a pinned supplement relationship (see below). The response is read when its reported media type, without parameters such as `charset`, is PDF (`application/pdf`), HTML (`text/html`, `application/xhtml+xml`) or XML (`application/xml`, `text/xml`). A body served as `application/octet-stream` or `binary/octet-stream` is read as a PDF when its bytes start with the PDF signature. Without that signature it is `unsupported_fulltext`. A response of any other type is recorded `pending` with `unexpected_mime`. XML is read as a JATS article when its root element is `article`. Element names are matched by their local name, so a namespaced document reads the same. The Europe PMC endpoint `https://www.ebi.ac.uk/europepmc/webservices/rest/<PMCID>/fullTextXML` (for example `PMC13104172`) serves such a document for an open-access article. The extractor `jats` saves the text of the whole article (front matter, body and back matter) with a line break at each block element. `includes_abstract` is true when the abstract has text. The capture field `visual_asset_names` lists the `graphic` references of each `fig`, in document order and without repeats. These are names only: no image is fetched, and `visual` acquires images from an HTML original only. The extraction status depends on body content: text in a paragraph, list item, table cell or similar element inside `body`, outside headings, abstracts and metadata. An `article` without such text is `landing_page`, and an XML document whose root is not `article` is `unsupported_fulltext`. The parser loads no external DTD or entity and expands no declared entity. A document that declares an internal entity is `xml_internal_entity`. A document that refers to an external entity is `xml_external_entity`. So is a document that refers to a named entity that only an external DTD defines (for example `&nbsp;` from the JATS DTD). Invalid XML is `malformed_xml`. Predefined entities and numeric character references read normally. The extractor is bounded: at most 200,000 elements (`xml_element_limit`), a nesting depth of at most 256 (`xml_depth_limit`), at most 33,554,432 characters of decoded markup and text (`xml_text_limit`, a bound on characters, not on bytes) and ten seconds for the whole extraction (`xml_timeout`). Each of these XML statuses leaves the capture `pending` with that code as `extraction_status` and keeps the original bytes. A pending capture has no text to read. Acquire another supported original of the work with a new `fulltext` request, for example the publisher's PDF or HTML page, and read that capture. `max_requests` bounds the HTTP attempts of the capture, and each redirect and each retry is one attempt, so set it for the whole chain of a link that redirects: a publisher PDF link that was redirected three times before it served the file needed four attempts. When the budget runs out, the capture is recorded as `pending` with `extraction_status` `request_budget` and stays in the record; a new `fulltext` request with its own request id and a larger `max_requests` tries again. When a transfer runs out of time, the capture is `pending` with `extraction_status` `timeout`, and the `timeout` item of `pending` describes the last network attempt: `timeout_seconds` is the limit of that attempt, `elapsed_seconds` the time that the attempt took and `bytes_received` the bytes of the response body that it received. One attempt has 30 seconds for the connection, the headers and the body together, or the time that was left of the whole call when the attempt started, when that is less. The whole call has 120 seconds, with its redirects and retries. When the time of the call runs out between two attempts, the item still describes the attempt before, which either timed out or ended within its limit, so `elapsed_seconds` can be less than `timeout_seconds`. No option of `fulltext` raises either limit. A PDF that does not arrive within them is acquired as a full-text job (`fulltext-start`, below), which transfers the original in byte ranges, each range in an attempt of its own. A `timeout` item recorded before 0.88.0 has `code` alone. For a PDF, the harness chooses the extraction mode itself when the request gives no `layout` option and no OCR. It first extracts the text in the extractor's layout mode, which pads the text with spaces to keep the physical layout of each page, and measures that text. When the whitespace fraction is greater than 0.90, or the expansion ratio (the UTF-8 bytes of the extracted text divided by the bytes of the PDF) is greater than 2.0, the harness extracts the PDF again without layout mode and keeps that plain text. Neither mode truncates the text. The thresholds come from measurements with `pdftotext` 26.02.0: among 30 ordinary article PDFs the largest whitespace fraction was 0.644 and the largest expansion ratio 0.487, and among three PDFs whose layout text was padded the smallest were 0.970 and 2.61. The capture records the choice in `extraction.layout_selection`: `protocol` (`exactory-pdf-layout-selection-v1`), `kept_mode` (`layout` or `plain`), `thresholds` (`whitespace_fraction` and `expansion_ratio`) and `measurements.layout`, which holds the text bytes, page count, longest line, whitespace fraction and expansion ratio of the layout text. After a second extraction it also records `plain_status`, the status of the plain extraction, and, when that extraction gave a text, `measurements.plain`. When the plain extraction fails, `kept_mode` is null, the capture is `pending` with that status as `extraction_status`, and the padded text is not kept. The other fields of `extraction` describe the text that was kept. The harness tries the plain mode only after a layout extraction that succeeded: when the layout extraction itself fails, the capture is `pending` with that status and records no `layout_selection`. An explicit `extraction_options: {"layout": true}` or `{"layout": false}` fixes the mode: the harness extracts once in that mode, keeps the result whatever its measures, and records no `layout_selection`. For scanned PDFs, `extraction_options: {"ocr": true}` uses bounded English OCR with pdfinfo, pdftoppm and Tesseract, retaining every PDF page boundary and actual tool versions. OCR has a 600-second deadline, 200-page limit, 5000-pixel maximum page dimension, and 32 MiB limits for each rendered page and total text. OCR and layout options are mutually exclusive, and an OCR capture records no `layout_selection`. Interpret OCR text against the original page images; the harness records the tools and does not check the text. An original up to 128 MiB is captured; a larger response fails with `response_too_large`. Preserves the exact original and extraction result, and records `extraction` (extractor, version, options, text bytes, page count, longest line, whitespace fraction, expansion ratio) on the capture. Every request with a new request id adds a capture and changes no earlier capture. Captures with the same original bytes are captures of one original, whatever their options and their texts, and a reading on any capture of that original satisfies its full-text coverage. `select-main-capture` (below) chooses which capture of an original is its main capture. A PDF original larger than 128 MiB, or a PDF transfer or extraction that one `fulltext` call cannot finish within its limits, is acquired as a full-text job (`fulltext-start`, below); a job extracts PDF originals only, so an HTML or XML original stays with this command and its limits. |
+| `import-fulltext` | `identifier`, `file`, `origin: {saved_by, obtained_from, obtained_at, statement}` | Since 0.90.0. Optional `extraction_options: {layout, ocr}`, two booleans. Records a full text that a person saved, for a source that `fulltext` cannot fetch. `identifier` names an acquired work whose id is a DOI, an OpenAlex id or a `url:` identifier (`invalid_input` for another kind of identifier, `unknown_work` when the store does not hold the work). `file` is a PDF or a UTF-8 text file inside the workspace, under the rule for file paths in a payload (above) and at most 128 MiB; a Markdown file is UTF-8 text, and an HTML document is refused with `invalid_input`. `origin` holds what the person reports: `saved_by` (who saved the file), `obtained_from` (the public HTTP or HTTPS address from which the person got it; `unsafe_url` for another address), `obtained_at` (a timestamp with a zone) and `statement` (how the file was saved). The command reads the local file and makes no network request. It records a source with `provider: "fulltext"`, `capture_method: "supplied_file"`, `origin_verified: false`, `imported: true`, `http_status: null` and `supplied: {saved_by, obtained_from, obtained_at, statement, evidence: "reported_by_agent", note}`, keeps the bytes of the file as the original, and adds a capture to the work with the extraction that `fulltext` makes. `note` is one fixed text: a person saved the text, the harness did not fetch it and did not verify its origin, and a finding states when a decisive judgment rests on it. The result has `status`, `scope: "fulltext_acquisition"`, `pending`, `work_id` and `capture`. An available supplied capture is a main body of its work while the work holds no available main capture that the harness fetched. As a main body it admits a complete article bundle (`bundle`) and a full reading (`read`), and that reading counts where a full reading is required. A PDF whose extraction fails, and a text file without text, leave a pending capture (`status: "pending"`, with the code in `pending`): it keeps the bytes and the origin labels and gives no reading credit. Correct the file or the extraction options and run `import-fulltext` again with a new request id before the bundle and the reading. When the harness later fetches the original, the available fetched capture is the main body, and a reading keeps its credit when the bytes of the two originals are equal. The `supplied` object travels with the text: in the `source_provenance` of a session delivery of a bar, slate or result review, as `origin` in the plan entry of an openness reading chain, in the notices of an openness forecast, and under `supplied_texts` in the manifest of a problem export and in the record of its post. `status` lists the supplied captures of the workspace under `supplied_texts`, each `{version_id, source_id, original, availability, extraction_status, supplied}`, and `record-check` checks the labels of each and lists the checked source ids under `supplied_texts`. Every use that needs a capture that the harness fetched keeps that rule: a supplied capture is no alternative of the complete-source route (`review_complete_source_mismatch`), no original for `fulltext-start` with `source_id` (`source_pending`), no terminal-failure evidence for `availability` and no source of a visual asset. |
 | `fulltext-start` | `identifier`, and exactly one of `url` or `source_id` | `extraction_options`, `allowances`, `use_ranges`. Records a durable full-text job for the exact version and returns `{job_id, status: "pending", pending: [{code: "fulltext_job_pending"}], revision}`; the transfer and the extraction run in `fulltext-resume`. `url` names the original to transfer. The job binds the transferred original to `identifier` by the rule of `fulltext`: for an arXiv identifier the final URL of the transfer must normalize to the exact requested version, with its version number, so request the versioned arXiv URL; another destination leaves the job pending with `version_mismatch`, which no resume changes. For any other identifier the final URL is not an identity, `observed_identifier` stays null, and the job's source and assembly bind the requested identifier. `source_id` names a retained complete original of the exact version, for example the original of a `fulltext` capture, which the job extracts without a transfer; the source is accepted by its requested identifier, and for an arXiv identifier its observed identifier must be the same exact version. The job extracts a PDF original only (see "Full-text jobs" below). A job does not choose the extraction mode as `fulltext` does, and it does not extract a second time without layout mode. With `extraction_options: {"ocr": true}` it uses OCR. Otherwise it extracts in layout mode unless `extraction_options` sets `layout` to false. Its capture records no `layout_selection`. `use_ranges` (default true) transfers in verified byte ranges that a later resume continues; false transfers the original whole. `allowances` are the job's limits: `original_bytes` (default 512 MiB), `retained_bytes` (4 GiB of retained transfer and extraction artifacts), `text_bytes` (256 MiB of extracted text), `network_attempts` (100), `invocation_seconds` (120 per resume), `unit_seconds` (30 for each unit of extraction work, such as one page; a transfer uses what remains of `invocation_seconds`), `unit_output_bytes` and `unit_image_bytes` (32 MiB each), `pages_per_resume` (20) and `range_bytes` (8 MiB). See "Full-text jobs" below. |
 | `fulltext-resume` | `job_id` | `max_requests`, `max_pages`, `allowances`, `reason`. Runs the job within its allowances: the next transfer units (`max_requests` bounds the network attempts of this invocation) and then the next extraction pages of the PDF original (`max_pages`, 1 to `pages_per_resume`), each recorded durably as it completes. `allowances` raises one or more limits of the job, never lowers one, and then needs `reason`; the expenditure so far is kept. The result is `{job_id, status, pending, completed_pages, page_count, attempts_used, next_unit, revision}`, and `fulltext-status` shows the next action. A `timeout` item of `pending` carries `timeout_seconds`, `elapsed_seconds` and `bytes_received`. When a network attempt reached its limit, they describe that attempt as in `fulltext`, with the job's `invocation_seconds` in place of the 120 seconds of the whole call. When the resume ran out of `invocation_seconds` outside a network attempt, for example while it assembled the byte ranges, `timeout_seconds` is `invocation_seconds`, `elapsed_seconds` the time since the transfer of this resume began and `bytes_received` the bytes that the attempts of this resume received. No allowance raises the 30 seconds of one attempt. `invocation_seconds` raises the time of one resume. |
-| `import-response` | `provider`, `response_file`, `source_url`, `captured_at` | `media_type`, `mappings`, `publisher_capture`; `web`/`mcp` mappings use JSON pointers into the original saved response for every work. For a `web` capture of an endpoint that names its query in the path of the URL, `mappings` can be an object `{records, query_path: {template, segment}}`, in which `records` is that list of mappings. `template` is the path of `source_url` with the segment that holds the query written as the name `segment` in braces, for example `{"template": "/graph/v1/paper/{paper_id}/citations", "segment": "paper_id"}` for `https://api.semanticscholar.org/graph/v1/paper/arXiv:1208.4714/citations`. The import records the percent-decoded segment as `query_binding: {template, segment, kind: "url_path", value}`, in the example with the value `arXiv:1208.4714`, and a search binds that value as the `query` of the response (`search`, below). `template` starts with a slash and holds the placeholder exactly once, as a whole segment, and no other brace. `segment` is a name of ASCII letters, digits and underscores that does not start with a digit. The path of `source_url` has the same number of segments as the template and the same text in every segment outside the placeholder, and its segment at the placeholder is not empty. Any other `mappings` or `query_path`, and `query_path` with the provider `mcp`, are refused with `invalid_import`. A request already committed is replayed first, from its recorded receipt, before the response is parsed. A new response, or the import payload, above 8 MiB is refused with `import_input_too_large` before it is parsed. The result of a new import carries `identity_conflicts`: each DOI of the batch that the import makes ambiguous, as `{identifier, existing_families, incoming_families, candidates}` with sorted arrays, including a conflict between two works of one batch; an assertion that repeats a recorded family adds none. The import continues, the field is advisory, and the original result of an earlier import replays without it. The result also carries `excluded_items` and `excluded_item_count`. A list response of OpenAlex, one with `results`, can hold works of type `paratext`, which the import leaves out: such a row becomes no work and no pending item, and `excluded_items` lists it as `{index, id, doi, record_type: "paratext", reason: "openalex_paratext"}` (excluded items, in the search coverage section). A response that is the record of one work is imported as that work, whatever its type. A response without an excluded row gives an empty list, and a result recorded before 0.88.0 replays without the two fields. `--preview` on the command line reports the same for the payload without writing: `{status: "preview", scope: "metadata_import", revision, work_ids, pending, warnings, excluded_items, excluded_item_count, identity_conflicts}` from the current snapshot, with no record, artifact, receipt or charge. It needs an existing store and takes no `--expected-revision` or `--request-id`. Optional `publisher_capture: {format, identifier}` imports one complete captured HTTP response of a publisher API, in place of `mappings`. It applies to provider `web` or `mcp` with a `media_type` of `message/http`, the captured status line, headers and body, and no `mappings`. The only format is `springer-meta-json-v1`. The parser follows the published format of the Springer Nature Meta API v2. `source_url` is `https://api.springernature.com/meta/v2/json` with its query, without a credential parameter such as `api_key`, and `identifier` is the article's canonical DOI, `doi:10.1007/...` or `doi:10.1038/...`. The URL check that every import runs first refuses, with `unsafe_url`, a URL with a credential query parameter, a user name or password, a fragment or a port other than 443. The capture admits one exact DOI abstract from a complete response with unambiguous JSON boundaries. The response is a `200` response of `HTTP/1.0` or `HTTP/1.1` whose `Content-Length` equals the length of its body. It has no `Transfer-Encoding` and no `Content-Range`, its content encoding is identity, and its `Content-Type` is `application/json`. The body is UTF-8 JSON, one object with no repeated key, that holds the API message and exactly one record with counts of `1`. The record's `doi`, and its `identifier` when present, normalize to the requested DOI, and its `title` and `abstract` are nonblank. The work's abstract is recorded `available` and `complete` with the representation `springer-meta-json-v1`. The source carries `publisher_capture`, `content_scope: "publisher_metadata"`, `observed_identifier`, `capture_method: "external_import"` and `origin_verified: false`. The import creates no full-text record and no reading. Everything else is refused with `invalid_publisher_capture`, and nothing is written. That includes a capture object with other fields, another format, another media type, and a media type with whitespace around it or a malformed parameter. It also includes a native provider, `mappings` beside the capture, another source URL that passes the URL check, and an identifier that is not such a DOI. The same code refuses a partial, chunked, compressed or ranged response and a repeated key. It also refuses more than one record, another DOI, and an empty title or abstract. The command's other refusals apply unchanged. A response that is not bytes, or a `captured_at` without a timezone, is `invalid_import`. An oversized input is `import_input_too_large`, and a replay whose capture differs is `request_id_conflict`. `--preview` takes the field and adds `source_candidates`, one `{version_id, candidates, ambiguities}` per work. The candidates are the related versions of the work's alias family with their abstracts, as a bar source delivery reports them under `abstract_candidates`. An import recorded without the field keeps its payload bytes and replays unchanged, and a mapped abstract stays a partial `mapped_excerpt`. |
+| `import-response` | `provider`, `response_file`, `source_url`, `captured_at` | `media_type`, `mappings`, `publisher_capture`; since 0.90.0 `provider` can be `datacite`, for the saved response of one DOI of the DataCite REST API; `web`/`mcp` mappings use JSON pointers into the original saved response for every work. For a `web` capture of an endpoint that names its query in the path of the URL, `mappings` can be an object `{records, query_path: {template, segment}}`, in which `records` is that list of mappings. `template` is the path of `source_url` with the segment that holds the query written as the name `segment` in braces, for example `{"template": "/graph/v1/paper/{paper_id}/citations", "segment": "paper_id"}` for `https://api.semanticscholar.org/graph/v1/paper/arXiv:1208.4714/citations`. The import records the percent-decoded segment as `query_binding: {template, segment, kind: "url_path", value}`, in the example with the value `arXiv:1208.4714`, and a search binds that value as the `query` of the response (`search`, below). `template` starts with a slash and holds the placeholder exactly once, as a whole segment, and no other brace. `segment` is a name of ASCII letters, digits and underscores that does not start with a digit. The path of `source_url` has the same number of segments as the template and the same text in every segment outside the placeholder, and its segment at the placeholder is not empty. Any other `mappings` or `query_path`, and `query_path` with the provider `mcp`, are refused with `invalid_import`. A request already committed is replayed first, from its recorded receipt, before the response is parsed. A new response, or the import payload, above 8 MiB is refused with `import_input_too_large` before it is parsed. The result of a new import carries `identity_conflicts`: each DOI of the batch that the import makes ambiguous, as `{identifier, existing_families, incoming_families, candidates}` with sorted arrays, including a conflict between two works of one batch; an assertion that repeats a recorded family adds none. The import continues, the field is advisory, and the original result of an earlier import replays without it. The result also carries `excluded_items` and `excluded_item_count`. A list response of OpenAlex, one with `results`, can hold works of type `paratext`, which the import leaves out: such a row becomes no work and no pending item, and `excluded_items` lists it as `{index, id, doi, record_type: "paratext", reason: "openalex_paratext"}` (excluded items, in the search coverage section). A response that is the record of one work is imported as that work, whatever its type. A response without an excluded row gives an empty list, and a result recorded before 0.88.0 replays without the two fields. `--preview` on the command line reports the same for the payload without writing: `{status: "preview", scope: "metadata_import", revision, work_ids, pending, warnings, excluded_items, excluded_item_count, identity_conflicts}` from the current snapshot, with no record, artifact, receipt or charge. It needs an existing store and takes no `--expected-revision` or `--request-id`. Optional `publisher_capture: {format, identifier}` imports one complete captured HTTP response of a publisher API, in place of `mappings`. It applies to provider `web` or `mcp` with a `media_type` of `message/http`, the captured status line, headers and body, and no `mappings`. The only format is `springer-meta-json-v1`. The parser follows the published format of the Springer Nature Meta API v2. `source_url` is `https://api.springernature.com/meta/v2/json` with its query, without a credential parameter such as `api_key`, and `identifier` is the article's canonical DOI, `doi:10.1007/...` or `doi:10.1038/...`. The URL check that every import runs first refuses, with `unsafe_url`, a URL with a credential query parameter, a user name or password, a fragment or a port other than 443. The capture admits one exact DOI abstract from a complete response with unambiguous JSON boundaries. The response is a `200` response of `HTTP/1.0` or `HTTP/1.1` whose `Content-Length` equals the length of its body. It has no `Transfer-Encoding` and no `Content-Range`, its content encoding is identity, and its `Content-Type` is `application/json`. The body is UTF-8 JSON, one object with no repeated key, that holds the API message and exactly one record with counts of `1`. The record's `doi`, and its `identifier` when present, normalize to the requested DOI, and its `title` and `abstract` are nonblank. The work's abstract is recorded `available` and `complete` with the representation `springer-meta-json-v1`. The source carries `publisher_capture`, `content_scope: "publisher_metadata"`, `observed_identifier`, `capture_method: "external_import"` and `origin_verified: false`. The import creates no full-text record and no reading. Everything else is refused with `invalid_publisher_capture`, and nothing is written. That includes a capture object with other fields, another format, another media type, and a media type with whitespace around it or a malformed parameter. It also includes a native provider, `mappings` beside the capture, another source URL that passes the URL check, and an identifier that is not such a DOI. The same code refuses a partial, chunked, compressed or ranged response and a repeated key. It also refuses more than one record, another DOI, and an empty title or abstract. The command's other refusals apply unchanged. A response that is not bytes, or a `captured_at` without a timezone, is `invalid_import`. An oversized input is `import_input_too_large`, and a replay whose capture differs is `request_id_conflict`. `--preview` takes the field and adds `source_candidates`, one `{version_id, candidates, ambiguities}` per work. The candidates are the related versions of the work's alias family with their abstracts, as a bar source delivery reports them under `abstract_candidates`. An import recorded without the field keeps its payload bytes and replays unchanged, and a mapped abstract stays a partial `mapped_excerpt`. |
 | `import-oai-cohort` | `collection_id`, `pages: [{response_file, source_url, captured_at}]` | Existing arXiv math-ph collection only. Each file is an original XML response, at a path under the rule for file paths in a payload (above). Supply the complete ordered arXivRaw whole-set token chain; no authored works, totals, flags or HTTP receipts. |
 | `roots` | `profile`, `roots: string[]`, `collection_ids: string[]` | `target` is required for verification; optional `historical_cutoff`. Research objective identity is set by `target`, not by this scope. |
 | `bundle` | `id`, `version_id`, `source_id`, `scope`, `completeness`, `units`, `inventory`, `bibliography`, `resolutions` | Each unit has `id`, `kind`, `required`, `link`, and optional `reason`/`url`; inventory and bibliography must reflect the original article. The citation graph reads every registry occurrence and, for each acquired original of the version that has a bundle, the bibliography occurrences of that original's latest bundle, unless the version's last `bundle` import named an earlier bundle of that original. An acquired original is an available main original of the version, so an original that a bundle of another of the version's bodies links as a `supplement` unit is another body. Only a version none of whose acquired originals has a bundle reads, by the same rule, the bundles of its other bodies, such as the saved response of a passage or such a supplement. A bundle of another body, such as a passage on a saved tool response or a bundle whose body is such a supplement, is therefore not read once a bundle of an acquired original exists, whichever was imported first, while a passage bundle whose body is an acquired original is read as that original's bundle. A new bundle for the same body replaces the occurrences of the earlier one, so their obligations end with it. A verification target reads the bundle of each acquired original whatever its pin. `resolutions` account for earlier occurrences that the graph still reads, such as registry observations. An entry or a resolution of kind `paper` can add `target_family`: the canonical id of an acquired family that an assertion of its `target` names, chosen with the entry's own `link` and `reason`. A DOI target can choose its own family or an asserted arXiv family; an exact arXiv target of the chosen family keeps its version. An unknown, unrelated, versioned, noncanonical or malformed choice is `invalid_family_selection`, and nothing is written. The choice binds that occurrence or resolution only: earlier bundles and reading units keep their digests, and an occurrence without a choice stays `reference_identity_ambiguous` while its target has conflicting assertions. A resolution with a choice resolves an occurrence of an earlier bundle. |
@@ -2827,7 +2927,7 @@ File paths in a payload. These fields name a file or a directory of the workspac
 | `screening-checkpoint` | `id`, `batch_ids`, `reason` | Under `screened-v1` only. Accepted when the two named batches are the two most recent `read-batch` records, both contain only `pending` members, and every item of both was judged `consequential: false`; otherwise `invalid_screening`. While it covers, unread `pending` members carry no obligation and are counted as `inventoried_unread`; a later consequential batch, a higher screening round, or a policy change removes the effect. |
 | `sample` | `id`, `collection_id`, `size`, `seed` | Optional `depth`. Available under `sampled-v1`, or in research with an explicit `depth` object or selected depth plan (`policy_inapplicable` otherwise). Draws and records a sample of one frozen population, stratified by month with equal allocation, a short month's shortfall passed to the next months, and the whole population when it fits within `size` (1 to the effective `sample_size`; verification keeps 1 to 100). The enumeration must be complete (`collection_pending`). The record keeps the seed, the per-month population and sampled counts, the population digest and the drawn members; the draw repeats from that seed, and two verifications of one paper choose their own seeds and read different members. A second draw against the unchanged population is refused with `sample_exists`; a population that changed after the draw reports `sample_stale`, which a new draw clears. Under the verification preset every sampled member owes an abstract reading (`sample_reading_missing`) carrying a placement (`placement_missing`), and a scoped collection that is not the sampled one reports `sample_missing`. Research records the draw as tool evidence, with readings at its stated depth. |
 | `loop-close` | `id`, `purposes` | Optional `depth`. Under `lineage-v1` only (`policy_inapplicable` otherwise). Closes the bounded loop. `purposes` names all five search purposes exactly once, each `{status, note}` with status `covered` or `gap`. A `covered` purpose needs a loop reading judged `relevant` or `contradictory`, or two distinct captured queries for it with no such hit; a `gap` needs two distinct queries tried, or the loop at the call's effective `loop_abstracts` limit (default 100). Each captured query counts once. A native capture counts by the query it asks: its provider, endpoint and the parameters that decide which works match, as the registries' API references define them (`search_query` and `id_list` for arXiv; `query`, every field query `query.<field>` and `filter` for Crossref; `search`, `search.exact`, `search.semantic`, `filter` and `corpus` for OpenAlex). Its pages, its repeated captures and captures that differ only in another parameter (an order such as `sort`, `order`, `sortBy` or `sortOrder`, `select`, `sample`, `seed`, `facet`, `group_by`, paging, `mailto`, `api_key`, or any parameter outside these lists) therefore count once, whichever of its query parameters a judgment binds (for example OpenAlex `search` and `filter`). So do captures whose URLs spell one query differently: the endpoint is compared by its host and its path without a trailing slash, an empty parameter or list item counts as absent, and the comma-separated items of a `filter` or an arXiv `id_list` are compared as a set, because the registries combine them in any order. An OpenAlex `filter` is compared as OpenAlex reads it: the letter case of its values does not count, and the `\|` alternatives of one filter, after a leading `!` that negates them all, are compared as a set, so `type:Article` asks the same query as `type:article`, and `cites:W2\|W1` as `cites:W1\|W2`. Two native captures whose matching parameters differ in any other way count apart, even when they share a query value; this includes the name of a filter in another letter case, another letter case of the value of a `.search` filter such as `title.search` (OpenAlex reads its Boolean operators only in uppercase), and another letter case of the value of any other matching parameter, such as `search`. A `web` or `mcp` capture counts by its saved response and its bound query: the queries bound to one response count once, and so do the responses bound to one query. Such a capture adds no query when a native capture of the purpose was bound to the same value, because the harness cannot tell it from another capture of that query. The record keeps the queries each purpose tried and a digest of the loop it closed: a later loop reading or search reports `loop_closure_stale`, and no closure at all reports `loop_closure_missing`. |
-| `search` | `id`, `profile`, `purpose`, `queries`, `responses`, `captured_at`, `found_work_ids`, `verdict`, `cited_work_ids`, `impact`, `gaps`, `dispositions` | Optional `resolved`, `scope`, `question`, `binding`, `depth`, `hits_per_query`, `completes: [{search_id, closed_gaps: [{text, how}]}]`. A completion must satisfy the formulation, time, queries, clean, pages, rows, works, judgments and gaps conditions; otherwise `search_completion_invalid` names the failed condition. Repair it or record the search without `completes`. The stored completion pins the earlier search digest and lists rows no longer returned by a complete enumeration; `closed_gaps` is the author's statement. A minimum may omit searches completed by a bound search, including through a chain of completions. Without `scope`, the question supplies its text. A provisional search before roots requires `question`; see the search coverage section. Bind the original query and every result. A response's `query` is the value of a query parameter of its captured URL (`search_query` for arXiv; `query`, `query.bibliographic` or `query.author` for Crossref; `search` or `filter` for OpenAlex, so a citing-works capture binds its whole filter value, such as `cites:W123` or, when the filter also holds a date clause, `cites:W123,from_publication_date:2025-01-01`; `q`, `query`, `search` or `search_query` for `web` and `mcp`, and also `search_string` for `web`), or, for a `web` capture whose import declared `query_path`, the path segment that the import bound (`import-response`, above), or, for a `web` or `mcp` capture, a saved response value named by `query_locator`. Any other value is refused with `invalid_search`. `nothing-new` needs an actual captured search, including an actual empty result array when appropriate. `dispositions` judges every found work once: `{work_id, disposition, reason}` with `relevant`, `contradictory`, `potentially_relevant`, `out_of_scope`, `duplicate`, or `unresolved`; cited works are relevant or contradictory. Each cited work becomes a critical full-text requirement (purpose `novelty`), so it is owed a full reading, while its judgment is the selected search of the profile and purpose; a new search for the purpose retires the requirements of the works it does not cite again (the stored requirement records stay). A new search for a purpose carries forward each `contradictory` or `unresolved` work of the selected search or lists it under `resolved: [{work_id, reason}]`, else `search_findings_dropped`. A judgment is stale when its scope changes (`search_scope_stale`), when a root, required full text, found or cited work changes content (`search_evidence_stale`), or when a family enters or moves in the citation graph (`search_frontier_stale`); a new version of an unrelated reference changes nothing. When a new search for a purpose drops a family that only the judgment it replaced required, each selected judgment of another purpose that was recorded while the family was required reports `search_frontier_stale` and `search_evidence_stale` until it is recorded again: as notices under `lineage-v1` and `sampled-v1`, and as obligations under `exhaustive-v1` and `screened-v1`. The one exception is a judgment that found a version of the family: it reports only `search_frontier_stale` when the citation graph had read no reference of the family's versions when the judgment was recorded, for example because no root or other required full text cited the family then. A reference of the family that the graph read later, while the family was required, does not change this. A judgment recorded before the family was required is stale while the family is required, and the drop ends that staleness. Searches recorded before dispositions existed report `search_dispositions_missing`. Under `lineage-v1` and `sampled-v1`, captured hits are bounded by the resolved `hits_per_query`, counted across every response of that query (`invalid_search` above that). Research may use bounded coverage. Verification resolves `hits_per_query` from a plan or override of its own profile, default 10 and never below it, and keeps its native search enumeration obligation; see the search coverage section for both profiles. The receipt names the found works, the pending items, the invalid works, the incomplete responses, the excluded items and the warnings, and `search --check` returns every field of that receipt before anything is recorded (the receipt, in the search coverage section). |
+| `search` | `id`, `profile`, `purpose`, `queries`, `responses`, `captured_at`, `found_work_ids`, `verdict`, `cited_work_ids`, `impact`, `gaps`, `dispositions` | Optional `resolved`, `scope`, `question`, `binding`, `depth`, `hits_per_query` and, since 0.90.0, `completes: [{search_id, closed_gaps: [{text, how}]}]` and `row_dispositions: [{source_id, index, reason}]` (a search that completes earlier searches, and a row that the import cannot read, both in the search coverage section). Without `scope`, the question supplies its text. A provisional search before roots requires `question`; see the search coverage section. Bind the original query and every result. A response's `query` is the value of a query parameter of its captured URL (`search_query` for arXiv, or since 0.90.0 `id_list` when `search_query` is absent or empty; `query`, `query.bibliographic` or `query.author` for Crossref; `search` or `filter` for OpenAlex, so a citing-works capture binds its whole filter value, such as `cites:W123` or, when the filter also holds a date clause, `cites:W123,from_publication_date:2025-01-01`; `q`, `query`, `search` or `search_query` for `web` and `mcp`, and also `search_string` for `web`), or, for a `web` capture whose import declared `query_path`, the path segment that the import bound (`import-response`, above), or, for a `web` or `mcp` capture, a saved response value named by `query_locator`. Any other value is refused with `invalid_search`. `nothing-new` needs an actual captured search, including an actual empty result array when appropriate. `dispositions` judges every found work once: `{work_id, disposition, reason}` with `relevant`, `contradictory`, `potentially_relevant`, `out_of_scope`, `duplicate`, or `unresolved`; cited works are relevant or contradictory. Each cited work becomes a critical full-text requirement (purpose `novelty`), so it is owed a full reading, while its judgment is the selected search of the profile and purpose; a new search for the purpose retires the requirements of the works it does not cite again (the stored requirement records stay). A new search for a purpose carries forward each `contradictory` or `unresolved` work of the selected search or lists it under `resolved: [{work_id, reason}]`, else `search_findings_dropped`. A judgment is stale when its scope changes (`search_scope_stale`), when a root, required full text, found or cited work changes content (`search_evidence_stale`), or when a family enters or moves in the citation graph (`search_frontier_stale`); a new version of an unrelated reference changes nothing. When a new search for a purpose drops a family that only the judgment it replaced required, each selected judgment of another purpose that was recorded while the family was required reports `search_frontier_stale` and `search_evidence_stale` until it is recorded again: as notices under `lineage-v1` and `sampled-v1`, and as obligations under `exhaustive-v1` and `screened-v1`. The one exception is a judgment that found a version of the family: it reports only `search_frontier_stale` when the citation graph had read no reference of the family's versions when the judgment was recorded, for example because no root or other required full text cited the family then. A reference of the family that the graph read later, while the family was required, does not change this. A judgment recorded before the family was required is stale while the family is required, and the drop ends that staleness. Searches recorded before dispositions existed report `search_dispositions_missing`. Under `lineage-v1` and `sampled-v1`, captured hits are bounded by the resolved `hits_per_query`, counted across every response of that query (`invalid_search` above that). Research may use bounded coverage. Verification resolves `hits_per_query` from a plan or override of its own profile, default 10 and never below it, and keeps its native search enumeration obligation; see the search coverage section for both profiles. The receipt names the found works, the pending items, the invalid works, the incomplete responses, the excluded items and the warnings, and `search --check` returns every field of that receipt before anything is recorded (the receipt, in the search coverage section). |
 | `require-fulltext` | `id`, `profile`, `version_id`, `purpose`, `reason` | Optional `historical_cutoff`, `depends_on`, and `depth` for purpose `core`. Purposes: `major_claim`, `novelty`, `innovation`, `validity`, `exemplar`, `lineage` (the parent's own line of results), `classic` (a foundational paper that line rests on), `core` (a paper whose full text decides a verdict's stance or its prediction band) and `contradiction` (a source that opposes a claim). `lineage`, `classic` and `core` name the claim, lineage entry or finding they serve in `depends_on`. A `core` requirement beyond the effective `core_fulltexts` amount is refused with `core_limit_reached`; verification resolves the amount from a plan or override of its own profile, default 10 and never below it. Every `lineage` and nondeferred `classic` entry is cited in the pinned bibliography (see "Review, publication, and verification"). An `exemplar` requirement under the `research` profile, recorded while a round is active, is that round's exemplar (see "Development rounds"). |
 | `availability` | `id`, `profile`, `version_id`, `depth`, `source_ids`, `reason`, `policy` | Policy has `id`, `minimum_attempts`, `allowed_statuses`, `rationale`. Two policies qualify: captured terminal HTTP 403/404/410/451 failures, or (abstract depth, non-arXiv work) `allowed_statuses` `[200]` with complete parsed captures bound to the work from every registry that addresses its identifiers (Crossref and OpenAlex for a DOI, OpenAlex for an OpenAlex id, the saved web/MCP import for a `url:` work), none carrying an abstract. A review source request for the exact version and depth can be settled as `unavailable_qualified` only after current bindings, registry coverage and response bytes are revalidated and the evidence is delivered. Review registry absence requires at least one addressing registry; a web/MCP import alone is insufficient. A current complete source takes precedence, and a terminal failure cannot excuse pending units of held full text. Qualified answers grant no reading or scientific-support credit. Critical sources remain required. |
 | `defer-source` | `id`, `profile`, `version_id`, `reason`, `authorization`, `acquisition_evidence`, `dependent_claims`, `continuing_work` | Research only. Names one registered exact version with a current missing full-text requirement. `authorization` is a checked, nonempty artifact reference; `acquisition_evidence` is a nonempty array of checked, nonempty artifact references. The last two fields are nonempty string arrays recording claims that cannot use the source and work that can continue. Roots and verification targets cannot be deferred. |
@@ -3244,6 +3344,89 @@ the same `warnings` in its response, with the pending items, before anything
 is recorded. After such a warning, capture the pages of the query again in one
 run. Bind the new captures in the search when it is not recorded yet, and in
 a new search with a new id when it is.
+
+A row that the import cannot read. Since 0.90.0 the payload of `search` can
+hold `row_dispositions: [{source_id, index, reason}]`. An entry is the
+author's statement about one returned row that the harness could not import.
+`source_id` names a native response of the search (arXiv, OpenAlex or
+Crossref), `index` is the zero-based place of the row in the results of that
+response, and `reason` is a nonempty text. The row must be one that a pending
+item of the response names by the same `index`, for example an
+`invalid_work`. An imported row, a row that the import leaves out by the rule
+of the excluded items, a response without native pages, an index outside the
+response and a second entry for one row are refused with `invalid_search`
+(`entry` in the details). The record keeps each entry with the evidence of
+its row: `{source_id, index, reason, provider, row_id, record_type,
+row_digest, row_byte_length, row_excerpt}`. `row_id` is the provider's
+identifier of the row, or null. `row_digest` and `row_byte_length` are the
+SHA-256 and the number of UTF-8 bytes of the whole row: the canonical JSON of
+an OpenAlex or Crossref row, and the exact bytes of an arXiv Atom entry.
+`row_excerpt` is the first 20,000 characters of the row. A row with a
+disposition is no pending item and no integrity error of the search, and it
+counts in the `inspected_count` of its query. The receipt adds
+`row_disposition_count` and `row_dispositions`. The reviewer of a problem
+openness packet receives these fields, with `row_excerpt` and not the whole
+of a longer row, beside the reason, and a reading that the
+reason names by its id is bound as a supporting reading of the packet, unless
+it is already decisive (the
+minimum of version 2, under [Problem creation](#problem-creation)). A stored
+search cannot gain a disposition: record a new search that completes it (the
+next paragraph) and give the disposition there. `record-check` verifies that
+each stored entry names a response of its search, has an index inside that
+response, and holds the `row_digest` of the saved row at that index; it
+compares no other field. A failure is `invalid_search`, and the checked
+searches are listed under `search_row_dispositions`.
+
+A search that completes earlier searches. Since 0.90.0 the payload of
+`search` can hold `completes: [{search_id, closed_gaps: [{text, how}]}]`.
+The new search can then replace each named earlier search in an openness
+minimum: a spec that binds the completing search can leave the completed
+search out, and a completed search that stays bound is in the packet and is
+assessed. The command checks ten conditions, in this order, from the two records
+and their stored responses, and refuses the first that fails with
+`search_completion_invalid` and the details `search_id` (the earlier search),
+`condition` and the fields of the table:
+
+| `condition` | Requirement | Further details |
+| --- | --- | --- |
+| `payload` | `completes` is a list; each entry names a different stored search other than the new one; each `closed_gaps` entry has a nonempty `text`, stated once, and a nonempty `how`. | |
+| `formulation` | Both searches have the same `profile`. Their `question` values are equal, or both searches have no `question`. | |
+| `time` | `captured_at` of the new search is not earlier than that of the earlier one. | |
+| `queries` | Every query of the earlier search is a query of the new one, and the captures of the new search ask it as the same request: for a native capture the same provider, endpoint and matching parameters (the query identity that `loop-close` counts by, in [Operation fields](#operation-fields)); for a `web` or `mcp` capture the same provider, address without its query string and bound query. | `query` |
+| `clean` | The new search has a coverage row of kind `complete`, `top_k` or `bounded_unordered` with `inspected_count` for each of its queries, no integrity error and empty `gaps`; and for every query of the earlier search its coverage kind is not weaker than the earlier one, in the order `complete`, `top_k`, `bounded_unordered`. | `query` for the comparison |
+| `pages` | For a query on which the native pages of the earlier search form no verified whole or leading part (a page error other than an `invalid_work` or an incomplete response, more than one page group, or pages that do not join), the coverage kind of the new search is `complete` or `top_k`. | `query` |
+| `rows` | Every row that the captures of the earlier search returned for a query is accounted for in the new search in one of four ways: a found work of the new search has the identifier of the row as its id or as an alias; the new search leaves the row out by the rule of the excluded items; a row disposition of the new search names a row of the same provider and the same captured request with the same `row_id`, or, for a row without an identifier, the same `row_digest`; or the coverage of the new search for the query is `complete` and its captures do not return the row (where the new search holds row dispositions, its captures of the same request). A row without an identifier that has no such disposition is accepted under a `complete` coverage without a comparison. | `query`, `row_id`, and for a row without an identifier `row_digest`, `source_id` and `index` |
+| `works` | Every found work of the earlier search is a found work of the new one. | `work_id` |
+| `judgments` | For every work that the earlier search judged `relevant`, `contradictory`, `potentially_relevant` or `unresolved` and that the new search judges otherwise, `resolved` of the new search names the work with a nonempty reason. | `work_id` |
+| `gaps` | For every text of `gaps` of the earlier search, `closed_gaps` of its entry holds an entry with that exact `text`. | `text` |
+
+The record keeps `completes: [{search_id, search_digest, not_returned:
+[{query, row_id}], closed_gaps}]`. `search_digest` pins the earlier record.
+The harness computes `not_returned`: the rows of the earlier search that it
+accepted under a complete coverage. An entry with `row_id: null` is an
+earlier row without an identifier and does not show that the row
+disappeared. `closed_gaps` is
+the author's statement of how the new search closes each earlier gap; the
+harness checks that every gap has an entry and not what the entry says. The
+searches that an openness minimum must bind are the material searches that no
+bound search completes, directly or through searches that each complete the
+next; a spec can still bind a completed search, which is then in the packet
+and is assessed as every bound search is. A capture that adds a filter
+asks another query, so it does not satisfy `queries`. `record-check` verifies
+that every stored entry names a stored search with that digest, lists the
+checked searches under `search_completions`, and fails with
+`search_completion_invalid` and the condition `search_digest` otherwise.
+
+An arXiv request by `id_list`. Since 0.90.0 a captured arXiv request with
+`id_list` and without a `search_query` value is bound by the exact `id_list`
+value as its `query`. The search checks each listed identifier against the
+entries that the captured pages return: an identifier without a version is
+answered by any version of that paper, and an identifier with a version only
+by that version. For each identifier without an answer, `pending` and
+`integrity_errors` hold `{code: "search_id_list_entry_missing", identifier,
+group_id}`, and the receipt lists these under `missing_identifiers` with
+`missing_identifier_count`. With a `search_query` value the request is bound
+by that value, as before.
 
 Before roots exist, add required text `question` to the normal search payload:
 
@@ -4326,6 +4509,134 @@ the evidence checks. A new unbound material search, changed bound
 reading/search or missing current formulation makes the finding stale
 (`problem_openness_stale`).
 
+The minimum of version 2. Since 0.90.0 the export builds a minimum with
+`schema_version: 2`: `{schema_version, statement, neighbours, searches,
+reading_digests, settling_work_id, duplicate_resolutions, family_readings,
+supporting_reading_digests, results}`. The spec takes three further optional
+fields under `minimum`, and a spec without them is valid:
+
+| Field of `minimum` in the spec | Meaning |
+| --- | --- |
+| `family_readings: [{search_digest, work_id, version_id}]` | A decisive work of a bound search (`work_id`, which the search with `search_digest` judges `relevant` or `contradictory`) that has no complete full reading of its own is answered by the complete full reading of `version_id`, another record of the same work. Two records are records of one work under one of three links: `work_id` is the arXiv identifier of `version_id` without its version number (`arxiv_version`); a DOI of `work_id`, as its id or an alias, is the DataCite DOI of the arXiv paper of `version_id` (`datacite_doi`); or both records carry one DOI, as id or alias (`shared_doi`). An identifier that the store also assigns to a third family links nothing. For the two DOI links the normalized author lists must be equal when both records hold authors. No title is compared. Without an entry for such a work, the export binds the latest version of the work that has a complete full reading. The result reports each binding that the export derived under `derived_family_readings`, as `{search_digest, work_id, version_id, link: {kind, identifier, authors_compared}}`. The readings of the bound version join `reading_digests`, and its text is a unit of the chain. An entry that names no decisive work of that search, the work itself, an unknown version, a version without a link or a version without a complete full reading is refused with `openness_reading_gap` (`search_digest`, `work_id` and `version_id` in the details). |
+| `supporting_reading_ids: [reading id]` | Reading records to deliver beside the decisive readings. Without the field the export already binds every reading of the store that is not decisive and whose id occurs in a text of a bound search: the `reason` of a disposition, of a `resolved` entry or of a row disposition, `impact`, `scope`, or a text of `gaps`. An occurrence counts when the character before it and the character after it are not a letter or a digit. Binding a supporting reading adds its reading record and not the text that it read; another binding can still deliver that text. The result lists the supporting readings under `supporting_readings`, each `{reading_id, reading_digest, cited_by: [{search_id, search_digest, fields}]}`. An id that the store does not hold is refused with `openness_reading_gap` (`reading_ids` in the details). A work whose text the openness judgment needs is judged `relevant` in a search record, which makes its full reading decisive and its text a unit. |
+| `results: [{native_attempt_digest, acceptance_id, cited_as}]` | Accepted results of solver objectives of this record that the bound searches cite. `cited_as` is the author's label for the result, for example "Theorem L9", the name under which the searches cite it; the harness does not compare it with the search records (an accepted result of the record, below). |
+
+The gaps and the forecast. After the binding checks and before it writes, the
+export computes the gaps of the minimum, the forecast and the notices. The
+forecast and the option `--accept-gaps` exist since 0.89.0; since 0.90.0 the
+packet carries them. A gap is `{condition, code, outcomes, formulation,
+search_id, search_digest, work_id, details}`. `outcomes` names the resolved
+outcomes that the gap blocks, `code` is the code with which `problem-openness`
+refuses such an outcome, and `work_id` is present where the condition
+concerns one work.
+
+| `condition` | `code` | Blocks | What it reports | Repaired by |
+| --- | --- | --- | --- | --- |
+| `search_integrity` | `openness_search_gap` | both | The integrity errors of a bound search that no later bound search reassesses, with their codes, counts and queries. | `search`: a new capture of the query, in a search that reassesses or completes this one |
+| `search_declared_gap` | `openness_search_gap` | both | The texts of `gaps` of such a search. | `search` |
+| `search_coverage_unspecified` | `openness_search_gap` | both | A query of such a search without a coverage row of the kind `complete`, `top_k` or `bounded_unordered`, or without `inspected_count`. | `search` |
+| `result_uncertain` | `openness_reading_gap` | both | A work judged `potentially_relevant` or `unresolved` that no later bound search resolves. | `search` with `resolved` |
+| `duplicate_unbound` | `openness_reading_gap` | both | A `duplicate` work without an entry in `duplicate_resolutions`. | the spec |
+| `duplicate_source_not_decisive` | `openness_reading_gap` | both | A resolution whose canonical work its search does not judge `relevant` or `contradictory`. | the spec, or `search` |
+| `reading_missing` | `openness_reading_gap`, or the code of the underlying error when `details.assessment_error` is present | both | A decisive work without a complete full reading among the bound readings, also not through a family reading, with the missing captures and units. | `fulltext` or `import-fulltext`, `bundle`, `read` |
+| `reading_deferred` | `openness_reading_gap`, or the code of the underlying error when `details.assessment_error` is present | both | A decisive work under an active or stale source deferral, or an assessment of the source deferrals that failed. | Repair an `assessment_error` and assess again; for an active or stale deferral, `resume-source`, then the reading |
+| `settling_undeclared` | `openness_settling_source` | `already_solved` | No settling work is declared. | Nothing, when the author holds the statement open |
+| `settling_not_decisive` | `openness_settling_source` | both | The declared settling work is no decisive work of a bound search. | `search` that judges the work, or the spec without it |
+| `settling_declared` | `openness_settling_source` | `supported_open` | A decisive settling work is declared. | Nothing, when the author holds the statement settled |
+| `result_undelivered` | `openness_result_gap` | both | A bound result with an artifact of the role `proof` or `theorem` that cannot be delivered as text. | The export reads the artifacts that the accepted checkpoint pins, so a new file beside them changes nothing: obtain and deliver a new accepted checkpoint whose proof and theorem artifacts are text, and bind that acceptance in a new export. Leave the result out of the spec only when no bound search cites it any more. |
+| `result_changed` | `openness_result_changed` | both | A bound result whose acceptance the latest delivered snapshot of its objective no longer holds as the minimum pins it. It arises only after the export. | `search deliver-attempt`, then a new export |
+
+A later bound search reassesses an earlier one for a formulation when it is
+bound to the same formulation, was not captured earlier, holds every query of
+the earlier search, and has stated coverage for each of its queries, no
+integrity error and empty `gaps`. The result of the export carries
+`audit_forecast: {outcomes, gaps, notices, searched_through}`. `outcomes` is
+`{supported_open, already_solved}`, each `"possible"` when no gap blocks it
+and `"blocked"` otherwise. Three states occur. Without a declared settling
+work and without another gap, `supported_open` is possible and
+`already_solved` is blocked. With a decisive settling work and no other gap,
+it is the reverse. In every other state both are blocked, and a review can
+record only an `unresolved` finding. `notices` holds facts that block nothing:
+for each bound search its coverage rows, its incomplete responses, its
+excluded items and its warnings, and, where it completes earlier searches,
+those completions; an entry of kind `supplied_text` for each decisive reading
+of a text that a person supplied (`import-fulltext`); and an entry with the
+condition `result_described` for each described artifact of a bound result
+whose role is neither `proof` nor `theorem` (a described artifact of those
+roles gives the gap `result_undelivered` instead). `searched_through` is the date of the latest
+capture among the bound searches.
+
+When the forecast leaves a resolved outcome possible, the export writes the
+packet. When both resolved outcomes are blocked, the export delivers no
+packet and returns `openness_minimum_gaps` with the forecast as details, so the
+refusal names each search, query and work with the command that repairs it.
+With `--accept-gaps` the export writes the same packet and returns the
+forecast under `warnings`, with the code `openness_minimum_gaps`. The option
+is an argument of the command; no spec, packet or record holds it, and it
+suppresses no check: a review over such a packet records an `unresolved`
+finding with its gaps. Since 0.90.0 the packet carries the gaps as
+`scientific_context.minimum_gaps`, the forecast as
+`scientific_context.audit_forecast`, and
+`scientific_context.decisive_work_ids`, the decisive works of the bound
+searches that have a bound full reading under their own id.
+
+An accepted result of the record. Since 0.90.0 `minimum.results` binds a
+result that a solver objective of this record accepted, so that the reviewer
+reads what the search records cite. `search deliver-attempt` writes, for each
+acceptance of the delivered state with the status `accepted` whose review
+names an observed assignment, an immutable link record
+`native_acceptance_review` from the acceptance to that review. A repeat of
+`search deliver-attempt` for an unchanged state adds the link records that the
+store lacks and changes nothing else, which is how an attempt that an earlier
+release delivered gets its links. The export binds an entry when these
+conditions hold, and refuses the first that does not:
+
+| Condition | Refusal |
+| --- | --- |
+| `minimum.results` is a list of `{native_attempt_digest, acceptance_id, cited_as}` with nonempty texts, a SHA-256 digest, and each acceptance once. | `invalid_input` |
+| The store holds the delivered attempt with that digest. | `problem_result_unbound` |
+| The attempt is the latest delivered snapshot of its objective. | `problem_result_superseded` (`latest_native_attempt_digest` in the details) |
+| The acceptance has the status `accepted` and the outcome `proof`, `reduction`, `obstruction` or `counterexample`. | `problem_result_missing` |
+| The store holds exactly one link record of the acceptance. | `openness_result_unlinked` (`command: "search deliver-attempt"`, `then: "export"`) |
+| The final assignment that the link names is ready, with the attempt and the output digest of the link and an approving output; its native packet is the review of the accepted checkpoint; and that packet carries the evidence closure of the acceptance. | `openness_native_evidence_missing` |
+
+The extension reason that the value rubric asks of an objective beyond the
+ordinary limits is not applied here. The evidence closure is the manifests
+that the checkpoint names, their artifacts, their child manifests and the
+manifests of the accepted dependencies. Each part has a delivery form:
+
+| Part of the closure | `delivery` | When it cannot be read as text |
+| --- | --- | --- |
+| A manifest (JSON); a manifest of kind `certificate` or `lean` holds its `verification` record | a `result_text` unit | does not occur |
+| An artifact that is no PDF and whose bytes are valid UTF-8, other than an executable of `execution_provenance` and an artifact of the role `toolchain` | `text`: a `result_text` unit, whole or in parts | does not occur |
+| A PDF artifact | `pdf_text`: the extracted text as a `result_text` unit; the row names the digest of the PDF (`sha256`) and of the text (`text_sha256`) | role `proof` or `theorem`: the gap `result_undelivered`; another role: `described` |
+| Another artifact that is not text | `described`: the row gives `path`, `role`, `media_type`, `size` and `sha256`, and the forecast holds a notice | role `proof` or `theorem`: the gap `result_undelivered` |
+| An executable of `execution_provenance`, and an artifact of the role `toolchain` | `described` | no gap |
+
+The packet carries one record for each bound result, the exact JSON of
+`{cited_as, native_attempt_digest, objective_id, objective_claim, acceptance:
+{id, outcome, standard, status, classification, checkpoint_id,
+evidence_digests}, checkpoint: {id, kind, claim, verification_status}, review:
+{assignment_id, final_assignment_id, attempt_id, output_digest}, manifests:
+[{sha256, kind}], artifacts: [{sha256, path, role, media_type, size, delivery,
+text_sha256?}], note}`. `note` is one fixed text: a solver objective of the
+record accepted the result after the named review, the result is delivered so
+that the reviewer can read what the search records cite, and the acceptance
+is no finding about the openness of the statement under review. In the
+minimum, an entry of `results` is `{native_attempt_digest, acceptance_id,
+cited_as, link_digest, result_digest}`: `link_digest` is the digest of the
+link record, and `result_digest` is the SHA-256 of that record body. A stored
+finding is verified from the link record and the review assignment, which
+are immutable, so it does not depend on a later snapshot of the objective.
+The state of the acceptance is assessed apart from that: while the latest
+delivered snapshot holds the acceptance with the status `accepted`, the same
+checkpoint claim and the same evidence digests, the result adds no gap.
+Otherwise the gap `result_changed` arises, the packet is no longer current,
+and a recorded finding reports `problem_openness_stale` with the cause
+`openness_result_changed`. The export cannot find a result that a search
+cites by a name, so the author binds every result of the record that a bound
+search cites.
+
 On a text route (`claude_cli_v1`, `codex_cli_v1`, `codex_cli_framed_v1`) the
 packet's full-text bodies count against the route's input limit. The optional
 `minimum.text_priority` lists version ids of read works, the decisive ones first.
@@ -4367,7 +4678,11 @@ the same rule with its own units and protocol, described after the problem
 chain below. A native result review without an openness minimum keeps its
 single turn.
 
-New problem reading chains use `exactory-openness-reading-v5`. Every bound
+A stored problem reading chain continues under its own protocol: v4 stays
+v4, and v5 stays v5. Since 0.90.0 a new chain uses
+`exactory-openness-reading-v6`, which keeps the search delivery, the units,
+the withholding and the verification that this section describes for v5 and
+adds what "The reading protocol v6" states below. Every bound
 search keeps its original digest and minimum binding. The first assignment
 freezes `reading_record.search_delivery`, a manifest of the original searches,
 their residual descriptors and their shared field descriptors. The exact
@@ -4554,8 +4869,9 @@ input only; the observed outputs keep every note, and each later assignment
 starts from the full notes again. The statement and its record, the
 formulations, every excerpt, every passage, the source descriptors and the
 allowances are never withheld. When even the fully reduced request does not
-fit, `review-assignment` refuses with `review_input_too_large` before it
-records the assignment. The details give `input_characters`,
+fit, `review-assignment` refuses before it records the assignment, since
+0.90.0 with `review_chain_projection_over_limit` (the projection of a reading
+chain, below) and before that with `review_input_too_large`. The details give `input_characters`,
 `input_limit_characters` and `parts: {base_packet, notes, excerpts,
 passages}`, the characters that the reduced request spends on each part; the
 four parts add up to the input characters, and the message names all four.
@@ -4574,7 +4890,9 @@ statement record, the bodies that the proof, source and screening contracts
 protect, and the required proof bytes), the excerpts and passages that the
 chain has accumulated so far, the v5 search manifest and the final prompt; a body that the final
 turn may withhold counts as empty. When that lower bound exceeds the route's
-input limit, `review-assignment` refuses with `review_input_too_large` and
+input limit, `review-assignment` refuses, since 0.90.0 with
+`review_chain_projection_over_limit` and before that with
+`review_input_too_large`, and
 the details `phase: "final_preflight"`, `measurement_kind:
 "mandatory_input_lower_bound"`, `input_characters`, `input_limit_characters`
 and `mandatory_components`, one entry per component with its `kind`
@@ -4645,9 +4963,10 @@ Run a reading chain turn by turn:
    starts a new chain.
 3. After the last reading turn the next assignment is the final turn, built and
    fitted as described above. When its request does not fit after every
-   withholding, `review-assignment` refuses with `review_input_too_large` and
-   the four part sizes, and `review-series` ends with a `stop` of that code
-   (exit status 3). A new export does not change them; report the sizes in
+   withholding, `review-assignment` refuses with
+   `review_chain_projection_over_limit` (`review_input_too_large` before
+   0.90.0) and the four part sizes, and `review-series` ends with a `stop` of
+   that code (exit status 3). A new export does not change them; report the sizes in
    the summary and continue the work that does not depend on this chain. A
    refusal at step 1 or step 2 with `phase: "final_preflight"` says the same
    of the mandatory material alone, before that turn is planned; report its
@@ -4738,9 +5057,167 @@ whose final turn returned passage requests, therefore reads its records next,
 and the final turn follows. A final turn that returned the native result still
 ends its chain.
 
-A stored v4 chain continues as v4. Its prompts, requests, packets, observations,
-source delivery rules and `reading_turns` remain unchanged. Only new problem
-chains select v5; historical chains are never relabeled or factored midway.
+A stored v4 chain continues as v4, and a stored v5 chain as v5. Their prompts,
+requests, packets, observations, source delivery rules and `reading_turns`
+remain unchanged. Only a new problem chain selects the current protocol;
+historical chains are never relabeled or factored midway.
+
+The reading protocol v6. Since 0.90.0 a new problem openness review runs
+under `exactory-openness-reading-v6` when it is a chain (prompt templates
+`exactory-openness-reading-v6/reading` and `exactory-openness-reading-v6/final`)
+and under the prompt template `exactory-review-v7/native_math` when it stays
+one turn. Both need a packet with a minimum of version 2, `minimum_gaps` and
+`audit_forecast`. The first assignment over another problem openness packet,
+for example one that an earlier release exported, is refused with
+`openness_packet_outdated` (`handoff: "export"` in the details): export the
+packet again. v6 keeps the turns, the search delivery, the withholding, the
+excerpt and passage rules and the verification of v5, with these additions.
+
+- The units. The chain delivers, in this order: the full texts; the texts of
+  the bound results as units of the kind `result_text`, named by
+  `{native_attempt_digest, acceptance_id, text_sha256}`; the shared search
+  fields and the searches; the reading records, decisive and supporting, and
+  the record of each bound result as a record unit with `record_kind:
+  "accepted_result"` and `record_id` `<native_attempt_digest>:<acceptance_id>`;
+  and the statement record. The plan entry of a reading record carries `role`
+  (`decisive` or `supporting`) and, for a supporting reading, `cited_by:
+  [{search_id, search_digest, fields}]`. The plan entry of a full text that a
+  person supplied carries `origin`, the `supplied` object of its source
+  (`import-fulltext`). An excerpt or a passage request can name a
+  `result_text` unit or an `accepted_result` record by these identities. To
+  fit the route limit, the final turn withholds complete bodies in the order
+  full texts, result texts, reading records, records of results, search
+  records. The verification of the chain asks complete delivery of every
+  unit, supporting readings and result units included.
+- The prompts. Both prompts add to the v5 texts: what a family reading is and
+  by which links the harness joins two records of one work; what a supporting
+  reading is; a guide to the fields of a search record, one line for each
+  field with its class (identity, scope, capture, the author's judgment, the
+  author's bound, or coverage), which says that the Coverage fields hold the
+  recorded coverage findings, asks the reviewer to assess whether the
+  queries, the scope and the captured responses address each formulation, and
+  states that a provisional mark, a null `scope_digest`, the verdict, the
+  impact and `hits_per_query` alone establish no gap of coverage; what `completes` states and
+  which of it the harness checked; the origin of a supplied text; the units of
+  an accepted result; and the record allowance. The prompt of a review of one
+  turn holds the same texts without the rules of a chain.
+- The answer is a finding. The final answer, and the answer of a review of one
+  turn, is exactly `{schema_version: 3, subject_digest, claim_digest, reviewer,
+  findings: {statement, assumptions, scope, dependencies, policy, openness:
+  {outcome, coverage, reason, grounds: [{kind, text, work_id?, turns?}]}}}`. It
+  has no `decision`. The five findings and `reason` are nonempty texts.
+  `coverage` is a nonempty text, or a list with one entry for the statement
+  and one for each neighbour. The outcome follows three rules, read in order:
+  `already_solved` with empty `grounds` when the forecast states it possible
+  and the reviewer judges that the declared settling work, read in full,
+  settles the statement; `supported_open` with empty `grounds` when the
+  forecast states it possible and the reviewer holds no ground; `unresolved`
+  in every other case, with every ground that the reviewer holds, and with
+  empty `grounds` only when the forecast blocks both resolved outcomes. A
+  ground has one of five kinds:
+
+  | `kind` | The reviewer holds | `next` in the obligation `problem_openness_unresolved` |
+  | --- | --- | --- |
+  | `reviewer_gap` | The evidence lacks something that the judgment needs and that the gaps of the forecast do not list. | Repair it with `search`, `fulltext` or `import-fulltext`, and `read`; then export. |
+  | `source_settles` | A decisive work of the packet, read in full, proves or refutes the statement, and the forecast does not state `already_solved` possible. `work_id` is required and is one of `scientific_context.decisive_work_ids`. | Repair the gaps; then export with the work as `settling_work_id`, or record a new statement. |
+  | `settling_source_rejected` | The declared settling work does not settle the statement. | Export without that settling work. |
+  | `own_argument` | An argument of the reviewer, in no source of the packet, proves or refutes the statement. | Check the argument, for example in a solver objective whose accepted result an export can bind; or record a new statement. |
+  | `packet_defect` | The packet lacks or contradicts something that a finding needs. | Record the defect, then export. |
+
+  `turns` is optional and names assignment ids of reading turns of the chain
+  whose notes hold the detail of the ground. The harness checks the answer
+  when it observes it, under the contract check `openness.finding`, from the
+  answer and the packet of its assignment alone. An answer that does not
+  satisfy the contract is the output refusal `openness_finding_invalid`, with
+  `details: {rule, path, forecast}`: `rule` is `answer_fields`,
+  `schema_version`, `binding`, `finding_fields`, `nonempty_text`,
+  `openness_fields`, `coverage`, `grounds_list`, `ground_fields`,
+  `ground_kind`, `work_id`, `decisive_work`, `reading_turns` or `outcome`, or
+  the number of the outcome rule that the answer breaks. In a reading chain
+  `review-series` runs the turn once more, and a second refused output gives
+  the handoff `review_slot_exhausted`, whose command is `export`. A review of
+  one turn reaches that handoff after its first refused output in this
+  release. A final turn can still return a reading answer with a passage
+  request, under the rules of v5.
+- The recording. `problem-openness` records an answer that satisfies the
+  contract. The harness composes the copies that earlier protocols asked of
+  the reviewer: `statement_digest` is the claim digest of the packet,
+  `searched_at` is `searched_through` of the forecast, `minimum` is the
+  minimum of the packet, `minimum_gaps` is its list of gaps, and `evidence` is
+  the digests of the bound records and artifacts that the verification of the
+  chain confirms as delivered complete. The record also keeps `grounds`. For a
+  resolved outcome the audit of the minimum runs on the composed finding, as
+  before. A finding with the outcome `unresolved` is recorded without that
+  audit. Its obligation `problem_openness_unresolved` carries `gaps`, the gaps
+  of the finding's minimum against the records of now, and `grounds`, each
+  with `next`, the step of the table. The handoffs of a final answer are
+  stated under [Review chains and `review-series`](#review-chains-and-review-series).
+- The record allowance. The reading record has a third allowance beside the
+  excerpt and the passage allowance: `allowances.record: {characters, used,
+  not_retained}`, in serialized characters. It counts every excerpt and
+  passage answer that the record keeps, with fields and JSON escapes, and one
+  row for each final turn that returns a reading answer. The first assignment
+  fixes its total: the largest number that keeps every request of the chain
+  within the input limit of the route, and at least 300,000. An entry that
+  the rest of the total cannot hold is not kept, is counted by its kind under
+  `not_retained`, and uses nothing of the other two allowances. A reading
+  answer of a final turn is refused with `invalid_reading_response` when the
+  total cannot hold the row of that turn together with one delivered passage.
+  The record also keeps `planned_reading_turns` and
+  `projection_characters`, the bound on the characters of every request. An
+  assignment id or an attempt id of a v6 chain has at most 120 characters
+  (`invalid_input` with `characters` and `maximum_characters`).
+
+The projection of a reading chain. Since 0.90.0 `review-assignment` computes,
+for the first assignment of a v6 chain, a projection of every request that
+the chain can make: the fixed parts of the largest reading request and of the
+final request, plus the record allowance. It admits the chain when the
+projection is finite, the record allowance is at least 300,000 characters,
+and the characters and the tokens of the projection are within the limits of
+the route. Otherwise it records nothing and refuses with
+`review_chain_projection_over_limit`. The same code now carries every
+refusal of a reading chain for the size of its input, under every reading
+protocol: a unit that does not fit a reading turn alone, a final turn that
+does not fit after every withholding, and, for a problem chain, a mandatory
+final input above the limit. A math-solver chain is not refused for its
+mandatory final input; each of its requests must fit the route. Its details are those of the earlier
+refusals, with `reason` (`below_floor`: the route cannot hold the fixed parts
+with a record allowance of 300,000 characters; `no_enforceable_bound`: no
+bound of the protocol keeps the requests within the limit), `projection`,
+`limit`, `unbounded_kinds` (the kinds of record entry that the protocol does
+not bound; empty under v6) and `decision`. The stop is a decision stop.
+`decision` is `{owner_decides, then}`: for a problem chain the question
+"Whether this review waits for a reading protocol that bounds the record of
+its chain, or runs over a packet that binds less material." with the answers
+`Wait for a reading protocol that bounds the record` and `Run over a smaller
+packet`; for a math-solver chain the question "Whether this chain continues to
+its final turn, waits for the protocol reading-math-v2, or runs over a packet
+that binds less material." with the answers `Continue this chain to its final
+turn` (on a stored head), `Wait for reading-math-v2` and `Run over a smaller
+packet`. Each answer lists its steps with their payloads, the fields to
+choose and their prerequisites. The protocols `exactory-openness-reading-v7`
+and `reading-math-v2` are not part of this release. For a math-solver chain
+with two observed turns or more, the harness also stops before a call when
+its estimate of the final input is above the limit (`estimate: true` in the
+details), unless the owner's answer `Continue this chain to its final turn`
+is recorded with `review-context` and the reason
+`reading_chain_continue_to_final`. That instruction leaves the limit of each
+request in force.
+
+The receipt of every `review-assignment` of a reading chain carries, beside
+`diagnostics.final_input`, three members that are part of the receipt alone
+and enter no saved packet or digest: `reading_chain_admission` (`state`,
+`projection`, `limit`), `capacity_forecast` (`protocol`, `finite`, `is_bound`,
+`measured_final`, `retained_entries` by kind, `remaining_allowances`,
+`planned_reading_turns`, `recorded_turns`, `units` and `final_estimate`) and
+`capacity_warning.input` (`warning`, `estimate`, `projected_input_characters`,
+`input_limit_characters`, `message`, `ways` and the measure of the exact
+`request`). `is_bound` is true for a v6 chain, whose projection is a limit
+that the harness enforces. For an earlier protocol the forecast is an
+estimate, and `message` says so. A line of `review-series` for a reading
+chain carries `capacity_forecast` and `capacity_warning` as well; when they
+cannot be computed, the line keeps its state and reports `capacity_forecast:
+{status: "unavailable", reason}`.
 
 A native result review of a math-solver objective reads its packet in the same
 chain when the packet binds `scientific_context.openness_minimum` outside
@@ -4791,7 +5268,8 @@ single native turn.
 
 Refusal codes of a reading chain:
 
-- `review_input_too_large`: the first unit of a reading turn does not fit
+- `review_chain_projection_over_limit` (since 0.90.0; `review_input_too_large`
+  before): the first unit of a reading turn does not fit
   alone, even with every earlier note withheld, or the final turn does not fit
   after every withholding. The message says that the reading turn, or the
   final turn, has that many input characters after it withholds every body and
@@ -4801,7 +5279,11 @@ Refusal codes of a reading chain:
   planned, the same code with `phase: "final_preflight"` says that the lower
   bound of the mandatory final input, described above, exceeds the route
   input limit; the details give `measurement_kind`, `input_characters`,
-  `input_limit_characters` and `mandatory_components`.
+  `input_limit_characters` and `mandatory_components`. Since 0.90.0 every
+  refusal of this code also carries `reason`, `projection`, `limit`,
+  `unbounded_kinds` and `decision` (the projection of a reading chain, below),
+  and a request of a reading chain that `review-run` finds over the limit at
+  dispatch keeps `review_input_too_large`.
 - `invalid_reading_response`: a malformed reading answer, an excerpt or passage
   request with mixed identity fields, a reading answer in a final turn without
   a passage request, one after the passage allowance is used up, or, in a math
@@ -5815,6 +6297,43 @@ and its digest, and `problem-posted` records it as before: the command
 compares a directory with the current projection first and then with the
 projection without the reference list. A directory whose `citation-refs.json`
 was changed or removed is refused with `problem_export_mismatch`.
+
+The registry text of a citation. Since 0.90.0 `export --kind problem` and
+`export --kind problem-override` write the manifest schema
+`exactory-problem-export-v4`, and compose `citation` of `citations.json` and
+the entry of `citation-refs.json` from one set of values. For a citation
+whose locator is a DOI or an arXiv id, the title and the ordered names are
+those of the registry record of that identifier: the latest complete captured
+response of Crossref or DataCite for the DOI, or of arXiv for the arXiv id,
+that the store holds, by capture time (`acquire` captures one). The year
+stays that of the work record. An arXiv id without a version takes the
+record that a request for that id returned. Capture a registry record again
+with `acquire` to change the text, then export again. When the store holds
+no such record for a citation, the export uses the values of the work record
+as before and names the citation in the result and in the manifest under
+`missing_registry_citations`, each `{work_id, version_id, locator,
+capture_command}`; `capture_command` is the `acquire` command that captures
+the record. A work with a `url:` locator keeps the rule of
+`problem-citation-metadata` above. Where an override export names the
+versions to cite, the locator of such a citation is the DOI or arXiv id of
+the named version. An export that an earlier release wrote keeps its files,
+its schema and its digest, and the harness compares it with the projection of
+its own schema. The evidence binding of the reviews and the review packets
+keep the citation text of the work record, so the registry values of an
+export change no evidence digest. An `acquire` can still fill an empty title
+or author list of the work record or add an alias, which changes the citation
+of that binding: check the gates after an acquisition and refresh a review
+that became stale. An acquisition keeps a title and an author list that the
+work record already holds, and it does not replace the identifier. `exactory-check lookup` compares a reference with the same registry
+values: a `title_mismatch` or an `author_mismatch` now ends with the repair
+for each kind of entry.
+
+Supplied texts in an export. Since 0.90.0 the manifest of a problem export
+holds `supplied_texts: [{version_id, source_id, original_sha256, supplied}]`
+when a cited work was read through a text that a person supplied
+(`import-fulltext`), and the record of its post (`problem-posted`,
+`problem-post-external`) keeps the same list. The member is absent when the
+list is empty. `citations.json` stays `{citation, locator}`.
 
 The math-conjecturer delivery section checks the exported citation locators
 and duplicates, runs `exactory post-problem` on the exported files, then records
@@ -7375,7 +7894,7 @@ The six steps run in this order. The first failed step ends the check, and the l
 5. `continuation`: for every chain head, `plan_next` and the transitions that stay local. The offline executor runs only `review-assignment`, `value-review`, `review-adjudication` and `problem-openness`, and only on the clone. A `review-run` action (`run`, `wait`, `resume`) is never executed: its request is rebuilt, its delivery validated and `review_preflight.check_request` applied. Each chain ends at a boundary: `done`; `run` or `wait` (the prospective request is rebuilt and passes its checks); `pending` (a live worker or a call to finish); `handoff` or `stop` with a code that the check accepts (the handoffs and the outcomes of [Review chains and `review-series`](#review-chains-and-review-series), except `review_input_too_large` and `review_format_unsupported`, which fail the step when a plan stops with them); `decision` (below); or `controller` (a native head that is not an openness chain belongs to the math-solver controller, which the `report` step reads). The step fails on an unknown stop code, an action outside the allowlist (`qualification_unavailable`), an unknown plan state (`record_unknown_action`) or a repeated unchanged action (`review_series_no_progress`).
 6. `report`: the three report readers, `status`, `next` and `obligations` (one page of each obligation code), each run under the time budget (below). The math-solver readers run under the same budget. They are `exactory-math search status` and `search next`, which read each math-solver controller found on disk inside the clone (never through the registry of absolute paths), with `--attack-root` set to the cloned root. A reader that does not stay within the budget fails with `record_command_timeout`, and a math-solver reader that refuses fails with `record_math_read_failed`. A failed reader fails the step with `record_report_failed`, and the step keeps its `result`. The `result` gives a row for each report reader under `commands` and a row for the math-solver readers under `math`. Each row gives `seconds` (the elapsed time), `processor_seconds` and, after a failure, the reader's `error`.
 
-Decision stops. A refusal of an allowed action for route capacity means that the chain cannot finish on that route with that material; the next step is a decision (a route with a larger limit, or less material). The codes are `review_input_too_large` in the phase `final_preflight` (the mandatory final input of a reading chain is over the route limit), `review_parts_frame_too_large`, `review_parts_inventory_too_large` and `review_parts_final_too_large`. Each is listed under the continuation result's `decision_stops` with `head_id`, `command`, `code` and `details`, and the record passes the step. Every other refusal keeps its result.
+Decision stops. A refusal of an allowed action for route capacity means that the chain cannot finish on that route with that material; the next step is a decision (a route with a larger limit, or less material). The codes are `review_chain_projection_over_limit` (since 0.90.0: a reading chain cannot keep its requests within the route limit), `review_input_too_large` in the phase `final_preflight` (the same refusal of the mandatory final input in a record of an earlier release), `review_parts_frame_too_large`, `review_parts_inventory_too_large` and `review_parts_final_too_large`. Each is listed under the continuation result's `decision_stops` with `head_id`, `command`, `code` and `details`, and the record passes the step. Every other refusal keeps its result.
 
 `--time-budget SECONDS` bounds the processor time of each reader of the `report` step, to catch a runaway cost. It is a finite positive number of seconds, at most 100000000, default 10800. Input that the option parser rejects, for example `abc`, ends the command with a usage error and exit status 2, and a value that the parser accepts but that is not finite or is outside this range is refused with `invalid_input` before the command copies `W`. The maximum is a limit of the harness, chosen inside the range of values that macOS accepts for an interval timer. The default rests on two measurements made for 0.85.3 on one machine. A report reader of the largest live record used 1,186 to 1,231 seconds of processor time. A fixed Python workload used 3.1 to 3.7 times as much processor time when it ran on the efficiency cores of that machine.
 

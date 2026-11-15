@@ -104,59 +104,103 @@ PROMPT = TRIMMED_STRATEGY_PROMPT + (
     "not an object or an array. Keep structured search details inside those strings when needed."
 )
 
-FINDING_INVALID_MESSAGE = "Return the openness finding required by this assignment's forecast and answer contract."
+FINDING_INVALID_MESSAGE = (
+    "This answer is not the openness finding that the prompt of this assignment describes. details.rule names "
+    "the rule that the answer breaks, details.path the place in the answer, and details.forecast the forecast of "
+    "the packet. Return the finding in the stated form, with an outcome that the forecast states as possible, or "
+    "with the outcome unresolved.")
+# The kinds of ground, each with what the reviewer holds (rendered into X1) and the next step of the author
+# (reported with a recorded unresolved finding).
 GROUND_RULES = {
     "reviewer_gap": dict(
-        description="The evidence lacks something beyond the forecast's gaps, such as a needed unread work or a sufficiently broad search.",
-        next="Repair by search, fulltext and reading, then export."),
+        description=("The delivered evidence lacks something that the judgment needs and that the gaps of the "
+                     "forecast do not list: for example a work that no reading of the packet read in full, a "
+                     "search that is too narrow for a formulation, or a source that could not be read. text names "
+                     "what is missing."),
+        next=("Repair what the ground names with search, fulltext or import-fulltext, and reading. Then export a "
+              "new packet with export --kind problem-openness.")),
     "source_settles": dict(
-        description="A decisive bound source, read in full, proves or refutes the statement while the forecast does not offer already_solved; work_id names that source.",
-        next="Export with this work as settling_work_id after repairing the gaps, or record a new statement."),
+        description=("A decisive work of the packet, read in full, proves or refutes the statement, and the "
+                     "forecast does not state already_solved as possible. work_id is required and is one of "
+                     "native.scientific_context.decisive_work_ids. text states the result and where the work "
+                     "proves it."),
+        next=("Repair the gaps of the finding. Then export a new packet with this work as "
+              "minimum.settling_work_id, or record a new statement with problem-statement.")),
     "settling_source_rejected": dict(
-        description="The declared settling work does not settle the statement.",
-        next="Export without the declared settling work."),
+        description=("The declared settling work, openness_minimum.settling_work_id, does not settle the "
+                     "statement. text states why."),
+        next="Export a new packet without this settling work."),
     "own_argument": dict(
-        description="An argument of the reviewer, in no bound source, proves or refutes the statement.",
-        next="Check the argument, for example in a solver objective whose accepted result can be bound, or record a new statement."),
+        description=("An argument of your own, which no source of the packet holds, proves or refutes the "
+                     "statement. text states the argument, or turns names the reading turns whose notes hold it."),
+        next=("Check the argument, for example in a solver objective, whose accepted result an export can bind "
+              "under minimum.results. Or record a new statement with problem-statement.")),
     "packet_defect": dict(
-        description="The packet lacks or contradicts what a finding needs.",
-        next="Record the packet defect in the harness improvement records, then export again."),
+        description=("The packet lacks or contradicts something that a finding needs. text names the defect."),
+        next="Record the packet defect in the harness-improvement records. Then export a new packet."),
 }
 GROUND_NEXT_STEPS = {kind: rule["next"] for kind, rule in GROUND_RULES.items()}
 # Both the validator and X1 read these rows in order.
 FINDING_RULES = (
     dict(number=1, outcome="already_solved", forecast="already_solved", grounds="empty",
-         condition="The forecast offers already_solved as possible and the declared settling work, read in full, settles the statement"),
+         condition=("audit_forecast.outcomes.already_solved is \"possible\", and you judge that the declared "
+                    "settling work, read in full, settles the statement")),
     dict(number=2, outcome="supported_open", forecast="supported_open", grounds="empty",
-         condition="The forecast offers supported_open as possible and the reviewer holds no ground"),
+         condition=("audit_forecast.outcomes.supported_open is \"possible\", and you hold none of the grounds "
+                    "below")),
     dict(number=3, outcome="unresolved", forecast=None, grounds="present_or_both_blocked",
-         condition="Every other case: report each ground held; grounds may be empty when the forecast blocks both resolved outcomes"),
+         condition="neither rule 1 nor rule 2 applies"),
 )
+# What each grounds value of FINDING_RULES asks of the answer, in the words of the prompt.
+FINDING_GROUNDS_TEXT = {
+    "empty": "grounds is the empty list",
+    "present_or_both_blocked": ("grounds holds every ground that you hold, and it can be empty only when the "
+                                "forecast states both outcomes as blocked"),
+}
 
 
 def render_finding_rule(row):
-    return "Rule {number}: {condition}. Return {outcome}; grounds: {grounds}.".format(**row)
+    return "Rule {number}. When {condition}, return the outcome {outcome}; {text}.".format(
+        text=FINDING_GROUNDS_TEXT[row["grounds"]], **row)
 
 
 def render_finding_prompt():
     """Render X1 from the same ordered rules and ground vocabulary used for validation."""
     return (
-        "Report what the delivered evidence establishes about whether this exact statement is open. "
-        "An unresolved finding with its grounds is a complete and correct answer. "
-        "This finding assesses neither the worth of the problem nor permission to post it. "
+        "This review answers one question: what does the delivered evidence establish about whether the exact "
+        "statement in native.subject is open? Your answer is a finding. It is no judgment of the worth of the "
+        "problem, and it gives no permission to post it. An unresolved finding that states its grounds is a "
+        "complete and correct answer.\n\n"
         "Return exactly {schema_version:3,subject_digest,claim_digest,reviewer,findings:{statement,assumptions,"
         "scope,dependencies,policy,openness:{outcome,coverage,reason,grounds:[{kind,text,work_id?,turns?}]}}}. "
-        "Use the exact native.subject_digest, native.claim_digest and native.reviewer bindings. "
-        "The five text findings and reason are nonempty strings. coverage is a nonempty string or a nonempty "
-        "list with one entry for every formulation. outcome is supported_open, already_solved or unresolved. "
-        "native.scientific_context.audit_forecast reports possible and blocked outcomes, the minimum gaps and "
-        "searched_through. You may add grounds from your assessment of the delivered evidence. "
-        "The harness supplies the recorded statement digest, evidence, search date and minimum. "
-        + " ".join(render_finding_rule(row) for row in FINDING_RULES) + " "
-        + " ".join(kind + ": " + GROUND_RULES[kind]["description"] + " " + step
-                   for kind, step in GROUND_NEXT_STEPS.items())
-        + " Each ground has nonempty text. Optional turns names distinct reading assignment ids in this chain's "
-        "reading_record.turns whose notes hold the details; put an argument arising in this final turn in text."
+        "Copy subject_digest, claim_digest and reviewer exactly from native. findings.statement, "
+        "findings.assumptions, findings.scope, findings.dependencies and findings.policy are nonempty strings: "
+        "your assessment of the statement as it is written, of its assumptions, of its scope, of the results and "
+        "sources that the judgment depends on, and of how the delivered evidence meets the rules of this prompt. "
+        "outcome is supported_open, already_solved or unresolved. coverage is a nonempty string, or a list with "
+        "exactly one entry for the statement and one for each neighbour of "
+        "native.scientific_context.openness_minimum; it states for each formulation which searches covered it, "
+        "when, and how far. reason is a nonempty string that explains the outcome. grounds is a list.\n\n"
+        "native.scientific_context.audit_forecast holds what the harness computed from the records when it built "
+        "this packet. outcomes states for supported_open and for already_solved whether the harness can record "
+        "that outcome: \"possible\" or \"blocked\". gaps, which native.scientific_context.minimum_gaps repeats, "
+        "lists each condition that blocks an outcome, with the outcomes that it blocks, the search and the work "
+        "that it concerns, and details. notices lists facts that block no outcome, such as the coverage of each "
+        "search, responses that hold fewer results than the registry reports, and rows that an import rule leaves "
+        "out. searched_through is the date of the latest capture among the bound searches. You cannot remove a "
+        "gap: the harness refuses an outcome that the forecast states as blocked, whatever the evidence shows. "
+        "Your own assessment of the delivered evidence can add grounds. The harness adds the statement digest, the "
+        "evidence list, the search date and the minimum to the recorded finding, so the answer holds none of "
+        "them.\n\n"
+        "The outcome follows three rules, read in order. "
+        + " ".join(render_finding_rule(row) for row in FINDING_RULES)
+        + "\n\nA ground is {kind,text}, with work_id where its kind asks for it and with optional turns. text is a "
+        "nonempty string. kind is one of the following. "
+        + " ".join(kind + ": " + rule["description"] for kind, rule in GROUND_RULES.items())
+        + " turns is a list of distinct assignment ids of reading turns of this chain, taken from "
+        "reading_record.turns, whose notes hold the detail of the ground, so that the ground does not repeat "
+        "them. An argument that you form in the final turn stands in text. A review of one turn has no reading "
+        "turns, so its grounds hold no turns."
     )
 
 

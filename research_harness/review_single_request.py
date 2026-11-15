@@ -17,7 +17,9 @@ def describe_task_entry(records, route, role, packet, request):
     return 'task' if characters > limits['task_characters'] else None
 
 
-OUTPUT_SERIES_WARNING = 'This single review exceeds its output profile start value. Follow its continuation plan after an attempt reaches the output limit.'
+OUTPUT_SERIES_WARNING = ('The task of this single review is larger than the size at which the output profile of its '
+                         'route starts a review, and the review stays one request. When an attempt reaches the output '
+                         'limit, follow the step that review-series plans for it.')
 
 
 def describe_assignment_delivery(records, artifacts, assignment):
@@ -137,9 +139,12 @@ def prepare_replacement(records, artifacts, value, revision):
             or any(normalized_text(value[key]) != normalized_text(previous[key])
                    for key in ('reviewer_id', 'author_id'))):
         raise ResearchError('review_source_continuation_mismatch',
-                            'A capacity replacement keeps the frozen review, route, reviewer and author.')
+                            'This replacement names another role, route, dossier, reviewer or author than the assignment '
+                            'that it replaces. Give the role, route_id, dossier_id, reviewer_id and author_id of that '
+                            'assignment.')
     if protocol.find_replacement(records, previous) is not None:
-        raise ResearchError('review_source_continuation_fork', 'Continue the recorded capacity replacement.')
+        raise ResearchError('review_source_continuation_fork', 'The assignment that context.capacity_replacement names '
+                            'already has a replacement. Continue that replacement.')
     attempts = protocol.read_filtered_records(records, 'review_attempt', assignment_id=identifier).values()
     classifications = [failures.classify_attempt(records, artifacts, row) for row in attempts]
     eligible = any((outcome or {}).get('outcome') == 'output_over_cap' for outcome in classifications)
@@ -158,12 +163,18 @@ def prepare_replacement(records, artifacts, value, revision):
     if (protocol.has_pending_invocation(records, identifier)
             or any(outcome is None for outcome in classifications) or not eligible):
         raise ResearchError('invalid_review_context',
-                            'A capacity replacement needs an admissible smaller task, no pending invocation and no usable completed output.')
+                            'The assignment that context.capacity_replacement names is not open to a capacity '
+                            'replacement. A replacement needs an attempt that reached the output limit, or a first '
+                            'read, a parts read or a context repair whose planned step is a replacement, no pending '
+                            'call, and no attempt whose output can still be used. Follow the step that review-series '
+                            'plans for the assignment.')
     planned = (failures.plan_output_replacement(records, artifacts, previous, include_packet=True,
                     outcome=outcome, replacement_id=value['id']) if parts_recovery
                else build_output_replacement(records, artifacts, previous, identifier=value['id']))
     if planned is None or parts_recovery and planned['state'] != 'replace':
-        raise ResearchError('invalid_review_context', 'This review has no smaller parts task.')
+        raise ResearchError('invalid_review_context', 'This review cannot be divided into a smaller task on its route, '
+                            'so it has no capacity replacement. Follow the decision that review-series reports for '
+                            'it.')
     packet, prompt = planned['packet'], planned['prompt']
     header = packet[parts.KEY]
     record = copy.deepcopy(previous)

@@ -1653,10 +1653,20 @@ NOTES_MAXIMUM_CHARACTERS = 20000
 TARGET_PREFERRED_CHARACTERS = 30000
 TARGET_MAXIMUM_CHARACTERS = 60000
 FRAME_MAXIMUM_CHARACTERS = 200000
-PLAN_VIOLATED_MESSAGE = 'The exact reviewer request exceeds its stored capacity plan. Retain the plan and request as evidence of a harness defect; use gate-auto-pass with the recorded harness stop for an eligible internal step.'
-BELOW_FLOOR_MESSAGE = 'The route cannot hold the frame and minimum task or the final minimums of this chain. Record a serving route with review-route.'
-CAPACITY_PLAN_DESCRIPTION = 'The capacity plan pins the route limits, measurement rule, profile, frames, inventory, targets and allowances at the first assignment. Later turns reuse its digest.'
-CAPACITY_FORECAST_DESCRIPTION = 'The capacity forecast estimates remaining turns and calls from the current profile. It may change without changing the stored plan or its allowances.'
+PLAN_VIOLATED_MESSAGE = ('The exact request of this turn is larger than the stored capacity plan of its chain allows. '
+                         'The plan is computed so that this cannot occur, so this is a harness defect. Keep the plan and '
+                         'the request as its evidence. For an internal step that gate-auto-pass covers, use '
+                         'gate-auto-pass with the recorded harness stop.')
+BELOW_FLOOR_MESSAGE = ('The smallest allocation at this step of the capacity plan is larger than the room for it: '
+                       'details.minimum against details.room. The room can come from the input limit of the route, '
+                       'from its output profile or from the share of one target. Inspect those, then record a route '
+                       'that can serve the chain with review-route.')
+CAPACITY_PLAN_DESCRIPTION = ('The capacity plan of a chain is fixed at its first assignment: the limits of the route, '
+                             'the rule of measurement, the output profile, the frames, the inventory, the targets and '
+                             'the allowances. Every later turn of the chain names the plan by its digest.')
+CAPACITY_FORECAST_DESCRIPTION = ('The capacity forecast estimates the remaining turns and calls from the current '
+                                 'output profile. It can change between turns. The stored plan and its allowances do '
+                                 'not change with it.')
 
 
 def divide_room(room, parts):
@@ -2040,9 +2050,15 @@ def derive_turn_task_limits(records, artifacts, assignment, *, kind=None, notice
     return derive_plan_task_limits(plan, kind, observations, notice_characters=notice_characters)
 
 
-CAPACITY_EFFORT_MESSAGE = 'The harness keeps the route and its effort. A change of effort requires an owner decision and a new route recorded with review-route.'
-OUTPUT_OVER_CAP_DECISION_MESSAGE = 'No smaller admissible task remains within the capacity recovery allowance. Review the measured share, profile rows and turn attempts; decide whether this review moves to a route with another effort or output limit using review-route.'
-CAPACITY_DECISION_MESSAGE = 'No smaller admissible task is available on this protocol and route. Use the outcome row and its route decision steps.'
+CAPACITY_EFFORT_MESSAGE = ('The harness keeps this review on its route and at its effort. Only the owner changes the '
+                           'effort: record a route with the other effort with review-route.')
+OUTPUT_OVER_CAP_DECISION_MESSAGE = ('No smaller task that the protocol admits is left for this turn within its recovery '
+                                    'allowance. at_or_over_limit_share, profile_rows and attempts show what was '
+                                    'measured. The owner decides whether the review moves to a route with another '
+                                    'effort or another output limit; record that route with review-route.')
+CAPACITY_DECISION_MESSAGE = ('This protocol has no smaller task for this turn on this route. The steps of the answer '
+                             'move the review to another route. required_unit, when present, names the unit of a '
+                             'later release that gives this protocol a smaller task.')
 
 
 def list_capacity_recovery_rows():

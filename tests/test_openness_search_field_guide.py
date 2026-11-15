@@ -79,7 +79,7 @@ class SearchFieldGuideTests(OpennessReadingCase):
             for key, row in reading.SEARCH_FIELD_GUIDE.items():
                 line = key + ': ' + row['line']
                 self.assertEqual(prompt['text'].count(line), 1, key)
-            self.assertIn('provisional: [X2 R42: scope_binding; no literature scope', prompt['text'])
+            self.assertIn('provisional: Scope. true means that the record had no literature scope', prompt['text'])
             self.assertIn('says nothing about coverage or outstanding readings', prompt['text'])
             self.assertIn(reading.SUPPORTING_READING_SENTENCE, prompt['text'])
         for protocol, prompts in load_0_87_0_openness_reading().PROMPTS.items():

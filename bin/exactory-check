@@ -66,12 +66,13 @@ _CACHE_FILE_NAME = "citation-cache.json"
 _CACHE_SCHEMA_VERSION = 3
 
 _CITATION_METADATA_REPAIR = (
-    " For a DOI or arXiv work in a store, capture the registry record with acquire and export again."
-    " For a URL work, record problem-citation-metadata from retained evidence."
-    " For a bibliography entry, use the title and ordered names registered for its identifier,"
-    " or cite the preprint by its arXiv identifier.")
+    ". Repair by the kind of the entry. For a work of a problem record that has a DOI or an arXiv id, capture its"
+    " registry record with acquire and export again; the export then takes the title and the names from the"
+    " registry. For a work with a url: identifier, record problem-citation-metadata from the retained evidence."
+    " For an entry of a bibliography, give the title and the names, in their order, that the registry holds for"
+    " its identifier, or cite the preprint by its arXiv identifier")
 _TITLE_MISMATCH_DETAIL = (
-    "the id resolves to a work titled '{registry_title}' but the entry gives the title '{title}'.")
+    "the id resolves to a work titled '{registry_title}' but the entry gives the title '{title}'")
 
 _TIMEOUT_SECONDS = 30
 _MIN_REQUEST_INTERVAL_SECONDS = 0.6

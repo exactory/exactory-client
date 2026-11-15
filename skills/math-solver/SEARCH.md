@@ -82,6 +82,29 @@ on, including exploratory origins recorded after the assessment. This follows
 both `checkpoint:` and `acceptance:` references, manifest
 `conclusion.dependency_ids`, and the accepted dependencies' complete proof graph.
 
+To use the output of a probe in a problem workspace as native certificate
+evidence, verify it with an independent checker in a solver objective of its
+own. The probe output stays out of
+`basis.deduction_digest`, `preflight.inspected_evidence` and
+`domain.encoding_digest` of the computation contract. A soundness text
+written for the objective fills the first two, the uncertainty of the
+contract names the probe, and the proposal of the role `research` keeps
+`already_determined: false`. After the verification, acknowledge the move
+with `journal add` before a local checkpoint: `begin` and the verification
+alone give the checkpoint no journal prefix. The policy review of the
+terminal result, whose subject digest is the `result_digest` of the run, is a
+review apart from the result review of the checkpoint, so the path has four
+reviews: the proposal, the input of the run, the policy of the verification
+and the checkpoint. A manifest of the certificate that reaches
+`search checkpoint` before `search interpret` of its run is refused with
+`exploratory_evidence`; the code `interpretation_required` belongs to another
+case, a new mathematical launch while a run awaits its interpretation. The
+CLI command `search status` makes no full audit; the service call
+`status(full_audit=True)` does. `harness/tests/test_certificate_path_example.py`
+runs the whole path with its six refusals, and the math-conjecturer skill
+states it step by step for a problem record
+("A certified computation as evidence of the accounts").
+
 The computation field introduced in proposal version 2 remains required in
 version 3 alongside `foundation`. Analytical `task.kind: proof` uses
 `computation: null`. Versions 1 and 2, their reviews, admissions, reservations,
@@ -1228,16 +1251,24 @@ native review that the controller still needs.
 A second live continuation of one turn is refused with
 `review_source_continuation_fork`. When the first unit of a reading turn does
 not fit the route alone, or the final turn does not fit after every
-withholding, `review-assignment` refuses with `review_input_too_large`, and
-`review-series` ends with a `stop` of that code. For the final turn the
+withholding, `review-assignment` refuses with
+`review_chain_projection_over_limit` (`review_input_too_large` before 0.90.0),
+and `review-series` ends with a `stop` of that code. For the final turn the
 details give the sizes of the base packet, the notes, the excerpts and the
-passages. Before each turn is planned, the harness also measures a lower bound
-of the mandatory final input (the required proof bytes and the protected
-bodies, the excerpts and passages so far and the final prompt) and refuses
-with the same code and `phase: "final_preflight"` when it exceeds the route
-limit; nothing is written, `mandatory_components` names each body, and the
-chain cannot finish on that route with that material
-([CLI reference](../../docs/research-cli.md#problem-creation)). At the handoff
+passages. A math-solver chain is not refused for the lower bound of its
+mandatory final input; each of its requests must fit the route
+([CLI reference](../../docs/research-cli.md#problem-creation)). Since 0.90.0,
+once the chain has two observed turns, the harness also stops it before a
+call when its estimate of the final input is above the limit, with the same
+code and `estimate: true` in the details, unless the owner's instruction to
+continue is recorded. Each such refusal is a decision stop: follow the
+choices and the steps that `details.decision` offers. A refusal of the first
+assignment offers only to wait for the protocol reading-math-v2, which this
+release does not hold, or to run over a packet that binds less material.
+Where the decision offers to continue this chain to its final turn, record
+that answer with `review-context` and the reason
+`reading_chain_continue_to_final`. That instruction waives the estimate stop
+only; each request must still fit the route. At the handoff
 `native_review_acceptance_required` (command `search accept`), submit the
 native output of the final turn unchanged. Its `attestation_id` names the
 first turn, the assignment id chosen before the export. `accept` and

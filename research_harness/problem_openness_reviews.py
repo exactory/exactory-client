@@ -13,15 +13,35 @@ MISSING = "openness_native_evidence_missing"
 UNDELIVERED = "openness_native_evidence_undelivered"
 
 ACCEPTED_RESULT_NOTE = (
-    "This result was accepted in a solver objective of this record after the named review, is delivered so that "
-    "the reviewer can read what the search records cite, and carries no finding about the openness of the "
-    "statement under review.")
-RESULT_UNLINKED_MESSAGE = "Run search deliver-attempt in the result's objective to add its acceptance-review link, then export again."
-RESULT_UNDELIVERED_MESSAGE = "Deliver a text form of this accepted result's unreadable proof artifact, or export without the result."
-RESULT_CHANGED_MESSAGE = "The latest delivered objective no longer holds this acceptance with the same accepted claim and evidence; run search deliver-attempt, then export again."
-RESULT_DESCRIBED_MESSAGE = "This part of the accepted result is described by path, role, media type, size and digest; its bytes are not delivered as scientific text."
-RESULT_BINDING_MESSAGE = "The accepted result must retain its immutable acceptance-review link, reviewed checkpoint and delivered material."
-RESULT_MANIFEST_MESSAGE = "Deliver an analytical manifest without execution verification, or a certificate or lean manifest with its verification record."
+    "A solver objective of this record accepted this result after the review that review names. The result is "
+    "delivered so that the reviewer can read what the search records cite. The acceptance is no finding about the "
+    "openness of the statement under review.")
+RESULT_UNLINKED_MESSAGE = (
+    "The store does not hold exactly one link from this acceptance to the review that it rests on. When the "
+    "acceptance rests on an observed review assignment, run search deliver-attempt in the objective of the result, "
+    "then export again. The delivery writes no link for an earlier review without an observed assignment: obtain "
+    "and deliver a new acceptance that rests on an observed review. When several links match, inspect the store "
+    "with record-check.")
+RESULT_UNDELIVERED_MESSAGE = (
+    "An artifact of this accepted result with the role proof or theorem cannot be delivered as text. The export "
+    "reads the artifacts that the accepted checkpoint pins. Obtain and deliver a new accepted checkpoint whose "
+    "proof and theorem artifacts are text and bind that acceptance, or export without the result when no bound "
+    "search cites it.")
+RESULT_CHANGED_MESSAGE = (
+    "The latest delivered snapshot of the objective no longer holds this acceptance with the status accepted, the "
+    "same checkpoint id, the same checkpoint claim and the same evidence digests. Run search deliver-attempt in "
+    "the objective, then export again.")
+RESULT_DESCRIBED_MESSAGE = (
+    "This part of the accepted result is described by its path, role, media type, size and digest. The row adds "
+    "no content as scientific text. Another delivered part can hold the same bytes.")
+RESULT_BINDING_MESSAGE = (
+    "This accepted result does not match its acceptance-review link, its reviewed checkpoint or its delivered "
+    "material. For an export, run search deliver-attempt in the objective of the result and export again. For a "
+    "recorded finding, inspect the store with record-check.")
+RESULT_MANIFEST_MESSAGE = (
+    "A manifest of this accepted result has a form that cannot be delivered. An analytical manifest has "
+    "verification null, and a certificate or lean manifest holds its verification record. Deliver the result with "
+    "such manifests, or export without the result.")
 PROOF_ROLES = frozenset(("proof", "theorem"))
 
 
@@ -156,16 +176,19 @@ def required_evidence(artifacts, packet, native, *, result_kinds=False):
 def validate_result_specs(bindings):
     """Validate the optional export list once at its command boundary."""
     import re
-    require(isinstance(bindings, list), "Accepted result selections must be a list.", "invalid_input")
+    require(isinstance(bindings, list), "minimum.results is not a list. Give a list of "
+            "{native_attempt_digest, acceptance_id, cited_as} entries, or leave the field out.", "invalid_input")
     seen = set()
     for binding in bindings:
         fields(binding, ("native_attempt_digest", "acceptance_id", "cited_as"))
         for name in binding:
             text(binding[name], "Accepted result " + name)
         require(re.fullmatch(r"[0-9a-f]{64}", binding["native_attempt_digest"]) is not None,
-                "An accepted result requires its native attempt SHA-256 digest.", "invalid_input")
+                "native_attempt_digest of a result is not a SHA-256 digest. Give the digest that search "
+                "deliver-attempt returned for the objective of the result.", "invalid_input")
         key = (binding["native_attempt_digest"], binding["acceptance_id"])
-        require(key not in seen, "Bind each accepted result once.", "invalid_input")
+        require(key not in seen, "minimum.results names one acceptance twice. Bind each accepted result once.",
+                "invalid_input")
         seen.add(key)
 
 
@@ -177,15 +200,18 @@ def resolve_result_review(records, artifacts, binding, *, current=False):
     native = records.get("native_attempt", {}).get(identifier)
     latest = None if native is None else find_latest_native_attempt(records, native)[0]
     require(native is not None and (not current or latest is not None),
-            "Deliver this result's objective into the problem store with search deliver-attempt before export.",
+            "The store cannot resolve this delivered attempt, or the current snapshot of its objective. Run "
+            "search deliver-attempt in the objective of the result and give the digest that it returns.",
             "problem_result_unbound", native_attempt_digest=identifier)
     require(not current or latest == identifier,
-            "Bind the latest delivered snapshot of this result's objective, then export again.",
+            "The objective of this result has a later delivered snapshot. Give the native_attempt_digest in "
+            "details.latest_native_attempt_digest, then export again.",
             "problem_result_superseded", native_attempt_digest=identifier, latest_native_attempt_digest=latest)
     acceptance = next((row for row in native["acceptances"] if row["id"] == binding["acceptance_id"]), None)
     require(acceptance is not None and acceptance["status"] == "accepted"
             and acceptance["outcome"] in ("proof", "reduction", "obstruction", "counterexample"),
-            "Bind an acceptance with status accepted and outcome proof, reduction, obstruction or counterexample.",
+            "The snapshot holds no acceptance with this id that has the status accepted and the outcome proof, "
+            "reduction, obstruction or counterexample. Bind such an acceptance.",
             "problem_result_missing", native_attempt_digest=identifier, acceptance_id=binding["acceptance_id"])
     links = [row for row in records.get("native_acceptance_review", {}).values()
              if all(row[name] == native[name] for name in ("attack_root", "objective_id"))

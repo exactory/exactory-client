@@ -75,21 +75,40 @@ VERBOSE_ENTRY_KEYS = ('artifact_descriptor', 'locator', 'request', 'note', 'chec
 RECORD_ALLOWANCE_FLOOR = 300000
 RESERVED_IDENTIFIER_CHARACTERS = 120
 PROJECTION_STOP = 'review_chain_projection_over_limit'
-IDENTIFIER_LIMIT_MESSAGE = 'A v6 assignment or attempt identifier has at most 120 characters.'
-PACKET_OUTDATED_MESSAGE = 'Export a current problem openness packet before starting this review.'
-PROJECTION_STOP_MESSAGE = 'The reading chain needs an owner decision about its input capacity before another call.'
-PROBLEM_PROJECTION_DECISION = 'Whether the review waits for a reading protocol that bounds its record, or runs over a smaller packet.'
-MATH_PROJECTION_DECISION = 'Whether the chain continues to its final, waits for reading-math-v2, or runs over a smaller packet.'
-WAIT_PROBLEM_ANSWER = 'Wait for a bounded problem reading protocol.'
-WAIT_MATH_ANSWER = 'Wait for reading-math-v2.'
-SMALLER_PACKET_ANSWER = 'Run over a smaller packet.'
-CONTINUE_MATH_ANSWER = 'Continue this chain to its final.'
+IDENTIFIER_LIMIT_MESSAGE = ('This identifier is longer than 120 characters. A chain of exactory-openness-reading-v6 '
+                            'reserves 120 characters for each assignment id and each attempt id. Give an id of at '
+                            'most 120 characters.')
+PACKET_OUTDATED_MESSAGE = ('A new problem openness review needs a packet whose minimum has schema_version 2 and whose '
+                           'scientific_context holds minimum_gaps and audit_forecast. This packet lacks them. Export a '
+                           'new packet with export --kind problem-openness, then record the first assignment over it.')
+PROJECTION_STOP_MESSAGE = ('The harness stopped this reading chain before its next reviewer call, for the size of '
+                           'its input. details.reason is below_floor when a finite projection of the chain fails '
+                           'its admission, and no_enforceable_bound for every other stop of this kind. details '
+                           'holds the measurements of the request and of the projection. When details.estimate is '
+                           'true, the stop rests on an estimate of the final input. details.unbounded_kinds names '
+                           'the kinds of record entry without a bound, and details.decision states what the owner '
+                           'decides and the steps of each answer.')
+PROBLEM_PROJECTION_DECISION = ('Whether this review waits for a reading protocol that bounds the record of its chain, '
+                               'or runs over a packet that binds less material.')
+MATH_PROJECTION_DECISION = ('Whether this chain continues to its final turn, waits for the protocol reading-math-v2, '
+                            'or runs over a packet that binds less material.')
+WAIT_PROBLEM_ANSWER = 'Wait for a reading protocol that bounds the record'
+WAIT_MATH_ANSWER = 'Wait for reading-math-v2'
+SMALLER_PACKET_ANSWER = 'Run over a smaller packet'
+CONTINUE_MATH_ANSWER = 'Continue this chain to its final turn'
 # Stable review-context reason marker; the owner's actual instruction remains in its evidence artifact.
 MATH_CONTINUATION_REASON = 'reading_chain_continue_to_final'
-FORECAST_NO_BOUND_MESSAGE = 'This forecast is an estimate, not an enforceable bound on later requests.'
-FINITE_PROJECTION_MESSAGE = 'The serialized record allowance bounds the character projection; its token cost is an estimate.'
-CONTINUE_TO_V7_MESSAGE = 'Read the remaining units under this protocol, then take the final in a v7 chain that carries the verified turns.'
-EXPORT_TO_V7_MESSAGE = 'Export now and let a v7 chain carry the verified turns and read what remains.'
+FORECAST_NO_BOUND_MESSAGE = ('The sizes of later requests in this forecast are estimates. For a math-solver chain '
+                             'with two recorded turns or more, an estimate above the character limit of the route '
+                             'stops the next call, unless a recorded instruction of the owner continues the chain. '
+                             'The limit of each request applies in every case.')
+FINITE_PROJECTION_MESSAGE = ('The record allowance of this chain bounds every later request at '
+                             'projected_input_characters. The token count of that input is an estimate.')
+CONTINUE_TO_V7_MESSAGE = ('Read the remaining units in this chain. When its final turn does not fit, a chain of '
+                          'exactory-openness-reading-v7, in a release that holds that protocol, carries the verified '
+                          'turns of this chain.')
+EXPORT_TO_V7_MESSAGE = ('Export a new packet in a release that holds exactory-openness-reading-v7. Its chain carries '
+                        'the verified turns of this chain and reads only what remains.')
 
 # AR18.2: None means that validation and retention impose no bound. A symbolic bound is fixed by the first packet.
 LEGACY_ENTRY_BOUNDS = {
@@ -398,79 +417,242 @@ PROMPTS = {PROTOCOL_V1: {'reading': READING_PROMPT_V1, 'final': FINAL_PROMPT_V1}
            MATH_PROTOCOL: {'reading': MATH_READING_PROMPT, 'final': MATH_FINAL_PROMPT}}
 
 
-V6_READING_PARAGRAPH = (' [X2: v6 family readings, accepted results, and supplied origin.]')
-V6_FINAL_PARAGRAPH = (' [X2: v6 delivered family readings, accepted results, and supplied origin.]')
-# Each recorded search key has one class and one writer-pass placeholder. Both v6 prompts use these lines.
-ROW_DISPOSITION_GUIDE_LINE = ('A row disposition is the author\'s statement about a row that the harness could '
-    'not import; the row beside the reason is what the provider returned. A reading named in the reason is '
-    'bound as a supporting reading and is a unit of the chain that requires complete delivery.')
+# The texts that exactory-openness-reading-v6 adds to the v5 prompts. A reading turn holds reading_turn with its plan
+# and no native packet; a final turn and a review of one turn hold the native packet. Each text below names the place
+# where its reader finds a fact, so that the same sentence is right in every prompt that carries it.
+V6_READING_PARAGRAPH = (
+    '\n\nThis chain runs under exactory-openness-reading-v6. The paragraphs below add to the rules above.\n\n'
+    'A full text can stand for another record of the same work. A bound search can judge a work relevant or '
+    'contradictory under an identifier whose own record has no complete full reading, for example an arXiv '
+    'identifier without a version number, or the DOI record of a paper whose arXiv version was read. When the store '
+    'holds a complete full reading of a linked version of that work, the packet can bind that reading, and this '
+    'chain then delivers the text of that version under its own version_id. Without such a reading the minimum '
+    'keeps a gap with the condition reading_missing. The harness links the two records in one of three ways: the found record is the arXiv '
+    'identifier of the read version without its version number; a DOI of the found record is the DOI that arXiv '
+    'registered for the read paper; or both records carry the same DOI. For the two DOI links it compares the author '
+    'lists when both records hold authors. It compares no title and no text, and the texts of two versions of one '
+    'work can differ. The final turn carries the list of these pairs in '
+    'native.scientific_context.openness_minimum.family_readings, as {search_digest,work_id,version_id}. When a '
+    'judgment rests on such a text, name in your notes the version that you read.')
+V6_FINAL_PARAGRAPH = (
+    '\n\nThe packet binds more than the search records and the full readings of the works that they judge '
+    'decisive. The paragraphs below state what each further member is.\n\n'
+    'A full text can stand for another record of the same work. '
+    'native.scientific_context.openness_minimum.family_readings lists {search_digest,work_id,version_id}: the search '
+    'with that digest judges work_id relevant or contradictory, the record of work_id has no complete full reading '
+    'of its own, and the complete full reading of version_id, another record of the same work, stands for it. The '
+    'harness links the two records in one of three ways: work_id is the arXiv identifier of version_id without its '
+    'version number; a DOI of work_id is the DOI that arXiv registered for the paper of version_id; or both records '
+    'carry the same DOI. For the two DOI links it compares the author lists when both records hold authors. It '
+    'compares no title and no text, and the texts of two versions of one work can differ. When the judgment rests '
+    'on such a text, name in reason the version that was read.')
+# What a bound row disposition is. The guide below carries this line, so both v6 prompts hold it once.
+ROW_DISPOSITION_GUIDE_LINE = (
+    "Coverage. The author's statement about a row that a response returned and that the harness could not import. "
+    'Each entry holds what the provider returned for that row (row_excerpt, the first 20,000 characters of the row, '
+    'with row_digest and row_byte_length of the whole row) beside reason. The row is evidence of the capture; '
+    "reason is the author's and the harness did not check it. A reading that reason names by its id is bound "
+    'as a supporting reading, unless it is already a decisive reading.')
+# One line for each key that `search` records, with the class of the key. Test G5 compares the keys.
 SEARCH_FIELD_GUIDE = {
-    'id': {'class': 'identity', 'line': '[X2 R42: identity; the search record identifier.]'},
-    'profile': {'class': 'identity', 'line': '[X2 R42: identity; the literature profile.]'},
-    'purpose': {'class': 'identity', 'line': '[X2 R42: identity; the purpose of the search.]'},
-    'question': {'class': 'scope_binding', 'line': '[X2 R42: scope_binding; the question searched.]'},
-    'scope': {'class': 'scope_binding', 'line': '[X2 R42: scope_binding; the declared bounds of this search.]'},
-    'queries': {'class': 'capture', 'line': '[X2 R42: capture; the recorded query texts.]'},
-    'responses': {'class': 'capture', 'line': '[X2 R42: capture; the captured responses and their query bindings.]'},
-    'captured_at': {'class': 'capture', 'line': '[X2 R42: capture; the date of the recorded search.]'},
-    'found_work_ids': {'class': 'capture', 'line': '[X2 R42: capture; the imported works found in the responses.]'},
-    'cited_work_ids': {'class': 'author_judgment', 'line': '[X2 R42: author_judgment; works cited by the author.]'},
-    'verdict': {'class': 'author_judgment', 'line': '[X2 R42: author_judgment; the author verdict is no coverage finding.]'},
-    'impact': {'class': 'author_judgment', 'line': '[X2 R42: author_judgment; the author impact assessment is no coverage finding.]'},
-    'dispositions': {'class': 'coverage', 'line': '[X2 R42: coverage; the relevance judgment and reason for each found work.]'},
+    'id': {'class': 'identity', 'line': 'Identity. The id of the search record.'},
+    'profile': {'class': 'identity', 'line': 'Identity. The literature profile that the search belongs to.'},
+    'purpose': {'class': 'identity', 'line': 'Identity. The purpose for which the author recorded the search.'},
+    'question': {'class': 'scope_binding', 'line': 'Scope. The question that the search addresses.'},
+    'scope': {'class': 'scope_binding', 'line':
+              'Scope. The bounds of the search as the author stated them; without a stated scope, the question.'},
+    'queries': {'class': 'capture', 'line':
+                'Capture. The query texts. Each of them is bound to at least one captured response.'},
+    'responses': {'class': 'capture', 'line':
+                  'Capture. One entry for each captured response: the source record that holds the response, and '
+                  'the query that it answers.'},
+    'captured_at': {'class': 'capture', 'line':
+                    'Capture. The time that the author states for the search. No response of the search was '
+                    'captured later.'},
+    'found_work_ids': {'class': 'capture', 'line':
+                       'Capture. The works that the harness imported from the rows of the responses.'},
+    'cited_work_ids': {'class': 'author_judgment', 'line':
+                       "Author's judgment. The found works that the author cites for the verdict."},
+    'verdict': {'class': 'author_judgment', 'line':
+                "Author's judgment. The author's novelty verdict. It is no finding about coverage."},
+    'impact': {'class': 'author_judgment', 'line':
+               "Author's judgment. The author's account of what the search means for the question. It is no "
+               'finding about coverage.'},
+    'dispositions': {'class': 'coverage', 'line':
+                     "Coverage. The author's judgment of each found work, with a reason: relevant, contradictory, "
+                     'potentially_relevant, out_of_scope, duplicate or unresolved. A relevant or contradictory '
+                     'work needs a complete full reading. A potentially_relevant or unresolved work is a gap '
+                     'until a later bound search resolves it.'},
     'row_dispositions': {'class': 'coverage', 'line': ROW_DISPOSITION_GUIDE_LINE},
-    'resolved': {'class': 'coverage', 'line': '[X2 R42: coverage; explicit resolutions of earlier work judgments.]'},
-    'gaps': {'class': 'coverage', 'line': '[X2 R42: coverage; the declared remaining gaps.]'},
-    'coverage': {'class': 'coverage', 'line': '[X2 R42: coverage; per-query complete, top_k, bounded_unordered or unspecified coverage.]'},
-    'pending': {'class': 'coverage', 'line': '[X2 R42: coverage; pending capture, parsing or enumeration issues.]'},
-    'integrity_errors': {'class': 'coverage', 'line': '[X2 R42: coverage; errors in the captured search evidence.]'},
-    'page_groups': {'class': 'capture', 'line': '[X2 R42: capture; pagination, enumeration and excluded rows of captured responses.]'},
-    'hits_per_query': {'class': 'author_bound', 'line': '[X2 R42: author_bound; the author-chosen bound is no coverage finding.]'},
-    'depth': {'class': 'author_bound', 'line': '[X2 R42: author_bound; the requested search depth overrides.]'},
-    'binding': {'class': 'scope_binding', 'line': '[X2 R42: scope_binding; an unchanged provisional search rebound to a literature scope.]'},
-    'scope_digest': {'class': 'scope_binding', 'line': '[X2 R42: scope_binding; null when recorded without a literature scope; no coverage finding.]'},
-    'provisional': {'class': 'scope_binding', 'line': '[X2 R42: scope_binding; no literature scope existed, so the search was recorded by question; says nothing about coverage or outstanding readings.]'},
-    'evidence_digest': {'class': 'scope_binding', 'line': '[X2 R42: scope_binding; the evidence digest at scope binding.]'},
-    'frontier_digest': {'class': 'scope_binding', 'line': '[X2 R42: scope_binding; the frontier digest at scope binding.]'},
-    'native_parse_version': {'class': 'capture', 'line': '[X2 R42: capture; the parser version used for native responses.]'},
+    'resolved': {'class': 'coverage', 'line':
+                 "Coverage. The author's explanations of changes to earlier judgments of works, as "
+                 '{work_id,reason}. An entry resolves an earlier judgment only where the reassessment or the '
+                 'completion checks of the harness pass.'},
+    'gaps': {'class': 'coverage', 'line':
+             'Coverage. What the author states that the search did not cover. A nonempty list is a gap of this '
+             'review, unless a later bound search reassesses this search.'},
+    'coverage': {'class': 'coverage', 'line':
+                 'Coverage. For each query, what the harness derived from the captures: kind complete (the whole '
+                 'enumeration of the query was captured), top_k (an intact ordered leading part of at least '
+                 'requested_k results) or bounded_unordered (any other bounded capture), with returned_count and '
+                 'inspected_count. A bounded kind states how far the search went and blocks no outcome. A query '
+                 'without a row of one of these kinds, or without an integer inspected_count, is a gap, unless '
+                 'a later bound search reassesses this search.'},
+    'pending': {'class': 'coverage', 'line':
+                'Coverage. What the harness could not use or could not join in the captured responses: a row '
+                'that it could not import, pages whose counts or contents do not agree, an identifier of an '
+                'id_list request that no returned row answers, or a response that holds fewer results than the '
+                'registry reports (search_response_incomplete).'},
+    'integrity_errors': {'class': 'coverage', 'line':
+                         'Coverage. The entries of pending other than search_response_incomplete. Each one is an '
+                         'error in the captured evidence and a gap of this review, unless a later bound search '
+                         'reassesses this search.'},
+    'page_groups': {'class': 'capture', 'line':
+                    'Capture. For each registry query, its captured pages read as one enumeration: the pages, '
+                    'the counts, whether the enumeration is complete, and the rows that a recorded import rule '
+                    'leaves out.'},
+    'hits_per_query': {'class': 'author_bound', 'line':
+                       "Author's bound. The number of hits for each query that the search was recorded under. "
+                       'It is no finding about coverage.'},
+    'depth': {'class': 'author_bound', 'line':
+              "Author's bound. The depth amounts that the author set for this search in place of the defaults."},
+    'binding': {'class': 'scope_binding', 'line':
+                'Scope. Present when the author bound the unchanged queries and responses of a provisional '
+                'search to a literature scope; it names that search and gives the reason.'},
+    'scope_digest': {'class': 'scope_binding', 'line':
+                     'Scope. The digest of the literature scope of the record when the search was recorded; null '
+                     'when the record had no literature scope. It is no finding about coverage.'},
+    'provisional': {'class': 'scope_binding', 'line':
+                    'Scope. true means that the record had no literature scope, so the search was recorded by '
+                    'its question. This says nothing about coverage or outstanding readings and is not itself a '
+                    'ground against the search.'},
+    'evidence_digest': {'class': 'scope_binding', 'line':
+                        'Scope. For a search recorded under a literature scope, the digest of the evidence that '
+                        'its judgment rested on at that time.'},
+    'frontier_digest': {'class': 'scope_binding', 'line':
+                        'Scope. For a search recorded under a literature scope, the digest of the citation '
+                        'frontier of its profile at that time.'},
+    'native_parse_version': {'class': 'capture', 'line':
+                             'Capture. The version of the harness parser that read the registry responses.'},
 }
-SEARCH_FIELD_GUIDE_TEXT = '\n\nSearch record field guide:\n' + '\n'.join(
-    key + ': ' + row['line'] for key, row in SEARCH_FIELD_GUIDE.items()) + '\n\n'
-SUPPORTING_READING_SENTENCE = (' [X2 R20: A supporting reading is delivered as its reading record, with role '
-    '"supporting" and citing searches in cited_by; a work whose full text the openness judgment needs must be '
-    'judged relevant so that its reading is decisive and its text is a unit.]')
-SEARCH_COMPLETION_SENTENCE = (' For completes, the harness checked matching profile and question, capture time '
-    'not earlier than the completed search, retained query identities, clean coverage at least as strong, complete '
-    'or prefix coverage where earlier pages do not join, every returned row and found work, reasons for changed '
-    'material judgments and a closure statement for every earlier gap; completed searches omitted from this packet '
-    'contribute no gaps to this review, and closed_gaps is the author\'s statement of how the gaps were closed.')
-SUPPLIED_ORIGIN_SENTENCE = (' A full-text unit with origin contains a text saved by a person. The harness did not '
-    'fetch it or verify its reported origin. Its full reading counts; state when a decisive judgment rests on it.')
+SEARCH_FIELD_GUIDE_TEXT = (
+    '\n\nGuide to the fields of a bound search record. Each line names a field, then its class, then what the field '
+    'states. The fields of the class Coverage hold the recorded coverage findings. Assess whether the queries, '
+    'the scope and the captured responses address each formulation adequately. The provisional mark, a null '
+    'scope_digest, the verdict, the impact and hits_per_query alone establish no gap of coverage.\n'
+    + '\n'.join(key + ': ' + row['line'] for key, row in SEARCH_FIELD_GUIDE.items()) + '\n\n')
+SUPPORTING_READING_SENTENCE = (
+    '\n\nA reading record of the packet is decisive or supporting. A decisive reading is a full reading of a work that '
+    'a bound search judges relevant or contradictory, or of the declared settling work, and the text that it read '
+    'is delivered. A supporting reading is another reading record of the store that a text of a bound search names '
+    'by its id (the reason of a disposition, of a resolved entry or of a row disposition, impact, scope, or a text '
+    'of gaps), or that the author bound by its id. A reading that is already decisive stays decisive. Binding a '
+    'supporting reading adds its reading record and not the text that it read. That text is part of this review '
+    'only when another binding delivers it as a unit. In a reading turn the plan entry of a reading record states role, and for '
+    'a supporting reading cited_by, the {search_id,search_digest,fields} of each search that names it. '
+    'native.scientific_context.openness_minimum lists the digests of the decisive readings under reading_digests '
+    'and those of the supporting readings under supporting_reading_digests. A supporting reading shows what the '
+    'author recorded about a work; it does not show that this review read the work. When the judgment needs a '
+    'full text that no unit delivers, say so. The author then judges the work relevant in a search record, which makes '
+    'its full reading decisive and its text a part of the review.')
+SEARCH_COMPLETION_SENTENCE = (
+    'A search that completes earlier searches. A search record can hold completes, one entry for each earlier '
+    'search that it completes. A minimum can leave out a completed search when it binds the search that completes it, '
+    'and a search that is left out adds no gap to this review. A completed search that the minimum still binds is '
+    'in the packet and is assessed as every bound search is. Before it recorded the completing search, the harness checked nine conditions from the two records '
+    'and their stored responses. The two searches have the same profile, and their question values are equal or both absent. The completing '
+    'search was not captured earlier. Its captures ask every query of the earlier search as the same request. It '
+    'has a stated coverage for each of its queries, no integrity error and no gaps of its own, and its coverage '
+    'of each earlier query is not weaker, in the order complete, top_k, bounded_unordered. Where the pages of the earlier search form no verified whole or leading part, its '
+    'coverage of that query is complete or top_k. Every row that the earlier captures returned is accounted for: '
+    'the completing search imported it, left it out under a recorded rule, or gave a row disposition to a row of '
+    'the same provider and the same captured request with the same identifier (for a row without an identifier, '
+    'the same row digest), or its coverage of the query is complete and its captures of that request do not '
+    'return the row. An earlier row without an identifier is accepted under a complete coverage without such a '
+    'comparison. Every work that the earlier search found is '
+    'found again. Each relevant, contradictory, potentially_relevant or unresolved judgment that it changes has a '
+    'reason under resolved. Every text of the earlier gaps has an entry in closed_gaps. An entry of completes '
+    'holds search_id and search_digest of the completed search, not_returned and closed_gaps. not_returned lists, '
+    'by query and row_id, the earlier rows that the harness accepted under a complete coverage; the harness '
+    'computed it. An entry with row_id null is an earlier row without an identifier, and it does not show that '
+    'the row disappeared. '
+    "closed_gaps: [{text,how}] is the author's statement of how each earlier gap was closed; the harness checked "
+    'that every earlier gap has an entry and did not check what the entry says.')
+SUPPLIED_ORIGIN_SENTENCE = (
+    '\n\nA text that a person supplied. A full text can be a file that a person saved and gave to the harness. In a '
+    'reading turn the plan entry of such a text carries origin: {saved_by,obtained_from,obtained_at,statement,'
+    'evidence,note}. For a decisive reading, native.scientific_context.audit_forecast.notices holds an entry of '
+    'kind supplied_text with the same object under supplied. saved_by, obtained_from, obtained_at and statement '
+    'hold what the author reported. The harness sets evidence and note, and neither verifies that report. The '
+    'harness kept the bytes of the file. It did not fetch the text and did not verify where it came from. A complete full '
+    'reading of such a text counts as a full reading. When a decisive judgment rests on it, say so in your notes '
+    'and in the reason of the finding.')
 RESULT_READING_RULE = (
-    ' An accepted_result record identifies the solver objective, accepted checkpoint, linked review and evidence '
-    'closure cited by the searches. Read its manifests and UTF-8 artifacts in result_text units; PDF artifacts '
-    'arrive as extracted text with the PDF and text digests. Both kinds of unit may arrive in consecutive parts. '
-    'A described proof or theorem artifact is a result_undelivered gap; other described binary parts, executables '
-    'and toolchains carry notices and are not scientific text. A certificate or lean manifest includes the '
-    'verification record. Acceptance in that objective establishes no openness finding for this statement.')
+    '\n\nAn accepted result of this record. The packet binds each result of a solver objective of this record that '
+    'the author selected for it, for example a theorem that a bound search cites. cited_as is the label that the '
+    'author gave the result; check in the search records whether and how they cite it. This chain delivers a '
+    'bound result in two kinds of unit. A unit of kind result_text, named by '
+    '{native_attempt_digest,acceptance_id,text_sha256}, holds one text of the evidence of the result: a manifest, an '
+    'artifact that is UTF-8 text, or the text that the harness extracted from a PDF artifact. These units arrive '
+    'after the full texts. A record unit with record_kind accepted_result and record_id '
+    '<native_attempt_digest>:<acceptance_id> arrives with the other records. It holds the exact JSON text of '
+    '{cited_as,native_attempt_digest,objective_id,objective_claim,acceptance,checkpoint,review,manifests,artifacts,'
+    'note}: the claim of the accepted checkpoint, the review that the acceptance rests on, and one row for each '
+    'part of the evidence. Either kind of unit can arrive in consecutive parts. A manifest of kind certificate or '
+    'lean holds the record of its verification. Each row of artifacts states delivery. text and pdf_text mean that '
+    'a result_text unit delivers the part; for pdf_text the row gives sha256, the digest of the PDF, and '
+    'text_sha256, the digest of the extracted text. described means that the row gives path, role, media type, size '
+    'and digest, and that the bytes are not delivered. A described artifact of role proof or theorem is a gap of '
+    'the review, with the condition result_undelivered. A described executable, toolchain or other binary part is '
+    'no scientific text and is no gap. An excerpt from a result_text has the form '
+    '{native_attempt_digest,acceptance_id,text_sha256,text,purpose}, and an excerpt from the record has the form '
+    '{record_kind:"accepted_result",record_id,text,purpose}. A passage request uses the same identity fields. The '
+    'acceptance is a fact about the solver objective. It is no finding about the openness of the statement under '
+    'review: read the result and note what it proves.')
 RESULT_FINAL_RULE = (
-    ' Judge each accepted result from its accepted_result record and delivered result_text units, including '
-    'their verified parts and the retained reading notes. Described proof or theorem artifacts remain gaps; '
-    'other described binary parts, executables and toolchains are notices. The solver acceptance carries no '
-    'finding about the openness of the statement under review.')
-RECORD_ALLOWANCE_SENTENCE = (' The third allowance, record, counts serialized characters of every retained excerpt, '
-    'passage answer and extra final reading turn, including fields and escapes.')
-RECORD_PASSAGE_LIMIT_MESSAGE = 'The record allowance cannot retain another final reading turn and a delivered passage; return the finding.'
-RECORD_NOT_RETAINED_SENTENCE = (' An entry beyond the remaining record total is counted by kind in '
-    'allowances.record.not_retained and is absent from later inputs; it uses no other allowance.')
+    '\n\nAn accepted result of this record. native.scientific_context.openness_minimum.results lists each result of '
+    'a solver objective of this record that the packet binds, as '
+    '{native_attempt_digest,acceptance_id,cited_as,link_digest,result_digest}. The author selected these results. '
+    'cited_as is the label that the author gave the result; check in the search records whether and how they '
+    'cite it. Its accepted_result record, whose digest is result_digest, holds the claim of '
+    'the accepted checkpoint, the review that the acceptance rests on, and one row for each part of the evidence. '
+    'The texts of the result are its manifests, its artifacts that are UTF-8 text and are no PDF, executable or '
+    'toolchain, and the text that the harness extracted from its PDF artifacts. A reading chain delivered the record as a record unit with record_kind '
+    'accepted_result and the texts as units of kind result_text, named by '
+    '{native_attempt_digest,acceptance_id,text_sha256}; a review of one turn holds them in evidence. Judge what the '
+    'result proves from these texts, and in a chain from your notes, excerpts and passages of them. An artifact '
+    'whose row has delivery described is represented by that row, and its bytes are not delivered. For the role '
+    'proof or theorem it is a gap of the review, with the condition result_undelivered. Every other described '
+    'artifact gives a notice. The acceptance is a fact about the solver objective. It is no finding about the openness of the '
+    'statement under review.')
+RECORD_ALLOWANCE_SENTENCE = (
+    '\n\nThe reading record of this chain has a third allowance beside the two above: allowances.record, in '
+    'serialized characters. It counts what the record keeps of your answers and carries into every later input: '
+    'each excerpt and each passage answer as the record serializes it, whatever its status, with its fields and '
+    'its JSON escapes, and one row for each final turn that returns a reading response. characters is the total, '
+    'and used is what the record holds now.')
+RECORD_PASSAGE_LIMIT_MESSAGE = ('The record allowance of this chain cannot hold the row of another final turn '
+                                'together with a delivered passage, so this reading response delivers nothing. '
+                                'Return the finding.')
+RECORD_NOT_RETAINED_SENTENCE = (
+    ' An excerpt or a passage answer that the rest of this total cannot hold is not kept. '
+    'allowances.record.not_retained counts it under its kind (verified_excerpt, unmatched_excerpt, '
+    'over_allowance_excerpt, delivered_passage or undelivered_passage), no later input holds it, and it uses '
+    'nothing of the excerpt allowance or the passage allowance. In a final turn the harness refuses a reading '
+    'response when the total cannot hold the row of that turn together with at least one delivered passage. '
+    'Return the finding in that case.')
+# What a final turn and a review of one turn are told about the bound material. review_protocol appends it to the
+# answer contract of prompt version 7.
+V6_FINAL_EVIDENCE_TEXT = (V6_FINAL_PARAGRAPH + SUPPORTING_READING_SENTENCE + SEARCH_FIELD_GUIDE_TEXT
+                          + SEARCH_COMPLETION_SENTENCE + SUPPLIED_ORIGIN_SENTENCE + RESULT_FINAL_RULE)
 PROMPTS[PROTOCOL_V6] = {
     'reading': READING_PROMPT + SEARCH_READING_RULE + V6_READING_PARAGRAPH + SUPPORTING_READING_SENTENCE
                + SEARCH_FIELD_GUIDE_TEXT + SEARCH_COMPLETION_SENTENCE + SUPPLIED_ORIGIN_SENTENCE + RESULT_READING_RULE
                + RECORD_ALLOWANCE_SENTENCE + RECORD_NOT_RETAINED_SENTENCE,
     'final': (FINAL_PROMPT + FINAL_PROGRESS_RULE + SEARCH_FINAL_RULE).replace(
         'native result review described above', 'finding described above').replace(
-        'native result review', 'finding described above') + V6_FINAL_PARAGRAPH + SUPPORTING_READING_SENTENCE
-        + SEARCH_FIELD_GUIDE_TEXT + SEARCH_COMPLETION_SENTENCE + SUPPLIED_ORIGIN_SENTENCE + RESULT_FINAL_RULE,
+        'native result review', 'finding described above') + V6_FINAL_EVIDENCE_TEXT
+        + RECORD_ALLOWANCE_SENTENCE + RECORD_NOT_RETAINED_SENTENCE,
 }
 
 

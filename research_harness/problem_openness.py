@@ -14,18 +14,25 @@ from .operations import fields, immutable_record, iso_date, strings, text
 from .problem_claims import find_current_statement, find_latest, require_problem, compute_statement_digest
 from .reading import fulltext_coverage
 
-GAPPED_EXPORT_MESSAGE = ("Both resolved outcomes are blocked by this minimum. Protocol v6 can record an "
-                         "unresolved finding with these gaps.")
-OUTDATED_PACKET_MESSAGE = ("The current records no longer support this packet's minimum and gap forecast. "
-                           "Export a new problem-openness packet. The added and removed entries name the "
-                           "changed R10 facts; verified reading turns remain verified.")
+GAPPED_EXPORT_MESSAGE = ("The gaps of this minimum block both supported_open and already_solved, so a review "
+                         "over this packet can record only an unresolved finding. details.gaps lists the "
+                         "blocking conditions with the records that they concern; a gap that a command repairs "
+                         "names it under details.command. Continue for an unresolved finding, or repair the "
+                         "gaps and export again.")
+OUTDATED_PACKET_MESSAGE = ("The records changed after this packet was exported: a binding check of its minimum now "
+                           "fails, or the gaps that the harness computes now differ from the gaps of the packet. "
+                           "added and removed list the changes: in each item, row names the kind of dependency "
+                           "that changed and entry holds the error or the gap. Export "
+                           "a new packet with export --kind problem-openness and start a new chain over it. The "
+                           "verified reading turns of this chain stay verified.")
 
 
 FAMILY_READING_REPORT_FIELD = "derived_family_readings"
 FAMILY_READING_LINK_FIELD = "link"
 FAMILY_READING_AUTHOR_COMPARISON_FIELD = "authors_compared"
 FAMILY_READING_V1_REFUSAL = "Family readings require a version 2 openness minimum delivered with protocol v6."
-FAMILY_READING_LIST_REFUSAL = "Family reading selections must be a list."
+FAMILY_READING_LIST_REFUSAL = ("minimum.family_readings is not a list. Give a list of "
+                               "{search_digest, work_id, version_id} entries, or leave the field out.")
 
 
 def describe_gap_fact(gap, packet, family_failures):
@@ -440,7 +447,8 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
     strings(spec["minimum"].get("supporting_reading_ids", []), "Supporting reading IDs")
     missing = sorted(set(spec["minimum"].get("supporting_reading_ids", [])) - set(records.get("reading", {})))
     if missing:
-        raise ResearchError("openness_reading_gap", "Bind supporting reading IDs recorded in this store.",
+        raise ResearchError("openness_reading_gap", "minimum.supporting_reading_ids names a reading that this store "
+                            "does not hold. Give the ids of reading records of this store.",
                             {"reading_ids": missing})
     from .problem_openness_reviews import bind_results, validate_result_specs
     validate_result_specs(spec["minimum"].get("results", []))

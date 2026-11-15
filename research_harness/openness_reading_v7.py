@@ -23,7 +23,10 @@ from .review_search_delivery import plan_search_delivery
 
 PROTOCOL = 'exactory-openness-reading-v7'
 LABEL_CHARACTERS = 120
-SELECTION_MISMATCH_MESSAGE = 'The selected carried item does not match its authenticated turn and the new inventory.'
+SELECTION_MISMATCH_MESSAGE = ('An item of this selection does not match the authenticated turn that it comes from, or '
+                              'the inventory of the new chain does not hold its unit. Select only ranges, searches, '
+                              'excerpts and passages that the turn delivered or verified and whose units the new '
+                              'inventory holds.')
 
 
 def _describe_identity(row):

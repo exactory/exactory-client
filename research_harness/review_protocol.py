@@ -1018,7 +1018,7 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
         if version == 7:
             from .native_review import PROBLEM_OPENNESS_PROMPT
             return _build_prompt('exactory-review-v7/native_math', common + PROBLEM_OPENNESS_PROMPT
-                + openness_reading.V6_FINAL_PARAGRAPH, {'role': role}, common_version)
+                + openness_reading.V6_FINAL_EVIDENCE_TEXT, {'role': role}, common_version)
         from .native_review import (PROMPT, LEGACY_PROMPT, OPENNESS_PROMPT, MINIMUM_PROMPT,
                                     RESOLUTIONS_PROMPT, STRATEGY_PROMPT, TRIMMED_STRATEGY_PROMPT)
         prompt = common + (LEGACY_PROMPT if legacy else OPENNESS_PROMPT if version == 1

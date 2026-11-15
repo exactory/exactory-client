@@ -1460,6 +1460,43 @@ except paging, so pages with different lists form separate page groups. Each
 group must enumerate its results by itself, and the search records a group
 that does not as an incomplete response.
 
+Since 0.90.0 a search can account for what an earlier capture left open, and
+a record can hold a source that the harness cannot fetch. The
+[search coverage section](research-cli.md#search-depth-coverage-and-provisional-questions-search)
+and the [operation fields](research-cli.md#operation-fields) of the CLI
+reference state each rule in full.
+
+- A row that the import cannot read. Give the row a disposition in the search
+  that binds its response: `row_dispositions: [{source_id, index, reason}]`.
+  The record keeps `row_excerpt`, the first 20,000 characters of the row that
+  the provider returned, with the digest and the byte length of the whole
+  row, beside the reason, and the row is then no integrity error of the
+  search. For a Crossref query that
+  means articles, capture it with `filter=type:journal-article`, so that the
+  response holds no record of another type; inspect the other types when the
+  query calls for them.
+- A search that completes an earlier one. A stored search is immutable, so a
+  gap, an integrity error or an open judgment of it is closed by a new search
+  with `completes: [{search_id, closed_gaps: [{text, how}]}]`. The new search
+  captures every query of the earlier one again as the same request, covers
+  it at least as far, accounts for every row that the earlier captures
+  returned, finds every work again, and states in `closed_gaps` how it closes
+  each earlier gap. An openness minimum can then bind the new search alone. A
+  capture with another filter asks another query and completes nothing.
+- An arXiv request by `id_list`. Bind it by the exact `id_list` value as its
+  query when the request has no `search_query` value. The search then checks
+  that the captured pages return every listed identifier.
+- A registry record at DataCite. `acquire` reads a DOI from Crossref and, when
+  Crossref does not hold it, from DataCite; `provider: "datacite"` asks
+  DataCite directly. A problem export cites a work by the title and the names
+  of the registry record that the store captured for its DOI or arXiv id.
+- A full text that a person saved. When `fulltext` cannot fetch a complete
+  source, `import-fulltext` records a PDF or a UTF-8 text file of the
+  workspace with the origin that the person reports. The harness labels the
+  origin as reported and not verified, and the label travels with the text
+  to every reviewer and into a problem export. A complete full reading of
+  the text counts as a full reading.
+
 ```sh
 exactory-research example search > direct-search.json
 exactory-research search --file direct-search.json --expected-revision REVISION --request-id search-direct-001

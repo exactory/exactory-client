@@ -531,12 +531,16 @@ def build_search_receipt(value, found, pending, page_groups, pages):
     return result
 
 
-ROW_DISPOSITION_MESSAGE = ('Give each row disposition as source_id, index and a nonempty reason. The source '
-    'must be a response of this search, and its zero-based index must name a returned row that the harness '
-    'could not import. Imported rows, rows excluded under a recorded rule and repeated entries cannot receive '
-    'a row disposition. Record a new search with completes to account for a row of a stored search.')
-ROW_DISPOSITION_PIN_MESSAGE = ('A stored row disposition must name a response of its search and retain the '
-    'digest of that returned row. Inspect the search and its saved response with record-check.')
+ROW_DISPOSITION_MESSAGE = (
+    'A row disposition of this search is not valid. Give row_dispositions as a list of {source_id, index, reason}. '
+    'source_id names a registry response of this search, index is the zero-based position of a row that the '
+    'response returned and that the harness could not import, and reason is a nonempty text. A row that the '
+    'harness imported, a row that a recorded import rule leaves out, and a second entry for one row take no '
+    'disposition. To account for a row of a search that is already stored, record a new search with completes.')
+ROW_DISPOSITION_PIN_MESSAGE = (
+    'A stored row disposition does not match its search. It names no response of the search, or the row at its '
+    'index in the saved response does not have the stored row_digest. Inspect the stored search record and the '
+    'saved response that details.entry names.')
 
 
 def build_row_dispositions(records, artifacts, entries, responses, captures):
@@ -600,31 +604,53 @@ def check_search_row_dispositions(records, artifacts):
     return sorted(checked)
 
 
-SEARCH_COMPLETION_PAYLOAD_MESSAGE = ('Give completes as an array of distinct earlier search_id entries with '
-    'closed_gaps: [{text, how}]; use stored searches and nonempty gap statements. Repair the payload or record '
-    'the search without completes.')
-SEARCH_COMPLETION_FORMULATION_MESSAGE = ('The completing search must have the same profile and question as the '
-    'completed search. Repair the formulation or record the search without completes.')
-SEARCH_COMPLETION_TIME_MESSAGE = ('The completing search must not predate the completed search. Repair the '
-    'capture time or record the search without completes.')
-SEARCH_COMPLETION_QUERIES_MESSAGE = ('The completing search must retain every earlier query and its captured '
-    'query identity. Capture the same queries or record the search without completes.')
-SEARCH_COMPLETION_CLEAN_MESSAGE = ('The completing search must pass search coverage checks and retain coverage '
-    'at least as strong for every earlier query. Repair its coverage or record the search without completes.')
-SEARCH_COMPLETION_PAGES_MESSAGE = ('The earlier registry pages do not form a verified whole or prefix. Capture '
-    'a complete enumeration or verified top_k prefix for this query, or record the search without completes.')
-SEARCH_COMPLETION_ROWS_MESSAGE = ('An earlier returned row is unaccounted for. Import it, exclude it under a '
-    'recorded rule, give a row disposition for the same provider identifier or, for two unidentified rows, '
-    'the same row digest, or capture a complete enumeration that no longer returns it. A disposition for '
-    'another row does not account for this row. Repair the capture or record the search without completes.')
-SEARCH_COMPLETION_WORKS_MESSAGE = ('The completing search must find every work found by the completed search. '
-    'Restore the missing work or record the search without completes.')
-SEARCH_COMPLETION_JUDGMENTS_MESSAGE = ('A changed material judgment needs the work and a reason under resolved. '
-    'Explain the change or record the search without completes.')
-SEARCH_COMPLETION_GAPS_MESSAGE = ('Each earlier gap needs its exact text and the author\'s account of how it '
-    'was closed under closed_gaps. Supply that statement or record the search without completes.')
-SEARCH_COMPLETION_DIGEST_MESSAGE = ('A stored completion must name an existing search with its exact digest. '
-    'Inspect the retained completion and its target with record-check.')
+SEARCH_COMPLETION_PAYLOAD_MESSAGE = (
+    'completes is not valid. Give a list of {search_id, closed_gaps: [{text, how}]}. Each search_id names a '
+    'different stored search other than this one. Each closed_gaps entry has a nonempty text, stated once, and a '
+    'nonempty how. Correct the payload, or record the search without completes.')
+SEARCH_COMPLETION_FORMULATION_MESSAGE = (
+    'This search and the search that it completes differ in profile or in question. Record the completing search '
+    'with the same profile and the same question, or record it without completes.')
+SEARCH_COMPLETION_TIME_MESSAGE = (
+    'captured_at of this search is earlier than captured_at of the search that it completes. Give a capture time '
+    'that is not earlier, or record the search without completes.')
+SEARCH_COMPLETION_QUERIES_MESSAGE = (
+    'The query in details.query of the completed search is missing from this search, or the captures of this '
+    'search ask it as another request: another provider, another address or other matching parameters. Capture '
+    'that query again as the same request, or record the search without completes.')
+SEARCH_COMPLETION_CLEAN_MESSAGE = (
+    'This search cannot complete another search as it is. It has an integrity error, a nonempty gaps list or a '
+    'query without a stated coverage, or its coverage of the query in details.query is weaker than that of the '
+    'completed search, in the order complete, top_k, bounded_unordered. Record a search without integrity errors '
+    'and with empty gaps that covers each earlier query at least as far, or record this search without completes.')
+SEARCH_COMPLETION_PAGES_MESSAGE = (
+    'The pages that the completed search captured for the query in details.query form no verified whole or '
+    'leading part, so this search must cover that query with the kind complete or top_k. Capture a complete '
+    'enumeration or a verified leading part of the query, or record the search without completes.')
+SEARCH_COMPLETION_ROWS_MESSAGE = (
+    'A row that the completed search returned for the query in details.query is not accounted for. details names '
+    'it by row_id, or by row_digest, source_id and index when the row has no identifier. Account for it in one of '
+    'four ways. Import it. Leave it out under a recorded import rule. Give a row disposition to a row of the same '
+    'provider and the same captured request: for a row with a provider identifier, the row with that identifier, '
+    'and for a row without one, a row with the same row digest. Or cover the query with the kind complete. The identifier of '
+    'an earlier row must then be absent from the responses of this search for the query; where the search holds '
+    'row dispositions for the query, from its responses of the earlier captured request. An earlier row without '
+    'an identifier is accepted under a complete coverage without a check of absence. '
+    'A disposition of another row does not account for this row. Otherwise record the search without completes.')
+SEARCH_COMPLETION_WORKS_MESSAGE = (
+    'The work in details.work_id, which the completed search found, is not among found_work_ids of this search. '
+    'Capture and import that work in this search, or record the search without completes.')
+SEARCH_COMPLETION_JUDGMENTS_MESSAGE = (
+    'The completed search judged the work in details.work_id relevant, contradictory, potentially_relevant or '
+    'unresolved, and this search judges it otherwise without an entry under resolved. Add {work_id, reason} to '
+    'resolved, or record the search without completes.')
+SEARCH_COMPLETION_GAPS_MESSAGE = (
+    'closed_gaps has no entry for the gap of the completed search in details.text. Add {text, how} with that exact '
+    'text and with how this search closes the gap, or record the search without completes.')
+SEARCH_COMPLETION_DIGEST_MESSAGE = (
+    'The stored completes of a search is not a list, names a search that the store does not hold, or holds a '
+    'search_digest that differs from the digest of that search. Inspect the record that '
+    'details.completing_search_id names and, where details.search_id names a stored search, that record.')
 
 
 def refuse_search_completion(condition, message, search_id, **details):

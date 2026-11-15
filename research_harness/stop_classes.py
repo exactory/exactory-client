@@ -221,7 +221,8 @@ from .openness_reading import PROJECTION_STOP, PROBLEM_PROJECTION_DECISION, WAIT
 STOP_REGISTRY[PROJECTION_STOP] = dict(code=PROJECTION_STOP, **{'class': 'decision'}, owner='D1',
     next=dict(kind='decision', owner_decides=PROBLEM_PROJECTION_DECISION,
               then=[dict(answer=WAIT_PROBLEM_ANSWER, steps=[dict(id=4, command='export',
-                    prerequisites=[dict(condition='Install a bounded reading protocol for this packet.')])]),
+                    prerequisites=[dict(condition=(
+                        'The installed release holds a reading protocol that bounds the record of this chain.'))])]),
                     dict(answer=SMALLER_PACKET_ANSWER, steps=[dict(id=4, command='export'),
                          dict(command='review-assignment', check=True)])]))
 for _code in ('stale_revision', 'review_task_dependency_changed', 'review_output_pending', 'review_sources_pending',
