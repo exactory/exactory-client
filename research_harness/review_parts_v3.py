@@ -23,11 +23,6 @@ def _read_floor(plan):
     return min(row['material_allowance'] for row in plan['task']['read']['levels'])
 
 
-def _read_card_ceiling(plan):
-    return min(plan['allocation']['rooms']['combine'],
-               min(row['material_allowance'] for row in plan['task']['combine']['levels']))
-
-
 def _read_block_room(plan):
     return min(plan['allocation']['rooms']['combine'], plan['task']['combine']['material_allowance'])
 
@@ -47,6 +42,13 @@ def _read_turn_bound(plan, level):
     return min(CARD_CHARACTERS, answer)
 
 
+def describe_card_bounds(plan, level):
+    """Return complete turn/card bounds from the pinned read and combine levels."""
+    turn = _read_turn_bound(plan, level)
+    combine = min(row['material_allowance'] for row in plan['task']['combine']['levels'])
+    return dict(turn_characters=turn, card_characters=min(turn, combine))
+
+
 def read_content_rate(plan):
     """Bound the pinned rate by one full floor card at every reachable level.
 
@@ -62,7 +64,7 @@ def read_content_rate(plan):
         level = row['material_allowance']
         if level > ceiling:
             continue
-        bound = min(_read_turn_bound(plan, level), _read_card_ceiling(plan))
+        bound = describe_card_bounds(plan, level)['card_characters']
         if bound <= entry:
             raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
                                 dict(kind='read', level=level, room=bound, minimum=entry + 1,
@@ -81,31 +83,30 @@ def compute_content_allocation(plan, delivered_before, delivered_through):
     return _allocate_content(read_content_rate(plan), delivered_before, delivered_through)
 
 
-def _describe_card_allowance(entry, rate, delivered_before, delivered_through, cards):
-    content = _allocate_content(rate, delivered_before, delivered_through)
-    late_content = 0
-    at = delivered_before
-    for card in cards:
-        through = at + card['unit_characters']
-        if card.get('late', False):
-            late_content += _allocate_content(rate, at, through)
-        at = through
-    entries = len(cards) * entry
-    normal_entries = sum(not card.get('late', False) for card in cards) * entry
+def _describe_card_allowance(entry, rate, parts):
+    content, late_content = 0, 0
+    for part in parts:
+        allocated = _allocate_content(rate, part['delivered_before'], part['delivered_through'])
+        content += allocated
+        if part.get('late', False):
+            late_content += allocated
+    entries = len(parts) * entry
+    normal_entries = sum(not part.get('late', False) for part in parts) * entry
     return dict(content_characters=content, entry_characters=entries, characters=content + entries,
                 card_budget=content - late_content, card_reserve=normal_entries,
                 late_unit_reserve=late_content + entries - normal_entries)
 
 
-def compute_card_allowance(plan, delivered_before, delivered_through, cards):
+def compute_card_allowance(plan, parts):
     """Return content, full entries and their three separate reserve charges.
 
     This arithmetic never clamps to the answer cap. size_read_turn chooses a
-    fitting interval and card count. Mixed late/initial cards state their
-    unit_characters so their content intervals can be charged independently.
+    fitting parts and card count. Each part states its series delivered_before
+    and delivered_through; cached content allocations are not trusted. Parts
+    marked late charge their content and full entry to the late reserve.
     """
     return _describe_card_allowance(plan['allocation']['entry_sizes']['card'], read_content_rate(plan),
-                                    delivered_before, delivered_through, cards)
+                                    parts)
 
 
 def _can_pay_card(plan, cursor, content, late):
@@ -118,12 +119,12 @@ def _can_pay_card(plan, cursor, content, late):
             and cursor['card_budget'] + content <= allocation['card_budget'])
 
 
-def _size_card(plan, rate, cursor, unit, material_left, answer_left):
+def _size_card(plan, rate, cursor, unit, material_left, answer_left, card_bound):
     """Use available room without making a nonfinal part smaller than the floor."""
     remaining = unit['characters'] - cursor['unit_offset']
     floor = _read_floor(plan)
     entry = plan['allocation']['entry_sizes']['card']
-    ceiling = min(answer_left, _read_card_ceiling(plan))
+    ceiling = min(answer_left, card_bound)
     if remaining == 0:
         return 0 if entry <= ceiling and _can_pay_card(plan, cursor, 0, unit.get('late', False)) else None
     minimum = min(remaining, floor)
@@ -154,7 +155,8 @@ def size_read_turn(plan, level, inventory, *, position=None):
     """
     if type(level) is not int or level <= 0:
         raise ResearchError('invalid_input', 'The read material allowance must be a positive integer.')
-    turn_bound = _read_turn_bound(plan, level)
+    bounds = describe_card_bounds(plan, level)
+    turn_bound = bounds['turn_characters']
     rate = read_content_rate(plan)
     cursor = dict(unit_index=0, unit_offset=0, delivered=0, card_count=0,
                   card_budget=0, card_reserve=0, late_unit_reserve=0)
@@ -166,7 +168,8 @@ def size_read_turn(plan, level, inventory, *, position=None):
     entry = plan['allocation']['entry_sizes']['card']
     while cursor['unit_index'] < len(inventory):
         unit = inventory[cursor['unit_index']]
-        size = _size_card(plan, rate, cursor, unit, level - material, turn_bound - answer)
+        size = _size_card(plan, rate, cursor, unit, level - material, turn_bound - answer,
+                          bounds['card_characters'])
         if size is None:
             if not cards:
                 raise ResearchError('invalid_input', READ_TURN_CANNOT_FIT_MESSAGE,
@@ -178,6 +181,7 @@ def size_read_turn(plan, level, inventory, *, position=None):
         late = unit.get('late', False)
         cards.append(dict(handle='c/' + unit['handle'] + '/' + str(start), unit=unit['handle'],
                           start=start, end=start + size, unit_characters=size, late=late,
+                          delivered_before=cursor['delivered'], delivered_through=through,
                           content_characters=content, entry_characters=entry, characters=content + entry))
         if late:
             cursor['late_unit_reserve'] += content + entry
@@ -193,7 +197,7 @@ def size_read_turn(plan, level, inventory, *, position=None):
             cursor['unit_index'] += 1
             cursor['unit_offset'] = 0
     return dict(delivered_before=before, delivered_through=cursor['delivered'], unit_characters=material,
-                cards=cards, allowance=_describe_card_allowance(entry, rate, before, cursor['delivered'], cards),
+                cards=cards, allowance=_describe_card_allowance(entry, rate, cards),
                 next=cursor)
 
 
