@@ -319,7 +319,7 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
             return
     with contract_check("review.shape"):
         fields(output, ("stage", "support", "value", "objections", "limitations"),
-               ("source_requests", "reassessment", "excerpts"), code="invalid_value_review", path='')
+               ("source_requests", "settled_requests", "reassessment", "excerpts"), code="invalid_value_review", path='')
         with describe_error_at('/stage'):
             strategy.choice(output["stage"], ("bar", "slate", "result"), "Review phase", "invalid_value_review")
     route = records['review_route'][assignment['route_id']]
@@ -363,6 +363,8 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
     with contract_check("review.source_requests"), describe_error_at('/source_requests'):
         pending = bar_sources.pending(packet, output,
             manifest=graph.get('epoch', {}).get('manifest') if staged_binding is not None else None)
+        if packet.get('source_rules') == bar_sources.PROTOCOL_V3:
+            bar_sources.validate_requested_artifacts(artifacts, packet, output)
     if pending and "source_inventory" in packet:
         inventory = packet["source_inventory"]
         rows = bar_sources.validate_inventory(artifacts, inventory)
@@ -375,8 +377,9 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
                         bar_sources._page(rows, inventory["digest"], request["page"], request.get("query"),
                                           page_size=inventory["page_size"])
     # Valid pending requests are retained turns, not intrinsically unrecordable final assessments.
-    if pending:
+    if pending or output.get('settled_requests'):
         return
+    bar_sources.validate_settlement_limitations(packet, output)
     problem = assignment.get("subject", {}).get("kind") == "problem"
     stage = output["stage"]
     dossier_payload = next((item["dossier"] for item in packets if "dossier" in item), {})
@@ -440,13 +443,30 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
     with contract_check("review.reassessment"), describe_error_at('/reassessment'):
         review_context_repair.validate_reassessment(records, artifacts, assignment, output, reading_checks=False, packet=repair_packet,
                                                     evidence_validator=contract_evidence)
-    if problem or readiness_parts:
+    source_only = not (problem or readiness_parts) and frozen.get('source_rules') == bar_sources.PROTOCOL_V3
+    evidence_rows = list(evidence_arrays(output, with_paths=True))
+    if source_only:
+        evidence_rows = [(path, [reference for reference in evidence if reference.get('kind') == 'source'])
+                         for path, evidence in evidence_rows]
+        support = output['support'] if stage == 'result' else None
+        if isinstance(support, dict) and isinstance(support.get('checks'), list):
+            for index, check in enumerate(support['checks']):
+                if not isinstance(check, dict) or not isinstance(check.get('evidence'), list):
+                    continue
+                sources = [reference for reference in check['evidence']
+                           if isinstance(reference, dict) and reference.get('kind') == 'source']
+                if sources:
+                    path = '/support/checks/' + str(index) + '/evidence'
+                    with describe_error_at(path):
+                        contract_evidence(records, artifacts, sources)
+                    evidence_rows.append((path, sources))
+    if problem or readiness_parts or source_only and any(evidence for _, evidence in evidence_rows):
         from .review_delivered_evidence import project_delivery_view
         if staged_binding is not None:
             delivery = project_delivery_view(records, artifacts, packets)
         else:
             delivery = read_review_citation_delivery(records, artifacts, assignment, attempt=attempt)
-        for path, evidence in evidence_arrays(output, with_paths=True):
+        for path, evidence in evidence_rows:
             missing = find_review_undelivered_references(records, artifacts, evidence, delivery,
                 require_complete_artifacts=bool(visual or series or staged_binding))
             if missing:
@@ -491,7 +511,7 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                 raise ResearchError('problem_evidence_part_pending', 'Continue the evidence part before recording a result review',
                                     {'assignment_id': saved['id'], 'turn': packet[review_problem_parts.KEY]['turn']})
         fields(value, ("id", "dossier_id", "assignment_id", "stage", "support", "value", "objections", "limitations"),
-               ("source_requests", "reassessment", "excerpts"), code="invalid_value_review")
+               ("source_requests", "settled_requests", "reassessment", "excerpts"), code="invalid_value_review")
         old = strategy.existing_record(records, "value_review", value)
         if old is not None:
             return [], old
@@ -530,7 +550,7 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                                         dict(assignment_id=saved_assignment['id'], issues=verified['issues']))
         validate_review_contract(records, artifacts, saved_assignment, effective_output)
         if value["stage"] in ("bar", "slate", "result"):
-            if assignment.get("pending_source_requests"):
+            if assignment.get("pending_source_requests") or value.get('settled_requests'):
                 raise ResearchError("review_sources_pending", "Retain the observed request turn; resolve its source deliveries before recording a final phase assessment")
         from . import review_context_repair
         saved_assignment = records["review_assignment"][value["assignment_id"]]

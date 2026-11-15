@@ -6,7 +6,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
-from research_harness import cli, development, review_continuation, review_series, stop_classes
+from research_harness import cli, development, review_continuation, review_series, review_protocol, stop_classes
 from research_harness.errors import ResearchError
 from research_harness.execution_evidence import validate_result_reference
 from research_harness.problem_evidence import project_citations
@@ -27,6 +27,17 @@ class StudyRowTests(unittest.TestCase):
         return fixture
 
     def take_boundary_plan(self, case, read_boundary):
+        records = case.store.snapshot()['records']
+        if 'study-boundary' not in records.get('review_assignment', {}):
+            case.mutate(review_protocol.record_route, dict(id='study-boundary-route', adapter='openai_responses_v1',
+                model='gpt-6-astra', endpoint='https://example.test/responses',
+                configuration=dict(max_output_tokens=1000, timeout_seconds=5)))
+            problem = records.get('workspace', {}).get('problem')
+            author = problem['authors'][0] if problem is not None else 'study-author'
+            primary = case.artifacts.put(b'A synthetic finite argument for the boundary review.\n', 'text/plain')
+            case.mutate(review_protocol.record_assignment, dict(id='study-boundary', role='standalone',
+                route_id='study-boundary-route', dossier_id=None, reviewer_id='boundary-reviewer',
+                author_id=author, context=dict(artifact_refs=[primary])))
         def read_plan(store, assignment_id):
             snapshot = store.snapshot()
             read_boundary(snapshot['records'])

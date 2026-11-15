@@ -73,3 +73,88 @@ def open_stored_case(owner, version, scenario):
         case.addCleanup(patcher.stop)
         limit_codex_input(case, metadata.get('input_limit') or INPUT_LIMIT_CHARACTERS)
     return case, metadata
+
+
+class CurrentStoppedCase(OpennessReadingCase):
+    text_sizes = (120000, 60000)
+    reading_protocol = None
+
+
+def open_current_stopped_case(owner, version, *, observed=True, both=False):
+    """Build the C8 stopped-prefix shape with a current route and its real keyed probe."""
+    from openness_reading_fixtures import build_sized_body
+    from research_harness import openness_reading, review_route_capacity
+    from research_harness.capture_selection import select_main_capture
+    from research_harness.literature import import_bundle
+    from research_harness.reading import record_reading
+
+    case = CurrentStoppedCase()
+    if version == 'math':
+        # Leave the first turn room for the captured search response before its
+        # first complete full text, as in the native stopped-prefix fixture.
+        case.text_sizes = (119000, 60000)
+    owner.addCleanup(case.doCleanups)
+    case.setUp()
+    if version != 'math':
+        selected_protocol = openness_reading.PROTOCOL_V4 if version == 4 else openness_reading.PROTOCOL_V5
+        patcher = patch.object(openness_reading, 'find_chain_protocol', return_value=selected_protocol)
+        patcher.start()
+        case.addCleanup(patcher.stop)
+    if version == 4:
+        case.limit_input(400000)
+    work = case.versions[1]
+    first = case.store.snapshot()['records']['work'][work]['fulltexts'][0]
+    compact = case.capture(work, pdf_text=build_sized_body(2, 50000))
+    case.mutate(select_main_capture, dict(version_id=work, source_id=compact['source_id'],
+                                        reason='Choose the complete second extraction.'))
+    bundle = case.bundle(work, capture=compact, bundle_id='bundle-compact')
+    if both:
+        bundle['units'].append(dict(id='earlier-extraction', kind='text', required=True,
+            link=case.link(work, first['source_id'], first['text'], 'Paper 2 opening line.', kind='span')))
+    for unit in bundle['units']:
+        link = unit['link']
+        if link['locator']['kind'] == 'text':
+            unit['link'] = case.link(work, link['source_id'], link['artifact'], link['locator']['quote'], kind='span')
+    bundle['inventory']['links'] = [bundle['units'][0]['link']]
+    case.mutate(import_bundle, bundle)
+    case.mutate(record_reading, case.full_note(bundle, 'read-compact'))
+    reference = case.export(priority=case.versions)
+    if version == 'math':
+        # Keep the current exporter's chosen-capture binding and evidence. The
+        # mathematical result contract names the schema-1 openness minimum.
+        native = json.loads(case.artifacts.read(reference))
+        native['contract'] = dict(proof_policy='analytical')
+        native['objective_id'] = 'synthetic-math-objective'
+        minimum = native['scientific_context']['openness_minimum']
+        native['scientific_context']['openness_minimum'] = dict(schema_version=1,
+            **{key: minimum[key] for key in ('statement', 'neighbours', 'searches',
+                                             'reading_digests', 'settling_work_id')})
+        # Native math delivers the captured response itself; the problem
+        # exporter also carries normalized search material under other hashes.
+        records = case.store.snapshot()['records']
+        carried = {entry['digest']: entry['artifact'] for entry in native['evidence']}
+        for binding in minimum['searches']:
+            search = json.loads(case.artifacts.read(carried[binding['search_digest']]))
+            for response in search['responses']:
+                body = records['source'][response['source_id']]['response']
+                if body['sha256'] not in carried:
+                    native['evidence'].append(dict(digest=body['sha256'], kind='artifact', artifact=body))
+                    carried[body['sha256']] = body
+        reference = case.artifacts.put(json.dumps(native, sort_keys=True, ensure_ascii=False).encode(),
+                                       'application/json')
+    assignment = case.assign('turn-1', reference)
+    packet = case.read_packet('turn-1')
+    owner.assertIn('reading_chain', assignment)
+    plan = packet['reading_turn']['reading_plan']
+    owner.assertFalse(any(row.get('version_id') == work for row in plan['delivered_now']))
+    owner.assertTrue(any(row.get('version_id') == work for row in plan['remaining']))
+    records = case.store.snapshot()['records']
+    route = records['review_route']['route']
+    capacity = review_route_capacity.describe_route_capacity(route, records=records, artifacts=case.artifacts)
+    owner.assertIsNotNone(capacity['input_tokens']['key'])
+    owner.assertGreater(capacity['input_tokens']['value'], 0)
+    owner.assertEqual(records['review_route_probe']['probe-route']['capacity_evidence']['key'],
+                      capacity['input_tokens']['key'])
+    if observed:
+        case.invoke('turn-1', case.build_reading_response(packet, excerpts=[]))
+    return case, dict(protocol=version, work=work, first=first, compact=compact, native=reference)

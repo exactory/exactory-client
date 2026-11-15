@@ -37,6 +37,52 @@ class V6ChainTests(OpennessReadingCase):
         self.assertTrue(assigned['reading_chain_admission']['projection']['finite'])
         self.assertIn('output', assigned['capacity_warning'])
 
+    def test_v6_admission_uses_the_verified_probe_of_its_new_codex_runtime(self):
+        from codex_route_fixtures import build_codex_response
+        from research_harness import review_codex_transport as codex, review_excerpts
+        from research_harness import review_route_capacity as capacity, review_transport as transport
+        codex.runtime.return_value = dict(codex.runtime(), version='reading-capacity-runtime')
+        self.mutate(protocol.record_route, dict(id='keyed-route', adapter=codex.ADAPTER,
+            model='gpt-6-astra', endpoint='codex://local',
+            configuration=dict(max_output_tokens=1000, timeout_seconds=5)))
+        records = self.store.snapshot()['records']
+        route = records['review_route']['keyed-route']
+        self.assertEqual(capacity.describe_route_capacity(route, records=records,
+            artifacts=self.artifacts)['input_tokens']['value'], 0)
+
+        def send_probe(route, request, credential):
+            packet = review_excerpts.read_sent_packet(request)
+            response = build_codex_response(route, request, dict(allowed_control=packet['allowed_control'],
+                evidence_control=packet['evidence_control'], excluded_controls=[]))
+            response['usage']['input_tokens'] = 1000000
+            return response
+
+        with patch.object(transport, 'send_request', side_effect=send_probe):
+            probe = self.mutate(protocol.probe_route, dict(id='keyed-capacity', route_id='keyed-route',
+                capacity=dict(input_tokens=1000000)))['result']
+        self.assertTrue(probe['capacity_verified'])
+        reference = self.export(assignment_id='keyed-turn')
+        assigned = self.mutate(protocol.record_assignment, dict(id='keyed-turn', route_id='keyed-route',
+            dossier_id=None, role='native_math', reviewer_id='openness-reviewer', author_id='problem-author',
+            context=dict(native_packet=reference)))['result']
+        self.assertEqual(reading.find_protocol(self.read_packet('keyed-turn')), reading.PROTOCOL_V6)
+        admission = assigned['reading_chain_admission']
+        self.assertEqual(admission['state'], 'record')
+        self.assertEqual(admission['limit']['tokens'], 999000)
+        self.assertGreaterEqual(admission['projection']['record_total'], reading.RECORD_ALLOWANCE_FLOOR)
+        request = assigned['capacity_warning']['input']['request']
+        self.assertEqual(request['token_limit'], 999000)
+        self.assertTrue(request['fits'])
+        records = self.store.snapshot()['records']
+        changed = dict(route, endpoint='codex://different-endpoint')
+        self.assertEqual(capacity.describe_route_capacity(changed, records=records,
+            artifacts=self.artifacts)['input_tokens']['value'], 0)
+        refused = reading.admit_reading_chain(changed, admission['projection'], records=records,
+                                              artifacts=self.artifacts, assignment=assigned)
+        self.assertEqual(refused['state'], 'stop')
+        self.assertEqual(refused['code'], reading.PROJECTION_STOP)
+        self.assertEqual(refused['details']['limit']['tokens'], 0)
+
     def test_current_finding_prompt_is_separate_from_the_math_result_prompt(self):
         current = protocol.canonical_prompt('native_math', version=7)
         old = protocol.canonical_prompt('native_math', version=6)
@@ -129,9 +175,10 @@ class V6ChainTests(OpennessReadingCase):
             identifier = ('h' * 120 if number == 1 else str(number).ljust(120, 't')) if shape == 'long-identifiers' else 'turn-' + str(number)
             assigned = self.assign(identifier, native, prior)
             packet = self.read_packet(identifier)
-            route = self.store.snapshot()['records']['review_route']['route']
-            request = protocol.build_assignment_request(self.store.snapshot()['records'], self.artifacts, assigned)
-            measured = measure_request(route, request)
+            records = self.store.snapshot()['records']
+            route = records['review_route']['route']
+            request = protocol.build_assignment_request(records, self.artifacts, assigned)
+            measured = measure_request(route, request, records=records, artifacts=self.artifacts)
             first_projection = first_projection or assigned['reading_chain_admission']['projection']
             self.assertLessEqual(measured['characters'], first_projection['characters'])
             self.assertTrue(measured['fits'])

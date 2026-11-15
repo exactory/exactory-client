@@ -773,6 +773,34 @@ def hidden():
             reach.analyze_sources(dict(sources, **{'pkg/core.py': sources['pkg/core.py'].replace(
                 'obj.invoke()', 'hidden()')}), roots, declared_edges=declaration)
 
+    def test_stop_settlement_dispatch_reaches_only_its_original_call_operations(self):
+        sources = {
+            'research_harness/review_stop.py': """
+def settle_stop(step):
+    from .cli import OPERATIONS
+    OPERATIONS[step['command']]()
+""",
+            'research_harness/cli.py': """
+def _review_run():
+    ResearchError('stopped_run', '')
+def _review_probe():
+    ResearchError('stopped_probe', '')
+def _review_output_correction():
+    ResearchError('stopped_correction', '')
+def unrelated():
+    ResearchError('outside_settlement', '')
+OPERATIONS = {'review-run': _review_run, 'review-probe': _review_probe,
+              'review-output-correction': _review_output_correction, 'unrelated': unrelated}
+"""}
+        caller = 'research_harness/review_stop.py:settle_stop'
+        targets = reach.DECLARED_EDGES[caller]
+        self.assertEqual(set(targets), {'research_harness/cli.py:' + name for name in
+            ('_review_run', '_review_probe', '_review_output_correction')})
+        result = reach.analyze_sources(sources, {'review-stop': [caller]},
+                                       declared_edges={caller: targets})
+        self.assertEqual(result['reachable'], ['stopped_correction', 'stopped_probe', 'stopped_run'])
+        self.assertNotIn('outside_settlement', result['by_command']['review-stop'])
+
     def test_series_roots_use_only_the_commands_declared_by_driver_source(self):
         sources = {
             'research_harness/cli.py': """

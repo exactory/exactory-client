@@ -58,6 +58,19 @@ class RefusalNoticeTests(RefusalCase):
         return self.notices.build_refusal_notice(self.records, self.artifacts, attempt_ids,
             form=form, diagnoses=self.read_diagnoses())
 
+    def build_verified_route(self, adapter='openai_responses_v1'):
+        from capacity_evidence_fixtures import build_capacity_runtime
+        from research_harness import review_route_capacity as capacity
+        route = dict(id='route', adapter=adapter, model='fixture-model',
+            runtime=build_capacity_runtime(adapter),
+            endpoint='codex://local' if adapter.startswith('codex_') else 'https://api.openai.com/v1/responses',
+            configuration=dict(max_output_tokens=1000, timeout_seconds=5))
+        self.records['review_route'] = {route['id']: route}
+        self.records['review_route_probe'] = dict(probe=dict(id='probe', route_id=route['id'],
+            capacity=dict(input_tokens=2000000),
+            capacity_evidence=dict(key=capacity.describe_capacity_key(route), input_tokens=2000000)))
+        return route
+
     def test_part_offset_notice_preserves_expected_offsets_and_every_stored_digest(self):
         before = copy.deepcopy(self.records)
         frozen = {kind: digest(value) for kind, value in before.items()}
@@ -337,10 +350,7 @@ class RefusalNoticeTests(RefusalCase):
                 self.build_notice(form, ids)
 
     def test_form_selection_counts_notice_in_task_and_reports_both_failed_trials(self):
-        from research_harness import review_transport as transport
-        route = {'id': 'route', 'adapter': transport.ADAPTER, 'model': 'fixture-model', 'runtime': {},
-                 'endpoint': 'https://api.openai.com/v1/responses',
-                 'configuration': {'max_output_tokens': 1000, 'timeout_seconds': 5}}
+        route = self.build_verified_route()
         self.output['value']['reason'] = 'x' * 100_000
         self.add_refusal('first', self.output)
         packet = {'role': 'bar'}
@@ -365,12 +375,24 @@ class RefusalNoticeTests(RefusalCase):
         self.assertTrue(all(not row['fits'] for row in failed['trials']))
         self.assertEqual(packet, {'role': 'bar'})
 
+    def test_form_selection_uses_only_the_routes_keyed_capacity_witness(self):
+        route = self.build_verified_route('codex_cli_v1')
+        before = copy.deepcopy(self.records)
+        selected = self.select_notice(self.records, self.artifacts, ('first',), route=route,
+            role='bar', prompt='Frozen reviewer prompt.', packet={'role': 'bar'})
+        self.assertEqual(selected['notice']['form'], 'whole')
+        self.assertEqual(selected['trials'][0]['request_measure']['token_limit'], 1999000)
+        changed = dict(route, runtime=dict(route['runtime'], version='fixture-cli-updated'))
+        refused = self.select_notice(self.records, self.artifacts, ('first',), route=changed,
+            role='bar', prompt='Frozen reviewer prompt.', packet={'role': 'bar'})
+        self.assertIsNone(refused['notice'])
+        self.assertTrue(all(trial['request_measure']['token_limit'] == 0 for trial in refused['trials']))
+        self.assertEqual(self.records, before)
+
     def test_preflight_selects_bounded_form_and_does_not_hide_unrelated_errors(self):
         from research_harness import review_preflight
         from research_harness import review_transport as transport
-        route = {'id': 'route', 'adapter': transport.ADAPTER, 'model': 'fixture-model', 'runtime': {},
-                 'endpoint': 'https://api.openai.com/v1/responses',
-                 'configuration': {'max_output_tokens': 1000, 'timeout_seconds': 5}}
+        route = self.build_verified_route()
         self.output['value']['reason'] = 'x' * 100_000
         self.add_refusal('first', self.output)
         def select():
@@ -391,9 +413,7 @@ class RefusalNoticeTests(RefusalCase):
 
     def test_each_form_measures_its_recorded_prompt_and_non_notice_task(self):
         from research_harness import review_transport as transport
-        route = {'id': 'route', 'adapter': transport.ADAPTER, 'model': 'fixture-model', 'runtime': {},
-                 'endpoint': 'https://api.openai.com/v1/responses',
-                 'configuration': {'max_output_tokens': 1000, 'timeout_seconds': 5}}
+        route = self.build_verified_route()
         self.output['value']['reason'] = 'x' * 100_000
         self.add_refusal('first', self.output)
         texts = {'whole': 'Whole retry placeholder.', 'bounded': 'Bounded retry placeholder. ' + 'b' * 60_000}
@@ -425,9 +445,7 @@ class RefusalNoticeTests(RefusalCase):
 
     def test_selected_request_keeps_the_exact_notice_and_rebuild_does_not_reselect(self):
         from research_harness import review_excerpts, review_transport as transport
-        route = {'id': 'route', 'adapter': transport.ADAPTER, 'model': 'fixture-model', 'runtime': {},
-                 'endpoint': 'https://api.openai.com/v1/responses',
-                 'configuration': {'max_output_tokens': 1000, 'timeout_seconds': 5}}
+        route = self.build_verified_route()
         real_request = transport.request_body
         def strip_notice(route, prompt, packet, **options):
             supplied = dict(packet)

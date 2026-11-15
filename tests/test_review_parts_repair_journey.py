@@ -7,7 +7,7 @@ from unittest.mock import patch
 from codex_route_fixtures import (build_codex_response, invoke_codex, limit_codex_input,
                                   probe_codex_route, record_codex_route)
 from research_harness import review_parts as parts, review_problem_parts as legacy
-from research_harness import research_decisions as decisions, review_protocol as protocol
+from research_harness import bar_sources, research_decisions as decisions, review_protocol as protocol
 from research_harness.evidence import digest
 from research_harness.errors import ResearchError
 from review_parts_fixtures import PartsResultCase, make_output
@@ -45,6 +45,7 @@ class ResultRepairJourneyTests(PartsResultCase):
             assignment = self.continue_repair(assignment, 'repair-turn-' + str(number))
         self.fail('The repair series did not finish')
 
+    @patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL)
     def test_three_legacy_parts_without_final_enter_fresh_repair(self):
         # Derive the limit from the rendered ordinary request, with enough room for the new frame.
         ordinary = protocol.build_packet(self.case.read_records(), self.case.artifacts, None, 'result', 'first')
@@ -138,8 +139,9 @@ class BarRepairJourneyTests(StrategyCase):
             reason='The same observation fits both mechanisms.', evidence=[self.evidence],
             resolution_condition='Supply a deciding observation.')
         self.original = self.review_response('bar', status='insufficient', objections=[self.objection])
-        assignment = self.mutate(protocol.record_assignment, dict(id='assignment-bar-a', route_id='route',
-            dossier_id='dossier-1', role='bar', reviewer_id='reviewer-a', author_id='author', context={}))['result']
+        with patch.object(bar_sources, 'SESSION_PROTOCOL', getattr(self, 'source_rules_protocol', bar_sources.PROTOCOL)):
+            assignment = self.mutate(protocol.record_assignment, dict(id='assignment-bar-a', route_id='route',
+                dossier_id='dossier-1', role='bar', reviewer_id='reviewer-a', author_id='author', context={}))['result']
         invoke_codex(self, assignment['id'], self.original)
         self.mutate(decisions.record_value_review, dict(self.original, id='bar-a', dossier_id='dossier-1',
                                                        assignment_id=assignment['id']))

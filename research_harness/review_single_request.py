@@ -45,11 +45,10 @@ def describe_assignment_delivery(records, artifacts, assignment):
         adapter=adapter, route_adapter=route['adapter'])))
 
 
-def measure_parts_request(records, route, request, characters):
+def measure_parts_request(records, route, request, characters, *, artifacts=None):
     """Give the parts fitter the canonical token and text limits in its character unit."""
-    profile = capacity.read_output_profile(records, route)
-    limits = capacity.describe_route_capacity(route, profile)
-    measure = capacity.measure_request(route, request)
+    limits = capacity.describe_route_capacity(route, records=records, artifacts=artifacts)
+    measure = capacity.measure_request(route, request, records=records, artifacts=artifacts)
     if (measure['tokens_upper'] > limits['input_tokens']['value']
             or measure['text_characters'] > limits['input_text_characters']['value']):
         from .review_transport import local_input_limit
@@ -127,6 +126,7 @@ def build_output_replacement(records, artifacts, assignment, *, identifier=None)
 def prepare_replacement(records, artifacts, value, revision):
     """Validate the command's replacement binding once, then publish its frozen read turn."""
     from . import review_protocol as protocol, review_failure_class as failures
+    from . import review_parts_repair as repair
     from .operations import immutable_record
 
     fields(value['context'], ('capacity_replacement',), code='invalid_review_context')
@@ -143,17 +143,27 @@ def prepare_replacement(records, artifacts, value, revision):
     attempts = protocol.read_filtered_records(records, 'review_attempt', assignment_id=identifier).values()
     classifications = [failures.classify_attempt(records, artifacts, row) for row in attempts]
     eligible = any((outcome or {}).get('outcome') == 'output_over_cap' for outcome in classifications)
-    if is_first_output_read(previous, protocol._read_json(artifacts, previous['packet'])):
+    previous_packet = protocol._read_json(artifacts, previous['packet'])
+    output_read = is_first_output_read(previous, previous_packet)
+    parts_recovery = (not output_read and (parts.find_kind(previous_packet) == 'read'
+                                          or repair.applies(previous, previous_packet)))
+    outcome = None
+    if output_read or parts_recovery:
         recovery = failures.plan_after_failure(records, artifacts, identifier)
+        outcome = recovery.get('details', {}).get('outcome')
+        handlers = ('parts_v2_read', 'context_repair') if parts_recovery else ('single_request_series',)
         eligible = (recovery['state'] == 'replace'
-                    and recovery.get('details', {}).get('handler') == 'single_request_series')
+                    and recovery.get('details', {}).get('handler') in handlers
+                    and outcome in ('output_over_cap', 'input_over_limit', 'timeout', 'provider_refused'))
     if (protocol.has_pending_invocation(records, identifier)
             or any(outcome is None for outcome in classifications) or not eligible):
         raise ResearchError('invalid_review_context',
                             'A capacity replacement needs an admissible smaller task, no pending invocation and no usable completed output.')
-    planned = build_output_replacement(records, artifacts, previous, identifier=value['id'])
-    if planned is None:
-        raise ResearchError('invalid_review_context', 'This single review has no smaller parts task.')
+    planned = (failures.plan_output_replacement(records, artifacts, previous, include_packet=True,
+                    outcome=outcome, replacement_id=value['id']) if parts_recovery
+               else build_output_replacement(records, artifacts, previous, identifier=value['id']))
+    if planned is None or parts_recovery and planned['state'] != 'replace':
+        raise ResearchError('invalid_review_context', 'This review has no smaller parts task.')
     packet, prompt = planned['packet'], planned['prompt']
     header = packet[parts.KEY]
     record = copy.deepcopy(previous)
@@ -164,8 +174,10 @@ def prepare_replacement(records, artifacts, value, revision):
     record['context_state'] = protocol.route_state(records, artifacts, previous['route_id'])
     record['slot_id'] = protocol.context_repair.slot_id(records, previous)
     record.pop('history_ref', None)
-    record[parts.KEY] = {key: header[key] for key in
-        ('protocol', 'adapter', 'kind', 'series_assignment_id', 'turn', 'inventory_digest', 'replaces_assignment_id')}
+    keys = ('protocol', 'adapter', 'kind', 'series_assignment_id', 'turn', 'inventory_digest')
+    if 'replaces_assignment_id' in header:
+        keys += ('replaces_assignment_id',)
+    record[parts.KEY] = {key: header[key] for key in keys}
     record['review_parts_plan'] = parts.describe_plan(packet)
     from .problem_delivery import require_unposted_review
     require_unposted_review(records, record, artifacts)

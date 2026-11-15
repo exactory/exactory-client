@@ -150,7 +150,7 @@ class StrategyCase(unittest.TestCase):
     def provider_response(self, output):
         return {"id": "synthetic-provider-return", "model": "fixture-model", "status": "completed",
                 "output": [{"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": json.dumps(output)}]}],
-                "usage": {"input_tokens": 37, "output_tokens": 19}}
+                "usage": {"input_tokens": 1000000 if "allowed_control" in output else 37, "output_tokens": 19}}
 
     def route(self):
         protocol = self.module("review_protocol")
@@ -162,6 +162,8 @@ class StrategyCase(unittest.TestCase):
             return self.provider_response({"allowed_control": packet["allowed_control"], "evidence_control": packet["evidence_control"],
                                            "excluded_controls": []})
 
+        from visual_capacity_fixtures import install_bounded_binary_backend
+        install_bounded_binary_backend(self, [self.store.snapshot()['records']['review_route']['route']])
         with patch("research_harness.review_transport.send_request", side_effect=probe):
             protocol.probe_route(self.store, {"id": "probe", "route_id": "route"}, credential="fixture-only",
                                  expected_revision=self.store.revision, request_id="probe-route")

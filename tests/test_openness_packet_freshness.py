@@ -273,7 +273,10 @@ class PacketFreshnessTests(OpennessReadingCase):
         self.invoke('turn-1', answer)
         records = self.store.snapshot()['records']
         self.assertEqual(records['review_output_refusal']['attempt-turn-1']['code'], 'openness_finding_invalid')
-        self.assertEqual(plan_next(records, self.artifacts, 'turn-1')['state'], 'run')
+        plan = plan_next(records, self.artifacts, 'turn-1')
+        self.assertEqual((plan['state'], plan['command'], plan['code']),
+                         ('handoff', 'export', 'review_slot_exhausted'))
+        self.assertEqual(plan['details']['outcome'], 'scientific_refused')
 
 
 class ChainFreshnessTests(OpennessReadingCase):

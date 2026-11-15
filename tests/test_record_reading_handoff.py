@@ -131,11 +131,15 @@ class ReadingHandoffTests(unittest.TestCase):
                 if kind != 'literature_operation':
                     self.assertEqual(after[kind], values, kind)
             self.assertEqual(after['review_series_stop'][plan['stop_id']]['plan']['state'], 'handoff')
-            self.assertEqual(set(after['literature_operation']) - set(before['literature_operation']), {plan['stop_id']})
+            driver, = after['review_series_run'].values()
+            self.assertEqual(driver['ended']['code'], 'reading_missing')
+            self.assertEqual(driver['ended']['stop_id'], plan['stop_id'])
+            self.assertEqual(set(after['literature_operation']) - set(before['literature_operation']),
+                             {plan['stop_id'], driver['id'], driver['id'] + ':end'})
             self.read_source()
             record = self.plan()
             self.assertEqual(record, dict(state='record', chain='session', head_id='final',
-                progress=record['progress'], command='value-review',
+                progress=record['progress'], capacity_forecast=record['capacity_forecast'], command='value-review',
                 payload=dict(output, id='review:final', assignment_id='final', dossier_id=None)))
             saved = self.execute(record)['result']
             self.assertEqual(saved['output_digest'], digest(output))

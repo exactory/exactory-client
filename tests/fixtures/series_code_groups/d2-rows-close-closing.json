@@ -358,6 +358,9 @@
         "research_harness/review_route_capacity.py:prepare_assignment_capacity#9": [
           "content"
         ],
+        "research_harness/review_stop.py:request_stop#1": [
+          "form"
+        ],
         "research_harness/review_task_execution.py:_TransactionRecords.__iter__#1": [
           "harness"
         ],
@@ -609,6 +612,11 @@
           "content"
         ]
       },
+      "process_gone": {
+        "research_harness/review_stop.py:_reconcile_gone_drivers#1": [
+          "entry"
+        ]
+      },
       "provider_state_unavailable": {
         "research_harness/provider_pacing.py:ProviderPacing._edit_state#1": [
           "environment"
@@ -812,7 +820,7 @@
         "research_harness/review_staged_protocol.py:accept_capture#1": [
           "content"
         ],
-        "research_harness/review_staged_protocol.py:invoke_task.prepare_capture#1": [
+        "research_harness/review_staged_protocol.py:prepare_capture_attempt#1": [
           "content"
         ]
       },

@@ -33,7 +33,9 @@ class VisualRouteTests(unittest.TestCase):
                       'author_id': 'Author', 'dossier_id': None, 'slot_id': 'slot', 'subject': self.packet['subject'],
                       'context': {'source_delivery': 'complete-visible-v1'},
                       'packet': self.artifacts.put(json.dumps(self.packet).encode(), 'application/json')}
-        self.route = {'id': 'visual', 'adapter': 'codex_cli_visual_v1', 'model': 'gpt-6-astra', 'endpoint': 'codex://local'}
+        self.route = {'id': 'visual', 'adapter': 'codex_cli_visual_v1', 'model': 'gpt-6-astra', 'endpoint': 'codex://local',
+                      'configuration': {'max_output_tokens': 1000, 'timeout_seconds': 5},
+                      'runtime': {'adapter': 'codex_cli_visual_v1', 'fixture': 'visual-bridge-test'}}
         self.records = {'review_assignment': {'prior': self.prior},
                         'review_route': {'old': dict(self.route, id='old', adapter='codex_cli_v1'), 'visual': self.route},
                         'review_attempt': {'attempt': {'id': 'attempt', 'request_digest': digest(self.request),

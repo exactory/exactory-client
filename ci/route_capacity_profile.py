@@ -445,13 +445,204 @@ def build_prior_rows(samples, *, source, date):
     return rows
 
 
+RELEASE_EVIDENCE_MESSAGE = 'The capacity release check is blocked. Resolve the reported cause and retain its coverage evidence before release.'
+
+
+def assess_release_records(records, artifacts, *, matrix=None, inventory=None, check_plans=True, check_share=True, since=None):
+    """K10 inspects every retained attempt, independent of its classified outcome.
+
+    This is a release audit, not admission or a migration. No stored record,
+    prompt, request, packet, profile or route identity is rewritten.
+    """
+    from ci import capacity_guard as guard
+    from ci.capacity_packet_inventory import read_packet_registry, validate_packet
+    from research_harness import review_failure_class as failures, stop_classes
+    from research_harness.review_continuation import list_chain_heads, plan_next
+    matrix = guard.read_matrix() if matrix is None else matrix
+    inventory = guard.read_transport_inventory() if inventory is None else inventory
+    registry = read_packet_registry()
+    entries = {row['id']: row for row in matrix['entries']}
+    blocks, observations, samples = [], [], []
+
+    def block(reason, identifier, **details):
+        blocks.append(dict(reason=reason, id=identifier, message=RELEASE_EVIDENCE_MESSAGE, **details))
+
+    assignments = records.get('review_assignment', {})
+    for assignment in assignments.values():
+        if assignment.get('packet') is None:
+            continue
+        packet = json.loads(artifacts.read(assignment['packet']))
+        errors = validate_packet(assignment['role'], packet, registry)
+        if errors:
+            block('undeclared_packet_member', assignment['id'], errors=errors)
+    for record_kind, operation in COMPLETION_OPERATIONS:
+        for attempt in records.get(record_kind, {}).values():
+            assignment = assignments.get(attempt.get('assignment_id'), {})
+            route = records.get('review_route', {}).get(attempt.get('route_id') or assignment.get('route_id'))
+            if route is None:
+                block('attempt_without_route', attempt['id'])
+                continue
+            adapter = inventory['adapters'].get(route['adapter'])
+            if adapter is None:
+                block('unlisted_adapter', attempt['id'])
+                continue
+            response, answer = failures.read_attempt_evidence(artifacts, attempt)
+            classification = (failures.classify_attempt(records, artifacts, attempt)
+                if record_kind == 'review_attempt' else failures.find_capacity_signal(route, attempt, response, answer))
+            outcome = classification['outcome'] if classification else None
+            retained = failures.find_capacity_signal(route, attempt, response, answer)
+            code = (attempt.get('error') or {}).get('code')
+            known = {key for row in inventory['adapters'].values() for key in row['signals']['codes']}
+            known.update(failures.OUTCOME_CODES.values())
+            if code and code not in known:
+                block('unlisted_transport_code', attempt['id'], code=code)
+            issues = list(response.get('context_evidence', {}).get('issues', []))
+            if route['adapter'] == 'claude_cli_v1' and response.get('execution', {}).get('system_events') is not None:
+                from research_harness.review_claude_transport import inspect_retained_system_events
+                try:
+                    inspected = inspect_retained_system_events(response)
+                except ResearchError as error:
+                    block('unreadable_context_events', attempt['id'], code=error.code)
+                else:
+                    issues = sorted(set(issues) | set(inspected['issues']))
+                    if inspected['truncated']:
+                        block('truncated_context_events', attempt['id'])
+            issue_signals = [row for row in inventory.get('recognized_evidence', [])
+                if row['adapter'] == route['adapter'] and row['field'] == 'context_issue'
+                and any(issue == row['prefix'] or row['prefix'].endswith('*')
+                    and issue.startswith(row['prefix'][:-1]) for issue in issues)]
+            for issue in issues:
+                matches = [name for name in adapter['signals']['issues'] if issue == name or
+                    name.endswith('*') and issue.startswith(name[:-1])]
+                if not matches and not any(row['prefix'] == issue for row in issue_signals):
+                    block('unlisted_context_issue', attempt['id'], issue=issue)
+                if issue.startswith('system_event_') and issue != 'system_event_compact_boundary':
+                    block('unverified_context_event', attempt['id'], issue=issue)
+            usage = dict(response.get('usage') or {})
+            usage.update({key: value for key, value in (attempt.get('usage') or {}).items() if value is not None})
+            output_limit = capacity.describe_route_capacity(route)['output_tokens']['value']
+            raw_compaction = next((row for row in issue_signals if row['detail'] == 'compacted'), None)
+            size_outcomes = ('output_over_cap', 'input_over_limit', 'response_over_limit', 'timeout')
+            # A non-size classifier signal cannot erase independent size evidence.
+            # The transport's non-2xx response-size precedence remains in retained.
+            size_outcome = raw_compaction['outcome'] if raw_compaction else (
+                retained['outcome'] if retained and retained['outcome'] in size_outcomes else
+                'output_over_cap' if type(usage.get('output_tokens')) is int and usage['output_tokens'] >= output_limit else
+                'input_over_limit' if code == 'review_input_too_large' else
+                'timeout' if attempt.get('status') == 'timed_out' or response.get('execution', {}).get('timeout') else None)
+            entry = ('A26' if size_outcome == 'response_over_limit' else
+                'A27' if size_outcome == 'input_over_limit' and (raw_compaction is not None or
+                    retained and retained['signal'].get('detail') == 'compacted')
+                    and route['adapter'] == 'claude_cli_v1' else
+                'A20' if size_outcome == 'input_over_limit' and route['adapter'].startswith('codex_') else
+                'A9' if size_outcome == 'input_over_limit' else
+                'A21' if size_outcome == 'timeout' else None)
+            request = json.loads(artifacts.read(attempt['request'])) if attempt.get('request') else None
+            packet = review_excerpts.read_sent_packet(request) if request else None
+            if packet is not None:
+                packet_role = {'review.route_probe': 'probe', 'review.output_correction': 'correction'}.get(
+                    operation, assignment.get('role', 'probe'))
+                errors = validate_packet(packet_role, packet, registry)
+                if errors:
+                    block('undeclared_emitted_packet_member', attempt['id'], errors=errors)
+            if packet is None:
+                packet = json.loads(artifacts.read(assignment['packet'])) if assignment.get('packet') else {}
+            kind = capacity.describe_task_kind(assignment.get('role', 'probe'), packet, operation)
+            if size_outcome == 'output_over_cap':
+                entry = dict(request='A12', reading='A13', final='A14', read='A15', combine='A15',
+                    check='A15', single='A16', staged='A10c', correction='A11', probe='A24').get(kind)
+            if size_outcome in size_outcomes:
+                if outcome is not None and outcome not in size_outcomes:
+                    block('size_evidence_without_size_outcome', attempt['id'], outcome=outcome, entry=entry)
+                if entry not in entries or kind not in entries[entry]['kinds']:
+                    block('uncovered_size_attempt', attempt['id'], kind=kind, entry=entry)
+                if not entries.get(entry, {}).get('tests') or not any(entries.get(entry, {}).get('units', {}).values()):
+                    block('size_attempt_without_unit_or_test', attempt['id'], entry=entry)
+            if request is not None:
+                measure = capacity.measure_request(route, request, records=records, artifacts=artifacts)
+                if size_outcome == 'input_over_limit' and measure['fits']:
+                    block('input_limit_inside_measure', attempt['id'], measure=measure)
+                reported_input = usage.get('input_tokens')
+                if measure['tokens_upper'] is None:
+                    block(measure['reason'], attempt['id'], measure=measure, entry='A10b')
+                elif type(reported_input) is int and reported_input > measure['tokens_upper']:
+                    block('token_measure_below_usage', attempt['id'], measure=measure, input_tokens=reported_input)
+                sample = capacity.describe_attempt(route, assignment.get('role', 'probe'), packet, request, response,
+                    operation=operation, attempt_error=attempt.get('error'), observed_at=attempt.get('observed_at'))
+                samples.append(dict(sample, route_class=capacity.describe_route_class(route), output_limit=output_limit))
+            observations.append(dict(id=attempt['id'], operation=operation, outcome=outcome,
+                retained_outcome=size_outcome, kind=kind, entry=entry, code=code, issues=issues))
+    if check_plans:
+        for identifier in list_chain_heads(records, artifacts):
+            assignment = assignments[identifier]
+            plan = plan_next(records, artifacts, identifier)
+            if plan['state'] not in ('run', 'resume', 'continue', 'record', 'wait', 'handoff', 'stop', 'done'):
+                block('unlisted_plan_form', assignment['id'], state=plan['state'])
+            if plan.get('code') in capacity.VERIFICATION_SIZE_STOP_CODES and plan['code'] not in stop_classes.STOP_REGISTRY:
+                block('size_stop_without_registry', assignment['id'], code=plan['code'])
+    shares = assess_release_output_share(samples, since=since)
+    for row in shares:
+        if check_share and row['result'] == 'fail':
+            block('output_share_above_ceiling', row['kind'], share=row)
+    return dict(result='fail' if blocks else 'pass', attempts=observations, blocks=blocks, shares=shares)
+
+
+def read_root_capacity_check(root, *, since=None):
+    """Read a live root without ignoring committed records in its WAL."""
+    database = root / '.exactory/research.sqlite3'
+    if not database.is_file():
+        return dict(result='fail', attempts=[], shares=[], blocks=[dict(
+            reason='store_missing', message=RELEASE_EVIDENCE_MESSAGE)])
+    try:
+        connection = sqlite3.connect(database.resolve().as_uri() + '?mode=ro', uri=True)
+        try:
+            records = {}
+            for kind, key, value in connection.execute('select kind,key,value from records'):
+                records.setdefault(kind, {})[key] = json.loads(value)
+        finally:
+            connection.close()
+        return assess_release_records(records, ArtifactStore(root), check_share=False, since=since)
+    except (ResearchError, ValueError, sqlite3.DatabaseError) as error:
+        return dict(result='fail', attempts=[], shares=[], blocks=[dict(reason='audit_input_unreadable',
+            code=getattr(error, 'code', type(error).__name__), message=RELEASE_EVIDENCE_MESSAGE)])
+
+
+def assess_release_roots(checks):
+    """Apply the class/kind ceiling to all audited roots together."""
+    groups = {}
+    for check in checks:
+        for share in check['shares']:
+            route_class = share['route_class']
+            key = tuple(route_class.get(name) for name in ('adapter', 'model', 'effort')) + (share['kind'],)
+            row = groups.setdefault(key, dict(route_class=route_class, kind=share['kind'], calls=0, at_or_over_limit=0))
+            row['calls'] += share['calls']
+            row['at_or_over_limit'] += share['at_or_over_limit']
+    blocks = []
+    for row in groups.values():
+        row['result'] = ('incomplete' if row['calls'] < capacity.VERIFICATION_MINIMUM_CALLS else
+            'fail' if row['at_or_over_limit'] * capacity.VERIFICATION_CALLS_PER_OVER_LIMIT > row['calls'] else 'pass')
+        if row['result'] == 'fail':
+            blocks.append(dict(reason='output_share_above_ceiling', share=row, message=RELEASE_EVIDENCE_MESSAGE))
+    if not checks:
+        blocks.append(dict(reason='roots_missing', message=RELEASE_EVIDENCE_MESSAGE))
+    return dict(protocol='exactory-capacity-release-check-v1', roots=checks, shares=list(groups.values()),
+        blocks=blocks, result='fail' if blocks or any(check['result'] == 'fail' for check in checks) else 'pass')
+
+
 def run_cli(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--roots-file', type=Path, required=True)
     parser.add_argument('--probe-summary', type=Path)
     parser.add_argument('--frame-summary', type=Path)
     parser.add_argument('--date', default=capacity.MEASUREMENT_DATE)
+    parser.add_argument('--check-closure', action='store_true')
+    parser.add_argument('--since')
     args = parser.parse_args(argv)
+    if args.check_closure:
+        checks = [read_root_capacity_check(root, since=args.since) for root in read_root_paths(args.roots_file)]
+        report = assess_release_roots(checks)
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return int(report['result'] == 'fail')
     frame_samples, frame_policy = read_frame_probe_samples(
         args.frame_summary,
         read_summary_rows(args.probe_summary),

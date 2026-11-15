@@ -218,6 +218,9 @@ def _review_output_correction(store, payload, **identity):
     return invoke_correction(store, payload, credential=os.environ.get("OPENAI_API_KEY"), **identity)
 
 
+from .review_stop import stop_review
+OPERATIONS["review-stop"] = stop_review
+
 OPERATIONS.update({"review-probe": _review_probe, "review-run": _review_run,
                    "review-output-correction": _review_output_correction})
 
@@ -524,14 +527,16 @@ def describe_review_receipt(store, command, payload, receipt):
         assignment = records.get('review_assignment', {}).get(payload['id'])
         if assignment is None:
             return receipt
+        from .evaluation import Evaluation
+        artifacts = Evaluation(records, store.build_artifact_store())
         if 'capacity_plan_kind' in assignment:
             from .review_route_capacity import describe_assignment_capacity
-            receipt = dict(receipt, **describe_assignment_capacity(records, store.build_artifact_store(), assignment))
-        warning = describe_assignment_warning(records, payload['id'], artifacts=store.build_artifact_store())
+            receipt = dict(receipt, **describe_assignment_capacity(records, artifacts, assignment))
+        warning = describe_assignment_warning(records, payload['id'], artifacts=artifacts)
         from .review_single_request import describe_assignment_delivery
         try:
-            delivery = describe_assignment_delivery(records, store.build_artifact_store(), assignment)
-        except ResearchError:
+            delivery = describe_assignment_delivery(records, artifacts, assignment)
+        except (ResearchError, json.JSONDecodeError):
             # Advisory delivery details do not prevent replay of a recorded receipt.
             return dict(receipt, capacity_warning=warning) if warning is not None else receipt
         if 'capacity_warning' in delivery:
@@ -539,10 +544,17 @@ def describe_review_receipt(store, command, payload, receipt):
             output = dict(extra, **(warning or {}).get('output', {}))
             output.update(above_start=True, message=extra['message'])
             warning = dict(warning or {}, output=output)
-        return dict(receipt, capacity_warning=warning) if warning is not None else receipt
+        result = dict(receipt, capacity_warning=warning) if warning is not None else receipt
+        from .review_route_capacity import describe_session_forecast
+        try:
+            forecast = describe_session_forecast(records, artifacts, assignment)
+        except (ResearchError, json.JSONDecodeError):
+            # Replaying a receipt does not require reopening its old delivery inputs.
+            return result
+        return dict(result, capacity_forecast=forecast) if forecast is not None else result
     routes = records.get('review_route', {})
     route = routes.get(payload['id'], payload) if command == 'review-route' else routes[payload['route_id']]
-    return dict(receipt, **describe_route_report(records, route))
+    return dict(receipt, **describe_route_report(records, route, store.build_artifact_store()))
 
 
 def _review_status(records, artifacts):
@@ -564,6 +576,24 @@ def _review_status(records, artifacts):
         if successor is not None:
             result['assignments'][identifier]['not_selected'] = dict(
                 assignment_id=successor['id'], message=NOT_SELECTED_MSG)
+    from .review_call_admission import list_waiting_calls, list_active_calls, describe_capacity_wait
+    queue = list_waiting_calls(records)
+    if queue:
+        active = list_active_calls(records)
+        result['queue'] = [dict(row, **describe_capacity_wait(records, artifacts, row['route_id'], active, queue))
+                           for row in queue]
+    from .review_stop import find_stop, describe_stop, list_live_drivers, _matches_call_scope
+    running_drivers = list_live_drivers(records, dict(kind='store'))
+    scoped_entries = result['assignments'].items() if records.get('review_stop') or running_drivers else ()
+    for identifier, entry in scoped_entries:
+        stop = (find_stop(records, assignment_id=identifier)
+                or find_stop(records, standing=False, assignment_id=identifier))
+        if stop is not None:
+            entry['last_stop'] = describe_stop(records, stop)
+        drivers = [row for row in running_drivers
+                   if _matches_call_scope(records, row['scope'], dict(assignment_id=identifier))]
+        if drivers:
+            entry['drivers'] = drivers
     from .review_provider_usage import describe_usage
     usage = describe_usage(records, artifacts)
     if usage['windows']:
@@ -586,14 +616,26 @@ def _review_status(records, artifacts):
         except (ResearchError, json.JSONDecodeError):
             state = dict(ready=False)
         series = series_results[assignment[review_parts.KEY]['series_assignment_id']]
+        is_posted = find_review_post(records, assignment, artifacts) is not None
         result['assignments'][identifier]['review_parts'] = describe_parts_turn(
             assignment, state, series,
-            is_posted=find_review_post(records, assignment, artifacts) is not None,
+            is_posted=is_posted,
             ended_without_output=review_protocol.has_ended_without_output(records, identifier))
         progress = result['assignments'][identifier]['review_parts']
-        if progress['next']:
+        if (not is_posted and not progress['complete']
+                and progress.get('blocked') == 'review_output_refused'):
+            progress['next'] = describe_next_actions(records, artifacts, identifier)
+            selected = progress['next'][0]
+            progress.pop('blocked')
+            if selected['state'] in ('stop', 'handoff'):
+                progress['blocked'] = selected.get('code', 'review_output_refused')
+            if selected['state'] == 'stop' and 'command' not in selected:
+                progress['next'] = []
+        elif progress['next']:
             progress['next'] = describe_next_actions(records, artifacts, identifier, progress['next'])
-    from .review_route_capacity import describe_open_route_reports
+    from .review_route_capacity import describe_open_route_reports, describe_unsolved_reviews
+    if records.get('review_route'):
+        result['outside_solved_part'] = describe_unsolved_reviews()
     routes = describe_open_route_reports(records, artifacts)
     if routes:
         result['routes'] = routes
@@ -967,7 +1009,7 @@ def run(args):
         examples = strict_json((Path(__file__).resolve().parents[1] / "docs/research-cli-examples.json").read_bytes())
         return examples[args.operation]
     if getattr(args, "check", False) and args.command in (
-            "batches", "export", "recover", "restore", "strategy-packet", "review-series"):
+            "batches", "export", "recover", "restore", "strategy-packet", "review-series", "review-stop"):
         raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects",
                             {"command": args.command})
     preview = args.command == "import-response" and args.preview
@@ -1112,7 +1154,7 @@ def run(args):
                                                              decision_id=args.decision_id), revision=snapshot["revision"])
             if args.command == "review-route-assess":
                 return dict(review_protocol.route_state(snapshot["records"], artifacts, args.route_id),
-                            **review_protocol.describe_route_report(snapshot["records"], args.route_id),
+                            **review_protocol.describe_route_report(snapshot["records"], args.route_id, artifacts),
                             revision=snapshot["revision"])
             context = strict_json(Path(args.context_file).read_bytes()) if args.context_file else {}
             if not isinstance(context, dict):

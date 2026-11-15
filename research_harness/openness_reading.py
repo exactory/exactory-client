@@ -888,7 +888,7 @@ def _build_projection_record(artifacts, rows, record, units, record_total, *, so
     return projected
 
 
-def _measure_largest_reading_request(route, packet, record, units, artifacts, prompt):
+def _measure_largest_reading_request(route, packet, record, units, artifacts, prompt, *, records=None):
     """Bound every prefix with the largest plan frame plus the largest distinct delivered evidence window.
 
     A delivered_now reference is shorter than the descriptor used before or after it. Keeping every descriptor in
@@ -933,11 +933,11 @@ def _measure_largest_reading_request(route, packet, record, units, artifacts, pr
     measures = []
     for start, end in sorted(set(windows.values())):
         frame['evidence'] = [entries[key] for key in sorted(set(keys[start:end]))]
-        measures.append(measure_request(route, _render(route, prompt, frame)))
+        measures.append(measure_request(route, _render(route, prompt, frame), records=records, artifacts=artifacts))
     return measures
 
 
-def project_reading_chain(route, packet, rows, record, *, artifacts, record_total=None, prompts=None,
+def project_reading_chain(route, packet, rows, record, *, artifacts, records=None, record_total=None, prompts=None,
                           eligible_texts=(), final_input=None):
     """Bound every mandatory request of a chain, using the v6 serialized-record allowance.
 
@@ -957,7 +957,7 @@ def project_reading_chain(route, packet, rows, record, *, artifacts, record_tota
                   reserved_identifier_characters=RESERVED_IDENTIFIER_CHARACTERS)
     if unbounded:
         measured = final_input if final_input is not None else measure_final_input(
-            route, packet, rows, record, eligible_texts=eligible_texts)
+            route, packet, rows, record, eligible_texts=eligible_texts, records=records, artifacts=artifacts)
         result['fixed_parts'] = dict(measured['parts'])
         delivery_rows = list_delivery_rows(rows, record['search_delivery']) if 'search_delivery' in record else rows
         result['planned_reading_turns'] = sum(len(value) for value in _compute_spans(artifacts, delivery_rows).values())
@@ -994,12 +994,13 @@ def project_reading_chain(route, packet, rows, record, *, artifacts, record_tota
                     1, body_parts[entry['artifact']['sha256']]))))
     fixed_final = _measure(route, _render(route, prompts['final'], final))
     from .review_route_capacity import measure_request
-    measurements = dict(final=measure_request(route, _render(route, prompts['final'], final)))
+    measurements = dict(final=measure_request(route, _render(route, prompts['final'], final),
+                                             records=records, artifacts=artifacts))
     reading_measures = _measure_largest_reading_request(route, packet, projected, units, artifacts,
-                                                       prompts['reading'])
+                                                       prompts['reading'], records=records)
     fixed = dict(final=fixed_final, reading=max((measure['characters'] for measure in reading_measures), default=0))
     from .review_route_capacity import describe_route_capacity
-    capacity = describe_route_capacity(route)
+    capacity = describe_route_capacity(route, records=records, artifacts=artifacts)
     ratio = capacity['input_text_characters']['characters_per_token'] or 1
     token_parts = dict(final=measurements['final']['tokens_upper'],
                        reading=max((measure['tokens_upper'] for measure in reading_measures), default=0))
@@ -1057,7 +1058,7 @@ def describe_projection_decision(protocol, *, records=None, artifacts=None, assi
 def admit_reading_chain(route, projection, *, records=None, artifacts=None, assignment=None):
     """The first-assignment admission, deliberately separate from the v5 first-assignment call site."""
     from .review_route_capacity import describe_route_capacity
-    capacity = describe_route_capacity(route)
+    capacity = describe_route_capacity(route, records=records, artifacts=artifacts)
     limit = dict(characters=capacity['input_characters']['value'], tokens=capacity['input_tokens']['value'])
     reason = 'no_enforceable_bound' if not projection['finite'] else 'below_floor'
     if (projection['finite'] and projection['record_total'] >= RECORD_ALLOWANCE_FLOOR
@@ -1101,7 +1102,8 @@ def _find_delivery_turns(unit, turns):
     return result
 
 
-def measure_final_input(route, packet, rows, record, *, eligible_texts=(), reading_turn_ids=None):
+def measure_final_input(route, packet, rows, record, *, eligible_texts=(), reading_turn_ids=None,
+                        records=None, artifacts=None):
     """Build the prospective final as the final builder does, retaining every record member.
 
     All plan bodies may eventually have delivery credit. This diagnostic grants none: it only measures their
@@ -1134,7 +1136,7 @@ def measure_final_input(route, packet, rows, record, *, eligible_texts=(), readi
     report = _measure_parts(route, prompt, candidate)
     from .review_route_capacity import measure_request
     report.update(measurement_kind='built_final_request', status='measured', phase='final_forecast',
-                  request=measure_request(route, request))
+                  request=measure_request(route, request, records=records, artifacts=artifacts))
     report['headroom_upper_bound_characters'] = report['input_limit_characters'] - report['input_characters']
     supplied = review_excerpts.read_sent_packet(request)
     text_value = transport._local_adapter(route).packet_text(request)
@@ -1163,7 +1165,7 @@ def measure_final_input(route, packet, rows, record, *, eligible_texts=(), readi
 def _measure_chain_request(records, artifacts, route, request, assignments):
     """AR17's estimate with the chain's largest observed last-send token cost, when available."""
     from .review_route_capacity import measure_request
-    measure = measure_request(route, request)
+    measure = measure_request(route, request, records=records, artifacts=artifacts)
     largest = None
     for attempt in records.get('review_attempt', {}).values():
         if attempt['assignment_id'] not in assignments:
@@ -1171,7 +1173,8 @@ def _measure_chain_request(records, artifacts, route, request, assignments):
         tokens = (attempt.get('usage') or {}).get('input_tokens')
         if not tokens or not attempt.get('request') or (attempt.get('usage') or {}).get('sends', 1) != 1:
             continue
-        earlier = measure_request(route, json.loads(artifacts.read(attempt['request'])))
+        earlier = measure_request(route, json.loads(artifacts.read(attempt['request'])),
+                                  records=records, artifacts=artifacts)
         ratio = tokens / max(1, earlier['text_characters'])
         largest = max(largest or 0, ratio)
     measure['chain_tokens_per_character'] = largest
@@ -1189,7 +1192,7 @@ def forecast_reading_chain(records, artifacts, route, packet, rows, record, *, r
         reading_turn_ids = {identifier for identifier in assignments if records['review_assignment'][identifier].get(
             'prompt', {}).get('parameters', {}).get('reading_stage') == 'reading'}
         final = measure_final_input(route, packet, rows, record, eligible_texts=eligible_texts,
-                                    reading_turn_ids=reading_turn_ids or None)
+                                    reading_turn_ids=reading_turn_ids or None, records=records, artifacts=artifacts)
     else:
         final = copy.deepcopy(final_input)
     entries = measure_retained_entries(route, record)
@@ -1246,9 +1249,10 @@ def describe_reading_receipt(records, artifacts, assignment, route, logical, pac
     reading_turn_ids = {row['id'] for row in lineage if row.get('prompt', {}).get('parameters', {}).get(
         'reading_stage') == 'reading'}
     final = measure_final_input(route, logical, rows, record, eligible_texts=selected,
-                                reading_turn_ids=reading_turn_ids or None)
+                                reading_turn_ids=reading_turn_ids or None, records=records, artifacts=artifacts)
     total = record['allowances'].get('record', {}).get('characters')
-    projection = project_reading_chain(route, logical, rows, record, artifacts=artifacts, eligible_texts=selected,
+    projection = project_reading_chain(route, logical, rows, record, artifacts=artifacts, records=records,
+                                       eligible_texts=selected,
                                        record_total=total, final_input=final)
     forecast, warning = forecast_reading_chain(records, artifacts, route, logical, rows, record,
         request=request, eligible_texts=selected, assignments=identifiers, projection=projection, final_input=final)
@@ -1940,7 +1944,7 @@ def prepare_packet(records, artifacts, value, route, packet):
         if protocol == PROTOCOL_V6:
             record['planned_reading_turns'] = sum(len(parts) for parts in
                 _compute_spans(artifacts, list_delivery_rows(rows, record['search_delivery'])).values())
-            projection = project_reading_chain(route, packet, rows, record, artifacts=artifacts,
+            projection = project_reading_chain(route, packet, rows, record, artifacts=artifacts, records=records,
                 eligible_texts=_classify_final_texts(records, artifacts, native, rows, protocol))
             admission = admit_reading_chain(route, projection, records=records, artifacts=artifacts, assignment=value)
             if admission['state'] != 'record':

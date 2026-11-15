@@ -1,16 +1,19 @@
 """Prospective result contracts preserve old findings and actual input boundaries."""
 
+import base64
 import copy
+import gzip
 import hashlib
 import importlib
 import json
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 import test_research_problem_reviews as fixtures
 from problem_parts_fixtures import KEY as PARTS_KEY, ResultPartsCase
 from research_harness.review_bodies import read_history
-from research_harness import direction_reviews, review_protocol as protocol
+from research_harness import bar_sources, direction_reviews, review_protocol as protocol
 from research_harness import research_decisions as decisions, review_transport as transport
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
@@ -26,18 +29,19 @@ class ProblemResultContractTests(unittest.TestCase):
 
     def old_result(self):
         case = self.case
-        case.observe_bar_reviews()
         original = protocol.canonical_prompt
         def old_prompt(role, **options):
             if (role == 'result' and options.get('orchestration') == 'problem_creation'
                     and 'version' not in options):
                 options['version'] = 2
             return original(role, **options)
-        output = case.build_review_output('result')
-        output['value']['assurances'][-1].update(status='not_assessed',
-            reason='The delivered contract left the stop assessment incomplete.')
-        with patch.object(protocol, 'canonical_prompt', side_effect=old_prompt):
-            case.observe('result', 'first', output)
+        with patch.object(bar_sources, 'SESSION_PROTOCOL', getattr(self, 'source_rules_protocol', bar_sources.PROTOCOL)):
+            case.observe_bar_reviews()
+            output = case.build_review_output('result')
+            output['value']['assurances'][-1].update(status='not_assessed',
+                reason='The delivered contract left the stop assessment incomplete.')
+            with patch.object(protocol, 'canonical_prompt', side_effect=old_prompt):
+                case.observe('result', 'first', output)
         return case.read_records()['review_assignment']['result-first'], output
 
     def test_new_result_example_does_not_treat_completed_no_stop_assessment_as_incomplete(self):
@@ -231,11 +235,25 @@ class ProblemResultContractTests(unittest.TestCase):
         self.assertTrue(pending, 'The actual request omits the binary despite its raw saved packet.')
         self.assertIn(binary['sha256'], pending[0]['artifact_digests'])
 
+    def load_stored_binary_reviews(self):
+        fixture = json.loads(gzip.decompress((Path(__file__).with_name('fixtures') /
+            'stored-binary-review-0.88.1.json.gz').read_bytes()))
+        self.assertEqual(fixture['source_release'], '0.88.1')
+        for sha256, encoded in fixture['objects'].items():
+            reference = self.case.artifacts.put(base64.b64decode(encoded), 'application/octet-stream')
+            self.assertEqual(reference['sha256'], sha256)
+        records = fixture['records']
+        self.case.expected = fixture['expected']
+        for attempt in records['review_attempt'].values():
+            assignment = records['review_assignment'][attempt['assignment_id']]
+            self.assertTrue(protocol.authenticate_attempt(records, self.case.artifacts, assignment, attempt))
+            rebuilt = protocol.build_assignment_request(records, self.case.artifacts, assignment)
+            self.assertEqual(digest(rebuilt), attempt['request_digest'])
+        return records, fixture['binary']
+
     def test_actual_exact_file_input_keeps_coverage_without_restoring_saved_bytes(self):
         case = self.case
-        binary = self.binary_computation()
-        case.observe_result_reviews()
-        records = case.read_records()
+        records, binary = self.load_stored_binary_reviews()
         actual = json.loads(case.artifacts.read(records['review_attempt']['attempt-result-first']['request']))
         self.assertTrue(any(part['type'] == 'input_file' for part in actual['input'][-1]['content']))
         helper = getattr(direction_reviews, 'collect_actual_input_packets', None)
@@ -250,9 +268,7 @@ class ProblemResultContractTests(unittest.TestCase):
 
     def test_changed_observed_request_has_no_raw_packet_fallback(self):
         case = self.case
-        self.binary_computation()
-        case.observe_result_reviews()
-        records = case.read_records()
+        records, _ = self.load_stored_binary_reviews()
         attempt = records['review_attempt']['attempt-result-first']
         actual = json.loads(case.artifacts.read(attempt['request']))
         actual['input'][-1]['content'] = 'A substituted input without the expected evidence.'

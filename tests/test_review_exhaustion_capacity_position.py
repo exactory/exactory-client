@@ -92,6 +92,153 @@ class MixedCapacityPositionTests(unittest.TestCase):
         self.assertEqual(plan['payload']['context']['output_refusal'], dict(assignment_id=previous['id']))
         return self.case.mutate(protocol.record_assignment, dict(plan['payload'], id=identifier))['result']
 
+    def test_capacity_replacement_of_a_refused_read_keeps_its_frozen_notice(self):
+        self.check_refused_read_capacity_notice(continued=True)
+
+    def test_capacity_replacement_of_a_refused_initial_read_keeps_its_frozen_notice(self):
+        self.check_refused_read_capacity_notice(continued=False)
+
+    def check_refused_read_capacity_notice(self, *, continued):
+        from research_harness.review_continuation import plan_next
+        from research_harness.review_problem_parts import _measure
+        from research_harness.review_refusal_replacement import validate_replacement_origin
+        from research_harness.review_route_capacity import measure_request
+
+        for form in ('whole', 'bounded'):
+            with self.subTest(form=form):
+                fixture = PartsResultCase()
+                fixture.setUp()
+                self.addCleanup(fixture.doCleanups)
+                fixture.oversized(count=5, characters=30000, room=65000)
+                case, artifacts = fixture.case, fixture.case.artifacts
+                seed = None
+                if continued:
+                    seed = fixture.assign('seed-' + form)
+                    fixture.invoke(seed, make_output(fixture.packet(seed)))
+                first = fixture.assign('first-' + form, seed['id'] if seed is not None else None)
+                original_slot = repair.slot_id(case.read_records(), first)
+                output = make_output(fixture.packet(first))
+                output.pop('kind')
+                if form == 'bounded':
+                    output['synthetic_refusal_context'] = 'x' * 100000
+                fixture.invoke(first, output)
+                records = case.read_records()
+                request = protocol.build_assignment_request(records, artifacts, first)
+                extra_room = 50000 if form == 'bounded' else 10000
+                limit_codex_input(fixture, _measure(records['review_route']['route'], request) + extra_room)
+                refused_plan = plan_next(case.read_records(), artifacts, first['id'])
+                self.assertEqual(refused_plan['state'], 'replace', refused_plan)
+                refused = case.mutate(protocol.record_assignment,
+                    dict(refused_plan['payload'], id='refusal-' + form))['result']
+                refused_packet = fixture.packet(refused)
+                notice = copy.deepcopy(refused_packet['output_refusal'])
+                self.assertEqual(notice['form'], form)
+                self.assertNotEqual(refused_packet[parts.KEY].get('entry'), 'output')
+                frozen = artifacts.read(refused['packet'])
+                before = protocol.build_assignment_request(case.read_records(), artifacts, refused)
+
+                def overflow(route, request, credential):
+                    response = build_codex_response(route, request, {})
+                    response['status'] = 'incomplete'
+                    response['usage']['output_tokens'] = route['configuration']['max_output_tokens']
+                    return response
+
+                with patch.object(protocol.transport, 'send_request', side_effect=overflow):
+                    case.mutate(protocol.invoke_assignment,
+                        dict(id='overflow-' + form, assignment_id=refused['id']), credential='fixture')
+                capacity_plan = plan_next(case.read_records(), artifacts, first['id'])
+                self.assertEqual(capacity_plan['state'], 'replace', capacity_plan)
+                self.assertEqual(capacity_plan['payload']['context'],
+                                 dict(capacity_replacement=refused['id']))
+                following = case.mutate(protocol.record_assignment,
+                    dict(capacity_plan['payload'], id='capacity-' + form))['result']
+                records = case.read_records()
+                packet = fixture.packet(following)
+                self.assertEqual(packet.get('output_refusal'), notice)
+                self.assertEqual(following['capacity_replacement_of'], refused['id'])
+                self.assertEqual(following['context'], refused['context'])
+                self.assertEqual(repair.slot_id(records, following), original_slot)
+                self.assertLess(packet[parts.KEY]['unit_characters'],
+                                refused_packet[parts.KEY]['unit_characters'])
+                validate_replacement_origin(records, artifacts, following)
+                request = protocol.build_assignment_request(records, artifacts, following)
+                self.assertTrue(measure_request(records['review_route']['route'], request,
+                    records=records, artifacts=artifacts)['fits'])
+                fixture.invoke(following, make_output(packet))
+                self.assertTrue(protocol.assignment_state(case.read_records(), artifacts, following['id'])['ready'])
+                self.assertEqual(artifacts.read(refused['packet']), frozen)
+                self.assertEqual(protocol.build_assignment_request(case.read_records(), artifacts, refused), before)
+
+    def test_capacity_replacement_of_a_refused_repair_read_keeps_its_frozen_notice(self):
+        from research_harness.review_continuation import plan_next
+        from research_harness.review_problem_parts import _measure
+        from research_harness.review_refusal_replacement import validate_replacement_origin
+        from research_harness.review_route_capacity import measure_request
+        from test_review_parts_repair_journey import ResultRepairJourneyTests
+
+        fixture = ResultRepairJourneyTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        case, artifacts = fixture.case, fixture.case.artifacts
+        ordinary = protocol.build_packet(case.read_records(), artifacts, None, 'result', 'first')
+        route = case.read_records()['review_route']['route']
+        prompt = protocol.canonical_prompt('result', orchestration='problem_creation', excerpts=True,
+            review_parts=dict(adapter='context_repair', kind='read'))
+        measured = _measure(route, protocol.transport.request_body(route, prompt['text'], ordinary, []))
+        fixture.oversized(count=12, characters=measured * 3, limit=measured * 12)
+        first = fixture.assign('original')
+        fixture.invoke(first)
+        second = fixture.assign('second', first['id'])
+        fixture.invoke(second)
+        # The repair carries its ancestors' frames as well as their material.
+        # Leave room for that frame, its refusal notice and a smaller read.
+        limit_codex_input(fixture, measured * 48)
+        binding = fixture.contaminate(second)
+        repaired = fixture.repair_assignment(second, binding)
+        original_slot = repair.slot_id(case.read_records(), repaired)
+        repair_packet = fixture.packet(repaired)
+        self.assertEqual((repair_packet[parts.KEY]['adapter'], parts.find_kind(repair_packet)),
+                         ('context_repair', 'read'))
+        bad = make_output(repair_packet)
+        bad.pop('kind')
+        fixture.invoke(repaired, bad)
+        refused_plan = plan_next(case.read_records(), artifacts, repaired['id'])
+        self.assertEqual(refused_plan['state'], 'replace', refused_plan)
+        refused = case.mutate(protocol.record_assignment,
+            dict(refused_plan['payload'], id='refused-repair'))['result']
+        refused_packet = fixture.packet(refused)
+        notice = copy.deepcopy(refused_packet['output_refusal'])
+        self.assertEqual(notice['form'], 'whole')
+        frozen = artifacts.read(refused['packet'])
+
+        def overflow(route, request, credential):
+            response = build_codex_response(route, request, {})
+            response['status'] = 'incomplete'
+            response['usage']['output_tokens'] = route['configuration']['max_output_tokens']
+            return response
+
+        with patch.object(protocol.transport, 'send_request', side_effect=overflow):
+            case.mutate(protocol.invoke_assignment,
+                dict(id='overflow-repair', assignment_id=refused['id']), credential='fixture')
+        capacity_plan = plan_next(case.read_records(), artifacts, repaired['id'])
+        self.assertEqual(capacity_plan['state'], 'replace', capacity_plan)
+        following = case.mutate(protocol.record_assignment,
+            dict(capacity_plan['payload'], id='capacity-repair'))['result']
+        records = case.read_records()
+        packet = fixture.packet(following)
+        self.assertEqual(packet.get('output_refusal'), notice)
+        self.assertEqual(following['capacity_replacement_of'], refused['id'])
+        self.assertEqual(following['context'], refused['context'])
+        self.assertEqual(repair.slot_id(records, following), original_slot)
+        self.assertLess(packet[parts.KEY]['unit_characters'], refused_packet[parts.KEY]['unit_characters'])
+        validate_replacement_origin(records, artifacts, following)
+        request = protocol.build_assignment_request(records, artifacts, following)
+        self.assertTrue(measure_request(records['review_route'][following['route_id']], request,
+            records=records, artifacts=artifacts)['fits'])
+        fixture.invoke(following, make_output(packet))
+        self.assertTrue(protocol.assignment_state(case.read_records(), artifacts, following['id'])['ready'])
+        self.assertEqual(artifacts.read(refused['packet']), frozen)
+
     def build_mixed_position(self, *, extra_capacity=False, refused_capacity_source=False):
         first = self.fixture.assign('A')
         self.assertEqual(parts.find_kind(self.fixture.packet(first)), 'read')

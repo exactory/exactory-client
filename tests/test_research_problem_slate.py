@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-from research_harness import output_views, problem_candidates, problem_evidence, problem_forming
+from research_harness import bar_sources, output_views, problem_candidates, problem_evidence, problem_forming
 from research_harness import research_decisions as decisions, review_protocol as protocol
 from research_harness.cli import status_report
 from research_harness.errors import ResearchError
@@ -301,7 +301,7 @@ class ProblemSlateTests(ProblemDeliveryCase):
         assignment = records["review_assignment"][payload["assignment_id"]]
         packet = json.loads(self.artifacts.read(assignment["packet"]))
         base = protocol.prompt_paragraphs.strip_prompt_paragraphs(assignment["prompt"], "slate")
-        self.assertEqual(base["template_id"], "exactory-problem-review-v5/slate")
+        self.assertEqual(base["template_id"], "exactory-problem-review-v5/slate/sources-v3")
         self.assertEqual(assignment["subject"], {"kind": "problem", "statement_id": None})
         self.assertEqual(assignment["history_assignment_id"], "bar-first")
         self.assertEqual((packet["protocol"], packet["subject"]), ("exactory-problem-review-v2", assignment["subject"]))
@@ -426,7 +426,8 @@ class ProblemSlateTests(ProblemDeliveryCase):
                 if options.get("orchestration") == "problem_creation":
                     options["version"] = 1
                 return original_prompt(role, **options)
-            with patch.object(protocol, "canonical_prompt", side_effect=previous_prompt):
+            with patch.object(bar_sources, "SESSION_PROTOCOL", bar_sources.PROTOCOL), \
+                patch.object(protocol, "canonical_prompt", side_effect=previous_prompt):
                 self.observe_bars()
         else:
             self.observe_bars()
@@ -494,7 +495,8 @@ class ProblemSlateTests(ProblemDeliveryCase):
                 options["version"] = 1
             return original(role, **options)
         self.record_candidate()
-        with patch.object(protocol, "canonical_prompt", side_effect=previous_prompt):
+        with patch.object(bar_sources, "SESSION_PROTOCOL", bar_sources.PROTOCOL), \
+                patch.object(protocol, "canonical_prompt", side_effect=previous_prompt):
             self.observe_bars()
         with self.assertRaises(ResearchError) as caught:
             self.record_slate()
@@ -530,7 +532,8 @@ class ProblemSlateTests(ProblemDeliveryCase):
                 options["version"] = 1
             return original(role, **options)
         self.record_candidate()
-        with patch.object(protocol, "canonical_prompt", side_effect=previous_prompt):
+        with patch.object(bar_sources, "SESSION_PROTOCOL", bar_sources.PROTOCOL), \
+                patch.object(protocol, "canonical_prompt", side_effect=previous_prompt):
             self.observe_bars()
         stranded = self.observe("slate", "first", self.build_slate_output(["candidate-1"]))
         for reviewer in ("first", "second"):
@@ -575,7 +578,8 @@ class ProblemSlateTests(ProblemDeliveryCase):
                 options["version"] = 1
             return original(role, **options)
         self.record_candidate()
-        with patch.object(protocol, "canonical_prompt", side_effect=previous_prompt):
+        with patch.object(bar_sources, "SESSION_PROTOCOL", bar_sources.PROTOCOL), \
+                patch.object(protocol, "canonical_prompt", side_effect=previous_prompt):
             self.observe_bars()
         output = self.build_slate_output(["candidate-1"])
         output["objections"] = [{"id": "restated", "claim": "Candidate 1 restates a known question.",
@@ -681,13 +685,15 @@ class ProblemResultCalibrationTests(ProblemDeliveryCase):
         from test_research_problem_attempt import build_attempt
         from test_research_problem_assessment import build_assessment
         self.mutate(record_attempt, build_attempt(reading=item))
-        with patch.object(protocol, "canonical_prompt", side_effect=previous_prompt):
+        with patch.object(bar_sources, "SESSION_PROTOCOL", bar_sources.PROTOCOL), \
+                patch.object(protocol, "canonical_prompt", side_effect=previous_prompt):
             self.observe_bars()
         self.observe_openness()
         self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
         self.mutate(self.load_problem_module().record_value, self.build_value([item]))
         self.mutate(self.load_problem_module().record_assessment, build_assessment(self.selected))
-        with patch.object(protocol, "canonical_prompt", side_effect=previous_prompt), \
+        with patch.object(bar_sources, "SESSION_PROTOCOL", bar_sources.PROTOCOL), \
+                patch.object(protocol, "canonical_prompt", side_effect=previous_prompt), \
                 patch.object(protocol, "require_calibrated_bars", return_value=None):
             for reviewer in ("first", "second"):
                 output = self.build_review_output("result")

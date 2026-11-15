@@ -642,6 +642,9 @@
         "research_harness/review_answer_recovery.py:recover_answer#1": [
           "entry"
         ],
+        "research_harness/review_protocol.py:_observe_https_capacity_probe#1": [
+          "entry"
+        ],
         "research_harness/review_transport.py:observe#1": [
           "entry"
         ]

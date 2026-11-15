@@ -31,6 +31,22 @@ class ReadingProjectionTests(FinalPreflightCase):
                                         excerpt_protocol=reading.review_excerpts.SESSION_PROTOCOL)
         return records, artifacts, value, route, packet, rows, record
 
+    def test_forecast_uses_keyed_probe_capacity_without_changing_the_request(self):
+        self.limit_input(self.input_limit)
+        native, _ = self.build_native()
+        records, artifacts, _, route, packet = self.build_inputs(native)
+        request = reading.transport.request_body(route, protocol.canonical_prompt('native_math')['text'], packet)
+        original = json.dumps(request, sort_keys=True)
+        forecast = reading._measure_chain_request(records, artifacts, route, request, set())
+        self.assertEqual(forecast['token_limit'], 2999000)
+        self.assertTrue(forecast['fits'])
+        self.assertEqual(json.dumps(request, sort_keys=True), original)
+        changed = dict(route, endpoint='codex://different-endpoint')
+        forecast = reading._measure_chain_request(records, artifacts, changed, request, set())
+        self.assertEqual(forecast['token_limit'], 0)
+        self.assertFalse(forecast['fits'])
+        self.assertEqual(json.dumps(request, sort_keys=True), original)
+
     def test_unbounded_protocols_name_every_missing_bound_and_admission_stop(self):
         records, artifacts, value, route, packet, rows, record = self.build_projection_inputs()
         for rules in (reading.PROTOCOL_V5, reading.MATH_PROTOCOL):

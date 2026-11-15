@@ -203,6 +203,56 @@ class RecoveryRowsTests(unittest.TestCase):
         replacement = case.case.mutate(protocol.record_assignment, result['details']['recovery']['payload'])['result']
         self.assertLessEqual(case.packet(replacement)[parts.KEY]['unit_characters'], original // 2)
         self.assertEqual(replacement['route_id'], assignment['route_id'])
+        records = case.case.read_records()
+        self.assertEqual(replacement['capacity_replacement_of'], assignment['id'])
+        self.assertEqual(protocol.context_repair.slot_id(records, replacement),
+                         protocol.context_repair.slot_id(records, assignment))
+
+    def test_verification_input_replacement_preserves_its_slot_and_frozen_parent(self):
+        from research_harness.errors import ResearchError
+        from research_harness.review_continuation import plan_next
+        from review_parts_fixtures import make_output
+        from test_review_parts_study import VerificationPartsTests
+
+        fixture = self.prepare(VerificationPartsTests)
+        fixture.enlarge_verification()
+        assignment = fixture.assign()
+        case = fixture.case
+        records = fixture.records()
+        parent = copy.deepcopy(assignment)
+        packet_bytes = case.artifacts.read(assignment['packet'])
+        request = protocol.build_assignment_request(records, case.artifacts, assignment)
+        premature = {key: assignment[key] for key in
+                     ('route_id', 'dossier_id', 'role', 'reviewer_id', 'author_id')}
+        premature.update(id='premature', context=dict(capacity_replacement=assignment['id']))
+        before = case.store.snapshot()
+        with self.assertRaises(ResearchError) as caught:
+            case.mutate(protocol.record_assignment, premature)
+        self.assertEqual(caught.exception.code, 'invalid_review_context')
+        self.assertEqual(case.store.snapshot(), before)
+
+        self.invoke_event(fixture, assignment, 'Prompt is too long')
+        plan = plan_next(fixture.records(), case.artifacts, assignment['id'])
+        self.assertEqual((plan['state'], plan['command']), ('replace', 'review-assignment'))
+        self.assertEqual(plan['payload']['context'], dict(capacity_replacement=assignment['id']))
+        following = case.mutate(protocol.record_assignment, plan['payload'])['result']
+        records = fixture.records()
+        self.assertEqual(following['capacity_replacement_of'], assignment['id'])
+        self.assertEqual(protocol.context_repair.slot_id(records, following), assignment['id'])
+        self.assertEqual(set(failures.list_turn_assignments(records, following)),
+                         {assignment['id'], following['id']})
+        self.assertEqual(following['context'], parent['context'])
+        self.assertLessEqual(fixture.packet(following)[parts.KEY]['unit_characters'],
+                             fixture.packet(assignment)[parts.KEY]['unit_characters'] // 2)
+        self.assertNotIn('replaces_assignment_id', following[parts.KEY])
+        self.assertEqual(records['review_assignment'][assignment['id']], parent)
+        self.assertEqual(case.artifacts.read(assignment['packet']), packet_bytes)
+        self.assertEqual(protocol.build_assignment_request(records, case.artifacts, assignment), request)
+        selected = plan_next(records, case.artifacts, assignment['id'])
+        self.assertEqual((selected['head_id'], selected['state'], selected['command']),
+                         (following['id'], 'run', 'review-run'))
+        fixture.invoke(following, make_output(fixture.packet(following)))
+        self.assertTrue(protocol.assignment_state(fixture.records(), case.artifacts, following['id'])['ready'])
 
     def test_c_exhaustion_returns_a_decision_and_names_the_untried_level(self):
         case = self.prepare(PartsResultCase)

@@ -1,6 +1,7 @@
 """Session citations use authenticated turns even after replay loses their bodies."""
 
 import copy
+import hashlib
 import json
 import unittest
 from unittest.mock import patch
@@ -21,8 +22,12 @@ class SessionDeliveryTests(unittest.TestCase):
         self.case.setUp()
         self.addCleanup(self.case.doCleanups)
         self.case.supporting = self.case.artifacts.put(b'A synthetic field standard.', 'text/plain')
-        record_codex_route(self.case)
-        limit_codex_input(self.case, 105000)
+        record_codex_route(self.case, model='gpt-6-astra')
+        # Retain the reduced-history fitting budget on a route that can admit
+        # the projected replay. The dispatch guard keeps the real route limits.
+        fitting_limit = patch.object(transport, 'local_input_limit', return_value=105000)
+        fitting_limit.start()
+        self.addCleanup(fitting_limit.stop)
         self.versions = []
         for index in (1, 2, 3):
             version = self.case.metadata(index)
@@ -101,6 +106,70 @@ class SessionDeliveryTests(unittest.TestCase):
         self.assertEqual(saved['assignment_id'], final_id)
         self.assertEqual(decisions.find_undelivered_review_references(self.case.read_records(),
                                                                     self.case.artifacts, saved), [])
+
+    def test_final_citations_follow_the_union_of_two_delivered_parts(self):
+        # N2, 20261114054500-bar-cannot-be-recorded-after-instalment-deliveries.
+        # Keep a held tail so the negative citation is valid but was not delivered.
+        bibliography = 'References: none.'
+        content = 'a' * 60000 + 'b' * 37404 + 'c' * (2596 - len(bibliography)) + bibliography
+        version = self.case.metadata(4)
+        captured = self.case.capture(version, pdf_text=content)
+        from research_harness.literature import import_bundle
+        from research_harness.reading import record_reading
+        bundle = self.case.bundle(version, capture=captured, bundle_id='split-bundle')
+        self.case.mutate(import_bundle, bundle)
+        self.case.mutate(record_reading, self.case.full_note(bundle, note_id='split-reading'))
+        readings = copy.deepcopy(self.case.read_records()['reading'])
+        capture = self.case.read_records()['work'][version]['fulltexts'][0]
+        request = dict(id='split-source', kind='source', version_id=version, depth='fulltext')
+        limit_codex_input(self.case, 500000)
+        spans = [(0, 60000), (60000, 97404), (97404, 100000)]
+        with patch.object(review_excerpts, 'compute_part_spans', return_value=spans):
+            self.assign_turn('request')
+            self.invoke_turn('request', [request])
+            with patch.object(review_excerpts, 'TURN_FULLTEXT_CHARACTERS', 60000):
+                self.assign_turn('first-part', 'request')
+            self.invoke_turn('first-part', [])
+            with patch.object(review_excerpts, 'TURN_FULLTEXT_CHARACTERS', 37404):
+                self.assign_turn('second-part', 'first-part')
+            output = self.case.build_review_output('bar')
+            output['value'].update(status='unresolved', evidence=[])
+            output['settled_requests'] = [request['id']]
+            invoke_codex(self.case, 'second-part', output)
+            self.assign_turn('final', 'second-part')
+        for identifier, expected in (('first-part', (0, 60000)), ('second-part', (60000, 97404))):
+            packet = review_excerpts.read_sent_packet(self.read_request(identifier))
+            delivered = packet['source_deliveries']
+            self.assertEqual(len(delivered), 1)
+            self.assertEqual((delivered[0]['part']['start'], delivered[0]['part']['end']), expected)
+            self.assertNotIn(capture['text'], [entry['artifact'] for entry in packet['evidence']])
+        packet = self.read_packet('final')
+        self.assertEqual(packet['pending_source_requests'], [])
+        self.assertEqual(packet['source_deliveries'], [])
+        output = self.case.build_review_output('bar')
+        output['limitations'].extend(packet['settled_source_requests'][0]['limitations'])
+        reference = dict(kind='source', link=dict(version_id=version, source_id=capture['source_id'],
+            artifact=capture['text'], locator=dict(kind='span', start=0, end=97404,
+                sha256=hashlib.sha256(content[:97404].encode()).hexdigest())))
+        output['value']['evidence'] = [reference]
+        refused = copy.deepcopy(output)
+        refused['value']['evidence'][0]['link']['locator'].update(end=97405,
+            sha256=hashlib.sha256(content[:97405].encode()).hexdigest())
+        invoke_codex(self.case, 'final', refused, 'undelivered-tail')
+        finding = review_refusal.classify_observed_output(self.case.read_records(), self.case.artifacts,
+                                                         'undelivered-tail')
+        self.assertEqual(finding['code'], 'review_evidence_undelivered')
+        payload = dict(refused, id='refused-final', dossier_id=None, assignment_id='final')
+        with self.assertRaises(ResearchError) as error:
+            self.case.mutate(decisions.record_value_review, payload)
+        self.assertEqual(error.exception.code, 'review_evidence_undelivered')
+        invoke_codex(self.case, 'final', output)
+        payload = dict(output, id='accepted-final', dossier_id=None, assignment_id='final')
+        saved = self.case.mutate(decisions.record_value_review, payload)['result']
+        self.assertEqual(saved['payload']['value']['evidence'], [reference])
+        self.assertEqual(decisions.find_undelivered_review_references(self.case.read_records(),
+                                                                    self.case.artifacts, saved), [])
+        self.assertEqual(self.case.read_records()['reading'], readings)
 
     def test_chain_view_keeps_current_input_separate_and_excludes_undelivered_sources(self):
         final_id = self.build_reduced_session()
@@ -275,6 +344,50 @@ class SessionDeliveryProjectionTests(unittest.TestCase):
                                                      locator=dict(kind='span', start=start, end=end)))
             self.assertEqual(not decisions.find_review_undelivered_references(
                 case.records, case.artifacts, [reference], view), received)
+
+    def test_part_union_citations_preserve_v2_and_stored_inputs(self):
+        from research_harness import bar_sources
+        from research_harness.review_delivered_evidence import project_delivery_view
+        case = self.case
+        content = 'First part. Second part.'
+        original = case.artifacts.put(content.encode(), 'text/plain')
+        request = dict(id='split', kind='source', version_id='version', depth='fulltext')
+        capture = dict(source_id='source', text=original)
+        parts = [bar_sources._describe_part(case.artifacts, request, capture, content, 'delivered', index,
+                  [(0, 12), (12, 24)]) for index in (1, 2)]
+        packet = case.build_packet(role='bar', source_deliveries=parts,
+            evidence=protocol._evidence(case.artifacts, [part['excerpt'] for part in parts]))
+        prior, selected, final, attempt = self.record_session(packet)
+        packet_bytes = case.artifacts.read(prior['packet'])
+        request_bytes = case.artifacts.read(selected['request'])
+        prompt = copy.deepcopy(prior['prompt'])
+        view = self.read_chain(final, attempt)
+        reference = dict(kind='source', link=dict(version_id='version', source_id='source', artifact=original,
+            locator=dict(kind='span', start=0, end=24, sha256=original['sha256'])))
+        self.assertNotIn('segments', view)
+        self.assertEqual(view['packets'][0], packet)
+        self.assertEqual(decisions.find_review_undelivered_references(
+            case.records, case.artifacts, [reference], view),
+            [dict(sha256=original['sha256'], locator=reference['link']['locator'])])
+        current = case.build_packet(role='bar', source_rules=bar_sources.PROTOCOL_V3,
+            source_deliveries=parts, evidence=packet['evidence'])
+        (case.artifacts.root / original['path']).unlink()
+        view = project_delivery_view(case.records, case.artifacts, [current])
+        self.assertEqual(view['packets'], [current])
+        self.assertEqual(decisions.find_review_undelivered_references(
+            case.records, case.artifacts, [reference], view), [])
+        other_version = copy.deepcopy(reference)
+        other_version['link']['version_id'] = 'another-version'
+        self.assertTrue(decisions.find_review_undelivered_references(
+            case.records, case.artifacts, [other_version], view))
+        older = project_delivery_view(case.records, case.artifacts, [current, packet])
+        self.assertEqual(decisions.find_review_undelivered_references(
+            case.records, case.artifacts, [reference], older),
+            [dict(sha256=original['sha256'], locator=reference['link']['locator'])])
+        self.assertEqual(case.artifacts.read(prior['packet']), packet_bytes)
+        self.assertEqual(case.artifacts.read(selected['request']), request_bytes)
+        self.assertEqual(prior['prompt'], prompt)
+        self.assertTrue(protocol.authenticate_attempt(case.records, case.artifacts, prior, selected))
 
 
 class DeliveryNoticeProjectionTests(unittest.TestCase):

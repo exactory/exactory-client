@@ -66,7 +66,7 @@ class NativeOpennessReviewTests(ProblemCase):
 
     def observe_packet(self, packet, identifier, change_output=None, invoke=True):
         reference = self.pin_json(packet)
-        assignment = self.mutate(review_protocol.record_assignment, {"id": identifier, "route_id": "route",
+        assignment = self.mutate(review_protocol.record_assignment, {"id": identifier, "route_id": getattr(self, "route_id", "route"),
             "dossier_id": None, "role": "native_math", "reviewer_id": packet["reviewer"]["actor_id"],
             "author_id": "problem-author", "context": {"native_packet": reference}})["result"]
         if packet["objective_id"] == self.selected["id"]:
@@ -286,7 +286,19 @@ class NativeOpennessReviewTests(ProblemCase):
         self.assert_error("openness_native_review_mismatch", lambda: self.record_openness(packet, "null"))
 
     def test_binary_proof_requires_actual_exact_attachment(self):
-        self.proof = self.artifacts.put(b"\x89PNG\x00\xffsynthetic-proof", "image/png")
+        from research_harness.review_visual_inputs import control_image
+        self.proof = self.artifacts.put(control_image("synthetic proof"), "image/png")
+        self.route_id = "binary-route"
+        self.mutate(review_protocol.record_route, dict(id=self.route_id,
+            adapter="openai_responses_v1", model="gpt-6-astra",
+            endpoint="https://api.openai.com/v1/responses",
+            configuration=dict(max_output_tokens=1000, timeout_seconds=5)))
+        def respond(route, request, credential):
+            packet = json.loads(request["input"][0]["content"][len(review_transport.PACKET_LABEL):])
+            return self.build_provider_response(dict(allowed_control=packet["allowed_control"],
+                evidence_control=packet["evidence_control"], excluded_controls=[]))
+        with patch.object(review_transport, "send_request", side_effect=respond):
+            self.mutate(review_protocol.probe_route, dict(id="binary-probe", route_id=self.route_id))
         manifest = dict(self.manifest, artifacts=[{"path": "attempt/proof.png", "digest": self.proof["sha256"], "role": "proof"}])
         self.replace_manifest(manifest, identifier="binary-proof")
         packet = self.export(assignment="binary-openness", support="binary-proof")

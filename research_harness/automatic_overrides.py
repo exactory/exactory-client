@@ -54,7 +54,7 @@ def record_series_stop(store, plan):
     snapshot = store.snapshot()
     plan = copy.deepcopy(plan)
     code = plan['code']
-    from .review_series import _identify_ending, _complete_ending_step
+    from .review_series import _identify_ending, _complete_ending_step, _bind_ending_receipt
     retained = [row for row in snapshot['records'].get('review_series_stop', {}).values()
                 if row['assignment_id'] == plan['head_id']]
     latest = max(retained, key=lambda row: row['recorded_revision']) if retained else None
@@ -87,7 +87,7 @@ def record_series_stop(store, plan):
     identifier = 'series-stop:' + digest([snapshot['revision'], _identify_ending(plan)])
     request_id = identifier
     plan.setdefault('details', {})['receipt'] = dict(place='store', id=identifier, retained_at=time.time_ns())
-    plan.update(stop_id=identifier, revision_after_stop=snapshot['revision'] + 1)
+    _bind_ending_receipt(plan, identifier, snapshot['revision'] + 1)
     if not read_errors and plan['details'].get('step', {}).get('command') == 'gate-auto-pass':
         plan['details']['step'].update(payload=dict(stop_id=identifier), chooses=[], prerequisites=[])
     _complete_ending_step(store, plan)

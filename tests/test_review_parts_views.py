@@ -200,26 +200,66 @@ class PartsStatusTests(PartsViewCase):
         self.assertEqual(progress.get('blocked'), 'artifact_missing')
         self.assertEqual(progress['next'], [])
 
-    def test_two_refusals_show_exhaustion_without_recommending_a_forbidden_run(self):
+    def test_two_refusals_offer_the_planned_replacement_without_claiming_exhaustion(self):
         self.prepare_parts()
         assignment = self.assign()
         output = self.output(assignment)
         output['cards'] = []
         for number in range(2):
             self.invoke(assignment, output, attempt='refused-' + str(number))
+        records = self.case.read_records()
+        raw = report_views.describe_parts_turn(assignment,
+            protocol.assignment_state(records, self.case.artifacts, assignment['id']),
+            parts.verify_series(records, self.case.artifacts, assignment['id']))
+        self.assertEqual(raw.get('blocked'), 'review_output_refused')
+        self.assertEqual(raw['next'], [])
+        report, progress = self.read_progress(assignment)
+        self.assertNotIn('blocked', progress)
+        self.assertEqual((progress['units_carded'], progress['units_remaining']), (0, 6))
+        action = report['next']['next'][0]
+        self.assertEqual((action['state'], action['command']), ('replace', 'review-assignment'))
+        self.assertEqual(progress['next'][0], action)
+        self.assertEqual(action['payload']['context']['output_refusal'], dict(assignment_id=assignment['id']))
+        self.assertIsNone(report_views.next_summary(report)['next_hint']['review_parts']['blocked'])
+        self.assertNotIn('blocked', report_views.status_summary(report)['review_parts']['examples'][0])
+        replacement = self.case.mutate(protocol.record_assignment, action['payload'])['result']
+        self.assertEqual(replacement['slot_id'], assignment['slot_id'])
+        self.invoke(replacement)
+        self.assertTrue(protocol.assignment_state(self.case.read_records(), self.case.artifacts, replacement['id'])['ready'])
+
+    def test_spent_refusal_replacements_show_exhaustion_without_a_forbidden_run(self):
+        self.prepare_parts()
+        assignment = self.assign()
+        output = self.output(assignment)
+        output['cards'] = []
+        for number in range(2):
+            self.invoke(assignment, output, attempt='refused-' + str(number))
+        for number in range(2):
+            report, _ = self.read_progress(assignment)
+            action = report['next']['next'][0]
+            self.assertEqual((action['state'], action['command']), ('replace', 'review-assignment'))
+            assignment = self.case.mutate(protocol.record_assignment, action['payload'])['result']
+            output = self.output(assignment)
+            output['cards'] = []
+            self.invoke(assignment, output, attempt='refused-replacement-' + str(number))
         report, progress = self.read_progress(assignment)
         self.assertEqual(progress.get('blocked'), 'review_slot_exhausted')
-        self.assertEqual(progress['next'], [])
+        self.assertEqual((progress['units_carded'], progress['units_remaining']), (0, 6))
         self.assertEqual(report['next']['code'], 'review_parts_pending')
         action = report['next']['next'][0]
-        self.assertEqual(action['state'], 'stop')
+        self.assertEqual((action['state'], action['command']), ('handoff', 'review-assignment'))
         self.assertEqual(action['code'], 'review_slot_exhausted')
-        self.assertNotIn('command', action)
+        self.assertEqual(progress['next'][0], action)
+        self.assertEqual(action['details']['step']['id'], 2)
+        self.assertEqual(action['details']['step']['payload']['context']['context_repair'][
+            'exhaustion']['head_assignment_id'], assignment['id'])
         self.assertNotIn('payload', action)
         self.assertEqual(report_views.next_summary(report)['next_hint']['review_parts']['blocked'],
                          'review_slot_exhausted')
-        self.assertEqual(report_views.status_summary(report)['review_parts']['examples'][0]['blocked'],
-                         'review_slot_exhausted')
+        examples = report_views.status_summary(report)['review_parts']['examples']
+        current = next(row for row in examples if row['assignment_id'] == assignment['id'])
+        self.assertEqual(current['blocked'], 'review_slot_exhausted')
+        self.assertTrue(any(row.get('blocked') == 'review_assignment_replaced' for row in examples))
 
     def test_large_inventory_has_counts_without_unit_lists(self):
         self.prepare_parts(count=45)

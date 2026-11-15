@@ -22,6 +22,14 @@ from tools.review_measurement.score import ScoringTests
 
 class CampaignStopTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import review_route_capacity as capacity
+        from test_review_output_profile import build_row
+        # These synthetic campaigns compare input partitioning and call admission.
+        # Qualify the ordinary baseline with explicit single-output observations.
+        profile = patch.object(capacity, 'read_profile_priors', return_value=[
+            dict(build_row(level=None, kind='single', thinking=1), largest_output_tokens=900)])
+        profile.start()
+        self.addCleanup(profile.stop)
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
@@ -31,8 +39,8 @@ class CampaignStopTests(unittest.TestCase):
         self.addCleanup(boundary.stop)
 
     def make_route(self, adapter='claude_cli_v1'):
-        return dict(id='route', adapter=adapter, model='fixed-model',
-                    configuration=dict(effort='xhigh', max_output_tokens=128000))
+        from test_review_route_capacity import build_route
+        return build_route(adapter, 'fixed-model', effort='xhigh')
 
     def make_limit_response(self, answer, thread='quota-thread'):
         return dict(id=thread, model='fixed-model', status='incomplete',

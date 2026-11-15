@@ -3,7 +3,7 @@
 Regenerate with tests/generate_review_request_parity.py, never from the harness
 under test. Every case compares full reports and states, ordered obligations,
 selected attempts, refusal details and fingerprints of exact serialized bytes.
-The separate r3 fixture pins only added advisory fields and cannot replace any
+The separate r6 fixture pins only added advisory fields and cannot replace any
 field authenticated by the original oracle.
 """
 
@@ -15,11 +15,11 @@ import unittest
 from unittest import mock
 
 import review_request_parity_fixtures as fixtures
-from research_harness import review_continuation
+from research_harness import bar_sources, review_continuation
 from research_harness.evidence import digest
 
 
-CAPACITY_PATH = fixtures.FROZEN_PATH.with_name('review-capacity-advisory-r3.json')
+CAPACITY_PATH = fixtures.FROZEN_PATH.with_name('review-capacity-advisory-r6.json')
 
 
 class ReviewRequestParityTests(unittest.TestCase):
@@ -37,6 +37,25 @@ class ReviewRequestParityTests(unittest.TestCase):
         self.assertEqual(set(self.capacity['cases']), set(fixtures.CASE_BUILDERS))
         self.assertEqual(self.capacity['protocol'], 'exactory-route-output-profile-v1')
 
+    def test_merged_advisory_keeps_keyed_evidence_and_stage2_task_sizes(self):
+        keyed = json.loads(CAPACITY_PATH.with_name('review-capacity-advisory-r5.json').read_bytes())
+        stage2 = json.loads(CAPACITY_PATH.with_name('review-capacity-advisory-r3.json').read_bytes())
+        changed = {
+            'corrupted-history': ('attempt-first-part-1', 'attempt-first-turn-2'),
+            'result-history-06918': ('attempt-series-1', 'attempt-series-1-part-2',
+                'attempt-series-2', 'attempt-series-2-part-2', 'attempt-series-3', 'attempt-series-3-part-2'),
+            'result-parts-v1': ('attempt-first-part-1', 'attempt-first-turn-2'),
+            'result-parts-v2': ('attempt-part-1', 'attempt-turn-2', 'attempt-turn-3', 'attempt-turn-4'),
+        }
+        for name, identifiers in changed.items():
+            for identifier in identifiers:
+                task = stage2['cases'][name]['attempts'][identifier]['task']
+                self.assertNotEqual(keyed['cases'][name]['attempts'][identifier]['task'], task)
+                keyed['cases'][name]['attempts'][identifier]['task'] = task
+        keyed['source'] = ('Synthetic request-parity fixture calls; D1 closure r4.3 keyed evidence '
+                           'and Stage2 task-size advisory fields')
+        self.assertEqual(self.capacity, keyed)
+
     def extend_expected_attempt(self, name, attempt):
         if attempt is None:
             return None
@@ -45,7 +64,7 @@ class ReviewRequestParityTests(unittest.TestCase):
             return attempt
         self.assertEqual(attempt['origin'], 'instrumented')
         self.assertEqual(set(metadata), {'task', 'answer', 'cli_version', 'completed_generation',
-                                         'verified_input_tokens', 'usage'})
+                                         'verified_input_tokens', 'capacity_evidence', 'usage'})
         result = copy.deepcopy(attempt)
         for key, value in metadata.items():
             if key == 'usage':
@@ -56,6 +75,18 @@ class ReviewRequestParityTests(unittest.TestCase):
                 self.assertNotIn(key, result)
                 result[key] = value
         return result
+
+    def test_result_parts_v2_preserves_stored_inputs_under_the_v3_default(self):
+        with mock.patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL_V3):
+            actual = build_without_actions(fixtures.CASE_BUILDERS['result-parts-v2'])
+            self.assertEqual(bar_sources.SESSION_PROTOCOL, bar_sources.PROTOCOL_V3)
+        expected = self.frozen['cases']['result-parts-v2']
+        for field in ('stored_packets', 'stored_requests', 'emitted_requests', 'rebuilt_requests', 'authentication'):
+            with self.subTest(field=field):
+                self.assertEqual(actual[field], expected[field])
+        for identifier, state in actual['states'].items():
+            with self.subTest(assignment=identifier):
+                self.assertEqual(state['value']['prompt_hash'], expected['states'][identifier]['value']['prompt_hash'])
 
     def extend_expected_capacity(self, name, field, expected):
         if field == 'attempts':
@@ -68,6 +99,7 @@ class ReviewRequestParityTests(unittest.TestCase):
                     selection['value'] = [self.extend_expected_attempt(name, binding), refused,
                                           [self.extend_expected_attempt(name, value) for value in completed]]
         if field == 'status' and 'value' in expected:
+            expected['value']['review']['outside_solved_part'] = copy.deepcopy(self.capacity['outside_solved_part'])
             routes = self.capacity['cases'][name]['routes']
             if routes is not None:
                 self.assertNotIn('routes', expected['value']['review'])
@@ -166,11 +198,11 @@ def strip_status_floor(value):
     return value
 
 
-def keep_report(records, artifacts, report):
+def keep_report(records, artifacts, report, *, context_failures=None):
     return report
 
 
-def keep_actions(records, artifacts, assignment_id, actions=()):
+def keep_actions(records, artifacts, assignment_id, actions=(), *, context_failures=None):
     return [dict(action) for action in actions]
 
 

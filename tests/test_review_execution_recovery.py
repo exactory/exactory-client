@@ -199,8 +199,10 @@ class ExecutionRecoveryTests(unittest.TestCase):
                 lambda: self.fixture.invoke(ordinary, output=self.fixture.case.build_review_output('result')),
                 lambda: protocol.probe_route(self.fixture.case.store, dict(id='blocked-probe', route_id='route'),
                     expected_revision=self.fixture.case.store.revision, request_id='blocked-probe')):
-            with self.assertRaises(ResearchError) as failure:
-                action()
+            with patch('research_harness.review_call_admission.wait_for_admission',
+                       side_effect=lambda store, attempt: attempt(False)):
+                with self.assertRaises(ResearchError) as failure:
+                    action()
             self.assertEqual(failure.exception.code, 'review_capacity_wait')
 
 

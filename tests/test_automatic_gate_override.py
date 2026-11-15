@@ -116,7 +116,7 @@ class StopClassificationTests(unittest.TestCase):
 
         def advance(seconds):
             delays.append(seconds)
-            self.assertLessEqual(len(delays), 20, "Authentication failures waited forever")
+            self.assertLessEqual(sum(delays), 20000, "Authentication failures waited forever")
             now[0] += timedelta(seconds=seconds)
 
         response = fixture.case.build_provider_response({})
@@ -128,11 +128,13 @@ class StopClassificationTests(unittest.TestCase):
                 patch("research_harness.review_failure_class.datetime", Clock), \
                 patch("research_harness.review_series.datetime", Clock), \
                 patch("research_harness.review_series.time.sleep", side_effect=advance), \
+                patch("research_harness.review_stop.read_driver_boundary", return_value=None), \
                 patch("research_harness.review_transport.send_request", return_value=response):
             result = run_series(fixture.case.store, fixture.assignment["id"], emit=steps.append)
         self.assertEqual(result, 3, steps)
-        self.assertEqual(delays, [60, 120, 240, 480, 960, 1800, 1800] * 2
-                         + [60, 120, 240, 480, 960, 1800])
+        expected_delays = [60, 120, 240, 480, 960, 1800, 1800] * 2 + [60, 120, 240, 480, 960, 1800]
+        self.assertEqual(sum(delays), sum(expected_delays))
+        self.assertTrue(all(delay <= 5 for delay in delays))
         waits = [step for step in steps if step["state"] == "wait"]
         self.assertEqual(len(waits), 20)
         self.assertTrue(all(step["stop_class"] == "waiting" for step in waits))
@@ -309,8 +311,9 @@ class RecordedSeriesStopTests(unittest.TestCase):
         terminal = rows[-1]
         self.assertEqual(terminal["revision"], revision - 1)
         self.assertEqual({key: terminal['details'][key] for key in plan['details']}, plan['details'])
-        self.assertEqual(terminal.get("revision_after_stop"), revision + 1)
-        self.assertEqual(self.case.store.revision, revision + 1)
+        self.assertEqual(terminal.get("revision_after_stop"), revision + 2)
+        self.assertEqual(terminal.get("revision_after_driver"), revision + 3)
+        self.assertEqual(self.case.store.revision, revision + 3)
 
     def test_terminal_decision_does_not_claim_a_retry_schedule(self):
         from research_harness.automatic_overrides import record_series_stop

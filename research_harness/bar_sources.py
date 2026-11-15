@@ -19,6 +19,29 @@ from .source_candidates import find_source_candidates
 
 PAGE_SIZE = 10
 PROTOCOL = 'exactory-independent-review-sources-v2'
+PROTOCOL_V3 = 'exactory-independent-review-sources-v3'
+SESSION_PROTOCOL = PROTOCOL_V3
+SESSION_TEMPLATE_SUFFIX = '/sources-v3'
+# Placeholder for the writer's pass; keep the old PROMPT bytes readable.
+SESSION_PROMPT = (
+    ' Source requests (exactory-independent-review-sources-v3). source_inventory is immutable metadata, '
+    'not reading credit. Request inventory_page {id,kind,page}, inventory_query {id,kind,query,page}, '
+    'source {id,kind,version_id,depth:"abstract"|"fulltext"}, or artifact {id,kind,sha256}. '
+    'An artifact digest must occur in a record delivered by this packet or its session. '
+    'Artifact text arrives within the same turn budget as full text, in parts when necessary. '
+    'Request IDs are unique and stable; omitted pending requests remain pending. '
+    'To settle your own pending fulltext requests, return settled_requests as their IDs. '
+    'The next packet carries settled_source_requests with the undelivered character ranges and limitations; '
+    'copy those limitations into the final limitations array. Settlement cancels delivery of the remaining '
+    'parts and grants no reading credit. A request or settlement turn has value.status="unresolved" '
+    'and support=null, and preserves the assigned stage; for bar keep empty bar_ids, work_items, assurances '
+    'and objection_findings and both adequacies="not_assessed". Return the complete phase assessment only '
+    'in a later turn after all necessary requests settle. Delivery permits citations only within the bytes '
+    'delivered by authenticated turns; it never certifies a qualifying reading or scientific support.')
+SETTLEMENT_LIMITATION = 'Request {id}: artifact {sha256} characters [{start}, {end}) were not delivered.'
+SETTLEMENT_MESSAGE = 'Settle each of your pending fulltext request IDs once under the source rules v3.'
+MISSING_FULLTEXT_LIMITATION = 'Request {id}: no full text was delivered for {version_id}.'
+ARTIFACT_REQUEST_MESSAGE = 'Request the SHA-256 of a text artifact referenced by a record delivered to this session.'
 ROLES = ('bar', 'slate', 'result')
 PROMPT = (
     ' The source_inventory is a complete, immutable, sorted inventory, with a fixed first page. '
@@ -181,7 +204,7 @@ def require_exact_version(version_id, code='invalid_review_source_request'):
         raise ResearchError(code, 'Request the canonical exact version, including the arXiv version suffix')
 
 
-def requests(output, *, passages=False, staged=False, manifest=None):
+def requests(output, *, passages=False, staged=False, manifest=None, source_rules=None):
     """The validated source requests of an output. Passage requests belong to a turn under the excerpt rules."""
     if staged:
         from .review_staged import validate_retrieval
@@ -205,6 +228,8 @@ def requests(output, *, passages=False, staged=False, manifest=None):
               'source': ('id', 'kind', 'version_id', 'depth')}
     if passages:
         shapes['passage'] = ('id', 'kind', 'version_id', 'anchor', 'characters')
+    if source_rules == PROTOCOL_V3:
+        shapes['artifact'] = ('id', 'kind', 'sha256')
     seen = set()
     for index, request in enumerate(values):
         path = '/source_requests/' + str(index)
@@ -228,7 +253,13 @@ def requests(output, *, passages=False, staged=False, manifest=None):
                 if request['id'] in seen:
                     raise ResearchError('invalid_review_source_request', 'Source request IDs must be unique')
             seen.add(request['id'])
-            if kind == 'source':
+            if kind == 'artifact':
+                sha256 = request['sha256']
+                if (not isinstance(sha256, str) or len(sha256) != 64
+                        or any(character not in '0123456789abcdef' for character in sha256)):
+                    raise ResearchError('invalid_review_source_request', ARTIFACT_REQUEST_MESSAGE,
+                                        {'path': path + '/sha256'})
+            elif kind == 'source':
                 with describe_error_at(path + '/version_id'):
                     require_exact_version(request['version_id'])
                 if request['depth'] not in ('abstract', 'fulltext'):
@@ -244,7 +275,7 @@ def requests(output, *, passages=False, staged=False, manifest=None):
                 if kind == 'inventory_query':
                     with describe_error_at(path + '/query'):
                         text(request['query'], 'Literal ID or title query', code='invalid_review_source_request')
-    if values:
+    if values or output.get('settled_requests'):
         value = output.get('value')
         if not isinstance(value, dict):
             raise ResearchError('invalid_review_source_request', 'A source request turn requires an unresolved value object',
@@ -262,6 +293,68 @@ def requests(output, *, passages=False, staged=False, manifest=None):
     return values
 
 
+def collect_record_artifacts(packet):
+    """The descriptors of artifacts referenced by records this session delivers."""
+    from .review_protocol import _list_packet_records, collect_references
+    projections = [projection for _, _, _, projection, _ in _list_packet_records(packet)]
+    if 'dossier' in packet:
+        projections.append(packet['dossier'])
+    found = {row['sha256']: row for row in packet.get('source_artifacts', [])}
+
+    def visit(value):
+        if isinstance(value, dict):
+            if {'location', 'sha256', 'size', 'media_type'} <= value.keys():
+                found[value['sha256']] = {key: value[key] for key in ('location', 'sha256', 'size', 'media_type')}
+            for item in value.values():
+                visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+
+    for projection in projections:
+        for reference in collect_references(projection):
+            found[reference['sha256']] = descriptor(reference)
+        visit(projection)
+    return [found[key] for key in sorted(found)]
+
+
+def validate_settled_requests(packet, output):
+    """Admit settlement only for the reviewer's pending full-text requests."""
+    values = output.get('settled_requests', [])
+    pending_by_id = {row['id']: row for row in packet.get('pending_source_requests', [])}
+    if ('settled_requests' in output and packet.get('source_rules') != PROTOCOL_V3
+            or not isinstance(values, list)):
+        raise ResearchError('invalid_review_source_request', SETTLEMENT_MESSAGE, {'path': '/settled_requests'})
+    seen = set()
+    for index, identifier in enumerate(values):
+        request = pending_by_id.get(identifier) if isinstance(identifier, str) else None
+        if (request is None or identifier in seen or request['kind'] != 'source'
+                or request.get('depth') != 'fulltext'):
+            raise ResearchError('invalid_review_source_request', SETTLEMENT_MESSAGE,
+                                {'path': '/settled_requests/' + str(index)})
+        seen.add(identifier)
+    return values
+
+
+def validate_requested_artifacts(artifacts, packet, output):
+    """Refuse binary or non-UTF-8 artifact requests at output admission."""
+    from .review_transport import is_binary_evidence
+    references = {row['sha256']: _reference(row) for row in collect_record_artifacts(packet)}
+    for index, request in enumerate(output.get('source_requests', [])):
+        if request['kind'] != 'artifact':
+            continue
+        reference = references[request['sha256']]
+        data = artifacts.read(reference)
+        try:
+            data.decode('utf-8')
+            valid = not is_binary_evidence(data, reference['media_type'])
+        except UnicodeDecodeError:
+            valid = False
+        if not valid:
+            raise ResearchError('invalid_review_source_request', ARTIFACT_REQUEST_MESSAGE,
+                                {'path': '/source_requests/' + str(index) + '/sha256'})
+
+
 def pending(packet, output, *, manifest=None):
     if 'staged_review' in packet:
         staged = packet['staged_review']
@@ -275,13 +368,22 @@ def pending(packet, output, *, manifest=None):
                 raise ResearchError('invalid_review_source_request', 'A retrieval ID cannot change its question or scope')
             combined[row['id']] = row
         return [row for row in combined.values() if row['status'] in ('pending', 'delivered')]
+    settled = validate_settled_requests(packet, output)
     combined = {request['id']: request for request in packet.get('pending_source_requests', [])}
-    for index, request in enumerate(requests(output, passages=review_excerpts.KEY in packet)):
+    references = {row['sha256'] for row in collect_record_artifacts(packet)} if packet.get('source_rules') == PROTOCOL_V3 else set()
+    for index, request in enumerate(requests(output, passages=review_excerpts.KEY in packet,
+                                            source_rules=packet.get('source_rules'))):
+        if request['id'] in settled:
+            raise ResearchError('invalid_review_source_request', SETTLEMENT_MESSAGE,
+                                {'path': '/source_requests/' + str(index) + '/id'})
+        if request['kind'] == 'artifact' and request['sha256'] not in references:
+            raise ResearchError('invalid_review_source_request', ARTIFACT_REQUEST_MESSAGE,
+                                {'path': '/source_requests/' + str(index) + '/sha256'})
         if request['id'] in combined and combined[request['id']] != request:
             raise ResearchError('invalid_review_source_request', 'A pending request ID cannot name different source evidence',
                                 {'path': '/source_requests/' + str(index) + '/id', 'request_id': request['id']})
         combined[request['id']] = request
-    return list(combined.values())
+    return [row for identifier, row in combined.items() if identifier not in settled]
 
 
 def _compact_locator(locator):
@@ -626,7 +728,7 @@ def _describe_part(artifacts, request, capture, content, status, part, spans):
             'reading_credit': False, 'scientific_truth_certified': False, 'reason': PART_NOTE}
 
 
-def _answer_fulltext(records, artifacts, request, original_rows, delivered_bodies, characters_left):
+def _answer_fulltext(records, artifacts, request, original_rows, delivered_bodies, characters_left, *, exact_spans=False):
     """The deliveries that answer a full-text request within the characters of new full text left in this turn: the
     whole source, its next parts, an already_delivered answer or a deferral. Returns the deliveries, the characters of
     new full text they deliver, whether the request stays pending and whether it waits for the reading budget."""
@@ -637,7 +739,12 @@ def _answer_fulltext(records, artifacts, request, original_rows, delivered_bodie
     complete = delivery['status'] == 'delivered'
     content = artifacts.read(capture['text']).decode('utf-8')
     spans = review_excerpts.compute_part_spans(content)
-    earlier = [delivered_bodies.get(sha256) for sha256 in review_excerpts.compute_part_digests(content)]
+    if exact_spans:
+        earlier = [delivered_bodies.get((capture['text']['sha256'], start, end)) for start, end in spans]
+        if capture['text']['sha256'] in delivered_bodies:
+            earlier = [delivered_bodies[capture['text']['sha256']]] * len(spans)
+    else:
+        earlier = [delivered_bodies.get(sha256) for sha256 in review_excerpts.compute_part_digests(content)]
     # A whole text first delivered while its source was partial is delivered again once the source is complete.
     if all(earlier) and not (complete and len(spans) == 1 and not earlier[0]['is_complete_delivery']):
         if complete:
@@ -673,11 +780,74 @@ def _answer_fulltext(records, artifacts, request, original_rows, delivered_bodie
     return deliveries, used, remaining > 0 or not complete, remaining > 0
 
 
+def _answer_artifact(artifacts, request, references, delivered_bodies, characters_left):
+    """Deliver referenced UTF-8 artifact text in consecutive budgeted parts."""
+    reference = _reference(next(row for row in references if row['sha256'] == request['sha256']))
+    data = artifacts.read(reference)
+    content = data.decode('utf-8')
+    spans = review_excerpts.compute_part_spans(content)
+    earlier = [delivered_bodies.get((reference['sha256'], start, end)) for start, end in spans]
+    if reference['sha256'] in delivered_bodies:
+        earlier = [delivered_bodies[reference['sha256']]] * len(spans)
+    if all(earlier):
+        return [_describe_already_delivered(request, min(earlier, key=lambda body: body['order']))], 0, False, False
+    deliveries, used = [], 0
+    for part, body in enumerate(earlier, 1):
+        start, end = spans[part - 1]
+        if body is not None:
+            continue
+        if used + end - start > characters_left:
+            break
+        excerpt = review_excerpts.save_part(artifacts, content, reference, start, end)
+        deliveries.append(dict(request=request, status='delivered', evidence=[excerpt], excerpt=excerpt,
+            part=dict(part=part, parts=len(spans), start=start, end=end, characters=end-start),
+            origin=dict(artifact_descriptor=descriptor(reference), locator=dict(kind='span', start=start, end=end,
+                sha256=excerpt['sha256'])), reading_credit=False, scientific_truth_certified=False))
+        used += end - start
+    remaining = len(spans) - sum(body is not None for body in earlier) - len(deliveries)
+    if not deliveries:
+        deliveries = [dict(request=request, status='deferred_reading_budget', reason=DEFERRED_NOTE, reading_credit=False)]
+    return deliveries, used, remaining > 0, remaining > 0
+
+
+def describe_settlements(records, artifacts, packet, output, delivered_bodies):
+    """Retain exact undelivered ranges when a reviewer settles a pending full text."""
+    settled = list(packet.get('settled_source_requests', []))
+    by_id = {row['id']: row for row in packet.get('pending_source_requests', [])}
+    for identifier in output.get('settled_requests', []):
+        request = by_id[identifier]
+        reference = review_excerpts.find_fulltext(records, request['version_id'])
+        if reference is None:
+            # No captured text has a character range yet; the request stays an explicit limitation.
+            settled.append(dict(request=request, undelivered_spans=[], limitations=[
+                MISSING_FULLTEXT_LIMITATION.format(id=identifier, version_id=request['version_id'])]))
+            continue
+        content = artifacts.read(reference).decode('utf-8')
+        from .review_staged import interval_gaps
+        whole = reference['sha256'] in delivered_bodies
+        covered = [[key[1], key[2]] for key in delivered_bodies
+                   if isinstance(key, tuple) and key[0] == reference['sha256']]
+        gaps = [] if whole else interval_gaps([[0, len(content)]], covered)
+        missing = [dict(artifact_descriptor=descriptor(reference), start=start, end=end) for start, end in gaps]
+        limitations = [SETTLEMENT_LIMITATION.format(id=identifier, sha256=reference['sha256'],
+                                                   start=row['start'], end=row['end']) for row in missing]
+        settled.append(dict(request=request, undelivered_spans=missing, limitations=limitations))
+    return settled
+
+
+def validate_settlement_limitations(packet, output):
+    """A final explicitly retains every undelivered range of its settled requests."""
+    required = [text for row in packet.get('settled_source_requests', []) for text in row['limitations']]
+    if any(text not in output.get('limitations', []) for text in required):
+        raise ResearchError('invalid_value_review', 'Copy the settled_source_requests limitations into the final limitations array.',
+                            {'path': '/limitations', 'required': required})
+
+
 def continuation(records, artifacts, previous_packet, output, delivered_bodies=None):
     """Answer the pending requests of a session turn under the excerpt rules. Full-text requests are answered in
     request order within one turn's budget of new full text: a source arrives whole, or its extracted text in
-    consecutive parts, or it waits with status deferred_reading_budget. delivered_bodies maps the SHA-256 of each body
-    that an earlier turn of this session delivered complete to that turn; a version whose whole text or every part is
+    consecutive parts, or it waits with status deferred_reading_budget. delivered_bodies maps complete body hashes
+    and exact (original hash, start, end) spans to their delivering turns; a version whose whole text or every part is
     among them is answered as already delivered. A passage request is answered at once. A request stays pending until
     its source or last part has arrived, or qualified unavailability evidence settles it; already delivered and
     passage answers never stay pending."""
@@ -707,11 +877,20 @@ def continuation(records, artifacts, previous_packet, output, delivered_bodies=N
         if request['kind'] == 'passage':
             deliveries.append(answered[request['id']])
             continue
+        if request['kind'] == 'artifact':
+            found, characters, is_pending, is_waiting = _answer_artifact(
+                artifacts, request, collect_record_artifacts(previous_packet), delivered_bodies, characters_left)
+            deliveries.extend(found)
+            characters_left = 0 if is_waiting else characters_left - characters
+            if is_pending:
+                outstanding.append(request)
+            continue
         if request['kind'] == 'source' and request['depth'] == 'fulltext':
             # A second request for the same version in this turn shares the first one's answer.
             if request['version_id'] not in fulltexts:
                 found, characters, is_pending, is_waiting = _answer_fulltext(
-                    records, artifacts, request, original_rows, delivered_bodies, characters_left)
+                    records, artifacts, request, original_rows, delivered_bodies, characters_left,
+                    exact_spans=previous_packet.get('source_rules') == PROTOCOL_V3)
                 characters_left = 0 if is_waiting else characters_left - characters
                 fulltexts[request['version_id']] = (found, is_pending)
             found, is_pending = fulltexts[request['version_id']]
@@ -728,6 +907,12 @@ def continuation(records, artifacts, previous_packet, output, delivered_bodies=N
         if delivery['status'] not in ('delivered', 'unavailable_qualified'):
             outstanding.append(request)
     from .capture_selection import describe_capture_selections
-    return {'source_inventory': inventory_value, 'prior_context': [], 'source_deliveries': deliveries,
+    result = {'source_inventory': inventory_value, 'prior_context': [], 'source_deliveries': deliveries,
             'pending_source_requests': outstanding, review_excerpts.KEY: session,
             **describe_capture_selections(records)}
+    if previous_packet.get('source_rules') == PROTOCOL_V3:
+        result.update(source_rules=PROTOCOL_V3, source_artifacts=collect_record_artifacts(previous_packet))
+        settled = describe_settlements(records, artifacts, previous_packet, output, delivered_bodies)
+        if settled:
+            result['settled_source_requests'] = settled
+    return result

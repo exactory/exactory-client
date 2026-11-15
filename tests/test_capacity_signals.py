@@ -1,5 +1,6 @@
 """Capacity signals retain the evidence and use D2's existing recovery vocabulary."""
 
+import base64
 import copy
 import json
 import os
@@ -16,11 +17,13 @@ from research_harness.review_plan_steps import complete_plan
 import test_review_failure_class as failure_fixtures
 from test_review_output_profile import build_request, build_response
 from test_review_route_capacity import build_route
+from test_review_capacity_closure import build_runtime
 import test_research_claude_transport as stream_fixtures
 import test_review_continuation as continuation_fixtures
 import test_review_parts_study as study_fixtures
 import openness_reading_fixtures as reading_fixtures
-from codex_route_fixtures import record_codex_route, build_codex_response
+from codex_route_fixtures import record_codex_route, build_codex_response, install_codex_runtime
+from research_harness import review_codex_transport as codex_transport
 from research_harness import cli, review_excerpts
 from research_harness.errors import ResearchError
 from research_harness.review_continuation import plan_next
@@ -153,7 +156,8 @@ class ResponseLimitJourneyTests(unittest.TestCase):
     def test_response_choices_exclude_unverified_retired_and_unsupported_routes(self):
         fixture = self.prepare(continuation_fixtures.ContinuationTests)
         case = fixture.case
-        record_codex_route(case, 'serving', output_tokens=128000)
+        self.register_serving_route(case)
+        self.probe_serving_capacity(case)
         self.execute(case, 'review-route', dict(id='unverified', adapter='codex_cli_v1', model='fixture-model',
             endpoint='codex://local', configuration=dict(max_output_tokens=128000, timeout_seconds=5)))
         records = case.read_records()
@@ -162,11 +166,15 @@ class ResponseLimitJourneyTests(unittest.TestCase):
                 dict(state='stop', code='review_response_too_large', details={}))['details']['serving_routes']
         self.assertEqual(describe(records), ['serving'])
         packet = protocol._read_json(case.artifacts, fixture.assignment['packet'])
-        unsupported = dict(packet, evidence=[dict(encoding='base64', content='AA==',
-            artifact=case.artifacts.put(b'\x00', 'application/octet-stream'))])
+        # Its base64 body exceeds one read turn and has no captured text form.
+        binary = b'\x00' * 450000
+        unsupported = dict(packet, evidence=[dict(encoding='base64',
+            content=base64.b64encode(binary).decode('ascii'),
+            artifact=case.artifacts.put(binary, 'application/octet-stream'))])
         self.assertEqual(capacity.find_serving_routes(records, 'bar', unsupported, artifacts=case.artifacts,
             assignment=fixture.assignment, prompt=fixture.assignment['prompt']['text']), [])
-        oversized = dict(packet, synthetic_material='x' * 700000)
+        # This indivisible frame exceeds both the HTTPS bound and the local transport limit.
+        oversized = dict(packet, synthetic_material='x' * 2000000)
         self.assertEqual(capacity.find_serving_routes(records, 'bar', oversized, artifacts=case.artifacts,
             assignment=fixture.assignment, prompt=fixture.assignment['prompt']['text']), [])
         second = self.execute(case, 'review-assignment', dict(id='second', role='bar', dossier_id=None,
@@ -175,6 +183,49 @@ class ResponseLimitJourneyTests(unittest.TestCase):
         self.execute(case, 'review-context', dict(id='withdraw', assignment_id=second['id'], source='owner',
             kind='route_retired', reason='Withdraw this fixture route.', evidence=[evidence]))
         self.assertEqual(describe(case.read_records()), [])
+
+    def test_response_choices_require_capacity_evidence_after_the_route_probe(self):
+        fixture = self.prepare(continuation_fixtures.ContinuationTests)
+        case = fixture.case
+        self.register_serving_route(case)
+
+        def describe():
+            records = case.read_records()
+            report = capacity.describe_route_capacity(records['review_route']['serving'],
+                records=records, artifacts=case.artifacts)
+            choices = complete_plan(records, case.artifacts, fixture.assignment,
+                dict(state='stop', code='review_response_too_large', details={}))['details']['serving_routes']
+            return report['input_tokens']['value'], choices
+
+        self.assertEqual(protocol.route_state(case.read_records(), case.artifacts, 'serving')['context_status'],
+                         'verified_for_route')
+        self.assertEqual(describe(), (0, []))
+        self.probe_serving_capacity(case)
+        self.assertEqual(describe(), (72000, ['serving']))
+
+    def register_serving_route(self, case):
+        install_codex_runtime(case)
+        runtime = patch.object(codex_transport, 'runtime', return_value=build_runtime())
+        runtime.start()
+        self.addCleanup(runtime.stop)
+        self.execute(case, 'review-route', dict(id='serving', adapter='codex_cli_v1', model='fixture-model',
+            endpoint='codex://local', configuration=dict(max_output_tokens=128000, timeout_seconds=5)))
+        # Verify the input boundary without borrowing the shared fixture's large capacity witness.
+        self.probe_serving_capacity(case, identifier='probe-serving', input_tokens=None)
+
+    def probe_serving_capacity(self, case, *, identifier='capacity-serving', input_tokens=200000):
+        def respond(route, request, credential):
+            packet = review_excerpts.read_sent_packet(request)
+            response = build_codex_response(route, request, dict(allowed_control=packet['allowed_control'],
+                evidence_control=packet['evidence_control'], excluded_controls=[]))
+            response['usage']['input_tokens'] = (capacity.measure_request(route, request)['tokens_upper']
+                if input_tokens is None else input_tokens)
+            return response
+        payload = dict(id=identifier, route_id='serving')
+        if input_tokens is not None:
+            payload['capacity'] = dict(input_tokens=input_tokens)
+        with patch.object(protocol.transport, 'send_request', side_effect=respond):
+            self.execute(case, 'review-probe', payload)
 
     def prepare(self, cls):
         fixture = cls()
@@ -190,14 +241,18 @@ class ResponseLimitJourneyTests(unittest.TestCase):
         self.execute(case, 'review-route', dict(id='https', adapter='openai_responses_v1',
             endpoint='https://example.test/responses', model='fixture-model',
             configuration=dict(max_output_tokens=1000, timeout_seconds=5)))
+        from visual_capacity_fixtures import install_bounded_binary_backend
+        install_bounded_binary_backend(case, [case.store.snapshot()['records']['review_route']['https']])
         def respond_to_probe(route, request, credential):
             packet = review_excerpts.read_sent_packet(request)
-            return dict(id='positive', status='completed', usage=dict(input_tokens=37, output_tokens=12),
+            tokens = capacity.measure_request(route, request)['tokens_upper']
+            return dict(id='positive', status='completed', usage=dict(input_tokens=tokens, output_tokens=12),
                 output=[dict(type='message', content=[dict(type='output_text', text=json.dumps(dict(
                     allowed_control=packet['allowed_control'], evidence_control=packet['evidence_control'], excluded_controls=[])))])])
         with patch.dict(os.environ, {'OPENAI_API_KEY': 'fixture'}), patch.object(
                 protocol.transport, 'send_request', side_effect=respond_to_probe):
-            self.execute(case, 'review-probe', dict(id='https-probe', route_id='https'))
+            self.execute(case, 'review-probe', dict(id='https-probe', route_id='https',
+                capacity=dict(input_tokens=2000000)))
 
     def stop_response(self, case, identifier):
         records = case.store.snapshot()['records']
@@ -269,6 +324,11 @@ class ResponseLimitJourneyTests(unittest.TestCase):
         self.assertEqual(plan_next(case.store.snapshot()['records'], case.artifacts, 'new')['state'], 'done')
 
     def test_verification_moves_by_probe_and_first_assignment_to_recorded_verdict(self):
+        from test_review_output_profile import build_row
+        profile = patch.object(capacity, 'read_profile_priors', return_value=[
+            dict(build_row(level=None, kind='single', thinking=1), largest_output_tokens=12)])
+        profile.start()
+        self.addCleanup(profile.stop)
         fixture = self.prepare(study_fixtures.VerificationPartsTests)
         case = fixture.case
         self.register_https(case)

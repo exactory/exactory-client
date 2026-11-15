@@ -33,7 +33,9 @@ class StagedContextTests(unittest.TestCase):
         self.route = dict(id='route', adapter='codex_cli_v1', model='fixture', endpoint='codex://local',
                           configuration=dict(max_output_tokens=10000, timeout_seconds=600))
         self.controller = dict(id=self.epoch['controller_assignment_id'], route_id='route',
-                               packet=protocol._put_json(self.artifacts, {}))
+            role=self.epoch['role'], prompt=protocol.canonical_prompt(self.epoch['role'],
+                                                                   orchestration='problem_creation'),
+            packet=protocol._put_json(self.artifacts, {}))
         child = dict(self.controller, id='discoverer', staged_task=assigned,
                      staged_review=dict(kind='task', epoch_id=self.epoch['id']))
         self.records = dict(review_route={'route':self.route}, review_assignment={'discoverer':child},

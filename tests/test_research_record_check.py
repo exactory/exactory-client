@@ -17,7 +17,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-from research_harness import cli, review_protocol as protocol
+from research_harness import bar_sources, cli, review_protocol as protocol
 from research_harness.artifacts import _OBJECT_DIRECTORY, _SEALED_DIRECTORY
 from research_harness.errors import ResearchError
 from research_harness.storage import Store
@@ -127,7 +127,8 @@ class RecordCheckTests(unittest.TestCase):
         self.addCleanup(self.case.doCleanups)
         self.case.prepare_review_route()
         self.case.supporting = self.case.artifacts.put(b'A synthetic field standard.', 'text/plain')
-        self.assignment = self.case.assign('bar', 'first', **self.case.deliver_supporting('first'))
+        with patch.object(bar_sources, 'SESSION_PROTOCOL', getattr(self, 'source_rules_protocol', bar_sources.SESSION_PROTOCOL)):
+            self.assignment = self.case.assign('bar', 'first', **self.case.deliver_supporting('first'))
 
     def observe(self, output=None, failure=False):
         response = self.case.build_provider_response(output or self.case.build_review_output('bar'))
@@ -685,7 +686,10 @@ from test_research_review_protocol import ReviewProtocolTests
 case = ReviewProtocolTests()
 case.setUp()
 try:
-    case.route()
+    # Use the archived route operation; modern test backends require later modules.
+    case.mutate(case.protocol().record_route, dict(id='route', adapter='openai_responses_v1',
+        model='fixture-model', endpoint='https://api.openai.com/v1/responses',
+        configuration=dict(max_output_tokens=1000, timeout_seconds=5)))
     case.run_probe()
     case.assign()
     case.invoke(dict(decision='approve', reason='The supplied synthetic evidence is consistent.'))

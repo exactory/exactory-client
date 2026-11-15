@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from problem_parts_fixtures import KEY, ResultPartsCase
 from codex_route_fixtures import install_codex_runtime, limit_codex_input
+from capacity_evidence_fixtures import build_capacity_prior, build_capacity_runtime
 from research_harness.review_bodies import read_history
 from research_harness import research_decisions as decisions, review_problem_parts as parts
 from research_harness import review_protocol as protocol, review_transport as transport
@@ -155,6 +156,8 @@ class ProblemResultHistoryTests(ResultPartsCase):
             setattr(self, key, copy.deepcopy(value))
         self.input_limit = getattr(self, 'input_limit', 105000)
         limit_codex_input(self, self.input_limit)
+        if name == 'claude':
+            self.install_claude_capacity(fixture['records']['review_route']['route'])
         self.fixture = fixture
         return self.current[-1] if hasattr(self, 'current') else None
 
@@ -1082,6 +1085,18 @@ class ProblemResultHistoryTests(ResultPartsCase):
         self.assertTrue(has_attachment(inputs[1], review_excerpts.read_sent_packet(request), body))
         self.assertLessEqual(parts._measure(inputs[3], request), self.input_limit)
 
+    def install_claude_capacity(self, route):
+        from research_harness import review_capacity_evidence as capacity_evidence
+        from research_harness import review_claude_transport as claude
+        # This legacy byte-history fixture uses a synthetic 1.3M-character executor.
+        # Its probe prior belongs to that complete runtime key, not a listed provider model.
+        prior = dict(build_capacity_prior(route, 2000000, 'legacy-history-probe'), capacity_probe=True)
+        priors = tuple(capacity_evidence.read_capacity_priors()) + (prior,)
+        for active in (patch.object(claude, 'runtime', return_value=route['runtime']),
+                       patch.object(capacity_evidence, 'CAPACITY_PRIORS', priors)):
+            active.start()
+            self.addCleanup(active.stop)
+
     def record_claude_bars(self):
         from claude_review_fixtures import build_recorded_response, RECORDED_CONTEXTS
         from research_harness import review_claude_transport as claude
@@ -1091,8 +1106,11 @@ class ProblemResultHistoryTests(ResultPartsCase):
         self.addCleanup(self.case.doCleanups)
         case = self.case
         case.supporting = case.artifacts.put(b'A captured field standard.', 'text/plain')
-        case.mutate(protocol.record_route, {'id': 'route', 'adapter': 'claude_cli_v1', 'model': 'fixture-model',
-            'endpoint': 'claude://local', 'configuration': {'effort': 'xhigh', 'max_output_tokens': 20000, 'timeout_seconds': 5}})
+        route = {'id': 'route', 'adapter': 'claude_cli_v1', 'model': 'fixture-model',
+            'endpoint': 'claude://local', 'configuration': {'effort': 'xhigh', 'max_output_tokens': 20000, 'timeout_seconds': 5}}
+        self.install_claude_capacity(dict(route, runtime=build_capacity_runtime(
+            route['adapter'], fixture='legacy-result-history')))
+        case.mutate(protocol.record_route, route)
 
         def respond(route, request, output):
             response = build_recorded_response(route, request, output, RECORDED_CONTEXTS[0])

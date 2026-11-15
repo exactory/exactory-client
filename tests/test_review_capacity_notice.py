@@ -186,7 +186,8 @@ class CapacityAssignmentTests(unittest.TestCase):
         self.assertEqual(packet, captured[0])
         self.assertNotIn('route_capacity', packet)
         self.assertNotIn('capacity', assignment['prompt']['parameters'])
-        self.assertEqual(assignment['prompt'], protocol.canonical_prompt('bar', orchestration='problem_creation'))
+        self.assertEqual(assignment['prompt'], protocol.canonical_prompt('bar', orchestration='problem_creation',
+                                         source_rules=protocol.bar_sources.PROTOCOL_V3))
         route = self.case.read_records()['review_route']['route']
         self.assertEqual(protocol.build_assignment_request(self.case.read_records(), self.case.artifacts, assignment),
                          protocol.transport.request_body(route, assignment['prompt']['text'], captured[0], []))

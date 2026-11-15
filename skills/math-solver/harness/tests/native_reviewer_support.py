@@ -13,7 +13,7 @@ def response(output):
     return {"id": "native-fixture-response", "model": "fixture-model", "status": "completed",
         "output": [{"type": "message", "role": "assistant", "content": [
             {"type": "output_text", "text": json.dumps(output)}]}],
-        "usage": {"input_tokens": 37, "output_tokens": 12}}
+        "usage": {"input_tokens": 3000000 if "allowed_control" in output else 37, "output_tokens": 12}}
 
 
 def mutate(store, function, payload, **options):

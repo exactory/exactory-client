@@ -153,7 +153,7 @@ def build_request(records, artifacts, assignment_id, route_id):
     preflight = review_preflight.check_request(
         review_preflight.build_report(records, artifacts, route, assignment['role'], PROMPT, packet, request),
         request, correction_packet=packet)
-    measured = measure_request(route, request)
+    measured = measure_request(route, request, records=records, artifacts=artifacts)
     if not measured['fits']:
         raise ResearchError('review_input_too_large',
                             'The complete correction request exceeds the route input limit.',

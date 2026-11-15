@@ -31,9 +31,10 @@ class ResultPartsCase(unittest.TestCase):
     def setUp(self):
         use_emulated_request_builders(self)
         if not getattr(self, 'use_parts_v2', False):
-            from research_harness import review_parts, review_problem_parts
+            from research_harness import bar_sources, review_parts, review_problem_parts
             # These fixtures exercise the frozen 0.69.x entry implementation.
             for target, name, replacement in (
+                (bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL),
                 (review_parts, 'prepare_packet', lambda records, artifacts, value, route, packet, prompt, history, **kwargs: packet),
                 (review_problem_parts, 'prepare_packet', review_problem_parts._prepare_legacy_packet)):
                 patcher = patch.object(target, name, replacement)

@@ -41,6 +41,11 @@ PLAN_STEPS = {
     13: dict(command='read', roles=('bar', 'slate', 'result', 'adjudicator'),
              chooses=('id', 'inspections', 'notes'),
              prerequisites=('Acquire a complete full-text capture.', 'Declare its required-unit bundle.')),
+    16: dict(command='review-probe', roles=protocol.ROLES, chooses=('id',),
+             prerequisites=("Obtain the owner's authorization for the paid capacity probe.",)),
+    14: dict(command='review-assignment', roles=protocol.ROLES, chooses=(), prerequisites=()),
+    15: dict(command='artifact', roles=protocol.ROLES, chooses=('id', 'path'),
+             prerequisites=('Write the complete text of the named body to a file in the workspace.',)),
 }
 
 
@@ -136,10 +141,63 @@ def describe_step(records, artifacts, assignment, number, *, stop_id=None, readi
             result['chooses'].append('bundle_id')
         result['captures'] = copy.deepcopy(captures)
         result['prerequisites'] = [copy.deepcopy(step) for capture in captures for step in capture['prerequisites']]
+    elif number == 16:
+        payload = dict(route_id=assignment['route_id'])
+    elif number == 14:
+        payload = {key: copy.deepcopy(assignment[key]) for key in
+                   ('id', 'role', 'route_id', 'dossier_id', 'reviewer_id', 'author_id', 'context')}
+    elif number == 15:
+        payload = dict(media_type='text/plain')
     else:
         payload = {}
     result['payload'] = payload
     return result
+
+
+CAPACITY_ROUTE_RETIRE_REASON = 'This route cannot deliver the review within its limits. The preserved review continues on a route that can.'
+
+
+def find_capacity_parent(records, assignment, packet):
+    context = assignment.get('context', {})
+    parent_id = context.get('prior_assignment_id') or context.get('context_repair', {}).get('assignment_id')
+    if parent_id is None and (packet or {}).get('own_bars'):
+        parent_id = packet['own_bars'][-1]['assignment_id']
+    return records.get('review_assignment', {}).get(parent_id)
+
+
+def describe_capacity_steps(records, artifacts, assignment, serving_routes, probe_tokens=None, *, body=None, packet=None):
+    """Resume a refused first assignment without inventing a slot or a repair event."""
+    answers = []
+    if body is not None:
+        capture = describe_step(records, artifacts, assignment, 15)
+        capture['body'] = copy.deepcopy(body)
+        resume = describe_step(records, artifacts, assignment, 14)
+        resume['chooses'] = ['context']
+        resume['prerequisites'].append(dict(condition='Replace the body in the inputs of the review with its stored text form.'))
+        answers.append(dict(answer='Capture a text form', steps=[capture, resume]))
+    if probe_tokens is not None:
+        probe = describe_step(records, artifacts, assignment, 16)
+        probe['payload']['capacity'] = dict(input_tokens=probe_tokens)
+        answers.append(dict(answer='Probe this route', steps=[probe, describe_step(records, artifacts, assignment, 14)]))
+    for route in serving_routes:
+        parent = find_capacity_parent(records, assignment, packet)
+        if parent is None:
+            steps = [describe_step(records, artifacts, dict(assignment, route_id=route['route_id']), 14)]
+        else:
+            steps = [describe_step(records, artifacts, parent, number)
+                     for number in select_route_steps(records, artifacts, parent)]
+            serving = records['review_route'][route['route_id']]
+            for step in steps:
+                if step['id'] == 8:
+                    step['payload']['reason'] = CAPACITY_ROUTE_RETIRE_REASON
+                    step['chooses'].remove('reason')
+                if step['command'] == 'review-route':
+                    step['payload'] = {key: copy.deepcopy(serving[key]) for key in
+                                       ('adapter', 'model', 'endpoint', 'configuration')}
+                if step['id'] == 6:
+                    step['payload']['context'].pop('prior_assignment_id', None)
+        answers.append(dict(answer='Use a serving route', route_id=route['route_id'], steps=steps))
+    return answers
 
 
 def select_route_steps(records, artifacts, assignment):
@@ -177,6 +235,15 @@ def describe_role_handoff(records, artifacts, assignment, code, details=None):
             then=[dict(answer='Retire the route', steps=steps)])
         return dict(state='stop', code=code, details=details)
     return dict(state='handoff', code=code, command=steps[0]['command'], details=details)
+
+
+def _describe_session_route_steps(records, artifacts, assignment):
+    steps = [describe_step(records, artifacts, assignment, number)
+             for number in select_route_steps(records, artifacts, assignment)]
+    # Retirement is recorded by an earlier step, so its event and evidence
+    # are choices filled from that command's receipt rather than stale bindings.
+    steps[-1]['chooses'].extend(('context.context_repair.event_ids', 'context.context_repair.evidence'))
+    return steps
 
 
 def complete_plan(records, artifacts, assignment, plan):
@@ -225,7 +292,44 @@ def complete_plan(records, artifacts, assignment, plan):
         return dict(plan, **describe_role_handoff(records, artifacts, assignment, code, details))
     context_status = assignment.get('context_state', {}).get('context_status')
     head_ran = protocol.describe_assignment_calls(records, assignment)['ran']
-    if code in ('native_review_attestation_required', 'openness_review_not_approved'):
+    if code == 'review_pending_delivery_over_plan':
+        from .review_route_capacity import (SESSION_FORECAST_DECISION, SESSION_CAPTURE_ANSWER,
+            SESSION_CAPTURE_REPAIR_ANSWER, SESSION_ROUTE_ANSWER, SESSION_ARTIFACT_DECISION, SESSION_STOP_ANSWER)
+        forecast = details['capacity_forecast']
+        if forecast['reason'] == 'pending_turns' and any(row.get('sha256') and row.get('pending_parts')
+                                                       for row in details['pending_sources']):
+            step = dict(command='review-stop', payload=dict(action='stop', mode='now',
+                assignment_id=assignment['id']), chooses=['id', 'reason'])
+            details.update(step=step, decision=dict(owner_decides=SESSION_ARTIFACT_DECISION,
+                then=[dict(answer=SESSION_STOP_ANSWER, steps=[step])]))
+            return dict(plan, state='stop', command='review-stop')
+        captures = []
+        for source in details['pending_sources']:
+            if not source.get('pending_parts') or 'version_id' not in source:
+                continue
+            step = describe_step(records, artifacts, assignment, 12)
+            step['payload'] = dict(version_id=source['version_id'])
+            step['chooses'].remove('version_id')
+            captures.append(step)
+        has_captures = bool(captures)
+        packet = protocol._read_json(artifacts, assignment['packet'])
+        keeps_source_delivery = any(row.get('request', {}).get('kind') == 'source'
+            and row['request'].get('depth') == 'fulltext' for row in packet.get('source_deliveries', []))
+        if not head_ran or keeps_source_delivery or not forecast['request']['fits']:
+            # A selected capture cannot replace bytes frozen in this head or its history.
+            captures.extend(_describe_session_route_steps(records, artifacts, assignment))
+            capture_answer = SESSION_CAPTURE_REPAIR_ANSWER
+        else:
+            captures.append(dict(command='review-series', assignment_id=assignment['id']))
+            capture_answer = SESSION_CAPTURE_ANSWER
+        answers = [dict(answer=capture_answer, steps=captures)] if has_captures else []
+        if details['capacity_forecast']['reason'] == 'projected_input':
+            answers.append(dict(answer=SESSION_ROUTE_ANSWER,
+                                steps=_describe_session_route_steps(records, artifacts, assignment)))
+        details['decision'] = dict(owner_decides=SESSION_FORECAST_DECISION, then=answers)
+        details['step'] = answers[0]['steps'][0]
+        plan.update(state='stop', command=details['step']['command'])
+    elif code in ('native_review_attestation_required', 'openness_review_not_approved'):
         number = select_route_steps(records, artifacts, assignment)[-1]
         details['step'] = describe_step(records, artifacts, assignment, number)
         plan.update(state='handoff', command=details['step']['command'])

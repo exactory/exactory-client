@@ -152,6 +152,7 @@ class ProblemGateTests(ProblemDeliveryCase):
     def test_recorded_post_is_the_only_post_gate_obligation(self):
         records = self.store.snapshot()["records"]
         records["problem_post"] = {"posted": {"id": "posted", "problem_id": "remote-id",
+            "recorded_revision": self.store.revision + 1,
             "statement_digest": self.load_problem_module().compute_statement_digest(self.selected)}}
         self.assertEqual(self.collect_gate_codes(records), {"problem_already_posted"})
 

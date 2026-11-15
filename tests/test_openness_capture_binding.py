@@ -243,6 +243,7 @@ class OpennessCaptureBindingTests(unittest.TestCase):
         from research_harness import review_excerpts
         for version in (reading.PROTOCOL_V4, reading.PROTOCOL_V5):
             with self.subTest(protocol=version), ExitStack() as stack:
+                current_export = openness.export_openness
                 owner = V4ReplayTests()
                 self.addCleanup(owner.doCleanups)
                 stack.callback(owner.doCleanups)
@@ -269,7 +270,9 @@ class OpennessCaptureBindingTests(unittest.TestCase):
                 self.assertEqual(reading.verify_chain(records, case.artifacts,
                     records['review_assignment'][identifiers[-1]]), saved['reading_turns'])
                 self.assertEqual(records['problem_openness'], before['problem_openness'])
-                selected = owner.fixture.export('selected', support='standalone-proof', priority=True)
+                # The replay owner installs its old exporter; this last operation is a current export.
+                with patch.object(openness, 'export_openness', new=current_export):
+                    selected = owner.fixture.export('selected', support='standalone-proof', priority=True)
                 self.assertEqual(selected['scientific_context']['openness_delivery']['sources'][0]['selected_source_id'],
                                  compact['source_id'])
 

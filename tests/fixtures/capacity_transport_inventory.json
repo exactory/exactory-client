@@ -1,0 +1,1892 @@
+{
+  "call_sites": [
+    "research_harness/artifacts.py:reference:Attribute(value=Name(id='self', ctx=Load()), attr='_observed', ctx=Load())",
+    "research_harness/artifacts.py:reference:Attribute(value=Name(id='self', ctx=Load()), attr='_observed', ctx=Load())",
+    "research_harness/artifacts.py:reference:Attribute(value=Name(id='self', ctx=Load()), attr='_observed', ctx=Load())",
+    "research_harness/artifacts.py:reference:Attribute(value=Name(id='self', ctx=Load()), attr='_observed', ctx=Load())",
+    "research_harness/artifacts.py:reference:Attribute(value=Name(id='self', ctx=Load()), attr='_observed', ctx=Load())",
+    "research_harness/artifacts.py:reference:Attribute(value=Name(id='self', ctx=Load()), attr='_observed', ctx=Store())",
+    "research_harness/review_capacity_evidence.py:call:Call(func=Name(id='observe', ctx=Load()), args=[Name(id='witness', ctx=Load()), Call(func=Name(id='dict', ctx=Load()), args=[], keywords=[keyword(arg='id', value=Subscript(value=Name(id='record', ctx=Load()), slice=Constant(value='id'), ctx=Load())), keyword(arg='source', value=Name(id='kind', ctx=Load()))]), Name(id='capacity_probe', ctx=Load())], keywords=[])",
+    "research_harness/review_capacity_evidence.py:call:Call(func=Name(id='observe', ctx=Load()), args=[Name(id='witness', ctx=Load()), Name(id='source', ctx=Load()), Call(func=Attribute(value=Name(id='prior', ctx=Load()), attr='get', ctx=Load()), args=[Constant(value='capacity_probe'), Constant(value=False)], keywords=[])], keywords=[keyword(arg='applies', value=Name(id='applies', ctx=Load()))])",
+    "research_harness/review_codex_invocation.py:reference:Attribute(value=Name(id='transport', ctx=Load()), attr='observe', ctx=Load())",
+    "research_harness/review_problem_parts.py:call:Call(func=Name(id='observe', ctx=Load()), args=[], keywords=[])",
+    "research_harness/review_protocol.py:call:Call(func=Name(id='_observed', ctx=Load()), args=[Name(id='artifacts', ctx=Load()), Name(id='route', ctx=Load()), Name(id='request', ctx=Load()), Name(id='credential', ctx=Load())], keywords=[keyword(value=Name(id='observation_options', ctx=Load()))])",
+    "research_harness/review_protocol.py:reference:Attribute(value=Name(id='invocation_capture', ctx=Load()), attr='observe', ctx=Load())",
+    "research_harness/review_protocol.py:reference:Attribute(value=Name(id='transport', ctx=Load()), attr='send_request', ctx=Load())",
+    "research_harness/review_transport.py:call:Call(func=Name(id='send_request', ctx=Load()), args=[Name(id='route', ctx=Load()), Name(id='request', ctx=Load()), Name(id='credential', ctx=Load())], keywords=[])",
+    "research_harness/review_transport.py:reference:Attribute(value=Name(id='local', ctx=Load()), attr='send_request', ctx=Load())",
+    "research_harness/review_worker.py:call:Call(func=Name(id='_observed', ctx=Load()), args=[Call(func=Attribute(value=Name(id='store', ctx=Load()), attr='build_artifact_store', ctx=Load()), args=[], keywords=[]), Name(id='route', ctx=Load()), Name(id='request', ctx=Load()), Constant(value=None)], keywords=[])",
+    "research_harness/review_worker.py:import:ImportFrom(module='review_protocol', names=[alias(name='_observed')], level=1)"
+  ],
+  "operation_sites": [
+    "research_harness/review_output_correction.py:Call(func=Attribute(value=Name(id='protocol', ctx=Load()), attr='_invoke_once', ctx=Load()), args=[Name(id='store', ctx=Load()), Name(id='payload', ctx=Load()), Constant(value='review.output_correction'), Name(id='start', ctx=Load()), Name(id='finish', ctx=Load())], keywords=[keyword(arg='expected_revision', value=Name(id='expected_revision', ctx=Load())), keyword(arg='request_id', value=Name(id='request_id', ctx=Load())), keyword(arg='credential', value=Name(id='credential', ctx=Load()))])",
+    "research_harness/review_protocol.py:Call(func=Name(id='_invoke_once', ctx=Load()), args=[Name(id='store', ctx=Load()), Name(id='payload', ctx=Load()), Constant(value='review.invoke'), Name(id='start', ctx=Load()), Name(id='finish', ctx=Load())], keywords=[keyword(arg='expected_revision', value=Name(id='expected_revision', ctx=Load())), keyword(arg='request_id', value=Name(id='request_id', ctx=Load())), keyword(arg='credential', value=Name(id='credential', ctx=Load()))])",
+    "research_harness/review_protocol.py:Call(func=Name(id='_invoke_once', ctx=Load()), args=[Name(id='store', ctx=Load()), Name(id='payload', ctx=Load()), Constant(value='review.route_probe'), Name(id='start', ctx=Load()), Name(id='finish', ctx=Load())], keywords=[keyword(arg='expected_revision', value=Name(id='expected_revision', ctx=Load())), keyword(arg='request_id', value=Name(id='request_id', ctx=Load())), keyword(arg='credential', value=Name(id='credential', ctx=Load()))])"
+  ],
+  "call_operations": [
+    "review.invoke",
+    "review.output_correction",
+    "review.route_probe"
+  ],
+  "admission_functions": {
+    "research_harness/review_protocol.py:_invoke_once": "1efda5f673500457f630bcb85156afa39ec3965d9ea5122ccc38176aa51c4faa",
+    "research_harness/review_protocol.py:_observed": "896e10fd17b469f2f469fe89b8f07113b9dec3ec9e829e146e300a516bcf5765",
+    "research_harness/review_call_admission.py:admit_review_call": "91bbea98b04dd72715df943eebf3cf1f498a614109b0ba4df2130ba4900177c2",
+    "research_harness/review_route_capacity.py:describe_session_stop": "65cfe3b9fb9d3f1bf3d0506b7f01594166971485799cafe4497a32b995166af5",
+    "research_harness/review_protocol.py:invoke_assignment": "15cce1bf133c8891bd90efb74ca8b18b4b650af9a1ad638a9d6a02a307490cfd"
+  },
+  "limit_readers": [
+    "research_harness/batches.py",
+    "research_harness/cli.py",
+    "research_harness/openness_reading.py",
+    "research_harness/problem_openness.py",
+    "research_harness/review_capacity_evidence.py",
+    "research_harness/review_claude_transport.py",
+    "research_harness/review_codex_framed_transport.py",
+    "research_harness/review_codex_transport.py",
+    "research_harness/review_codex_visual_transport.py",
+    "research_harness/review_failed_request_history.py",
+    "research_harness/review_parts.py",
+    "research_harness/review_parts_repair.py",
+    "research_harness/review_preflight.py",
+    "research_harness/review_problem_parts.py",
+    "research_harness/review_protocol.py",
+    "research_harness/review_request_evaluation.py",
+    "research_harness/review_request_fit.py",
+    "research_harness/review_request_restoration.py",
+    "research_harness/review_route_capacity.py",
+    "research_harness/review_single_request.py",
+    "research_harness/review_source_batches.py",
+    "research_harness/review_staged_protocol.py",
+    "research_harness/review_transport.py",
+    "research_harness/review_visual_inputs.py"
+  ],
+  "adapters": {
+    "claude_cli_v1": {
+      "module": "research_harness/review_claude_transport.py",
+      "limits": {
+        "input_characters": {
+          "entry": "A1",
+          "source": "transport",
+          "signal": "input_over_limit",
+          "value": 1300000
+        },
+        "input_tokens": {
+          "entry": "A9",
+          "source": "review_route_capacity",
+          "signal": "input_over_limit",
+          "capacity_field": "input_tokens",
+          "reader": "research_harness.review_route_capacity.describe_route_capacity"
+        },
+        "output_tokens": {
+          "entry": "A12",
+          "source": "route_configuration",
+          "signal": "output_over_cap",
+          "capacity_field": "output_tokens",
+          "reader": "research_harness.review_route_capacity.describe_route_capacity"
+        },
+        "time": {
+          "entry": "A21",
+          "source": "route_configuration",
+          "signal": "timeout",
+          "configuration_field": "timeout_seconds",
+          "maximum_configured": 3600
+        },
+        "response_bytes": {
+          "entry": "A26",
+          "source": "none",
+          "signal": "no_signal:context_unverified",
+          "value": null
+        },
+        "binary_input": {
+          "entry": "A10b",
+          "source": "none",
+          "signal": "no_signal:context_unverified",
+          "value": null,
+          "state": "unsupported"
+        },
+        "binary_request": {
+          "entry": "Q14",
+          "source": "none",
+          "signal": "no_signal:context_unverified",
+          "value": null,
+          "state": "unsupported"
+        }
+      },
+      "signals": {
+        "codes": {
+          "invalid_review_route": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          },
+          "review_format_unsupported": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          },
+          "review_input_too_large": {
+            "limit": "input_characters",
+            "outcome": "input_over_limit",
+            "detail": null
+          },
+          "review_runtime_missing": {
+            "limit": null,
+            "outcome": "runtime_unavailable",
+            "detail": null
+          },
+          "review_system_events_invalid": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          },
+          "review_system_events_unavailable": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          }
+        },
+        "issues": {
+          "commands_loaded": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "excluded_control_exposed": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "incomplete_turn": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "mcp_servers_connected": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "model_mismatch": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "notice": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "packet_or_history_mismatch": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "provider_output_mismatch": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "session_identity": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "session_initialization": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "skills_loaded": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "system_event_*": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "tool_or_injected_input": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "tool_use_or_unknown_output": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "tools_available": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unknown_event": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          }
+        }
+      },
+      "runtime": {
+        "adapter": {
+          "class": "key",
+          "reason": "The adapter selects the provider request and context contract."
+        },
+        "credential_mode": {
+          "class": "key",
+          "reason": "The credential mode selects the provider access path."
+        },
+        "flags": {
+          "class": "key",
+          "reason": "The flags select the CLI context loaders and request isolation."
+        },
+        "implementation_sha256": {
+          "class": "key",
+          "reason": "The transport and renderer bytes decide the serialized input and context controls."
+        },
+        "input_contract": {
+          "class": "key",
+          "reason": "The input contract states the context that reaches the provider."
+        },
+        "output_limit": {
+          "class": "no_effect",
+          "reason": "This describes enforcement; max_output_tokens supplies the reservation."
+        },
+        "wall_limit": {
+          "class": "no_effect",
+          "reason": "Process termination bounds elapsed time, not the accepted input window."
+        }
+      },
+      "configuration": {
+        "effort": {
+          "class": "key",
+          "reason": "Effort changes the model reasoning settings in the request."
+        },
+        "max_output_tokens": {
+          "class": "reservation",
+          "reason": "The asking route leaves this room for the answer."
+        },
+        "timeout_seconds": {
+          "class": "no_effect",
+          "reason": "The timeout changes how long the caller waits, not the provider window."
+        }
+      },
+      "source_ast_sha256": "d0b9c74ff10da25692a0bd10594ea674f32777c8e6dc2b589396664d8293ac37"
+    },
+    "codex_cli_v1": {
+      "module": "research_harness/review_codex_transport.py",
+      "limits": {
+        "input_characters": {
+          "entry": "A1",
+          "source": "transport",
+          "signal": "input_over_limit",
+          "value": 1048576
+        },
+        "input_tokens": {
+          "entry": "A9",
+          "source": "review_route_capacity",
+          "signal": "input_over_limit",
+          "capacity_field": "input_tokens",
+          "reader": "research_harness.review_route_capacity.describe_route_capacity"
+        },
+        "output_tokens": {
+          "entry": "A12",
+          "source": "route_configuration",
+          "signal": "output_over_cap",
+          "capacity_field": "output_tokens",
+          "reader": "research_harness.review_route_capacity.describe_route_capacity"
+        },
+        "time": {
+          "entry": "A21",
+          "source": "route_configuration",
+          "signal": "timeout",
+          "configuration_field": "timeout_seconds",
+          "maximum_configured": 600
+        },
+        "response_bytes": {
+          "entry": "A26",
+          "source": "none",
+          "signal": "no_signal:context_unverified",
+          "value": null
+        },
+        "binary_input": {
+          "entry": "A10b",
+          "source": "none",
+          "signal": "no_signal:context_unverified",
+          "value": null,
+          "state": "unsupported"
+        },
+        "binary_request": {
+          "entry": "Q14",
+          "source": "none",
+          "signal": "no_signal:context_unverified",
+          "value": null,
+          "state": "unsupported"
+        }
+      },
+      "signals": {
+        "codes": {
+          "invalid_review_route": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          },
+          "review_context_unverified": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          },
+          "review_format_unsupported": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          },
+          "review_input_too_large": {
+            "limit": "input_characters",
+            "outcome": "input_over_limit",
+            "detail": null
+          },
+          "review_runtime_missing": {
+            "limit": null,
+            "outcome": "runtime_unavailable",
+            "detail": null
+          }
+        },
+        "issues": {
+          "excluded_control_exposed": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "inherited_assistant_history": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "inherited_reasoning": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "late_developer_input": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "packet_or_history_mismatch": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "repeated_environment_input": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "session_identity_or_instructions": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "tool_call:*": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unexpected_environment": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "uninspected_compaction": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unknown_developer_input": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unknown_input_role": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unknown_message_content": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unknown_or_tool_input": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          }
+        }
+      },
+      "runtime": {
+        "adapter": {
+          "class": "key",
+          "reason": "The adapter selects the provider request and context contract."
+        },
+        "controls": {
+          "class": "key",
+          "reason": "These controls determine the CLI context and model settings."
+        },
+        "credential_mode": {
+          "class": "key",
+          "reason": "The credential mode selects the provider access path."
+        },
+        "executable": {
+          "class": "no_effect",
+          "reason": "Installation location does not change the version, transport bytes or controls."
+        },
+        "implementation_sha256": {
+          "class": "key",
+          "reason": "The transport and renderer bytes decide the serialized input and context controls."
+        },
+        "input_contract": {
+          "class": "key",
+          "reason": "The input contract states the context that reaches the provider."
+        },
+        "output_limit": {
+          "class": "no_effect",
+          "reason": "This describes enforcement; max_output_tokens supplies the reservation."
+        },
+        "version": {
+          "class": "key",
+          "reason": "A CLI version can change context handling and the accepted input window."
+        },
+        "wall_limit": {
+          "class": "no_effect",
+          "reason": "Process termination bounds elapsed time, not the accepted input window."
+        }
+      },
+      "configuration": {
+        "max_output_tokens": {
+          "class": "reservation",
+          "reason": "The asking route leaves this room for the answer."
+        },
+        "timeout_seconds": {
+          "class": "no_effect",
+          "reason": "The timeout changes how long the caller waits, not the provider window."
+        }
+      },
+      "source_ast_sha256": "1a674d76baa83781300d64c11223ccb1ef7ffb97324b03fd73e0cc58721a3a77"
+    },
+    "codex_cli_framed_v1": {
+      "module": "research_harness/review_codex_framed_transport.py",
+      "limits": {
+        "input_characters": {
+          "entry": "A1",
+          "source": "transport",
+          "signal": "input_over_limit",
+          "value": 1048576
+        },
+        "input_tokens": {
+          "entry": "A9",
+          "source": "review_route_capacity",
+          "signal": "input_over_limit",
+          "capacity_field": "input_tokens",
+          "reader": "research_harness.review_route_capacity.describe_route_capacity"
+        },
+        "output_tokens": {
+          "entry": "A12",
+          "source": "route_configuration",
+          "signal": "output_over_cap",
+          "capacity_field": "output_tokens",
+          "reader": "research_harness.review_route_capacity.describe_route_capacity"
+        },
+        "time": {
+          "entry": "A21",
+          "source": "route_configuration",
+          "signal": "timeout",
+          "configuration_field": "timeout_seconds",
+          "maximum_configured": 600
+        },
+        "response_bytes": {
+          "entry": "A26",
+          "source": "none",
+          "signal": "no_signal:context_unverified",
+          "value": null
+        },
+        "binary_input": {
+          "entry": "A10b",
+          "source": "none",
+          "signal": "no_signal:context_unverified",
+          "value": null,
+          "state": "unsupported"
+        },
+        "binary_request": {
+          "entry": "Q14",
+          "source": "none",
+          "signal": "no_signal:context_unverified",
+          "value": null,
+          "state": "unsupported"
+        }
+      },
+      "signals": {
+        "codes": {
+          "invalid_review_route": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          },
+          "review_context_unverified": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          },
+          "review_format_unsupported": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          },
+          "review_input_too_large": {
+            "limit": "input_characters",
+            "outcome": "input_over_limit",
+            "detail": null
+          },
+          "review_runtime_missing": {
+            "limit": null,
+            "outcome": "runtime_unavailable",
+            "detail": null
+          }
+        },
+        "issues": {
+          "excluded_control_exposed": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "inherited_assistant_history": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "inherited_reasoning": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "late_developer_input": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "packet_or_history_mismatch": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "repeated_environment_input": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "session_identity_or_instructions": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "tool_call:*": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unexpected_environment": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "uninspected_compaction": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unknown_developer_input": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unknown_input_role": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unknown_message_content": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unknown_or_tool_input": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          }
+        }
+      },
+      "runtime": {
+        "adapter": {
+          "class": "key",
+          "reason": "The adapter selects the provider request and context contract."
+        },
+        "controls": {
+          "class": "key",
+          "reason": "These controls determine the CLI context and model settings."
+        },
+        "credential_mode": {
+          "class": "key",
+          "reason": "The credential mode selects the provider access path."
+        },
+        "executable": {
+          "class": "no_effect",
+          "reason": "Installation location does not change the version, transport bytes or controls."
+        },
+        "implementation_sha256": {
+          "class": "key",
+          "reason": "The transport and renderer bytes decide the serialized input and context controls."
+        },
+        "input_contract": {
+          "class": "key",
+          "reason": "The input contract states the context that reaches the provider."
+        },
+        "output_limit": {
+          "class": "no_effect",
+          "reason": "This describes enforcement; max_output_tokens supplies the reservation."
+        },
+        "version": {
+          "class": "key",
+          "reason": "A CLI version can change context handling and the accepted input window."
+        },
+        "wall_limit": {
+          "class": "no_effect",
+          "reason": "Process termination bounds elapsed time, not the accepted input window."
+        }
+      },
+      "configuration": {
+        "max_output_tokens": {
+          "class": "reservation",
+          "reason": "The asking route leaves this room for the answer."
+        },
+        "timeout_seconds": {
+          "class": "no_effect",
+          "reason": "The timeout changes how long the caller waits, not the provider window."
+        }
+      },
+      "source_ast_sha256": "7f1b66ee6290e7b0c54b347700d50533206ba19b4a6a267c19edb0ee660ce168"
+    },
+    "codex_cli_visual_v1": {
+      "module": "research_harness/review_codex_visual_transport.py",
+      "limits": {
+        "input_characters": {
+          "entry": "A1",
+          "source": "transport",
+          "signal": "input_over_limit",
+          "value": 1048576
+        },
+        "input_tokens": {
+          "entry": "A9",
+          "source": "review_route_capacity",
+          "signal": "input_over_limit",
+          "capacity_field": "input_tokens",
+          "reader": "research_harness.review_route_capacity.describe_route_capacity"
+        },
+        "output_tokens": {
+          "entry": "A12",
+          "source": "route_configuration",
+          "signal": "output_over_cap",
+          "capacity_field": "output_tokens",
+          "reader": "research_harness.review_route_capacity.describe_route_capacity"
+        },
+        "time": {
+          "entry": "A21",
+          "source": "route_configuration",
+          "signal": "timeout",
+          "configuration_field": "timeout_seconds",
+          "maximum_configured": 600
+        },
+        "response_bytes": {
+          "entry": "A26",
+          "source": "none",
+          "signal": "no_signal:context_unverified",
+          "value": null
+        },
+        "binary_input": {
+          "entry": "A10b",
+          "source": "research_harness.review_route_capacity.describe_binary_rules",
+          "signal": "no_signal:context_unverified",
+          "rule_inventory": "adapters/codex_cli_visual_v1/binary_rules"
+        },
+        "binary_request": {
+          "entry": "Q14",
+          "source": "research_harness.review_route_capacity.describe_binary_rules",
+          "signal": "no_signal:context_unverified",
+          "rule_inventory": "adapters/codex_cli_visual_v1/binary_rules"
+        }
+      },
+      "signals": {
+        "codes": {
+          "invalid_review_route": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          },
+          "review_format_unsupported": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          },
+          "review_image_input_invalid": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          },
+          "review_input_too_large": {
+            "limit": "input_characters",
+            "outcome": "input_over_limit",
+            "detail": null
+          },
+          "review_model_mismatch": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          }
+        },
+        "issues": {
+          "actual_model_effort_or_turn_context": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "excluded_control_exposed": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "excluded_image_exposed": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "inherited_assistant_history": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "inherited_reasoning": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "late_developer_input": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "packet_images_or_history_mismatch": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "repeated_environment_input": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "session_identity_or_instructions": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "tool_call:*": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unexpected_environment": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unexpected_user_input": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "uninspected_compaction": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unknown_developer_input": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unknown_input_role": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unknown_or_mismatched_message_content": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          },
+          "unknown_or_tool_input": {
+            "limit": null,
+            "outcome": "context_unverified",
+            "detail": null
+          }
+        }
+      },
+      "runtime": {
+        "adapter": {
+          "class": "key",
+          "reason": "The adapter selects the provider request and context contract."
+        },
+        "controls": {
+          "class": "key",
+          "reason": "These controls determine the CLI context and model settings."
+        },
+        "credential_mode": {
+          "class": "key",
+          "reason": "The credential mode selects the provider access path."
+        },
+        "executable": {
+          "class": "no_effect",
+          "reason": "Installation location does not change the version, transport bytes or controls."
+        },
+        "implementation_sha256": {
+          "class": "key",
+          "reason": "The transport and renderer bytes decide the serialized input and context controls."
+        },
+        "input_contract": {
+          "class": "key",
+          "reason": "The input contract states the context that reaches the provider."
+        },
+        "output_limit": {
+          "class": "no_effect",
+          "reason": "This describes enforcement; max_output_tokens supplies the reservation."
+        },
+        "version": {
+          "class": "key",
+          "reason": "A CLI version can change context handling and the accepted input window."
+        },
+        "wall_limit": {
+          "class": "no_effect",
+          "reason": "Process termination bounds elapsed time, not the accepted input window."
+        }
+      },
+      "configuration": {
+        "max_output_tokens": {
+          "class": "reservation",
+          "reason": "The asking route leaves this room for the answer."
+        },
+        "timeout_seconds": {
+          "class": "no_effect",
+          "reason": "The timeout changes how long the caller waits, not the provider window."
+        }
+      },
+      "runtime_inherits": "codex_cli_v1",
+      "source_ast_sha256": "7660b8f690c0f88f426c9751920f31aa07fcf37fddaa992239517111326050fa",
+      "binary_rules": [
+        {
+          "endpoint": "codex://local",
+          "model": "gpt-6-astra",
+          "rules": {
+            "image": {
+              "input_limits": {
+                "bytes": {
+                  "value": 33554432,
+                  "source": "transport",
+                  "file": "research_harness/review_codex_visual_transport.py"
+                },
+                "pixels": {
+                  "value": 16777216,
+                  "source": "transport",
+                  "file": "research_harness/review_codex_visual_transport.py"
+                }
+              },
+              "request_limits": {},
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": 364458,
+                "largest_bytes": 474410,
+                "largest_pixels": 2236350,
+                "largest_request_bytes": 6832558,
+                "largest_request_images": 19,
+                "basis": "whole_request_usage_including_text",
+                "tokens_per_image": 19182.0,
+                "tokens_per_byte": 0.05334136936708038,
+                "tokens_per_pixel": 0.008859254919106047
+              }
+            }
+          }
+        },
+        {
+          "endpoint": "codex://local",
+          "model": "gpt-6.1-sol",
+          "rules": {
+            "image": {
+              "input_limits": {
+                "bytes": {
+                  "value": 33554432,
+                  "source": "transport",
+                  "file": "research_harness/review_codex_visual_transport.py"
+                },
+                "pixels": {
+                  "value": 16777216,
+                  "source": "transport",
+                  "file": "research_harness/review_codex_visual_transport.py"
+                }
+              },
+              "request_limits": {},
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": 364458,
+                "largest_bytes": 474410,
+                "largest_pixels": 2236350,
+                "largest_request_bytes": 6832558,
+                "largest_request_images": 19,
+                "basis": "whole_request_usage_including_text",
+                "tokens_per_image": 19182.0,
+                "tokens_per_byte": 0.05334136936708038,
+                "tokens_per_pixel": 0.008859254919106047
+              }
+            }
+          }
+        },
+        {
+          "endpoint": "codex://local",
+          "model": "gpt-6-luna",
+          "rules": {
+            "image": {
+              "input_limits": {
+                "bytes": {
+                  "value": 33554432,
+                  "source": "transport",
+                  "file": "research_harness/review_codex_visual_transport.py"
+                },
+                "pixels": {
+                  "value": 16777216,
+                  "source": "transport",
+                  "file": "research_harness/review_codex_visual_transport.py"
+                }
+              },
+              "request_limits": {},
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": 364458,
+                "largest_bytes": 474410,
+                "largest_pixels": 2236350,
+                "largest_request_bytes": 6832558,
+                "largest_request_images": 19,
+                "basis": "whole_request_usage_including_text",
+                "tokens_per_image": 19182.0,
+                "tokens_per_byte": 0.05334136936708038,
+                "tokens_per_pixel": 0.008859254919106047
+              }
+            }
+          }
+        },
+        {
+          "endpoint": "codex://local",
+          "model": "unlisted-model",
+          "rules": {
+            "image": {
+              "input_limits": {
+                "bytes": {
+                  "value": 33554432,
+                  "source": "transport",
+                  "file": "research_harness/review_codex_visual_transport.py"
+                },
+                "pixels": {
+                  "value": 16777216,
+                  "source": "transport",
+                  "file": "research_harness/review_codex_visual_transport.py"
+                }
+              },
+              "request_limits": {},
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": 364458,
+                "largest_bytes": 474410,
+                "largest_pixels": 2236350,
+                "largest_request_bytes": 6832558,
+                "largest_request_images": 19,
+                "basis": "whole_request_usage_including_text",
+                "tokens_per_image": 19182.0,
+                "tokens_per_byte": 0.05334136936708038,
+                "tokens_per_pixel": 0.008859254919106047
+              }
+            }
+          }
+        }
+      ]
+    },
+    "openai_responses_v1": {
+      "module": "research_harness/review_transport.py",
+      "limits": {
+        "input_characters": {
+          "entry": "A1",
+          "source": "none",
+          "signal": "input_over_limit",
+          "value": null
+        },
+        "input_tokens": {
+          "entry": "A9",
+          "source": "review_route_capacity",
+          "signal": "input_over_limit",
+          "capacity_field": "input_tokens",
+          "reader": "research_harness.review_route_capacity.describe_route_capacity"
+        },
+        "output_tokens": {
+          "entry": "A12",
+          "source": "route_configuration",
+          "signal": "output_over_cap",
+          "capacity_field": "output_tokens",
+          "reader": "research_harness.review_route_capacity.describe_route_capacity"
+        },
+        "time": {
+          "entry": "A21",
+          "source": "route_configuration",
+          "signal": "timeout",
+          "configuration_field": "timeout_seconds",
+          "maximum_configured": 600
+        },
+        "response_bytes": {
+          "entry": "A26",
+          "source": "transport",
+          "signal": "response_over_limit",
+          "value": 16777216
+        },
+        "binary_input": {
+          "entry": "A10b",
+          "source": "research_harness.review_route_capacity.describe_binary_rules",
+          "signal": "no_signal:context_unverified",
+          "rule_inventory": "adapters/openai_responses_v1/binary_rules"
+        },
+        "binary_request": {
+          "entry": "Q14",
+          "source": "research_harness.review_route_capacity.describe_binary_rules",
+          "signal": "no_signal:context_unverified",
+          "rule_inventory": "adapters/openai_responses_v1/binary_rules"
+        }
+      },
+      "signals": {
+        "codes": {
+          "invalid_review_route": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          },
+          "review_complete_source_route": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          },
+          "review_credential_missing": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          },
+          "review_incomplete": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          },
+          "review_provider_failure": {
+            "limit": null,
+            "outcome": "provider_unavailable",
+            "detail": null
+          },
+          "review_response_too_large": {
+            "limit": "response_bytes",
+            "outcome": "response_over_limit",
+            "detail": null
+          },
+          "review_route_unsupported": {
+            "limit": null,
+            "outcome": "unknown",
+            "detail": null
+          }
+        },
+        "issues": {}
+      },
+      "runtime": {
+        "adapter": {
+          "class": "key",
+          "reason": "The adapter selects the provider request and context contract."
+        },
+        "host": {
+          "class": "no_effect",
+          "reason": "The host name does not change the serialized HTTPS request."
+        },
+        "implementation_sha256": {
+          "class": "key",
+          "reason": "The transport and renderer bytes decide the serialized input and context controls."
+        },
+        "input_contract": {
+          "class": "key",
+          "reason": "The input contract states the context that reaches the provider."
+        },
+        "platform": {
+          "class": "no_effect",
+          "reason": "The local platform does not change the explicit provider input."
+        },
+        "python": {
+          "class": "no_effect",
+          "reason": "The Python version does not change the explicit provider input contract."
+        }
+      },
+      "configuration": {
+        "max_output_tokens": {
+          "class": "reservation",
+          "reason": "The asking route leaves this room for the answer."
+        },
+        "timeout_seconds": {
+          "class": "no_effect",
+          "reason": "The timeout changes how long the caller waits, not the provider window."
+        }
+      },
+      "source_ast_sha256": "60b46bfb5131d9d02d931d7cb7c6d6575bfe4c515f814b22c1a97cb6ccba081c",
+      "binary_rules": [
+        {
+          "endpoint": "https://api.openai.com/v1/responses",
+          "model": "gpt-6-astra",
+          "rules": {
+            "image": {
+              "input_limits": {
+                "processed_patches": {
+                  "value": 30000,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/images-vision",
+                  "date": "2026-11-14"
+                }
+              },
+              "request_limits": {
+                "bytes": {
+                  "value": 512000000,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/images-vision",
+                  "date": "2026-11-14"
+                },
+                "count": {
+                  "value": 1500,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/images-vision",
+                  "date": "2026-11-14"
+                }
+              },
+              "token_rule": {
+                "source": "documented",
+                "url": "https://developers.openai.com/api/docs/guides/images-vision",
+                "date": "2026-11-14",
+                "rule": "patch_budget",
+                "patch_pixels": 32,
+                "multiplier": 1.2,
+                "detail_budgets": {
+                  "low": 256,
+                  "high": 2500,
+                  "original": 30000,
+                  "auto": 30000
+                },
+                "maximum_dimension": 65535,
+                "rounding_margin_tokens": 1
+              },
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": null
+              }
+            },
+            "pdf": {
+              "input_limits": {
+                "bytes": {
+                  "value": 50000000,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/file-inputs",
+                  "exclusive": true,
+                  "date": "2026-11-14"
+                }
+              },
+              "request_limits": {
+                "bytes": {
+                  "value": 50000000,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/file-inputs",
+                  "date": "2026-11-14"
+                }
+              },
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": null
+              }
+            }
+          }
+        },
+        {
+          "endpoint": "https://api.openai.com/v1/responses",
+          "model": "gpt-6.1-sol",
+          "rules": {
+            "image": {
+              "input_limits": {},
+              "request_limits": {
+                "bytes": {
+                  "value": 512000000,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/images-vision",
+                  "date": "2026-11-14"
+                },
+                "count": {
+                  "value": 1500,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/images-vision",
+                  "date": "2026-11-14"
+                }
+              },
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": null
+              }
+            },
+            "pdf": {
+              "input_limits": {
+                "bytes": {
+                  "value": 50000000,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/file-inputs",
+                  "exclusive": true,
+                  "date": "2026-11-14"
+                }
+              },
+              "request_limits": {
+                "bytes": {
+                  "value": 50000000,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/file-inputs",
+                  "date": "2026-11-14"
+                }
+              },
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": null
+              }
+            }
+          }
+        },
+        {
+          "endpoint": "https://api.openai.com/v1/responses",
+          "model": "gpt-6-luna",
+          "rules": {
+            "image": {
+              "input_limits": {},
+              "request_limits": {
+                "bytes": {
+                  "value": 512000000,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/images-vision",
+                  "date": "2026-11-14"
+                },
+                "count": {
+                  "value": 1500,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/images-vision",
+                  "date": "2026-11-14"
+                }
+              },
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": null
+              }
+            },
+            "pdf": {
+              "input_limits": {
+                "bytes": {
+                  "value": 50000000,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/file-inputs",
+                  "exclusive": true,
+                  "date": "2026-11-14"
+                }
+              },
+              "request_limits": {
+                "bytes": {
+                  "value": 50000000,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/file-inputs",
+                  "date": "2026-11-14"
+                }
+              },
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": null
+              }
+            }
+          }
+        },
+        {
+          "endpoint": "https://api.openai.com/v1/responses",
+          "model": "unlisted-model",
+          "rules": {
+            "image": {
+              "input_limits": {},
+              "request_limits": {
+                "bytes": {
+                  "value": 512000000,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/images-vision",
+                  "date": "2026-11-14"
+                },
+                "count": {
+                  "value": 1500,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/images-vision",
+                  "date": "2026-11-14"
+                }
+              },
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": null
+              }
+            },
+            "pdf": {
+              "input_limits": {
+                "bytes": {
+                  "value": 50000000,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/file-inputs",
+                  "exclusive": true,
+                  "date": "2026-11-14"
+                }
+              },
+              "request_limits": {
+                "bytes": {
+                  "value": 50000000,
+                  "source": "documented",
+                  "url": "https://developers.openai.com/api/docs/guides/file-inputs",
+                  "date": "2026-11-14"
+                }
+              },
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": null
+              }
+            }
+          }
+        },
+        {
+          "endpoint": "https://capacity.invalid/v1/responses",
+          "model": "gpt-6-astra",
+          "rules": {
+            "image": {
+              "input_limits": {},
+              "request_limits": {},
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": null
+              }
+            },
+            "pdf": {
+              "input_limits": {},
+              "request_limits": {},
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": null
+              }
+            }
+          }
+        },
+        {
+          "endpoint": "https://capacity.invalid/v1/responses",
+          "model": "gpt-6.1-sol",
+          "rules": {
+            "image": {
+              "input_limits": {},
+              "request_limits": {},
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": null
+              }
+            },
+            "pdf": {
+              "input_limits": {},
+              "request_limits": {},
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": null
+              }
+            }
+          }
+        },
+        {
+          "endpoint": "https://capacity.invalid/v1/responses",
+          "model": "gpt-6-luna",
+          "rules": {
+            "image": {
+              "input_limits": {},
+              "request_limits": {},
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": null
+              }
+            },
+            "pdf": {
+              "input_limits": {},
+              "request_limits": {},
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": null
+              }
+            }
+          }
+        },
+        {
+          "endpoint": "https://capacity.invalid/v1/responses",
+          "model": "unlisted-model",
+          "rules": {
+            "image": {
+              "input_limits": {},
+              "request_limits": {},
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": null
+              }
+            },
+            "pdf": {
+              "input_limits": {},
+              "request_limits": {},
+              "token_rule": null,
+              "estimate": {
+                "kind": "estimate",
+                "source_record": "20261113110022-every-open-record-and-review-capacity",
+                "largest_request_input_tokens": null
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "roles": {
+    "bar": {
+      "delivery": "parts-v2",
+      "entry": "A1",
+      "field_schema": "capacity_packet_schema.json"
+    },
+    "slate": {
+      "delivery": "parts-v2",
+      "entry": "A1",
+      "field_schema": "capacity_packet_schema.json"
+    },
+    "result": {
+      "delivery": "parts-v2",
+      "entry": "A1",
+      "field_schema": "capacity_packet_schema.json"
+    },
+    "adjudicator": {
+      "delivery": "parts-v2",
+      "entry": "A1",
+      "field_schema": "capacity_packet_schema.json"
+    },
+    "manuscript": {
+      "delivery": "single",
+      "entry": "A23",
+      "field_schema": "capacity_packet_schema.json"
+    },
+    "standalone": {
+      "delivery": "single",
+      "entry": "A23",
+      "field_schema": "capacity_packet_schema.json"
+    },
+    "verification": {
+      "delivery": "parts-v2",
+      "entry": "A1",
+      "field_schema": "capacity_packet_schema.json"
+    },
+    "native_math": {
+      "delivery": "parts-v2",
+      "entry": "A1",
+      "field_schema": "capacity_packet_schema.json"
+    }
+  },
+  "task_rules": {
+    "reading": {
+      "members": [
+        "reading_turn"
+      ],
+      "levels": [
+        120000,
+        60000,
+        30000,
+        15000
+      ],
+      "answer_bound": "review_route_capacity._describe_answer_bounds",
+      "protocols": [
+        "openness-v5",
+        "openness-v6",
+        "math-v1"
+      ],
+      "entries": [
+        "A4",
+        "A13",
+        "A25"
+      ]
+    },
+    "read": {
+      "members": [
+        "review_parts.kind",
+        "problem_evidence_parts.stage"
+      ],
+      "levels": [
+        600000,
+        300000,
+        150000,
+        75000,
+        37500,
+        18750,
+        15000
+      ],
+      "answer_bound": "review_route_capacity._describe_answer_bounds",
+      "protocols": [
+        "parts-v1",
+        "parts-v2",
+        "problem-evidence-parts-v1"
+      ],
+      "entries": [
+        "A6",
+        "A15"
+      ]
+    },
+    "combine": {
+      "members": [
+        "review_parts.kind"
+      ],
+      "levels": [
+        480000,
+        240000,
+        120000,
+        60000
+      ],
+      "answer_bound": "review_route_capacity._describe_answer_bounds",
+      "protocols": [
+        "parts-v1",
+        "parts-v2"
+      ],
+      "entries": [
+        "A6",
+        "A15"
+      ]
+    },
+    "check": {
+      "members": [
+        "review_parts.kind"
+      ],
+      "levels": [
+        480000,
+        240000,
+        120000,
+        60000
+      ],
+      "answer_bound": "review_route_capacity._describe_answer_bounds",
+      "protocols": [
+        "parts-v1",
+        "parts-v2"
+      ],
+      "entries": [
+        "A6",
+        "A15"
+      ]
+    },
+    "final": {
+      "members": [
+        "reading_record",
+        "review_parts.kind"
+      ],
+      "levels": [
+        480000,
+        240000,
+        120000,
+        60000
+      ],
+      "answer_bound": "review_route_capacity._describe_answer_bounds",
+      "protocols": [
+        "openness-v5",
+        "openness-v6",
+        "math-v1",
+        "parts-v1",
+        "parts-v2"
+      ],
+      "entries": [
+        "A5",
+        "A14"
+      ]
+    },
+    "request": {
+      "members": [
+        "reviewer_excerpts"
+      ],
+      "levels": [
+        120000,
+        60000,
+        30000,
+        15000
+      ],
+      "answer_bound": "review_route_capacity._describe_answer_bounds",
+      "protocols": [
+        "sources-v2",
+        "sources-v3"
+      ],
+      "entries": [
+        "A2",
+        "A12",
+        "Q18"
+      ]
+    },
+    "single": {
+      "members": [
+        "ordinary role schema"
+      ],
+      "levels": [
+        600000,
+        300000,
+        150000,
+        75000,
+        37500,
+        18750,
+        15000
+      ],
+      "answer_bound": "review_route_capacity._describe_answer_bounds",
+      "protocols": [
+        "independent-v1",
+        "problem-v1",
+        "problem-v2",
+        "problem-v3",
+        "problem-v4",
+        "problem-v5",
+        "verification-v2"
+      ],
+      "entries": [
+        "A1",
+        "A16",
+        "A23"
+      ]
+    },
+    "staged": {
+      "members": [
+        "staged_review"
+      ],
+      "levels": [
+        0
+      ],
+      "answer_bound": "review_route_capacity._describe_answer_bounds",
+      "protocols": [
+        "staged-v1",
+        "staged-v2"
+      ],
+      "entries": [
+        "A10c"
+      ]
+    },
+    "probe": {
+      "members": [
+        "allowed_control",
+        "evidence_control",
+        "visual_probe"
+      ],
+      "levels": [
+        15000
+      ],
+      "answer_bound": "review_route_capacity._describe_answer_bounds",
+      "protocols": [
+        "route-probe-v1"
+      ],
+      "entries": [
+        "A24"
+      ]
+    },
+    "correction": {
+      "members": [
+        "protocol"
+      ],
+      "levels": [
+        600000,
+        300000,
+        150000,
+        75000,
+        37500,
+        18750,
+        15000
+      ],
+      "answer_bound": "review_route_capacity._describe_answer_bounds",
+      "protocols": [
+        "reassessment-disposition-correction-v1"
+      ],
+      "entries": [
+        "A11"
+      ]
+    }
+  },
+  "recognized_evidence": [
+    {
+      "adapter": "claude_cli_v1",
+      "field": "answer",
+      "prefix": "API Error: Claude's response exceeded",
+      "limit": "output_tokens",
+      "outcome": "output_over_cap",
+      "detail": null,
+      "entry": "A12"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "field": "answer",
+      "prefix": "Prompt is too long",
+      "limit": "input_tokens",
+      "outcome": "input_over_limit",
+      "detail": null,
+      "entry": "A9"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "field": "answer",
+      "prefix": "for a request sent without streaming",
+      "limit": null,
+      "outcome": "execution_incomplete",
+      "detail": "non_streaming_fallback",
+      "entry": "A18"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "field": "context_issue",
+      "prefix": "system_event_compact_boundary",
+      "limit": "input_tokens",
+      "outcome": "input_over_limit",
+      "detail": "compacted",
+      "entry": "A27"
+    },
+    {
+      "adapter": "codex_cli_v1",
+      "field": "context_issue",
+      "prefix": "uninspected_compaction",
+      "limit": "input_tokens",
+      "outcome": "input_over_limit",
+      "detail": "compacted",
+      "entry": "A20"
+    },
+    {
+      "adapter": "codex_cli_framed_v1",
+      "field": "context_issue",
+      "prefix": "uninspected_compaction",
+      "limit": "input_tokens",
+      "outcome": "input_over_limit",
+      "detail": "compacted",
+      "entry": "A20"
+    },
+    {
+      "adapter": "codex_cli_visual_v1",
+      "field": "context_issue",
+      "prefix": "uninspected_compaction",
+      "limit": "input_tokens",
+      "outcome": "input_over_limit",
+      "detail": "compacted",
+      "entry": "A20"
+    },
+    {
+      "adapter": "codex_cli_v1",
+      "field": "codex_error_info",
+      "prefix": "context_window_exceeded",
+      "limit": "input_tokens",
+      "outcome": "input_over_limit",
+      "detail": null,
+      "entry": "A20"
+    }
+  ],
+  "pending_capacity_evidence": [],
+  "capacity_prior_constants": [
+    {
+      "module": "research_harness/review_capacity_evidence.py",
+      "name": "CAPACITY_PRIORS",
+      "pending_unit": "route-limits-C3",
+      "encoding": "keyed-json-tuples",
+      "legacy_ast_sha256": null
+    }
+  ],
+  "native_packet_producers": {
+    "skills/math-solver/harness/attack.py": "903e1a1e708facf7feeb1010428f5baef9f5f8ca44583298251a1c01ac554842",
+    "skills/math-solver/harness/search_controller/service.py": "301fb18027f39dccbac67835c3fb7cdd15277d86c833499586afcd80cd0b846a",
+    "skills/math-solver/harness/search_controller/strategy_refresh_io.py": "8987869e0ea210d0a8bba86f499bf4d12dd5a01bc9ba843a1ed8c48576148ac4",
+    "skills/math-solver/harness/search_controller/execution.py": "b006cc20aabf26270859b0f931632daa6d83006076a3d2237591c9314b07265d",
+    "skills/math-solver/harness/search_controller/deferrals.py": "8b0a7321da7b1773709642d28a67d1edfa667fa6f210c29aba54473dbd4f35d5",
+    "skills/math-solver/harness/search_controller/research.py": "c6f108b7728d5060732d5da1fa1cf9e658af2518a83faf497ce1214746101f64",
+    "skills/math-solver/harness/search_controller/output_views.py": "08b9082723860ce9bf98e0025c8efc387a84bbd32a4203d58e6f0b971f29aae5",
+    "skills/math-solver/harness/search_controller/discovery.py": "c136cb176dd270beb30cf7cda986b9876f000e0228c81c61966a5efd6f0be7cd",
+    "skills/math-solver/harness/search_controller/render.py": "304d723d594fce8cedc17618fb308cc3f28cabe84f905e90370723bd792b65e3",
+    "skills/math-solver/harness/search_controller/problem_records.py": "cf2dc7a9ce2a31fa79d591651b420cea92a93812aa11ebd8692bfaa36ba31f6e",
+    "skills/math-solver/harness/search_controller/dispositions.py": "19eae998379431d3c62bd698e0cf9733afac33e49effd9cc98d31e370178f439",
+    "skills/math-solver/harness/search_controller/__init__.py": "f6d19cbcf81f2b0c5d313887755cdc3d7a0ef1474f19eec54e8a0348c8bf73a0",
+    "skills/math-solver/harness/search_controller/runtime.py": "8535a24f4baeca5de06c798ed9aa52bc24b4b7af6e84a118d075755fcb22529d",
+    "skills/math-solver/harness/search_controller/computation_io.py": "54af2f077385939596ea41e52b29fd3508086a00351aeb21c00b7e1ae076db7f",
+    "skills/math-solver/harness/search_controller/integration.py": "46296c69ad99be5f6180cc0b5faa6e74caf1e1ea91afca19994397f3ce9af8fe",
+    "skills/math-solver/harness/search_controller/execution_state.py": "3c4a034eb4da377fa092ef7bddf97f43be109f182125ddf2c2bf9bbdc7bfd6ad",
+    "skills/math-solver/harness/search_controller/model.py": "6ed431f383cc25b51924c1645ff8f8931a02f1407c571df46e8dcdd420c59c0c",
+    "skills/math-solver/harness/search_controller/cli.py": "9762296da2edd0164115e6caff107645477f33d91479a6144031d277e4505848",
+    "skills/math-solver/harness/search_controller/adoption.py": "48a4f1030bb3527af6cb21b01035a2a8b2b6eb5c7f9f6ce1c15c72f589a8ef59",
+    "skills/math-solver/harness/search_controller/strategy_refresh.py": "c7f6f855fc6b91d788ef4d03ce8c8e2c4aae14b843a404e8ced7079c47871bce",
+    "skills/math-solver/harness/search_controller/reviewer.py": "8f4db8310b939cc7015cc4a7c00790c151b392153cf41d1148ce0e2a7b7c5ba6",
+    "skills/math-solver/harness/search_controller/closure_delivery.py": "76714a2668c73a72348864b3c2d21d267998f43ce11f0be0dbfbd5144d99ae2a",
+    "skills/math-solver/harness/search_controller/storage.py": "e6935835f974cf385a5f303e927038779dfc7692d06f24eab3257ba0d6b885d2",
+    "skills/math-solver/harness/search_controller/attempt_delivery.py": "2fd6d081df989c94711fa4d75e178c337a2ccb478358d4201682f71474655fbc",
+    "skills/math-solver/harness/search_controller/proof.py": "a8b94f3a2d4bf0f060b29eb1abfe062c745499a92fa5ae170b5d67f290b8ea0d",
+    "skills/math-solver/harness/search_controller/rank_recovery.py": "fe88ffa31fb8dc528049cb94cb840adab82a0251fd0cb0bd253e892307efa5ec",
+    "skills/math-solver/harness/search_controller/scheduler.py": "c74155c4782dc0bd66cf723871f37be68d31f36cac51f959c02d419ffed0895e",
+    "skills/math-solver/harness/search_controller/admission.py": "d6786e5cc8e6c4e46e997112ecc2390bec9672a05966277e187bf8680e075cd5",
+    "skills/math-solver/harness/search_controller/errors.py": "c376404f3954954542ec1fb2e6667c8cd3c1e19bdbca9b15bbbcbf8ac167973d",
+    "skills/math-solver/harness/search_controller/openness.py": "0b036ea514c0d6b6c9e3136db982d1dfb0f2cd35ea382df5f06581f9e28b0772",
+    "skills/math-solver/harness/search_controller/journal_io.py": "9b32fda84f44ee3ae277780fb901283665ca60019671a40cbd17acee47114b16",
+    "skills/math-solver/harness/search_controller/provenance.py": "c1e44339c47513b8df886ba17989c4e957d87e0e7201810bcc410932ea8a5826",
+    "skills/math-solver/harness/search_controller/computation.py": "e52c1a79a0b3b95a8fc8759b2f1b81f470420be67ef599426f502f718fe2e204",
+    "skills/math-solver/harness/search_controller/evidence.py": "be0e6061a7fa17019ae773aea552cf0ca051fa72d0de746a98c22af6cdd0aa55",
+    "skills/math-solver/harness/search_controller/schema.py": "02588f90114cd09d8ab9b44f7bad6d9b4d1534edcc52a06d988d8aea47674a75"
+  }
+}

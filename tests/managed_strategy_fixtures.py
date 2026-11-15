@@ -78,7 +78,10 @@ class ManagedStrategy:
 
     def review(self, dossier, reviewer, stage, identifier, bars):
         assignment_id = identifier + '-assignment'
-        self.mutate(review_protocol.record_assignment, {'id': assignment_id, 'route_id': self.ensure_route(),
+        route_id = self.ensure_route()
+        from visual_capacity_fixtures import install_bounded_binary_backend
+        install_bounded_binary_backend(self.case, [self.records()['review_route'][route_id]])
+        self.mutate(review_protocol.record_assignment, {'id': assignment_id, 'route_id': route_id,
             'dossier_id': dossier['id'], 'role': stage, 'reviewer_id': reviewer,
             'author_id': 'fixture-author', 'context': {}})
         packet = json.loads(self.artifacts.read(self.records()['review_assignment'][assignment_id]['packet']))

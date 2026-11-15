@@ -58,7 +58,7 @@ class PayloadFilePathTests(CheckCommandMixin, unittest.TestCase):
             'strategy': 'research_intent_missing', 'research-lead': 'research_intent_missing',
             'value-review': 'strategy_reference_missing', 'review-assignment': 'review_record_missing',
             'review-attempt': 'review_record_missing', 'review-context': 'review_record_missing',
-            'review-adjudication': 'review_adjudication_unverified', 'probe-intent': 'configuration_missing',
+            'review-adjudication': 'review_record_missing', 'probe-intent': 'configuration_missing',
             'probe': 'probe_intent_missing', 'check-claims': 'candidate_checkpoint_missing',
             'import-fulltext': 'unknown_work',
         }

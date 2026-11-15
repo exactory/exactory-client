@@ -90,17 +90,35 @@ class ResultJourneyTests(PartsResultCase):
     def test_v1_recorded_final_refresh_enters_v2(self):
         from unittest.mock import patch
         from problem_parts_fixtures import ResultPartsCase
-        from research_harness import review_problem_parts as legacy
+        from research_harness import bar_sources, review_problem_parts as legacy
         self.oversized()
-        with patch.object(parts,'prepare_packet',side_effect=lambda records,artifacts,value,route,packet,prompt,history,**kwargs:packet), \
+        # The stored v1 series predates the v3 source rules; only its creation uses v2.
+        with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL), \
+                patch.object(parts,'prepare_packet',side_effect=lambda records,artifacts,value,route,packet,prompt,history,**kwargs:packet), \
                 patch.object(legacy,'prepare_packet',side_effect=legacy._prepare_legacy_packet), \
                 patch.object(self,'output',side_effect=lambda assignment:ResultPartsCase.output(self,assignment)):
             turns,final=self.finish_parts()
             self.record_final(final)
+        self.assertEqual(bar_sources.SESSION_PROTOCOL, bar_sources.PROTOCOL_V3)
+        self.assertTrue(turns)
+        self.assertEqual(self.packet(final)[legacy.KEY]['protocol'], legacy.PROTOCOL)
+        self.assertNotIn('source_rules', self.packet(final))
+        records = self.case.read_records()
+        stored = []
+        for previous in turns + [final]:
+            attempt = records['review_attempt']['attempt-' + previous['id']]
+            stored.append((previous, attempt, self.case.artifacts.read(previous['packet']),
+                           digest(previous['prompt']), self.case.artifacts.read(attempt['request'])))
         self.case.expected['openness_searches'][0]['search']['reason']+=' Changed evidence.'
         assignment=self.assign('v2-after-v1',final['id'])
         self.assertEqual(self.packet(assignment)['review_parts']['series_assignment_id'],assignment['id'])
         self.assertNotIn(legacy.KEY,self.packet(assignment))
+        records = self.case.read_records()
+        for previous, attempt, packet_bytes, prompt_digest, request_bytes in stored:
+            self.assertEqual(self.case.artifacts.read(previous['packet']), packet_bytes)
+            self.assertEqual(digest(records['review_assignment'][previous['id']]['prompt']), prompt_digest)
+            self.assertEqual(self.case.artifacts.read(attempt['request']), request_bytes)
+            self.assertTrue(protocol.authenticate_attempt(records, self.case.artifacts, previous, attempt))
 
     def test_prompt_variant_requires_matching_parts_header_binding(self):
         self.oversized();assignment=self.assign()

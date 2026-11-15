@@ -22,7 +22,16 @@ import sys
 
 SOURCE_FOLDERS = ('research_harness', 'skills/math-solver/harness')
 # Only calls hidden from the source rules belong here. Each target needs its reason.
-DECLARED_EDGES = {}
+DECLARED_EDGES = {
+    'research_harness/review_stop.py:settle_stop': {
+        'research_harness/cli.py:_review_run':
+            'A stopped assignment or staged reservation finishes or reconciles through review-run.',
+        'research_harness/cli.py:_review_probe':
+            'A captured route probe finishes through its original review-probe operation.',
+        'research_harness/cli.py:_review_output_correction':
+            'A captured correction finishes through its original review-output-correction operation.',
+    },
+}
 
 PLANNER_MODULES = frozenset(('research_harness.review_continuation',
                             'research_harness.review_failure_class',
@@ -199,6 +208,17 @@ COMPUTED_CODE_SITES = {
         'sources': ['skills/math-solver/harness/search_controller/execution.py:launch']},
 }
 
+# The HTTPS probe retains transport errors, and signal stops have one fixed code.
+COMPUTED_CODE_SITES.update({
+    "research_harness/review_protocol.py:_observe_https_capacity_probe:getattr(error, 'code', 'review_transport_failure')": {
+        'codes': ['review_transport_failure'],
+        'sources': ['research_harness/review_protocol.py:_observe_https_capacity_probe']},
+    "research_harness/review_protocol.py:invoke_assignment.start:stop['code']": {
+        'sources': ['research_harness/review_route_capacity.py:describe_session_stop']},
+    'research_harness/review_stop.py:ReviewStopSignal.describe_error:self.code': {
+        'codes': ['review_chain_stopped']},
+})
+
 # RR8 forwards retained or observed codes without constructing a new refusal.
 COMPUTED_CODE_SITES.update({
     "research_harness/record_check.py:describe_series_stops:row['code']": {
@@ -235,7 +255,7 @@ SERIES_COMMANDS = (
     'review-adjudication', 'value-review', 'problem-openness', 'bind-verdict',
     'manuscript-review', 'review', 'gate-auto-pass', 'select-main-capture',
 )
-UNAVAILABLE_COMMANDS = {'review-stop': 'The installed CLI has no public review-stop operation yet.'}
+UNAVAILABLE_COMMANDS = {}
 
 
 def walk_scope(node):
@@ -793,8 +813,10 @@ def resolve_reference_expression(expression, function, index, seen):
     """Collect direct targets and dependencies of one lexical reference."""
     # Dynamic dispatch is supplied by EXECUTABLE_COMMANDS, never the whole CLI.
     if (isinstance(expression, ast.Name) and expression.id == 'OPERATIONS'
-            and (function['key'].startswith('research_harness/review_series.py:run_series')
-                 or function['key'] == 'research_harness/record_check.py:check_continuation')):
+            and (function['key'].startswith(('research_harness/review_series.py:run_series',
+                                              'research_harness/review_series.py:_run_series'))
+                 or function['key'] in ('research_harness/record_check.py:check_continuation',
+                                        'research_harness/review_stop.py:settle_stop'))):
         return set()
 
     def resolve_values(values, owner):

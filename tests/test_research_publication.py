@@ -772,7 +772,20 @@ class FulltextComponentDepthTests(SourceLimitedCase):
                    "context": {"bundle": bundle}}
         path = self.root / "paper-assignment.json"
         path.write_text(json.dumps(payload))
-        result = subprocess.run([sys.executable, str(PLUGIN / "bin/exactory-research"), "review-assignment",
+        # Declare the synthetic file-reading backend in the subprocess as in the in-process review fixtures.
+        bootstrap = ("import json, runpy, sys, unittest\n"
+                     "sys.path.insert(0, sys.argv.pop(1))\n"
+                     "from visual_capacity_fixtures import install_bounded_binary_backend\n"
+                     "case = unittest.TestCase()\n"
+                     "install_bounded_binary_backend(case, json.loads(sys.argv.pop(1)))\n"
+                     "sys.argv = sys.argv[1:]\n"
+                     "try:\n"
+                     "    runpy.run_path(sys.argv[0], run_name='__main__')\n"
+                     "finally:\n"
+                     "    case.doCleanups()\n")
+        route = self.store.snapshot()["records"]["review_route"]["paper-route"]
+        result = subprocess.run([sys.executable, "-c", bootstrap, str(PLUGIN / "tests"), json.dumps([route]),
+                                 str(PLUGIN / "bin/exactory-research"), "review-assignment",
                                  "--workspace", str(self.root), "--file", str(path), "--expected-revision",
                                  str(self.store.revision), "--request-id", "paper-assignment"],
                                 capture_output=True, text=True)

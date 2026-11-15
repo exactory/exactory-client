@@ -302,18 +302,27 @@ class BudgetFloorReplacementTests(PartsResultCase):
         self.assertEqual({key: warning['output'][key] for key in (
             'state', 'sample_size', 'at_or_over_limit_share', 'kinds')},
             dict(state='unmeasured', sample_size=0, at_or_over_limit_share=None, kinds=['read']))
-        self.assertEqual(stop, dict(plan, stop_id=recorded_stop['id'], stop_class='decision',
-                                   provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0),
-                                   revision_after_stop=after['revision'], capacity_warning=warning))
-        self.assertEqual(recorded_stop['plan'], plan)
-        self.assertEqual(recorded_stop['recorded_revision'], after['revision'])
+        for member in ('state', 'chain', 'head_id', 'progress', 'code'):
+            self.assertEqual(stop[member], plan[member])
+        self.assertEqual(stop['provider_usage'], dict(windows=[], warnings=[], planned_remaining_turns=0))
+        self.assertEqual(stop['revision_after_stop'], recorded_stop['recorded_revision'])
+        self.assertEqual(stop['revision_after_driver'], after['revision'])
+        self.assertEqual(recorded_stop['plan'], {key: value for key, value in stop.items()
+                                              if key not in ('provider_usage', 'revision_after_driver')})
+        self.assertEqual(recorded_stop['recorded_revision'], after['revision'] - 1)
         self.assertEqual(self.case.store.committed_request(recorded_stop['request_id'])['response']['result'],
                          recorded_stop)
         operations = dict(before['records']['literature_operation'])
         operations[recorded_stop['request_id']] = dict(operation='review.series_stop',
                                                       runtime=self.case.store.describe_runtime())
-        self.assertEqual(after, dict(before, revision=before['revision'] + 1,
+        runs = after['records']['review_series_run']
+        driver, = runs.values()
+        self.assertEqual(driver['ended']['stop_id'], recorded_stop['id'])
+        for request_id, operation in ((driver['id'], 'review.series_start'), (driver['id'] + ':end', 'review.series_end')):
+            operations[request_id] = dict(operation=operation, runtime=self.case.store.describe_runtime())
+        self.assertEqual(after, dict(before, revision=before['revision'] + 3,
             records=dict(before['records'], review_series_stop={recorded_stop['id']: recorded_stop},
+                         review_series_run=runs,
                          literature_operation=operations)))
 
     def test_over_cap_failure_at_the_floor_stops_before_recording_a_replacement(self):

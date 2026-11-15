@@ -6,7 +6,7 @@ from unittest.mock import patch
 import test_research_problem_delivery as delivery_fixtures
 import test_research_problem_objections as objection_fixtures
 
-from research_harness import research_decisions as decisions, review_protocol as protocol
+from research_harness import bar_sources, research_decisions as decisions, review_protocol as protocol
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 
@@ -199,6 +199,54 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         self.assertEqual((refresh["assignment_id"], refresh["reason"], refresh["undelivered_keys"]),
                          ("focused", "packet_incomplete", ["version_evidence:problem_candidate:candidate-2"]))
         self.assert_delivered()
+
+    def prepare_selection_only_focused_refresh(self):
+        self.contest_with_a_candidate_record()
+        real = protocol.add_focused_adjudication
+
+        def build_without_cited_records(*arguments, **options):
+            real(*arguments, **options)
+            packet = arguments[2]
+            packet["version_evidence"] = [entry for entry in packet["version_evidence"]
+                                          if entry.get("kind") != "record"]
+
+        with patch.object(protocol, "add_focused_adjudication", side_effect=build_without_cited_records):
+            self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
+        assignment = self.assign("adjudicator", "focused-third", identifier="focused-refresh",
+            review_ids=["review-bar-first", "review-bar-second"], objection_id="unsupported-implication")
+        records = self.store.snapshot()["records"]
+        parent = protocol.assignment_state(records, self.artifacts, "focused")
+        self.assertFalse(parent["ready"])
+        self.assertEqual({row["code"] for row in parent["obligations"]}, {"review_assignment_replaced"})
+        return assignment
+
+    def test_focused_refresh_uses_verified_history_after_its_parent_is_unselected(self):
+        assignment = self.prepare_selection_only_focused_refresh()
+        records = self.store.snapshot()["records"]
+        parent = records["review_assignment"]["focused"]
+        attempt = records["review_attempt"]["focused-attempt"]
+        frozen = [(reference, self.artifacts.read(reference)) for reference in
+                  (parent["packet"], attempt["request"], attempt["response"], attempt["output"])]
+        output = self.adjudication_output([self.supporting])
+        self.invoke_focused(output, assignment["id"])
+        records = self.store.snapshot()["records"]
+        self.assertTrue(protocol.assignment_state(records, self.artifacts, assignment["id"])["ready"])
+        self.assertEqual(records["review_assignment"]["focused"], parent)
+        for reference, content in frozen:
+            self.assertEqual(self.artifacts.read(reference), content)
+        with patch.object(protocol.transport, "send_request", return_value=self.build_provider_response(output)):
+            self.assert_error("review_assignment_replaced", lambda: self.mutate(protocol.invoke_assignment,
+                dict(id="forbidden-old-retry", assignment_id="focused"), credential="test-only"))
+
+    def test_focused_refresh_refuses_history_whose_response_is_unavailable(self):
+        assignment = self.prepare_selection_only_focused_refresh()
+        response = self.store.snapshot()["records"]["review_attempt"]["focused-attempt"]["response"]
+        (self.root / response["path"]).unlink()
+        output = self.adjudication_output([self.supporting])
+        with patch.object(protocol.transport, "send_request", return_value=self.build_provider_response(output)):
+            self.assert_error("review_source_continuation_unverified", lambda: self.mutate(protocol.invoke_assignment,
+                dict(id="blocked-refresh-attempt", assignment_id=assignment["id"]), credential="test-only"))
+        self.assertNotIn("blocked-refresh-attempt", self.store.snapshot()["records"].get("review_invocation", {}))
 
     def test_a_cited_record_that_no_packet_of_the_stating_review_carried_is_undelivered(self):
         """R42: candidate-3 is in the store at the cited digest, but the stating slate review never received it. R45
@@ -407,6 +455,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                          ("review_evidence_undelivered", {"record_kind": "problem_candidate", "id": "candidate-1", "digest": None,
                                                          "path": "/objections/0/evidence"}))
 
+    @patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL)
     def test_a_stop_assurance_written_as_not_assessed_passes_the_gate(self):
         """The version 2 result prompt's own example writes the stop assurance as not_assessed with the reason that
         nothing requires a stop; the gate counts that as the assurance passing for a result on that prompt. Every
@@ -1095,7 +1144,8 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
 
     def test_a_result_packet_offers_a_citation_only_for_a_passage_a_review_can_record(self):
         """R58: O1 cites a text passage and a JSON passage; the result packet carries a citation for the text passage
-        only. A link built to the JSON passage gets the typed fulltext refusal; the text citation is recorded."""
+        only. A link built to the JSON passage, which is no full-text capture of its version, is refused as an output
+        with source_link_not_fulltext (closure C12, ruling 28); the text citation is recorded."""
         self.prepare_problem_evidence()
         json_link = self.read_a_json_passage()
         unit = self.add_unbound_full_source()
@@ -1423,6 +1473,7 @@ class ReviewOutputRefusalTests(delivery_fixtures.ProblemDeliveryCase):
     def records(self):
         return self.store.snapshot()["records"]
 
+    @patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL)
     def prepare_resolved_bar_refresh(self, *, historical=False, source_request=False):
         """Retain a legacy result's packet after its delivered bar objection is resolved."""
         objection_fixtures.ProblemObjectionTests.prepare_version_one_bar_objection(self)
@@ -1631,12 +1682,22 @@ class ReviewOutputRefusalTests(delivery_fixtures.ProblemDeliveryCase):
         output = self.prepare_bar()
         self.refuse(output)
         self.refuse(output, attempt="refused-2")
+        predecessor = "bar-first"
+        # Two refused calls exhaust this assignment; the position still has its
+        # two refusal-carrying replacements before a new reviewer can take it.
+        for number in range(1, 3):
+            identifier = "bar-refusal-" + str(number)
+            context = dict(self.records()["review_assignment"][predecessor]["context"],
+                           output_refusal=dict(assignment_id=predecessor))
+            self.assign("bar", "first", identifier=identifier, **context)
+            self.refuse(output, assignment=identifier, attempt="refused-replacement-" + str(number))
+            predecessor = identifier
         with self.assertRaises(ResearchError) as caught:
             self.assign("bar", " FIRST ", identifier="same-reviewer")
         self.assertEqual(caught.exception.code, "review_resampling_forbidden")
         replacement = self.assign("bar", "new-reviewer", identifier="replacement")
         self.assertEqual(replacement["slot_id"], "bar-first")
-        self.assertEqual(len(self.records()["review_attempt"]), 2)
+        self.assertEqual(len(self.records()["review_attempt"]), 4)
 
     def test_failed_only_initial_slot_also_prohibits_same_reviewer(self):
         output = self.prepare_bar()
@@ -1728,7 +1789,7 @@ class ReviewOutputRefusalTests(delivery_fixtures.ProblemDeliveryCase):
             {"attempt_id": "refused-2", "code": "review_evidence_undelivered"}])
         usage = protocol.usage_report(self.records())
         self.assertEqual(usage["calls"], 3)  # One route probe, both observed refusals.
-        self.assertEqual(usage["observed"]["input_tokens"], 111)
+        self.assertEqual(usage["observed"]["input_tokens"], 1000000 + 2 * 37)
 
     def test_recheck_restores_binding_and_requires_recording_if_contract_becomes_recordable(self):
         """Frozen packets cannot legitimately change in place. Simulate a future pure-validator correction only."""

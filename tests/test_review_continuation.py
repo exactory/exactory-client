@@ -289,7 +289,8 @@ class ContinuationTests(unittest.TestCase):
         records['review_route']['route']['adapter'] = 'codex_cli_v1'
         records['review_invocation'] = dict(other=dict(id='other', assignment_id='other-chain', route_id='route'))
         records['review_pool_membership'] = {identify_call('review.invoke', 'other'):
-            dict(released=False, invocation_id='other', operation='review.invoke')}
+            dict(released=False, invocation_id='other', operation='review.invoke', state='running', children=[],
+                 owner=dict(pid=987654321, pgid=987654321, started='gone'))}
         with patch.object(protocol, 'assignment_state', return_value=dict(output=None, obligations=[])):
             plan = self.plan(records)
         self.assertEqual(plan['state'], 'wait')
@@ -350,6 +351,38 @@ class ContinuationTests(unittest.TestCase):
         accepted = self.case.mutate(protocol.record_assignment, dict(step['payload'], id='new-bar',
             route_id='route', reviewer_id='third'))['result']
         self.assertEqual((accepted['slot_id'], accepted['context']), ('bar-first', {}))
+
+    def test_capacity_replacement_keeps_the_proven_payload(self):
+        records = self.case.read_records()
+        parent = records['review_assignment']['bar-first']
+        failed = dict(parent, id='failed', context=dict(prior_assignment_id='bar-first'),
+                      history_assignment_id='bar-first', recorded_revision=100)
+        records['review_assignment']['failed'] = failed
+        records['review_attempt'] = dict(failure=dict(id='failure', assignment_id='failed',
+            status='failed', recorded_revision=101))
+        payload = dict(id='proved-replacement', role='bar', route_id='route', dossier_id=None,
+                       reviewer_id='first', author_id='author', context=dict(prior_assignment_id='bar-first'))
+        recovery = dict(kind='replace', reason='capacity', payload=payload,
+                        preflight=dict(allowed=True), details={})
+        with patch('research_harness.review_failure_class.plan_after_failure', return_value=dict(
+                state='replace', code='review_output_over_cap', details=dict(recovery=recovery))):
+            plan = self.plan(records)
+        self.assertEqual(plan['payload'], payload)
+        self.assertEqual(plan['details']['recovery']['preflight'], dict(allowed=True))
+
+    def test_first_scientific_refusal_uses_the_position_counter(self):
+        output = self.case.build_review_output('bar')
+        output['value']['status'] = 'invented'
+        self.invoke(output)
+        with self.assertRaises(ResearchError):
+            self.execute(self.plan(), request='audit')
+        with patch('research_harness.review_failure_class.plan_after_failure', return_value=dict(
+                state='wait', code='review_sequence_wait', not_before='2030-01-01T00:00:00+00:00',
+                details=dict(failed_attempts=8))) as policy:
+            plan = self.plan()
+        self.assertEqual(plan['state'], 'wait')
+        self.assertEqual(plan['code'], 'review_sequence_wait')
+        policy.assert_called_once()
 
     def test_capacity_replacement_keeps_the_proven_payload(self):
         records = self.case.read_records()

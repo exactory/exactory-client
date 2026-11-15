@@ -45,11 +45,18 @@ def project_delivery_view(records, artifacts, packets):
         candidates += [mapping for objection in list_delivered_objections(packet)
                        for mapping in resolved_objection_entries(packet, objection, 'version_source_mappings')]
         for mapping in candidates:
-            if ('origin' in mapping and mapping.get('excerpt') in references.values()
+            if ('origin' in mapping and mapping.get('request', {}).get('kind') != 'artifact'
+                    and mapping.get('excerpt') in references.values()
                     and mapping not in mappings):
                 mappings.append(mapping)
     carried = protocol.collect_carried_records(records, evaluation, None, packets=packets)
-    return dict(packets=packets, artifacts=references, source_mappings=mappings, carried_records=carried)
+    delivery = dict(packets=packets, artifacts=references, source_mappings=mappings, carried_records=carried)
+    from .bar_sources import PROTOCOL_V3
+    segments = [entry for packet in packets if packet.get('source_rules') == PROTOCOL_V3
+                for entry in packet.get('evidence', []) if entry.get('segment') and not entry.get('item')]
+    if segments:
+        delivery.update(segments=segments, actual_packets=packets)
+    return delivery
 
 
 def resolve_part_source_link(link, packets):

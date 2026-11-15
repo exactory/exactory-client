@@ -644,6 +644,14 @@ def main():
 
 class RunnerTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import review_route_capacity as capacity
+        from test_review_output_profile import build_row
+        # The stand-in tests input partitioning, with four synthetic completed
+        # single-output observations qualifying its ordinary baseline.
+        profile = patch.object(capacity, 'read_profile_priors', return_value=[
+            dict(build_row(level=None, kind='single', thinking=1), largest_output_tokens=900)])
+        profile.start()
+        self.addCleanup(profile.stop)
         from research_harness import review_transport
         boundary = patch.object(review_transport, 'send_request',
                                 side_effect=AssertionError('Tests cannot call a model.'))

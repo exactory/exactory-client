@@ -98,7 +98,11 @@ class SelectedSourceTests(unittest.TestCase):
                     with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', size - 1):
                         result = f.mutate(protocol.record_assignment, value)['result']
                     final = json.loads(f.artifacts.read(result['packet']))
-                    invoke_codex(f, identifier, f.output(native, 'supported_open'))
+                    # This journey pins the v5 final contract. The shared fixture's current
+                    # export shim emits v6 findings, so build the released schema-2 answer explicitly.
+                    output = source_fixtures.native_fixtures.NativeOpennessReviewTests.output(
+                        f, native, 'supported_open')
+                    invoke_codex(f, identifier, output)
                     break
                 result = f.mutate(protocol.record_assignment, value)['result']
                 packet = json.loads(f.artifacts.read(result['packet']))

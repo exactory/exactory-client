@@ -102,7 +102,25 @@ class SeriesTests(unittest.TestCase):
         self.assertEqual(code, 3)
         self.assertIn(steps[-1]['stop_id'], self.case.read_records()['review_series_stop'])
         marker = json.loads((self.case.root / '.exactory/output-views.json').read_text())
-        self.assertEqual(marker['revision'], steps[-1]['revision_after_stop'])
+        self.assertEqual(marker['revision'], steps[-1]['revision_after_driver'])
+
+    def test_scoped_driver_start_reaches_a_retained_ending(self):
+        from research_harness.review_continuation import plan_next
+        initial = plan_next(self.case.read_records(), self.case.artifacts, 'bar-first')
+        terminal = dict(initial, state='stop', code='review_provider_refused', details={})
+        with patch('research_harness.review_series.plan_next', return_value=terminal), patch(
+                'research_harness.review_transport.send_request',
+                side_effect=AssertionError('A terminal plan must not call a reviewer')):
+            code, rows = self.drive()
+        self.assertEqual(code, 3)
+        records = self.case.read_records()
+        driver, = records['review_series_run'].values()
+        self.assertEqual(driver['scope']['root_assignment_id'], 'bar-first')
+        ending = rows[-1]
+        retained = records['review_series_stop'][ending['stop_id']]
+        self.assertEqual(retained['code'], 'review_provider_refused')
+        self.assertEqual(driver['ended']['stop_id'], retained['id'])
+        self.assertEqual(ending['revision_after_driver'], self.case.store.revision)
 
     def test_busy_and_dependency_refusals_are_replanned(self):
         original = cli.OPERATIONS['review-run']
@@ -160,8 +178,10 @@ class SeriesTests(unittest.TestCase):
         self.assertNotIn('stop_record_error', terminal)
         stops = self.case.read_records()['review_series_stop']
         self.assertEqual(list(stops), [terminal['stop_id']])
-        self.assertEqual(terminal['revision_after_stop'], self.case.store.revision)
-        self.assertEqual(stops[terminal['stop_id']]['recorded_revision'], self.case.store.revision)
+        self.assertEqual(terminal['revision_after_driver'], self.case.store.revision)
+        self.assertLess(stops[terminal['stop_id']]['recorded_revision'], self.case.store.revision)
+        driver = next(iter(self.case.read_records()['review_series_run'].values()))
+        self.assertEqual(driver['ended']['revision'], self.case.store.revision)
 
     def test_second_stale_stop_recording_keeps_the_original_terminal_stop(self):
         attempts, terminal = self.race_stop_recording(2)
@@ -268,7 +288,8 @@ class SeriesTests(unittest.TestCase):
             code, steps = self.drive()
         self.assertEqual(code, 0, steps[-1])
         self.assertEqual(send.call_count, 2)
-        self.assertEqual(sleep.call_count, 1)
+        self.assertTrue(sleep.call_args_list)
+        self.assertTrue(all(call.args[0] <= 5 for call in sleep.call_args_list))
         self.assertIn('wait', [step['state'] for step in steps])
 
     def test_wait_over_thirty_minutes_exits_four(self):

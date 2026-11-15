@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 from contextlib import contextmanager
 from unittest.mock import patch
-from research_harness import review_request_evaluation
+from research_harness import bar_sources, review_request_evaluation
 
 from codex_route_fixtures import limit_codex_input
 from problem_parts_fixtures import ResultPartsCase
@@ -26,8 +26,9 @@ from research_harness.review_bodies import read_history
 
 @contextmanager
 def record_legacy():
-    """Freeze only fixture creation, restoring both production entries on exit."""
-    with patch.object(parts, 'prepare_packet', side_effect=lambda records, artifacts, value,
+    """Freeze fixture creation under its original planner and source rules."""
+    with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL), \
+            patch.object(parts, 'prepare_packet', side_effect=lambda records, artifacts, value,
                       route, packet, prompt, replay, **kwargs: packet), \
             patch.object(legacy, 'prepare_packet', legacy._prepare_legacy_packet):
         yield

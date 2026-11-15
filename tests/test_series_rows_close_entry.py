@@ -90,7 +90,7 @@ class EntryRowTests(unittest.TestCase):
         members = json.loads(GROUPS.read_text())['named_cause']['members']
         self.assertEqual(set(members), set(stop_classes._NAMED_CAUSE_CODES_ENTRY))
         self.assertEqual(len(members), 145)
-        self.assertEqual(sum(len(sites) for sites in members.values()), 201)
+        self.assertEqual(sum(len(sites) for sites in members.values()), 202)
         for code, sites in members.items():
             for site, conditions in sites.items():
                 with self.subTest(code=code, site=site):

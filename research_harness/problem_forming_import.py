@@ -493,6 +493,32 @@ def describe_imports(records, artifacts):
     return [row for _, row in sorted(collect_import_projections(records, artifacts).items())]
 
 
+def describe_import_size(records, artifacts, imported):
+    """Report the proposed import without modifying its manifest or stored receipt."""
+    from .review_route_capacity import describe_material_size, SIZE_REPORT_IMPORT_LABEL
+    proposed = dict(problem_forming_import={imported['id']: imported})
+    material = [row for _, row in sorted(collect_import_projections(proposed, artifacts).items())]
+    return describe_material_size(records, artifacts, material, label=SIZE_REPORT_IMPORT_LABEL,
+                                  records_field='import_records_characters')
+
+
 def deliver_slate_imports(records, artifacts, packet):
-    if packet.get('subject', {}).get('kind') == 'problem' and packet.get('role') == 'slate' and records.get('problem_forming_import'):
+    if packet.get('subject', {}).get('kind') != 'problem' or packet.get('role') != 'slate':
+        return
+    from .bar_sources import PROTOCOL_V3
+    from .review_prompt_paragraphs import FORMING_RECORD_KINDS
+    from .review_protocol import _reference_templates
+    descriptors = packet.get('source_rules') == PROTOCOL_V3
+    if records.get('problem_forming_import'):
         packet['problem_forming_imports'] = describe_imports(records, artifacts)
+        if descriptors:
+            packet['problem_forming_imports'] = _reference_templates(packet['problem_forming_imports'])
+    if descriptors:
+        references = {(item['record_kind'], item['id']): item for candidate in packet.get('candidates', [])
+                      for item in candidate.get('source', {}).get('evidence', [])
+                      if item.get('kind') == 'record' and 'origin' not in item
+                      and item.get('record_kind') in FORMING_RECORD_KINDS}
+        if references:
+            packet['forming_records'] = [dict(record=_reference_templates(records[kind][identifier]),
+                cite=dict(references[(kind, identifier)], digest=digest(records[kind][identifier])))
+                for kind, identifier in sorted(references)]

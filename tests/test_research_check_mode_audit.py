@@ -33,7 +33,7 @@ from test_review_parts_views import PartsViewCase
 
 PLUGIN = Path(__file__).resolve().parents[1]
 EXTERNAL_COMMANDS = frozenset((*cli.ACQUISITION, "review-probe", "review-run", "review-output-correction",
-                               "reconcile-run", "batches", "export", "recover", "restore", "strategy-packet", "review-series"))
+                               "reconcile-run", "batches", "export", "recover", "restore", "strategy-packet", "review-series", "review-stop"))
 OTHER_ARGUMENTS = {
     "batches": ["--destination", "check-batches"],
     "export": [],
@@ -412,7 +412,7 @@ REFUSED_OUTCOMES = {
     "result": "unknown_cycle",
     "resume-source": "source_deferral_inapplicable",
     "review": "candidate_checkpoint_missing",
-    "review-adjudication": "review_adjudication_unverified",
+    "review-adjudication": "review_record_missing",
     "review-assignment": "review_record_missing",
     "review-attempt": "review_record_missing",
     "review-context": "review_record_missing",

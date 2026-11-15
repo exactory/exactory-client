@@ -4853,5 +4853,12 @@
   "problem-report": {
     "id": "report-1",
     "reopen_when": "A new argument resolves the recorded obstruction."
+  },
+  "review-stop": {
+    "id": "stop-1",
+    "action": "stop",
+    "scope": "store",
+    "mode": "now",
+    "reason": "End reviewer calls before the requested public action."
   }
 }

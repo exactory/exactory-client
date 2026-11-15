@@ -355,7 +355,7 @@ class PostedReviewTests(ResultPartsCase):
         self.assertEqual(progress[0]['next'], [])
         actions = review_continuation.describe_next_actions(records, parts.case.artifacts, assignment['id'],
             [dict(kind='review', workflow='review-assignment', scope=dict(prior_assignment_id=assignment['id']))])
-        self.assertEqual(actions, [dict(kind='review', state='done')])
+        self.assertEqual(actions, [dict(kind='review', state='done', details=dict(closed_calls=[]))])
 
     def test_staged_status_preserves_tasks_and_incomplete_recovery_evidence(self):
         staged = self.make_case(frontier.FrontierTests)
@@ -440,7 +440,14 @@ class PostedReviewTests(ResultPartsCase):
         self.assertTrue(all(chain['boundary'] == 'done' for chain in continuation['chains']))
         self.assertEqual(stop_classes.describe_terminal('problem_already_posted')['state'], 'done')
         self.assertIs(record_check.EXPECTED_STOP_CODES, stop_classes.EXPECTED_STOP_CODES)
-        self.assertEqual(self.case.store.snapshot(), before)
+        after = self.case.store.snapshot()
+        self.assertEqual(after['revision'], before['revision'] + 2)
+        for kind in set(before['records']) | set(after['records']):
+            if kind not in ('review_series_run', 'literature_operation'):
+                self.assertEqual(after['records'].get(kind), before['records'].get(kind))
+        for key, value in before['records'].get('literature_operation', {}).items():
+            self.assertEqual(after['records']['literature_operation'][key], value)
+        self.assertTrue(all(row['ended']['state'] == 'done' for row in after['records']['review_series_run'].values()))
         changed = dict(self.case.statement, id='second-statement', statement='A distinct synthetic bound.')
         self.case.put('problem_statement', changed['id'], changed)
         self.case.put('problem_selection', 'current', dict(statement_id=changed['id']))

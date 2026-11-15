@@ -600,7 +600,9 @@ class StagedEntryTests(ResultPartsCase):
             staged_review=dict(kind='controller'))
         packet['digest'] = digest(packet)
         controller = dict(id='focused-controller', role='adjudicator', subject=packet['subject'], reviewer_id='judge',
-            route_id='route', slot_id='focused-slot', author_id='author', context=dict(objection_id='objection',
+            route_id='route', slot_id='focused-slot', author_id='author',
+            prompt=protocol.canonical_prompt('adjudicator', orchestration='problem_creation'),
+            context=dict(objection_id='objection',
                 review_ids=['review-bar-first','review-bar-second']), packet=protocol._put_json(self.case.artifacts,packet))
         changes = staged_protocol.prepare_controller(records, self.case.artifacts, controller, packet,
                                                        records['review_route']['route'])

@@ -27,7 +27,7 @@ class ScopedPreparationTests(LiteratureCase):
 
     def setUp(self):
         super().setUp()
-        self.route()
+        self.route(model='gpt-6-astra')
 
     def refuse(self, code, action):
         with self.assertRaises(ResearchError) as raised:
@@ -142,6 +142,42 @@ class ScopedPreparationTests(LiteratureCase):
                 expected_revision=self.store.revision, request_id='bar-run', credential=None)
         self.assertEqual(result['result']['status'], 'failed')
 
+    def test_legacy_capacity_probe_validation_ignores_unrelated_assignment_membership(self):
+        from research_harness.review_capacity_evidence import read_capacity_evidence
+        self.run_probe()
+        legacy = dict(self.records()['review_route_probe']['probe'])
+        legacy.pop('capacity_evidence', None)
+        self.seed('review_route_probe', 'probe', legacy)
+
+        def prepare(records, value):
+            route = records['review_route']['route']
+            capacity = read_capacity_evidence(route, records, artifacts=self.artifacts)
+            self.seed('review_assignment', 'foreign-capacity', dict(id='foreign-capacity',
+                role='standalone', route_id='route', dossier_id=None, context={}))
+            return [], dict(input_tokens=capacity['input_tokens'])
+
+        result = operations.prepared_task_mutation(self.store, 'capacity-scope', {}, prepare,
+                                                   request_id='capacity-scope')
+        self.assertEqual(result['result']['input_tokens'], 999000)
+
+    def test_legacy_capacity_probe_content_change_still_invalidates_preparation(self):
+        from research_harness.review_capacity_evidence import read_capacity_evidence
+        self.run_probe()
+        legacy = dict(self.records()['review_route_probe']['probe'])
+        legacy.pop('capacity_evidence', None)
+        self.seed('review_route_probe', 'probe', legacy)
+
+        def prepare(records, value):
+            route = records['review_route']['route']
+            read_capacity_evidence(route, records, artifacts=self.artifacts)
+            changed = copy.deepcopy(legacy)
+            changed['usage']['input_tokens'] += 1
+            self.seed('review_route_probe', 'probe', changed)
+            return [], {}
+
+        self.refuse('review_task_dependency_changed', lambda: operations.prepared_task_mutation(
+            self.store, 'capacity-change', {}, prepare, request_id='capacity-change'))
+
     def test_repair_preparation_ignores_unrelated_assignments_attempts_and_exposures(self):
         case = repair_fixtures.ContextRepairIntegrationTests()
         self.addCleanup(case.doCleanups)
@@ -169,23 +205,28 @@ class ScopedPreparationTests(LiteratureCase):
     def test_filtered_empty_membership_and_moves_are_revalidated(self):
         for kind, where in (
                 ('review_attempt', dict(assignment_id='own')),
+                ('review_attempt', dict(origin='instrumented')),
                 ('review_invocation', dict(assignment_id='own')),
                 ('review_route_probe', dict(route_id='own')),
                 ('review_assignment', dict(slot_id='own')),
+                ('review_assignment', dict(route_id='own')),
+                ('review_assignment', dict(context={'artifact_refs': []})),
+                ('review_assignment', {'context.output_refusal.assignment_id': 'own'}),
                 ('review_assignment', {'staged_review.controller_assignment_id': 'own'}),
                 ('review_context_event', dict(assignment_id='own')),
                 ('review_output_correction', dict(assignment_id='own')),
+                ('review_output_correction', dict(origin='instrumented')),
                 ('review_selection', dict(controller_assignment_id='own'))):
             with self.subTest(kind=kind, where=where):
                 def prepare(records, value):
                     self.assertEqual(self.read_group(records, kind, **where), {})
                     row = dict(id='new')
                     for field, expected in where.items():
-                        if '.' in field:
-                            outer, inner = field.split('.')
-                            row[outer] = {inner: expected}
-                        else:
-                            row[field] = expected
+                        target = row
+                        parts = field.split('.')
+                        for part in parts[:-1]:
+                            target = target.setdefault(part, {})
+                        target[parts[-1]] = expected
                     self.seed(kind, 'new', row)
                     return [], {}
                 self.refuse('review_task_dependency_changed', lambda: operations.prepared_task_mutation(
@@ -234,6 +275,7 @@ store.mutate('other-process', row, lambda tx: tx.put('review_attempt', row['id']
         self.assertNotIn('blocked', self.records().get('review_invocation', {}))
 
     def test_scoped_finish_reprepares_after_dependency_change_without_repeating_model_io(self):
+        self.run_probe()
         self.assign()
         commit = self.store.mutate_scoped
         injected = []
@@ -259,6 +301,7 @@ store.mutate('other-process', row, lambda tx: tx.put('review_attempt', row['id']
         self.assertEqual(self.records()['review_attempt']['attempt']['recorded_revision'], result['revision'])
 
     def test_exhausted_scoped_finish_keeps_dependency_error_explicit(self):
+        self.run_probe()
         self.assign()
         commit = self.store.mutate_scoped
         refused = []
@@ -409,6 +452,7 @@ store.mutate('other-process', row, lambda tx: tx.put('review_attempt', row['id']
         self.assertEqual(checked, receipt)
 
     def test_invocation_request_conflict_precedes_invalid_assignment_selector(self):
+        self.run_probe()
         self.assign()
         with patch.object(protocol, '_observed', return_value=dict(status='failed', output=None)):
             protocol.invoke_assignment(self.store, dict(id='attempt', assignment_id='assignment'),

@@ -239,19 +239,26 @@ class ContinuationRegressionTests(unittest.TestCase):
         for member in ('state', 'chain', 'head_id', 'progress', 'code'):
             self.assertEqual(stop['plan'][member], plan[member])
         self.assertIsNone(stop['retry'])
-        self.assertEqual(after['revision'], before['revision'] + 1)
-        expected_records = dict(before['records'], review_series_stop=stops)
+        self.assertEqual(after['revision'], before['revision'] + 3)
+        runs = after['records']['review_series_run']
+        driver, = runs.values()
+        self.assertEqual(driver['ended']['stop_id'], stop['id'])
+        expected_records = dict(before['records'], review_series_stop=stops, review_series_run=runs)
         expected_records['literature_operation'] = dict(before['records']['literature_operation'])
         expected_records['literature_operation'][stop['request_id']] = dict(
             operation='review.series_stop', runtime=case.store.describe_runtime())
+        for request_id, operation in ((driver['id'], 'review.series_start'), (driver['id'] + ':end', 'review.series_end')):
+            expected_records['literature_operation'][request_id] = dict(operation=operation, runtime=case.store.describe_runtime())
         self.assertEqual(after['records'], expected_records)
         lines = [json.loads(line) for line in output.getvalue().splitlines()]
-        self.assertEqual(stop['plan'], {key: value for key, value in lines[-1].items() if key != 'provider_usage'})
+        self.assertEqual(stop['plan'], {key: value for key, value in lines[-1].items()
+                                       if key not in ('provider_usage', 'revision_after_driver')})
         self.assertEqual(len(lines), 1)
         self.assertEqual(lines[0]['state'], 'handoff')
         self.assertEqual(lines[0]['provider_usage'], dict(windows=[], warnings=[], planned_remaining_turns=0))
         self.assertEqual(lines[0]['stop_id'], stop['id'])
-        self.assertEqual(lines[0]['revision_after_stop'], after['revision'])
+        self.assertEqual(lines[0]['revision_after_stop'], stop['recorded_revision'])
+        self.assertEqual(lines[0]['revision_after_driver'], after['revision'])
         self.assertEqual(lines[0]['stop_class'], 'decision')
         receipt = case.store.committed_request(stop['request_id'])
         self.assertEqual(receipt['operation'], 'review.series_stop')

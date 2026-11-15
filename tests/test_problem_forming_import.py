@@ -473,7 +473,7 @@ class FormingImportTests(unittest.TestCase):
         self.assertIsNotNone(found)
         self.assertEqual(found[0]['record'], self.call)
 
-    def test_slate_import_delivers_the_probe_program_and_keeps_unread_outputs_sealed(self):
+    def test_slate_import_describes_the_probe_program_and_keeps_unread_outputs_sealed(self):
         import test_research_problem_slate as fixtures
         from test_research_program_probes import ProgramProbeCase
 
@@ -494,7 +494,9 @@ class FormingImportTests(unittest.TestCase):
         destination.observe_bars()
         packet = json.loads(destination.artifacts.read(destination.assign('slate', 'first')['packet']))
         delivered = [entry['artifact'] for entry in packet['evidence']]
-        self.assertIn(intent['program'], delivered)
+        self.assertNotIn(intent['program'], delivered)
+        from research_harness.bar_sources import descriptor
+        self.assertIn(descriptor(intent['program']), packet['source_artifacts'])
         for reference in outcome['outputs'] + [outcome['stdout'], outcome['stderr']]:
             self.assertNotIn(reference, delivered)
             destination.artifacts.verify_sealed(reference)

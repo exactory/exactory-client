@@ -206,7 +206,8 @@ class MainCaptureChainTests(ExcerptSessionCase):
         self.setup_dossier()
         record_codex_route(self)
         self.version = self.metadata()
-        self.old_text = 'Only the layout capture contains this exact first theorem.\n\n' + 'x ' * 180000 + 'References: none.\f'
+        # Keep two parts while the projected replay fits this unlisted fixture route.
+        self.old_text = 'Only the layout capture contains this exact first theorem.\n\n' + 'x ' * 60000 + 'References: none.\f'
         self.first = self.capture(self.version, pdf_text=self.old_text)
         self.versions = [self.version]
         self.requests = [dict(id='requested', kind='source', version_id=self.version, depth='fulltext')]

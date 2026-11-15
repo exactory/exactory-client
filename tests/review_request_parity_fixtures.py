@@ -25,8 +25,9 @@ import test_openness_v4_replay as v4_fixtures
 import test_problem_openness_native_reviews as native_fixtures
 import test_problem_result_history as history_fixtures
 import test_research_review_protocol as ordinary_fixtures
-from research_harness import cli, gates, openness_reading, review_protocol as protocol
+from research_harness import bar_sources, cli, gates, openness_reading, review_protocol as protocol
 from research_harness import review_request_evaluation, review_transport as transport
+from research_harness import review_route_capacity
 from research_harness import review_codex_invocation, review_request_restoration
 from research_harness import review_codex_transport as codex
 from research_harness import review_parts_problem_result as result_parts
@@ -67,7 +68,7 @@ def build_legacy_codex_response(route, request, output):
     response = {'id': 'provider-response', 'model': 'fixture-model', 'status': 'completed',
                 'output': [{'type': 'message', 'role': 'assistant',
                             'content': [{'type': 'output_text', 'text': json.dumps(output)}]}],
-                'usage': {'input_tokens': 37, 'output_tokens': 12}}
+                'usage': {'input_tokens': 1000000 if 'allowed_control' in output else 37, 'output_tokens': 12}}
     events = [{'type': 'session_meta', 'payload': {'id': response['id'], 'source': 'exec',
                'base_instructions': {'text': request['instructions']}}},
               {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
@@ -84,6 +85,14 @@ def fix_external_inputs():
     # Recreate pre-notice assignments for the unchanged byte oracle. Fresh
     # profiled assignments are covered by test_review_capacity_notice.
     original_runtime = transport.runtime
+    install_runtime = codex_fixtures.install_codex_runtime
+
+    def install_historical_runtime(case):
+        install_runtime(case)
+        from research_harness import review_codex_framed_transport as framed
+        for adapter in (codex, framed):
+            adapter.runtime.return_value = dict(adapter=adapter.ADAPTER, fixture='reviewer-excerpt-test')
+
     numbers = itertools.count(1)
     emitted = []
     original_observe = transport.observe
@@ -97,7 +106,12 @@ def fix_external_inputs():
         emitted.append(dict(route_id=route["id"], request=compute_fingerprint(serialize_like_put_json(request))))
         return original_observe(route, request, credential)
 
-    with patch.object(transport, "runtime", side_effect=describe_fixture_runtime), \
+    # Reconstruct the old admission policy, common prompt version and runtime,
+    # then exercise current authentication and reports against unchanged bytes.
+    with patch.object(review_route_capacity, "require_covered_assignment", return_value=None), \
+            patch.object(protocol, "COMMON_VERSION", 3), \
+            patch.object(codex_fixtures, "install_codex_runtime", side_effect=install_historical_runtime), \
+            patch.object(transport, "runtime", side_effect=describe_fixture_runtime), \
             patch.object(protocol, "prepare_capacity_notice", side_effect=lambda records, route, role, packet: packet), \
             patch.object(codex_fixtures, "build_codex_response", new=build_legacy_codex_response), \
             patch.object(review_codex_invocation, "supports_route", return_value=False), \
@@ -320,8 +334,10 @@ def build_local_adapter_case(name):
 
 def build_result_case(version, corrupted_history=False):
     kind = legacy_parts.ResultPartsCase if version == 1 else current_parts.PartsResultCase
-    # The oracle predates record units; recreate its stored inventory rule.
-    with fix_external_inputs() as emitted, open_fixture(kind) as parts, \
+    # Pin the oracle's session rules before setup creates its supporting bars.
+    # Its result inventory also predates record units.
+    with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL), \
+            fix_external_inputs() as emitted, open_fixture(kind) as parts, \
             patch.dict(result_parts.ADAPTER, unit_rule=None):
         if version == 1:
             parts.oversized(count=2, characters=50000, limit=105000)

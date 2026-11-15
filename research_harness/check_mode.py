@@ -104,6 +104,9 @@ class _CheckingStore:
         if operation == 'review.assignment' and result.get('packet') is not None:
             from .review_single_request import describe_assignment_delivery
             response['review_delivery'] = describe_assignment_delivery(self._records, self._artifacts, result)
+        if operation == 'problem.forming_import':
+            from .problem_forming_import import describe_import_size
+            response['size_report'] = describe_import_size(self._records, self._artifacts, result)
         raise _CheckComplete(response)
 
 

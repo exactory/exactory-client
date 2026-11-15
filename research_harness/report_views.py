@@ -92,10 +92,12 @@ def describe_parts_turn(assignment, state, series, *, ended_without_output=False
     if not series['complete']:
         if invalid_code is not None:
             result['blocked'] = invalid_code
-        elif not state['ready'] and len(state.get('refused_attempts', [])) >= 2:
-            result['blocked'] = 'review_slot_exhausted'
         elif not state['ready'] and blocking_code is not None:
             result['blocked'] = blocking_code
+        elif not state['ready'] and state.get('refused_attempts'):
+            # Only the continuation planner knows whether a replacement or
+            # correction remains. Standalone views cannot offer another call.
+            result['blocked'] = 'review_output_refused'
         elif not state['ready'] and state.get('output') is not None:
             result['blocked'] = next((item['code'] for item in state.get('obligations', [])),
                                      'review_invocation_unverified')

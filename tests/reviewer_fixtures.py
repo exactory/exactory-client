@@ -27,6 +27,8 @@ def manuscript_assignment(case, bundle, assessor, core, prediction, reasons):
                              'evidence_control':packet['evidence_control'],'excluded_controls':[]})
         with patch('research_harness.review_transport.send_request', side_effect=positive):
             case.mutate(review_protocol.probe_route, {'id':'fixture-paper-probe','route_id':route_id}, credential='fixture')
+    from visual_capacity_fixtures import install_bounded_binary_backend
+    install_bounded_binary_backend(case, [case.store.snapshot()['records']['review_route'][route_id]])
     identifier = 'paper-' + str(case.store.revision) + '-' + normalized_text(assessor)
     author = bundle['candidate']['authors'][0] if bundle['candidate']['authors'] else 'fixture-author'
     case.mutate(review_protocol.record_assignment, {'id':identifier,'route_id':route_id,'dossier_id':None,
@@ -40,7 +42,7 @@ def manuscript_assignment(case, bundle, assessor, core, prediction, reasons):
 def response(output):
     return {'id':'fixture-provider-response','model':'fixture-model','status':'completed',
         'output':[{'type':'message','role':'assistant','content':[{'type':'output_text','text':json.dumps(output)}]}],
-        'usage':{'input_tokens':37,'output_tokens':12}}
+        'usage':{'input_tokens':1000000 if 'allowed_control' in output else 37,'output_tokens':12}}
 
 
 def verdict_assignment(case, payload):
@@ -57,6 +59,8 @@ def verdict_assignment(case, payload):
         with patch('research_harness.review_transport.send_request', side_effect=positive):
             case.mutate(review_protocol.probe_route, {'id': 'fixture-verdict-probe',
                 'route_id': route_id}, credential='fixture')
+    from visual_capacity_fixtures import install_bounded_binary_backend
+    install_bounded_binary_backend(case, [case.store.snapshot()['records']['review_route'][route_id]])
     identifier = 'verifier-' + str(case.store.revision)
     case.mutate(review_protocol.record_assignment, {'id': identifier, 'route_id': route_id,
         'dossier_id': None, 'role': 'verification', 'reviewer_id': payload['assessment']['assessor'],

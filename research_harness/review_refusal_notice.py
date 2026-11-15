@@ -168,7 +168,7 @@ def select_refusal_notice(records, artifacts, attempt_ids, *, route, role, promp
         trials.append(trial)
         try:
             request = review_transport.request_body(route, prompt_text, supplied, order=())
-            trial['request_measure'] = capacity.measure_request(route, request)
+            trial['request_measure'] = capacity.measure_request(route, request, records=records, artifacts=artifacts)
             if task_characters is None:
                 task = capacity.describe_task(role, supplied, route=route, request=request)
                 task.update(notice_characters=characters, limit_characters=task_limit_characters)

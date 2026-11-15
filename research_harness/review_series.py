@@ -3,6 +3,8 @@
 import copy
 from datetime import datetime, timedelta, timezone
 import json
+import signal
+import threading
 import time
 import uuid
 
@@ -21,6 +23,7 @@ EXECUTABLE_COMMANDS = frozenset(('review-run', 'review-assignment', 'value-revie
                                  'review-adjudication', 'problem-openness'))
 ENDING_RECEIPTS_DIRECTORY = '.exactory/series-endings'
 FALLBACK_STEP_MESSAGE = 'Check the retained record, then resume this review head.'
+SESSION_FORECAST_FIELD = 'capacity_forecast'
 
 
 def _emit_json(row):
@@ -114,6 +117,7 @@ def _enrich_line(store, row, capacity_records, *, usage_snapshot=None):
                 forecast = describe_assignment_capacity(capacity_records, store.build_artifact_store(), assignment)
                 row['capacity_forecast'] = forecast['capacity_forecast']
             except BaseException as error:
+                row.pop('capacity_forecast', None)
                 _record_omission(row, 'capacity_forecast', error)
         try:
             warning = describe_assignment_warning(capacity_records, head, artifacts=store.build_artifact_store())
@@ -121,6 +125,17 @@ def _enrich_line(store, row, capacity_records, *, usage_snapshot=None):
                 row['capacity_warning'] = dict(row.get('capacity_warning', {}), **warning)
         except BaseException as error:
             _record_omission(row, 'capacity_warning', error)
+    if (SESSION_FORECAST_FIELD not in row and row.get('state') != 'done' and head is not None
+            and head in capacity_records.get('review_assignment', {})
+            and 'capacity_plan_kind' not in capacity_records['review_assignment'][head]):
+        from .review_route_capacity import describe_session_forecast
+        try:
+            forecast = describe_session_forecast(capacity_records, store.build_artifact_store(),
+                                                 capacity_records['review_assignment'][head])
+            if forecast is not None:
+                row[SESSION_FORECAST_FIELD] = forecast
+        except BaseException as error:
+            _record_omission(row, SESSION_FORECAST_FIELD, error)
     if head in capacity_records.get('review_assignment', {}):
         assignment = capacity_records['review_assignment'][head]
         if assignment.get('reading_chain'):
@@ -214,21 +229,33 @@ def _complete_ending_step(store, row):
                     choice.update(copy.deepcopy(step))
 
 
+def _bind_ending_receipt(row, identifier, revision):
+    """Keep a requested stop's release identity beside its series receipt."""
+    if row.get('code') == 'review_chain_stopped':
+        row['series_stop_id'] = identifier
+    else:
+        row['stop_id'] = identifier
+    row['revision_after_stop'] = revision
+
+
 def _identify_ending(row):
     action = row.get('details', {}).get('refused_action')
     # Earlier planner receipts describe plan_next, without an executable payload.
     identity = (None if action is None else copy.deepcopy(action) if 'payload' not in action else
                 [action['command'], action['state'], _identify_action(action)])
-    return [row['head_id'], row.get('progress'), row.get('code'), row['state'],
-            row.get('details', {}).get('step', {}).get('command'), identity]
+    result = [row['head_id'], row.get('progress'), row.get('code'), row['state'],
+              row.get('details', {}).get('step', {}).get('command'), identity]
+    if row.get('code') == 'review_chain_stopped':
+        result.append(row.get('details', {}).get('stop_id') or row.get('stop_id'))
+    return result
 
 
 def _recover_ending_line(row):
     result = {key: copy.deepcopy(row[key]) for key in
-              ('state', 'head_id', 'code', 'stop_class', 'error') if key in row}
+              ('state', 'head_id', 'code', 'stop_class', 'error', 'stop_id', 'series_stop_id') if key in row}
     if row['state'] == 'wait':
         result['not_before'] = row['not_before']
-    keys = ['intended_step', 'refused_action', 'unlisted', 'receipt', 'omitted']
+    keys = ['intended_step', 'refused_action', 'unlisted', 'receipt', 'omitted', 'stop_id']
     if row['state'] == 'stop':
         keys.append('decision')
     elif row['state'] in ('handoff', 'wait'):
@@ -248,7 +275,7 @@ def _write_ending_file(store, row):
 
 
 def _end_series(store, plan, *, error=None, exit_code, output, capacity_records=None, current=None,
-                refused_action=None, snapshot_failed=False):
+                refused_action=None, snapshot_failed=False, driver=None):
     """Fix the ending in memory, enrich it, retain it, then print it."""
     # Phase 1: these values come only from the selected plan and the refusal.
     row = (_describe_stop(dict(plan, error=error.as_dict()), error.code, error.details or {}, refused_action=refused_action)
@@ -262,6 +289,8 @@ def _end_series(store, plan, *, error=None, exit_code, output, capacity_records=
     row.setdefault('details', {})
     if refused_action is None:
         row['details'].pop('refused_action', None)
+    else:
+        row['details']['refused_action'] = copy.deepcopy(refused_action)
     had_step = 'step' in row['details']
     _complete_ending_step(store, row)
     intended_step = copy.deepcopy(row['details'].get('step', {}))
@@ -275,6 +304,7 @@ def _end_series(store, plan, *, error=None, exit_code, output, capacity_records=
             observed = store.snapshot()
         except BaseException as read_error:
             _record_omission(row, 'snapshot', read_error)
+            snapshot_failed = True
     records = observed['records'] if observed is not None else (capacity_records or {})
     if observed is not None:
         row.setdefault('revision', observed['revision'])
@@ -304,7 +334,8 @@ def _end_series(store, plan, *, error=None, exit_code, output, capacity_records=
     except BaseException as detail_error:
         _record_omission(row, 'diagnostics', detail_error)
     _complete_ending_step(store, row)
-    if snapshot_failed and row['state'] in ('handoff', 'stop'):
+    if ((snapshot_failed or code == 'review_chain_stopped' and not row['details'].get('stop_id'))
+            and row['state'] in ('handoff', 'stop')):
         _use_fallback_step(store, row)
 
     # Phase 3: the store, then a durable workspace file, then an explicit absence.
@@ -319,7 +350,7 @@ def _end_series(store, plan, *, error=None, exit_code, output, capacity_records=
                         continue
                     raise
                 break
-            row.update(stop_id=stop['id'], revision_after_stop=stop['recorded_revision'])
+            _bind_ending_receipt(row, stop['id'], stop['recorded_revision'])
             if stop.get('read_errors'):
                 row['details'].setdefault('omitted', {}).update(stop['read_errors'])
             if stop.get('read_errors') and row['details'].get('step', {}).get('command') == 'gate-auto-pass':
@@ -345,6 +376,14 @@ def _end_series(store, plan, *, error=None, exit_code, output, capacity_records=
                     _use_fallback_step(store, row)
 
     # Phase 4: the receipt already exists when rendering or printing fails.
+    if driver is not None:
+        from .review_stop import end_driver
+        try:
+            ended = end_driver(store, driver['id'], row)['ended']
+            if 'revision_after_stop' in row:
+                row['revision_after_driver'] = ended['revision_after_driver']
+        except BaseException as driver_error:
+            _record_omission(row, 'driver', driver_error)
     try:
         _render_views(store, row)
     except BaseException as view_error:
@@ -359,14 +398,34 @@ def _end_series(store, plan, *, error=None, exit_code, output, capacity_records=
     return 0 if row['state'] == 'done' else exit_code
 
 
+def _describe_requested_ending(store, error, plan, driver):
+    """Keep the selected head and action while settling a requested stop."""
+    from .review_stop import record_signal_boundary, settle_stop, describe_driver_stop
+    raised = error.as_dict() if isinstance(error, ResearchError) else error.describe_error()
+    row = _describe_stop(dict(plan, error=raised), 'review_chain_stopped', error.details or {})
+    row['state'] = 'stop'
+    try:
+        stop_id = record_signal_boundary(store, error)
+        row['stop_id'] = stop_id
+        row['details']['stop_id'] = stop_id
+        settle_stop(store, stop_id, scope=driver['scope'] if driver is not None else None)
+        records = store.snapshot()['records']
+        row.update(describe_driver_stop(records, records['review_stop'][stop_id], plan['head_id']))
+    except BaseException as stop_error:
+        _record_omission(row, 'stop_settlement', stop_error)
+    return row
+
+
 class _ProgressOutputFailure(BaseException):
     def __init__(self, error):
         self.error = error
 
 
-def run_series(store, assignment_id, *, emit=_emit_json):
+def _run_series(store, assignment_id, driver, *, emit=_emit_json):
     """Run until a recorded final, an external boundary, or a typed refusal."""
     from .cli import OPERATIONS
+    from .review_worker import read_polling_store
+    from .review_stop import ReviewStopSignal
     capacity_records = {}
 
     def emit_progress(row, *, usage_snapshot=None):
@@ -377,7 +436,7 @@ def run_series(store, assignment_id, *, emit=_emit_json):
             _record_omission(row, 'diagnostics', read_error)
         try:
             emit(row)
-        except ResearchError:
+        except (ResearchError, ReviewStopSignal):
             raise
         except BaseException as output_error:
             raise _ProgressOutputFailure(output_error) from output_error
@@ -386,6 +445,17 @@ def run_series(store, assignment_id, *, emit=_emit_json):
     refusals = 0
     ready_step = None
     last_plan = dict(state='stop', chain=None, head_id=assignment_id, progress=None)
+    def read_boundary(*, settle=False):
+        from .review_stop import read_driver_boundary
+        row = read_polling_store(lambda: read_driver_boundary(store, driver))
+        if row is not None:
+            if settle and row['details']['mode'] == 'now':
+                from .review_stop import settle_stop
+                settle_stop(store, row['stop_id'], scope=driver['scope'])
+                row = read_driver_boundary(store, driver) or row
+            return dict(last_plan, **row)
+        return None
+
     while True:
         selected_action = None
         try:
@@ -396,6 +466,8 @@ def run_series(store, assignment_id, *, emit=_emit_json):
                     snapshot, plan = ready_step
                     ready_step = None
             except ResearchError as error:
+                if error.code == 'review_chain_stopped':
+                    raise
                 refusals += 1
                 row = dict(last_plan, error=error.as_dict())
                 if error.code not in REPLAN_CODES or refusals >= MAX_CONSECUTIVE_REFUSALS:
@@ -406,7 +478,17 @@ def run_series(store, assignment_id, *, emit=_emit_json):
             capacity_records = snapshot['records']
             if 'provider_usage' not in plan and 'provider_usage' in last_plan:
                 plan = dict(plan, provider_usage=last_plan['provider_usage'])
+            if plan['state'] == 'done' and SESSION_FORECAST_FIELD in last_plan:
+                plan = dict(plan, **{SESSION_FORECAST_FIELD: last_plan[SESSION_FORECAST_FIELD]})
             last_plan = plan
+            if plan.get('code') == 'review_chain_stopped':
+                ending = dict(plan=dict(plan, state='stop', stop_id=plan['details']['stop_id']),
+                              error=None, exit_code=3, current=None)
+                break
+            boundary = read_boundary()
+            if boundary is not None:
+                ending = dict(plan=boundary, error=None, exit_code=3, current=None)
+                break
             waiting = plan['state'] == 'wait'
             if plan['state'] == 'stop' and plan.get('code') in REPLAN_CODES:
                 refusals += 1
@@ -425,8 +507,22 @@ def run_series(store, assignment_id, *, emit=_emit_json):
                     ending = dict(plan=plan, error=None, exit_code=4, current=None)
                     break
                 emit_progress(plan)
+                refresh_wait = False
                 if delay:
-                    time.sleep(delay)
+                    remaining = delay
+                    while remaining > 0:
+                        interval = min(5, remaining)
+                        time.sleep(interval)
+                        remaining -= interval
+                        boundary = read_boundary()
+                        if boundary is not None:
+                            break
+                        if remaining > 0 and read_polling_store(lambda: store.revision) not in (None, snapshot['revision']):
+                            refresh_wait = True
+                            break
+                    if boundary is not None:
+                        ending = dict(plan=boundary, error=None, exit_code=3, current=None)
+                        break
                 # Another owner can capture, accept or finish during this wait.
                 # Dispatch the newly selected state before acting on its revision.
                 try:
@@ -442,7 +538,7 @@ def run_series(store, assignment_id, *, emit=_emit_json):
                 selected_action = fresh_plan
                 if 'provider_usage' not in fresh_plan and 'provider_usage' in plan:
                     fresh_plan = dict(fresh_plan, provider_usage=plan['provider_usage'])
-                if (fresh_plan['state'] != 'wait' or fresh_plan['head_id'] != plan['head_id']
+                if (refresh_wait or fresh_plan['state'] != 'wait' or fresh_plan['head_id'] != plan['head_id']
                         or fresh_plan['progress'] != plan['progress']
                         or _identify_action(fresh_plan) != _identify_action(plan)):
                     ready_step = fresh_snapshot, fresh_plan
@@ -452,6 +548,10 @@ def run_series(store, assignment_id, *, emit=_emit_json):
                 last_plan = plan
             elif plan['state'] not in EXECUTABLE_STATES:
                 raise ValueError('Unknown review continuation state: ' + plan['state'])
+            boundary = read_boundary()
+            if boundary is not None:
+                ending = dict(plan=boundary, error=None, exit_code=3, current=None)
+                break
             selected_action = plan
             action = _identify_action(plan)
             position = (action, digest(plan['progress']))
@@ -474,6 +574,20 @@ def run_series(store, assignment_id, *, emit=_emit_json):
                     except BaseException as view_error:
                         _record_omission(plan, 'views', view_error)
             except ResearchError as error:
+                if error.code == 'review_chain_stopped':
+                    raise
+                try:
+                    boundary = read_boundary(settle=True)
+                except ReviewStopSignal:
+                    raise
+                except BaseException as read_error:
+                    row = dict(plan, request_id=request_id, error=error.as_dict())
+                    _record_omission(row, 'boundary', read_error)
+                    ending = dict(plan=row, error=error, exit_code=3, current=None, snapshot_failed=True)
+                    break
+                if boundary is not None:
+                    ending = dict(plan=boundary, error=None, exit_code=3, current=None)
+                    break
                 if error.code == 'review_route_runtime_stale':
                     ending = dict(plan=plan, error=error, exit_code=3, current=snapshot)
                     break
@@ -534,9 +648,61 @@ def run_series(store, assignment_id, *, emit=_emit_json):
             emit_progress(row)
         except _ProgressOutputFailure as failure:
             raise failure.error
-        except ResearchError as error:
-            ending = dict(plan=last_plan, error=error, exit_code=3, current=None)
+        except (ResearchError, ReviewStopSignal) as error:
+            if error.code == 'review_chain_stopped':
+                ending = dict(plan=_describe_requested_ending(store, error, last_plan, driver),
+                              error=None, exit_code=3, current=None)
+            else:
+                ending = dict(plan=last_plan, error=error, exit_code=3, current=None)
             break
     ending['refused_action'] = ({key: copy.deepcopy(selected_action[key]) for key in ('command', 'state', 'payload')
                                 if key in selected_action} if selected_action is not None else None)
-    return _end_series(store, output=emit, capacity_records=capacity_records, **ending)
+    return _end_series(store, output=emit, capacity_records=capacity_records, driver=driver, **ending)
+
+
+def run_series(store, assignment_id, *, emit=_emit_json):
+    """Record the driver lifetime and turn process signals into a requested stop."""
+    from .review_stop import (start_driver, end_driver, request_stop, settle_stop,
+                              _end_owned_processes, record_signal_boundary, ReviewStopSignal, describe_driver_stop,
+                              _select_stop_calls)
+    initial = dict(state='stop', chain=None, head_id=assignment_id, progress=None)
+    try:
+        driver = start_driver(store, assignment_id)
+    except ResearchError as error:
+        return _end_series(store, initial, error=error, exit_code=3, output=emit)
+    previous = {}
+
+    def handle_signal(number, frame):
+        for handled in (signal.SIGTERM, signal.SIGINT):
+            signal.signal(handled, signal.SIG_IGN)
+        payload = dict(id='review-signal:' + uuid.uuid4().hex, action='stop', assignment_id=assignment_id,
+                       mode='now', reason='The review series received ' + signal.Signals(number).name + '.')
+        try:
+            receipt = request_stop(store, payload, request_id=payload['id'], origin='signal')
+        except ResearchError as error:
+            if error.code not in ('store_reentrant_access', 'store_busy'):
+                raise
+            raise ReviewStopSignal(dict(stop_request=payload)) from error
+        records = store.snapshot()['records']
+        _end_owned_processes(records, _select_stop_calls(records, receipt['result'], driver['scope']))
+        raise ReviewStopSignal(dict(stop_id=receipt['result']['id']))
+
+    if threading.current_thread() is threading.main_thread():
+        for number in (signal.SIGTERM, signal.SIGINT):
+            previous[number] = signal.signal(number, handle_signal)
+    try:
+        return _run_series(store, assignment_id, driver, emit=emit)
+    except (ResearchError, ReviewStopSignal) as error:
+        if error.code != 'review_chain_stopped':
+            raise
+        row = _describe_requested_ending(store, error, initial, driver)
+        return _end_series(store, row, exit_code=3, output=emit, driver=driver)
+    except BaseException as original_error:
+        try:
+            end_driver(store, driver['id'], dict(state='ended'))
+        except BaseException as cleanup_error:
+            raise original_error from cleanup_error
+        raise
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)

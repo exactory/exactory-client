@@ -24,7 +24,21 @@ class DeadAssignmentTests(unittest.TestCase):
         self.addCleanup(recorder.__exit__, None, None, None)
         with patch.object(protocol, 'probe_route'):
             self.case.prepare_review_route()
+        self.install_input_capacity(self.case)
         self.case.supporting = self.case.artifacts.put(b'A synthetic standard.', 'text/plain')
+
+    def install_input_capacity(self, case):
+        """Give the stub its input witness without proving context independence."""
+        from capacity_evidence_fixtures import build_capacity_prior
+        from research_harness import review_capacity_evidence as evidence
+        route = case.store.snapshot()['records']['review_route']['route']
+        witness = build_capacity_prior(route, 2000000, identifier='dead-assignment-input')
+        self.assertIsNotNone(witness['key'])
+        active = patch.object(evidence, 'CAPACITY_PRIORS', tuple(evidence.read_capacity_priors()) + (witness,))
+        active.start()
+        case.addCleanup(active.stop)
+        self.assertEqual(protocol.route_state(case.store.snapshot()['records'], case.artifacts, route['id'])
+                         ['context_status'], 'unverified')
 
     def probe(self, identifier="probe"):
         def respond(route, request, credential):
@@ -217,6 +231,7 @@ class DeadAssignmentTests(unittest.TestCase):
         case.setUp()
         self.addCleanup(case.doCleanups)
         case.route()
+        self.install_input_capacity(case)
         initial = case.assign()['result']
         before = copy.deepcopy(initial)
         case.run_probe()
@@ -323,15 +338,23 @@ class DeadAssignmentTests(unittest.TestCase):
         legacy['context_state']['context_status'] = 'unverified'
         case.store.mutate('fixture.dead-focused', {}, lambda tx: tx.put('review_assignment', legacy['id'], legacy),
             expected_revision=case.store.revision, request_id='dead-focused')
-        case.assign('adjudicator', 'fourth', identifier='focused', **context)
+        head = case.assign('adjudicator', 'fourth', identifier='focused', **context)
         output = dict(objection_id=context['objection_id'], disposition='not_upheld',
             reason='Exact evidence resolves it.', correction_admissible=None,
             evidence=[case.artifacts.put(b'Undelivered evidence.', 'text/plain')])
-        for attempt in ('refused-1', 'refused-2'):
-            case.refuse(output, 'focused', attempt, command='review-adjudication')
+        for number in range(3):
+            case.refuse(output, head['id'], 'refused-' + str(number + 1), command='review-adjudication')
+            plan = plan_next(case.store.snapshot()['records'], case.artifacts, head['id'])
+            if number < 2:
+                self.assertEqual((plan['state'], plan['command']), ('replace', 'review-assignment'))
+                head = case.mutate(protocol.record_assignment, plan['payload'])['result']
+        self.assertEqual((plan['state'], plan['code']), ('handoff', 'review_slot_exhausted'))
         accepted = case.assign('adjudicator', 'third', identifier='new-focused', **context)
         self.assertEqual(accepted['slot_id'], old.get('slot_id', old['id']))
         self.assertEqual(plan_next(case.store.snapshot()['records'], case.artifacts, old['id'])['head_id'], accepted['id'])
+        records = case.store.snapshot()['records']
+        self.assertEqual(records['review_assignment'][old['id']], legacy)
+        self.assertFalse(any(attempt['assignment_id'] == old['id'] for attempt in records['review_attempt'].values()))
 
     def prepare_staged_child(self):
         from test_review_continuation_staged import StagedContinuationTests

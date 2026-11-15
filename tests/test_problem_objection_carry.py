@@ -1320,9 +1320,15 @@ class ProblemObjectionCarryDeliveryTests(unittest.TestCase):
             source.mutate(decisions.record_value_review, dict(legacy, id='review-legacy-visual-source', dossier_id=None, assignment_id=prior['id']))
         sender = VisualResultDeliveryTests()
         sender.case = source
-        with patch.object(visual, 'runtime', return_value=dict(adapter=visual.ADAPTER, fixture='carry-native-visual')):
+        from capacity_evidence_fixtures import build_capacity_runtime
+        with patch.object(visual, 'runtime', return_value=build_capacity_runtime(
+                visual.ADAPTER, fixture='carry-native-visual')):
             source.mutate(protocol.record_route, dict(id='visual-route', adapter=visual.ADAPTER,
                 model='fixture-model', endpoint='codex://local', configuration=dict(max_output_tokens=128000, timeout_seconds=600)))
+
+            from visual_capacity_fixtures import install_bounded_visual_backend
+            install_bounded_visual_backend(self, [source.store.snapshot()['records']['review_route']['visual-route'],
+                                                   destination.store.snapshot()['records']['review_route']['route']])
 
             def respond_probe(route, request, credential):
                 positive = source.store.snapshot()['records']['review_probe_invocation']['visual-probe']['positive_controls']
@@ -1463,10 +1469,11 @@ def build_output(body, root):
     def test_legacy_parts_final_retains_imported_objection_evidence(self):
         from codex_route_fixtures import invoke_codex, limit_codex_input
         from problem_parts_fixtures import note_units
-        from research_harness import review_parts, review_problem_parts
+        from research_harness import bar_sources, review_parts, review_problem_parts
         source, case = self.local_destination()
         limit_codex_input(self, 170000)
-        with patch.object(review_parts, 'prepare_packet', side_effect=lambda records, artifacts, value, route, packet, prompt, history, **kwargs: packet), \
+        with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL), \
+             patch.object(review_parts, 'prepare_packet', side_effect=lambda records, artifacts, value, route, packet, prompt, history, **kwargs: packet), \
              patch.object(review_problem_parts, 'prepare_packet', review_problem_parts._prepare_legacy_packet):
             assignment = case.assign('result', 'first', identifier='legacy-1')
             turns = 0

@@ -72,6 +72,7 @@ class SingleEntryTests(unittest.TestCase):
             'previous': dict(id='previous', role='result', route_id='route', dossier_id=None,
                              reviewer_id='prior-reviewer', author_id='author', context={},
                              slot_id='previous', recorded_revision=0)})
+        self.read_output_profile = capacity.read_output_profile
         profile = patch.object(capacity, 'read_output_profile', return_value=dict(rows=[]))
         profile.start()
         self.addCleanup(profile.stop)
@@ -95,6 +96,22 @@ class SingleEntryTests(unittest.TestCase):
                 self.assertEqual(planned[parts.KEY]['adapter'], adapter)
                 self.assertEqual(parts.find_kind(planned), 'read')
                 self.assertLessEqual(planned[parts.KEY]['unit_characters'], 15000)
+
+    def test_parts_fitter_uses_only_keyed_store_capacity(self):
+        from capacity_evidence_fixtures import build_capacity_runtime
+        from research_harness.review_single_request import measure_parts_request
+        route = build_route('codex_cli_v1', 'fixture-model')
+        route['runtime'] = build_capacity_runtime(route['adapter'])
+        witness = dict(key=capacity.describe_capacity_key(route), input_tokens=2000000)
+        records = dict(review_route={'route': route}, review_route_probe=dict(probe=dict(
+            id='probe', route_id='route', capacity=dict(input_tokens=2000000), capacity_evidence=witness)))
+        request = protocol.transport.request_body(route, 'Review the frozen evidence.',
+                                                dict(role='verification', evidence=[]), [])
+        characters = capacity.measure_request(route, request)['text_characters']
+        self.assertEqual(measure_parts_request(records, route, request, characters), characters)
+        changed = dict(route, endpoint='codex://another-endpoint')
+        self.assertGreater(measure_parts_request(records, changed, request, characters),
+                           protocol.transport.local_input_limit(changed))
 
     def test_entry_compares_whole_request_at_the_exact_start_value(self):
         packet = build_adapter_cases()['study_verification']
@@ -132,13 +149,14 @@ class SingleEntryTests(unittest.TestCase):
         self.assertEqual(limits['material_allowance'], 15000)
         self.assertIsNone(limits['borrowed_kind'])
 
-    def test_single_start_uses_the_observed_input_room_of_its_profile(self):
+    def test_single_start_keeps_output_profile_separate_from_input_evidence(self):
         from test_review_output_profile import build_row
         route = build_route('codex_cli_v1', model='fixture')
-        limits = capacity.select_task_limits(route, dict(
-            rows=[build_row(level=None, kind='single', thinking=1000)], verified_input_tokens=400000),
-            'single', frame_characters=0)
-        self.assertEqual(limits['material_allowance'], 300000)
+        profile = dict(rows=[build_row(level=None, kind='single', thinking=1000)],
+                       verified_input_tokens=400000)
+        limits = capacity.select_task_limits(route, profile, 'single', frame_characters=0)
+        self.assertEqual(limits['material_allowance'], 600000)
+        self.assertEqual(capacity.describe_route_capacity(route, profile)['input_tokens']['value'], 0)
 
     def test_adapterless_review_reports_output_warning_and_retains_its_packet(self):
         from types import SimpleNamespace
@@ -224,6 +242,10 @@ class SingleEntryTests(unittest.TestCase):
         from research_harness import review_preflight
         from research_harness.review_single_request import build_output_replacement
         for adapter, packet in build_adapter_cases().items():
+            if adapter == 'context_repair':
+                with self.subTest(adapter=adapter):
+                    self.check_real_repair_replacement_is_admitted()
+                continue
             with self.subTest(adapter=adapter), tempfile.TemporaryDirectory() as directory:
                 store = Store(Path(directory), create=True)
                 artifacts = store.build_artifact_store()
@@ -238,8 +260,6 @@ class SingleEntryTests(unittest.TestCase):
                 if packet['role'] == 'adjudicator':
                     context.update(review_ids=[row['id'] for row in packet['assessments']],
                                    objection_id=packet['objection']['id'])
-                if 'context_repair' in packet:
-                    context['context_repair'] = dict(assignment_id='previous')
                 for entry in packet.get('evidence', []):
                     artifacts.put(entry['content'].encode(), entry['artifact']['media_type'])
                 packet.pop('digest', None)
@@ -252,17 +272,12 @@ class SingleEntryTests(unittest.TestCase):
                     context_state=dict(context_status='verified_for_route'))
                 if 'subject' in packet:
                     assignment['subject'] = packet['subject']
-                if 'context_repair' in packet:
-                    assignment['slot_id'] = 'previous'
                 attempt = dict(id='over-cap', assignment_id='first', origin='instrumented',
                     status='failed', response=None, output=None, error=None,
                     usage=dict(output_tokens=128000), recorded_revision=1)
                 def seed(records, value):
                     return [('review_route', 'route', self.route), ('review_assignment', 'first', assignment),
                             ('review_attempt', 'over-cap', attempt),
-                            ('review_assignment', 'previous', dict(id='previous', role='result', context={},
-                                reviewer_id='prior-reviewer', author_id='author', dossier_id=None,
-                                route_id='route', slot_id='previous', recorded_revision=0)),
                             ('research_intent', 'intent', dict(payload=dict(authors=['author']))),
                             ('strategy_dossier', 'dossier', dict(payload=dict(intent_id='intent')))], {}
                 prepared_mutation(store, 'fixture.single', {}, seed,
@@ -282,6 +297,67 @@ class SingleEntryTests(unittest.TestCase):
                 self.assertTrue(protocol._prompt_matches(record, packet=planned_packet))
                 from research_harness.review_input_projection import packets_from_request
                 self.assertEqual(packets_from_request(request, assignments=[record])[-1], planned_packet)
+
+    def check_real_repair_replacement_is_admitted(self):
+        from codex_route_fixtures import build_codex_response, limit_codex_input
+        from research_harness import review_parts_repair, review_preflight
+        from research_harness.review_input_projection import packets_from_request
+        from review_parts_fixtures import make_output
+        from test_review_parts_repair_journey import ResultRepairJourneyTests
+
+        # Keep the predecessor, route probe and stored repair fully authenticated.
+        # Deferring prospective parts models an ordinary repair stored before task entry,
+        # as FrozenSingleTests does for its ordinary native assignment.
+        with patch.object(capacity, 'read_output_profile', self.read_output_profile):
+            fixture = ResultRepairJourneyTests()
+            fixture.setUp()
+            self.addCleanup(fixture.doCleanups)
+            fixture.oversized(count=6, characters=60000, room=110000)
+            previous = fixture.assign('repair-origin')
+            fixture.invoke(previous)
+            binding = fixture.contaminate(previous)
+            limit_codex_input(fixture, 2000000)
+            with patch.object(review_parts_repair, 'prepare_packet', side_effect=lambda records, artifacts,
+                    value, route, packet, prompt, history, **options: packet):
+                assignment = fixture.repair_assignment(previous, binding, 'ordinary-repair')
+            case, artifacts = fixture.case, fixture.case.artifacts
+            self.assertNotIn(parts.KEY, fixture.packet(assignment))
+            frozen = artifacts.read(assignment['packet'])
+            before = protocol.build_assignment_request(case.read_records(), artifacts, assignment)
+            review_preflight.check_request(review_preflight.build_assignment_report(
+                case.read_records(), artifacts, assignment, before), before)
+
+            def incomplete(route, request, credential):
+                response = build_codex_response(route, request, {})
+                response['status'] = 'incomplete'
+                response['usage']['output_tokens'] = route['configuration']['max_output_tokens']
+                return response
+
+            with patch.object(protocol.transport, 'send_request', side_effect=incomplete):
+                case.mutate(protocol.invoke_assignment,
+                    dict(id='repair-over-cap', assignment_id=assignment['id']), credential='fixture')
+            recovery = failures.plan_after_failure(case.read_records(), artifacts, assignment['id'])
+            self.assertEqual(recovery['state'], 'replace', recovery)
+            payload = recovery['details']['recovery']['payload']
+            self.assertEqual(payload['context'], dict(capacity_replacement=assignment['id']))
+            record = case.mutate(protocol.record_assignment, payload)['result']
+            records = case.read_records()
+            planned_packet = fixture.packet(record)
+            self.assertEqual((planned_packet[parts.KEY]['adapter'], parts.find_kind(planned_packet)),
+                             ('context_repair', 'read'))
+            self.assertEqual(protocol.context_repair.slot_id(records, record),
+                             protocol.context_repair.slot_id(records, assignment))
+            self.assertEqual(record['capacity_replacement_of'], assignment['id'])
+            self.assertTrue(protocol._prompt_matches(record, packet=planned_packet))
+            request = protocol.build_assignment_request(records, artifacts, record)
+            report = review_preflight.check_request(review_preflight.build_assignment_report(
+                records, artifacts, record, request), request)
+            self.assertLessEqual(report['input_size']['value'], report['input_size']['limit'])
+            self.assertEqual(packets_from_request(request, assignments=[record])[-1], planned_packet)
+            fixture.invoke(record, make_output(planned_packet))
+            self.assertTrue(protocol.assignment_state(case.read_records(), artifacts, record['id'])['ready'])
+            self.assertEqual(artifacts.read(assignment['packet']), frozen)
+            self.assertEqual(protocol.build_assignment_request(case.read_records(), artifacts, assignment), before)
 
 
 class FrozenSingleTests(unittest.TestCase):

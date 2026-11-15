@@ -356,7 +356,8 @@ def requires_parts(records, artifacts, value, route, packet, prompt, history, sl
 
 
 def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
-                   base_prompt_parameters, slot_id=None, repair=None, capacity_replacement=None):
+                   base_prompt_parameters, slot_id=None, repair=None, capacity_replacement=None,
+                   refusal_notice=None):
     """Plan a repair using the engine, including entry after ordinary output overflow."""
     from . import review_transport as transport
     from .review_problem_parts import _measure
@@ -370,6 +371,15 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
         transport.request_body(route, prompt['text'], packet, history)))
     if capacity_replacement is None and not continuing and not requires_parts(records, artifacts, value, route, packet, prompt, history, slot_id):
         return packet
+    from .bar_sources import PROTOCOL_V3
+    if packet.get('source_rules') == PROTOCOL_V3:
+        if (prior is not None and not continuing
+                or packet.get('forming_records') or packet.get('problem_forming_imports')
+                or any(request['kind'] == 'artifact' for request in packet.get('pending_source_requests', []))):
+            return packet
+        packet = {key: item for key, item in packet.items() if key not in ('source_rules', 'source_artifacts', 'digest')}
+        packet['digest'] = digest(packet)
+        base_prompt_parameters = {key: item for key, item in base_prompt_parameters.items() if key != 'source_rules'}
     if continuing:
         previous = parts.read_logical_packet(artifacts, json.loads(
             artifacts.read(prior['packet']))[parts.KEY])
@@ -443,12 +453,15 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
         read_allowance = select_task_limits(route, read_output_profile(records, route), 'read')['material_allowance']
 
     def measure(candidate):
+        if refusal_notice is not None:
+            from .review_refusal_notice import attach_refusal_notice
+            candidate = attach_refusal_notice(candidate, refusal_notice)
         turn_prompt = parts.build_turn_prompt(value['role'], base_prompt_parameters, candidate[parts.KEY])
         request = transport.request_body(route, turn_prompt['text'], candidate, [], order=())
         measured = _measure(route, request)
         if entry is not None:
             from .review_single_request import measure_parts_request
-            measured = measure_parts_request(records, route, request, measured)
+            measured = measure_parts_request(records, route, request, measured, artifacts=artifacts)
         return measured
 
     planned = parts.plan_turn(packet, inventory, observations, series_id=series_id,
@@ -457,6 +470,9 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
         inventory_reference=inventory_reference, logical_reference=logical_reference, series_key=series_key,
         entry=entry, read_allowance=read_allowance)
     planned = prioritize_fill(packet, inventory, planned, measure, transport.local_input_limit(route))
+    if refusal_notice is not None:
+        from .review_refusal_notice import attach_refusal_notice
+        planned = attach_refusal_notice(planned, refusal_notice)
     for entry in planned.get('evidence', []):
         if entry.get('segment'):
             reference = artifacts.put(entry['content'].encode('utf-8'), entry['artifact']['media_type'])

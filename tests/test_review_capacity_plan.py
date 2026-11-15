@@ -67,6 +67,24 @@ class DivideRoomTests(unittest.TestCase):
 
 
 class CapacityPlanTests(unittest.TestCase):
+    def test_plan_uses_its_keyed_input_witness_separately_from_the_output_profile(self):
+        from capacity_evidence_fixtures import build_capacity_runtime
+        route = dict(build_route('openai_responses_v1', model='fixture-model', output=1000),
+                     runtime=build_capacity_runtime('openai_responses_v1'))
+        records = dict(review_route=dict(route=route), review_route_probe=dict(probe=dict(
+            id='probe', route_id='route', capacity=dict(input_tokens=1000000),
+            capacity_evidence=dict(key=capacity.describe_capacity_key(route), input_tokens=1000000), usage={})))
+        profile = capacity.read_output_profile(records, route)
+        before = copy.deepcopy(records)
+        plan = capacity.plan_chain_capacity(route, profile, records=records, **build_inputs(1))
+        self.assertEqual(plan['limits']['input_tokens']['value'], 999000)
+        profile['verified_input_tokens'] = 10000000
+        other = dict(route, endpoint='https://another.example/responses')
+        with self.assertRaises(ResearchError) as caught:
+            capacity.plan_chain_capacity(other, profile, records=records, **build_inputs(1))
+        self.assertEqual(caught.exception.code, 'review_route_capacity_below_floor')
+        self.assertEqual(records, before)
+
     def test_plan_pins_every_input_and_counts_carried_state_and_notice(self):
         from research_harness.review_refusal_notice import BOUNDED_NOTICE_CHARACTERS
         plan = build_plan()
@@ -162,6 +180,7 @@ class CapacityAssignmentCase(unittest.TestCase):
         self.case.setUp()
         self.addCleanup(self.case.doCleanups)
         self.case.route()
+        self.case.run_probe()
         self.evidence = self.case.artifacts.put(b'Synthetic primary evidence.', 'text/plain')
         self.original_builder = review_protocol.build_packet
 
@@ -285,8 +304,14 @@ class PinnedPolicyTests(unittest.TestCase):
         self.assertEqual(expected['request_bound']['text_characters'], expected['task_characters'])
 
     def test_unmeasured_growth_stops_at_the_pinned_input_ceiling(self):
-        route = build_route('openai_responses_v1', model='fixture-model', output=1000)
-        plan = capacity.plan_chain_capacity(route, capacity.read_output_profile({}, route), **build_inputs(1))
+        from capacity_evidence_fixtures import build_capacity_runtime
+        route = dict(build_route('openai_responses_v1', model='fixture-model', output=1000),
+                     runtime=build_capacity_runtime('openai_responses_v1'))
+        records = dict(review_route=dict(route=route), review_route_probe=dict(probe=dict(
+            id='probe', route_id='route', capacity=dict(input_tokens=151000),
+            capacity_evidence=dict(key=capacity.describe_capacity_key(route), input_tokens=151000), usage={})))
+        plan = capacity.plan_chain_capacity(route, capacity.read_output_profile(records, route),
+                                            records=records, **build_inputs(1))
         observations = []
         for _ in range(8):
             current = capacity.derive_plan_task_limits(plan, 'reading', observations)

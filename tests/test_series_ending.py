@@ -31,6 +31,30 @@ class SeriesEndingTests(unittest.TestCase):
         with record_reachable_errors('run_series', injected=INJECTED_CODES):
             return review_series.run_series(*args, **kwargs)
 
+    def read_current_plans(self, events):
+        events = iter(events)
+        def read(store, assignment_id):
+            event = next(events)
+            if isinstance(event, BaseException):
+                raise event
+            snapshot, plan = event
+            return dict(snapshot, revision=store.revision), plan
+        return read
+
+    def assert_only_driver_lifetime_changed(self, before, after):
+        self.assertEqual(after['revision'], before['revision'] + 2)
+        for kind in set(before['records']) | set(after['records']):
+            if kind not in ('review_series_run', 'literature_operation'):
+                self.assertEqual(after['records'].get(kind), before['records'].get(kind), kind)
+        for identifier, record in before['records'].get('literature_operation', {}).items():
+            self.assertEqual(after['records']['literature_operation'][identifier], record)
+        runs = after['records']['review_series_run']
+        previous = before['records'].get('review_series_run', {})
+        self.assertEqual(len(runs), len(previous) + 1)
+        for identifier, record in previous.items():
+            self.assertEqual(runs[identifier], record)
+        self.assertTrue(all(record['ended'] is not None for record in runs.values()))
+
     def build_error(self, code=INJECTED_CODE):
         return ResearchError(code, 'Synthetic refusal.', dict(marker='retained'))
 
@@ -252,13 +276,13 @@ class SeriesEndingTests(unittest.TestCase):
                 if state == 'wait':
                     plan['not_before'] = '2099-01-01T00:00:00Z'
                 first_result, first = self.run_ending(plan)
-                revision = self.case.store.revision
+                before_repeat = self.case.store.snapshot()
                 second_result, second = self.run_ending(plan)
                 self.assertEqual((first_result, second_result), (expected, expected))
                 self.assertEqual(first['state'], state)
                 self.assertEqual(first['details']['receipt']['place'], 'store')
                 self.assertEqual(first['stop_id'], second['stop_id'])
-                self.assertEqual(self.case.store.revision, revision)
+                self.assert_only_driver_lifetime_changed(before_repeat, self.case.store.snapshot())
                 retained = self.case.read_records()['review_series_stop'][first['stop_id']]
                 self.assertEqual(retained['plan']['state'], state)
 
@@ -284,7 +308,7 @@ class SeriesEndingTests(unittest.TestCase):
             report = self.check_copy()
             self.assertEqual(report['series_stops'][0]['place'], 'workspace')
             self.assertEqual(report['series_stops'][0]['finding'], 'record_unlisted_stop')
-        self.assertEqual(self.case.store.snapshot(), before)
+        self.assert_only_driver_lifetime_changed(before, self.case.store.snapshot())
         with patch.dict(stop_classes.STOP_REGISTRY, {INJECTED_CODE: dict(code=INJECTED_CODE,
                 **{'class': 'decision'}, owner='test', next=dict(kind='done'))}):
             self.assertNotIn('finding', self.check_copy()['series_stops'][0])
@@ -394,14 +418,22 @@ class SeriesEndingTests(unittest.TestCase):
 
     def test_failed_post_refusal_snapshot_never_replaces_the_refused_operation(self):
         original = self.case.store.snapshot
-        attempts = []
+        refused, failed_read = [], []
+        def refuse(*args, **kwargs):
+            refused.append(True)
+            raise self.build_error()
         def read():
-            attempts.append(True)
-            if len(attempts) == 2:
+            if refused and not failed_read:
+                failed_read.append(True)
                 raise self.build_error(sorted(INJECTED_CODES)[1])
             return original()
-        with patch.object(self.case.store, 'snapshot', side_effect=read):
-            line = self.run_refusal()
+        rows = []
+        with patch.object(self.case.store, 'snapshot', side_effect=read), \
+                patch('research_harness.review_stop.read_driver_boundary', return_value=None), \
+                patch.dict(cli.OPERATIONS, {'review-run': refuse}):
+            result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
+        self.assertEqual(result, 3)
+        line = rows[-1]
         self.assertEqual(line['code'], INJECTED_CODE)
         self.assertEqual(line['details']['omitted']['snapshot']['code'], sorted(INJECTED_CODES)[1])
 
@@ -536,24 +568,35 @@ class SeriesEndingTests(unittest.TestCase):
                 'describe_usage': 1, '_record_omission': 1},
             '_enrich_line': {'Evaluation': 1, 'describe_usage': 1, 'describe_assignment_warning': 1,
                 'store.snapshot': 1, 'ArtifactStore': 1, 'describe_assignment_capacity': 1,
-                'store.build_artifact_store': 3, 'review_protocol._read_json': 1,
+                'describe_session_forecast': 1, 'store.build_artifact_store': 4, 'review_protocol._read_json': 1,
                 'review_protocol.build_packet': 1, 'review_protocol.build_assignment_request': 1,
-                'openness_reading.describe_reading_receipt': 1, '_record_omission': 5, 'classify_stop': 1},
+                'openness_reading.describe_reading_receipt': 1, '_record_omission': 6, 'classify_stop': 1},
             '_build_check_step': {},
             '_use_fallback_step': {'_build_check_step': 1},
             '_complete_ending_step': {},
+            '_bind_ending_receipt': {},
             '_identify_ending': {'_identify_action': 1},
             '_recover_ending_line': {},
             '_write_ending_file': {'checked_parent': 1, 'write_atomic': 1},
             '_end_series': {'_enrich_line': 1, '_render_views': 1, 'output': 2, '_recover_ending_line': 1, 'print': 1, 'store.snapshot': 1,
                 'complete_plan': 1, 'plan_route_handoff': 1, 'Evaluation': 1, 'record_series_stop': 1,
                 '_write_ending_file': 1, 'ArtifactStore': 1, '_describe_stop': 2, 'classify_stop': 1,
-                '_complete_ending_step': 3, '_use_fallback_step': 6, '_record_omission': 7,
+                '_bind_ending_receipt': 1,
+                '_complete_ending_step': 3, '_use_fallback_step': 6, '_record_omission': 8, 'end_driver': 1,
                 'error.as_dict': 1, 'recording_error.as_dict': 1},
-            'run_series': {'_end_series': 1, '_render_views': 1, 'emit': 1, '_enrich_line': 1,
+            '_describe_requested_ending': {'_describe_stop': 1, 'record_signal_boundary': 1, 'settle_stop': 1,
+                'store.snapshot': 1, 'describe_driver_stop': 1, '_record_omission': 1,
+                'error.as_dict': 1, 'error.describe_error': 1},
+            '_run_series': {'_end_series': 1, '_render_views': 1, 'emit': 1, '_enrich_line': 1,
                 'emit_progress': 8, '_ProgressOutputFailure': 1, "OPERATIONS[plan['command']]": 1, '_read_plan': 3,
                 'time.sleep': 2, 'store.snapshot': 1, '_identify_action': 3, 'digest': 1, 'ResearchError': 1,
-                '_record_omission': 4, 'error.as_dict': 2, 'read_error.as_dict': 1}}
+                '_record_omission': 5, 'error.as_dict': 3, 'read_error.as_dict': 1,
+                'read_polling_store': 2, 'read_boundary': 4, 'read_driver_boundary': 2, 'settle_stop': 1, 'min': 1,
+                '_describe_requested_ending': 1},
+            'run_series': {'start_driver': 1, '_end_owned_processes': 1, 'ReviewStopSignal': 2,
+                'threading.current_thread': 1, 'threading.main_thread': 1, '_run_series': 1, 'signal.signal': 3,
+                'request_stop': 1, 'store.snapshot': 1, '_select_stop_calls': 1, '_describe_requested_ending': 1,
+                '_end_series': 2, 'end_driver': 1, 'signal.Signals': 1}}
         module = ast.parse(inspect.getsource(review_series))
         self.assertEqual(set(cases), {node.name for node in module.body if isinstance(node, ast.FunctionDef)})
         for name, expected in cases.items():
@@ -566,8 +609,19 @@ class SeriesEndingTests(unittest.TestCase):
                 if callee not in standard:
                     actual[callee] += 1
             self.assertEqual(dict(actual), expected, name)
-        tree = ast.parse(inspect.getsource(review_series.run_series))
-        returns = [node for node in ast.walk(tree) if isinstance(node, ast.Return)]
+        tree = ast.parse(inspect.getsource(review_series._run_series))
+        outer = tree.body[0]
+        class LoopReturns(ast.NodeVisitor):
+            def __init__(self):
+                self.returns = []
+            def visit_FunctionDef(self, node):
+                if node is outer:
+                    self.generic_visit(node)
+            def visit_Return(self, node):
+                self.returns.append(node)
+        visitor = LoopReturns()
+        visitor.visit(outer)
+        returns = visitor.returns
         self.assertEqual(len(returns), 1)
         self.assertEqual(ast.unparse(returns[0].value.func), '_end_series')
         self.assert_unlisted(self.run_refusal())
@@ -712,8 +766,9 @@ class SeriesEndingTests(unittest.TestCase):
         def succeed(store, payload, **identity):
             executed.append(identity['request_id'])
             return store.mutate('fixture.executed', {}, lambda tx: None, **identity)
-        with patch.object(review_series, '_read_plan', side_effect=[(self.snapshot, known_plan),
-                self.build_error(), self.build_error()]), patch.dict(cli.OPERATIONS, {'review-run': succeed}):
+        with patch.object(review_series, '_read_plan', side_effect=self.read_current_plans([
+                (self.snapshot, known_plan), self.build_error(), self.build_error()])), \
+                patch.dict(cli.OPERATIONS, {'review-run': succeed}):
             result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
         self.assertEqual(result, 3)
         self.assertEqual(len(executed), 1)
@@ -734,7 +789,8 @@ class SeriesEndingTests(unittest.TestCase):
             executed.append(identity['request_id'])
             return store.mutate('fixture.executed', {}, lambda tx: None, **identity)
         done = dict(self.plan, state='done', details={})
-        with patch.object(review_series, '_read_plan', side_effect=[(self.snapshot, self.plan), (self.snapshot, done)]), \
+        with patch.object(review_series, '_read_plan', side_effect=self.read_current_plans([
+                (self.snapshot, self.plan), (self.snapshot, done)])), \
                 patch.dict(cli.OPERATIONS, {'review-run': succeed}), \
                 patch.object(review_series, 'render_workspace_views', side_effect=RuntimeError('Synthetic renderer failure.')):
             result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
@@ -930,16 +986,20 @@ class SeriesEndingTests(unittest.TestCase):
     def test_snapshot_replan_names_both_refusals_before_continuing(self):
         done = dict(self.plan, state='done', code='problem_already_posted', details={})
         original = self.case.store.snapshot
-        reads = []
+        refused, reads = [], []
+        def refuse(*args, **kwargs):
+            refused.append(True)
+            raise self.build_error()
         def snapshot():
-            reads.append(True)
-            if len(reads) == 1:
+            if refused and not reads:
+                reads.append(True)
                 raise self.build_error('store_busy')
             return original()
         rows = []
         with patch.object(review_series, '_read_plan', side_effect=[(self.snapshot, self.plan), (self.snapshot, done)]), \
                 patch.object(self.case.store, 'snapshot', side_effect=snapshot), \
-                patch.dict(cli.OPERATIONS, {'review-run': lambda *a, **k: self.raise_error()}):
+                patch('research_harness.review_stop.read_driver_boundary', return_value=None), \
+                patch.dict(cli.OPERATIONS, {'review-run': refuse}):
             result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
         self.assertEqual(result, 0)
         self.assertEqual(rows[0]['error']['code'], INJECTED_CODE)
@@ -951,6 +1011,7 @@ class SeriesEndingTests(unittest.TestCase):
         snapshot = copy.deepcopy(self.snapshot)
         snapshot['records']['review_assignment']['bar-first']['capacity_plan_kind'] = 'synthetic'
         resume = dict(self.plan, state='resume')
+        resume.pop('capacity_forecast', None)  # This test isolates the plan/reading diagnostic, not session forecasting.
         done = dict(self.plan, state='done', details={})
         rows = []
         with patch.object(review_series, '_read_plan', side_effect=[(snapshot, resume), (self.snapshot, done)]), \
@@ -968,6 +1029,7 @@ class SeriesEndingTests(unittest.TestCase):
         with patch.object(review_series, '_read_plan', side_effect=[(snapshot, resume), (self.snapshot, done)]), \
                 patch.dict(cli.OPERATIONS, {'review-run': lambda *a, **k: self.raise_error('review_invocation_pending')}), \
                 patch.object(review_series.time, 'sleep', return_value=None), \
+                patch('research_harness.review_route_capacity.describe_session_forecast', return_value=None), \
                 patch('research_harness.review_provider_usage.describe_usage', return_value={}), \
                 patch('research_harness.review_route_capacity.describe_assignment_warning', return_value=None), \
                 patch('research_harness.review_protocol._read_json', side_effect=TypeError('Synthetic reading failure.')):

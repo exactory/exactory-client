@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from ci import series_code_reach as reach
@@ -336,25 +335,29 @@ class ExcludedCodeRecorderTests(unittest.TestCase):
         report = json.loads(FIXTURE.read_text())
         self.assertIn('contract_changed', report['emitted'])
         self.assertNotIn('contract_changed', reach.read_command_codes(report, 'run_series'))
-        def plan(*args):
-            return dict(state='run', command='review-run', payload={'assignment_id': 'head'},
-                        head_id='head', chain='session', progress={})
+        def plan(records, artifacts, assignment_id):
+            return dict(state='run', command='review-run', payload={'assignment_id': assignment_id},
+                        head_id=assignment_id, chain='session', progress={})
         def refuse(store, payload, **identity):
             raise ResearchError('contract_changed', 'The external controller contract changed.')
-        with tempfile.TemporaryDirectory() as scratch:
-            store = SimpleNamespace(root=Path(scratch), snapshot=lambda: dict(records={}, revision=0))
-            with patch.object(review_continuation, 'plan_next', plan), patch.object(
-                    review_series, 'plan_next', plan), patch.dict(cli.OPERATIONS, {'review-run': refuse}):
-                with self.assertRaisesRegex(AssertionError, 'constructed unreachable code.*contract_changed'):
-                    with record_reachable_errors('run_series'):
-                        review_series.run_series(store, 'head', emit=lambda row: None)
-            def plan_terminal(*args):
-                return dict(state='stop', code='contract_changed', head_id='head', details={})
-            with patch.object(review_continuation, 'plan_next', plan_terminal), patch.object(
-                    review_series, 'plan_next', plan_terminal):
-                with self.assertRaisesRegex(AssertionError, 'returned an unlisted code.*contract_changed'):
-                    with record_reachable_errors('run_series'):
-                        review_series.run_series(store, 'head', emit=lambda row: None)
+        import test_review_continuation as continuation_fixtures
+        fixture = continuation_fixtures.ContinuationTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        store = fixture.case.store
+        head = fixture.assignment['id']
+        with patch.object(review_continuation, 'plan_next', plan), patch.object(
+                review_series, 'plan_next', plan), patch.dict(cli.OPERATIONS, {'review-run': refuse}):
+            with self.assertRaisesRegex(AssertionError, 'constructed unreachable code.*contract_changed'):
+                with record_reachable_errors('run_series'):
+                    review_series.run_series(store, head, emit=lambda row: None)
+        def plan_terminal(*args):
+            return dict(state='stop', code='contract_changed', head_id=head, details={})
+        with patch.object(review_continuation, 'plan_next', plan_terminal), patch.object(
+                review_series, 'plan_next', plan_terminal):
+            with self.assertRaisesRegex(AssertionError, 'returned an unlisted code.*contract_changed'):
+                with record_reachable_errors('run_series'):
+                    review_series.run_series(store, head, emit=lambda row: None)
 
 
 class LiteralRefusalTests(unittest.TestCase):

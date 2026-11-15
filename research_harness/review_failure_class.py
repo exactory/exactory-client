@@ -440,7 +440,8 @@ def plan_output_replacement(records, artifacts, assignment, *, allow_single=True
     history = protocol.read_history(staged, assignment)
     prepare = repair.prepare_packet if is_repair else parts.prepare_packet
     try:
-        options = dict(base_prompt_parameters=parameters, slot_id=slot_id)
+        options = dict(base_prompt_parameters=parameters, slot_id=slot_id,
+                       refusal_notice=packet.get('output_refusal'))
         if outcome == 'input_over_limit':
             options['capacity_replacement'] = dict(input_over_limit=True,
                 unit_characters=packet[parts.KEY]['unit_characters'] if is_read else parts.READ_CHARACTERS)
@@ -486,7 +487,7 @@ def plan_output_replacement(records, artifacts, assignment, *, allow_single=True
     replacement = dict(state='replace', code=OUTCOME_CODES['output_over_cap'],
                 handler='context_repair' if is_repair else 'parts_v2_read',
                 unit_characters=header['unit_characters'],
-                context=copy.deepcopy(value['context']), preflight=preflight)
+                context=dict(capacity_replacement=assignment['id']), preflight=preflight)
     if include_packet:
         replacement.update(packet=candidate, prompt=turn_prompt)
     return replacement
