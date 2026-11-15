@@ -6,6 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from capacity_evidence_fixtures import build_capacity_runtime
 from research_harness import review_protocol as protocol, review_transport as transport
 from research_harness import review_visual_route as bridge
 from research_harness.errors import ResearchError
@@ -19,8 +20,10 @@ class VisualAssignmentIntegrationTests(unittest.TestCase):
         self.addCleanup(self.case.doCleanups)
         self.case.setUp()
         self.records = self.case.records
+        route = self.records['review_route']['visual']
+        route['runtime'] = build_capacity_runtime(route['adapter'], fixture='visual-bridge-test')
         from visual_capacity_fixtures import install_bounded_visual_backend
-        install_bounded_visual_backend(self, [self.records['review_route']['visual']])
+        install_bounded_visual_backend(self, [route])
         self.records['workspace'] = {'problem': {'orchestration': 'problem_creation', 'authors': ['Author']}}
         self.case.prior['session_id'] = 'original-session'
         self.value = {'id': 'visual-result', 'route_id': 'visual', 'dossier_id': None, 'role': 'result',
