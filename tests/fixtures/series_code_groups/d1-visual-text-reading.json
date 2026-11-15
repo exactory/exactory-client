@@ -1,0 +1,14 @@
+{
+  "visual_text_reading": {
+    "members": {
+      "review_visual_text_route_required": {
+        "research_harness/openness_reading_v7.py:describe_visual_text_stop#1": [
+          "route"
+        ],
+        "research_harness/openness_reading_v7.py:require_text_reading_route#1": [
+          "route"
+        ]
+      }
+    }
+  }
+}

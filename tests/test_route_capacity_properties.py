@@ -71,6 +71,12 @@ class ReadingCapacityPropertyTests(unittest.TestCase):
         with patch.object(v7, 'build_inventory', return_value=built):
             admission = v7.check_v7_admission({}, artifacts, route, native)
         if admission['state'] == 'stop':
+            if admission.get('code') == v7.VISUAL_TEXT_ROUTE_CODE:
+                self.assertEqual(route['adapter'], 'codex_cli_visual_v1')
+                self.assertEqual(admission['reason'], 'text_route_required')
+                following = reading_fixtures.execute_visual_text_answer(self, route, admission['details'], built=built)
+                self.assertEqual(following['capacity_plan_kind'], 'reading')
+                return admission
             self.assertIn(admission['reason'], ('below_floor', 'final_needs_pages'))
             if admission['reason'] == 'final_needs_pages':
                 declared = capacity_guard.read_matrix()['reading_property_ends']
@@ -270,8 +276,9 @@ class ReadingCapacityCommandTests(unittest.TestCase):
                         return reading_fixtures.build_adapter_response(selected, request, dict(
                             allowed_control=supplied['allowed_control'], evidence_control=supplied['evidence_control'],
                             excluded_controls=[]))
-                    with patch.object(protocol.transport, 'send_request', side_effect=respond):
-                        case.mutate(protocol.probe_route, dict(id='property-probe', route_id=route['id']), credential='fixture')
+                    if adapter != visual.ADAPTER:
+                        with patch.object(protocol.transport, 'send_request', side_effect=respond):
+                            case.mutate(protocol.probe_route, dict(id='property-probe', route_id=route['id']), credential='fixture')
                     def invoke(identifier, output, attempt=None):
                         with patch.object(protocol.transport, 'send_request', side_effect=lambda selected, request,
                                 credential: reading_fixtures.build_adapter_response(selected, request, output)):
@@ -295,6 +302,13 @@ class ReadingCapacityCommandTests(unittest.TestCase):
                         try:
                             receipt = case.assign('turn-1', native)
                         except ResearchError as error:
+                            if adapter == visual.ADAPTER:
+                                self.assertEqual(error.code, v7.VISUAL_TEXT_ROUTE_CODE)
+                                self.assertNotIn('turn-1', case.store.snapshot()['records'].get('review_assignment', {}))
+                                reading_fixtures.execute_visual_text_answer(self, route, error.details, case=case)
+                                print('READING_COMMAND_END ' + json.dumps(dict(adapter=adapter, category=category,
+                                    end=error.code)), flush=True)
+                                continue
                             self.assertEqual(error.code, 'review_route_capacity_below_floor')
                             self.assertNotIn('turn-1', case.store.snapshot()['records'].get('review_assignment', {}))
                             print('READING_COMMAND_END ' + json.dumps(dict(adapter=adapter, category=category,

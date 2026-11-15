@@ -799,7 +799,8 @@ def plan_after_failure(records, artifacts, assignment_id):
                 outcome != 'timeout' or used >= 2):
             allowance = calculate_over_cap_allowance(recovery['details']['at_or_over_limit_share'])
             if recovery['kind'] == 'replace' and (position['failed_attempts'] >= TURN_FAILURE_LIMIT
-                    or outcome == 'output_over_cap' and len(position['over_cap_by_level']) >= allowance):
+                    or outcome == 'output_over_cap' and len(position['over_cap_by_level']) >= allowance
+                    and recovery['details']['handler'] not in ('reading_v7', 'final_v7')):
                 from .review_route_capacity import describe_capacity_decision
                 recovery = describe_capacity_decision(records, artifacts, assignment, outcome,
                     dict(recovery['details'], over_cap_allowance=allowance,

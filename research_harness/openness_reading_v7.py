@@ -26,6 +26,12 @@ from . import review_route_capacity as capacity
 from .review_search_delivery import plan_search_delivery
 
 PROTOCOL = 'exactory-openness-reading-v7'
+VISUAL_TEXT_ROUTE_CODE = 'review_visual_text_route_required'
+VISUAL_TEXT_ROUTE_MESSAGE = ('Protocol v7 delivers text units. Register and probe a text route of the same model, '
+                             'then export, check and assign the reading there. Text turns on the visual transport '
+                             'ship with the transport release 0.93.0.')
+VISUAL_TEXT_ROUTE_QUESTION = 'Which text route of this model should read the packet?'
+VISUAL_TEXT_ROUTE_ANSWER = 'Register and probe the text route of the same model.'
 LABEL_CHARACTERS = 120
 SELECTION_MISMATCH_MESSAGE = ('An item of this selection does not match the authenticated turn that it comes from, or '
                               'the inventory of the new chain does not hold its unit. Select only ranges, searches, '
@@ -561,6 +567,50 @@ def check_v7_admission(records, artifacts, route, native):
     return _check_v7_admission(records, artifacts, route, native, include_largest=True)
 
 
+def describe_visual_text_stop(records, route, assignment=None):
+    """Keep the visual runtime unchanged and give the complete text-route answer."""
+    from .review_continuation import _find_unused_id
+    from .review_plan_steps import describe_step
+    from .stop_classes import describe_terminal
+    assignment = assignment or dict(id='reading-text-first', role='native_math', dossier_id=None,
+        reviewer_id=None, author_id=None, context={})
+    value = dict(assignment, route_id=route.get('id', 'visual-route'))
+    route_id = _find_unused_id(records, value['route_id'] + '-text')
+    probe_id = _find_unused_id(records, route_id + '-probe')
+    first_id = _find_unused_id(records, assignment['id'], maximum=reading.RESERVED_IDENTIFIER_CHARACTERS)
+    route_step = describe_step(records, None, value, 7)
+    route_step.pop('then')
+    adapter = 'claude_cli_v1' if route['model'].startswith('claude-') else 'codex_cli_v1'
+    route_step['payload'] = dict(id=route_id, adapter=adapter, model=route['model'],
+        endpoint='claude://local' if adapter == 'claude_cli_v1' else 'codex://local',
+        configuration=copy.deepcopy(route['configuration']))
+    route_step['chooses'] = []
+    probe = dict(command='review-probe', payload=dict(id=probe_id, route_id=route_id),
+                 chooses=[], prerequisites=[])
+    if not capacity.describe_route_capacity(route)['listed']:
+        probe['chooses'] = ['capacity.input_tokens']
+        probe['prerequisites'] = [dict(condition='Authorize a capacity probe large enough for the first reading assignment.')]
+    export = describe_step(records, None, value, 4)
+    assign = export.pop('then')[0]
+    export['payload'].update(assignment_id=first_id, reviewer_id=assignment['reviewer_id'])
+    export['chooses'] = ['minimum'] + ([] if assignment['reviewer_id'] else ['reviewer_id'])
+    assign['payload'].update(id=first_id, route_id=route_id, reviewer_id=assignment['reviewer_id'])
+    assign['chooses'] = ['context.native_packet']
+    assign['chooses'].extend(key for key in ('reviewer_id', 'author_id') if not assign['payload'].get(key))
+    terminal = describe_terminal(VISUAL_TEXT_ROUTE_CODE)
+    terminal['details'].update(message=VISUAL_TEXT_ROUTE_MESSAGE, required_unit='codex-transport-release')
+    terminal['details']['decision']['then'][0]['steps'] = [route_step, probe, export,
+        dict(copy.deepcopy(assign), check=True), assign]
+    return terminal
+
+
+def require_text_reading_route(records, route, assignment):
+    """Refuse visual v7 admission before constructing or sending a request."""
+    if route['adapter'] == 'codex_cli_visual_v1':
+        stop = describe_visual_text_stop(records, route, assignment)
+        raise ResearchError(VISUAL_TEXT_ROUTE_CODE, VISUAL_TEXT_ROUTE_MESSAGE, stop['details'])
+
+
 def _find_largest_one_request_targets(records, artifacts, route, native):
     minimum = native['scientific_context']['openness_minimum']
     maximum = min(1 + len(minimum['neighbours']), max(capacity.describe_material_levels('final')) // (
@@ -577,6 +627,10 @@ def _find_largest_one_request_targets(records, artifacts, route, native):
 
 
 def _check_v7_admission(records, artifacts, route, native, *, include_largest):
+    if route['adapter'] == 'codex_cli_visual_v1':
+        stop = describe_visual_text_stop(records, route)
+        return dict(state='stop', protocol=PROTOCOL, reason='text_route_required',
+                    code=VISUAL_TEXT_ROUTE_CODE, details=stop['details'])
     overlay = _PlanningArtifacts(artifacts)
     if has_binary_native_evidence(artifacts, native):
         return dict(state='stop', protocol=PROTOCOL, reason='binary_required_evidence',

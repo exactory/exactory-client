@@ -3636,6 +3636,13 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             raise ResearchError('review_complete_source_route', 'Complete visible source input retains the existing Codex local route')
         staged_repair = repair is not None and repair['predecessor'].get('staged_review') is not None
         visual_repair = route['adapter'] == 'codex_cli_visual_v1' and repair is not None and not staged_repair
+        if (route['adapter'] == 'codex_cli_visual_v1' and value['role'] == 'native_math'
+                and openness_reading.PROTOCOL_V7 in openness_reading.NEW_PROBLEM_CHAIN_PROTOCOLS):
+            from .native_review import load_packet
+            if openness_reading.is_openness_packet(load_packet(
+                    artifacts, value['context']['native_packet'], value['reviewer_id'])):
+                from .openness_reading_v7 import require_text_reading_route
+                require_text_reading_route(records, route, value)
         if route['adapter'] == 'codex_cli_visual_v1':
             if visual_repair:
                 from .review_visual_context_repair import eligible

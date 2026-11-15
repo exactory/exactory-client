@@ -465,7 +465,7 @@ def _plan_openness_freshness(records, artifacts, assignment, packet=None):
         return None
     if packet is None:
         packet = protocol._read_json(artifacts, assignment['packet'])
-        if openness_reading.find_protocol(packet) != openness_reading.PROTOCOL_V6:
+        if openness_reading.find_protocol(packet) not in (openness_reading.PROTOCOL_V6, openness_reading.PROTOCOL_V7):
             return None
         packet = protocol._read_json(artifacts, assignment['context']['native_packet'])
     from .problem_openness import assess_packet_freshness, OUTDATED_PACKET_MESSAGE

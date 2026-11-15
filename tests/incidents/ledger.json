@@ -7065,7 +7065,8 @@
       "fixed_in": "open",
       "test_kind": "real_shape",
       "tests": [
-        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_output_cap_at_every_level_reaches_the_floor_before_decision"
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_output_cap_at_every_level_reaches_the_floor_before_decision",
+        "test_capacity_guard_fixes.CapacityGuardFixTests.test_output_caps_execute_all_lower_levels_on_the_same_route"
       ]
     },
     {
@@ -7073,12 +7074,16 @@
       "record": "20261113110022-every-open-record-and-review-capacity",
       "class": "reading-route-admission",
       "summary": "A text-only problem reading chain on codex_cli_visual_v1 is rejected as a native visual problem-result assignment before v7 admission. The visual request builder also raises review_visual_input_mismatch for admitted scaled reading packets.",
-      "expected": "Every registered adapter reaches a recorded reading finding or an accepted capacity stop; the visual adapter must run the v7 admission instead of rejecting this role with review_visual_route_mismatch.",
+      "expected": "On 0.91.0 a visual v7 reading stops before any request and its declared decision registers and probes a text route of the same model, then exports, checks and records a first assignment there. Native visual text turns belong to the 0.93.0 transport release.",
       "fixed_in": "open",
       "test_kind": "real_shape",
       "tests": [
         "test_route_capacity_properties.ReadingCapacityCommandTests.test_every_adapter_and_profile_class_executes_a_finding_or_declared_stop",
-        "test_route_capacity_properties.ReadingCapacityPropertyTests.test_v7_every_adapter_and_profile_class_delivers_scaled_bodies"
+        "test_route_capacity_properties.ReadingCapacityPropertyTests.test_v7_every_adapter_and_profile_class_delivers_scaled_bodies",
+        "test_capacity_guard_fixes.CapacityGuardFixTests.test_text_v7_exception_never_removes_visual_page_requirements",
+        "test_capacity_guard_fixes.CapacityGuardFixTests.test_visual_v7_admission_declares_a_text_route_before_inventory_or_request",
+        "test_capacity_guard_fixes.CapacityGuardFixTests.test_visual_v7_command_stops_before_requests_and_executes_the_text_answer",
+        "test_capacity_guard_fixes.CapacityGuardFixTests.test_visual_runtime_identity_keeps_the_091_file_bytes"
       ]
     },
     {
@@ -7102,7 +7107,8 @@
       "fixed_in": "open",
       "test_kind": "real_shape",
       "tests": [
-        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_new_search_and_twenty_percent_denser_measurement_export_then_record"
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_new_search_and_twenty_percent_denser_measurement_export_then_record",
+        "test_capacity_guard_fixes.CapacityGuardFixTests.test_new_search_hands_off_before_the_first_v7_request"
       ]
     }
   ]

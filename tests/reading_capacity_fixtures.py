@@ -213,6 +213,67 @@ def assert_turn_fits(case, route, packet, plan, kind):
     return request
 
 
+def execute_visual_text_answer(test, route, details, *, case=None, built=None):
+    """Execute the declared visual-reading answer through a checked text assignment."""
+    import copy
+    from contextlib import nullcontext
+    from unittest.mock import patch
+    from research_harness import review_protocol as protocol
+    from research_harness.check_mode import check_mutation
+    from test_route_capacity_properties import ReadingCapacityCommandTests
+    if case is None:
+        driver = ReadingCapacityCommandTests()
+        test.addCleanup(driver.doCleanups)
+        case = driver.make_case()
+    steps = details['decision']['then'][0]['steps']
+    test.assertEqual([step['command'] for step in steps],
+        ['review-route', 'review-probe', 'export', 'review-assignment', 'review-assignment'])
+    test.assertTrue(steps[3]['check'])
+    test.assertEqual(steps[3]['payload'], steps[4]['payload'])
+    text_route = copy.deepcopy(steps[0]['payload'])
+    test.assertNotEqual(text_route['adapter'], 'codex_cli_visual_v1')
+    test.assertEqual(text_route['model'], route['model'])
+    test.assertEqual(text_route['configuration'], route['configuration'])
+    recorded = case.mutate(protocol.record_route, text_route)['result']
+    probe = copy.deepcopy(steps[1]['payload'])
+    if 'capacity.input_tokens' in steps[1]['chooses']:
+        probe['capacity'] = dict(input_tokens=700000)
+    def respond(selected, request, credential):
+        controls = case.store.snapshot()['records']['review_probe_invocation'][probe['id']]['positive_controls']
+        response = build_adapter_response(selected, request, dict(allowed_control=controls['allowed_control'],
+            evidence_control=controls['evidence_control'], excluded_controls=[]))
+        if 'capacity' in probe:
+            response['usage']['input_tokens'] = probe['capacity']['input_tokens']
+        return response
+    with patch.object(transport, 'send_request', side_effect=respond):
+        case.mutate(protocol.probe_route, probe, credential='fixture')
+    test.assertEqual(protocol.route_state(case.store.snapshot()['records'], case.artifacts,
+        text_route['id'])['context_status'], 'verified_for_route')
+    assignment = copy.deepcopy(steps[4]['payload'])
+    assignment['reviewer_id'] = assignment.get('reviewer_id') or 'openness-reviewer'
+    assignment['author_id'] = assignment.get('author_id') or 'problem-author'
+    native = case.export(name='text-export-' + text_route['id'], assignment_id=assignment['id'])
+    test.assertEqual(steps[2]['payload']['assignment_id'], assignment['id'])
+    assignment['context'] = dict(native_packet=native)
+    if built is not None:
+        for body in built['bodies'].values():
+            case.artifacts.put(body, 'text/plain; charset=utf-8')
+    with patch.object(reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (v7.PROTOCOL, reading.PROTOCOL_V6)), \
+            (patch.object(v7, 'build_inventory', return_value=built) if built is not None else nullcontext()):
+        checked = check_mutation(case.store, protocol.record_assignment, assignment,
+            expected_revision=case.store.revision, request_id='text-check-' + text_route['id'],
+            bounded_payload=assignment)
+        result = case.mutate(protocol.record_assignment, assignment)['result']
+    test.assertEqual(checked['protocol_selection'], result['protocol_selection'])
+    test.assertEqual(result['route_id'], recorded['id'])
+    test.assertEqual(case.store.snapshot()['records']['review_assignment'][assignment['id']]['route_id'], recorded['id'])
+    if built is not None:
+        stored = json.loads(case.artifacts.read(result['reading_chain']['inventory']))
+        test.assertTrue({row['sha256'] for row in built['inventory']['material']} <=
+                        {row['sha256'] for row in stored['material']})
+    return result
+
+
 def build_scaled_reading_deliveries(quantity, size):
     """Return distinct canonical reading emissions for a large upstream inventory."""
     from unittest.mock import patch

@@ -731,6 +731,8 @@ def choose_chain_protocol(records, artifacts, route, native, *, packet=None, ass
         if protocol == PROTOCOL_V7:
             result = v7.check_v7_admission(records, artifacts, route, native)
         elif protocol == PROTOCOL_V6:
+            if transport.local_input_limit(route) is None:
+                continue
             rows = list_reading_rows(records, artifacts, native, review=assignment)
             delivery = _plan_search_delivery(artifacts, native)
             for content in delivery['bodies'].values():

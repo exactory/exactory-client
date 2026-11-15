@@ -6,6 +6,7 @@ Unknown codes retain the decision class used by stored records.
 
 import copy
 from .openness_reading_v7 import ADMISSION_QUESTION, ADMISSION_SMALLER_ANSWER, ADMISSION_ROUTE_ANSWER
+from .openness_reading_v7 import VISUAL_TEXT_ROUTE_CODE, VISUAL_TEXT_ROUTE_QUESTION, VISUAL_TEXT_ROUTE_ANSWER
 
 
 _STORED_CONTENT_CODES_REVIEW_A = (
@@ -748,8 +749,17 @@ STOP_GROUPS['named_cause'] = dict(id='named_cause', **{'class': 'decision'}, own
         **STOP_GROUPS['stored_state']['conditions']))
 
 
+STOP_GROUPS['visual_text_reading'] = dict(id='visual_text_reading', **{'class': 'decision'}, owner='D1',
+    next=dict(kind='decision', owner_decides=VISUAL_TEXT_ROUTE_QUESTION,
+        then=[dict(answer=VISUAL_TEXT_ROUTE_ANSWER, steps=[
+            dict(command='review-route'), dict(command='review-probe'), dict(command='export'),
+            dict(command='review-assignment', check=True), dict(command='review-assignment')])]),
+    conditions=dict(route='A v7 problem reading delivers text units on a route whose native contract requires page images.'))
+
+
 # Each review lane adds its own (group, codes) tuple here with its evidence file.
 for _group, _codes in (
+        ('visual_text_reading', (VISUAL_TEXT_ROUTE_CODE,)),
         ('named_cause', _NAMED_CAUSE_CODES_ENTRY),
         ('named_cause', _NAMED_CAUSE_CODES_RECORD),
         ('named_cause', _NAMED_CAUSE_CODES_CONDITIONS),
