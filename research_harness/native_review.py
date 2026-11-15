@@ -230,7 +230,8 @@ UNREAD_SET_REFERENCE_MESSAGE = (
     'A finding over unread ranges needs a ground of the kind reviewer_gap whose refs holds {ref:"x1"}, the citation '
     'of the complete set of unread ranges. Add that ground.')
 UNREAD_UNIT_REFERENCE_MESSAGE = (
-    'A ground of this finding cites a unit by a u handle that is not the unit of a row of the unread set. In a '
+    'A ground of this finding cites a unit that does not match a row of the unread set: its u handle is not the unit '
+    'of a row, or its artifact is not the artifact of that row. In a '
     'finding over unread ranges a u handle cites an unread unit: take it from the member unit of a row of '
     'reading_final.unread or of a page of the list unread, or remove the citation.')
 

@@ -893,7 +893,7 @@ The handoffs:
 | `native_review_attestation_required` | `search review-packet` (openness chains: `export`, kind `problem-openness`) | A native first turn needs a replacement, which needs a new attestation. |
 | `verification_verdict_body_required` | `bind-verdict` | A verification review has its output; recording needs the verdict body. |
 | `review_recording_required` | `manuscript-review`, `export` (standalone, kind `outputs`) or `review` | Another role's output needs its recording step. |
-| `review_slot_exhausted`, `review_refusal_notice_metadata_too_large` | For `review_slot_exhausted` only, `review-output-correction` when that operation admits the head and its request fits the route (the metadata correction of a problem result reassessment, below); the position is then not exhausted, and replacements can remain. Otherwise the step of the role of the head: `review-assignment` of a new eligible reviewer for a `bar` and for an `adjudicator`; `review-assignment` of a context repair with the member `exhaustion` for a `slate` and for a `result`; `export`, kind `problem-openness`, for an openness chain (a new chain; since 0.91.0 the handoff states the admission of that chain under `details.successor`, and a stop with a decision takes its place when no protocol admits the new packet); `search review-packet` for another native mathematical review (a new attestation); `review-route` and then `review-assignment` for a `verification`, a `manuscript` and a `standalone` review. | An eligible problem result reassessment takes its one metadata correction, or the turn position is exhausted (A position whose replacements are spent, below). Follow `details.step`. |
+| `review_slot_exhausted`, `review_refusal_notice_metadata_too_large` | For `review_slot_exhausted` only, `review-output-correction` when that operation admits the head and its request fits the route (the metadata correction of a problem result reassessment, below); the position is then not exhausted, and replacements can remain. Otherwise the step of the role of the head: `review-assignment` of a new eligible reviewer for a `bar` and for an `adjudicator`; `review-assignment` of a context repair with the member `exhaustion` for a `slate` and for a `result`; `export`, kind `problem-openness`, for an openness chain (a new chain; since 0.91.0, for a chain under v5, v6 or v7, the handoff states the admission of that chain under `details.successor`, and a stop with a decision takes its place when no protocol admits the new packet); `search review-packet` for another native mathematical review (a new attestation); `review-route` and then `review-assignment` for a `verification`, a `manuscript` and a `standalone` review. | An eligible problem result reassessment takes its one metadata correction, or the turn position is exhausted (A position whose replacements are spent, below). Follow `details.step`. |
 | `review_resampling_forbidden` | `review-assignment` | An initial bar, slate or result review ended without an output; the same reviewer identity is not sampled again, so a new eligible reviewer is needed. |
 | `review_worker_reconciliation_required` | `review-attempt` | A pending invocation has no pool membership (a call of an earlier version). |
 | `review_context_*`, `review_route_retired` | `review-assignment` | A context repair is needed. |
@@ -1055,7 +1055,7 @@ starts a new sequence.
 | `usage_limit` | an answer that starts "You've hit your ... limit" or "You've reached your ... limit", or the Codex diagnostic `usage_limit_exceeded` | `wait` until the stated reset (Claude: "resets <Mon> <d> at <h>[:<mm>]am/pm (<zone>)"; Codex: "try again at <Mon> <d>th, <yyyy> <h>:<mm> AM/PM.", local time), else the provider schedule | `review_provider_unavailable` |
 | `model_at_capacity` | the Codex diagnostic `server_overloaded` | the provider schedule | `review_provider_unavailable` |
 | `provider_unavailable` | an answer that starts "API Error:" (other than the two rows below), or the error code `review_provider_failure` | the provider schedule | `review_provider_unavailable` |
-| `provider_refused` | the Claude Code CLI's notice that the model's safeguards stopped the answer (a safeguards notice, below), or an "API Error:" answer that names safeguards | one more call after the first and after the second of this outcome; the third ends the failure sequence: the plan waits until 30 minutes after the observation of the last attempt and then starts the next permitted sequence, and it stops with `review_turn_failures_exhausted` when no sequence remains. Since 0.90.0, from the third refusal the plan is a replacement at a smaller task where the turn has an admissible one (the smaller task after a capacity event, below). Since 0.91.0 a reading turn of a chain under `exactory-openness-reading-v7` that is refused in every permitted sequence, the last at the lowest reading level, is followed by the final over unread ranges ([The reading protocol v7](#problem-creation)) | `review_sequence_wait` while a further sequence remains, then `review_turn_failures_exhausted` |
+| `provider_refused` | the Claude Code CLI's notice that the model's safeguards stopped the answer (a safeguards notice, below), or an "API Error:" answer that names safeguards | one more call after the first and after the second of this outcome; the third ends the failure sequence: the plan waits until 30 minutes after the observation of the last attempt and then starts the next permitted sequence, and it stops with `review_turn_failures_exhausted` when no sequence remains. Since 0.90.0, from the third refusal the plan is a replacement at a smaller task where the turn has an admissible one (the smaller task after a capacity event, below). Since 0.91.0, when the permitted failure sequences of a reading turn of a chain under `exactory-openness-reading-v7` are used up, its last failure is this outcome and the turn is at the lowest reading level, the final over unread ranges follows ([The reading protocol v7](#problem-creation)) | `review_sequence_wait` while a further sequence remains, then `review_turn_failures_exhausted` |
 | `output_over_cap` | the adaptive handlers' own predicates, output tokens at or over the route cap, or an "API Error:" answer that states an exceeded output token maximum | an admissible replacement while the recovery allowance remains: a parts v2 read turn at half its unit characters or a context repair into parts v2, each of which must measure smaller than the request that failed, and since 0.90.0 an eligible single review as the first read of a parts v2 series, with a read allowance of at most half the characters of the inventory (its whole request can measure larger); otherwise the retry and stop rules of the smaller task after a capacity event, below | `review_output_over_cap`, with `handler_error` naming the handler's refusal where the handler gives one; when the recovery of a parts v2 read returns `review_parts_budget_exhausted`, the plan stops at once with that code and its measurements ([Reviews in fresh parts](#reviews-in-fresh-parts)) |
 | `execution_incomplete` | an interrupted invocation, an incomplete or injected turn, or an incomplete response with text | one more call; the second of this outcome stops | `review_execution_incomplete` |
 | `answer_malformed` | a completed response whose answer is not one object and is not recovered (the answer recovery below) | one more call; the second of this outcome stops | `review_answer_malformed` |
@@ -1138,8 +1138,10 @@ reviews](#staged-problem-reviews)). `plan_next` runs a turn of an openness
 reading chain under an earlier protocol once more after its first refused
 output, and then the position is exhausted. Every other turn without a
 replacement is exhausted after its first refused output. Since 0.91.0 the
-exhausted position of a problem reading chain gives the handoff `export`
-through the admission of a successor chain ([The reading protocol
+exhausted position of a problem reading chain under v5, v6 or v7 gives the
+handoff `export` through the admission of a successor chain, or the decision
+of that admission when no protocol admits one; a chain under an earlier
+protocol keeps the handoff of its role ([The reading protocol
 v7](#problem-creation)).
 
 The packet of the replacement is the task packet of the refused turn with the
@@ -1300,8 +1302,9 @@ single review limits the read allowance to at most half the characters of
 the inventory, and its whole request can measure larger than the single
 request, because a read turn carries more metadata. Since 0.91.0 a
 reading turn of a chain under `exactory-openness-reading-v7` is assigned
-again at the next lower level of its stored plan, also after a response over
-the limit of the route (`response_over_limit`), and a final turn of such a
+again at a lower level of its stored plan (the next one, or a lower one when
+a denser measured ratio leaves less room), also after a response over the
+limit of the route (`response_over_limit`), and a final turn of such a
 chain that waits for a part of an argument is assigned again with half its
 answer bound ([The reading protocol v7](#problem-creation)). Every other kind
 of turn has no smaller task in this release: a reading turn or a final turn
@@ -5001,8 +5004,8 @@ single turn.
 
 A stored problem reading chain continues under its own protocol: v4 stays
 v4, v5 stays v5, and v6 stays v6. Since 0.91.0 the protocol of a new chain is
-chosen by admission, in the order `exactory-openness-reading-v7`, then
-`exactory-openness-reading-v6` ("The reading protocol v7" below). v6 keeps the
+chosen by admission, in the order of the release ("The reading protocol v7"
+below). v6 keeps the
 search delivery, the units, the withholding and the verification that this
 section describes for v5 and adds what "The reading protocol v6" states below;
 v7 has its own packets, answers and verification. Every bound
@@ -5389,10 +5392,13 @@ The reading protocol v6. Since 0.90.0 a new problem openness review runs
 under `exactory-openness-reading-v6` when it is a chain (prompt templates
 `exactory-openness-reading-v6/reading` and `exactory-openness-reading-v6/final`)
 and under the prompt template `exactory-review-v7/native_math` when it stays
-one turn. Since 0.91.0 a new review is always a chain, and v6 is the second
-protocol of the admission order (The reading protocol v7, below). Both need a
-packet with a minimum of version 2, `minimum_gaps` and `audit_forecast`. The
-first assignment over another problem openness packet,
+one turn. Since 0.91.0 the protocol of a new chain is chosen by admission in
+the order of the release. Where that order holds
+`exactory-openness-reading-v7`, v6 is its second protocol, and a new review on
+a route with a local input limit is a chain also when it fits one input (The
+reading protocol v7, below). Both need a packet with a minimum of version 2,
+`minimum_gaps` and `audit_forecast`. The first assignment over another problem
+openness packet,
 for example one that an earlier release exported, is refused with
 `openness_packet_outdated` (`handoff: "export"` in the details): export the
 packet again. v6 keeps the turns, the search delivery, the withholding, the
@@ -5550,17 +5556,26 @@ chain carries `capacity_forecast` and `capacity_warning` as well; when they
 cannot be computed, the line keeps its state and reports `capacity_forecast:
 {status: "unavailable", reason}`.
 
-The reading protocol v7. Since 0.91.0 a new problem openness review is a
-reading chain whose protocol is chosen by admission. `review-assignment` runs
-the admission of each protocol in one order, `exactory-openness-reading-v7`
-and then `exactory-openness-reading-v6`, and it starts the chain under the
-first protocol that accepts the packet on the route. A review that stays one
-turn is no longer started. The receipt, also with `--check`, carries
-`protocol_selection: {protocol, admissions, message}`; `admissions` holds the
-result of each admission that ran, in order, and `status` reports the order
-under `new_problem_chain_protocols` once a record holds such a chain. A
-stored chain keeps its protocol. A chain under v6 follows "The reading
-protocol v6" above without a change.
+The reading protocol v7. Since 0.91.0 `review-assignment` chooses the protocol
+of a new problem reading chain by admission: it runs the admission of each
+protocol in the order of the release and starts the chain under the first
+protocol that accepts the packet on the route. The order is
+`exactory-openness-reading-v6` alone until a release admits
+`exactory-openness-reading-v7` for new chains, and from then on
+`exactory-openness-reading-v7` followed by `exactory-openness-reading-v6`.
+`status` reports the order under `new_problem_chain_protocols` once a record
+holds such a chain. Where the order holds v7, a new problem openness review on
+a route with a local input limit (`claude_cli_v1`, `codex_cli_v1` and
+`codex_cli_framed_v1`) is a reading chain also when its packet fits one input.
+Where the order holds v6 alone, a review whose units have at most 120,000
+characters together and whose packet fits one input stays one turn, and a
+larger one starts a chain under v6 when the admission of v6 accepts it. On a
+route without a local input limit (`openai_responses_v1` and
+`codex_cli_visual_v1`) the review stays one turn in both cases. The receipt of
+a chain, also with `--check`, carries `protocol_selection: {protocol,
+admissions, message}`; `admissions` holds the result of each admission that
+ran, in order. A stored chain keeps its protocol. A chain under v6 follows
+"The reading protocol v6" above without a change.
 
 - The admission of v7. Without writing a record, the harness builds the
   inventory of the units, measures the frame of a reading turn and of a final
@@ -5572,7 +5587,10 @@ protocol v6" above without a change.
   characters to tokens. The ratio is the denser of the ratio of the route
   class and the ratio that an earlier chain over the same statement and the
   same route identity shows, in a stored plan or in an attempt that sent its
-  request once. v7 accepts a packet when a reading turn fits a level of the
+  request once (a measured ratio is taken with the margin of the policy). On
+  a route that measures bytes, or when more than 5% of the characters of the
+  material are outside ASCII, the ratio is at most 0.25 characters for each
+  token. v7 accepts a packet when a reading turn fits a level of the
   plan and the final fits one request. It refuses with `reason:
   "final_needs_pages"` (with `pages`, `targets` and
   `largest_one_request_targets`), `"below_floor"` (the frame or the lowest
@@ -5581,9 +5599,11 @@ protocol v6" above without a change.
   under v6 when the projection of v6 admits it. When no protocol admits the
   packet, `review-assignment` records nothing and refuses with
   `review_route_capacity_below_floor`. The details hold `admissions`,
-  `targets`, `largest_one_request_targets`, `serving_routes`,
-  `unserved_range` (a statement, when no registered route serves the review)
-  and `decision`: the question "Whether this review runs over a statement
+  `targets`, `largest_one_request_targets`, `serving_routes` (the verified
+  registered routes whose input holds the review as one request; the list
+  does not show that a route admits a chain), `unserved_range` (a statement
+  of the smallest tasks of this release, when that list is empty) and
+  `decision`: the question "Whether this review runs over a statement
   with fewer neighbours, or on another route." with the answers `Record a
   statement with fewer neighbours` (record the statement, `export`,
   `review-assignment --check`, `review-assignment`) and `Run the review on
@@ -5611,8 +5631,9 @@ protocol v6" above without a change.
   lists the searches, their residuals and the shared values. A unit that is
   longer than the level of a turn is delivered as consecutive ranges, by
   character offsets. The statement
-  record, the list of formulations and the other fields of the native packet
-  become units when they are too long for the frame of a turn.
+  record, the list of formulations, the list of the decisive work ids and the
+  other fields of the native packet become units when they are too long for
+  the frame of a turn.
 - A reading turn. The packet holds `reading_turn`: the bindings, `statement`,
   `formulations` (the targets `t1`, `t2` and so on), `minimum`, `notes` and
   `notes_handle`, `allowances` (`notes`, `excerpts`, `targets` and
@@ -5623,44 +5644,62 @@ protocol v6" above without a change.
   reviewer, notes, excerpts, gaps, passage_requests}`. `notes` replace the
   notes of the earlier turn, within `allowances.notes` as characters and as
   the request carries them. An excerpt is `{unit, text, purpose, targets}`:
-  `text` is an exact copy from the content that the turn delivers for the
-  row `unit`, `purpose` has at most 200 characters, and the size of the
-  excerpt is charged to the allowance of every named target; an excerpt
-  beyond an allowance is recorded with the status `over_allowance` and does
-  not reach the final. A gap is `{formulation, text}` with a target handle
-  and at most 600 characters. At most ten passage requests are `{id, unit,
-  anchor, characters}` (an anchor of 1 to 600 characters that occurs in the
-  unit, or null for the start of the unit; 1 to 100,000 characters, within
-  the passage allowance of 100,000
-  characters for the chain) or `{id, kind: "list_page", list, after}` for
-  the next page of the list `allowances`, `affected_notes`, `unread` or
-  `unread_attempts`. A malformed answer is the output refusal
-  `invalid_reading_response`. A part of an argument is refused here with
-  `invalid_review_material`; arguments belong to final turns.
-- The final turn. The final is one request without source text. The packet
-  holds `native`, the frame of the native packet with counts in place of its
-  lists, except `decisive_work_ids` (the list, or `{count, unit}` above 10,000
-  characters), and `reading_final`: the bindings, `notes`, `fill` (earlier notes
-  that fit), `entries` (the retained excerpts and passage answers),
-  `sources`, `gaps` (forecast rows `{handle, condition, outcomes, target}`
-  and reviewer rows `{handle, formulation, text}`), `material` (completed
-  arguments), `page`, `minimum` (including `gaps_unit`, the handle of the
-  record `minimum_gaps`, whose details a passage request returns),
-  `allowances` and `capacity`. The answer is the finding of v6 with two
-  changes. A ground is `{kind, text, work_id?, refs?}`: `refs` holds
-  citations `{ref: <handle>}` of a gap, of notes or of an argument, which
-  the harness replaces by the reference of the stored text
+  `unit` names a row of `plan.now` of the same turn that is no list page,
+  `text` is an exact copy from the content that the turn delivers for that
+  row, `purpose` has at most 200 characters, and the size of the excerpt is
+  charged to the allowance of every named target; an excerpt beyond an
+  allowance is recorded with the status `over_allowance` and does not reach
+  the final. A gap is `{formulation, text}` with a target handle and 1 to 600
+  characters. At most ten passage requests are `{id, unit, anchor,
+  characters}` or `{id, kind: "list_page", list, after}`. In a passage
+  request, `unit` is a `u` handle of the chain: the handle of a row of
+  `plan.now` of this or an earlier turn, of the index of affected notes or of
+  an unread row, or the unit of an entry. The unit need not have been
+  delivered. The handle of a logical unit, which a carried entry shows, stands
+  for the first of its delivery parts that holds the anchor, or for its first
+  part when the anchor is null; the passage ends with that part, and the row
+  that answers the request has the handle of that part. `anchor` is a phrase
+  of 1 to 600 characters that occurs in the unit, or null for the start of the
+  unit, and `characters` is 1 to 100,000. A request takes the smaller of its
+  characters and the text from the start of the passage to the end of the
+  unit, or of that part, within what
+  the passage allowance of 100,000 characters for the chain has left: the
+  allowance less the passage text that earlier turns and this turn deliver,
+  and less the text that is still to be delivered for earlier requests. A
+  list request names `allowances`, `affected_notes`, `unread` or
+  `unread_attempts`, at most once for each list in an answer. `after` is null
+  for the first page of a list, also when the packet shows rows of it, and
+  then the `next` of the latest page; `next: null` ends the list. A malformed
+  answer is the output refusal `invalid_reading_response`. A part of an
+  argument is refused here with `invalid_review_material`; arguments belong
+  to final turns.
+- The final turn. The final holds what the chain kept. It delivers source text
+  only on request, in a chain that ends over unread ranges. The packet holds
+  `native`, the frame of the native packet with counts in place of its lists,
+  except `decisive_work_ids` (the list, or `{count, unit}` when the list is
+  longer than 10,000 characters as the request carries it or the frame of a
+  turn does not fit the route with it), and `reading_final`: the bindings,
+  `notes`, `fill` (earlier notes that fit), `entries` (the retained excerpts
+  and passage answers), `sources`, `gaps` (forecast rows `{handle, condition,
+  outcomes, target}` and reviewer rows `{handle, formulation, text}`; a gap
+  of the reviewer beyond the allowance of its target is not listed),
+  `material` (completed arguments), `page`, `minimum` (including `gaps_unit`,
+  the handle of the record `minimum_gaps`, whose details a passage request
+  returns), `allowances` and `capacity`. The answer is the finding of v6 with
+  two changes. A ground is `{kind, text, work_id?, refs?}`: `refs` holds
+  citations `{ref: <handle>}` of a gap, of notes or of an argument, which the
+  harness replaces by the reference of the stored text
   (`invalid_reference_handle` for an unknown handle), and a ground has no
   `turns`. `reason` has at most 4,000 characters, the text of a ground at
-  most 600, and `coverage` is a list with one entry of at most 800
-  characters for each target, or a text of at most 800 characters times the
-  number of targets. A final can also return a reading answer with at least
-  one request that can deliver something; the next turn is then a reading
-  turn that delivers the requests, and a final turn follows it (in a chain
-  that ends over unread ranges the next turn is again a final turn). It can
-  also return one part of an argument of the reviewer, `{stage: "material",
-  title, part, text, more}`, of at most eight parts; the next turn is then
-  again a final turn. The rules of the refusal
+  most 600, and `coverage` is a list with one entry for each target, each of
+  at most 800 characters as compact JSON, or a text of at most 800 characters
+  times the number of targets. A final can also return a reading answer with
+  one to ten requests, of which at least one can deliver something; the next
+  turn is then a reading turn that delivers the requests, and a final turn
+  follows it (in a chain that ends over unread ranges the next turn is again a
+  final turn). It can also return one part of an argument of the reviewer,
+  `{stage: "material", title, part, text, more}`, of at most eight parts; the
+  next turn is then again a final turn. The rules of the refusal
   `openness_finding_invalid` add `reason_bound`, `coverage_bound`,
   `ground_bound` and `recorded_references`.
 - Carried turns. A new v7 chain takes over the verified reading turns of
@@ -5678,86 +5717,108 @@ protocol v6" above without a change.
   on unchanged units open the chain. Notes that rest on a changed or removed
   unit are affected notes: the newest ones, as many as one reading turn at
   the start level holds and at least one, are delivered first, and the
-  others on request, by the handle of each note with a null anchor. Carried
-  entries beyond the pool are delivered as a
-  unit, and the reviewer keeps one with `{keep, targets}` in `excerpts`. The
+  others on request: the index of the first turn and the list
+  `affected_notes` give each of them with its `handle`, `chain` and
+  `characters`, and a passage request with that handle and a null anchor
+  delivers the note, charged to the passage allowance. Carried entries beyond
+  the pool are delivered as a unit, and the reviewer keeps one with `{keep,
+  targets}` in `excerpts`. The
   earlier turns stay authenticated under their own protocols and keep their
   bytes. When v6 starts the chain, the receipt carries `carried_readings`
   with `would_carry`, and nothing is carried.
 - A turn that failed. For `output_over_cap`, `input_over_limit`,
   `response_over_limit`, `timeout` from the second timeout and
-  `provider_refused` from the third refusal, a reading turn is replaced on
-  the same route and at the same effort at the next lower level of the
-  stored plan. At the lowest level the plan is the decision stop of the
-  outcome, whose details hold `range_not_served`. A final turn that waits
-  for a part of an argument is replaced with half its answer bound, down to
-  the smallest answer bound of the plan; every other final takes the
-  decision stop. A reading turn that the provider refuses in every permitted
-  sequence, the last at the lowest level, is followed by the final over
-  unread ranges, below.
+  `provider_refused` from the third refusal of a sequence, the planner looks
+  for a smaller task of the turn on the same route and at the same effort,
+  within the failure limits and the recovery allowance of the turn position
+  (The smaller task after a capacity event, under [Review chains and
+  `review-series`](#review-chains-and-review-series)). A reading turn is
+  assigned again at a lower level of the stored plan: the next one, or a lower
+  one when a denser measured ratio leaves less room. A final turn that waits
+  for a part of an argument is assigned again with half its answer bound, down
+  to the smallest answer bound of the plan; every other final turn has no
+  smaller task. Where no replacement is admitted, the plan follows the retry,
+  wait and stop rules of the outcome, and the details of the decision for a
+  turn without a smaller task hold `range_not_served`. When the permitted
+  failure sequences of a reading turn are used up, its last failure is
+  `provider_refused` and the turn is at the lowest level, the final over
+  unread ranges follows, below.
 - A refused answer. A reading turn or a final turn of a v7 chain takes the
   replacement that carries the refusal (The replacement after a refused
   output, under [Review chains and
   `review-series`](#review-chains-and-review-series)), at most two for the
   position. The replacement is built from the state before the refused turn.
-  For a reading turn the notice is taken from the material of the turn, so
-  the replacement can deliver fewer ranges, and later turns deliver the
-  rest. A final keeps its level and its material, and its notice uses the
-  45,000 characters that the plan reserves beside every level. A position
-  whose replacements are spent, or whose notice does not fit, gives the
-  handoff `export` through the admission of a successor chain, below.
-- The final over unread ranges. When the provider refuses a reading turn in
-  every permitted sequence and the last sequence ran at the lowest reading
-  level, `review-series` plans a `replace` step with `details.reason:
-  "unread"`: a `review-assignment` whose `context.unread: {assignment_id}`
-  names the refused turn. Any other payload with `context.unread` is refused
-  with `invalid_review_context`. The assignment is a final turn whose packet
-  adds `reading_final.unread: {handle: "x1", artifact, digest, causes,
-  count, rows, omitted}`: the complete set of the ranges that the chain did
-  not read is one stored artifact with two lists, `rows` (each with `unit`,
-  `label`, `start`, `end`, `characters`, `cause` and `artifact`; `cause` is
-  `provider_refused` for a range of the refused turn and `not_delivered`
-  for every other one) and `attempts` (every attempt of the refused turn,
-  with its sequence, outcome and time). The packet shows the first rows,
-  within 30,000 characters and the room of the turn, and the lists `unread`
-  and `unread_attempts` hold the rest. The prompt adds the paragraph
-  `exactory-openness-unread-final-v1`. The finding of such a final has the
-  outcome `unresolved` and a ground `reviewer_gap` whose `refs` cites `x1`,
-  and a unit that a ground cites belongs to the set; the rules of
+  For a reading turn the notice is taken from the material allowance of the
+  turn, but not below the lowest reading level, so the replacement can deliver
+  fewer ranges, and later turns deliver the rest. A final keeps its level and
+  its material, and its notice uses the 45,000 characters that the plan
+  reserves beside every level. A position whose replacements are spent, or
+  whose notice does not fit, gives the handoff `export` through the admission
+  of a successor chain, below.
+- The final over unread ranges. When the permitted failure sequences of a
+  reading turn are used up, its last failure is `provider_refused` and the
+  turn is at the lowest reading level of the stored plan, `review-series`
+  plans a `replace` step with `details.reason: "unread"`: a
+  `review-assignment` whose `context.unread: {assignment_id}` names that turn.
+  Earlier sequences can have ended for other reasons. Any other payload with
+  `context.unread` is refused with `invalid_review_context`. The assignment is
+  a final turn whose packet adds `reading_final.unread: {handle: "x1",
+  artifact, digest, causes, count, rows, omitted}`. The set is one stored
+  artifact with two lists. `rows` holds the ranges of the inventory that the
+  chain delivers by itself and that are still undelivered (an affected note on
+  request is not among them), each with `unit`, `label`, `start`, `end`,
+  `characters`, `cause` and `artifact`; `cause` is `provider_refused` for a
+  range of the last refused request and `not_delivered` for every other one.
+  `attempts` holds the whole attempt history of the turn position, its
+  replaced assignments included, with the sequence, the outcome and the time
+  of each. The packet shows the first rows, within 30,000 characters and the
+  room of the turn. The lists `unread` and `unread_attempts` hold every row,
+  and their first page is requested with `after: null`. The prompt adds the
+  paragraph `exactory-openness-unread-final-v1`. The finding of such a final
+  has the outcome `unresolved` and a ground `reviewer_gap` whose `refs` cites
+  `x1`, and a unit that a ground cites belongs to the set; the rules of
   `openness_finding_invalid` for them are `unread_outcome`,
   `unread_set_reference` and `unread_unit_reference`. `problem-openness`
   records the finding with `unread`, the complete rows and attempts, and
-  credits as delivered only the units that the chain delivered whole. A
-  later export for the same reviewer, statement and route starts a chain
-  that carries the verified turns and reads what remains.
+  credits as delivered only the units that the chain delivered whole. After a
+  later export, a new chain carries the verified turns and reads what remains
+  when its admission selects v7 and the reviewer, the author, the statement,
+  the formulations and the route identity are the same. A chain under v6 reads
+  every unit again, and when no protocol admits the packet the assignment
+  returns the decision of the admission.
 - A denser ratio. When an attempt of the chain measures fewer characters for
   each token than the plan assumes, and the final with the allowances that
   the chain has granted no longer fits one request at that ratio,
   `review-assignment` and `review-run` refuse the next request with
   `review_chain_projection_over_limit`, and `review-series` ends with the
   handoff `export`, or with the decision stop of the admission when no
-  protocol admits a new chain. The plan of the new chain takes that ratio.
-- The admission of a successor chain. Where a problem chain cannot go on and
-  a new export can, the plan is the handoff `export`, and its details state
-  what the new chain will be: `details.successor` holds the admission that
-  the new packet meets on the same route with the same reviewer
-  (`protocol`, `admissions`, and `carried_readings` with `measure` for a v7
-  chain, or `reads_every_unit_again` and `planned_reading_turns` for a v6
-  chain), `details.message` says it in words, and `details.step` is the
-  `export` with the reviewer fixed, followed by `review-assignment --check`
-  and `review-assignment` on the same route. When no protocol admits the new
+  protocol admits a new chain. For a new chain under v7,
+  `details.successor.measure` gives the ratio of its plan: the measured ratio,
+  or a denser one that another earlier chain over the same statement and route
+  identity shows. A chain under v6 is admitted by its own projection.
+- The admission of a successor chain. Where a problem chain cannot go on and a
+  new export can, the plan is the handoff `export`, and its details state what
+  the new chain will be: `details.successor` holds the admission that the new
+  packet meets on the same route with the same reviewer (`protocol`,
+  `admissions`, and `carried_readings` with `measure` for a v7 chain, or
+  `reads_every_unit_again` and `planned_reading_turns` for a v6 chain),
+  `details.message` says it in words, and `details.step` is the `export` with
+  the reviewer fixed, followed by `review-assignment --check` and
+  `review-assignment` on the same route. When no protocol admits the new
   packet, the plan is a stop with the decision of the admission above. This
-  applies to a chain under v5 or v6 whose next request does not fit
-  (`review_chain_projection_over_limit` or `review_input_too_large`), to an
-  exhausted position of a problem chain (`review_slot_exhausted` or
-  `review_refusal_notice_metadata_too_large`), and to a v7 chain after a
-  denser ratio. For a chain under v5 or v6, the decision after an
-  `output_over_cap` at the same size, and the decision
+  applies to problem chains under v5, v6 and v7; a chain under an earlier
+  protocol keeps the handoff of its role. It applies to a chain under v5 or v6
+  whose next request does not fit (`review_chain_projection_over_limit` or
+  `review_input_too_large`), to an exhausted position of a problem chain
+  (`review_slot_exhausted` or `review_refusal_notice_metadata_too_large`), and
+  to a v7 chain after a denser ratio. For a chain under v5 or v6, the decision
+  after an `output_over_cap` at the same size, and the decision
   `review_turn_failures_exhausted` after provider refusals, gain the answer
-  `Export a new packet and start a new chain on this route` with that step.
-  A v7 turn whose input is over the limit at the lowest level of its
-  position keeps the decision stop of its outcome, and its verified turns
-  stay for a later chain.
+  `Export a new packet and start a new chain on this route` when the admission
+  of a successor gives an export step; otherwise they hold the answers that
+  `details.decision` lists. A v7 turn whose input is over the limit at the
+  lowest level of its position keeps the decision stop of its outcome, and its
+  verified turns stay for a later chain.
 - The verification. `problem-openness` records the finding of a v7 final
   when the chain verifies from the stored records: the carried selection
   matches its reference and each carried turn authenticates under its own
@@ -5852,8 +5913,10 @@ Refusal codes of a reading chain:
   chain or a problem chain under `exactory-openness-reading-v4` or
   `exactory-openness-reading-v5`, a reading answer in a final turn whose
   passage requests all deliver no characters. In a v7 chain it also covers an
-  excerpt whose text is no exact copy of the delivered content, a target or
-  a unit that the packet does not hold, a `keep` of an entry that was not
+  excerpt whose text is no exact copy of the content that the turn delivers,
+  a target that the packet does not hold, a passage request whose `unit` is
+  no `u` handle of the inventory or names a logical unit of which no part
+  holds the anchor, a `keep` of an entry that was not
   delivered, and a list request with a wrong cursor. `review-run` records it
   as an output refusal, and `review-assignment` refuses to continue from it;
   a v7 turn then takes the replacement that carries the refusal.

@@ -19,8 +19,10 @@ V6_SUCCESSOR_MESSAGE = (
     'admission accepts it as a chain of exactory-openness-reading-v6. That chain carries no earlier turn: it reads '
     'every unit again, in the number of reading turns that details.successor.planned_reading_turns gives.')
 RATIO_SUCCESSOR_MESSAGE = (
-    'The admission of the new chain was computed at the ratio of details.ratio, which this chain measured, or at a '
-    'denser one that an earlier chain of the same statement and route shows. The plan of the new chain keeps that '
+    'When the new chain runs under exactory-openness-reading-v7, details.successor.measure states the ratio of its '
+    'plan and the source of that ratio: the ratio of details.ratio, which this chain measured, or a denser one that '
+    'an earlier chain of the same statement and route shows. A chain under exactory-openness-reading-v6 is admitted '
+    'by its own projection and does not take this '
     'ratio.')
 # An answer of the decision after an output over the limit, and details.export_message of the same stop.
 OUTPUT_CAP_EXPORT_MESSAGE = 'Export a new packet and start a new chain on this route'

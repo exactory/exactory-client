@@ -75,7 +75,9 @@ AFFECTED_NOTES_TEXT = (
     'index lists them, the newest first, as rows {handle,chain,characters}: handle names the unit of one '
     'note, chain the chain that it comes from, and characters its length. omitted counts the rows that '
     'the index leaves out, and the list affected_notes holds every row. To read a note, send a passage '
-    'request with its handle as unit, anchor null and its characters.')
+    'request with its handle as unit, anchor null, and as characters the characters of its row. The '
+    'request is charged to allowances.passages like every passage request, so characters is at most '
+    '100,000 and at most what that allowance has left; a smaller number delivers the start of the note.')
 # For the author of a new export; the math-conjecturer skill states the same rule. No code reads this constant.
 KEEP_REVIEWER_TEXT = ('A new chain carries the verified reading turns of an earlier chain only under the same '
                       'reviewer_id, author, statement, formulations and route. Keep the reviewer_id of the earlier '
@@ -84,50 +86,53 @@ PASSED_OVER_TEXT = ('The earlier chain {chain} read the same statement on the sa
                     'so this chain carries none of its turns.')
 FINAL_MATERIAL_FIELDS = ('notes', 'entries', 'gaps', 'material', 'sources', 'fill')
 TARGET_PAGE_SENTENCE = (
-    ' When the list of formulations, the statement record or the other fields of the native packet are '
-    'too long for the fixed part of a request, they arrive as units, before the full texts and the '
-    'records. reading_turn.formulations is then {first,last,count}, and units of kind target_page deliver '
+    ' The list of formulations, the statement record and the other fields of the native packet each '
+    'become units on their own when they are too long for the fixed part of a request, and these units '
+    'arrive before the full texts and the records. When the list of formulations moves, '
+    'reading_turn.formulations is {first,last,count}, and units of kind target_page deliver '
     'the list of {handle,formulation}; every target handle from first to last is valid in an answer. '
-    'reading_turn.statement is then {unit:"statement"}, and a unit of kind fixed_field with the label '
-    'statement delivers the record. A unit of kind fixed_field with the label native_frame delivers the '
-    'other fields. A unit of kind fixed_field with the label decisive_work_ids delivers the ids of the '
-    'decisive works when their list is too long. Read these units first.')
+    'When the statement record moves, reading_turn.statement is {unit:"statement"}, and a unit of kind '
+    'fixed_field with the label statement delivers the record. A unit of kind fixed_field with the label '
+    'native_frame delivers the other fields. A unit of kind fixed_field with the label decisive_work_ids '
+    'delivers the ids of the decisive works when their list is too long. Read these units first.')
 LIST_PAGE_SENTENCE = (
-    ' A request {id,kind:"list_page",list,after} asks for the next page of a list that a packet shows only in part. '
+    ' A request {id,kind:"list_page",list,after} asks for a page of a list. '
     'list is allowances, affected_notes, unread or unread_attempts, and an answer holds at most one request for '
-    'each list. after is null for the first page of a list, and for a later page it is the next of the latest page '
-    'of that list. The page arrives in a later turn as a row of kind list_page with '
-    'page: {list,after,next,remaining}, and its content is the JSON text {list,after,rows,next,remaining}. The rows '
-    'of a list keep one fixed order. next null means that the list has ended. The harness refuses a request for a '
+    'each list. after is null for the first page, also when the packet already shows rows of the list, and then the '
+    'next of the latest page. A later turn delivers the page as a row of kind list_page with page: '
+    '{list,after,next,remaining} and the JSON content {list,after,rows,next,remaining}. The rows keep one fixed '
+    'order, and next null ends the list. The harness refuses a request for a '
     'list that has ended or holds no row, and a request with another value of after. A page uses room of its turn '
     'and no allowance.')
 # What neither a smaller task nor a registered route serves. plan_capacity_recovery gives it for a v7 turn without a
 # smaller task, and describe_admission_stop for a packet that no registered route holds.
 FINAL_PAGES_STATEMENT = (
-    'A chain of exactory-openness-reading-v7 takes its final in one request, and a reading turn delivers at least '
-    'the lowest material level of the stored plan. This release holds no smaller task than these: a final in '
-    'several pages is not part of it.')
+    'A chain of exactory-openness-reading-v7 takes its final in one request, and the task of a reading turn is not '
+    'sized below the lowest material level of the stored plan. This release holds no smaller task than these: a '
+    'final in several pages is not part of it.')
 INVALID_READING_MESSAGE = (
     'This answer is not the reading response of exactory-openness-reading-v7. Return exactly '
     '{schema_version:2,stage:"reading",subject_digest,claim_digest,reviewer,notes,excerpts,gaps,passage_requests}, '
-    'with the three bindings of the packet. notes is a nonempty string within allowances.notes, also as the request '
+    'with the three bindings of the packet. notes is a nonblank string within allowances.notes, also as the request '
     'carries it. An excerpt is {unit,text,purpose,targets}, with text copied exactly from the content that this turn '
     'delivers for that unit, or {keep,targets} for a carried entry whose unit was delivered whole. A gap is '
-    '{formulation,text}, with a target handle and at most 600 characters. passage_requests holds at most ten '
-    'requests, each {id,unit,anchor,characters} or {id,kind:"list_page",list,after}, within the passage allowance '
-    'and with the cursor of its list; in a final turn it holds at least one. details names the value that failed '
-    'where the rule has one.')
+    '{formulation,text}, with a target handle and 1 to 600 characters. passage_requests holds at most ten requests, '
+    'each {id,unit,anchor,characters} or {id,kind:"list_page",list,after} with an id of 1 to 120 characters, within '
+    'the passage allowance and with the cursor of its list; in a final turn it holds at least one. details names the '
+    'value that failed where the rule has one.')
 NOTES_COST_TEXT = (
-    ' The same bound holds for the size of the notes as the next request carries them, where a quote, a backslash '
-    'or a line break takes two characters.')
+    ' The same bound holds for the size that the notes add to the next request, where escaping makes a quote, a '
+    'backslash or a line break cost several characters.')
 ADMISSION_STOP_MESSAGE = (
     'No reading protocol of this release admits this packet on this route, so the harness records no assignment. '
     'details.admissions gives the refusal of each protocol in its order. details.targets is the number of '
-    'formulations of the packet. details.largest_one_request_targets, when it is above 0, is the largest number of '
-    'formulations whose final fits one request of exactory-openness-reading-v7 on this route. '
-    'details.serving_routes lists the verified registered routes that hold this review; when it is empty, '
-    'details.unserved_range states what no registered route serves. details.decision states what the owner decides '
-    'and the steps of each answer.')
+    'formulations of the packet. details.largest_one_request_targets, when it is above 0, is a number of '
+    'formulations with which exactory-openness-reading-v7 admits the packet on this route: the statement and its '
+    'first neighbours, counted up to the first number that the protocol refuses. details.serving_routes lists the '
+    'verified registered routes whose input holds this review as one request. It does not show that a route admits a '
+    'chain: the check of review-assignment in the steps of an answer does. When the list is empty, '
+    'details.unserved_range states the smallest tasks of this release. details.decision states what the owner '
+    'decides and the steps of each answer.')
 ADMISSION_SMALLER_ANSWER = 'Record a statement with fewer neighbours'
 ADMISSION_ROUTE_ANSWER = 'Run the review on another route'
 ADMISSION_QUESTION = 'Whether this review runs over a statement with fewer neighbours, or on another route.'
@@ -209,11 +214,10 @@ UNREAD_PACKET_CHARACTERS = 30000
 UNREAD_CORE_CHARACTERS = 1500
 # One text for the planned step (details.message) and for the refusal of any other payload with context.unread.
 UNREAD_FINAL_MESSAGE = (
-    'The provider refused a reading turn of this chain in every permitted sequence, the last one at the lowest '
-    'reading level, so the chain takes its final over the ranges that it did not read. The step that '
-    'review-series plans for that turn is a review-assignment whose context.unread.assignment_id names the refused '
-    'turn and which keeps its role, route, dossier, reviewer and author. The harness admits that payload alone: '
-    'run review-series on the head and take the step.')
+    'A final over unread ranges is admitted only as the step that review-series plans. It plans that step when the '
+    'last permitted sequence of a reading turn has ended with a refusal by the provider at the lowest reading level: '
+    'a review-assignment whose context.unread.assignment_id names that turn and which keeps its role, route, '
+    'dossier, reviewer and author. Run review-series on the head and take the step that it plans.')
 
 
 def plan_unread_final(records, artifacts, assignment, position):
@@ -2054,7 +2058,8 @@ RATIO_EXPORT_MESSAGE = (
     'measured ratio its final, with the allowances that the chain has granted, no longer fits one request. The '
     'harness sends no further request of this chain. details.ratio gives the measurement and its attempt, and '
     'details.required_characters and details.available_characters the size of the final and the room for it. '
-    'details.successor holds the admission of a new chain over a new export, which plans at the measured ratio. '
+    'details.successor holds the admission of a new chain over a new export: its protocol and, for '
+    'exactory-openness-reading-v7, the ratio of its plan under measure. '
     'When details.step is present, take it; details.message states what the new chain does. When it is absent, no '
     'protocol admits a new chain on this route, and details.decision states what the owner decides.')
 
@@ -2206,9 +2211,10 @@ ORIGIN_VERIFICATION_MESSAGE = (
     'harness cannot verify the turns that the chain carries, so the chain gives no finding. Check the record with '
     'record-check.')
 STATE_VERIFICATION_MESSAGE = (
-    'A stored artifact of this chain differs from what the harness rebuilds from the native packet, the carried '
-    'selection and the authenticated turns: the inventory of the first assignment, or the state of the turn that '
-    'details.assignment_id names. The chain gives no finding. Check the record with record-check.')
+    'A stored inventory or state of this chain differs from what the harness rebuilds from the native packet, the '
+    'carried selection and the authenticated turns, or the state_digest in the packet of a turn does not name the '
+    'rebuilt state. details.assignment_id names the turn where the check concerns one. The chain gives no finding. '
+    'Check the record with record-check.')
 BINDING_VERIFICATION_MESSAGE = (
     'The turn that details.assignment_id names is not the turn that this chain gives at its position. Every turn '
     'keeps the role, the native packet, the route, the reviewer, the author, the inventory and the capacity plan of '
@@ -2218,9 +2224,11 @@ BINDING_VERIFICATION_MESSAGE = (
 COVERAGE_VERIFICATION_MESSAGE = (
     'This chain does not hold everything that its finding needs. A required range or a required affected note is '
     'not delivered (details.ranges), a bound search does not rebuild from the delivered text (details.searches), a '
-    'required body of native evidence is not delivered whole (details.digests), or, for a final over unread ranges, '
-    'the stored records do not show the refused turn at the end of its last permitted sequence, or the unread set, '
-    'its citation in the finding or the recorded finding differs from what the harness rebuilds. Run review-series '
+    'required body of the evidence of the native packet is not delivered whole (details.digests), the native packet '
+    'of the finding is not the packet that the chain verified (also when details.digests is empty), or, for a final '
+    'over unread ranges, the stored records do not show the refused turn at the end of its last permitted sequence, '
+    'or the unread set, the outcome unresolved, the citation of the set in the finding or the recorded finding '
+    'differs from what the harness rebuilds. Run review-series '
     'on the chain and take the step that it plans.')
 FINAL_VERIFICATION_MESSAGE = (
     'The turn that details.assignment_id names has no observed, authenticated output in a verified context, or its '
