@@ -109,6 +109,37 @@ class ReadingCapacityGuardTests(unittest.TestCase):
             value[field]['capacity']['unreviewed'] = 1
             self.assertTrue(validate_packet('native_math', value, registry))
 
+    def test_k4_final_gap_rows_keep_forecast_conditions_and_reviewer_text(self):
+        from test_openness_reading_v7_turns import TurnPacketTests
+        from research_harness import openness_reading_v7 as v7, review_route_capacity as capacity
+        fixture = TurnPacketTests()
+        fixture.setUp()
+        fixture.packet['protocol'] = 'exactory-independent-review-v1'
+        statement = fixture.native['scientific_context']['openness_minimum']['statement']
+        fixture.native['scientific_context']['minimum_gaps'] = [dict(
+            formulation=statement, condition='A synthetic unresolved condition.',
+            outcomes=['supported_open'])]
+        _, chain = fixture.prepare()
+        plan = capacity.read_chain_capacity_plan(fixture.artifacts, chain)
+        inventory = json.loads(fixture.artifacts.read(chain['inventory']))
+        state = json.loads(fixture.artifacts.read(chain['state']))
+        state['gaps'] = [dict(handle='h1', formulation=statement,
+                             text='A synthetic reviewer gap.', status='verified')]
+        final = v7.build_turn_packet(fixture.artifacts, fixture.route, fixture.packet, 'chain', 2,
+            inventory, state, plan, capacity.derive_plan_task_limits(plan, 'final'), 'final')
+        gaps = final['reading_final']['gaps']
+        self.assertEqual(gaps[0]['condition'], 'A synthetic unresolved condition.')
+        self.assertEqual(gaps[1]['text'], 'A synthetic reviewer gap.')
+        registry = read_packet_registry()
+        closed = dict(registry, roles=dict(binding=registry['definitions']['v7_final_binding']))
+        self.assertEqual(validate_packet('native_math', final, registry), [])
+        self.assertEqual(validate_packet('binding', final['reading_final'], closed), [])
+        for row in gaps:
+            row['undeclared_gap_member'] = True
+            self.assertTrue(validate_packet('native_math', final, registry))
+            self.assertTrue(validate_packet('binding', final['reading_final'], closed))
+            del row['undeclared_gap_member']
+
     def test_k9_reading_constructions_leave_the_gap_table_only_with_executed_evidence(self):
         matrix = capacity_guard.read_matrix()
         rows = {row['id']: row for row in matrix['entries']}

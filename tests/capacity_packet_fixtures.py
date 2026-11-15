@@ -182,9 +182,9 @@ def build_scaled_v6_reading_records(quantity, size):
     """Build the v6 manifest and exact delivery receipts before assembling a turn."""
     from research_harness import openness_reading as reading, review_search_delivery
     from research_harness.problem_openness import serialize_record
-    if quantity not in ('texts', 'searches'):
-        raise ValueError('The v6 record factory scales manifest text or search receipts')
-    count = size if quantity == 'searches' else 1
+    if quantity not in ('texts', 'searches', 'turns'):
+        raise ValueError('The v6 record factory scales manifest text, search receipts or turn receipts')
+    count = size if quantity in ('searches', 'turns') else 1
     formulation = 'x' * size if quantity == 'texts' else 'A finite synthetic formulation.'
     searches = [dict(id='search-' + str(index), queries=[formulation]) for index in range(count)]
     bindings = [dict(formulation=formulation, search_digest=digest(search), search=search)
@@ -198,6 +198,11 @@ def build_scaled_v6_reading_records(quantity, size):
     receipts = review_search_delivery.verify_search_deliveries(planned['manifest'], delivered, originals)
     record = reading._create_record(reading.PROTOCOL_V6, planned['manifest'])
     record.update(search_receipts=receipts, planned_reading_turns=count)
+    if quantity == 'turns':
+        record['turns'] = [dict(assignment_id='reading-' + str(index),
+            attempt_id='attempt-' + str(index), stage='reading', delivered_units=[],
+            delivered_parts=[], completed_searches=[], notes='Read the supplied unit.')
+            for index in range(size)]
     record['allowances']['record'] = dict(characters=max(300000, size), used=0, not_retained={})
     with tempfile.TemporaryDirectory() as directory:
         artifacts = ArtifactStore(Path(directory))

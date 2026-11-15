@@ -7110,6 +7110,23 @@
         "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_new_search_and_twenty_percent_denser_measurement_export_then_record",
         "test_capacity_guard_fixes.CapacityGuardFixTests.test_new_search_hands_off_before_the_first_v7_request"
       ]
+    },
+    {
+      "id": "release-0910-merged-capacity-inventory",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "closed-packet-inventory",
+      "summary": "The 0.91.0 integration omitted carried/successor source declarations and retained certificates from before v7 dispatch; the concurrent guard schema also predated the final gap and affected-note shapes.",
+      "expected": "Declare both source modules, retain the closed current v7 shapes and both v6/v7 evidence sets, and review source and call differences before certifying them.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_capacity_packet_inventory.ProductionPacketInventoryTests.test_reviewed_production_member_passes_only_with_complete_declaration",
+        "test_reading_capacity_guard.ReadingCapacityGuardTests.test_k4_final_gap_rows_keep_forecast_conditions_and_reviewer_text",
+        "test_capacity_guard.CapacityGuardTests.test_v6_and_v7_constructions_keep_their_unit_evidence",
+        "test_openness_v6_guard.V6GuardTests.test_problem_first_assignment_requires_a_finite_projection_and_math_v1_keeps_c5",
+        "test_route_capacity_properties.ReadingCapacityPropertyTests.test_k6_each_source_inventory_kind_delivers_three_material_allowances",
+        "test_capacity_packet_inventory.QuantityFactoryTests.test_legacy_turns_use_the_v6_builder_and_other_role_frames_keep_their_owner"
+      ]
     }
   ]
 }

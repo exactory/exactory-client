@@ -7839,24 +7839,6 @@
       ]
     },
     {
-      "ast_sha256": "85a2154971c8658d7ea7d14f4005931a68378b5cc02bb70886f6ca6df81d9010",
-      "callee": "len",
-      "caller": "research_harness.review_route_capacity.describe_work_units",
-      "classification": "standard library",
-      "targets": [
-        "len"
-      ]
-    },
-    {
-      "ast_sha256": "a2d12e48709e6735e66f5d9d796136445557869e1ed9ba3c93b7149b4014a4d9",
-      "callee": "len",
-      "caller": "research_harness.review_route_capacity.describe_work_units",
-      "classification": "standard library",
-      "targets": [
-        "len"
-      ]
-    },
-    {
       "ast_sha256": "776f0474c79a81eb9abce04f2cc08a7ae278b2a8c3906af16bba3bfb8292b76f",
       "callee": "str",
       "caller": "research_harness.review_route_capacity.describe_work_units",
@@ -13417,16 +13399,6 @@
       ]
     },
     {
-      "ast_sha256": "dd918fd9d38b3c913a83435535bb67eca46d670939e7e7d7716bf06b0364bee9",
-      "callee": "dict",
-      "caller": "research_harness.openness_reading_v7._append_unit",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "dict"
-      ]
-    },
-    {
       "ast_sha256": "42f4a0a547b91e2be8190ee882d23f3aaa99fd6441ec4e884eda1518bc524f75",
       "callee": "len",
       "caller": "research_harness.openness_reading_v7._append_unit",
@@ -13434,16 +13406,6 @@
       "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
       "targets": [
         "len"
-      ]
-    },
-    {
-      "ast_sha256": "3c4a51a84689c0136bd58a32c2283fd2ffd9cc3587d37c4f57c29939db66f7b8",
-      "callee": "dict",
-      "caller": "research_harness.openness_reading_v7._bind_body",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "dict"
       ]
     },
     {
@@ -15064,30 +15026,12 @@
       ]
     },
     {
-      "ast_sha256": "d38955f50d1d8f229c5f6a7ae544dcb11fc4bb8b2a5513077fdfb6797366a864",
-      "callee": "research_harness.review_handles.expand_handles",
-      "caller": "research_harness.review_protocol.validate_adjudication_contract",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_handles.expand_handles"
-      ]
-    },
-    {
       "ast_sha256": "f71df93e3effb278f474cea48473ab543f2e3e9f35807725d57775c354ddc1d9",
       "callee": "research_harness.review_handles.is_material_output",
       "caller": "research_harness.review_protocol.validate_adjudication_contract",
       "classification": "listed module",
       "targets": [
         "research_harness.review_handles.is_material_output"
-      ]
-    },
-    {
-      "ast_sha256": "8de467fab9fddcb7a1fe602bb9c1a615cd690045e27c15b323000753d7b44bd0",
-      "callee": "research_harness.review_handles.validate_material",
-      "caller": "research_harness.review_protocol.validate_adjudication_contract",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_handles.validate_material"
       ]
     },
     {
@@ -15819,36 +15763,6 @@
       ]
     },
     {
-      "ast_sha256": "6a1ea2b9d90987ec0422730e0cec7dd48a891246f8b6a9c48e57b019567fd407",
-      "callee": "dict",
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "dict"
-      ]
-    },
-    {
-      "ast_sha256": "b3dc9a0f07ceaf326cee863b12f7be88aaaca042fc592107ae01f051f98c4727",
-      "callee": "dict",
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "dict"
-      ]
-    },
-    {
-      "ast_sha256": "c6c4e396d80f944c77c77b7b3f221516c153f294ad87acea25a3d300db66e1a6",
-      "callee": "dict",
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "dict"
-      ]
-    },
-    {
       "ast_sha256": "1e8074d5663e0ca712a5b0e4736eaee4f32dde075885a5be1c5be9174ac794a1",
       "callee": "min",
       "caller": "research_harness.review_route_capacity.plan_chain_capacity",
@@ -15856,15 +15770,6 @@
       "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
       "targets": [
         "min"
-      ]
-    },
-    {
-      "ast_sha256": "adaee0398a8690df8157da4423bd35c329f641702d0f23931699d4f14113868d",
-      "callee": "research_harness.review_route_capacity.select_task_limits",
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_route_capacity.select_task_limits"
       ]
     },
     {
@@ -15898,44 +15803,6 @@
       ]
     },
     {
-      "ast_sha256": "5da2e4c76099c9453ef7aa1a2b06c53ad9d2dd63da68298825315c71871a136d",
-      "callee": "dict",
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "dict"
-      ]
-    },
-    {
-      "ast_sha256": "e702916541eed243e9af81ed76685279511899d9a36bb70be7597a96d299bfdd",
-      "callee": "research_harness.review_route_capacity.select_task_limits",
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_route_capacity.select_task_limits"
-      ]
-    },
-    {
-      "ast_sha256": "28bc39aefe0f6bba805d0c647062dcdcd4f7a10b2ad766beaa173f7f49c9c9ff",
-      "callee": "research_harness.review_route_capacity.select_task_limits",
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_route_capacity.select_task_limits"
-      ]
-    },
-    {
-      "ast_sha256": "371ea6c3676c38afa11582c1dbb45961f2bd1e6342dc52911a5482b4b178f9c9",
-      "callee": "dict",
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "dict"
-      ]
-    },
-    {
       "ast_sha256": "c11826788137a793138539ef0d8c8e94de9273bde3b86d7d5ba37e90790d4e88",
       "callee": "max",
       "caller": "research_harness.review_route_capacity.plan_chain_capacity",
@@ -15943,26 +15810,6 @@
       "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
       "targets": [
         "max"
-      ]
-    },
-    {
-      "ast_sha256": "4e8e39e71dff4c55aba2eb6907e2dcd860befe157803d7632d596d4658476094",
-      "callee": "dict",
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "dict"
-      ]
-    },
-    {
-      "ast_sha256": "cdcae789d00445b7b5e058162a385e8d1bf1ef43d6f654e19f0ea4128b051ad9",
-      "callee": "dict",
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "dict"
       ]
     },
     {
@@ -16015,16 +15862,6 @@
       ]
     },
     {
-      "ast_sha256": "7ff8d1351c37408f16ce353eb8b2024e8a2f534d62696027e402b428d07f4d99",
-      "callee": "dict",
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "dict"
-      ]
-    },
-    {
       "ast_sha256": "122f16ab93663ae535f51e02736dde5f28544b8f8596fe90ea181cad64c46c95",
       "callee": "max",
       "caller": "research_harness.review_route_capacity.plan_chain_capacity",
@@ -16041,26 +15878,6 @@
       "classification": "listed module",
       "targets": [
         "research_harness.errors.ResearchError"
-      ]
-    },
-    {
-      "ast_sha256": "014bddc9eb9c24bab4b458c02b0ce7109edf1c96217bab41fdb89ce11cde32f5",
-      "callee": "dict",
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "dict"
-      ]
-    },
-    {
-      "ast_sha256": "79690644bec70faa11c5176f8d382acf7bd3621661f5297b45d3c4c93905fd55",
-      "callee": "dict",
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "dict"
       ]
     },
     {
@@ -16083,16 +15900,6 @@
       ]
     },
     {
-      "ast_sha256": "8e7fb7260e376c8e0d97e7e0a5d46b25b71ced27093a30cf88f09a0eb4948117",
-      "callee": "dict",
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "dict"
-      ]
-    },
-    {
       "ast_sha256": "a5d0a7a95e60468a524a0f6bfd4081ca365875d65539bc801b0f5e21c59f3332",
       "callee": "math.ceil",
       "caller": "research_harness.review_route_capacity.plan_chain_capacity",
@@ -16100,26 +15907,6 @@
       "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
       "targets": [
         "math.ceil"
-      ]
-    },
-    {
-      "ast_sha256": "17355fc14e4b0d1d95be1b612aeb899a54d11a8a76900160e185a3d6a41a9559",
-      "callee": "dict",
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "dict"
-      ]
-    },
-    {
-      "ast_sha256": "5291fa39ce55b05fbea653e042644ce8b21db1adccc0de6e8800d62b1f698d03",
-      "callee": "dict",
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "dict"
       ]
     },
     {
@@ -17727,6 +17514,368 @@
       "targets": [
         "research_harness.openness_reading_v7.require_text_reading_route"
       ]
+    },
+    {
+      "ast_sha256": "d3fa94d5f66dacca6edcd983ca0baccbb0df5d5a8643dba0f3d7c25291e75de4",
+      "callee": "dict",
+      "caller": "research_harness.openness_reading_v7._append_unit",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "b93fd79c8d3002c9516b5145e5fa4970d383ec52e6a02c3cc9ec3d838a42244b",
+      "callee": "dict",
+      "caller": "research_harness.openness_reading_v7._bind_body",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "2100631f66dbbd6b70a5e6128725168e20381dde4b43149902bb58d27db5cc23",
+      "callee": "research_harness.review_handles.expand_handles",
+      "caller": "research_harness.review_protocol.validate_adjudication_contract",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_handles.expand_handles"
+      ]
+    },
+    {
+      "ast_sha256": "8dbc1ae5d8479e8303fac6815b2f01e99924d2523cc83a73a3a251c1078cf784",
+      "callee": "research_harness.review_handles.validate_material",
+      "caller": "research_harness.review_protocol.validate_adjudication_contract",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_handles.validate_material"
+      ]
+    },
+    {
+      "ast_sha256": "85a2154971c8658d7ea7d14f4005931a68378b5cc02bb70886f6ca6df81d9010",
+      "callee": "len",
+      "caller": "research_harness.review_route_capacity.describe_work_units",
+      "classification": "standard library",
+      "targets": [
+        "len"
+      ]
+    },
+    {
+      "ast_sha256": "623b19e8d1df40166e131066721bb79155bf22304ac4ad7394e7fbc88afc0e0f",
+      "callee": "len",
+      "caller": "research_harness.review_route_capacity.describe_work_units",
+      "classification": "standard library",
+      "targets": [
+        "len"
+      ]
+    },
+    {
+      "ast_sha256": "6a1ea2b9d90987ec0422730e0cec7dd48a891246f8b6a9c48e57b019567fd407",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "69cf543f5b92e9c1d722a6a2e11ee5e2aec5d5d6072c2e5dd30d92cb34e0fd0e",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "0a6629f8b2651bb42b703f221490f7bdc9595a032d51e125192d5ace4c414239",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "c6c4e396d80f944c77c77b7b3f221516c153f294ad87acea25a3d300db66e1a6",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "dc36f069529d700f02a8dce188c9b3370fed5032306be175ba24cb8242f2f79d",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "5da2e4c76099c9453ef7aa1a2b06c53ad9d2dd63da68298825315c71871a136d",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "371ea6c3676c38afa11582c1dbb45961f2bd1e6342dc52911a5482b4b178f9c9",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "4e8e39e71dff4c55aba2eb6907e2dcd860befe157803d7632d596d4658476094",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "cdcae789d00445b7b5e058162a385e8d1bf1ef43d6f654e19f0ea4128b051ad9",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "e8e44a11f9d6ac22eb6e5222019ae81e9a55dd8e8c1933be350cc13a3f93c709",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "7ff8d1351c37408f16ce353eb8b2024e8a2f534d62696027e402b428d07f4d99",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "014bddc9eb9c24bab4b458c02b0ce7109edf1c96217bab41fdb89ce11cde32f5",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "79690644bec70faa11c5176f8d382acf7bd3621661f5297b45d3c4c93905fd55",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "f96433285b410d9b1d5b346d431327d74a60c7ff8086afa71d17312db837479a",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "8e7fb7260e376c8e0d97e7e0a5d46b25b71ced27093a30cf88f09a0eb4948117",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "17355fc14e4b0d1d95be1b612aeb899a54d11a8a76900160e185a3d6a41a9559",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "5291fa39ce55b05fbea653e042644ce8b21db1adccc0de6e8800d62b1f698d03",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "8f6086969b1e7b72e53943da096e4fe5a2e2b87bb25142b85b20ca37fd1db40d",
+      "callee": "dict",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "5b6a69029be8cb230c6bb32079f77b4bcc0f5a8c15974eb135b5f57c5026ebad",
+      "callee": "research_harness.review_route_capacity.select_task_limits",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_route_capacity.select_task_limits"
+      ]
+    },
+    {
+      "ast_sha256": "3e9d21827fce68ca03497d462c43b5d75bf6ae8018f347c692d6aadd0e0554b3",
+      "callee": "research_harness.review_route_capacity.select_task_limits",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_route_capacity.select_task_limits"
+      ]
+    },
+    {
+      "ast_sha256": "5732f392194fb7cb0681ab89a2c15499a92cc9e192c3ca441d6505596a5d9291",
+      "callee": "research_harness.review_route_capacity.select_task_limits",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_route_capacity.select_task_limits"
+      ]
+    },
+    {
+      "ast_sha256": "13932b78433923bcedf028bf4ae81b3eec300d55d35f86bf70edb68ff50ca224",
+      "callee": "research_harness.review_route_capacity.select_task_limits",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_route_capacity.select_task_limits"
+      ]
+    },
+    {
+      "ast_sha256": "beaec05f909c3e41df396688b5c07168990cbe38ac65e5f54cc0d124b0817251",
+      "callee": "research_harness.openness_reading_v7.project_native_delivery",
+      "caller": "research_harness.problem_openness_reviews.actual_delivery",
+      "classification": "listed module",
+      "reason": "Reviewed v7 dispatch or artifact-aware validation; the target is a declared source and the caller certificate pins its packet arguments.",
+      "targets": [
+        "research_harness.openness_reading_v7.project_native_delivery"
+      ]
+    },
+    {
+      "ast_sha256": "2100631f66dbbd6b70a5e6128725168e20381dde4b43149902bb58d27db5cc23",
+      "callee": "research_harness.review_handles.expand_handles",
+      "caller": "research_harness.research_decisions.validate_review_contract",
+      "classification": "listed module",
+      "reason": "Reviewed v7 dispatch or artifact-aware validation; the target is a declared source and the caller certificate pins its packet arguments.",
+      "targets": [
+        "research_harness.review_handles.expand_handles"
+      ]
+    },
+    {
+      "ast_sha256": "8dbc1ae5d8479e8303fac6815b2f01e99924d2523cc83a73a3a251c1078cf784",
+      "callee": "research_harness.review_handles.validate_material",
+      "caller": "research_harness.research_decisions.validate_review_contract",
+      "classification": "listed module",
+      "reason": "Reviewed v7 dispatch or artifact-aware validation; the target is a declared source and the caller certificate pins its packet arguments.",
+      "targets": [
+        "research_harness.review_handles.validate_material"
+      ]
+    },
+    {
+      "ast_sha256": "fc810252ca86139797998f95c44928c36ed170f7ece8638c58b854b8e703f15b",
+      "callee": "research_harness.review_handles.expand_handles",
+      "caller": "research_harness.review_refusal.classify_observed_output",
+      "classification": "listed module",
+      "reason": "Reviewed v7 dispatch or artifact-aware validation; the target is a declared source and the caller certificate pins its packet arguments.",
+      "targets": [
+        "research_harness.review_handles.expand_handles"
+      ]
+    },
+    {
+      "ast_sha256": "8dbc1ae5d8479e8303fac6815b2f01e99924d2523cc83a73a3a251c1078cf784",
+      "callee": "research_harness.review_handles.validate_material",
+      "caller": "research_harness.review_refusal.classify_observed_output",
+      "classification": "listed module",
+      "reason": "Reviewed v7 dispatch or artifact-aware validation; the target is a declared source and the caller certificate pins its packet arguments.",
+      "targets": [
+        "research_harness.review_handles.validate_material"
+      ]
+    },
+    {
+      "ast_sha256": "3ff6770525e9e118c2fb6668c4168f87b779356bdf5499c302c6b383af76b694",
+      "callee": "research_harness.openness_reading.validate_turn_output",
+      "caller": "research_harness.review_refusal.classify_observed_output",
+      "classification": "listed module",
+      "reason": "Reviewed v7 dispatch or artifact-aware validation; the target is a declared source and the caller certificate pins its packet arguments.",
+      "targets": [
+        "research_harness.openness_reading.validate_turn_output"
+      ]
+    },
+    {
+      "ast_sha256": "20db91aec2e881d8ba325ce7f6d44e8cc8b899ad994d4f5e9a99318fc28a1873",
+      "callee": "research_harness.review_protocol._read_json",
+      "caller": "research_harness.openness_successor.describe_successor_handoff",
+      "classification": "listed module",
+      "reason": "Reviewed v7 dispatch or artifact-aware validation; the target is a declared source and the caller certificate pins its packet arguments.",
+      "targets": [
+        "research_harness.review_protocol._read_json"
+      ]
+    },
+    {
+      "ast_sha256": "6f5c84ec3155190253aaf517039337940819bd5428742f0cd2c53a4c7085e387",
+      "callee": "research_harness.openness_reading.find_protocol",
+      "caller": "research_harness.openness_successor.describe_successor_handoff",
+      "classification": "listed module",
+      "reason": "Reviewed v7 dispatch or artifact-aware validation; the target is a declared source and the caller certificate pins its packet arguments.",
+      "targets": [
+        "research_harness.openness_reading.find_protocol"
+      ]
+    },
+    {
+      "ast_sha256": "ced9fb38633ba3abc0916759a89778c15c2a96497fc372dfc8911baaeae6df2c",
+      "callee": "research_harness.openness_reading_v7.plan_turn_recovery",
+      "caller": "research_harness.review_route_capacity.plan_capacity_recovery",
+      "classification": "listed module",
+      "reason": "Reviewed v7 dispatch or artifact-aware validation; the target is a declared source and the caller certificate pins its packet arguments.",
+      "targets": [
+        "research_harness.openness_reading_v7.plan_turn_recovery"
+      ]
     }
   ],
   "certificates": {
@@ -17936,7 +18085,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.check_mode": {
-      "ast_sha256": "478ea6d3e5b20ce2f6778f83eaa8b7cc3bd19ee7fddc803e34a9d7f5d40f8f63",
+      "ast_sha256": "4d0d51a0ae0655f3b3811f41e6fc63039152166e4b33a358859a3fa2f616c4f6",
       "functions": {
         "check_mutation": "61f257e0ad6895ddf89f68e7248697df340edc323fee96b2b14e22173f7adaa6"
       },
@@ -18000,7 +18149,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.cli": {
-      "ast_sha256": "75dc616d20d70111751eefd0ae12b93fd212e6ac8f69da5430b7687e23d9965b",
+      "ast_sha256": "328b8675ad47fadaa948762332acff9c88a4356287766a37644a468aa6c39a32",
       "functions": {
         "_build_status_report": "d66e55cb0dab6385c501dd53ebe53f6d1348d3c3d9c469ca8c53a79050987e9b",
         "_is_recording_command": "05655a0a1dadde896d4de40e67283b9eedfc8feb68651142be7c2b6f25c9a43c",
@@ -18008,7 +18157,7 @@
         "_review_output_correction": "dcbff6d8cffee41e4f4a58da058a3650935006b1f9bfb8e9f453f58629d25b77",
         "_review_probe": "5cd43a95a2e2036b0549950984da8348ef9a4cc9b43140411e3394061487b825",
         "_review_run": "8592eae1f164e099aa83b4932b16a357b87ef0f33a1b2b9c272ab5bcf9362642",
-        "_review_status": "5532fd1b820ac15514c31a85fa531dc529aa8dd68228a1835ca1c977904d78af",
+        "_review_status": "8df85490e3c252de37fb5a43536c700871ba621cea6cf97591cd0363b17bff6c",
         "acquisition_command": "0828e14bbf2f2781b879c9f43f7768f01e050a6e8242ff84873cb9fb3e98748d",
         "add_identity": "dbfc1703b8b8ab3d9046d3c66d99d69fdf56959381da3febdd0b0a761c786a7d",
         "add_managed_scope": "278f12442fa36bef930560425b123281ed271a0bd90aa91d493c5a2de9ae743b",
@@ -19174,7 +19323,6 @@
         "341bab71d8e412a2bf95b4411b96e29a84c2b5e233376c9d0c51a5f136ac4366",
         "343677f4dd84a48b7acacb50a3fba70badabe5bcbc207152890100edc2bfb453",
         "3b4a134677263966d427ecb1de8c6e56c55a52fca86efb662fdacd037d05bf71",
-        "3c4a51a84689c0136bd58a32c2283fd2ffd9cc3587d37c4f57c29939db66f7b8",
         "41bafc4fd16ab032590c3b426c2137538f1edf36f5b3822f62877b90a11098ae",
         "42f4a0a547b91e2be8190ee882d23f3aaa99fd6441ec4e884eda1518bc524f75",
         "46bb700f62f915c785f40dd4f3d22af6b77e6723bab95faf59f76e8f14dee54d",
@@ -19213,6 +19361,7 @@
         "af9802ba351a6c9f525518a9265bdc5ad19e40cf455533e6f33ea0a5833b9680",
         "b3a93083999bd9672eba411a50076846201501ef5845cb4ae20b544bbbbda612",
         "b7d0203d5c79d8c0a9a00b013a6bf17c796f488cad993b7a458c1c3d3cf5c01c",
+        "b93fd79c8d3002c9516b5145e5fa4970d383ec52e6a02c3cc9ec3d838a42244b",
         "bbf92f62402689d368200f36b28a85dca14a5064b2c4bfe626fccd89314cc955",
         "c1b36624e1df46e9fa16c2a816f3463b8ec32c3d44185f2819ed1da347566f31",
         "c4c572dc5d671dd79a401d89cba72e55dcf4f7123ce4a9d513ff19f83bd19f0d",
@@ -19221,9 +19370,9 @@
         "cf008d600fd7568ff7831dacfe718cd09335dedc556493f5e33e9b67e25b8d7a",
         "d0082c569d25ead8155397710b43d18c2f26752ddbfad98ca109c44ad2832565",
         "d24a9870ac0618bb149280599d6d309965eaedc93b93868b394a617c981b3a6d",
+        "d3fa94d5f66dacca6edcd983ca0baccbb0df5d5a8643dba0f3d7c25291e75de4",
         "d593359e03583baa071627a1bfc2db11540afe68a7ad4b9d6b1b424bbd3e3aae",
         "dd2fae9c662959da8449da32bf8a82bb1330a59a9ed98a09234e5398cd924fa5",
-        "dd918fd9d38b3c913a83435535bb67eca46d670939e7e7d7716bf06b0364bee9",
         "e15ab2e38a67d0d579854104751c5effbb70b88611a5e56d793edf3037c6447b",
         "e4aa9301b918b47cd572ff364eb50a01ebd9b4d283cc5e1fb7446929f06e0d2b",
         "e4f641e7d225670e29e68020a2aa6c4a8503d028b537770c77cbccf56f17d5db",
@@ -19235,12 +19384,12 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
     },
     "research_harness.openness_successor": {
-      "ast_sha256": "10f376e1bf3e17d97b0d69726aac2bf6456614a8e63cf4bfe9fc759e70c8788e",
+      "ast_sha256": "60c35b13682b56d6ad703220a08bde5e4ab0df73705cf394124cd4f3954b31d5",
       "functions": {
         "_project_successor_native": "0de9e1c43a0bc6110caade10147bf3141daf94c700348e79ec671ad52b2a55f1",
         "admit_successor_chain": "890932ee7823dd7ee815ec347f4ad6168994950ba3d864cdd567dff1eed6b46b",
-        "describe_input_handoff": "f54053201540cbf8c75f17e4fa8d6062c857f2834674572aaf64f17953a50639",
-        "describe_successor_handoff": "29cb5c820ec70649e15a4658204255dc77c97ae80c58dc3f8511580589996d6e"
+        "describe_input_handoff": "f5a2c1fda191f3137d74dc551ff7bef66631da044764ec40568b3c1b91a7c2b1",
+        "describe_successor_handoff": "0dba13772cc3d8ac7fc4e4a45d083d7b0478f8ad7f552d994c97e4a566e2f8ee"
       },
       "packet_call_digests": [
         "07a3312aabf5ec02665a48a64eb49f45b406def9a53fd3b78eca3ff60d889b66",
@@ -19906,9 +20055,9 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.problem_openness_reviews": {
-      "ast_sha256": "6cb4ecdc01073b2103e59676712e5e2d7f80da910630c2c09dfca0fb804aea6d",
+      "ast_sha256": "dfa213888c1b7488093077f71797cb8738f0662b12183da143c485b33ecfbefe",
       "functions": {
-        "actual_delivery": "2969ffed0fcac558a7b9ed9b9017856d5f5d87f2c032c0f5fef8cf7efa993400",
+        "actual_delivery": "e089daa263215a9ec19d3ab45c1f6e3cdcbb9daef4ee7721c0264a13c46dc643",
         "bind_results": "e0557ec8e2e2db1eb41bdeb01e3204ed795f87f07109a0658051a9b8f4eb5f16",
         "describe_result_material": "c57fb54f4bb87d25d4c25974666c2e0a2c0597b93720f796d31dae25956afb05",
         "find_result_metadata_fields": "6bbb3556bdee33114972539cbb9d8d519c0c733aec811dc01faf390dfaed12ef",
@@ -19983,6 +20132,7 @@
         "bb9ee2f2f9bdd898a1fe5afd7501f41234adac3e2fcda5535e005221083c645d",
         "bbf3c2bd3857175723a5c76819b81fd04fedbdfc5ae5d9fe28fbb459ee78ba6b",
         "be7509836cbe84e9d8d236cfbe728b331df6b44462ba4cb260653aef4db00afb",
+        "beaec05f909c3e41df396688b5c07168990cbe38ac65e5f54cc0d124b0817251",
         "c18ef64a48e54c56d13fe537ecc9c1067a64d4a0a11f02f853f009604bc06d2e",
         "c8e98eeb6caa761ee48049e3963b771b60c1597d146441aacd7f15bda6f4d8b9",
         "d031de949d075fc48f7af3998191a43e45106cf00524ddc06c92eacd8f79309b",
@@ -20409,7 +20559,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.report_views": {
-      "ast_sha256": "ae5d747e4133a71f1c7d3bbeed6cd4f53013ed72a219f3e70172030cd59bdbad",
+      "ast_sha256": "4e9e491287738b16fa61f56bc788b1698bb77e73b7372b8fffb1341e57e430dc",
       "functions": {
         "_hint": "a4b26ac7178c61f5d948fe67149e026f4e305ba20a642c9821fc7e934f3bcc28",
         "_obligations": "a728d3498a4ca0966e5d5307fc8d70f53860e2bb85cb074725f261e3889059e5",
@@ -20424,7 +20574,7 @@
         "obligations_page": "4fba1f63d3f3ea3f041b68625add2f6626bc605dbe8471a944dbac25b85cf622",
         "order_obligations": "2718ed6192a804e35771cefa63139652ff6e20a08429d34b61de4cc2c5b5cc71",
         "priority": "efda1682d6fae7c1b8cd14086fe98a3544437fa61d65eb964a6e261d9230d7f9",
-        "status_summary": "ca97bc420d2f99795bd10d94c6516b6561a691f27e34e163501d88f4441606d7",
+        "status_summary": "a7dc16e9c67a7a568f3bb592c90550223ef721c3b1d5103c33f236a19d0fd7f6",
         "summarize_authority": "1ce84409679721b6345df8cf1b29a66c2ea1adb3a6246257a71e18bce0a9a264",
         "summarize_overrides": "cc4204d01df8f4c6e4ec58ca530f11d798a15f1fc41fd43aa033033c21d065a7"
       },
@@ -20432,7 +20582,7 @@
       "reason": "Reviewed conservative unresolved-refusal projection without inferring exhaustion from raw attempt counts; independent blockers take precedence and posted views suppress actions. Changed AST requires declaration review."
     },
     "research_harness.research_decisions": {
-      "ast_sha256": "579458f1a91ba55ecf9241152e413d0271053e78eb8341f166b620b2efd3da21",
+      "ast_sha256": "70973692111bceeb5535fa21cad96e2b9299c343e81429b45f36a8174b72e089",
       "functions": {
         "_accept_support_digests": "420d7e37980f2ff3f96d01bf8a8444a24c3070e2dfbc7c2b1ffa79a6c6999aba",
         "_all_objections": "4afbf09db02d0799095d8052b6dac4239aa34b9ed355127d0910e67a049b94ef",
@@ -20484,14 +20634,16 @@
         "select_problem_slot_assignments": "610a5cec1d39c1293898c6ae41c51d9683ed622316b24ebe53101e1352cc4004",
         "state_objection": "2d1eaa8a024ba69d821df278ba51499535c610ccc9d080fc70b1c115838b5c04",
         "validate_cycle_decision": "1728a877d7503c453a9596667e25b2136f4957244d7c4c894dd8db30eafc567c",
-        "validate_review_contract": "34ea13d92ed62441aa7a3fa38ace4947768284a1bca60f3972722d3b0d1097cc",
+        "validate_review_contract": "48297f24dbc20b6517676b6ef210fc7c02a6285f5287d198b579a81331159cb5",
         "validate_source_impact": "36386d4ad7bd4989973a5eb089a2558964834305c6cf2d87c96b160e641b1107"
       },
       "packet_call_digests": [
         "0c2e80e469de1a1e4f07991b55cfdbe498a182ebabda4dcc956a4cbe3536d4e7",
         "1bb95343971b0f75af638f134c9aff50b678220d589e1015c205b3c472f9949e",
+        "2100631f66dbbd6b70a5e6128725168e20381dde4b43149902bb58d27db5cc23",
         "25a74334bef1e9c2cbf836be0f744795622f016490446a18c21e56563b9daa3b",
         "40dfff30817466bb68d2b897fffdfef004e15903c3525ac172a8a80399f5bbc5",
+        "8dbc1ae5d8479e8303fac6815b2f01e99924d2523cc83a73a3a251c1078cf784",
         "ebe38f71323c64b1948e633f1400bc74b184e3de2a3fcf8cd4804aaff7e05b82"
       ],
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
@@ -20780,7 +20932,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_context_repair": {
-      "ast_sha256": "91822b315f4da10a52982ccae636685d9ddd5bab4a75dd67cc1174942e2cebb4",
+      "ast_sha256": "691441a4406c216cca347b5d62e016a80715c2889ab372cc5b323ef50a3ea4a4",
       "functions": {
         "_assignment": "dc3dccd91bf18f17b04d64ca887c63fd89393a9441c73b7d45a5b70ebea77148",
         "_exposure_lineage": "b5ac9dd0e470179fb518bc15df1cde9900a67bcb5ea118654d0d0d068450b3c0",
@@ -21870,9 +22022,9 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
     },
     "research_harness.review_preflight": {
-      "ast_sha256": "03aa53408f6d59eb23b4a59ace59184c42d7ab52d834c98cad8e0331538e2a44",
+      "ast_sha256": "c589902e1dd43f7f02570917a0b9d7499ccf8bb6c51c6c2a79c89d12a0f0bef7",
       "functions": {
-        "build_assignment_report": "af7caf433c1667a2c14649b09a1313789fb4245fcef41b1cbc354674f53bb525",
+        "build_assignment_report": "90ff62a6f3e031b301eaf0ae129b664ed9d1ffca81a9d315a08045242255a3c4",
         "build_report": "797c1b67d7ffdde547d9882ec2dd1188934aecd1a9dfefae31e458c834288c9b",
         "check_request": "922a094fbfbdc088ae8c1dd46353580916d86bdd5180bbcbc6fdfe60bdd336ac",
         "describe_work": "3637ef88ec1befcbc2d1f3b1ccb4e79d985c76a206a8a681835ab883dbf18f37"
@@ -22204,6 +22356,7 @@
         "14a31118cd3d30a582eaebec7a2c9a52f8670ba373ff9e7b3fae4ebf84b6e42b",
         "1648baa9515d5d75b7344d4e1ae43643b63dbc8e8c68aa2f0c9a4496c978d872",
         "20f2c9d61b356eeb75f06e11b64b0cad9c943a4d84682466222c434420d293ce",
+        "2100631f66dbbd6b70a5e6128725168e20381dde4b43149902bb58d27db5cc23",
         "27609372163c11225d1472ba033e44bb31fc87752d6d54c723365507029f2175",
         "2bc66cf4eeca46bc5490ade2aafcc35e6befa4331f6209168225238acae76073",
         "38b97331ccaf7aedbd5d9f7005c34ff202614407f0f7d6eb4db54857a3552539",
@@ -22226,7 +22379,7 @@
         "8065050a20908e4c159eab24aee73cdaafa3df9d8fd970de61e2f78e7a7e761d",
         "8553bc1a0573242f3cb22e068c5cf2af854ec053d7e44f60a372e84a125801fe",
         "87f1b3d48bbb7e404b2fe6fe2cd1c15b19f442cd1757582ca49151fe1056b7af",
-        "8de467fab9fddcb7a1fe602bb9c1a615cd690045e27c15b323000753d7b44bd0",
+        "8dbc1ae5d8479e8303fac6815b2f01e99924d2523cc83a73a3a251c1078cf784",
         "9764a8cc470f8c006e17e4292b8342d33a6e1927dea7857bca019c5718d0fa7d",
         "98a250da29c20b3c9cc8585ebd33ce424f8f2368faa3202ff2a62f3c00813b41",
         "9d08c265ba3f12c5d5703f9dbeaea888c46b6dccb2d1cfd638cfedb84eb6f31a",
@@ -22240,7 +22393,6 @@
         "c14cd10fdf0118f0313d8a60d470af8b797d2e12411deae722f8fcb74c646387",
         "c7e36ae89d031fdcafd6c9cc1aeec2df6f739b1cb88dac05a5dfa95b17445b56",
         "d14473e8093e21d534933cf93a34a53805be68dfc2bb444aaa672b8204493be5",
-        "d38955f50d1d8f229c5f6a7ae544dcb11fc4bb8b2a5513077fdfb6797366a864",
         "d39f949efae180708796565c7cf7cfaf6859dc88cb1b6accb53a0030c92a3a75",
         "e1e09348186e6bca448cbd1edaf35bda718c5ed3c9d42799ddb247e161a94711",
         "e7ea2914734236dffb0b4d87b5c69ff27a7fb0110f77ecc41f62a7d9b034d208",
@@ -22254,9 +22406,9 @@
       "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
     },
     "research_harness.review_provider_usage": {
-      "ast_sha256": "2007b2994c6a401bf46b4f9341daf0442821c2c6a6cdb85abb14f7329a23dd4f",
+      "ast_sha256": "8b45cdd4c5b5a98325852d3040a320283c876c25fc99d358556999417a76c986",
       "functions": {
-        "_count_remaining_turns": "b76ee75f50b8969e5c876d74ba6aff9ffe5ac06110c9ef0681830a4e3ebd72ee",
+        "_count_remaining_turns": "694d2ee2dab03fbafc00fdc953575399d33ef6828ae589f7c86e8f3031cd2967",
         "_list_calls": "7e9731ddfd5d616cdb157738348c3f9e7b382b266d9d8cbd1a383aa3663ad07e",
         "_read_window": "6e611ea9fc492b955d645d8440da719c2fd0fba41ac63d5ee4358457d1285d79",
         "describe_usage": "e543252d07d70ce569a5217a66e6c092ce1cb6c5dd3f39792b1eef99d8e76cef"
@@ -22276,7 +22428,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.review_refusal": {
-      "ast_sha256": "2529d164b0ee1900acde190caf5515ea5f303c7badbe48e9bcb34e245ad4fea7",
+      "ast_sha256": "2d1de67b752733231719c8ea535fc4b6efb93ece5bed9c849eceb36c79e29a43",
       "functions": {
         "_find_delivered_part": "6fb04e71028feef3ef7ec90682db4f645b14889b69352c9a73a86a0bd5c82bac",
         "_frozen_pdf_capture": "d720f1747e180c4fc1efc6a9923a1691e1b4e554f52a1f3f1879fba5c6589f9b",
@@ -22285,7 +22437,7 @@
         "_validate_staged_final": "d4504365f23b3da1c22d18bafeea71f7360ee5f7b6265fb511f154c37e327fe0",
         "_validate_staged_objections": "76830b97bc4f81164c2bb4a0aeb7f66ffd873e9dcf40c1de644d6e0f9eda180d",
         "_validate_staged_pages": "4179cca8a7d476662b3ca834aecf2d9b38c61cda5a09e4afc9a9a94dac6533bb",
-        "classify_observed_output": "49c21764b947fde029f13ecf1c1ec73e910dc5e52f13bee771d27ddd280f77a7",
+        "classify_observed_output": "a08d3d964206a7e966955eeefced49d8d9024abfded97ea3523119ea8c9559d4",
         "contract_check": "0d40814fe91e0e1eb703c09e1f4643a73138d0da3f0860ab5e8026680b2dee5f",
         "evidence_arrays": "71556454ae0296cc56ad3abfa9313c7d76146dd4c74e327a0a7dca415d9a422c",
         "record_native_refusal": "d40201c986ad03e7127377e2282355b8f77565f15ff77487e69ccb70786b53bf",
@@ -22299,13 +22451,16 @@
         "1a008e4fd4a9938cf52c67672ce516a54d4a1620fd9a92dcce79e9af8ac09dac",
         "2e8be534194863472f0f137b45352280be4638bf6f7e22f95af5f247ec2e8716",
         "3e6a104ec3616f5bd9d5fd2a1c1587609b871f044dac93b4697fba685db0d287",
+        "3ff6770525e9e118c2fb6668c4168f87b779356bdf5499c302c6b383af76b694",
         "7cf8dbc712f341c8fdf71956d25ba828276f63b0f4a6caaba9014159168195ca",
+        "8dbc1ae5d8479e8303fac6815b2f01e99924d2523cc83a73a3a251c1078cf784",
         "c0fccee6ff7395477b784b4b16f6b28be8131cdde409781ee3ef7dfb2938c299",
         "d291fa131431f7d2db3dbbc9a60db2b293f4bb78d91c62961f0b68f8a85baf55",
         "da548ec6392f191d460e731e2191b3b387fd64645e9ba04c04fcef2d00650b12",
         "daa9d4b2970085ac2b67e8043e961d76f961128cfccdc89103c0c251f62f80fc",
         "df8de034a5c9530b4621bb05220a81cd2c0173b76d28d43e0c82390f4f9d1bb6",
-        "f0edafd0e800c3a1f3052f901be8124a3a502400b118de13c5ca20815273c705"
+        "f0edafd0e800c3a1f3052f901be8124a3a502400b118de13c5ca20815273c705",
+        "fc810252ca86139797998f95c44928c36ed170f7ece8638c58b854b8e703f15b"
       ],
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
@@ -22486,7 +22641,7 @@
         "_build_serving_parts": "8f2f7be1d7e1d4cc20fa124af779a48e77d41ab31cb6c7aed1fe3ed6a3de3afe",
         "_build_serving_repair": "c50aaef3ccfcccf6064f9a4cdaa0a0f52111886dd9b185936b6d1e5a38ab47ca",
         "_can_deliver_parts": "4cbd7d56f2a739fef566405d73c495a14fe05a16e5289d3b5092a2c8aa6935f2",
-        "_clear_carried_answers": "450249eb5ad31bbfb84f2927fe73157413625e917dedcee6df3a0b4d23aab489",
+        "_clear_carried_answers": "ec3247ebd2ea6832479c9633ad6cb8228221315e54d452f0af42120032ad328d",
         "_clear_material": "90e10993e38c73281ba419d352e38cc8dcc44979c5fd71f6c4b530cb6bb0545a",
         "_collect_strings": "ec0518deeb23b8da9b1eacd1634dc2e018c3e69fcae3c5de317a52cb49823629",
         "_count_capacity_pages": "cae4c2e03e90999bbd175c22935974afc10b57818474e0647c093c8c65ff1d52",
@@ -22536,21 +22691,21 @@
         "describe_session_forecast": "5f805fcd2f7eb89ac21c5e0ac4024b6a2711846ab5caa0b6aac58836327b1ba0",
         "describe_session_stop": "65cfe3b9fb9d3f1bf3d0506b7f01594166971485799cafe4497a32b995166af5",
         "describe_size_report": "7be62632b8c2997350e0fa36cc9e504b9c594f0b8744b9236c1a5574f63ed7e0",
-        "describe_task": "bf59a4b0a9d1d72edba00896d18072e220200a714291b297682c6a8063117c94",
-        "describe_task_kind": "cfe41db2cc3d03166e7a9d01a99b4be80f83a451b7213a3474f5a80a0543d1e3",
+        "describe_task": "3eaaccea9d8ff817ee7cb4d4c8027cf810d60617dd511d85f6fd8dd6d63a1cc4",
+        "describe_task_kind": "899dbb55839bc249bc5d1670c0141ced1ac9e9b159a27ba9ce19a55f6e928fb1",
         "describe_text_room": "32432cfaa36ebb629ce9cbb6ce7441821d37da4b4284dd5fd2d769748a113169",
         "describe_unsolved_reviews": "b10c5662b5a0d27327b1b6e1a3145ad94acfab170899c5fe0fc1a0b0cdd12fd1",
-        "describe_work_units": "1d9ffda98c8df71cf6b4840090aea9756134591a9a31f711398a75643795d78e",
+        "describe_work_units": "468b91882eec9e12c79f14d7204231f94f8692d48afe20770440099acb5d84a7",
         "divide_room": "479df84167dc68c68051cf92f213230c797c15f1ac495e77fdb4b451d82ca270",
         "find_serving_routes": "18ca735abee774034b5023e33a7181caba87437212369e5ed2b131726f85f776",
-        "list_capacity_recovery_rows": "042109d3efff1ab7172375d1786b47d0fd4cd28faa3fd786d1362a5d302a1b40",
+        "list_capacity_recovery_rows": "f7eb46440b7c38d38b47078dae1c6ecaa59472ca7381ebdb59a2c37863b86e34",
         "measure_capacity_value": "24609ddec40349650469c624e2e8d9a807d7415e78a862b95afaf55d1297914b",
         "measure_request": "1615879024ec19d63e6243105beb627438f6d407aa9cc8fb5f7dcad5ce6b6abb",
         "merge_profile_rows": "be408c3437ff8b29f6436f534c5c9d273232ad182c39cc7068eb587fb2648b3b",
         "pack_profile_prior": "cf2f899f6e103c3086dc749c6ad02492e7cb9d493c94d904c9e468847b82f22d",
-        "plan_capacity_recovery": "58951d16862d42ca60174c359fb76d170b14d1256ba3e842d6e9534bee88e108",
+        "plan_capacity_recovery": "3410862b70e8e3391102986923ceee2711b015c54c7554c4d74f1d9faf8156b6",
         "plan_chain_capacity": "f13a609a9a039dbf79a6e738777a4d6404e7b31e9f1ca624d7385b5df112846e",
-        "prepare_assignment_capacity": "cce370aecf8c692690e4ebfd3c6aa8a1b0697170432f6c2daf687e586817c018",
+        "prepare_assignment_capacity": "d96b0bdd7a9f87cad83917d10e304e7df2624b649a774c234da7d6d79b0c9b46",
         "qualifies_for_output_profile": "0b6dc9c47e30814e0677cf564d8471f1242e0b88c51e852b32df6b03846c08fd",
         "read_chain_capacity_plan": "bf38987008e1c94cba95973349a93c3130505138d155212b78db7f5650e32bb3",
         "read_installed_cli_version": "7ab8a808e85c473964f019ff6052eb71f04a036c0115a21d0b491c00f5ee310b",
@@ -22560,7 +22715,7 @@
         "require_covered_assignment": "26b8f1c9a35563db780e2428568c6c463c4659bae0b89489cc0817c27d79b73d",
         "scale_capacity_probe_size": "ef76790aa32dae503bd20a3b46ae0c47565600786dcc1eceedba0336a7e7bc07",
         "select_capacity_probe_size": "9a4958d5b028cdbdfdd1494c77d626f86a17cb2bfe5275d7d9a0d20d2d741792",
-        "select_task_limits": "2b2401f85997a7e7bd8aa4f2924de3686cd5bf5625cb048a758b82fd04d2643a"
+        "select_task_limits": "b0e757a70c28dfddd3c48c8d1cff38e710439ddbbaf468d7475f904f1e500d59"
       },
       "packet_call_digests": [
         "014bddc9eb9c24bab4b458c02b0ce7109edf1c96217bab41fdb89ce11cde32f5",
@@ -22568,6 +22723,7 @@
         "092d946ec677ab5f3cf74c226fc2fe40e8a22c9a53710d04c7916c652a4dae14",
         "0932fbda084c1ed016e533199f971a5cd2b23fa76efce3356a4228180aac75f7",
         "095e2956970900b403cfac3d4fce95d15c54c5a450831a5be18f7d8b40b08c5e",
+        "0a6629f8b2651bb42b703f221490f7bdc9595a032d51e125192d5ace4c414239",
         "0c7e9b9fdb1fd08288d0944b6c5d19f7dc1b943883476da482f6070167548411",
         "0e0f1bd798db87d7863e8ab0391d0dd6437c3f3fd8418718d904c289a2454152",
         "0e8db7273cb069fd8e142353ce7f2a32668dbe5f6f3a6c1ac021b0601b658d99",
@@ -22576,6 +22732,7 @@
         "122f16ab93663ae535f51e02736dde5f28544b8f8596fe90ea181cad64c46c95",
         "126b919b7b9d84a620ecccebee5754dddc1abeb7e34da128b4e3dc979212e2a6",
         "1389e7de4c921999048b6e207f8775b7f33d75b7040b8f5f230eb3c8e71c6bd6",
+        "13932b78433923bcedf028bf4ae81b3eec300d55d35f86bf70edb68ff50ca224",
         "13ddac755eb855cdc3bb273ae0d1014e8cbf4ec9541c997804c622ec01170aba",
         "1445f1fa39e27ae0206b888f6994f782921c3f4493a99aebfa00f942628ebc01",
         "153834f0235934a67a380d6de255ba6b62ae57a3c96b2c16cddc3df1844c9137",
@@ -22585,7 +22742,6 @@
         "1f9354043b76f563d6207a5f1c2a89245d0c6897bef3cb1ac052ad9302e3bfe4",
         "2127b29bd94438875e5725906bef26d9ae448adfb1b06a996361e5bac5b6e2ce",
         "228e09f686fbb46e8825f43b810375568a5e4e96e3d9c877b94c4eeb21d32b5a",
-        "28bc39aefe0f6bba805d0c647062dcdcd4f7a10b2ad766beaa173f7f49c9c9ff",
         "297a1c23cda4994082e3b69fb4b752a5d306cc3f9750647750ea320a7f27e311",
         "2bec3a06da74aaa7241b43edee719396bc09efb6657efe0e38798493483ff4ee",
         "2c2359e58454adff9c145ec2ead21523810155bb0f8fa0e59abba5ad41711516",
@@ -22596,6 +22752,7 @@
         "3119ca2bde0c6b49837baf039cbce6d2514ebd66385630b71e705904b140dbcb",
         "328a08fb920fdb67924261789055b9a82c29f249ead1898adcd6c66c21e5744a",
         "371ea6c3676c38afa11582c1dbb45961f2bd1e6342dc52911a5482b4b178f9c9",
+        "3e9d21827fce68ca03497d462c43b5d75bf6ae8018f347c692d6aadd0e0554b3",
         "3ef6de15a3156cac320c6b2b230185098474a0e18b1c2dc9537ecc7444899095",
         "3f35809fe3285b9c83234862ed66066ef9c9916dfebccfe0796f87e21503b245",
         "3f7f81fd24a0576af748ca671627e62df58e35253bf9e0241f2b59fec49f9f3f",
@@ -22608,6 +22765,8 @@
         "51f371b651c33beaf1807a8e78b02e06bec0f5779ae206416a18aaa4dbf1db70",
         "5291fa39ce55b05fbea653e042644ce8b21db1adccc0de6e8800d62b1f698d03",
         "5445dbd1a14c622c90658ffd506c42258679705375aa3799bea13c42b49cf3f1",
+        "5732f392194fb7cb0681ab89a2c15499a92cc9e192c3ca441d6505596a5d9291",
+        "5b6a69029be8cb230c6bb32079f77b4bcc0f5a8c15974eb135b5f57c5026ebad",
         "5bd0a636559bd5b27a5ca53e7dc91d881b51a6fa565bcc3258890bf6beb75522",
         "5c0ebec1794e847b3ba99b91b3d5eae59ca87bfbbb716729753dbb9548c62916",
         "5cdff9e2679328f86c346b08c299dff739f3a56efd54750d08a4aaf51af017e3",
@@ -22615,6 +22774,8 @@
         "5eb8732f219c080f94ce5e81ab44a8af0af6513b8238d8078e0e593c6398ed37",
         "61793957764cc7a23597e73bc3377e1e52e64f448ce64c664741d63f21d5ca10",
         "61d374f3569ed4258d92f3dab91a1b86f8f48192d1d1934cbfea9b3711192289",
+        "623b19e8d1df40166e131066721bb79155bf22304ac4ad7394e7fbc88afc0e0f",
+        "69cf543f5b92e9c1d722a6a2e11ee5e2aec5d5d6072c2e5dd30d92cb34e0fd0e",
         "6a1ea2b9d90987ec0422730e0cec7dd48a891246f8b6a9c48e57b019567fd407",
         "6c4b59c6048f86b6a4785ed24caf1f8d0cb5081e54c6d2da777e692497daef9e",
         "7143de2d68fb3a8f091ca541660a9a24699797383e1e6bb3a643776a8efc32f8",
@@ -22631,6 +22792,7 @@
         "889a5ecd919d4f2fef928e74a0ad419456da73d39d3a5789704645fecf70bfc6",
         "8abaec634a536215775eee245706f864d88d290cbe5fc180709d83ca623e2419",
         "8e7fb7260e376c8e0d97e7e0a5d46b25b71ced27093a30cf88f09a0eb4948117",
+        "8f6086969b1e7b72e53943da096e4fe5a2e2b87bb25142b85b20ca37fd1db40d",
         "8ff7a805fc8e621c7f665dec7a6aa3b3ed66a4063274d2a3cc87095358f4b86a",
         "931b24f230659cbefeb4cfd2ba2ea778e8c428e578fa74ff9fc013cc7b015f35",
         "949f6555bf04f81dd02bab137405ceab4dc3dae3b8a87399b13703380ed92280",
@@ -22643,13 +22805,10 @@
         "9e3d26ef984799768a3f62c964dfcb98f33f58b26a16bb217f7a8faa8228e673",
         "a204c173e0b7bf248ac18a200003586c38c5afc15be8faf113d1adde6dbd1017",
         "a2bdfd99130bf60745e0d5ce26c52615a463be0e86251d6457d85da45a461688",
-        "a2d12e48709e6735e66f5d9d796136445557869e1ed9ba3c93b7149b4014a4d9",
         "a5a0f024f5026f3592e663e578fea54c34a031e9f271457740f9d7b0210f884d",
         "a5d0a7a95e60468a524a0f6bfd4081ca365875d65539bc801b0f5e21c59f3332",
         "aa2d442f8e3d62cb79102be5d43a266213ddb313adfe18b8b010d1dfeda0fe50",
         "aad25aa57aee8558427a54af78be1f5e521b0e84afdd35fed2ef57ef8e40f990",
-        "adaee0398a8690df8157da4423bd35c329f641702d0f23931699d4f14113868d",
-        "b3dc9a0f07ceaf326cee863b12f7be88aaaca042fc592107ae01f051f98c4727",
         "b4a42a6e28272787565bb7d5a96d6b4e291f1307e7a90454e63f892d5eaf1686",
         "b597919d4ae296aefa5497e489887f2233d46c3adcfa1bb3e416a714da6ebc30",
         "b8b5c33a4bfba3471cd01e8011931d6115a8c93dc2fecce646b5fe3839895214",
@@ -22664,16 +22823,18 @@
         "c813fb9c7ca91d0f0041ea07ab95bb4178a8bc80f6c0ee33589db2763c23e5e4",
         "cdcae789d00445b7b5e058162a385e8d1bf1ef43d6f654e19f0ea4128b051ad9",
         "cdcdaf743119233362a539f200263ebb8e3a754e16b86d6c56db9db77e4b9eec",
+        "ced9fb38633ba3abc0916759a89778c15c2a96497fc372dfc8911baaeae6df2c",
         "d045d55dc485a6db6fa133679542cba7492fc75771dee3dd74222f6c3467b63c",
         "d7494f28340048b918e213b14a9cd4347969ac0651586805bb56917d719aa7f4",
         "d80a0609af5a3f86bbe0113d78d5da6baa669c823edfed01386a92510294bc75",
+        "dc36f069529d700f02a8dce188c9b3370fed5032306be175ba24cb8242f2f79d",
         "debeadd6758aaf305459d4a901eecf4353043dbec49cae6a3b5a0d3cddf48c5d",
         "dfe60a84dda9ff0123cdac8e1da844b61892f7b60bd774749655bd57a63a4e3c",
         "e14af1621794e04b5115bc93e66dc26e523440656556793c94781a10f54a0ef5",
         "e32d2fe550caaae2f7406aef4ed8b9e94f8c189336e833b74e434f4800270126",
         "e33d88cabe5b7f6a59473f4af4665e76747224e982c667b4b8ebcf6e5f0c56b7",
         "e445f841b873a3daefbceb8431f184d74bb88a8ad0c5ed62514bf90d7434603b",
-        "e702916541eed243e9af81ed76685279511899d9a36bb70be7597a96d299bfdd",
+        "e8e44a11f9d6ac22eb6e5222019ae81e9a55dd8e8c1933be350cc13a3f93c709",
         "e9d698efaa5fa17a9be6fd437e66e69212260150e4b69d15910723f4d7878aa4",
         "ee6518c36f27217cac9d0a62ade45e31ee480e3707a43db5dda7d6917130452b",
         "eff82958e61dc06bec6e96a0ac964fb9b6301955d137450147b84aa5a125eacb",
@@ -22681,6 +22842,7 @@
         "f2348c8b962b96093effe1bac671b28bfea9e07217876102e0e949a27fea8c7e",
         "f4450db265165e93e277abf011d613477dc019e9bcfa891769c840cb121b08b4",
         "f6c5ac39e8f1bde60914f9d14ae44b4f3c6ef436d7e4a1e79e0dd0fbf916c45b",
+        "f96433285b410d9b1d5b346d431327d74a60c7ff8086afa71d17312db837479a",
         "fc5b7c32b023357b2fb7c9a8d9d5624677a2845dd5a2e022120779e13eb9cbda",
         "ffdfc783a549c42578e6236ef07694427415cee2147068c18cd11ab6d1bd4c94"
       ],
@@ -50706,7 +50868,7 @@
     },
     "adjudicator/exactory-problem-review-v2:assessments.*.value.rubric.attempt": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:assessments.*.value.rubric.calibration": {
       "declared_entry": "Q3",
@@ -50714,7 +50876,7 @@
     },
     "adjudicator/exactory-problem-review-v2:assessments.*.value.rubric.significance": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:assessments.*.value.rubric_evidence.A1": {
       "declared_entry": "Q3",
@@ -50758,7 +50920,7 @@
     },
     "adjudicator/exactory-problem-review-v2:assessments.*.value.rubric_evidence.attempt": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:assessments.*.value.rubric_evidence.calibration": {
       "declared_entry": "Q3",
@@ -50906,7 +51068,7 @@
     },
     "adjudicator/exactory-problem-review-v2:context_repair.predecessor_binding.attempt_digests": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "Q10_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:context_repair.predecessor_binding.attempt_digests.*": {
       "declared_entry": "Q3",
@@ -50914,7 +51076,7 @@
     },
     "adjudicator/exactory-problem-review-v2:context_repair.predecessor_binding.attempt_ids": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "Q10_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:context_repair.predecessor_binding.attempt_ids.*": {
       "declared_entry": "Q3",
@@ -50930,7 +51092,7 @@
     },
     "adjudicator/exactory-problem-review-v2:context_repair.predecessor_binding.selected_attempt_id": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "Q10_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:context_repair.probe_id": {
       "declared_entry": "Q3",
@@ -51374,7 +51536,7 @@
     },
     "adjudicator/exactory-problem-review-v2:problem_evidence.assessment.grades.attempt": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:problem_evidence.assessment.grades.calibration": {
       "declared_entry": "Q3",
@@ -51382,7 +51544,7 @@
     },
     "adjudicator/exactory-problem-review-v2:problem_evidence.assessment.grades.significance": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:problem_evidence.assessment.id": {
       "declared_entry": "Q3",
@@ -51702,7 +51864,7 @@
     },
     "adjudicator/exactory-problem-review-v2:problem_evidence.attempt.proportion": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:problem_evidence.citations": {
       "declared_entry": "Q17",
@@ -52046,7 +52208,7 @@
     },
     "adjudicator/exactory-problem-review-v2:problem_evidence.readings.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:problem_evidence.readings.*.reading.*": {
       "declared_entry": "Q3",
@@ -52722,7 +52884,7 @@
     },
     "adjudicator/exactory-problem-review-v2:rubric_grades.*.attempt": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:rubric_grades.*.calibration": {
       "declared_entry": "Q3",
@@ -52730,7 +52892,7 @@
     },
     "adjudicator/exactory-problem-review-v2:rubric_grades.*.significance": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:scientific_history": {
       "declared_entry": "Q2",
@@ -52910,7 +53072,7 @@
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.assessments.*.value.rubric.attempt": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.assessments.*.value.rubric.calibration": {
       "declared_entry": "Q3",
@@ -52918,7 +53080,7 @@
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.assessments.*.value.rubric.significance": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.assessments.*.value.rubric_evidence.A1": {
       "declared_entry": "Q3",
@@ -52962,7 +53124,7 @@
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.assessments.*.value.rubric_evidence.attempt": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.assessments.*.value.rubric_evidence.calibration": {
       "declared_entry": "Q3",
@@ -53450,7 +53612,7 @@
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.assessment.grades.attempt": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.assessment.grades.calibration": {
       "declared_entry": "Q3",
@@ -53458,7 +53620,7 @@
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.assessment.grades.significance": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.assessment.id": {
       "declared_entry": "Q3",
@@ -53778,7 +53940,7 @@
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.attempt.proportion": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.citations": {
       "declared_entry": "Q17",
@@ -54118,7 +54280,7 @@
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.readings.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.readings.*.reading.*": {
       "declared_entry": "Q3",
@@ -54546,7 +54708,7 @@
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.units.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.units.*.reading.*": {
       "declared_entry": "Q3",
@@ -55114,7 +55276,7 @@
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.version_review.value.rubric.attempt": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.version_review.value.rubric.calibration": {
       "declared_entry": "Q3",
@@ -55122,7 +55284,7 @@
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.version_review.value.rubric.significance": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.version_review.value.rubric_evidence.A1": {
       "declared_entry": "Q3",
@@ -55166,7 +55328,7 @@
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.version_review.value.rubric_evidence.attempt": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.version_review.value.rubric_evidence.calibration": {
       "declared_entry": "Q3",
@@ -55398,7 +55560,7 @@
     },
     "adjudicator/exactory-problem-review-v2:version_review.value.rubric.attempt": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:version_review.value.rubric.calibration": {
       "declared_entry": "Q3",
@@ -55406,7 +55568,7 @@
     },
     "adjudicator/exactory-problem-review-v2:version_review.value.rubric.significance": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:version_review.value.rubric_evidence.A1": {
       "declared_entry": "Q3",
@@ -55450,7 +55612,7 @@
     },
     "adjudicator/exactory-problem-review-v2:version_review.value.rubric_evidence.attempt": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "adjudicator/exactory-problem-review-v2:version_review.value.rubric_evidence.calibration": {
       "declared_entry": "Q3",
@@ -58384,7 +58546,7 @@
     },
     "manuscript/:evidence.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "manuscript/:evidence.reading.*.assessment.bibliography_digest": {
       "declared_entry": "Q3",
@@ -58532,7 +58694,7 @@
     },
     "manuscript/:evidence.source": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "manuscript/:evidence.source.*.capture_method": {
       "declared_entry": "Q3",
@@ -58592,7 +58754,7 @@
     },
     "manuscript/:evidence.source_bundle": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "manuscript/:evidence.source_bundle.*.bibliography.entries": {
       "declared_entry": "Q2",
@@ -58688,7 +58850,7 @@
     },
     "manuscript/:evidence.work": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "manuscript/:evidence.work.*.abstract.path": {
       "declared_entry": "Q3",
@@ -58932,7 +59094,7 @@
     },
     "manuscript/:results": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "manuscript/:results.*.execution.command.argv": {
       "declared_entry": "Q2",
@@ -59724,7 +59886,7 @@
     },
     "manuscript/exactory-independent-review-v1:paper.evidence.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "manuscript/exactory-independent-review-v1:paper.evidence.reading.*.assessment.bibliography_digest": {
       "declared_entry": "Q3",
@@ -59872,7 +60034,7 @@
     },
     "manuscript/exactory-independent-review-v1:paper.evidence.source": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "manuscript/exactory-independent-review-v1:paper.evidence.source.*.capture_method": {
       "declared_entry": "Q3",
@@ -59932,7 +60094,7 @@
     },
     "manuscript/exactory-independent-review-v1:paper.evidence.source_bundle": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "manuscript/exactory-independent-review-v1:paper.evidence.source_bundle.*.bibliography.entries": {
       "declared_entry": "Q2",
@@ -60028,7 +60190,7 @@
     },
     "manuscript/exactory-independent-review-v1:paper.evidence.work": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "manuscript/exactory-independent-review-v1:paper.evidence.work.*.abstract.path": {
       "declared_entry": "Q3",
@@ -60272,7 +60434,7 @@
     },
     "manuscript/exactory-independent-review-v1:paper.results": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "manuscript/exactory-independent-review-v1:paper.results.*.execution.command.argv": {
       "declared_entry": "Q2",
@@ -61036,7 +61198,7 @@
     },
     "native_math/exactory-independent-review-v1:native.contract": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "native_math/exactory-independent-review-v1:native.contract.*": {
       "declared_entry": "Q3",
@@ -61084,7 +61246,7 @@
     },
     "native_math/exactory-independent-review-v1:native.scientific_context.current": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "native_math/exactory-independent-review-v1:native.scientific_context.current.*": {
       "declared_entry": "Q2",
@@ -61092,7 +61254,7 @@
     },
     "native_math/exactory-independent-review-v1:native.scientific_context.current.*.*": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "native_math/exactory-independent-review-v1:native.scientific_context.current.*.*.*": {
       "declared_entry": "Q3",
@@ -61255,8 +61417,19 @@
       "gap": "A1_frame_metadata"
     },
     "native_math/exactory-independent-review-v1:reading_turn.reading_record.turns": {
-      "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "canonical": {
+        "dimension": "entries",
+        "entry": "Q1",
+        "factory": "v6_reading_records",
+        "fixture": "canonical:v6_reading_records",
+        "path": [
+          "reading_turn",
+          "reading_record",
+          "turns"
+        ],
+        "property_kind": "v6_reading_record",
+        "quantity": "turns"
+      }
     },
     "native_math/exactory-independent-review-v1:reading_turn.reviewer.actor_id": {
       "declared_entry": "Q3",
@@ -61380,7 +61553,7 @@
     },
     "readiness/:inputs.assessment.assessment.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.assessment.assessment.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -61464,7 +61637,7 @@
     },
     "readiness/:inputs.assessment.assessment.payload.development": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.assessment.assessment.payload.development.*": {
       "declared_entry": "Q3",
@@ -61880,7 +62053,7 @@
     },
     "readiness/:inputs.assessment.payload.development": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.assessment.payload.development.*": {
       "declared_entry": "Q3",
@@ -62216,11 +62389,11 @@
     },
     "readiness/:inputs.branches": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.branches.*.admissions": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.branches.*.admissions.*.command.argv": {
       "declared_entry": "Q2",
@@ -62372,7 +62545,7 @@
     },
     "readiness/:inputs.branches.*.assessment.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.branches.*.assessment.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -62456,7 +62629,7 @@
     },
     "readiness/:inputs.branches.*.assessment.payload.development": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.branches.*.assessment.payload.development.*": {
       "declared_entry": "Q3",
@@ -62796,7 +62969,7 @@
     },
     "readiness/:inputs.branches.*.checkpoints": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.branches.*.checkpoints.*.artifact.path": {
       "declared_entry": "Q3",
@@ -62868,7 +63041,7 @@
     },
     "readiness/:inputs.branches.*.checkpoints.*.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.branches.*.checkpoints.*.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -62928,7 +63101,7 @@
     },
     "readiness/:inputs.branches.*.checkpoints.*.execution_digests": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.branches.*.checkpoints.*.execution_digests.*": {
       "declared_entry": "Q3",
@@ -63072,7 +63245,7 @@
     },
     "readiness/:inputs.branches.*.executions": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.branches.*.executions.*.id": {
       "declared_entry": "Q3",
@@ -63364,7 +63537,7 @@
     },
     "readiness/:inputs.branches.*.plan_evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.branches.*.plan_evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -63576,7 +63749,7 @@
     },
     "readiness/:inputs.checkpoint.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.checkpoint.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -63636,7 +63809,7 @@
     },
     "readiness/:inputs.checkpoint.execution_digests": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.checkpoint.execution_digests.*": {
       "declared_entry": "Q3",
@@ -63992,7 +64165,7 @@
     },
     "readiness/:inputs.sources.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.sources.reading.*.assessment.bibliography_digest": {
       "declared_entry": "Q3",
@@ -64140,7 +64313,7 @@
     },
     "readiness/:inputs.sources.source": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.sources.source.*.capture_method": {
       "declared_entry": "Q3",
@@ -64200,7 +64373,7 @@
     },
     "readiness/:inputs.sources.source_bundle": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.sources.source_bundle.*.bibliography.entries": {
       "declared_entry": "Q2",
@@ -64296,7 +64469,7 @@
     },
     "readiness/:inputs.sources.work": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.sources.work.*.abstract.path": {
       "declared_entry": "Q3",
@@ -64500,7 +64673,7 @@
     },
     "readiness/:inputs.sources.work_assertion": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.sources.work_assertion.*.abstract.path": {
       "declared_entry": "Q3",
@@ -64600,7 +64773,7 @@
     },
     "readiness/:inputs.strategy_accounts": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.strategy_accounts.*.cycles": {
       "declared_entry": "Q2",
@@ -64836,7 +65009,7 @@
     },
     "readiness/:inputs.synthesis.foundation.cohort.readings": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.synthesis.foundation.cohort.readings.*.assessment.bibliography_digest": {
       "declared_entry": "Q3",
@@ -65096,7 +65269,7 @@
     },
     "readiness/:inputs.synthesis.foundation.inventory.*.body_coverage.readings": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.synthesis.foundation.inventory.*.body_coverage.readings.*.assessment.bibliography_digest": {
       "declared_entry": "Q3",
@@ -65768,7 +65941,7 @@
     },
     "readiness/:inputs.synthesis.sections.context.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.synthesis.sections.context.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -66136,7 +66309,7 @@
     },
     "readiness/:inputs.synthesis.sections.innovation.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.synthesis.sections.innovation.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -66708,7 +66881,7 @@
     },
     "readiness/:inputs.synthesis.sections.rationale.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.synthesis.sections.rationale.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -67044,7 +67217,7 @@
     },
     "readiness/:inputs.synthesis.sections.standards.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "readiness/:inputs.synthesis.sections.standards.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -67556,7 +67729,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.assessment.assessment.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.assessment.assessment.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -67640,7 +67813,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.assessment.assessment.payload.development": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.assessment.assessment.payload.development.*": {
       "declared_entry": "Q3",
@@ -68056,7 +68229,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.assessment.payload.development": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.assessment.payload.development.*": {
       "declared_entry": "Q3",
@@ -68392,11 +68565,11 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches.*.admissions": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches.*.admissions.*.command.argv": {
       "declared_entry": "Q2",
@@ -68548,7 +68721,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches.*.assessment.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches.*.assessment.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -68632,7 +68805,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches.*.assessment.payload.development": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches.*.assessment.payload.development.*": {
       "declared_entry": "Q3",
@@ -68972,7 +69145,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches.*.checkpoints": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches.*.checkpoints.*.artifact.path": {
       "declared_entry": "Q3",
@@ -69044,7 +69217,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches.*.checkpoints.*.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches.*.checkpoints.*.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -69104,7 +69277,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches.*.checkpoints.*.execution_digests": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches.*.checkpoints.*.execution_digests.*": {
       "declared_entry": "Q3",
@@ -69248,7 +69421,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches.*.executions": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches.*.executions.*.id": {
       "declared_entry": "Q3",
@@ -69540,7 +69713,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches.*.plan_evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.branches.*.plan_evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -69752,7 +69925,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.checkpoint.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.checkpoint.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -69812,7 +69985,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.checkpoint.execution_digests": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.checkpoint.execution_digests.*": {
       "declared_entry": "Q3",
@@ -70168,7 +70341,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.sources.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.sources.reading.*.assessment.bibliography_digest": {
       "declared_entry": "Q3",
@@ -70316,7 +70489,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.sources.source": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.sources.source.*.capture_method": {
       "declared_entry": "Q3",
@@ -70376,7 +70549,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.sources.source_bundle": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.sources.source_bundle.*.bibliography.entries": {
       "declared_entry": "Q2",
@@ -70472,7 +70645,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.sources.work": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.sources.work.*.abstract.path": {
       "declared_entry": "Q3",
@@ -70676,7 +70849,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.sources.work_assertion": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.sources.work_assertion.*.abstract.path": {
       "declared_entry": "Q3",
@@ -70776,7 +70949,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.strategy_accounts": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.strategy_accounts.*.cycles": {
       "declared_entry": "Q2",
@@ -71012,7 +71185,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.synthesis.foundation.cohort.readings": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.synthesis.foundation.cohort.readings.*.assessment.bibliography_digest": {
       "declared_entry": "Q3",
@@ -71272,7 +71445,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.synthesis.foundation.inventory.*.body_coverage.readings": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.synthesis.foundation.inventory.*.body_coverage.readings.*.assessment.bibliography_digest": {
       "declared_entry": "Q3",
@@ -71944,7 +72117,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.synthesis.sections.context.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.synthesis.sections.context.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -72312,7 +72485,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.synthesis.sections.innovation.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.synthesis.sections.innovation.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -72884,7 +73057,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.synthesis.sections.rationale.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.synthesis.sections.rationale.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -73220,7 +73393,7 @@
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.synthesis.sections.standards.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-independent-review-sources-v2:readiness.inputs.synthesis.sections.standards.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -73876,7 +74049,7 @@
     },
     "result/exactory-problem-review-v2:context_repair.predecessor_binding.attempt_digests": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "Q10_frame_metadata"
     },
     "result/exactory-problem-review-v2:context_repair.predecessor_binding.attempt_digests.*": {
       "declared_entry": "Q3",
@@ -73884,7 +74057,7 @@
     },
     "result/exactory-problem-review-v2:context_repair.predecessor_binding.attempt_ids": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "Q10_frame_metadata"
     },
     "result/exactory-problem-review-v2:context_repair.predecessor_binding.attempt_ids.*": {
       "declared_entry": "Q3",
@@ -73900,7 +74073,7 @@
     },
     "result/exactory-problem-review-v2:context_repair.predecessor_binding.selected_attempt_id": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "Q10_frame_metadata"
     },
     "result/exactory-problem-review-v2:context_repair.probe_id": {
       "declared_entry": "Q3",
@@ -74092,7 +74265,7 @@
     },
     "result/exactory-problem-review-v2:historical_reviews.*.value.rubric.attempt": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-problem-review-v2:historical_reviews.*.value.rubric.calibration": {
       "declared_entry": "Q3",
@@ -74100,7 +74273,7 @@
     },
     "result/exactory-problem-review-v2:historical_reviews.*.value.rubric.significance": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-problem-review-v2:historical_reviews.*.value.rubric_evidence.A1": {
       "declared_entry": "Q3",
@@ -74144,7 +74317,7 @@
     },
     "result/exactory-problem-review-v2:historical_reviews.*.value.rubric_evidence.attempt": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-problem-review-v2:historical_reviews.*.value.rubric_evidence.calibration": {
       "declared_entry": "Q3",
@@ -74306,7 +74479,7 @@
     },
     "result/exactory-problem-review-v2:problem_evidence.account_records.*.cite.id": {
       "declared_entry": "Q6",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-problem-review-v2:problem_evidence.account_records.*.record.id": {
       "canonical": {
@@ -74461,7 +74634,7 @@
     },
     "result/exactory-problem-review-v2:problem_evidence.assessment.grades.attempt": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-problem-review-v2:problem_evidence.assessment.grades.calibration": {
       "declared_entry": "Q3",
@@ -74469,7 +74642,7 @@
     },
     "result/exactory-problem-review-v2:problem_evidence.assessment.grades.significance": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-problem-review-v2:problem_evidence.assessment.id": {
       "declared_entry": "Q3",
@@ -74789,7 +74962,7 @@
     },
     "result/exactory-problem-review-v2:problem_evidence.attempt.proportion": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-problem-review-v2:problem_evidence.citations": {
       "declared_entry": "Q17",
@@ -75290,7 +75463,7 @@
     },
     "result/exactory-problem-review-v2:problem_evidence.readings.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "result/exactory-problem-review-v2:problem_evidence.readings.*.reading.*": {
       "declared_entry": "Q3",
@@ -78508,7 +78681,7 @@
     },
     "round/:decision.payload.next.goal.continuity": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "round/:decision.payload.next.goal.contribution_delta": {
       "declared_entry": "Q3",
@@ -78620,7 +78793,7 @@
     },
     "round/:development": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "round/:development.*.alternatives": {
       "declared_entry": "Q2",
@@ -78956,7 +79129,7 @@
     },
     "round/:manuscript.evidence.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "round/:manuscript.evidence.reading.*.assessment.bibliography_digest": {
       "declared_entry": "Q3",
@@ -79104,7 +79277,7 @@
     },
     "round/:manuscript.evidence.source": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "round/:manuscript.evidence.source.*.capture_method": {
       "declared_entry": "Q3",
@@ -79164,7 +79337,7 @@
     },
     "round/:manuscript.evidence.source_bundle": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "round/:manuscript.evidence.source_bundle.*.bibliography.entries": {
       "declared_entry": "Q2",
@@ -79260,7 +79433,7 @@
     },
     "round/:manuscript.evidence.work": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "round/:manuscript.evidence.work.*.abstract.path": {
       "declared_entry": "Q3",
@@ -79496,7 +79669,7 @@
     },
     "round/:manuscript.results": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "round/:manuscript.results.*.execution.command.argv": {
       "declared_entry": "Q2",
@@ -81424,7 +81597,7 @@
     },
     "slate/exactory-independent-review-sources-v2:dossier.continuity": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "slate/exactory-independent-review-sources-v2:dossier.dependencies": {
       "declared_entry": "Q2",
@@ -82464,7 +82637,7 @@
     },
     "slate/exactory-independent-review-sources-v2:scientific_history.*.packet.dossier.continuity": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "slate/exactory-independent-review-sources-v2:scientific_history.*.packet.dossier.dependencies": {
       "declared_entry": "Q2",
@@ -82952,7 +83125,7 @@
     },
     "verification/exactory-independent-review-v1:paper.sources.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "verification/exactory-independent-review-v1:paper.sources.reading.*.assessment.bibliography_digest": {
       "declared_entry": "Q3",
@@ -83100,7 +83273,7 @@
     },
     "verification/exactory-independent-review-v1:paper.sources.source": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "verification/exactory-independent-review-v1:paper.sources.source.*.capture_method": {
       "declared_entry": "Q3",
@@ -83160,7 +83333,7 @@
     },
     "verification/exactory-independent-review-v1:paper.sources.source_bundle": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "verification/exactory-independent-review-v1:paper.sources.source_bundle.*.bibliography.entries": {
       "declared_entry": "Q2",
@@ -83256,7 +83429,7 @@
     },
     "verification/exactory-independent-review-v1:paper.sources.work": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "verification/exactory-independent-review-v1:paper.sources.work.*.abstract.path": {
       "declared_entry": "Q3",
@@ -83592,7 +83765,7 @@
     },
     "verification/exactory-independent-review-v1:paper.standards.evidence.*.reading": {
       "declared_entry": "Q1",
-      "gap": "Q1_identifier_turn_lineage"
+      "gap": "A1_frame_metadata"
     },
     "verification/exactory-independent-review-v1:paper.standards.evidence.*.reading.*": {
       "declared_entry": "Q3",
@@ -84081,7 +84254,8 @@
       "multiple_values": true
     },
     "v6_reading_records": {
-      "builder": "research_harness.openness_reading._assemble_reading_turn"
+      "builder": "research_harness.openness_reading._assemble_reading_turn",
+      "input": "The real v6 manifest, exact search receipts or synthetic upstream turn-receipt rows, serialized by _assemble_reading_turn. A scaled turn list is builder/shape evidence, not 10,000 observed calls or a claim of whole-request admission."
     },
     "v7_reading_deliveries": {
       "builder": "research_harness.openness_reading_v7.build_turn_packet",
