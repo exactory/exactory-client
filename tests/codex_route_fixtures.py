@@ -13,8 +13,9 @@ from research_harness.evidence import digest
 
 def install_codex_runtime(case):
     for adapter in (codex, framed):
-        runtime = patch.object(adapter, 'runtime', return_value={
-            'adapter': adapter.ADAPTER, 'fixture': 'reviewer-excerpt-test'})
+        from capacity_evidence_fixtures import build_capacity_runtime
+        runtime = patch.object(adapter, 'runtime', return_value=build_capacity_runtime(
+            adapter.ADAPTER, fixture='reviewer-excerpt-test'))
         rollout = patch.object(adapter, '_rollout', return_value=[])
         for patcher in (runtime, rollout,
                         patch.object(adapter, 'NATIVE_DECLARATIONS', ()),
@@ -27,7 +28,7 @@ def build_codex_response(route, request, output):
     response = {'id': 'provider-response', 'model': route['model'], 'status': 'completed',
                 'output': [{'type': 'message', 'role': 'assistant',
                             'content': [{'type': 'output_text', 'text': json.dumps(output)}]}],
-                'usage': {'input_tokens': 37, 'output_tokens': 12}}
+                'usage': {'input_tokens': 3000000 if 'allowed_control' in output else 37, 'output_tokens': 12}}
     return bind_codex_response(route, request, response)
 
 
@@ -55,10 +56,10 @@ def capture_codex_response(route, request, output):
     return invocation.capture_observation(route, request, {'response': response})['response']
 
 
-def record_codex_route(case, identifier='route', *, output_tokens=1000, timeout_seconds=5):
+def record_codex_route(case, identifier='route', *, output_tokens=1000, timeout_seconds=5, model='fixture-model'):
     """Register and probe a Codex route in the case's store."""
     install_codex_runtime(case)
-    protocol.record_route(case.store, {'id': identifier, 'adapter': 'codex_cli_v1', 'model': 'fixture-model',
+    protocol.record_route(case.store, {'id': identifier, 'adapter': 'codex_cli_v1', 'model': model,
         'endpoint': 'codex://local', 'configuration': {'max_output_tokens': output_tokens, 'timeout_seconds': timeout_seconds}},
         expected_revision=case.store.revision, request_id='codex-route-' + identifier)
     probe_codex_route(case, 'probe-' + identifier, identifier)

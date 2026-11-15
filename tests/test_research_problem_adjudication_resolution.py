@@ -1729,7 +1729,7 @@ class ReviewOutputRefusalTests(delivery_fixtures.ProblemDeliveryCase):
             {"attempt_id": "refused-2", "code": "review_evidence_undelivered"}])
         usage = protocol.usage_report(self.records())
         self.assertEqual(usage["calls"], 3)  # One route probe, both observed refusals.
-        self.assertEqual(usage["observed"]["input_tokens"], 111)
+        self.assertEqual(usage["observed"]["input_tokens"], 1000000 + 2 * 37)
 
     def test_recheck_restores_binding_and_requires_recording_if_contract_becomes_recordable(self):
         """Frozen packets cannot legitimately change in place. Simulate a future pure-validator correction only."""

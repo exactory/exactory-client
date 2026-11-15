@@ -28,7 +28,8 @@ class CallAdmissionTests(TaskExecutionFixture):
             record = dict(invocation, **observation, recorded_revision=revision)
             return [immutable_record(records, completed, identifier, record)], record
 
-        with patch.object(protocol, '_observed', side_effect=observe or (
+        with patch('research_harness.review_call_admission.wait_for_admission', side_effect=lambda store, attempt: attempt(False)), \
+                patch.object(protocol, '_observed', side_effect=observe or (
                 lambda *args: dict(status='failed', request=self.request, response=None, output=None))):
             return protocol._invoke_once(self.store, payload, operation, start, finish,
                 expected_revision=self.store.revision, request_id=identifier, credential=None)
@@ -96,6 +97,8 @@ from research_harness.operations import immutable_record
 from research_harness.storage import Store
 root, mode, raw = Path(sys.argv[1]), sys.argv[2], json.loads(sys.argv[3])
 store = Store(root)
+from research_harness import review_call_admission
+review_call_admission.wait_for_admission = lambda store, attempt: attempt(False)
 def report(value): (root / ('result-' + mode)).write_text(json.dumps(value))
 while not (root / 'race-gate').exists(): time.sleep(.005)
 try:

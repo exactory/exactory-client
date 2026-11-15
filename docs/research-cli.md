@@ -82,10 +82,11 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `work-item` | Retain one stable reviewer request or development obligation, classification, actual execution state and lineage. |
 | `research-lead` | Preserve an earlier discrepancy and its original provenance, verification status and next check. |
 | `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), `codex_cli_framed_v1` at `codex://local` (an isolated versioned route for lossless openness evidence framing), `codex_cli_visual_v1` at `codex://local` (a Codex route that also receives the rendered pages of a required PDF inspection as images), or `openai_responses_v1` at an HTTPS endpoint with an API credential. The record pins the runtime of the installed adapter. Probes and attempts verify against that pin, so a review bound earlier stays verifiable after the adapter changes. A run or a probe on a route whose pin differs from the installed adapter is refused with `review_route_runtime_stale` before any call. Record and probe a new route then. Since 0.75.0 a new probe, invocation and assignment on `codex_cli_v1` or `codex_cli_framed_v1` record `codex_invocation: "codex-invocation-settings-v1"`. Every observation of a call on these routes (an attempt, an output correction or a staged task) records the field too. The child assignment that runs a staged task does not record the field. The response of such a call retains the native rollout of the call under `codex_invocation.native_rollout`, read after the call returns. A response that holds the field authenticates only through the retained rollout. A probe whose record carries the field authenticates only when its response holds the rollout. The same holds for an ordinary attempt whose assignment or attempt record carries the field, and for a staged task whose observation carries it. The rollout must have the recorded `rollout_digest` and hold one `session_meta` and one `turn_context`. The turn's `model` must be the route's model and its `effort` must be `high`. The inspection of the retained rollout must give the recorded `context_evidence` again. The answer in the response must be the assistant output of the rollout. When the rollout cannot be read after the call, the response records the error under `codex_invocation.error` instead, and the call does not authenticate. A record without the field keeps its earlier authentication. A record whose `codex_invocation` is another value authenticates nothing. A `status` read or a review preparation observes the installed runtime of the adapters in use at its start and at its end; when it changed in between, the command refuses with `review_runtime_changed` and writes nothing, and the same command run again reads the current runtime. |
-| `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. The probe binds to the route's pinned runtime; after an adapter change, probe a new route instead of the old one. A probe interrupted after the reviewer answered is finished or reconciled as an interrupted `review-run` is. |
+| `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. The probe binds to the route's pinned runtime; after an adapter change, probe a new route instead of the old one. A probe interrupted after the reviewer answered is finished or reconciled as an interrupted `review-run` is. Since 0.89.2 the payload accepts `capacity: {input_tokens: N}`, where `N` is a positive integer. The probe is then a capacity probe: the same test with a request built for that target size, which gives the route evidence of its input limit (The capacity of a route, below). A probe that finds the reviewer capacity occupied waits for it (the queue, in [Staged problem reviews](#staged-problem-reviews)), and a standing store stop refuses it with `review_chain_stopped` ([Review chains and `review-series`](#review-chains-and-review-series)). |
 | `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. When a post closes the chain of a new assignment, the assignment is refused with `problem_already_posted` ([Problem creation](#problem-creation)). A packet whose request does not fit one input of a local text route, or whose fitted request withholds an evidence body, is delivered as a series of fresh-input turns when an adapter applies to its role (a problem `result` or `adjudicator` packet, a context repair, a `verification` or readiness `result` packet, a `native_math` packet without an openness minimum; [Reviews in fresh parts](#reviews-in-fresh-parts)) on a `claude_cli_v1`, `codex_cli_v1` or `codex_cli_framed_v1` route with a local input limit; an admitted adjudicator repair on such a route enters parts whatever its size. The next turn is assigned with a new id, the same role, dossier, route, reviewer and author, and the last turn as `context: {prior_assignment_id}`, and the assignment result carries `review_parts_plan`. A recorded 0.69.x result series continues in parts under its own protocol ([Problem evidence in parts](#problem-evidence-in-parts)). A staged review starts only through `context: {staged_upgrade: {assignment_id}}`, which opens one in a recorded slot; `{controller_assignment_id}` alone then plans and assigns its next task and returns the next command, `context: {controller_assignment_id, task_id}` records the child that runs one of its tasks, and `scheduler: {store_limit, route_limits}` records the reviewer capacity ([Staged problem reviews](#staged-problem-reviews)). A turn of a recorded 0.69.x series that the v1 part planner refuses with `review_input_too_large` can instead freeze a reduced replay history of completed earlier series, and since 0.73.0, when the planner refuses the reduced history too, starts one parts v2 successor in the same slot ([Problem evidence in parts](#problem-evidence-in-parts)). Since 0.71.0 an ordinary assignment, one that is neither on a `codex_cli_visual_v1` route nor the controller or a task of a staged review nor a turn of a parts v2 series (whose `history` is `[]`), stores its replayed history as `history_ref` instead of `history`: a version 1 root with `version`, `message_count`, `history_digest` and the ordered `pages`, each page an immutable artifact with `version`, `start` and at most 32 `messages`, and each message with `body` (an artifact that holds the exact content, UTF-8 text or JSON for a native content array), `metadata` (the other fields of the message), `source` (`assignment_id`, `message_index`) and `occurrence` (`session_id`, `index`); the pages and bodies of an unchanged prefix are shared between the turns of a session. Every command reads either form, and the reviewer receives the identical history. A record that carries both fields is refused with `review_history_ambiguous`, and a page or body that does not match its root with `review_history_invalid`, or with `artifact_missing` or `artifact_corrupt` when its artifact is gone or altered; either code means that the artifacts of the store are damaged or a record was edited, so stop and report it. |
-| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. When a post closes the chain of the assignment, `review-run` is refused with `problem_already_posted`, except for a replay, an acceptance and a reconciliation ([Problem creation](#problem-creation)). When the reviewer answers, the run commits the answer as one immutable record, `review_call_observation`, before the write that records the run: this capture binds the operation and the invocation, the original request ID and the digest of the payload, the route and the request, the reservation and the calling process, and holds the exact observation with its artifacts. The write that records the run reads the capture and is tried again after `store_busy`, `stale_revision` or `review_task_dependency_changed`, at most 600 times within 600 seconds, without a second call. The run that waited exits with the last of those refusals, and the capture stays. A run whose process ended after the capture committed, or whose write is still refused after that wait, is finished by repeating `review-run` with the same payload and the original request ID: that returns the recorded receipt when one exists and otherwise records the run from the capture, without calling the reviewer again. Until then the invocation is pending: a `review-run` of the assignment under another `id` refuses with `review_invocation_pending` and names that step, and `review-attempt` refuses an import under the run's `id`. A run whose process ended before the capture committed leaves an unknown outcome and the invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`, and the refusals say to reconcile it. `review-run` with `{"action": "reconcile", "operation": OPERATION, "invocation_id": ID}`, where the operation is `review.invoke` for a run, `review.route_probe` for a probe or `review.output_correction` for a correction and the id is the `id` of the original payload, releases the capacity of the call once its process and its transport processes have ended; for a call without a capture it also records the unknown outcome as a `failed` attempt, probe or correction with the error `review_invocation_interrupted`, which ends the pending state. For a run that 0.69.x started, which has no reservation, the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload), and the refusal carries that payload under `next`. After either step, a `review-run` of the assignment under a new `id` and request ID is permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. For a part turn of a problem result series ([Problem evidence in parts](#problem-evidence-in-parts)), `review-run` checks the part response when an authenticated run completes and writes the output refusal `invalid_value_review` under `review.shape` when it fails. For a turn of a parts v2 series ([Reviews in fresh parts](#reviews-in-fresh-parts)) it checks a read, combine or check output and the request form of a final the same way, under `review.shape` whatever the role, with `invalid_value_review` for a contract failure and `review_parts_request_no_progress` for a request that makes no progress. For a task of a staged review, `review-run {assignment_id, epoch_id, task_id}` reserves the task, runs it through an owned worker, accepts its committed capture and reconciles the worker; `action: "accept"` resumes an acceptance and `action: "reconcile"` a reconciliation, neither with a reviewer call; a refused capture permits one retry with the same request, and the result names `review-assignment {controller_assignment_id}` as the next step ([Staged problem reviews](#staged-problem-reviews)). See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
-| `review-series` | `--assignment HEAD`, where any assignment of the chain resolves to the chain's current head, and `--workspace` (default `.`). Execute the planned actions of one review chain in process, through the same operations as the CLI, until the chain is done or needs the agent. It takes no `--file`, `--expected-revision` or `--request-id`, and has no turn limit. `--check` is refused with `check_unsupported` before any workspace or model effect. Every `stop` and `wait` line with a `code` carries `stop_class`, and the last line of a run that ends in a `stop` carries `stop_id`, the id of the `review_series_stop` record that the driver writes for that stop, with `revision_after_stop`, or `stop_record_error`. [Review chains and `review-series`](#review-chains-and-review-series) states the plan of a chain, the exit statuses, the handoffs, the outcomes of a failed reviewer call and the stop record. |
+| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. When a post closes the chain of the assignment, `review-run` is refused with `problem_already_posted`, except for a replay, an acceptance and a reconciliation ([Problem creation](#problem-creation)). When the reviewer answers, the run commits the answer as one immutable record, `review_call_observation`, before the write that records the run: this capture binds the operation and the invocation, the original request ID and the digest of the payload, the route and the request, the reservation and the calling process, and holds the exact observation with its artifacts. The write that records the run reads the capture and is tried again after `store_busy`, `stale_revision` or `review_task_dependency_changed`, at most 600 times within 600 seconds, without a second call. The run that waited exits with the last of those refusals, and the capture stays. A run whose process ended after the capture committed, or whose write is still refused after that wait, is finished by repeating `review-run` with the same payload and the original request ID: that returns the recorded receipt when one exists and otherwise records the run from the capture, without calling the reviewer again. Until then the invocation is pending: a `review-run` of the assignment under another `id` refuses with `review_invocation_pending` and names that step, and `review-attempt` refuses an import under the run's `id`. A run whose process ended before the capture committed leaves an unknown outcome and the invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`, and the refusals say to reconcile it. `review-run` with `{"action": "reconcile", "operation": OPERATION, "invocation_id": ID}`, where the operation is `review.invoke` for a run, `review.route_probe` for a probe or `review.output_correction` for a correction and the id is the `id` of the original payload, releases the capacity of the call once its process and its transport processes have ended; for a call without a capture it also records the unknown outcome as a `failed` attempt, probe or correction with the error `review_invocation_interrupted`, which ends the pending state. For a run that 0.69.x started, which has no reservation, the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload), and the refusal carries that payload under `next`. After either step, a `review-run` of the assignment under a new `id` and request ID is permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. For a part turn of a problem result series ([Problem evidence in parts](#problem-evidence-in-parts)), `review-run` checks the part response when an authenticated run completes and writes the output refusal `invalid_value_review` under `review.shape` when it fails. For a turn of a parts v2 series ([Reviews in fresh parts](#reviews-in-fresh-parts)) it checks a read, combine or check output and the request form of a final the same way, under `review.shape` whatever the role, with `invalid_value_review` for a contract failure and `review_parts_request_no_progress` for a request that makes no progress. For a task of a staged review, `review-run {assignment_id, epoch_id, task_id}` reserves the task, runs it through an owned worker, accepts its committed capture and reconciles the worker; `action: "accept"` resumes an acceptance and `action: "reconcile"` a reconciliation, neither with a reviewer call; a refused capture permits one retry with the same request, and the result names `review-assignment {controller_assignment_id}` as the next step ([Staged problem reviews](#staged-problem-reviews)). Since 0.89.2 a run that finds the reviewer capacity occupied waits for it (the queue, in [Staged problem reviews](#staged-problem-reviews)), and a review stop that stands for the chain or for the store refuses a new call with `review_chain_stopped` ([Review chains and `review-series`](#review-chains-and-review-series)). See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
+| `review-series` | `--assignment HEAD`, where any assignment of the chain resolves to the chain's current head, and `--workspace` (default `.`). Execute the planned actions of one review chain in process, through the same operations as the CLI, until the chain is done or needs the agent. It takes no `--file`, `--expected-revision` or `--request-id`, and has no turn limit. `--check` is refused with `check_unsupported` before any workspace or model effect. Every `stop` and `wait` line with a `code` carries `stop_class`, and the last line of a run that ends in a `stop` carries `stop_id`, the id of the `review_series_stop` record that the driver writes for that stop, with `revision_after_stop`, or `stop_record_error`. Since 0.89.2 a run that meets a review stop ends in a `stop` with the code `review_chain_stopped`, whose `stop_id` is the id of the `review_stop` record, and SIGTERM or SIGINT to the command stops its chain in the same way. [Review chains and `review-series`](#review-chains-and-review-series) states the plan of a chain, the exit statuses, the handoffs, the outcomes of a failed reviewer call, the stop record and the review stop. |
+| `review-stop` | `{id, action: "stop", mode, reason}` with exactly one of `assignment_id` and `scope: "store"`, or `{id, action: "release", stop_id, reason}`. Stop the reviewer calls of one review chain or of the whole store, and release that stop later. `mode` is `now`, which ends the running calls, or `after_turn`, which lets them finish. In both modes no new call of the scope starts until the release. `--check` is refused with `check_unsupported`. [Review chains and `review-series`](#review-chains-and-review-series) states the scope, the two modes, the settlement of the stopped calls and the release. |
 | `review-attempt` | Preserve imported output or failure history; imported assertions never establish verified independence. |
 | `review-context` | Record evidence of later contamination or other context observations, or retire a route: `kind: "route_retired"` on an assignment of that route, with the owner's instruction as evidence. A retired route accepts no new assignment or run, an assignment on it without an observed output is dead, and a preserved slot continues through a context repair that names the retirement as its cause. |
 | `review-adjudication` | Record the exact observed focused finding. An output that fails its output contract leaves a refusal record. The finding's citations are checked against the delivery of the exact authenticated attempt that produced it, the packets that its request carried, and not against the saved packets of its lineage ([Problem creation](#problem-creation)). A turn of a parts v2 series that is not the final of a complete series, or a final that returned a request, is refused with `review_parts_pending` ([Reviews in fresh parts](#reviews-in-fresh-parts)). |
@@ -100,7 +101,8 @@ returns the same obligations consumed by direct mutations and gates. It accepts
 an optional `--decision-id`. `strategy-packet --dossier-id ID --role ROLE
 --reviewer-id ID` exposes the exact role packet; additional explicit role context
 uses `--context-file`. `review-route-assess --route-id ID` reports the current
-route test. These reports change no revision. `strategy-packet` can store a file
+route test and the capacity of the route (The capacity of a route, below).
+These reports change no revision. `strategy-packet` can store a file
 in the artifact store while it builds the packet, for example a projected claim
 file, so it accepts `--check` and refuses it with `check_unsupported` before it
 opens the workspace. The other two only read.
@@ -477,6 +479,140 @@ records, and `review-run` returns it under `preflight`. A recorded request is
 never checked again: the reconstruction and authentication of recorded
 attempts do not run the preflight.
 
+The capacity of a route. `review-route-assess`, and the receipts of
+`review-route` and `review-probe`, report the capacity of the route under
+`route_capacity` (`exactory-route-capacity-policy-v1`). `input_characters` is
+the character limit of the transport. `input_tokens` is the input limit in
+tokens that the harness applies: its `value`, its `source` (`documented`,
+`observed` or `default`), the `output_reservation_tokens` that the limit
+leaves for the answer, and `probe_id` when the evidence of the route holds a
+verified capacity probe. `input_limits` shows the documented and the observed limit side by
+side. `capacity_evidence` shows the `key` of the route (the adapter, the
+endpoint, the model, and the members of the runtime and of the configuration
+that `classification` marks as `key`), the `evidence` behind the observed
+limit, and `probe_input_tokens`, the size of a first capacity probe. The
+observed limit is the largest value that the evidence of the route gives, and
+it is 0 without evidence. For every route except a `claude_cli_v1` route of a
+listed model, the evidence is the verified calls under the same key, and each
+call gives its input tokens less the output reservation, at least 0. For a
+`claude_cli_v1` route of a listed model, the evidence is the verified calls of
+every listed Claude model with the same compaction threshold, under any key.
+There an ordinary call gives its full input tokens and a capacity probe gives
+its input tokens less the output reservation, so `probe_id` can name a probe
+of another route. The report also holds the output profile of the route and the task
+limits that follow from it (`output_profile`, `task_limits`,
+`final_reference_projection`, `near_limit_attempts`), with `capacity_warning`
+when the profile establishes no fitting task size for a turn kind.
+
+The capacity probe. Since 0.89.2 `review-probe` with `capacity:
+{input_tokens: N}` runs the input-boundary test with a request built for the
+target of `N` input tokens. The packet keeps its three members, and the
+harness fills the `evidence` member with padding until its own measure of the
+request equals a target measure. Without an earlier verified capacity probe of
+the key, the target measure is `N`. With one, it is `N` times the harness
+measure of that probe's request, divided by the input tokens that the provider
+reported for it, rounded up. `N` is a target: the number that the provider
+reports for the new probe can differ from it. The probe is refused
+with `invalid_review_capacity_probe` when `capacity` holds another member or
+`input_tokens` is not a positive integer, when the route is a
+`codex_cli_visual_v1` route, and when the transport cannot build a request of
+that size (details `input_tokens` and `character_limit`). The probe record
+holds `capacity_evidence`, which is `{key, input_tokens}` with the input
+tokens that the provider reported, when the probe verifies the route and its
+call was one completed send with a verified context and no compaction.
+Otherwise the field is null. `capacity_evidence_verified` states whether the
+field is set, `verified_input_tokens` is its number or null, and a capacity
+probe also has `capacity_verified` with the same value. A verified capacity
+probe gives its key an observed limit of at least its input tokens less the
+output reservation. A capacity probe is also the latest input-boundary test of
+its route. After a capacity probe that fails, for example because the provider
+refuses the size, the route is unverified until a later probe of the route
+passes. A failed capacity probe on an HTTPS route keeps the provider's failure
+under `error`, with its `message` and, when the message ends with one, its
+`http_status`.
+
+Binary inputs. `route_capacity.binary_inputs` is `"unsupported"` for an
+adapter that sends text only (`claude_cli_v1`, `codex_cli_v1`,
+`codex_cli_framed_v1`). For the other adapters it holds the rules of the route
+for `image` inputs and, on an HTTPS route, for `pdf` inputs. Each has
+`input_limits` (the limits of one input), `request_limits` (the limits of one
+request), `token_rule` (the documented rule that bounds the tokens of an
+input, or null when no documented rule applies) and `estimate`, which comes
+from measured requests, is labelled `kind: "estimate"` and admits nothing. A
+`codex_cli_visual_v1` route limits one image to 33,554,432 bytes and
+16,777,216 pixels and has no token rule. A route at
+`https://api.openai.com/v1/responses` limits a request to 1,500 images and
+512,000,000 bytes, counted on the serialized request, and limits a PDF to less
+than 50,000,000 bytes and the PDFs of a request to 50,000,000 bytes together.
+PDFs have no token rule. On that endpoint the model `gpt-6-astra` has the
+documented rule `patch_budget` for images: the bound of an image is its detail
+budget (256 for `low`, 2,500 for `high`, 30,000 for `original` and `auto`)
+times 1.2, rounded up, plus 1 token, and an `original` or `auto` image is
+limited to 30,000 processed patches. The harness reads the dimensions of a
+PNG; an image in another encoding has no bound. An HTTPS route at another
+endpoint has no limits and no token rule. The measure of a request adds these
+bounds to its text: `text_tokens_upper`, `binary_tokens_upper` and their sum
+`tokens_upper`, with one row for each binary input under `binary_inputs`
+(`kind`, `detail`, `bytes`, for a PNG `width`, `height` and `pixels`,
+`tokens_upper`, `token_rule`, `over_limit` and `estimate`). When an input has
+no bound, `binary_tokens_upper` and `tokens_upper` are null, and the request
+does not fit, with `reason: "binary_input_without_bound"`. When an input or
+the request exceeds a limit, or the bounded sum exceeds the input limit, the
+reason is `binary_input_over_measure`.
+
+A review that the route cannot deliver. Since 0.89.2 `review-assignment`
+measures the request of a new assignment against this capacity before it
+records the assignment; the controller of a staged review, which carries no
+request, is not measured. When the request does not fit, or the packet has an
+evidence body without a text form, the command refuses with
+`review_route_capacity_below_floor` and records no assignment and no call. A
+turn of an openness reading chain keeps its admission by characters while the
+route has an input limit above 0 and the request carries no binary input.
+The code is a decision stop, and `review-series` ends at it with exit status
+3. `details.reason` is one of four values. `no_parts_delivery`: the request
+does not fit the character limit or the token limit of the route, and the
+assignment has no delivery in parts there. `binary_input_over_measure` and
+`binary_input_without_bound`: the two reasons of the measure above.
+`body_without_text_form`: the packet delivers an evidence body as bytes or
+omits it, the body is larger than one read turn (its base64 form with its two
+JSON quote characters exceeds 600,000 characters), and the packet delivers no
+text capture of it. The other details
+are `measure`, `capacity_source` (the `source` of the input limit),
+`serving_routes`, `owner_decides`, `then` and `closing_unit`, the name of the
+planned unit of the harness that covers the case. `serving_routes` lists the
+verified routes of the record, with a current runtime and without a
+retirement, whose request for this review fits: `{route_id, delivery,
+measure}`, where `delivery` is `single`, `parts`, or `reassessment` for a slot
+with history that continues through a context repair. When no route serves the
+review, `coverage` says so. `then` lists the answers that the owner can
+authorize, each with its steps:
+
+| `answer` | Steps | Offered when |
+| --- | --- | --- |
+| `Capture a text form` | `artifact` with `media_type: "text/plain"` for the complete text of the body that `body` names, then `review-assignment` with the stored text artifact in place of the body: in `context.artifact_refs`, the reference to the body is replaced by the reference to the text. Adding the text beside the body does not clear the refusal. A body that is the original of a work clears it when the packet delivers the text capture that the work's `fulltexts` link to that original. | The reason is `body_without_text_form`. |
+| `Probe this route` | `review-probe` with `capacity.input_tokens` set, then the same `review-assignment`. | The reason is `no_parts_delivery`, the adapter is not `codex_cli_visual_v1`, the `source` of the input limit is `observed` or `default`, and the transport can build the probe request. |
+| `Use a serving route` | `review-assignment` on the route. For an assignment with a predecessor, the steps of its role for a move to another route instead. For a `bar`, `slate` or `result` slot these are the retirement of the present route (`review-context`, `kind: "route_retired"`, with the reason filled in), a route record with the configuration of the serving route, its probe, and the context repair that continues the slot. | Once for each route of `serving_routes`. |
+
+The size of the offered probe follows the capacity probes of the key. Before
+the first one it is `probe_input_tokens`: the largest input that a call under
+another key of the same adapter, endpoint and model carried, or 150,000. After
+a verified capacity probe it is the tokens of the request plus the route's
+`max_output_tokens`. After a capacity probe that was not verified it is half
+the `input_tokens` of that probe, rounded down, and at least 1. When the transport cannot build a probe of the size,
+no probe is offered, and `probe_unavailable` holds `input_tokens`,
+`measure_tokens`, `code`, `message` and `details`. Report the stop with its
+details; the owner decides whether a listed step is taken
+([The class of a stop](research-workflow.md#the-class-of-a-stop)).
+
+What this release does not deliver. `review-route-assess` and, when the store
+holds a route, `status` under `review` carry `outside_solved_part`: for each
+role, the kinds of review that no route delivers in this release, as
+`{reason, unit, message}`. `unit` names the planned unit of the harness that
+covers the kind, or is null. Every role lists `https_parts` (delivery in
+parts on an HTTPS route), `binary_inputs`, `body_without_text_form` and
+`staged_scale`. The roles `manuscript` and `standalone` also list
+`no_parts_delivery`, and `native_math` lists `math_reading_v1`.
+
 ### Review chains and `review-series`
 
 A review chain is one assignment with the turns, runs, replacements and
@@ -515,7 +651,7 @@ planner never moves a chain to another route. New ids are
 | `plan` | A staged controller plans or assigns its next task. |
 | `record` | The final output is observed and recording needs no judgment (`value-review`, `review-adjudication`, `problem-openness`). |
 | `handoff` | The next step needs the agent; `code`, `details` and the `command` the agent runs. |
-| `done` | The chain's final is recorded, or a post closes the chain ([Problem creation](#problem-creation)). |
+| `done` | The chain's final is recorded, or a post closes the chain ([Problem creation](#problem-creation)). For a chain that a post closes, `details.closed_calls` lists the calls that still need a closing step or ended without a usable output. |
 | `stop` | A typed limit or refusal; `code`, `details`. On a line of `review-series` also `stop_class`, and on the last line `stop_id` with `revision_after_stop`, or `stop_record_error` (the driver, below). |
 
 The `record` action of an openness chain is `problem-openness` with the
@@ -539,7 +675,9 @@ wait and a terminal plan print the plan. Every line also carries
 at a `handoff` or a `stop`, with the plan on the last line; and `4` when a
 `wait` ends more than 30 minutes ahead, with the plan, with its `not_before`,
 on the last line. A `wait` of at most 30 minutes: it sleeps until `not_before`
-and plans again. A refusal with `store_busy`, `stale_revision` or
+and plans again. During that sleep it reads the store every 5 seconds: it ends
+at a review stop (The stop, below), and it plans again at once when the
+revision of the store changed. A refusal with `store_busy`, `stale_revision` or
 `review_task_dependency_changed` is planned again from a fresh read, at most
 8 times in a row; the 8th ends in a `stop` with that code. A captured call is
 resumed with its original request id (state `resume`, field `request_id`);
@@ -571,7 +709,7 @@ stop the run: `status` and `next` then list the advisory
 `--check` is refused with `check_unsupported`
 before any workspace or model effect. Every `stop` and `wait` line that has a
 `code` carries `stop_class`, the class that the harness derives from the
-code: `waiting`, `harness_defect` or `decision`
+code: `waiting`, `harness_defect`, `decision` or `requested`
 ([The class of a stop](research-workflow.md#the-class-of-a-stop)). When the
 run ends in a `stop` with a `code` and a `head_id`, the driver writes the
 record `review_series_stop/<id>` before it prints the last line, with
@@ -591,7 +729,9 @@ record was committed (the line's other revision fields are unchanged), or
 `stop_record_error` when the record could not be written: a refusal of the
 store as `{code, message, details}`, or `{code: "stop_record_error", message}`
 for any other error. The stop's `code`, `details`, `stop_class` and the exit
-status are the same in both cases. An intermediate `stop` that the driver plans
+status are the same in both cases. Since 0.89.2 a line with
+`revision_after_stop` also carries `revision_after_driver`, the later revision
+at which the driver recorded the end of its run (The stop, below). An intermediate `stop` that the driver plans
 again writes no record. At a `handoff`, the agent performs the
 step that the handoff names; the paragraph after the handoffs states when
 `review-series` runs again. At a `stop` the
@@ -609,6 +749,128 @@ work that does not depend on this chain. After exit status 4, the agent runs
 `review-series` again at `not_before`. The agent writes no driver, turn limit
 or retry loop of its own around reviewer calls.
 
+The stop. Since 0.89.2 `review-stop` stops the reviewer calls of a scope, and
+they stay stopped until the stop is released. The payload is `{id, action:
+"stop", mode, reason}` with exactly one of `assignment_id` and `scope:
+"store"` (`example review-stop` prints one); any other form is refused with
+`invalid_input`, and `--check` with `check_unsupported`. With `assignment_id`
+the scope is the review chain of that assignment: the assignments of its role
+and dossier in its slot or in its lineage, with the tasks of a staged review.
+With `scope: "store"` the scope is every reviewer call of the store, route
+probes and output corrections included. A probe belongs to no chain, so only a
+store stop covers it. In one transaction the command writes
+`review_stop/<id>` with `scope`, `mode`, `reason`, `origin` (`command`, or
+`signal` for a stop that a signal to `review-series` made), `calls` (the calls
+of the scope that are not finished at that revision, each as `{operation,
+invocation_id or reservation_id, assignment_id}`), `waits` (the waiting calls
+of the scope, which it withdraws from the queue), `drivers` (the
+`review-series` runs of the scope whose process is alive),
+`requested_revision` and `release`, which is null while the stop stands.
+While a stop stands, each of the following is refused in its scope with
+`review_chain_stopped`, and nothing is written: the start of a `review-run`,
+a `review-probe` or a `review-output-correction`, a place in the queue, and
+the reservation and the launch of a staged task. The details are `stop_id`,
+`mode`, `reason` and `stop_class`, which is `requested`. A stop request for a
+scope that a standing stop already covers joins that stop and writes no second
+record. It returns the standing stop under its own id, and a request of the
+mode `now` changes an `after_turn` stop to `now`. A store stop that is
+requested while chain stops stand is a record of its own, and each of those
+stops then needs its own release.
+
+The two modes. With `after_turn` the command records the stop and returns. A
+call that runs can still start its transport process, finishes its turn and is
+recorded, and no new call starts. With `now` the command also ends the calls
+of `calls`. It sends SIGTERM to the transport processes of each call, to the
+worker of a staged task, and to the process that owns a call without a
+transport process, and SIGKILL to the processes that still run 10 seconds
+later. A transport process that a stopped
+call tries to start after the request is refused. Then the command takes each
+call towards a settled state through the step of its state. It repeats the
+pass over the calls until every call is settled, a step fails with a refusal
+that waiting does not clear, or 120 seconds have passed. The deadline is read
+after each pass, so a step that is in progress, for example the recording of a
+capture, which retries its write for up to 600 seconds, can keep the command
+beyond it. The states and their steps:
+
+| `state` | Recorded facts | `step` |
+| --- | --- | --- |
+| `running` | The capacity of the call is not released, there is no capture, and its owner or a transport process is alive. | `review-run` with `action: "reconcile"`, which succeeds once the processes have ended. |
+| `interrupted` | As `running`, and no process of the call is alive. | `review-run` with `action: "reconcile"`. For an ordinary call it records the unknown outcome as a failed attempt, probe or correction with the error `review_invocation_interrupted` and releases the capacity. For a staged task it marks the reservation `unknown` (a worker that ran) or `known_failure`, records no attempt and releases the capacity. |
+| `captured` | The observation of the call is retained, and its recording is pending. For an ordinary call the attempt is not recorded. For a staged task the capture has no acceptance and no refusal, and either its attempt is not recorded or its observation is completed. | For an ordinary call, the original command with, as `request_id`, its original request ID, which records the attempt from the capture without a reviewer call; the `payload` of the step is partial (below). For a staged task whose dispatch is recorded, the task's `review-run` under its original attempt id, with its original request ID as `request_id`. For another staged task, `review-run` with the task payload and `action: "accept"` when the observation is completed, and with `action: "reconcile"` when it is not; this step has no `request_id`. |
+| `accepted` | The attempt is recorded, or the staged task is accepted or refused, and the capacity is not released. | `review-run` with `action: "reconcile"`, which releases the capacity. |
+| `settled` | The capacity of the call is released, or a call without a pool membership has its attempt. A staged reservation that was reconciled without an observation is settled without an attempt. | None. |
+| `historical` | A call of 0.69.x: an invocation without a pool membership and without an attempt. | For a run, `review-attempt` with the failed attempt of the `review-run` row. The harness cannot establish the end of its processes, so a stop is complete without this step. |
+
+The result of the command is the stop record with `boundary_stands`,
+`call_states` (each call of `calls` with its `state` and, unless it is
+`settled`, its `step`: `command`, `payload` and, when the step replays an
+original command, `request_id`) and `running_drivers` (the drivers of
+`drivers` that still run). The command returns this result also when a call
+is not settled. A `now` stop whose result shows a call that is neither
+`settled` nor `historical` is not complete. Send the stop again with a new
+request ID: the command joins the standing stop and continues the settlement,
+and it reads the original payload of a captured call from the store. Or run
+the step of each such call and read the state again. The `payload` of a
+captured ordinary call holds only `id` and `assignment_id` or `route_id`, so
+restore every other member of the original payload before that replay, for
+example `capacity` of a capacity probe. A `historical` state does not
+establish that the processes of that call ended. A repeat with the same request ID returns the first response
+unchanged. An attempt without a completed output whose call a `now` stop
+lists in `calls` is the outcome `stopped`. It counts as no failure of its turn
+position, so the chain continues after the release with the counts that it
+had. An answer that was captured before its processes ended is recorded as
+what it is, and the plan continues from it.
+
+The release. `review-stop` with `{id, action: "release", stop_id, reason}`
+records `release: {id, reason, revision}` on the stop, and the calls of the
+scope can start again. The release is refused with
+`review_invocation_pending`, and the details `stop_id`, `calls`, `waits` and
+`drivers`, while a call of `calls` is neither `settled` nor `historical`, a
+call of the scope waits in the queue, or a driver of `drivers` still runs.
+The release of a released stop returns the stop unchanged. Until the release,
+`plan_next` gives every head of the scope that no post closes the handoff
+`review_chain_stopped` with the command `review-stop`. Its `details` hold the
+stop as the command returns it, and `details.step` is the release:
+`{action: "release", stop_id}` as the payload, with `id` and `reason` left to
+the agent. A stopped chain therefore starts again only when the agent releases
+its stop and runs `review-series`.
+
+The driver and the stop. `review-series` records its run as
+`review_series_run/<id>`, with `assignment_id`, the `scope` of its chain, its
+`process`, `started_revision` and `ended`, which is null while it runs and
+then holds its last line and the revision of that write. The driver reads the
+stops of its scope after each plan, before each action, and every 5 seconds
+during a wait. When a stop stands, or an action is refused with
+`review_chain_stopped`, it executes nothing further. When a `now` stop refused
+its action, it first settles the calls of its own chain as the command does.
+Its last line is then `state: "stop"`, `code: "review_chain_stopped"`,
+`stop_class: "requested"`, `command: "review-stop"` and `stop_id`, here the id
+of the `review_stop` record, with the stop and its release step under
+`details`. The exit status is 3. The driver writes no `review_series_stop`
+record for this code, so the line has no `revision_after_stop`, and
+`gate-auto-pass` has no stop to pass. SIGTERM and SIGINT to `review-series`
+are a stop of the mode `now` for its chain. A stop that the signal creates has
+`origin: "signal"` and the reason "The review series received SIGTERM." (or
+SIGINT). When a standing stop already covers the chain, the signal joins it
+and raises its mode to `now`, and that stop keeps its origin and its reason.
+The driver records the stop, ends the transport of its call, settles its calls
+and ends with a `stop` line of the same code. When the run ends through the
+driver's own handler of a signal or of a refusal with `review_chain_stopped`,
+that line has `chain` and `progress` null and no `provider_usage`. A signal
+that leaves the operation takes this path, also one that arrives while the
+driver waits for a staged task. When an ordinary call catches the signal while
+it observes the reviewer and then records the failed observation, the action
+returns, and the driver can print the stopped plan in the ordinary form, with
+`chain`, `progress` and `provider_usage`. An interrupted run therefore leaves a standing stop, and its chain
+continues only after the release. A driver that ends without running its
+handler, for example after SIGKILL, leaves no stop. The next driver, stop or
+release of its scope closes its run record with `ended.code:
+"process_gone"`, and its call is reconciled as an interrupted call. For an
+assignment whose chain has a stop, `status` shows the standing stop, or else
+the latest released one, under `review.assignments.<id>.last_stop`, in the
+form of the command's result. It shows the running drivers of the chain under
+`review.assignments.<id>.drivers`.
+
 The handoffs:
 
 | `code` | `command` | When |
@@ -623,6 +885,7 @@ The handoffs:
 | `assessment_incomplete` | `review-assignment` | A staged assessment is incomplete. |
 | `review_context_*`, `review_route_retired` | `review-assignment` | A context repair is needed. |
 | `review_route_runtime_stale` | `review-route` | The head's route pins another reviewer runtime. The planner keeps the route of the chain, so `review-series` on the same head gives this handoff again. Record a new route with a new id and the same adapter, model, endpoint and configuration, probe it, and then follow the stale-route procedure of the [route instructions](research-decisions.md#commands-and-shared-state): assign the role again on the new route, or, for a slot with history, retire the stale route and continue the slot through a context repair; then run `review-series` with the new assignment. |
+| `review_chain_stopped` | `review-stop` | A review stop stands for the chain or for the store; `details.step` is its release (The stop, above). `review-series` prints this plan as a `stop`. |
 | `openness_review_not_approved` | `export`, kind `problem-openness` | The final turn of an openness chain returned a result that `problem-openness` does not accept (for example the decision `revise` or `reject`, or an approved finding whose evidence or statement does not match); `details` hold `assignment_id`, `decision`, `reason`, `kind` and `refusal` (the `code` and `message` of the `problem-openness` refusal). Obtain a new finding after the reviewer's reason and the refusal are addressed. |
 
 After a handoff, the agent performs the step that the handoff names.
@@ -794,6 +1057,68 @@ the failures that the schedule or the turn position allows are used up. When
 a wait ends more than 30 minutes ahead, `review-series` exits with status 4,
 and the agent runs it again at `not_before`.
 Name a warning in the summary of the run.
+
+The forecast of a session. Since 0.89.2 a `bar`, `slate` or `result`
+assignment whose packet holds a source inventory, and that is neither a turn
+of a parts series nor part of a staged review, has a forecast of the source
+delivery that its session still owes (`exactory-session-capacity-forecast-v1`).
+The forecast leaves the packet, the prompt and the request of the assignment
+unchanged, and the stored receipt of `review-assignment` does not hold it.
+When `review-series` records a terminal stop, the stop record and its receipt
+keep the plan, with the forecast that the plan carries. The forecast appears as `capacity_forecast` on a plan of
+`plan_next` whose state is `run`, `continue` or `record`, on the receipt of
+`review-assignment`, and on the lines of `review-series` for such a head; the
+`done` line carries the last forecast of the run. `status` lists the forecasts
+of the open heads of a route under `review.routes.<route id>.capacity_forecasts`.
+The fields: `assignment_id`; `request`, the measure of the request of the
+present assignment against the limits of the route (on a `continue` plan this
+is still the request of the existing head); `pending_sources`, one row for
+each distinct version among the full-text requests that the forecast reads
+(`version_id`, `source_id`, `parts`, `pending_parts`, `pending_characters`,
+and the `whitespace_fraction` and `expansion_ratio` of the capture's
+extraction). A row has zero pending parts when its text was already delivered.
+When the version has no main capture with an extracted text, the row has no
+`source_id`, its other fields are null, and it adds nothing to the sums or to
+the turns. Then the sums `pending_parts` and
+`pending_characters`; `pending_turns`, the turns that deliver the pending
+parts at 120,000 characters for a turn, also as `turns: [{kind: "request",
+count}]`, with `units: [{kind: "fulltext_part", count, characters}]`;
+`pending_turn_limit`, which is 32, and `threshold_sources`, the records that
+the number comes from; `projected_final`, the measure of the request with the
+pending text added, marked `estimated: true` with a `note`, because later
+answers and reductions of the history can change it; `expected_calls`, which
+is `pending_turns / (1 - at_or_over_limit_share)` when the share is known and
+below 1, and null otherwise; and `reason`. `attempts` and
+`at_or_over_limit_share` come from the `request` row of the route's output
+profile for the task level of the request: the number of its attempts and the
+share of them at or over the output limit. That row can hold attempts that did
+not complete, and earlier measurements. `expected_output_tokens` and
+`expected_duration_seconds` are separate medians over the 500 latest completed
+attempts of the same route class, turn kind and task level that hold the
+measurement. Each is null when no such attempt holds it, and
+`unavailable_reason` is set when at least one of them is null. `capacity_warning` repeats the reason with the projected
+input under `input` and these output figures under `output`.
+
+The forecast stop. `reason` is `pending_turns` when `pending_turns` is more
+than 32, `projected_input` when at least one turn is pending and the
+projected request does not fit the route, and null otherwise. With a reason,
+a plan whose state is `run` or `continue` becomes a `stop` with the code
+`review_pending_delivery_over_plan`, a decision stop, before any call. The
+plan keeps `capacity_forecast` and has no `payload`. `review-run` of such an
+assignment refuses with the same code after the dispatch preflight and before
+the invocation is recorded, with the same details. A request that fails the
+dispatch preflight keeps its own refusal. The details are `message`,
+`capacity_forecast`, `pending_sources`, `decision: {owner_decides, then}` and
+`step`, the first step of the first answer. `then` lists the answers:
+
+| `answer` | Steps | Offered when |
+| --- | --- | --- |
+| `Select compact captures and continue this session` | For each source with pending parts, `select-main-capture` with `{version_id}`, where the agent chooses `source_id` and `reason` after it captured the original in a size that fits. Then `review-series` on the assignment. | The head has run, its packet holds no full-text delivery, and its present request fits the route. |
+| `Select compact captures and repair the preserved slot` | The same `select-main-capture` steps, then the steps of the role for a move to another route: for these roles the retirement of the route (`review-context`, `kind: "route_retired"`), a route record with its probe, and the context repair, whose `event_ids` and `evidence` come from the receipt of the retirement. | In every other case: a capture that is chosen later cannot replace text that the head or its history already holds. |
+| `Move the preserved slot to another route` | The steps of the role for a move to another route alone. | The reason is `projected_input`. A larger route does not shorten the pending turns, so the reason `pending_turns` has no such answer. |
+
+Report the stop with its details; the owner decides which answer is taken
+([The class of a stop](research-workflow.md#the-class-of-a-stop)).
 
 Answer recovery. The protocol `exactory-review-answer-recovery-v1` applies to
 a new observation of a completed response with a non-empty `id` whose answer
@@ -1461,7 +1786,7 @@ and `next`, the exact command payloads:
 | --- | --- | --- |
 | `ready`, no child yet | `review_task_pending` | `review-assignment` with `context: {controller_assignment_id, task_id}` and `id: task-assignment:<digest>`. |
 | `ready`, child recorded | `review_task_pending` | `review-run {assignment_id, epoch_id, task_id}`. |
-| `waiting` | `review_capacity_wait` | `review-run ... action: "reconcile"` for each active reservation, listed in `reservations`. |
+| `waiting` | `review_capacity_wait` | `review-run ... action: "reconcile"` for each active reservation whose processes have ended. When there is none, the task's own `review-run {assignment_id, epoch_id, task_id}`, which waits in the queue (below). `reservations` lists the active reservations, and `calls_before` is their number. |
 | `blocked` | `review_task_pending` | Empty while a dependency is not accepted; otherwise a recovery entry with the prerequisite `measured_rendering_and_admission` or `smaller_admissible_task`. |
 | `reconciling` | `review_worker_reconciliation_required` | `review-run ... action: "reconcile"`. |
 | `captured` | `review_observation_acceptance_pending` | `review-run ... action: "accept"`. |
@@ -1486,8 +1811,9 @@ reservation of a staged task, and the start of an ordinary `review-run`, a
 `review-probe` and a `review-output-correction`. Admission counts the active
 reservations and the pending ordinary invocations, probes and corrections on
 covered adapters, refuses with `review_capacity_wait` and the active
-reservation ids when the store limit or the route limit is reached, and
-otherwise writes the reservation and its pool membership together. When
+reservation ids when the store limit or the route limit is reached or an
+earlier waiting call comes first (the queue, below), and otherwise writes the
+reservation and its pool membership together. When
 `review-budget` has recorded an allowance of calls (its row under "Scientific
 contribution decisions"), the same admission first refuses with
 `review_budget_exhausted` when no call of the allowance remains. A route
@@ -1496,6 +1822,39 @@ outside the covered adapters cannot reserve a task
 active calls are below it. A reservation is released only after the harness
 confirms that the worker and its process group ended; the passing of time
 alone never releases one.
+
+The queue. Since 0.89.2 a call that admission refuses with
+`review_capacity_wait` waits by default: an ordinary `review-run`, a
+`review-probe`, a `review-output-correction` and the reservation of a staged
+`review-run`. The command records `review_call_wait/<id>` with the call
+(`operation`, `invocation_id`, `route_id`, `assignment_id`, `epoch_id`,
+`task_id` and the `scope` of its chain), its `owner` process, `state:
+"waiting"` and `requested_revision`, and it tries the admission again every
+second. Waiting calls are admitted in the order of their
+`requested_revision`. A waiting call yields only to an earlier waiting call
+whose route has room at that moment, so a call on a full route does not hold
+back a later call on another route. A call without a wait record yields to
+every waiting call whose route has room. The wait is bounded. Its limit,
+`wait_seconds`, is set at the first refusal: for each active call and each
+earlier waiting call, the `timeout_seconds` of that call's route (600 when the
+route sets none) plus 60 seconds, added together. A command that reaches the
+limit sets its wait to `withdrawn` with the reason `timeout` and exits with
+`review_capacity_wait`, whose details are `reservations` (the active calls),
+`calls_before`, `call`, `wait_seconds` and `scope`. The admission of the call
+sets its wait to `admitted`. A command that ends for another reason withdraws
+its wait with the reason `command_ended`. A review stop withdraws the waiting
+calls of its scope and writes its `stop_id` on them, and each waiting command
+then exits with `review_chain_stopped`
+([Review chains and `review-series`](#review-chains-and-review-series)). A
+wait whose owner process is gone no longer counts, and the next admission or
+the next wait record marks it `abandoned`. `status` lists the waiting calls
+whose owner is alive under `review.queue`, in their order. Waiting releases
+no capacity: a call whose process ended without a reconciliation holds its
+place until `review-run` with `action: "reconcile"` releases it. For a head
+whose call has to wait, `plan_next` gives a `wait` with the code
+`review_capacity_wait` and `details.calls_before`. Its action is the
+reconciliation of an active call whose process has ended, when there is one,
+and otherwise the head's own run, which then waits in the queue.
 
 Capture, acceptance and recovery. `review-run` reserves the task
 (`review_reservation/<id>`, `review_task_execution/<task id>` and
@@ -3744,7 +4103,7 @@ since 0.73.0, and is checked, not refused.
 | `problem-statement` | `{id, title, area, statement, resolution_criteria, neighbours, formal_statement, candidate_id}` and the optional `revises_statement_id` | `problem_statement/<id>` and `problem_selection/current = {statement_id}`. Statement and criteria are nonempty text with TeX mathematics. Write `statement` in the two parts of [math-conjecturer Formulation step 1](../skills/math-conjecturer/SKILL.md#formulation), with the optional `---` line and the details in the same field. Neighbours are formulation texts, possibly empty. Formal statement is optional, null or `{language, text}`. `candidate_id` is optional, null or the id of a current candidate that the statement formulates (`problem_candidate_missing`). The area must equal the immutable problem record's area (`problem_area_mismatch`); for another subject class, the rule of [math-conjecturer Exploration](../skills/math-conjecturer/SKILL.md#exploration) applies. Any other changed field requires a new statement id and moves the selection. `revises_statement_id` is optional: the id of the statement record that this one revises (`problem_statement_missing` when the store holds no statement record with that id). The harness reads these references to list the runs on the earlier texts of a statement beside the runs on its current text ([The accounts of a value record](#the-accounts-of-a-value-record)). The statement digest covers `statement` and `resolution_criteria`, so a revision that changes only the neighbours keeps the digest. A record without the field keeps the bytes of 0.82.0. |
 | `problem-attempt` | `{id, statement_id, kind, solver, literature, outcomes, proportion}` | Appends `problem_attempt/<id>`, adding `recorded_revision`. Binds the current statement to a solver attempt delivered in this store or a critically assessed full-reading literature attempt. The latest record by recorded revision is current; a resolved attempt blocks posting as an open problem. |
 | `problem-openness` | `{assignment_id}` | Records `problem_openness/<id>` from the observed native result review. Every supplied minimum must pass the shared closed-schema validation. `supported_open` advances the claim; `unresolved` records the gap without an evidence audit; `already_solved` redirects to the settling result and blocks posting as open. |
-| `problem-value` | `{id, statement_id, accounts, motivation, current_state}` | `problem_value/<id>` holds the accounts of the statement and two ordered paragraph arrays. Each paragraph is `{text, evidence}` with the optional `field_fact`, and its nonempty evidence cites entries of the accounts. `accounts` is required (`problem_accounts_required` otherwise). The record adds `recorded_revision` and the dates that the harness derives. [The accounts of a value record](#the-accounts-of-a-value-record) gives the parts, the rules, the derived parts and the refusals. A value record that an earlier release recorded has no accounts and keeps its contract. |
+| `problem-value` | `{id, statement_id, accounts, motivation, current_state}` | `problem_value/<id>` holds the accounts of the statement and two ordered paragraph arrays. Each paragraph is `{text, evidence}` with the optional `field_fact`, and its nonempty evidence cites entries of the accounts. `accounts` is required (`problem_accounts_required` otherwise). The record adds `recorded_revision` and the dates that the harness derives. [The accounts of a value record](#the-accounts-of-a-value-record) gives the parts, the rules, the derived parts and the refusals. A value record that an earlier release recorded has no accounts and keeps its contract. Since 0.89.2 the response of a new `problem-value` carries `size_report`; [Imported forming history](#imported-forming-history) gives its scope and its fields (the size report). The stored receipt holds none. |
 | `problem-citation-metadata` | `{id, version_id, title, authors, year, evidence}` | Appends `problem_citation_metadata/<id>`, adding `provenance` and `recorded_revision`, for an existing `url:` work with no DOI and no arXiv identity among its id, its aliases and its metadata (`problem_citation_work_ineligible` otherwise) that a valid full reading of this store covers (`problem_value_reading_missing` otherwise). `title` is nonblank text, `authors` is a nonempty ordered array of nonblank names, and `year`, optional, is four ASCII digits; a record without a year is cited without one, with no fallback to the work's year. `evidence` is `{title: span, authors: [span, ...], year: span}`: one span for the title, one span per author in the same order, and a year span exactly when `year` is given. A span is `{kind, source_id, sha256, start, end}`. `kind` is `fulltext`, the extracted text of a `fulltext` capture of this exact version, or `response`, the captured response of a `source` record; `source_id` names that source record; `sha256` is the hash of the retained object, the `text.sha256` of the capture or the `response.sha256` of the source record; `start` and `end` are zero-based UTF-8 byte offsets into that object, end exclusive, with `0 <= start < end <= size`. The selected bytes must equal the UTF-8 encoding of the field value exactly (`problem_citation_span_mismatch` otherwise): no JSON escape is decoded, no whitespace is normalized and no fragments are combined, so a line-wrapped title in a PDF text needs another retained capture that holds the clean title. An offset inside a multibyte character, or an object that is not valid UTF-8, is `invalid_input`. Every object is resolved through the stored records and the artifact store, never through a caller path: an absent source record is `unknown_source`; a source whose response is not a complete capture, or a capture that is not available and extracted, is `source_pending`; a `sha256` that is not the response of that source, a full text that no capture of this version with that source holds, or a retained object that is missing is `problem_citation_evidence_unbound`; retained bytes that fail their integrity check are `artifact_corrupt`. The record keeps the resolved provenance of every span: the source record's identity fields and digest, the response hash and, for a full text, the capture digest with the text and original hashes. The latest record for a version by `(recorded_revision, id)` is selected and revalidated at every projection. A correction is a new id with the complete replacement payload; a changed payload under an existing id is `record_conflict`. The selected record supplies the citation text alone; the locator does not change. |
 | `problem-citation-locator` | `{id, version_id, reading_id, original_sha256, url, source_id}` | Appends `citation_locator/<id>`, adding `reading_digest`, `source_digest` and `recorded_revision`: the HTTPS location of the exact original that an existing reading read. It supplies the locator of a read work that has no DOI, no arXiv id and no bundle HTTPS URL, for example a manuscript PDF in a GitHub repository, after those three in the locator order of `export --kind problem` (below); the citation text does not change. Every field is nonblank text. A payload that fails any of these conditions is refused with `problem_citation_locator_unbound`: `url` is an absolute `https` URL with a host, without a user name, a password, a fragment, whitespace or the port 0; `reading_id` names a reading of `version_id`; the bundle of that reading has `original_sha256`; `source_id` names a `source` record with this exact `url`, status `captured`, a complete response and a verified origin, whose response has the hash `original_sha256`; for a `url:` work, the text after `url:` equals `url`; a full-text capture of the work names this source and this original. The reading itself must still be valid (its own codes). Retained bytes that fail their integrity check are `artifact_corrupt`. The reading, its bundle and the work stay unchanged, and no new reading is needed. The latest record of a reading by `(recorded_revision, id)` is selected and revalidated at every projection; a selected record whose reading or source record changed after it was made is refused with `problem_citation_locator_unbound`. A correction is a new id; a changed payload under an existing id is `record_conflict`. |
 | `problem-assessment` | `{id, statement_id, grades, items, primary}` | `problem_assessment/<id>` binds the rubric self-assessment to the current statement, adding `recorded_revision`. Each item has evidence and a note; `primary` names its significance ground and criterion. |
@@ -5291,7 +5650,7 @@ example the population of the cohort tool. The post decision is
 | `review_series_superseded` | A saved selection or a result names a final of a superseded series. Select only the recorded finals of the current result slots; older finals stay as history ([Problem evidence in parts](#problem-evidence-in-parts)). |
 | `review_result_pending` | The current series of a slot has an observed complete final that is not recorded. Record it with `value-review` from its exact output; no further reviewer call is needed. |
 | `review_task_pending` | A task of a staged review is ready, blocked or not yet planned: run the `review-assignment` or `review-run` payload in `next`; `review-assignment {controller_assignment_id}` plans and assigns the next task ([Staged problem reviews](#staged-problem-reviews)). The post gate also lists this code, with `occupied`, `incomplete` and `pending`, when a current result head is pending and no head is incomplete. The head can be of any series: an ordinary review, a parts v1 series, a parts v2 series or a staged review. When a current result head is incomplete, the gate lists `assessment_incomplete` instead, also when another head is pending. Do the work that `next` lists for the pending series. That is a continuation obligation such as `problem_evidence_part_pending`, or the planned action of the pending head, for example `review-run`. |
-| `review_capacity_wait` | The reviewer capacity is occupied: reconcile the named reservations with `review-run ... action: "reconcile"` and start no other call. |
+| `review_capacity_wait` | The reviewer capacity is occupied. Run the payloads in `next`: `review-run ... action: "reconcile"` for a reservation whose processes have ended, or the task's own `review-run`, which waits in the queue until the capacity is free ([Staged problem reviews](#staged-problem-reviews)). |
 | `review_worker_reconciliation_required`, `review_observation_acceptance_pending` | Reconcile the task's worker, or resume the acceptance of its committed capture, with the `review-run` payload in `next`; neither makes a reviewer call. |
 | `review_epoch_stale` | The problem evidence, the subject or the slot head changed under a frozen epoch, or, in a record with a carry, the imported objection set changed; open an authorized successor with `context: {staged_upgrade: {assignment_id}}`. |
 | `assessment_incomplete` | A required assessment of an occupied slot is incomplete, or a recording command met one: do the research or recovery work in `next`, never a repeat of an exhausted task. |
@@ -5483,8 +5842,11 @@ the main obligations. This holds for an obligation that names an assignment of
 such a chain, and for the obligations that `status` adds for a chain head that
 ended without an output, for example `review_invocation_unverified` or
 `review_output_pending` of a turn that was stopped, or of a chain that a later
-export replaced. `next` therefore stays `problem_already_posted` alone, and
-the `obligations` command lists no such row. Such a row stays under
+export replaced. Since 0.89.2 `after_post` also lists the reviewer calls of a
+closed chain that still need a closing step or ended without a usable output,
+with the code `review_invocation_pending` or `review_call_closed` (The calls
+of a closed chain, below). `next` therefore stays `problem_already_posted`
+alone, and the `obligations` command lists no such row. Such a row stays under
 `after_post` when another statement is selected afterwards, so `status` can
 carry `after_post` while the current statement has no post. `next --summary`
 reports `after_post` as a count. `status` shows the stored post under `post`, with `gate` set to
@@ -5626,11 +5988,53 @@ reconciliation of a reservation whose worker never launched releases its
 capacity without a call. A review that was already observed is recorded with
 `value-review` or `review-adjudication`, and `review-context` events can be
 recorded too. `plan_next` is per chain head. A closed head is `done`, with
-`chain`, `head_id` and `progress` and without `command` or `payload`. The
-heads of the other chains keep their plan. `review-series` of a closed chain
-ends at `done` before any operation. `review-series` of an open chain of the
+`chain`, `head_id` and `progress` and without `command` or `payload`; since
+0.89.2 it also has `details.closed_calls` (The calls of a closed chain,
+below). The
+heads of the other chains keep their plan. Without a standing review stop,
+`review-series` of a closed chain ends at `done` before any operation. A
+standing stop of the chain or of the store comes first: the command then ends
+with `review_chain_stopped` and exit status 3. `review-series` of an open chain of the
 same record runs it. `record-check` ends a closed chain at the boundary `done`
 and checks the other chains as before.
+
+The calls of a closed chain. A post starts no reviewer call and ends none, so
+a call of a closed chain can still hold capacity or lack its record. Since
+0.89.2 `status`, `next` and the post gate list such calls under `after_post`,
+for every chain head that a post closes: the ordinary runs and the output
+corrections of the chain, and the reservations of its staged tasks. An
+ordinary run with a usable output, or an accepted correction, leaves the list
+only when it holds no active capacity. A staged task leaves the list when its
+reservation is released and its accepted attempt has a usable output. A row
+holds `operation`, `invocation_id` or `reservation_id`, `assignment_id`,
+`state`, `closed`, `code`, `reason` and, unless the state is `settled`,
+`step`. The states are those of a stopped call
+([Review chains and `review-series`](#review-chains-and-review-series)):
+
+| `state` | `closed` | `code` | `step` |
+| --- | --- | --- | --- |
+| `settled` | `true` | `review_call_closed` | None. The post closed the call, and nothing is owed. |
+| `interrupted` | `false` | `review_invocation_pending` | `review-run` with `{action: "reconcile", operation, invocation_id}`, or with the task payload and `action: "reconcile"` for a staged task. |
+| `captured` | `false` | `review_invocation_pending` | For an ordinary call, the original command with its original request ID as `request_id`; restore the members of the original payload that the row's `payload` leaves out. For a staged task: the task's `review-run` under its original attempt id and request ID, or the task payload with `action: "accept"` for a completed observation and `action: "reconcile"` for another. |
+| `accepted` | `false` | `review_invocation_pending` | `review-run` with `action: "reconcile"`, which releases the capacity. |
+| `historical` | `false` | `review_invocation_pending` | For a run, `review-attempt` with the failed attempt of the `review-run` row. |
+| `running` | `false` | `review_invocation_pending` | `review-stop` with `{id: "post-close-call:<digest>", action: "stop", assignment_id, mode: "now", reason: "The post closed this review chain."}`, which ends the call. |
+
+Every step is administrative: it closes recorded work and makes no reviewer
+call. A step does not always settle its call: `review-stop` returns also when
+its settlement is not complete, and the row of a captured call names a partial
+payload (the stop, in
+[Review chains and `review-series`](#review-chains-and-review-series)). Read
+`after_post` again after each step, and take the step that the row then shows,
+until the call is absent from the list or its row is `settled`. A settled call stays listed, with `closed: true`
+and `review_call_closed`, when it has no usable output, and it leaves the list
+when its output is usable and it holds no capacity. The `done` plan of a closed head carries the same
+rows, without `code` and `reason`, under `details.closed_calls`.
+The plan of a closed head is `done`, and `review-series` runs none of these
+steps, so the agent runs them. Without a standing review stop the command ends
+at `done`. Under a standing stop of the chain or of the store, for example the
+store stop that precedes a post on the owner's order, it ends with
+`review_chain_stopped` and exit status 3.
 
 What the views show. Every reader keeps its results: `status`, `next`, `gate`,
 the output views, authentication, the reconstruction of review requests,
@@ -6012,6 +6416,32 @@ under [Problem creation](#problem-creation)). Both take the ordinary `--file`,
 problem-candidate-transfer` print the payloads. With `--check` and a reachable
 source, `forming-import` validates the complete import and writes neither
 store. A record without an import behaves as before.
+
+The size report. Since 0.89.2 the response of `forming-import --check` and
+the response of a new `problem-value` carry `size_report`
+(`exactory-review-material-size-v1`). The report measures selected review
+material as a text delivery. For the import it measures the projections of
+the imported records and the bodies of the artifacts that they reach. For
+`problem-value` it measures `account_records`, with the derived forming
+history and the run checks, and the bodies of the artifacts that they reach.
+Other review material, for example the readings that a review delivers apart
+from `account_records`, is outside the report. The report is outside the
+stored records. The recorded import, its receipt, the stored receipt of
+`problem-value` and a replay of either hold no report, and a replay reads no
+body. When a body that the report needs cannot be read, `problem-value`
+refuses and records nothing. The fields: `description`; `characters`, the
+serialized records and bodies together, and `tokens_upper`, their bound in
+tokens when one byte of UTF-8 counts as one token; `import_records_characters`
+or `account_records_characters`, the records alone; `evidence_characters`, the
+serialized bodies; `bodies`, `text_bodies` and `binary_bodies`, where a binary
+body counts as omitted (`representation: "text_delivery"`); `body_characters`,
+the characters of the text bodies themselves; `turns`, the characters divided
+by 120,000 and rounded up; and `routes`, one row for each registered route
+with its `capacity`, the `measure` of the material against it and its own
+`turns`, marked `estimated: true`. `warning` is present when `turns` is more
+than 1 or the material does not fit a registered route. It asks the agent to
+read the counts and the measures before a review of the material starts. No
+command is refused for the size that the report states.
 
 The payload of `forming-import`:
 

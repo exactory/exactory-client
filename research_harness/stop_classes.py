@@ -20,6 +20,12 @@ STOP_REGISTRY.update({
         next=dict(kind='handoff', step=13, command='read')),
     'source_link_not_fulltext': dict(code='source_link_not_fulltext', **{'class': 'decision'}, owner='D2',
         next=dict(kind='continue', command='review-run')),
+    'invalid_review_capacity_probe': dict(code='invalid_review_capacity_probe', **{'class': 'decision'},
+        owner='D1', next=dict(kind='handoff', step=16, command='review-probe')),
+    'review_route_capacity_below_floor': dict(code='review_route_capacity_below_floor', **{'class': 'decision'},
+        owner='D1', reasons=('no_parts_delivery', 'binary_input_over_measure',
+                             'binary_input_without_bound', 'body_without_text_form'),
+        next=dict(kind='handoff', step=14, command='review-assignment')),
     'review_series_no_progress': dict(code='review_series_no_progress', **{'class': 'harness_defect'},
         owner='D2', proof='test_automatic_gate_override.RecordedSeriesStopTests.'
                          'test_unchanged_repeat_records_the_harness_stop_and_ended_schedule',
@@ -70,6 +76,9 @@ for _code in ('review_turn_failures_exhausted', 'review_parts_budget_exhausted',
                   then=[dict(answer='Check the retained record', steps=[dict(command='record-check')])]))
 STOP_REGISTRY['problem_already_posted'] = dict(code='problem_already_posted', **{'class': 'decision'},
                                              owner='D2', next=dict(kind='done'))
+STOP_REGISTRY['review_pending_delivery_over_plan'] = dict(
+    code='review_pending_delivery_over_plan', **{'class': 'decision'}, owner='D1',
+    next=dict(kind='handoff', step=12, command='select-main-capture'))
 for _code in ('stale_revision', 'review_task_dependency_changed'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2', next=dict(kind='continue'))
 

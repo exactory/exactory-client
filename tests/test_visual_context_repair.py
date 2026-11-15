@@ -179,7 +179,11 @@ class VisualContextRepairTests(unittest.TestCase):
         records['review_attempt'][later['id']] = later
         selected = protocol.assignment_state(records, self.artifacts, ancestor['id'])
         self.assertEqual(selected['attempt_id'], original['id'])
-        retained = visual_repair._science(records, self.artifacts, self.prior, prior_attempt, history)
+        # Current repairs authenticate each native ancestor; v1 replay has a frozen-history test.
+        ancestry = []
+        retained = visual_repair._science(records, self.artifacts, self.prior, prior_attempt, history,
+                                          ancestry=ancestry)
+        self.assertEqual(ancestry[0]['attempt_id'], original['id'])
         self.assertEqual(retained[0]['observed_output'], selected['output'])
 
 

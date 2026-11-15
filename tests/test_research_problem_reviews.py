@@ -75,7 +75,7 @@ class ProblemReviewTests(LiteratureCase):
         return {"id": "provider-response", "model": "fixture-model", "status": "completed",
             "output": [{"type": "message", "role": "assistant", "content": [
                 {"type": "output_text", "text": json.dumps(output)}]}],
-            "usage": {"input_tokens": 37, "output_tokens": 12}}
+            "usage": {"input_tokens": 1000000 if "allowed_control" in output else 37, "output_tokens": 12}}
 
     def prepare_review_route(self):
         self.mutate(protocol.record_route, {"id": "route", "adapter": "openai_responses_v1",
@@ -85,6 +85,8 @@ class ProblemReviewTests(LiteratureCase):
             packet = json.loads(request["input"][0]["content"].removeprefix("The packet below is JSON.\n"))
             return self.build_provider_response({"allowed_control": packet["allowed_control"],
                 "evidence_control": packet["evidence_control"], "excluded_controls": []})
+        from visual_capacity_fixtures import install_bounded_binary_backend
+        install_bounded_binary_backend(self, [self.store.snapshot()['records']['review_route']['route']])
         with patch("research_harness.review_transport.send_request", side_effect=respond_to_probe):
             self.mutate(protocol.probe_route, {"id": "probe", "route_id": "route"}, credential="test-only")
 
@@ -1063,6 +1065,8 @@ class ProblemOpennessReviewTests(ProblemCase):
             packet = json.loads(request["input"][0]["content"].removeprefix("The packet below is JSON.\n"))
             return self.build_provider_response({"allowed_control": packet["allowed_control"],
                 "evidence_control": packet["evidence_control"], "excluded_controls": []})
+        from visual_capacity_fixtures import install_bounded_binary_backend
+        install_bounded_binary_backend(self, [self.store.snapshot()['records']['review_route']['route']])
         with patch("research_harness.review_transport.send_request", side_effect=respond_to_probe):
             self.mutate(protocol.probe_route, {"id": "repair-probe", "route_id": "route"}, credential="test-only")
         self.assign("bar", "repair-reviewer", identifier="repair", context_repair={

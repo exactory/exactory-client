@@ -29,7 +29,9 @@ class SourceCapacityPendingTests(StrategyCase):
         self.versions, self.captures = [], []
         for index in range(1, 4):
             version = self.metadata(index)
-            body = ('Exact complete mathematical source %d with its proof. ' % index) * 1100
+            # The combined projection fits the route while the smaller native
+            # test boundary below still defers at least one complete source.
+            body = ('Exact complete mathematical source %d with its proof. ' % index) * 700
             self.versions.append(version)
             self.captures.append(self.capture(version, pdf_text=body + '\f'))
         original_request = review_transport.request_body

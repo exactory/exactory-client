@@ -18,6 +18,13 @@ import test_visual_context_repair as fixtures
 
 class NestedVisualContextRepairTests(unittest.TestCase):
     def setUp(self):
+        from research_harness import review_route_capacity
+        from test_review_output_profile import build_row
+        # The v1 replay fixture starts from ordinary source-review history.
+        profile = patch.object(review_route_capacity, 'read_profile_priors', return_value=[
+            dict(build_row(level=None, kind='single', thinking=1), largest_output_tokens=12)])
+        profile.start()
+        self.addCleanup(profile.stop)
         self.fixture = fixtures.VisualContextRepairTests()
         self.addCleanup(self.fixture.doCleanups)
         self.fixture.setUp()

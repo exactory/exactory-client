@@ -22,8 +22,12 @@ class SessionDeliveryTests(unittest.TestCase):
         self.case.setUp()
         self.addCleanup(self.case.doCleanups)
         self.case.supporting = self.case.artifacts.put(b'A synthetic field standard.', 'text/plain')
-        record_codex_route(self.case)
-        limit_codex_input(self.case, 105000)
+        record_codex_route(self.case, model='gpt-6-astra')
+        # Retain the reduced-history fitting budget on a route that can admit
+        # the projected replay. The dispatch guard keeps the real route limits.
+        fitting_limit = patch.object(transport, 'local_input_limit', return_value=105000)
+        fitting_limit.start()
+        self.addCleanup(fitting_limit.stop)
         self.versions = []
         for index in (1, 2, 3):
             version = self.case.metadata(index)

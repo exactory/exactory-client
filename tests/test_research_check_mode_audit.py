@@ -33,7 +33,7 @@ from test_review_parts_views import PartsViewCase
 
 PLUGIN = Path(__file__).resolve().parents[1]
 EXTERNAL_COMMANDS = frozenset((*cli.ACQUISITION, "review-probe", "review-run", "review-output-correction",
-                               "reconcile-run", "batches", "export", "recover", "restore", "strategy-packet", "review-series"))
+                               "reconcile-run", "batches", "export", "recover", "restore", "strategy-packet", "review-series", "review-stop"))
 OTHER_ARGUMENTS = {
     "batches": ["--destination", "check-batches"],
     "export": [],

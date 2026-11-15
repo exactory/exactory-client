@@ -183,10 +183,15 @@ def describe_review_tasks(records, epoch, state):
                 progress.update(state="waiting", code="review_capacity_wait", next=[])
                 for reservation in active:
                     owner = records.get("review_epoch", {}).get(reservation["epoch_id"])
-                    if owner is not None:
+                    from .review_stop import has_live_call_processes
+                    if owner is not None and not has_live_call_processes(reservation):
                         progress["next"].append(dict(kind="command", command="review-run", payload=dict(
                             assignment_id=owner["controller_assignment_id"], epoch_id=owner["id"],
                             task_id=reservation["task_id"], action="reconcile")))
+                if not progress['next']:
+                    progress['next'] = [dict(kind='command', command='review-run', payload=dict(
+                        assignment_id=epoch['controller_assignment_id'], epoch_id=epoch['id'], task_id=task['id']))]
+                progress['calls_before'] = len(active)
                 progress["reservations"] = [reservation["id"] for reservation in active]
         result.append(progress)
     return result
@@ -578,6 +583,7 @@ def assess_post(records, artifacts, *, source_guards=None, check_source_freshnes
         after_post = describe_after_post_obligations(unique)
         from .problem_reports import describe_post_condition_findings
         after_post.extend(describe_post_condition_findings(posted))
+        after_post.extend(describe_posted_calls(records, artifacts))
         after_post.extend(dict(row, code="problem_post_fact", explanation=row["fact"], reason=row["fact"])
                           for row in sorted(records.get("problem_post_fact", {}).values(),
                                             key=lambda row: (row["recorded_revision"], row["id"]))
@@ -597,6 +603,26 @@ def assess_post(records, artifacts, *, source_guards=None, check_source_freshnes
             "orchestration": "problem_creation", "milestone": milestone,
             "problem_evidence_digest": evidence_digest, "statement_id": None if statement is None else statement["id"],
             "decision_id": None if decision is None else decision["id"]}, **slots, **posted_state)
+
+
+def describe_posted_calls(records, artifacts):
+    """Project administrative closure after a post outside every scientific digest."""
+    from .review_continuation import list_chain_heads
+    from .review_stop import describe_closed_calls
+    if not records.get('problem_post'):
+        return []
+    result = []
+    for identifier in list_chain_heads(records, artifacts):
+        assignment = records['review_assignment'][identifier]
+        if find_review_post(records, assignment, artifacts) is None:
+            continue
+        for call in describe_closed_calls(records, artifacts, assignment):
+            reason = ('The post closed this reviewer call.' if call['closed'] else
+                      'The post closed the review chain of this call, and the call is not settled. '
+                      'Run the step of this row; it makes no reviewer call.')
+            result.append(dict(call, code='review_call_closed' if call['closed'] else 'review_invocation_pending',
+                               explanation=reason, reason=reason))
+    return result
 
 
 def describe_after_post_obligations(rows):

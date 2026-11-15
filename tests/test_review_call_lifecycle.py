@@ -22,7 +22,8 @@ from research_harness import review_codex_transport as codex
 from research_harness.storage import Store
 root, command, payload, mode = Path(sys.argv[1]), sys.argv[2], json.loads(sys.argv[3]), sys.argv[4]
 store = Store(root)
-codex.runtime = lambda: {'adapter':'codex_cli_v1','fixture':'reviewer-excerpt-test'}
+runtime = json.loads(sys.argv[5])
+codex.runtime = lambda: runtime
 codex.NATIVE_DECLARATIONS = ()
 codex.NATIVE_DECLARATION_SETS = {()}
 def observe(*args):
@@ -67,8 +68,10 @@ class PublicCallLifecycleTests(ResultPartsCase):
         self.assertTrue(path.exists(), str(path))
 
     def launch(self, command, payload, mode='die'):
+        runtime = self.case.read_records()['review_route']['route']['runtime']
         process = subprocess.Popen([sys.executable, '-c', _PROGRAM, str(self.case.root), command,
-                                    json.dumps(payload), mode], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                    json.dumps(payload), mode, json.dumps(runtime)],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         def cleanup():
             if process.poll() is None:
                 process.kill()
@@ -83,7 +86,9 @@ class PublicCallLifecycleTests(ResultPartsCase):
             'review-output-correction':'review.output_correction'}[command], invocation_id=payload['id']), request_id)
 
     def blocked_probe(self):
-        with patch.object(protocol, '_observed', side_effect=AssertionError('Occupied calls must prevent model I/O')):
+        with patch.object(protocol, '_observed', side_effect=AssertionError('Occupied calls must prevent model I/O')), \
+                patch('research_harness.review_call_admission.wait_for_admission',
+                      side_effect=lambda store, attempt: attempt(False)):
             self.assert_code('review_capacity_wait', lambda: self.command('review-probe',
                 dict(id='blocked', route_id='route'), 'blocked'))
 

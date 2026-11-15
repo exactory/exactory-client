@@ -133,7 +133,7 @@ def find_final_assignment(records, artifacts, identifier):
         seen.add(current['id'])
         live = [saved for saved in assignments.values()
                 if saved['role'] == 'native_math'
-                and saved['context'].get('prior_assignment_id') == current['id']
+                and (saved.get('capacity_replacement_of') or saved['context'].get('prior_assignment_id')) == current['id']
                 and not (has_ended_without_output(records, saved['id']) and find_replacement(records, saved))]
         if len(live) > 1:
             raise ResearchError('review_source_continuation_fork', 'The native series has multiple live continuations',
@@ -141,7 +141,8 @@ def find_final_assignment(records, artifacts, identifier):
         if not live:
             packet = strict_json(artifacts.read(current['packet']))
             state = assignment_state(records, artifacts, current['id'])
-            if (find_kind(packet) == 'final' and packet[KEY]['series_assignment_id'] == identifier
+            if (find_kind(packet) == 'final'
+                    and packet[KEY].get('replaces_assignment_id', packet[KEY]['series_assignment_id']) == identifier
                     and state['ready'] and state['output'].get('kind') != 'requests'):
                 return current
             break

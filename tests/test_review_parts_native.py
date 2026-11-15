@@ -108,6 +108,10 @@ class NativePartsTests(unittest.TestCase):
             self.assertEqual(frame['native'][key], self.native[key])
 
     def test_fitting_native_packet_stays_single(self):
+        # Fit the output profile floor as well as the transport's input room.
+        reference = self.artifacts.put(b'A short exact argument.', 'text/plain')
+        self.native['evidence'] = [dict(digest=reference['sha256'], kind='artifact', artifact=reference)]
+        self.reference = self.artifacts.put(json.dumps(self.native).encode(), 'application/json')
         assignment = self.assign()
         self.assertNotIn('review_parts', assignment)
         self.assertNotIn('reading_chain', assignment)

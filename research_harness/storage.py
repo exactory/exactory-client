@@ -721,7 +721,7 @@ class _ScopedProof(NamedTuple):
 # Equality predicates only; no caller code runs while validating a proof.
 _FILTER_FIELDS = {
     'review_task': {'epoch_id'},
-    'review_attempt': {'assignment_id'},
+    'review_attempt': {'assignment_id', 'origin'},
     'review_invocation': {'assignment_id'},
     'review_probe_invocation': {'route_id'},
     'review_route_probe': {'route_id'},
@@ -729,7 +729,7 @@ _FILTER_FIELDS = {
                           'context.context_repair.assignment_id', 'staged_review.controller_assignment_id',
                           'staged_review.epoch_id'},
     'review_context_event': {'assignment_id', 'kind'},
-    'review_output_correction': {'assignment_id'},
+    'review_output_correction': {'assignment_id', 'origin'},
     'review_output_correction_invocation': {'assignment_id'},
     'review_selection': {'controller_assignment_id'},
 }

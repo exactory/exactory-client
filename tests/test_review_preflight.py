@@ -142,21 +142,8 @@ class DispatchTests(unittest.TestCase):
         self.assertNotIn('missing-body', case.read_records().get('review_invocation', {}))
 
     def test_pre_072_refused_adjudicator_anchor_can_be_explicitly_upgraded(self):
-        from research_harness import review_parts
-        from test_research_problem_adjudication_contract import ProblemAdjudicationContractTests
-        case = ProblemAdjudicationContractTests()
-        case.setUp()
-        self.addCleanup(case.doCleanups)
-        original = case.make_objection
-        case.make_objection = lambda: dict(original(), reason='Unsupported implication. ' + 'x' * 1100000)
-        case.prepare_reviews(result_reviewer='first')
-        record_codex_route(case, 'local-route', output_tokens=128000, timeout_seconds=600)
-        payload = dict(id='anchor', role='adjudicator', reviewer_id='focused-third', author_id='problem-author',
-            dossier_id=None, route_id='local-route', context=dict(review_ids=[
-                'review-result-first', 'review-result-second'], objection_id='unsupported-implication'))
-        with patch.object(review_parts, 'prepare_packet', side_effect=lambda records, artifacts,
-                          value, route, packet, prompt, history, **kwargs: packet):
-            anchor = case.mutate(protocol.record_assignment, payload)['result']
+        from test_review_entry_policy import load_stored_focused_anchor
+        case, payload, anchor = load_stored_focused_anchor(self)
         self.assertNotIn('review_parts', anchor)
         self.assertNotIn('staged_review', anchor)
         with patch.object(transport, 'send_request', return_value=case.build_provider_response({})):

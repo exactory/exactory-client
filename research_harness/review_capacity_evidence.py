@@ -76,8 +76,8 @@ def describe_capacity_members(route):
         else:
             runtime_rules += CODEX_RUNTIME_MEMBERS
     result = []
-    for scope, members, rules in [('runtime', route.get('runtime', {}), runtime_rules),
-                                   ('configuration', route['configuration'], config_rules)]:
+    for scope, members, rules in (('runtime', route.get('runtime', {}), runtime_rules),
+                                  ('configuration', route['configuration'], config_rules)):
         for member in members:
             rule = next((row for row in rules if row[0] == member), None)
             result.append(dict(scope=scope, member=member,
@@ -210,6 +210,13 @@ def _match_capacity_key(prior, key):
                                _has_documented_join(prior) and key in prior.get('joined_keys', []))
 
 
+def read_capacity_records(records, kind):
+    """Bind provider observations without depending on unrelated imported attempts."""
+    from .storage import read_filtered_records
+    return (records.get(kind, {}) if kind == 'review_route_probe'
+            else read_filtered_records(records, kind, origin='instrumented'))
+
+
 def read_capacity_evidence(route, records, *, artifacts=None, threshold_models=(), reservation=None):
     """Read only witnesses that can raise the bound or the proposed probe size."""
     key = describe_capacity_key(route)
@@ -259,9 +266,7 @@ def read_capacity_evidence(route, records, *, artifacts=None, threshold_models=(
     routes = records.get('review_route', {})
     candidates = []
     for kind in ('review_attempt', 'review_route_probe', 'review_output_correction'):
-        for record in records.get(kind, {}).values():
-            if kind != 'review_route_probe' and record.get('origin') != 'instrumented':
-                continue
+        for record in read_capacity_records(records, kind).values():
             saved_route = routes.get(record.get('route_id') or assignments.get(record.get('assignment_id'), {}).get('route_id'))
             if saved_route is None:
                 continue

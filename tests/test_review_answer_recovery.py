@@ -206,7 +206,7 @@ class RecoveryObservationTests(LiteratureCase):
         self.assertEqual(usage['failed_calls'], 0)
         self.assertEqual(usage['recovered_calls'], 1)
         self.assertEqual(usage['call_ids'].count('recovered'), 1)
-        self.assertEqual(usage['observed']['input_tokens'], 74)
+        self.assertEqual(usage['observed']['input_tokens'], 1000000 + 37)
         self.assertEqual(cli._review_status(records, self.artifacts)['assignments']['assignment'][
             'answer_recoveries']['recovered'], result['answer_recovery'])
         exported = cli.run(cli.build_parser().parse_args([

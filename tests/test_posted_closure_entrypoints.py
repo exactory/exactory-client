@@ -84,8 +84,21 @@ class PostedClosureEntrypointTests(unittest.TestCase):
 
     def test_review_series_resolves_the_ancestor_to_the_closed_head(self):
         self.case.post(legacy=True)
-        with self.refuse_new_work():
+        before = self.case.store.snapshot()
+        with patch.object(protocol.transport, 'send_request',
+                          side_effect=AssertionError('A posted chain starts no provider call')), \
+                patch.object(review_worker, 'launch_worker',
+                             side_effect=AssertionError('A posted chain launches no worker')):
             plan = self.run_cli('review-series', '--assignment', self.root_assignment['id'], exit_code=0)
+        after = self.case.store.snapshot()
+        self.assertEqual(after['revision'], before['revision'] + 2)
+        for kind in set(before['records']) | set(after['records']):
+            if kind not in ('review_series_run', 'literature_operation'):
+                self.assertEqual(after['records'].get(kind), before['records'].get(kind))
+        for key, value in before['records'].get('literature_operation', {}).items():
+            self.assertEqual(after['records']['literature_operation'][key], value)
+        driver = next(iter(after['records']['review_series_run'].values()))
+        self.assertEqual(driver['ended']['state'], 'done')
         self.assertEqual((plan['state'], plan['head_id']), ('done', self.case.assignment['id']))
         for key in ('command', 'payload', 'workflow', 'scope'):
             self.assertNotIn(key, plan)

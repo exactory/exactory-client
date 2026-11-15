@@ -826,7 +826,8 @@ class ProblemOpennessDeliveryTests(ProblemDeliveryCase):
         real = review_protocol._evidence
 
         def attach_without_responses(artifacts, value, **options):
-            searches = (value.get("problem_evidence") or {}).get("openness_searches", [])
+            searches = ((value.get("problem_evidence") or {}).get("openness_searches", [])
+                        if isinstance(value, dict) else [])
             responses = {source["response"]["sha256"] for row in searches for source in row["sources"]}
             return [entry for entry in real(artifacts, value, **options) if entry["artifact"]["sha256"] not in responses]
         with patch.object(review_protocol, "_evidence", side_effect=attach_without_responses):

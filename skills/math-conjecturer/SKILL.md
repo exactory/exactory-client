@@ -42,7 +42,13 @@ the record, not an order of tools: every tool is available at every milestone, a
 `exactory-research gate post` requires every condition at once.
 When a step stops and only the user can pass it, report it and go on only as
 [Stops and overrides](../../docs/research-workflow.md#stops-and-overrides) describes; the post
-then uses `export --kind problem-override` and `problem-post-external`.
+then uses `export --kind problem-override` and `problem-post-external`. Before such a post, run
+`exactory-research review-stop` with `scope: "store"` and `mode: "now"` (`exactory-research example
+review-stop` prints the payload), send it again with a new request ID, or take the steps of its
+result, until every call that is not `historical` is `settled`, confirm by your own check that
+the old processes of each `historical` call have ended, and leave the stop standing through the
+post, so that no reviewer call of the record runs when the post closes its review chains
+([Review chains and `review-series`](../../docs/research-cli.md#review-chains-and-review-series)).
 
 Every `exactory-research` mutation below takes `--file FILE --expected-revision REVISION
 --request-id ID`. Read `exactory-research status` before each mutation and use its revision.
@@ -539,6 +545,10 @@ CLI reference gives the payloads, the records and the refusals.
    it. It keeps in the destination a verified snapshot of the source at that revision, as the
    carry keeps the proof of its source, and it records one manifest of that snapshot,
    `problem_forming_import/<id>`. No record of the source becomes a record of the destination.
+   Read the `size_report` of the `--check` response before you record the import: it gives the
+   character counts and the artifact counts of the imported material and its measure against the
+   input limits of each registered route, and it has a `warning` when the material is estimated at
+   more than one turn of 120,000 characters or exceeds an input limit of a registered route.
 4. The receipt of the command lists under `members` every record of the source that the
    destination can cite: the forming calls and the outcomes of the source, its probes, its
    plans, runs and assessments, the searches that its test declarations name, and the readings

@@ -105,11 +105,19 @@ class ReadingHandoffTests(unittest.TestCase):
                              ['body', 'bibliography', 'abstract'])
             self.assertEqual(plan['details']['step']['id'], 13)
             self.assertEqual(plan['details']['then'], dict(command='review-series', assignment_id=final['id']))
-            self.assertEqual(self.case.read_records(), before)
+            after = self.case.read_records()
+            driver, = after['review_series_run'].values()
+            self.assertEqual(driver['ended']['code'], 'reading_missing')
+            operations = dict(before['literature_operation'])
+            for suffix, operation in (('', 'review.series_start'), (':end', 'review.series_end')):
+                operations[driver['id'] + suffix] = dict(
+                    operation=operation, runtime=self.case.store.describe_runtime())
+            self.assertEqual(after, dict(before, review_series_run={driver['id']: driver},
+                                         literature_operation=operations))
             self.read_source()
             record = self.plan()
             self.assertEqual(record, dict(state='record', chain='session', head_id='final',
-                progress=record['progress'], command='value-review',
+                progress=record['progress'], capacity_forecast=record['capacity_forecast'], command='value-review',
                 payload=dict(output, id='review:final', assignment_id='final', dossier_id=None)))
             saved = self.execute(record)['result']
             self.assertEqual(saved['output_digest'], digest(output))

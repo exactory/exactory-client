@@ -452,7 +452,7 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
     from research_harness.native_review import load_packet
     from research_harness.openness_reading import find_final_assignment, verify_chain
     from research_harness.operations import normalized_text
-    from research_harness.review_protocol import assignment_state
+    from research_harness.review_protocol import assignment_state, find_replacement
     from research_harness import review_parts
     from research_harness.storage import Store
     identifier = value.get("reviewer", {}).get("attestation_id", "")
@@ -467,15 +467,18 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
             s.require(Path(common_guard.root).resolve() == common, "Native reviewer guard names another workspace", "review_workspace_mismatch")
         artifacts = ArtifactStore(common)
         current = assignment_state(records, artifacts, identifier)
-        s.require(current["ready"], "The current reviewer route or invocation does not establish independence", "review_context_unverified")
         assignment = records["review_assignment"][identifier]
+        replacement = find_replacement(records, assignment)
+        capacity_series = replacement is not None and replacement.get('capacity_replacement_of') == identifier
+        s.require(current["ready"] or capacity_series,
+                  "The current reviewer route or invocation does not establish independence", "review_context_unverified")
         s.require(assignment["role"] == "native_math" and assignment["dossier_id"] is None,
                   "Native approval requires its native mathematical assignment", "review_assignment_mismatch")
         if "reading_chain" in assignment:
             assignment = find_final_assignment(records, artifacts, identifier)
             current = dict(assignment_state(records, artifacts, assignment["id"]),
                            reading_turns=verify_chain(records, artifacts, assignment))
-        elif review_parts.KEY in assignment:
+        elif review_parts.KEY in assignment or capacity_series:
             from research_harness import review_parts_native
             assignment = review_parts_native.find_final_assignment(records, artifacts, identifier)
             verified = review_parts.verify_series(records, artifacts, assignment['id'])

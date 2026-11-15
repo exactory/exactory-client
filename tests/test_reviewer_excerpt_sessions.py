@@ -5,13 +5,14 @@ import json
 import unittest
 from unittest.mock import patch
 
-from codex_route_fixtures import (invoke_codex, limit_codex_input, probe_codex_route, read_sent_packet,
+from codex_route_fixtures import (invoke_codex, probe_codex_route, read_sent_packet,
                                   record_codex_route)
 from literature_fixtures import LiteratureCase
 from strategy_fixtures import StrategyCase
 import test_research_problem_reviews as problem_fixtures
 from test_research_strategic_source_requests import StrategicSourceHelpers
 from research_harness import bar_sources, research_decisions, review_excerpts, review_protocol as protocol
+from research_harness import review_transport as transport
 
 
 def build_lemma(index):
@@ -50,8 +51,8 @@ class ExcerptSessionCase(StrategyCase):
         self.requests = [{'id': 'source-%d' % index, 'kind': 'source', 'version_id': version, 'depth': 'fulltext'}
                          for index, version in enumerate(self.versions, 1)]
 
-    def assign(self, identifier, reviewer='reviewer-a', **context):
-        return self.mutate(protocol.record_assignment, {'id': identifier, 'route_id': 'route',
+    def assign(self, identifier, reviewer='reviewer-a', *, route_id='route', **context):
+        return self.mutate(protocol.record_assignment, {'id': identifier, 'route_id': route_id,
             'dossier_id': 'dossier-1', 'role': 'bar', 'reviewer_id': reviewer, 'author_id': 'author',
             'context': context})['result']
 
@@ -139,13 +140,17 @@ class ExcerptSessionTests(ExcerptSessionCase):
                          'exactory-review-excerpts-v3')
 
     def test_a_session_beyond_the_route_limit_reaches_a_recordable_final_bar(self):
-        limit_codex_input(self, 105000)
-        self.assign('a')
+        record_codex_route(self, 'serving-route', model='gpt-6-astra')
+        # Keep the historical fitting boundary on a route that admits the replay.
+        fitting_limit = patch.object(transport, 'local_input_limit', return_value=105000)
+        fitting_limit.start()
+        self.addCleanup(fitting_limit.stop)
+        self.assign('a', route_id='serving-route')
         self.invoke('a', self.build_request_turn(self.requests))
         parent, delivered_in = 'a', {}
         for turn in range(1, len(self.versions) + 3):
             child = 'turn-%d' % turn
-            self.assign(child, prior_assignment_id=parent)
+            self.assign(child, route_id='serving-route', prior_assignment_id=parent)
             statuses = {delivery['status'] for delivery in self.packet(child)['source_deliveries']}
             if not self.packet(child)['pending_source_requests'] and statuses == {'already_delivered'}:
                 break
@@ -159,7 +164,7 @@ class ExcerptSessionTests(ExcerptSessionCase):
         else:
             self.fail('The session did not settle within the number of requested texts.')
         self.assertEqual(set(delivered_in), set(self.versions))
-        # The route holds one text in each turn, so the texts arrive in three turns and the fourth finds all delivered.
+        # The fitting budget holds one text per turn; the fourth turn finds all delivered.
         self.assertEqual(sorted(delivered_in.values()), ['turn-1', 'turn-2', 'turn-3'])
         self.assertEqual(turn, len(self.versions) + 1)
         final = self.review_response('bar')

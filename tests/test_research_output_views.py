@@ -442,6 +442,22 @@ class PartsOutputViewTests(PartsViewCase):
 
 
 class RegistryTests(unittest.TestCase):
+    def test_capacity_member_classifications_are_not_record_writes(self):
+        from research_harness import review_capacity_evidence
+        route = dict(adapter="codex_cli_v1", runtime=dict(adapter="codex_cli_v1", fixture="capacity-test"),
+                     configuration=dict(max_output_tokens=1000, timeout_seconds=5))
+        classifications = review_capacity_evidence.describe_capacity_members(route)
+        self.assertEqual([(row["scope"], row["member"], row["classification"]) for row in classifications], [
+            ("runtime", "adapter", "key"), ("runtime", "fixture", "key"),
+            ("configuration", "max_output_tokens", "reservation"),
+            ("configuration", "timeout_seconds", "no_effect"),
+        ])
+        path = PLUGIN_ROOT / "research_harness/review_capacity_evidence.py"
+        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        scanner = _KindScanner(path.name, tree)
+        scanner.visit(tree)
+        self.assertEqual(scanner.kinds, set())
+
     def test_every_written_kind_has_a_placement(self):
         kinds, forwarding = scan_written_kinds()
         self.assertGreater(len(kinds), 100)

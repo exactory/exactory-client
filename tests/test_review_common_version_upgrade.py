@@ -15,7 +15,8 @@ import test_research_problem_reviews as problem_fixtures
 import test_review_objection_identity as objection_fixtures
 import test_review_staged_protocol as staged_fixtures
 import test_visual_result_delivery as visual_fixtures
-from codex_route_fixtures import record_codex_route
+from codex_route_fixtures import install_codex_runtime, probe_codex_route, record_codex_route
+from capacity_evidence_fixtures import build_capacity_runtime
 from research_harness import openness_reading
 from research_harness import research_decisions as decisions
 from research_harness import review_claude_transport as claude
@@ -307,13 +308,15 @@ class AssignmentInstructionsUpgradeTests(unittest.TestCase):
         if adapter == 'codex_cli_v1':
             record_codex_route(case)
         elif adapter == 'codex_cli_framed_v1':
+            install_codex_runtime(case)
             controls = control_fixtures.CodexControlTests()
-            runtime = {'adapter': adapter, 'fixture': 'common-version-upgrade'}
+            runtime = build_capacity_runtime(adapter, fixture='common-version-upgrade')
             patcher = patch.object(framed, 'runtime', return_value=runtime)
             case.addCleanup(patcher.stop)
             patcher.start()
             case.mutate(protocol.record_route,
                         dict(controls.build_route(framed), id='route'))
+            probe_codex_route(case, 'probe')
         elif adapter == 'openai_responses_v1':
             case.prepare_review_route()
         else:

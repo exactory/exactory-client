@@ -1248,6 +1248,8 @@ class ProblemObjectionCarryDeliveryTests(unittest.TestCase):
         from research_harness import review_codex_visual_transport as visual, review_transport as transport
         from research_harness.acquisition import acquire_fulltext
         from research_harness.record_check import check_integrity
+        from research_harness import review_route_capacity
+        from test_review_output_profile import build_row
         source = self.fixture(bars=False, settling=True)
         use_emulated_request_builders(self)
         record_codex_route(source, identifier='local', output_tokens=128000, timeout_seconds=600)
@@ -1302,7 +1304,10 @@ class ProblemObjectionCarryDeliveryTests(unittest.TestCase):
 
         # The native visual transition needs a current scientific frame. Use
         # the established v2-to-v3 rubric upgrade to refresh that frame.
-        with patch.object(protocol, 'canonical_prompt', side_effect=legacy_prompt):
+        # Keep the historical single assignments within their output start value.
+        with patch.object(protocol, 'canonical_prompt', side_effect=legacy_prompt), \
+             patch.object(review_route_capacity, 'read_profile_priors', return_value=[
+                 dict(build_row(level=None, kind='single', thinking=1000), largest_output_tokens=12)]):
             first = source.assign('result', 'first', identifier='image-request')
             identifier = source.packet(first)['material_objections'][0]['id']
             invoke_codex(source, first['id'], output([dict(id='pdf-source', kind='source', version_id=version, depth='fulltext')]))
@@ -1315,9 +1320,15 @@ class ProblemObjectionCarryDeliveryTests(unittest.TestCase):
             source.mutate(decisions.record_value_review, dict(legacy, id='review-legacy-visual-source', dossier_id=None, assignment_id=prior['id']))
         sender = VisualResultDeliveryTests()
         sender.case = source
-        with patch.object(visual, 'runtime', return_value=dict(adapter=visual.ADAPTER, fixture='carry-native-visual')):
+        from capacity_evidence_fixtures import build_capacity_runtime
+        with patch.object(visual, 'runtime', return_value=build_capacity_runtime(
+                visual.ADAPTER, fixture='carry-native-visual')):
             source.mutate(protocol.record_route, dict(id='visual-route', adapter=visual.ADAPTER,
                 model='fixture-model', endpoint='codex://local', configuration=dict(max_output_tokens=128000, timeout_seconds=600)))
+
+            from visual_capacity_fixtures import install_bounded_visual_backend
+            install_bounded_visual_backend(self, [source.store.snapshot()['records']['review_route']['visual-route'],
+                                                   destination.store.snapshot()['records']['review_route']['route']])
 
             def respond_probe(route, request, credential):
                 positive = source.store.snapshot()['records']['review_probe_invocation']['visual-probe']['positive_controls']

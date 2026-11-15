@@ -76,6 +76,18 @@ class PartsResultCase(ResultPartsCase):
     """Use the real prospective path; the parent only supplies observed bar fixtures."""
     use_parts_v2 = True
 
+    def setUp(self):
+        super().setUp()
+        from unittest.mock import patch
+        from research_harness import review_route_capacity as capacity
+        from test_review_output_profile import build_row
+        # These journeys isolate the input fitter and scientific contracts. Their small
+        # ordinary setup reviews have four observed single completions on the fixture route.
+        row = dict(build_row(level=None, kind='single', thinking=1), largest_output_tokens=12)
+        profile = patch.object(capacity, 'read_profile_priors', return_value=[row])
+        profile.start()
+        self.addCleanup(profile.stop)
+
     def oversized(self, count=6, characters=24000, room=110000, limit=None):
         return super().oversized(count=count, characters=characters,
                                  limit=measure_input_limit(room) if limit is None else limit)

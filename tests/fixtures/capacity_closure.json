@@ -1,0 +1,3067 @@
+{
+  "schema": "exactory-capacity-closure-v1",
+  "source": "20261113110022-every-open-record-and-review-capacity",
+  "installed_units": [
+    "account-record-units",
+    "binary-input-measure",
+    "call-queue",
+    "capacity-probe",
+    "capacity-signals",
+    "compact-pdf",
+    "coverage-by-turns",
+    "delivery-notice",
+    "openness-binding",
+    "outcome-table",
+    "output-profile",
+    "parts-v2-recovery",
+    "posted-closed-calls",
+    "provider-schedule",
+    "record-reading-handoff",
+    "repair-series",
+    "review-stop",
+    "route-limits",
+    "route-limits-C1",
+    "route-limits-C10",
+    "route-limits-C3",
+    "segmented-text",
+    "series-driver-stop",
+    "session-forecast-stop",
+    "session-rules-v3",
+    "single-request-series",
+    "size-reports",
+    "slate-forming-descriptors",
+    "staged-scale-refusal",
+    "stop-registry",
+    "unbound-packet-captures",
+    "uncovered-review-stop",
+    "verification-criterion"
+  ],
+  "entries": [
+    {
+      "id": "A1",
+      "scope": "plugin",
+      "quantity": "first request text",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "account-record-units",
+          "outcome-table",
+          "session-rules-v3",
+          "size-reports",
+          "slate-forming-descriptors",
+          "stop-registry",
+          "uncovered-review-stop"
+        ],
+        "construction": [
+          "field-classes",
+          "card-budget-v3",
+          "parts-v3",
+          "slate-series"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [
+          "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+          "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted",
+          "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call",
+          "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+          "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+          "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+          "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+          "test_size_reports.SizeReportTests.test_import_check_counts_delivered_bodies_without_changing_the_import_receipt",
+          "test_size_reports.SizeReportTests.test_size_report_uses_only_its_keyed_capacity_witness",
+          "test_size_reports.SizeReportTests.test_value_receipt_reports_cited_records_and_transitive_bodies_outside_storage"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity",
+        "test_slate_forming_descriptors.SlateFormingTests.test_native_call_and_three_outcomes_arrive_without_their_artifact_bodies"
+      ],
+      "required_stops": [
+        {
+          "code": "review_input_too_large",
+          "tests": [
+            "test_continuity_guard.ContinuityGuardTests.test_size_stops_execute_all_answers_to_a_recorded_review"
+          ]
+        },
+        {
+          "code": "review_route_capacity_below_floor",
+          "tests": [
+            "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted"
+          ]
+        },
+        {
+          "code": "review_pending_delivery_over_plan",
+          "tests": [
+            "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+            "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+            "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+            "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A2",
+      "scope": "plugin",
+      "quantity": "session history",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "coverage-by-turns",
+          "delivery-notice",
+          "session-forecast-stop",
+          "size-reports"
+        ],
+        "construction": [
+          "session-record-v4",
+          "session-turns-v4",
+          "session-entry-v4"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [
+          "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call",
+          "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+          "test_session_forecast.SessionForecastTests.test_forecast_uses_keyed_input_evidence_instead_of_output_profile",
+          "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+          "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+          "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+          "test_size_reports.SizeReportTests.test_import_check_counts_delivered_bodies_without_changing_the_import_receipt",
+          "test_size_reports.SizeReportTests.test_size_report_uses_only_its_keyed_capacity_witness",
+          "test_size_reports.SizeReportTests.test_value_receipt_reports_cited_records_and_transitive_bodies_outside_storage"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_record_reading_handoff.ReadingHandoffTests.test_delivered_fulltext_hands_off_reading_then_records_the_same_output_without_a_call"
+      ],
+      "required_stops": [
+        {
+          "code": "reading_missing",
+          "tests": [
+            "test_record_reading_handoff.ReadingHandoffTests.test_delivered_fulltext_hands_off_reading_then_records_the_same_output_without_a_call"
+          ]
+        },
+        {
+          "code": "review_pending_delivery_over_plan",
+          "tests": [
+            "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+            "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+            "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+            "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A3",
+      "scope": "plugin",
+      "quantity": "pending text parts",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.89.0",
+      "units": {
+        "path": [
+          "compact-pdf",
+          "openness-binding",
+          "session-forecast-stop",
+          "size-reports",
+          "unbound-packet-captures"
+        ],
+        "construction": [
+          "session-rules-v3",
+          "session-forecast-stop"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [
+          "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call",
+          "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+          "test_session_forecast.SessionForecastTests.test_forecast_uses_keyed_input_evidence_instead_of_output_profile",
+          "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+          "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+          "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+          "test_size_reports.SizeReportTests.test_import_check_counts_delivered_bodies_without_changing_the_import_receipt",
+          "test_size_reports.SizeReportTests.test_size_report_uses_only_its_keyed_capacity_witness",
+          "test_size_reports.SizeReportTests.test_value_receipt_reports_cited_records_and_transitive_bodies_outside_storage"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_session_rules_v3.SessionRulesTests.test_settling_after_three_of_twenty_two_parts_reaches_the_next_final",
+        "test_unbound_packet_captures.UnboundPacketCaptureTests.test_stored_0870_findings_replay_with_their_delivered_capture_and_unchanged_bytes"
+      ],
+      "required_stops": [
+        {
+          "code": "reading_missing",
+          "tests": [
+            "test_record_reading_handoff.ReadingHandoffTests.test_delivered_fulltext_hands_off_reading_then_records_the_same_output_without_a_call"
+          ]
+        },
+        {
+          "code": "review_pending_delivery_over_plan",
+          "tests": [
+            "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+            "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+            "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+            "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A4",
+      "scope": "plugin",
+      "quantity": "reading record replay",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.91.0",
+      "units": {
+        "path": [
+          "reading-forecast",
+          "UB6",
+          "UB10"
+        ],
+        "construction": [
+          "capacity-plan",
+          "reading-v7-state",
+          "reading-v7-turns",
+          "reading-v7-verification",
+          "carried-selection",
+          "carried-integration"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A5",
+      "scope": "plugin",
+      "quantity": "final request",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "capacity-plan"
+        ],
+        "construction": [
+          "composite-final",
+          "composition-rules",
+          "final-pages"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence.",
+      "pending_stops": [
+        {
+          "unit": "capacity-plan",
+          "code": "review_route_capacity_below_floor",
+          "tests": [
+            "test_continuity_guard.ContinuityGuardTests.test_final_minimum_floor_stops_before_call_even_with_final_pages"
+          ],
+          "trigger_units": [
+            "capacity-plan",
+            "final-pages"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "A6",
+      "scope": "plugin",
+      "quantity": "parts frame, cards, inventory and final",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "stop-registry",
+          "registry-rows"
+        ],
+        "construction": [
+          "field-classes",
+          "card-budget-v3",
+          "parts-v3"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_route_capacity_properties.CapacityPropertyTests.test_text_sizes_to_thirty_route_limits_have_finite_fitting_turns"
+      ],
+      "required_stops": [
+        {
+          "code": "review_parts_budget_exhausted",
+          "tests": [
+            "test_review_parts_budget_floor.BudgetFloorReplacementTests.test_series_ends_with_the_floor_budget_stop_without_another_call"
+          ]
+        },
+        {
+          "code": "review_parts_frame_too_large",
+          "registry_pending": "registry-rows",
+          "tests": [
+            "test_review_parts_planning.PlanningTests.test_no_progress_and_final_frame_too_large"
+          ]
+        },
+        {
+          "code": "review_parts_inventory_too_large",
+          "registry_pending": "registry-rows",
+          "tests": [
+            "test_review_parts_planning.PlanningTests.test_no_progress_and_final_frame_too_large"
+          ]
+        },
+        {
+          "code": "review_parts_final_too_large",
+          "registry_pending": "registry-rows",
+          "tests": [
+            "test_review_parts_planning.RevisedPlanningTests.test_frame_with_less_than_one_card_floor_refuses_as_final_too_large"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A7",
+      "scope": "plugin",
+      "quantity": "refusal notice",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.91.0",
+      "units": {
+        "path": [
+          "refusal-notice"
+        ],
+        "construction": [
+          "refusal-replacement",
+          "refusal-planner",
+          "v7-refusal-turn",
+          "capacity-plan"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_record_reading_handoff.ReadingHandoffTests.test_second_output_citing_descriptor_hands_off_only_the_fulltext_reading"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A8",
+      "scope": "plugin",
+      "quantity": "repair history",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "repair-series"
+        ],
+        "construction": [
+          "exhaustion-repair",
+          "field-classes"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_record_reading_handoff.ReadingHandoffTests.test_second_output_citing_descriptor_hands_off_only_the_fulltext_reading"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A9",
+      "scope": "plugin",
+      "quantity": "input tokens",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.89.0",
+      "units": {
+        "path": [
+          "capacity-signals",
+          "outcome-table"
+        ],
+        "construction": [
+          "route-limits"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [
+        {
+          "code": "review_input_too_large",
+          "tests": [
+            "test_continuity_guard.ContinuityGuardTests.test_size_stops_execute_all_answers_to_a_recorded_review"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A10a",
+      "scope": "plugin",
+      "quantity": "unsupported delivery route",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.93.0",
+      "units": {
+        "path": [
+          "capacity-probe",
+          "route-limits-C3",
+          "uncovered-review-stop"
+        ],
+        "construction": [
+          "https-series"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [
+          "test_review_capacity_closure.CapacityEvidenceTests.test_codex_prior_matches_version_file_and_controls_only_under_its_key",
+          "test_review_capacity_closure.CapacityEvidenceTests.test_two_endpoints_share_the_profile_class_but_no_input_capacity",
+          "test_review_capacity_probe.CapacityProbeSizingTests.test_unkeyed_probe_cannot_schedule_or_scale_a_new_runtime",
+          "test_review_capacity_probe.LocalCapacityProbeTests.test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review",
+          "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+          "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [
+        {
+          "code": "review_route_capacity_below_floor",
+          "tests": [
+            "test_review_capacity_closure.CapacityEvidenceTests.test_codex_prior_matches_version_file_and_controls_only_under_its_key",
+            "test_review_capacity_closure.CapacityEvidenceTests.test_two_endpoints_share_the_profile_class_but_no_input_capacity",
+            "test_review_capacity_probe.CapacityProbeSizingTests.test_unkeyed_probe_cannot_schedule_or_scale_a_new_runtime",
+            "test_review_capacity_probe.LocalCapacityProbeTests.test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A10b",
+      "scope": "plugin",
+      "quantity": "binary inputs",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.94.0",
+      "units": {
+        "path": [
+          "binary-input-measure",
+          "uncovered-review-stop"
+        ],
+        "construction": [
+          "visual-series"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [
+          "test_review_binary_capacity.BinaryCapacityTests.test_individually_valid_attachments_pass_the_combined_capacity",
+          "test_review_uncovered_stop.UncoveredReviewTests.test_pdf_attachment_stops_and_text_route_completes_same_review",
+          "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+          "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [
+        {
+          "code": "review_route_capacity_below_floor",
+          "tests": [
+            "test_review_binary_capacity.BinaryCapacityTests.test_individually_valid_attachments_pass_the_combined_capacity",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_pdf_attachment_stops_and_text_route_completes_same_review",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted"
+          ],
+          "reasons": [
+            "binary_input_without_bound",
+            "binary_input_over_measure"
+          ]
+        }
+      ],
+      "verification_required": true,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A10c",
+      "scope": "plugin",
+      "quantity": "staged scale",
+      "kinds": [
+        "staged"
+      ],
+      "release": "0.89.0",
+      "units": {
+        "path": [
+          "staged-scale-refusal",
+          "registry-rows"
+        ],
+        "construction": []
+      },
+      "no_construction_ruling": "23",
+      "coverage": "recovery",
+      "evidence": {
+        "tests": [
+          "test_continuity_guard.ContinuityGuardTests.test_staged_refusal_preserves_the_slot_and_series_records_the_review"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_continuity_guard.ContinuityGuardTests.test_staged_refusal_preserves_the_slot_and_series_records_the_review"
+      ],
+      "required_stops": [
+        {
+          "code": "review_staged_scale_unsupported",
+          "registry_pending": "registry-rows",
+          "tests": [
+            "test_continuity_guard.ContinuityGuardTests.test_staged_refusal_preserves_the_slot_and_series_records_the_review"
+          ]
+        }
+      ],
+      "verification_required": false
+    },
+    {
+      "id": "A11",
+      "scope": "plugin",
+      "quantity": "correction history",
+      "kinds": [
+        "correction"
+      ],
+      "release": "0.90.0",
+      "units": {
+        "path": [
+          "output-profile"
+        ],
+        "construction": [
+          "refusal-planner"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A12",
+      "scope": "plugin",
+      "quantity": "session output",
+      "kinds": [
+        "request"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "outcome-table",
+          "output-profile",
+          "route-limits-C1"
+        ],
+        "construction": [
+          "task-size",
+          "capacity-plan",
+          "capacity-notice",
+          "session-record-v4",
+          "session-turns-v4",
+          "session-entry-v4",
+          "verification-criterion"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [
+          "test_review_capacity_closure.ClosureStartTests.test_session_v4_uses_request_rows_and_counts_its_whole_request"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers",
+        "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry"
+      ],
+      "required_stops": [
+        {
+          "code": "review_output_over_cap",
+          "tests": [
+            "test_continuity_guard.ContinuityGuardTests.test_size_stops_execute_all_answers_to_a_recorded_review",
+            "test_review_capacity_closure.ClosureStartTests.test_session_v4_uses_request_rows_and_counts_its_whole_request"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A13",
+      "scope": "plugin",
+      "quantity": "reading output",
+      "kinds": [
+        "reading"
+      ],
+      "release": "0.91.0",
+      "units": {
+        "path": [
+          "outcome-table",
+          "output-profile"
+        ],
+        "construction": [
+          "task-size",
+          "reading-v7-turns"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers",
+        "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry"
+      ],
+      "required_stops": [
+        {
+          "code": "review_output_over_cap",
+          "tests": [
+            "test_continuity_guard.ContinuityGuardTests.test_size_stops_execute_all_answers_to_a_recorded_review"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A14",
+      "scope": "plugin",
+      "quantity": "final output",
+      "kinds": [
+        "final"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "outcome-table"
+        ],
+        "construction": [
+          "task-size",
+          "composite-final",
+          "final-pages"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers",
+        "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry"
+      ],
+      "required_stops": [
+        {
+          "code": "review_output_over_cap",
+          "tests": [
+            "test_continuity_guard.ContinuityGuardTests.test_size_stops_execute_all_answers_to_a_recorded_review"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A15",
+      "scope": "plugin",
+      "quantity": "parts or repair output",
+      "kinds": [
+        "read",
+        "combine",
+        "check",
+        "request"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "parts-v2-recovery"
+        ],
+        "construction": [
+          "task-size",
+          "parts-v3"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers",
+        "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry"
+      ],
+      "required_stops": [
+        {
+          "code": "review_parts_budget_exhausted",
+          "tests": [
+            "test_review_parts_budget_floor.BudgetFloorReplacementTests.test_series_ends_with_the_floor_budget_stop_without_another_call"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A16",
+      "scope": "plugin",
+      "quantity": "single request output",
+      "kinds": [
+        "single"
+      ],
+      "release": "0.90.0",
+      "units": {
+        "path": [
+          "outcome-table",
+          "output-profile",
+          "single-request-series"
+        ],
+        "construction": [
+          "single-request-series",
+          "task-size"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [
+          "test_review_single_request.FrozenSingleTests.test_opus_max_128000_output_replacement_reaches_a_recorded_native_final",
+          "test_review_single_request.SingleEntryTests.test_each_adapter_enters_by_task_with_profile_read_start"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers",
+        "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry"
+      ],
+      "required_stops": [
+        {
+          "code": "review_output_over_cap",
+          "tests": [
+            "test_continuity_guard.ContinuityGuardTests.test_size_stops_execute_all_answers_to_a_recorded_review",
+            "test_review_single_request.FrozenSingleTests.test_opus_max_128000_output_replacement_reaches_a_recorded_native_final",
+            "test_review_single_request.SingleEntryTests.test_each_adapter_enters_by_task_with_profile_read_start"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A17",
+      "scope": "plugin",
+      "quantity": "answer size",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.90.0",
+      "units": {
+        "path": [
+          "outcome-table"
+        ],
+        "construction": [
+          "handles",
+          "capacity-notice"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers",
+        "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry"
+      ],
+      "required_stops": [
+        {
+          "code": "review_output_over_cap",
+          "tests": [
+            "test_continuity_guard.ContinuityGuardTests.test_size_stops_execute_all_answers_to_a_recorded_review"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A18",
+      "scope": "plugin",
+      "quantity": "streaming fallback",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.93.0",
+      "units": {
+        "path": [
+          "capacity-signals"
+        ],
+        "construction": [
+          "claude-transport-release"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_capacity_signals.CapacitySignalTests.test_claude_output_maximum_reduced_and_fallback_have_distinct_details"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A19",
+      "scope": "plugin",
+      "quantity": "context reduced output maximum",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.90.0",
+      "units": {
+        "path": [
+          "capacity-signals"
+        ],
+        "construction": [
+          "route-limits",
+          "task-size"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry"
+      ],
+      "required_stops": [
+        {
+          "code": "review_output_over_cap",
+          "tests": [
+            "test_continuity_guard.ContinuityGuardTests.test_size_stops_execute_all_answers_to_a_recorded_review"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A20",
+      "scope": "plugin",
+      "quantity": "Codex window, compaction and output",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.93.0",
+      "units": {
+        "path": [
+          "capacity-probe",
+          "capacity-signals",
+          "route-limits-C3"
+        ],
+        "construction": [
+          "route-limits",
+          "capacity-probe",
+          "codex-transport-release"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [
+          "test_review_capacity_closure.CapacityEvidenceTests.test_codex_prior_matches_version_file_and_controls_only_under_its_key",
+          "test_review_capacity_closure.CapacityEvidenceTests.test_two_endpoints_share_the_profile_class_but_no_input_capacity",
+          "test_review_capacity_probe.CapacityProbeSizingTests.test_unkeyed_probe_cannot_schedule_or_scale_a_new_runtime",
+          "test_review_capacity_probe.LocalCapacityProbeTests.test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_capacity_signals.CapacitySignalTests.test_claude_output_maximum_reduced_and_fallback_have_distinct_details",
+        "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers"
+      ],
+      "required_stops": [
+        {
+          "code": "review_input_too_large",
+          "tests": [
+            "test_continuity_guard.ContinuityGuardTests.test_size_stops_execute_all_answers_to_a_recorded_review"
+          ]
+        },
+        {
+          "code": "review_route_capacity_below_floor",
+          "tests": [
+            "test_review_capacity_closure.CapacityEvidenceTests.test_codex_prior_matches_version_file_and_controls_only_under_its_key",
+            "test_review_capacity_closure.CapacityEvidenceTests.test_two_endpoints_share_the_profile_class_but_no_input_capacity",
+            "test_review_capacity_probe.CapacityProbeSizingTests.test_unkeyed_probe_cannot_schedule_or_scale_a_new_runtime",
+            "test_review_capacity_probe.LocalCapacityProbeTests.test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A21",
+      "scope": "plugin",
+      "quantity": "wall time",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.90.0",
+      "units": {
+        "path": [
+          "outcome-table"
+        ],
+        "construction": [
+          "task-size"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers",
+        "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry"
+      ],
+      "required_stops": [
+        {
+          "code": "review_timeout",
+          "tests": [
+            "test_continuity_guard.ContinuityGuardTests.test_size_stops_execute_all_answers_to_a_recorded_review"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A22",
+      "scope": "plugin",
+      "quantity": "HTTPS provider refusal",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.93.0",
+      "units": {
+        "path": [
+          "provider-schedule"
+        ],
+        "construction": [
+          "https-capacity-signals"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A23",
+      "scope": "plugin",
+      "quantity": "paper role request and output",
+      "kinds": [
+        "single"
+      ],
+      "release": "0.94.0",
+      "units": {
+        "path": [
+          "outcome-table",
+          "uncovered-review-stop"
+        ],
+        "construction": [
+          "paper-series"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [
+          "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+          "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers",
+        "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry"
+      ],
+      "required_stops": [
+        {
+          "code": "review_output_over_cap",
+          "tests": [
+            "test_continuity_guard.ContinuityGuardTests.test_size_stops_execute_all_answers_to_a_recorded_review"
+          ]
+        },
+        {
+          "code": "review_route_capacity_below_floor",
+          "tests": [
+            "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A24",
+      "scope": "plugin",
+      "quantity": "probe request",
+      "kinds": [
+        "probe"
+      ],
+      "release": "0.89.0",
+      "units": {
+        "path": [
+          "capacity-probe",
+          "output-profile"
+        ],
+        "construction": [
+          "capacity-probe"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [
+          "test_review_capacity_probe.CapacityProbeSizingTests.test_unkeyed_probe_cannot_schedule_or_scale_a_new_runtime",
+          "test_review_capacity_probe.LocalCapacityProbeTests.test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers",
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [
+        {
+          "code": "review_route_capacity_below_floor",
+          "tests": [
+            "test_review_capacity_probe.CapacityProbeSizingTests.test_unkeyed_probe_cannot_schedule_or_scale_a_new_runtime",
+            "test_review_capacity_probe.LocalCapacityProbeTests.test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A25",
+      "scope": "plugin",
+      "quantity": "math reading record",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "reading-forecast"
+        ],
+        "construction": [
+          "reading-math-v2"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A26",
+      "scope": "plugin",
+      "quantity": "response bytes",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.93.0",
+      "units": {
+        "path": [
+          "capacity-signals",
+          "outcome-table"
+        ],
+        "construction": [
+          "https-capacity-signals"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_capacity_signals.ResponseLimitJourneyTests.test_existing_bar_session_head_moves_by_retirement_probe_and_repair_to_recording",
+        "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers"
+      ],
+      "required_stops": [
+        {
+          "code": "review_response_too_large",
+          "tests": [
+            "test_capacity_signals.ResponseLimitJourneyTests.test_existing_bar_session_head_moves_by_retirement_probe_and_repair_to_recording"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "A27",
+      "scope": "plugin",
+      "quantity": "Claude compaction",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.89.0",
+      "units": {
+        "path": [
+          "capacity-probe",
+          "capacity-signals",
+          "outcome-table",
+          "route-limits-C10"
+        ],
+        "construction": [
+          "route-limits",
+          "capacity-probe"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [
+          "test_review_capacity_closure.CapacityEvidenceTests.test_claude_limit_is_the_minimum_and_ordinary_input_takes_no_second_reservation",
+          "test_review_capacity_probe.CapacityProbeSizingTests.test_unkeyed_probe_cannot_schedule_or_scale_a_new_runtime",
+          "test_review_capacity_probe.LocalCapacityProbeTests.test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_capacity_signals.CapacitySignalTests.test_claude_compaction_stream_is_input_limit_and_unknown_event_is_unverified",
+        "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers"
+      ],
+      "required_stops": [
+        {
+          "code": "review_input_too_large",
+          "tests": [
+            "test_continuity_guard.ContinuityGuardTests.test_size_stops_execute_all_answers_to_a_recorded_review",
+            "test_review_capacity_closure.CapacityEvidenceTests.test_claude_limit_is_the_minimum_and_ordinary_input_takes_no_second_reservation"
+          ]
+        },
+        {
+          "code": "review_route_capacity_below_floor",
+          "tests": [
+            "test_review_capacity_probe.CapacityProbeSizingTests.test_unkeyed_probe_cannot_schedule_or_scale_a_new_runtime",
+            "test_review_capacity_probe.LocalCapacityProbeTests.test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q1",
+      "scope": "plugin",
+      "quantity": "turns, attempts, identifiers",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.91.0",
+      "units": {
+        "path": [
+          "reading-forecast",
+          "UB6"
+        ],
+        "construction": [
+          "reading-v7-state",
+          "reading-v7-turns"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q2",
+      "scope": "plugin",
+      "quantity": "units, sources, searches",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "account-record-units"
+        ],
+        "construction": [
+          "reading-v7-state",
+          "field-classes"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_route_capacity_properties.CapacityPropertyTests.test_text_sizes_to_thirty_route_limits_have_finite_fitting_turns",
+        "test_route_capacity_properties.CapacityPropertyTests.test_ten_thousand_units_end_at_the_declared_inventory_boundary"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q3",
+      "scope": "plugin",
+      "quantity": "text length",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.87.0",
+      "units": {
+        "path": [
+          "compact-pdf"
+        ],
+        "construction": [
+          "segmented-text"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_route_capacity_properties.CapacityPropertyTests.test_text_sizes_to_thirty_route_limits_have_finite_fitting_turns"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q4",
+      "scope": "plugin",
+      "quantity": "excerpts, passages",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.91.0",
+      "units": {
+        "path": [
+          "UB6",
+          "capacity-plan"
+        ],
+        "construction": [
+          "reading-v7-turns"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q5",
+      "scope": "plugin",
+      "quantity": "notes",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "session-forecast-stop"
+        ],
+        "construction": [
+          "reading-v7-turns",
+          "session-record-v4"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [
+          "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call",
+          "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+          "test_session_forecast.SessionForecastTests.test_forecast_uses_keyed_input_evidence_instead_of_output_profile",
+          "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+          "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+          "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [
+        {
+          "code": "review_pending_delivery_over_plan",
+          "tests": [
+            "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+            "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+            "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+            "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q6",
+      "scope": "plugin",
+      "quantity": "cited records",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.88.0",
+      "units": {
+        "path": [
+          "account-record-units"
+        ],
+        "construction": [
+          "account-record-units"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "constructed",
+      "evidence": {
+        "tests": [
+          "test_review_account_record_units.AccountRecordJourneyTests.test_authenticated_series_rebuilds_accounts_and_openness_for_coverage_and_citations"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_review_account_record_units.AccountRecordJourneyTests.test_authenticated_series_rebuilds_accounts_and_openness_for_coverage_and_citations"
+      ],
+      "required_stops": [],
+      "verification_required": false
+    },
+    {
+      "id": "Q7",
+      "scope": "plugin",
+      "quantity": "targets",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "capacity-plan"
+        ],
+        "construction": [
+          "reading-v7-turns",
+          "final-pages"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q8",
+      "scope": "plugin",
+      "quantity": "gaps, notices",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "UB6",
+          "reading-forecast"
+        ],
+        "construction": [
+          "reading-v7-turns",
+          "final-pages"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q9",
+      "scope": "plugin",
+      "quantity": "refusals",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.90.0",
+      "units": {
+        "path": [
+          "refusal-notice"
+        ],
+        "construction": [
+          "refusal-notice"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_record_reading_handoff.ReadingHandoffTests.test_second_output_citing_descriptor_hands_off_only_the_fulltext_reading"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q10",
+      "scope": "plugin",
+      "quantity": "repair reviews and events",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "repair-series"
+        ],
+        "construction": [
+          "field-classes"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_record_reading_handoff.ReadingHandoffTests.test_second_output_citing_descriptor_hands_off_only_the_fulltext_reading"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q11",
+      "scope": "plugin",
+      "quantity": "historical reviews",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.90.0",
+      "units": {
+        "path": [
+          "parts-v2-recovery"
+        ],
+        "construction": [
+          "refusal-planner"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_record_reading_handoff.ReadingHandoffTests.test_second_output_citing_descriptor_hands_off_only_the_fulltext_reading"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q12",
+      "scope": "plugin",
+      "quantity": "carried turns",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.91.0",
+      "units": {
+        "path": [
+          "reading-v7-state"
+        ],
+        "construction": [
+          "carried-selection",
+          "carried-integration"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q13",
+      "scope": "plugin",
+      "quantity": "delivered sources and pending requests",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "delivery-notice",
+          "session-forecast-stop"
+        ],
+        "construction": [
+          "session-turns-v4"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [
+          "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call",
+          "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+          "test_session_forecast.SessionForecastTests.test_forecast_uses_keyed_input_evidence_instead_of_output_profile",
+          "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+          "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+          "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_record_reading_handoff.ReadingHandoffTests.test_delivered_fulltext_hands_off_reading_then_records_the_same_output_without_a_call"
+      ],
+      "required_stops": [
+        {
+          "code": "reading_missing",
+          "tests": [
+            "test_record_reading_handoff.ReadingHandoffTests.test_delivered_fulltext_hands_off_reading_then_records_the_same_output_without_a_call"
+          ]
+        },
+        {
+          "code": "review_pending_delivery_over_plan",
+          "tests": [
+            "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+            "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+            "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+            "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q14",
+      "scope": "plugin",
+      "quantity": "pages, images, staged tasks",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "binary-input-measure",
+          "staged-scale-refusal"
+        ],
+        "construction": [
+          "visual-series"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [
+          "test_review_binary_capacity.BinaryCapacityTests.test_individually_valid_attachments_pass_the_combined_capacity",
+          "test_review_uncovered_stop.UncoveredReviewTests.test_pdf_attachment_stops_and_text_route_completes_same_review"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [
+        {
+          "code": "review_route_capacity_below_floor",
+          "tests": [
+            "test_review_binary_capacity.BinaryCapacityTests.test_individually_valid_attachments_pass_the_combined_capacity",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_pdf_attachment_stops_and_text_route_completes_same_review"
+          ],
+          "reasons": [
+            "binary_input_without_bound",
+            "binary_input_over_measure"
+          ]
+        }
+      ],
+      "verification_required": true,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q15",
+      "scope": "plugin",
+      "quantity": "calls",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.90.0",
+      "units": {
+        "path": [
+          "call-queue",
+          "outcome-table",
+          "posted-closed-calls",
+          "review-stop",
+          "series-driver-stop"
+        ],
+        "construction": [
+          "capacity-plan"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [
+          "test_review_queue_triage.QueueTriageTests.test_recording_the_suggested_scheduler_allows_two_verified_routes_to_run_together",
+          "test_review_queue_triage.QueueTriageTests.test_three_series_drivers_finish_in_request_order_without_external_commands",
+          "test_review_stop_processes.StopProcessTests.test_sigterm_driver_records_signal_stop_attempt_and_acknowledgement",
+          "test_review_stop_processes.StopProcessTests.test_twenty_minute_waiting_driver_acknowledges_within_ten_seconds",
+          "test_review_stop_queue.ClosedCallTests.test_posted_calls_keep_each_state_and_only_administrative_steps",
+          "test_review_stop_queue.QueueTests.test_older_wait_runs_before_a_chain_gets_its_next_turn",
+          "test_review_stop_queue.StopQueueTests.test_interrupted_call_reconciles_and_does_not_spend_failure_allowance",
+          "test_review_stop_queue.StopQueueTests.test_stop_after_plan_before_start_refuses_without_an_invocation"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_d2_outcomes.OutcomeTests.test_generated_mixed_sequences_never_exceed_eight_or_renew_a_terminal_outcome"
+      ],
+      "required_stops": [
+        {
+          "code": "review_budget_exhausted",
+          "tests": [
+            "test_continuity_guard.ContinuityGuardTests.test_budget_stop_grants_calls_then_records_without_an_admission_send"
+          ]
+        },
+        {
+          "code": "review_chain_stopped",
+          "tests": [
+            "test_review_stop_processes.StopProcessTests.test_sigterm_driver_records_signal_stop_attempt_and_acknowledgement",
+            "test_review_stop_processes.StopProcessTests.test_twenty_minute_waiting_driver_acknowledges_within_ten_seconds",
+            "test_review_stop_queue.StopQueueTests.test_interrupted_call_reconciles_and_does_not_spend_failure_allowance",
+            "test_review_stop_queue.StopQueueTests.test_stop_after_plan_before_start_refuses_without_an_invocation"
+          ]
+        },
+        {
+          "code": "review_capacity_wait",
+          "tests": [
+            "test_review_queue_triage.QueueTriageTests.test_recording_the_suggested_scheduler_allows_two_verified_routes_to_run_together",
+            "test_review_queue_triage.QueueTriageTests.test_three_series_drivers_finish_in_request_order_without_external_commands",
+            "test_review_stop_queue.QueueTests.test_older_wait_runs_before_a_chain_gets_its_next_turn"
+          ]
+        },
+        {
+          "code": "problem_already_posted",
+          "tests": [
+            "test_review_stop_queue.ClosedCallTests.test_posted_calls_keep_each_state_and_only_administrative_steps"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q16",
+      "scope": "plugin",
+      "quantity": "bound material kinds",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.90.0",
+      "units": {
+        "path": [
+          "reading-forecast",
+          "UB6"
+        ],
+        "construction": [
+          "UB2",
+          "UB3",
+          "UB5",
+          "capacity-guard-2"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q17",
+      "scope": "plugin",
+      "quantity": "occurrences, citations, aliases",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "stop-registry",
+          "registry-rows"
+        ],
+        "construction": [
+          "field-classes",
+          "parts-v3"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+      ],
+      "required_stops": [
+        {
+          "code": "review_parts_budget_exhausted",
+          "tests": [
+            "test_review_parts_budget_floor.BudgetFloorReplacementTests.test_series_ends_with_the_floor_budget_stop_without_another_call"
+          ]
+        },
+        {
+          "code": "review_parts_frame_too_large",
+          "registry_pending": "registry-rows",
+          "tests": [
+            "test_review_parts_planning.PlanningTests.test_no_progress_and_final_frame_too_large"
+          ]
+        },
+        {
+          "code": "review_parts_inventory_too_large",
+          "registry_pending": "registry-rows",
+          "tests": [
+            "test_review_parts_planning.PlanningTests.test_no_progress_and_final_frame_too_large"
+          ]
+        },
+        {
+          "code": "review_parts_final_too_large",
+          "registry_pending": "registry-rows",
+          "tests": [
+            "test_review_parts_planning.RevisedPlanningTests.test_frame_with_less_than_one_card_floor_refuses_as_final_too_large"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "Q18",
+      "scope": "plugin",
+      "quantity": "session responses",
+      "kinds": [
+        "single",
+        "request",
+        "reading",
+        "read",
+        "combine",
+        "check",
+        "final",
+        "staged",
+        "probe",
+        "correction"
+      ],
+      "release": "0.92.0",
+      "units": {
+        "path": [
+          "route-limits-C1",
+          "session-forecast-stop",
+          "size-reports"
+        ],
+        "construction": [
+          "session-record-v4",
+          "session-turns-v4"
+        ]
+      },
+      "no_construction_ruling": null,
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [
+          "test_review_capacity_closure.ClosureStartTests.test_session_v4_uses_request_rows_and_counts_its_whole_request",
+          "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call",
+          "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+          "test_session_forecast.SessionForecastTests.test_forecast_uses_keyed_input_evidence_instead_of_output_profile",
+          "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+          "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+          "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+          "test_size_reports.SizeReportTests.test_import_check_counts_delivered_bodies_without_changing_the_import_receipt",
+          "test_size_reports.SizeReportTests.test_size_report_uses_only_its_keyed_capacity_witness",
+          "test_size_reports.SizeReportTests.test_value_receipt_reports_cited_records_and_transitive_bodies_outside_storage"
+        ],
+        "reports": []
+      },
+      "tests": [
+        "test_session_rules_v3.SessionRulesTests.test_v2_source_citation_contract_keeps_its_packet_prompt_and_request_bytes"
+      ],
+      "required_stops": [
+        {
+          "code": "review_output_over_cap",
+          "tests": [
+            "test_review_capacity_closure.ClosureStartTests.test_session_v4_uses_request_rows_and_counts_its_whole_request"
+          ]
+        },
+        {
+          "code": "review_pending_delivery_over_plan",
+          "tests": [
+            "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+            "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+            "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+            "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call"
+          ]
+        }
+      ],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    },
+    {
+      "id": "T3",
+      "scope": "external",
+      "quantity": "external implementation task loss",
+      "kinds": [
+        "external_task"
+      ],
+      "release": "external",
+      "units": {
+        "path": [
+          "external-ending-check"
+        ],
+        "construction": []
+      },
+      "no_construction_ruling": "33",
+      "coverage": "stop_before_call",
+      "evidence": {
+        "tests": [],
+        "reports": []
+      },
+      "tests": [
+        "test_continuity_guard.ContinuityGuardTests.test_external_task_loss_has_no_plugin_coverage_claim"
+      ],
+      "required_stops": [],
+      "verification_required": false,
+      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+    }
+  ],
+  "merge_obligations": [
+    {
+      "unit": "review-stop",
+      "entries": [
+        "Q15"
+      ],
+      "stops": [
+        "review_chain_stopped"
+      ],
+      "tests": [
+        "test_review_stop_queue.StopQueueTests.test_stop_after_plan_before_start_refuses_without_an_invocation",
+        "test_review_stop_queue.StopQueueTests.test_interrupted_call_reconciles_and_does_not_spend_failure_allowance"
+      ],
+      "presence": {
+        "module": "research_harness/review_stop.py",
+        "name": "review_stop",
+        "kind": "literal"
+      },
+      "per_entry": {
+        "Q15": {
+          "tests": [
+            "test_review_stop_queue.StopQueueTests.test_stop_after_plan_before_start_refuses_without_an_invocation",
+            "test_review_stop_queue.StopQueueTests.test_interrupted_call_reconciles_and_does_not_spend_failure_allowance"
+          ],
+          "stops": [
+            "review_chain_stopped"
+          ]
+        }
+      }
+    },
+    {
+      "unit": "series-driver-stop",
+      "entries": [
+        "Q15"
+      ],
+      "stops": [
+        "review_chain_stopped"
+      ],
+      "tests": [
+        "test_review_stop_processes.StopProcessTests.test_sigterm_driver_records_signal_stop_attempt_and_acknowledgement",
+        "test_review_stop_processes.StopProcessTests.test_twenty_minute_waiting_driver_acknowledges_within_ten_seconds"
+      ],
+      "presence": {
+        "module": "research_harness/review_series.py",
+        "name": "review_series_run",
+        "kind": "literal"
+      },
+      "per_entry": {
+        "Q15": {
+          "tests": [
+            "test_review_stop_processes.StopProcessTests.test_sigterm_driver_records_signal_stop_attempt_and_acknowledgement",
+            "test_review_stop_processes.StopProcessTests.test_twenty_minute_waiting_driver_acknowledges_within_ten_seconds"
+          ],
+          "stops": [
+            "review_chain_stopped"
+          ]
+        }
+      }
+    },
+    {
+      "unit": "call-queue",
+      "entries": [
+        "Q15"
+      ],
+      "stops": [
+        "review_capacity_wait"
+      ],
+      "tests": [
+        "test_review_stop_queue.QueueTests.test_older_wait_runs_before_a_chain_gets_its_next_turn",
+        "test_review_queue_triage.QueueTriageTests.test_recording_the_suggested_scheduler_allows_two_verified_routes_to_run_together",
+        "test_review_queue_triage.QueueTriageTests.test_three_series_drivers_finish_in_request_order_without_external_commands"
+      ],
+      "presence": {
+        "module": "research_harness/review_call_admission.py",
+        "name": "review_call_wait",
+        "kind": "literal"
+      },
+      "per_entry": {
+        "Q15": {
+          "tests": [
+            "test_review_stop_queue.QueueTests.test_older_wait_runs_before_a_chain_gets_its_next_turn",
+            "test_review_queue_triage.QueueTriageTests.test_recording_the_suggested_scheduler_allows_two_verified_routes_to_run_together",
+            "test_review_queue_triage.QueueTriageTests.test_three_series_drivers_finish_in_request_order_without_external_commands"
+          ],
+          "stops": [
+            "review_capacity_wait"
+          ]
+        }
+      }
+    },
+    {
+      "unit": "posted-closed-calls",
+      "entries": [
+        "Q15"
+      ],
+      "stops": [
+        "problem_already_posted"
+      ],
+      "tests": [
+        "test_review_stop_queue.ClosedCallTests.test_posted_calls_keep_each_state_and_only_administrative_steps"
+      ],
+      "presence": {
+        "module": "research_harness/review_stop.py",
+        "name": "closed_calls",
+        "kind": "literal"
+      },
+      "per_entry": {
+        "Q15": {
+          "tests": [
+            "test_review_stop_queue.ClosedCallTests.test_posted_calls_keep_each_state_and_only_administrative_steps"
+          ],
+          "stops": [
+            "problem_already_posted"
+          ]
+        }
+      }
+    },
+    {
+      "unit": "session-forecast-stop",
+      "entries": [
+        "A2",
+        "A3",
+        "Q5",
+        "Q13",
+        "Q18"
+      ],
+      "stops": [
+        "review_pending_delivery_over_plan"
+      ],
+      "tests": [
+        "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+        "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+        "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+        "test_session_forecast.SessionForecastTests.test_forecast_uses_keyed_input_evidence_instead_of_output_profile",
+        "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+        "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call"
+      ],
+      "presence": {
+        "module": "research_harness/review_route_capacity.py",
+        "name": "describe_session_forecast",
+        "kind": "function"
+      },
+      "per_entry": {
+        "A2": {
+          "tests": [
+            "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+            "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+            "test_session_forecast.SessionForecastTests.test_forecast_uses_keyed_input_evidence_instead_of_output_profile",
+            "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+            "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call"
+          ],
+          "stops": [
+            "review_pending_delivery_over_plan"
+          ]
+        },
+        "A3": {
+          "tests": [
+            "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+            "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+            "test_session_forecast.SessionForecastTests.test_forecast_uses_keyed_input_evidence_instead_of_output_profile",
+            "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+            "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call"
+          ],
+          "stops": [
+            "review_pending_delivery_over_plan"
+          ]
+        },
+        "Q5": {
+          "tests": [
+            "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+            "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+            "test_session_forecast.SessionForecastTests.test_forecast_uses_keyed_input_evidence_instead_of_output_profile",
+            "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+            "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call"
+          ],
+          "stops": [
+            "review_pending_delivery_over_plan"
+          ]
+        },
+        "Q13": {
+          "tests": [
+            "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+            "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+            "test_session_forecast.SessionForecastTests.test_forecast_uses_keyed_input_evidence_instead_of_output_profile",
+            "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+            "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call"
+          ],
+          "stops": [
+            "review_pending_delivery_over_plan"
+          ]
+        },
+        "Q18": {
+          "tests": [
+            "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+            "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+            "test_session_forecast.SessionForecastTests.test_forecast_uses_keyed_input_evidence_instead_of_output_profile",
+            "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+            "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call"
+          ],
+          "stops": [
+            "review_pending_delivery_over_plan"
+          ]
+        }
+      }
+    },
+    {
+      "unit": "size-reports",
+      "entries": [
+        "A1",
+        "A2",
+        "A3",
+        "Q18"
+      ],
+      "stops": [
+        "review_pending_delivery_over_plan"
+      ],
+      "tests": [
+        "test_size_reports.SizeReportTests.test_import_check_counts_delivered_bodies_without_changing_the_import_receipt",
+        "test_size_reports.SizeReportTests.test_value_receipt_reports_cited_records_and_transitive_bodies_outside_storage",
+        "test_size_reports.SizeReportTests.test_size_report_uses_only_its_keyed_capacity_witness"
+      ],
+      "presence": {
+        "module": "research_harness/review_route_capacity.py",
+        "name": "describe_size_report",
+        "kind": "function"
+      },
+      "per_entry": {
+        "A1": {
+          "tests": [
+            "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+            "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+            "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+            "test_size_reports.SizeReportTests.test_import_check_counts_delivered_bodies_without_changing_the_import_receipt",
+            "test_size_reports.SizeReportTests.test_size_report_uses_only_its_keyed_capacity_witness",
+            "test_size_reports.SizeReportTests.test_value_receipt_reports_cited_records_and_transitive_bodies_outside_storage"
+          ],
+          "stops": [
+            "review_pending_delivery_over_plan"
+          ]
+        },
+        "A2": {
+          "tests": [
+            "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+            "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+            "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+            "test_size_reports.SizeReportTests.test_import_check_counts_delivered_bodies_without_changing_the_import_receipt",
+            "test_size_reports.SizeReportTests.test_size_report_uses_only_its_keyed_capacity_witness",
+            "test_size_reports.SizeReportTests.test_value_receipt_reports_cited_records_and_transitive_bodies_outside_storage"
+          ],
+          "stops": [
+            "review_pending_delivery_over_plan"
+          ]
+        },
+        "A3": {
+          "tests": [
+            "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+            "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+            "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+            "test_size_reports.SizeReportTests.test_import_check_counts_delivered_bodies_without_changing_the_import_receipt",
+            "test_size_reports.SizeReportTests.test_size_report_uses_only_its_keyed_capacity_witness",
+            "test_size_reports.SizeReportTests.test_value_receipt_reports_cited_records_and_transitive_bodies_outside_storage"
+          ],
+          "stops": [
+            "review_pending_delivery_over_plan"
+          ]
+        },
+        "Q18": {
+          "tests": [
+            "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+            "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+            "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+            "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+            "test_size_reports.SizeReportTests.test_import_check_counts_delivered_bodies_without_changing_the_import_receipt",
+            "test_size_reports.SizeReportTests.test_size_report_uses_only_its_keyed_capacity_witness",
+            "test_size_reports.SizeReportTests.test_value_receipt_reports_cited_records_and_transitive_bodies_outside_storage"
+          ],
+          "stops": [
+            "review_pending_delivery_over_plan"
+          ]
+        }
+      }
+    },
+    {
+      "unit": "single-request-series",
+      "entries": [
+        "A16"
+      ],
+      "stops": [
+        "review_output_over_cap"
+      ],
+      "tests": [
+        "test_review_single_request.SingleEntryTests.test_each_adapter_enters_by_task_with_profile_read_start",
+        "test_review_single_request.FrozenSingleTests.test_opus_max_128000_output_replacement_reaches_a_recorded_native_final"
+      ],
+      "presence": {
+        "module": "research_harness/review_single_request.py",
+        "name": "build_output_replacement",
+        "kind": "function"
+      },
+      "per_entry": {
+        "A16": {
+          "tests": [
+            "test_review_single_request.SingleEntryTests.test_each_adapter_enters_by_task_with_profile_read_start",
+            "test_review_single_request.FrozenSingleTests.test_opus_max_128000_output_replacement_reaches_a_recorded_native_final"
+          ],
+          "stops": [
+            "review_output_over_cap"
+          ]
+        }
+      }
+    },
+    {
+      "unit": "binary-input-measure",
+      "entries": [
+        "A10b",
+        "Q14"
+      ],
+      "stops": [
+        "review_route_capacity_below_floor"
+      ],
+      "tests": [
+        "test_review_binary_capacity.BinaryCapacityTests.test_individually_valid_attachments_pass_the_combined_capacity",
+        "test_review_uncovered_stop.UncoveredReviewTests.test_pdf_attachment_stops_and_text_route_completes_same_review"
+      ],
+      "presence": {
+        "module": "research_harness/review_route_capacity.py",
+        "name": "binary_input_without_bound",
+        "kind": "literal"
+      },
+      "per_entry": {
+        "A10b": {
+          "tests": [
+            "test_review_binary_capacity.BinaryCapacityTests.test_individually_valid_attachments_pass_the_combined_capacity",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_pdf_attachment_stops_and_text_route_completes_same_review"
+          ],
+          "stops": [
+            "review_route_capacity_below_floor"
+          ]
+        },
+        "Q14": {
+          "tests": [
+            "test_review_binary_capacity.BinaryCapacityTests.test_individually_valid_attachments_pass_the_combined_capacity",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_pdf_attachment_stops_and_text_route_completes_same_review"
+          ],
+          "stops": [
+            "review_route_capacity_below_floor"
+          ]
+        }
+      }
+    },
+    {
+      "unit": "uncovered-review-stop",
+      "entries": [
+        "A1",
+        "A10a",
+        "A10b",
+        "A23"
+      ],
+      "stops": [
+        "review_route_capacity_below_floor"
+      ],
+      "tests": [
+        "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted",
+        "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot"
+      ],
+      "presence": {
+        "module": "research_harness/review_route_capacity.py",
+        "name": "no_parts_delivery",
+        "kind": "literal"
+      },
+      "per_entry": {
+        "A1": {
+          "tests": [
+            "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot"
+          ],
+          "stops": [
+            "review_route_capacity_below_floor"
+          ]
+        },
+        "A10a": {
+          "tests": [
+            "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot"
+          ],
+          "stops": [
+            "review_route_capacity_below_floor"
+          ]
+        },
+        "A10b": {
+          "tests": [
+            "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot"
+          ],
+          "stops": [
+            "review_route_capacity_below_floor"
+          ]
+        },
+        "A23": {
+          "tests": [
+            "test_review_uncovered_stop.UncoveredReviewTests.test_unlisted_route_stops_before_call_then_probe_and_assignment_are_accepted",
+            "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot"
+          ],
+          "stops": [
+            "review_route_capacity_below_floor"
+          ]
+        }
+      }
+    },
+    {
+      "unit": "capacity-probe",
+      "entries": [
+        "A10a",
+        "A20",
+        "A24",
+        "A27"
+      ],
+      "stops": [
+        "review_route_capacity_below_floor"
+      ],
+      "tests": [
+        "test_review_capacity_probe.LocalCapacityProbeTests.test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review",
+        "test_review_capacity_probe.CapacityProbeSizingTests.test_unkeyed_probe_cannot_schedule_or_scale_a_new_runtime"
+      ],
+      "presence": {
+        "module": "research_harness/review_protocol.py",
+        "name": "capacity_probe",
+        "kind": "literal"
+      },
+      "per_entry": {
+        "A10a": {
+          "tests": [
+            "test_review_capacity_probe.LocalCapacityProbeTests.test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review",
+            "test_review_capacity_probe.CapacityProbeSizingTests.test_unkeyed_probe_cannot_schedule_or_scale_a_new_runtime"
+          ],
+          "stops": [
+            "review_route_capacity_below_floor"
+          ]
+        },
+        "A20": {
+          "tests": [
+            "test_review_capacity_probe.LocalCapacityProbeTests.test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review",
+            "test_review_capacity_probe.CapacityProbeSizingTests.test_unkeyed_probe_cannot_schedule_or_scale_a_new_runtime"
+          ],
+          "stops": [
+            "review_route_capacity_below_floor"
+          ]
+        },
+        "A24": {
+          "tests": [
+            "test_review_capacity_probe.LocalCapacityProbeTests.test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review",
+            "test_review_capacity_probe.CapacityProbeSizingTests.test_unkeyed_probe_cannot_schedule_or_scale_a_new_runtime"
+          ],
+          "stops": [
+            "review_route_capacity_below_floor"
+          ]
+        },
+        "A27": {
+          "tests": [
+            "test_review_capacity_probe.LocalCapacityProbeTests.test_another_codex_runtime_probes_down_from_the_prior_then_records_the_boundary_review",
+            "test_review_capacity_probe.CapacityProbeSizingTests.test_unkeyed_probe_cannot_schedule_or_scale_a_new_runtime"
+          ],
+          "stops": [
+            "review_route_capacity_below_floor"
+          ]
+        }
+      }
+    },
+    {
+      "unit": "route-limits-C1",
+      "entries": [
+        "A12",
+        "Q18"
+      ],
+      "stops": [
+        "review_output_over_cap"
+      ],
+      "tests": [
+        "test_review_capacity_closure.ClosureStartTests.test_session_v4_uses_request_rows_and_counts_its_whole_request"
+      ],
+      "presence": {
+        "module": "research_harness/review_route_capacity.py",
+        "name": "exactory-independent-review-sources-v3",
+        "kind": "literal"
+      },
+      "per_entry": {
+        "A12": {
+          "tests": [
+            "test_review_capacity_closure.ClosureStartTests.test_session_v4_uses_request_rows_and_counts_its_whole_request"
+          ],
+          "stops": [
+            "review_output_over_cap"
+          ]
+        },
+        "Q18": {
+          "tests": [
+            "test_review_capacity_closure.ClosureStartTests.test_session_v4_uses_request_rows_and_counts_its_whole_request"
+          ],
+          "stops": [
+            "review_output_over_cap"
+          ]
+        }
+      }
+    },
+    {
+      "unit": "route-limits-C3",
+      "entries": [
+        "A10a",
+        "A20"
+      ],
+      "stops": [
+        "review_route_capacity_below_floor"
+      ],
+      "tests": [
+        "test_review_capacity_closure.CapacityEvidenceTests.test_two_endpoints_share_the_profile_class_but_no_input_capacity",
+        "test_review_capacity_closure.CapacityEvidenceTests.test_codex_prior_matches_version_file_and_controls_only_under_its_key"
+      ],
+      "presence": {
+        "module": "research_harness/review_capacity_evidence.py",
+        "name": "describe_capacity_key",
+        "kind": "function"
+      },
+      "per_entry": {
+        "A10a": {
+          "tests": [
+            "test_review_capacity_closure.CapacityEvidenceTests.test_two_endpoints_share_the_profile_class_but_no_input_capacity",
+            "test_review_capacity_closure.CapacityEvidenceTests.test_codex_prior_matches_version_file_and_controls_only_under_its_key"
+          ],
+          "stops": [
+            "review_route_capacity_below_floor"
+          ]
+        },
+        "A20": {
+          "tests": [
+            "test_review_capacity_closure.CapacityEvidenceTests.test_two_endpoints_share_the_profile_class_but_no_input_capacity",
+            "test_review_capacity_closure.CapacityEvidenceTests.test_codex_prior_matches_version_file_and_controls_only_under_its_key"
+          ],
+          "stops": [
+            "review_route_capacity_below_floor"
+          ]
+        }
+      }
+    },
+    {
+      "unit": "route-limits-C10",
+      "entries": [
+        "A27"
+      ],
+      "stops": [
+        "review_input_too_large"
+      ],
+      "tests": [
+        "test_review_capacity_closure.CapacityEvidenceTests.test_claude_limit_is_the_minimum_and_ordinary_input_takes_no_second_reservation"
+      ],
+      "presence": {
+        "module": "research_harness/review_route_capacity.py",
+        "name": "input_limits",
+        "kind": "literal"
+      },
+      "per_entry": {
+        "A27": {
+          "tests": [
+            "test_review_capacity_closure.CapacityEvidenceTests.test_claude_limit_is_the_minimum_and_ordinary_input_takes_no_second_reservation"
+          ],
+          "stops": [
+            "review_input_too_large"
+          ]
+        }
+      }
+    }
+  ],
+  "external_evidence": {
+    "T3": "Supervisor tooling L1 to L6, outside this plugin tree."
+  },
+  "stop_contracts": {
+    "A1": [
+      "review_input_too_large",
+      "review_pending_delivery_over_plan",
+      "review_route_capacity_below_floor"
+    ],
+    "A2": [
+      "reading_missing",
+      "review_pending_delivery_over_plan"
+    ],
+    "A3": [
+      "reading_missing",
+      "review_pending_delivery_over_plan"
+    ],
+    "A4": [],
+    "A5": [],
+    "A6": [
+      "review_parts_budget_exhausted",
+      "review_parts_frame_too_large",
+      "review_parts_inventory_too_large",
+      "review_parts_final_too_large"
+    ],
+    "A7": [],
+    "A8": [],
+    "A9": [
+      "review_input_too_large"
+    ],
+    "A10a": [
+      "review_route_capacity_below_floor"
+    ],
+    "A10b": [
+      "review_route_capacity_below_floor"
+    ],
+    "A10c": [
+      "review_staged_scale_unsupported"
+    ],
+    "A11": [],
+    "A12": [
+      "review_output_over_cap"
+    ],
+    "A13": [
+      "review_output_over_cap"
+    ],
+    "A14": [
+      "review_output_over_cap"
+    ],
+    "A15": [
+      "review_parts_budget_exhausted"
+    ],
+    "A16": [
+      "review_output_over_cap"
+    ],
+    "A17": [
+      "review_output_over_cap"
+    ],
+    "A18": [],
+    "A19": [
+      "review_output_over_cap"
+    ],
+    "A20": [
+      "review_input_too_large",
+      "review_route_capacity_below_floor"
+    ],
+    "A21": [
+      "review_timeout"
+    ],
+    "A22": [],
+    "A23": [
+      "review_output_over_cap",
+      "review_route_capacity_below_floor"
+    ],
+    "A24": [
+      "review_route_capacity_below_floor"
+    ],
+    "A25": [],
+    "A26": [
+      "review_response_too_large"
+    ],
+    "A27": [
+      "review_input_too_large",
+      "review_route_capacity_below_floor"
+    ],
+    "Q1": [],
+    "Q2": [],
+    "Q3": [],
+    "Q4": [],
+    "Q5": [
+      "review_pending_delivery_over_plan"
+    ],
+    "Q6": [],
+    "Q7": [],
+    "Q8": [],
+    "Q9": [],
+    "Q10": [],
+    "Q11": [],
+    "Q12": [],
+    "Q13": [
+      "reading_missing",
+      "review_pending_delivery_over_plan"
+    ],
+    "Q14": [
+      "review_route_capacity_below_floor"
+    ],
+    "Q15": [
+      "problem_already_posted",
+      "review_budget_exhausted",
+      "review_capacity_wait",
+      "review_chain_stopped"
+    ],
+    "Q16": [],
+    "Q17": [
+      "review_parts_budget_exhausted",
+      "review_parts_frame_too_large",
+      "review_parts_inventory_too_large",
+      "review_parts_final_too_large"
+    ],
+    "Q18": [
+      "review_output_over_cap",
+      "review_pending_delivery_over_plan"
+    ],
+    "T3": []
+  },
+  "verification_reports": {}
+}

@@ -167,21 +167,32 @@ class ContinuationRegressionTests(unittest.TestCase):
         stop = next(iter(stops.values()))
         self.assertEqual(stop['plan'], plan)
         self.assertIsNone(stop['retry'])
-        self.assertEqual(after['revision'], before['revision'] + 1)
-        expected_records = dict(before['records'], review_series_stop=stops)
+        self.assertEqual(after['revision'], before['revision'] + 3)
+        runs = after['records']['review_series_run']
+        driver, = runs.values()
+        self.assertEqual(driver['ended']['stop_id'], stop['id'])
+        expected_records = dict(before['records'], review_series_stop=stops, review_series_run=runs)
         expected_records['literature_operation'] = dict(before['records']['literature_operation'])
         expected_records['literature_operation'][stop['request_id']] = dict(
             operation='review.series_stop', runtime=case.store.describe_runtime())
+        for request_id, operation in ((driver['id'], 'review.series_start'), (driver['id'] + ':end', 'review.series_end')):
+            expected_records['literature_operation'][request_id] = dict(operation=operation, runtime=case.store.describe_runtime())
         self.assertEqual(after['records'], expected_records)
         lines = [json.loads(line) for line in output.getvalue().splitlines()]
         warning = lines[0]['capacity_warning']
         self.assertEqual({key: warning['output'][key] for key in (
             'state', 'sample_size', 'at_or_over_limit_share', 'kinds')},
             dict(state='unmeasured', sample_size=0, at_or_over_limit_share=None, kinds=['single']))
+        forecast = lines[0]['capacity_forecast']
+        self.assertEqual(forecast['assignment_id'], plan['head_id'])
+        self.assertEqual((forecast['pending_parts'], forecast['pending_turns']), (0, 0))
+        self.assertGreater(forecast['request']['characters'], 0)
+        self.assertGreater(forecast['request']['token_limit'], 0)
         self.assertEqual(lines,
-                         [dict(plan, stop_id=stop['id'], revision_after_stop=after['revision'],
+                         [dict(plan, stop_id=stop['id'], revision_after_stop=stop['recorded_revision'],
+                               revision_after_driver=after['revision'],
                                provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0),
-                               stop_class='decision', capacity_warning=warning)])
+                               stop_class='decision', capacity_warning=warning, capacity_forecast=forecast)])
         receipt = case.store.committed_request(stop['request_id'])
         self.assertEqual(receipt['operation'], 'review.series_stop')
         self.assertEqual(receipt['payload'], {'stop': stop})
@@ -446,6 +457,8 @@ class ContinuationRegressionTests(unittest.TestCase):
 
     def test_status_lists_failed_openness_but_not_controller_native_heads(self):
         from openness_reading_fixtures import OpennessReadingCase
+        from research_harness import review_route_capacity
+        from test_review_output_profile import build_row
         case = self.fixture(OpennessReadingCase)
         reference = case.export(assignment_id='openness-failed')
         case.assign('openness-failed', reference)
@@ -455,9 +468,12 @@ class ContinuationRegressionTests(unittest.TestCase):
         native['reviewer'] = dict(source='host', actor_id='math-reviewer',
                                  attestation_id='review-assignment:math-failed')
         reference = case.artifacts.put(json.dumps(native).encode(), 'application/json')
-        case.mutate(protocol.record_assignment, dict(id='math-failed', route_id='route',
-            dossier_id=None, role='native_math', reviewer_id='math-reviewer', author_id='problem-author',
-            context=dict(native_packet=reference)))
+        # This status fixture needs an ordinary native single beside its reading chain.
+        with patch.object(review_route_capacity, 'read_profile_priors', return_value=[
+                dict(build_row(level=None, kind='single', thinking=1000), largest_output_tokens=12)]):
+            case.mutate(protocol.record_assignment, dict(id='math-failed', route_id='route',
+                dossier_id=None, role='native_math', reviewer_id='math-reviewer', author_id='problem-author',
+                context=dict(native_packet=reference)))
         for identifier in ('math-failed', 'openness-failed'):
             with patch('research_harness.review_transport.send_request', side_effect=OSError('failure')):
                 protocol.invoke_assignment(case.store,

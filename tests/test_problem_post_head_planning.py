@@ -173,7 +173,8 @@ class PostedHeadPlanningTests(unittest.TestCase):
         plan = self.plan(records)
         self.assertEqual((plan['head_id'], plan['state']), ('posted-successor', 'done'))
         actions = review_continuation.describe_next_actions(records, self.case.artifacts, ancestor['id'], [hint])
-        self.assertEqual(actions, [dict(kind='review', state='done', label='Keep the finding label')])
+        self.assertEqual(actions, [dict(kind='review', state='done', label='Keep the finding label',
+                                        details=dict(closed_calls=[]))])
         self.assertEqual(hint, original)
 
     def test_cross_statement_slot_successor_still_resolves_to_revision_560(self):

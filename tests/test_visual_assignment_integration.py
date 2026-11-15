@@ -6,6 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from capacity_evidence_fixtures import build_capacity_runtime
 from research_harness import review_protocol as protocol, review_transport as transport
 from research_harness import review_visual_route as bridge
 from research_harness.errors import ResearchError
@@ -19,12 +20,19 @@ class VisualAssignmentIntegrationTests(unittest.TestCase):
         self.addCleanup(self.case.doCleanups)
         self.case.setUp()
         self.records = self.case.records
+        route = self.records['review_route']['visual']
+        route['runtime'] = build_capacity_runtime(route['adapter'], fixture='visual-bridge-test')
+        from visual_capacity_fixtures import install_bounded_visual_backend
+        install_bounded_visual_backend(self, [route])
         self.records['workspace'] = {'problem': {'orchestration': 'problem_creation', 'authors': ['Author']}}
         self.case.prior['session_id'] = 'original-session'
         self.value = {'id': 'visual-result', 'route_id': 'visual', 'dossier_id': None, 'role': 'result',
                       'reviewer_id': 'Astra', 'author_id': 'Author', 'context': {'prior_assignment_id': 'prior'}}
         self.packet = copy.deepcopy(self.case.packet)
         self.packet['evidence'] = []
+        self.packet['complete_source_delivery'].update(
+            history_digest=digest(self.case.context['history']), sources=[],
+            alternate_body_sha256=[], protected_sha256=[], restored_evidence=[])
         self.packet['digest'] = digest(self.packet)
         self.store = SimpleNamespace(root=self.case.fixture.root, build_artifact_store=lambda: self.case.artifacts)
         def prepare_only(store, operation, value, prepare, **options):

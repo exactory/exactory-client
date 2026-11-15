@@ -606,7 +606,8 @@ def describe_plan(value):
 
 def prepare_plan(packet, inventory, observations, *, series_id, input_limit, measure,
                  output_tokens, replacement=None, inventory_reference=None,
-                 logical_reference=None, series_key=None):
+                 logical_reference=None, series_key=None, entry=None, read_allowance=None,
+                 replaces_assignment_id=None):
     from .review_parts_roles import get_adapter
 
     units = enumerate_units(packet, inventory['adapter'], inventory)
@@ -616,7 +617,7 @@ def prepare_plan(packet, inventory, observations, *, series_id, input_limit, mea
     state = build_state(observations)
     reads = [row['packet'] for row in observations if find_kind(row['packet']) == 'read']
     remaining = [unit for unit in units if not is_unit_complete(unit, reads)]
-    allowance = READ_CHARACTERS
+    allowance = READ_CHARACTERS if read_allowance is None else read_allowance
     for observation in observations:
         if find_kind(observation['packet']) != 'read':
             continue
@@ -644,6 +645,10 @@ def prepare_plan(packet, inventory, observations, *, series_id, input_limit, mea
                             remaining_turns={kind: dict(estimate=int(kind == 'final')) for kind in KINDS}))
     if 'unit_rule' in inventory:
         header['unit_rule'] = inventory['unit_rule']
+    if entry is not None:
+        header['entry'] = entry
+    if replaces_assignment_id is not None:
+        header['replaces_assignment_id'] = replaces_assignment_id
     if inventory_reference is not None:
         header['inventory'] = inventory_reference
     if logical_reference is not None:
@@ -668,6 +673,8 @@ def prepare_plan(packet, inventory, observations, *, series_id, input_limit, mea
     if observations or replacement:
         header['plan']['unit_allowance'] = max(
             header['plan']['unit_allowance'], read_budget['unit_allowance_floor'])
+    if read_allowance is not None:
+        header['plan']['unit_allowance'] = min(header['plan']['unit_allowance'], read_allowance)
     if replacement and 'unit_allowance_floor' in replacement:
         details = dict(read_budget, units_remaining=len(remaining),
                        state_budget=budgets, input_limit_characters=input_limit)
@@ -1831,7 +1838,8 @@ def build_turn_prompt(role, base_parameters, header):
     from .review_protocol import canonical_prompt
     return canonical_prompt(role, **base_parameters,
         review_parts=dict(adapter=header['adapter'], kind=header['kind'],
-                          answer=bool(header.get('request'))))
+                          answer=bool(header.get('request')),
+                          **(dict(entry=header['entry']) if 'entry' in header else {})))
 
 
 def validate_turn_output(records, artifacts, assignment, packet, output, *, attempt=None):
@@ -1865,7 +1873,8 @@ def validate_turn_output(records, artifacts, assignment, packet, output, *, atte
 
 
 def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
-                   base_prompt_parameters=None, slot_id=None, legacy_refusal=None):
+                   base_prompt_parameters=None, slot_id=None, legacy_refusal=None,
+                   entry=None, read_allowance=None, replaces_assignment_id=None):
     """Enter or continue parts with the same base prompt and adapter-owned series key."""
     from . import review_problem_parts as legacy, review_transport as transport
     from .review_parts_roles import find_adapter, get_adapter
@@ -1903,8 +1912,12 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
     if not continuing:
         if legacy_refusal is None:
             ordinary = transport.request_body(route, prompt['text'], packet, history)
-            if (legacy._measure(route, ordinary) <= transport.local_input_limit(route)
-                    and legacy.preserves_ordinary_packet(artifacts, packet, ordinary)):
+            from .review_single_request import describe_task_entry
+            ordinary_fits = (legacy._measure(route, ordinary) <= transport.local_input_limit(route)
+                             and legacy.preserves_ordinary_packet(artifacts, packet, ordinary))
+            if entry is None and ordinary_fits:
+                entry = describe_task_entry(records, route, value['role'], packet, ordinary)
+            if entry is None and ordinary_fits:
                 return packet
         from .bar_sources import PROTOCOL_V3
         if packet.get('source_rules') == PROTOCOL_V3:
@@ -1919,6 +1932,13 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
                 base_prompt_parameters = {key: item for key, item in base_prompt_parameters.items() if key != 'source_rules'}
             series_key = get_adapter(adapter)['series_key'](packet)
         inventory = build_inventory(packet, adapter)
+    if continuing:
+        entry = old_header.get('entry')
+        replaces_assignment_id = old_header.get('replaces_assignment_id')
+    if entry is not None and not continuing and read_allowance is None:
+        from .review_route_capacity import read_output_profile, select_task_limits
+        profile = read_output_profile(records, route)
+        read_allowance = select_task_limits(route, profile, 'read')['material_allowance']
     observations = observe_series(records, artifacts, prior_id) if continuing else []
     series_id = old_header['series_assignment_id'] if continuing else value['id']
     inventory_reference = (old_header['inventory'] if continuing and inventory == previous_inventory
@@ -1957,7 +1977,12 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
                     # A non-stable source projection is infeasible even below its cap.
                     return max(measured, transport.local_input_limit(route) + 1)
                 raise
-        return legacy._measure(route, transport.request_body(route, turn_prompt['text'], candidate, [], order=()))
+        request = transport.request_body(route, turn_prompt['text'], candidate, [], order=())
+        measured = legacy._measure(route, request)
+        if entry is not None:
+            from .review_single_request import measure_parts_request
+            measured = measure_parts_request(records, route, request, measured, artifacts=artifacts)
+        return measured
 
     # Search captures are provenance, unless a unit or a source delivery owns
     # their bodies. Reduce only prospective packets; frozen inventories and
@@ -1974,7 +1999,8 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
             planned = plan_turn(packet, inventory, observations, series_id=series_id,
                 input_limit=transport.local_input_limit(route), measure=measure,
                 output_tokens=route['configuration']['max_output_tokens'], replacement=replacement,
-                inventory_reference=inventory_reference, logical_reference=logical_reference, series_key=series_key)
+                inventory_reference=inventory_reference, logical_reference=logical_reference, series_key=series_key,
+                entry=entry, read_allowance=read_allowance, replaces_assignment_id=replaces_assignment_id)
             break
         except ResearchError as error:
             if error.code not in ('review_parts_frame_too_large', 'review_parts_final_too_large',

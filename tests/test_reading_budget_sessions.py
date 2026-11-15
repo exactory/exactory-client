@@ -54,7 +54,8 @@ class LargeSessionBudgetTests(SessionBudgetHelpers, ExcerptSessionCase):
         StrategyCase.setUp(self)
         self.sequence = 0
         self.setup_dossier()
-        record_codex_route(self)
+        # The healthy seven-turn case needs a serving route for all 600,000 characters.
+        record_codex_route(self, model='gpt-6-astra')
         self.versions = []
         for index, characters in enumerate(SESSION_SIZES, 1):
             version = self.metadata(index)

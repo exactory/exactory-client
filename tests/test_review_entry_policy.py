@@ -3,12 +3,34 @@
 import unittest
 from unittest.mock import patch
 
-from codex_route_fixtures import invoke_codex, record_codex_route
+from codex_route_fixtures import install_codex_runtime, invoke_codex, probe_codex_route, record_codex_route
 from problem_parts_fixtures import KEY, ResultPartsCase, note_units
 from research_harness import research_decisions as decisions, review_protocol as protocol
 from research_harness import review_problem_parts as parts, review_staged_protocol as staged
 from research_harness import review_transport as transport
 from research_harness.gates import gate_state
+from research_harness.evidence import digest
+from stored_review_fixtures import restore_stored_review
+
+
+def load_stored_focused_anchor(test):
+    from test_research_problem_adjudication_contract import ProblemAdjudicationContractTests
+
+    case = ProblemAdjudicationContractTests()
+    case.setUp()
+    test.addCleanup(case.doCleanups)
+    fixture = restore_stored_review(case, 'stored-focused-anchor-0.88.1.json.gz')
+    install_codex_runtime(case)
+    records = case.read_records()
+    from research_harness import review_codex_transport as codex
+    runtime = patch.object(codex, 'runtime', return_value=records['review_route']['local-route']['runtime'])
+    runtime.start()
+    case.addCleanup(runtime.stop)
+    assignment = records['review_assignment'][fixture['value']['id']]
+    request = protocol.build_assignment_request(records, case.artifacts, assignment)
+    test.assertEqual(digest(request), fixture['request_digest'])
+    probe_codex_route(case, 'legacy-upgrade-probe', 'local-route')
+    return case, fixture['value'], assignment
 
 
 class ReviewEntryPolicyTests(ResultPartsCase):
@@ -69,12 +91,7 @@ class ReviewEntryPostGateTests(unittest.TestCase):
         self.assertEqual(case.store.snapshot(), before)
 
     def test_pre_072_oversized_focused_anchor_keeps_its_staged_upgrade(self):
-        from research_harness import review_parts
-
-        case, value = self.prepare_oversized_focused_assignment()
-        with patch.object(review_parts, 'prepare_packet', side_effect=lambda records, artifacts,
-                          value, route, packet, prompt, history, **kwargs: packet):
-            assignment = case.mutate(protocol.record_assignment, value)['result']
+        case, value, assignment = load_stored_focused_anchor(self)
         self.assertNotIn('staged_review', assignment)
         records = case.read_records()
         self.assertEqual(records['review_assignment'][assignment['id']], assignment)
