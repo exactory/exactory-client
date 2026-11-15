@@ -715,6 +715,10 @@ def plan_refusal_recovery(records, artifacts, assignment):
     payload['id'] = assignment['id'] + '-refusal'
     while payload['id'] in records.get('review_assignment', {}):
         payload['id'] += '-next'
+    if assignment.get('capacity_plan') and assignment.get('reading_chain'):
+        from .review_continuation import _find_unused_id
+        payload['id'] = _find_unused_id(records, assignment['id'] + '-refusal',
+                                       maximum=protocol.openness_reading.RESERVED_IDENTIFIER_CHARACTERS)
     payload['context']['output_refusal'] = {'assignment_id': assignment['id']}
     value = dict(payload)
     if 'subject' in assignment:

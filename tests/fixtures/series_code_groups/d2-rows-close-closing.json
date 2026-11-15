@@ -286,6 +286,9 @@
         "research_harness/problem_evidence.py:validate_override_citation_spec#2": [
           "form"
         ],
+        "research_harness/problem_openness.py:build_minimum#1": [
+          "form"
+        ],
         "research_harness/problem_openness.py:prepare_openness#1": [
           "form"
         ],
@@ -597,6 +600,13 @@
       },
       "openness_reading_gap": {
         "research_harness/openness_minimum.py:require_unblocked_outcome#1": [
+          "record"
+        ],
+        "research_harness/problem_openness.py:bind_family_readings#1": [
+          "form",
+          "record"
+        ],
+        "research_harness/problem_openness.py:bind_family_readings#2": [
           "record"
         ]
       },

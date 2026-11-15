@@ -983,6 +983,8 @@ def build_turn_packet(artifacts, route, logical, chain, number, inventory, state
     packet = {key: logical[key] for key in ('protocol', 'role', 'reviewer_id', 'dossier_id')}
     bounds = dict(output_tokens=plan['limits']['output_tokens']['value'], answer_bound=limits['answer_bound'],
                   material_allowance=limits['material_allowance'])
+    if limits.get('level_material_allowance') is not None:
+        bounds['level_material_allowance'] = limits['level_material_allowance']
     binding.update(notes=state['latest_notes'], allowances=describe_allowances(route, state, limits['answer_bound']),
                    capacity=bounds)
     binding['notes_handle'] = next(('n%d' % row['turn'] for row in reversed(state['notes'])
@@ -1572,12 +1574,18 @@ def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_
         kind = 'reading' if (_find_remaining_ranges(inventory, state) or requests
                              or notes_cost > state['allowances']['notes']) else 'final'
         number = prior['reading_chain']['turn'] + 1
-    limits = capacity.derive_turn_task_limits(records, artifacts, prior, kind=kind)
+    notice = frozen.get('output_refusal') if replacement else None
+    notice_characters = len(json.dumps(notice, ensure_ascii=False, sort_keys=True, allow_nan=False)) if notice else 0
+    limits = capacity.derive_turn_task_limits(records, artifacts, prior, kind=kind,
+                                             notice_characters=notice_characters)
     if replacement and kind == 'final' and state.get('material_state', {}).get('pending'):
         limits['answer_bound'] = max(plan['task']['final']['smallest_answer_bound'],
                                     frozen['reading_final']['capacity']['answer_bound'] // 2)
     packet = build_turn_packet(artifacts, route, logical, prior['reading_chain']['first_assignment_id'],
                                number, inventory, state, plan, limits, kind, requests=requests)
+    if notice:
+        from .review_refusal_notice import attach_refusal_notice
+        packet = attach_refusal_notice(packet, notice)
     _publish_deliveries(artifacts, packet)
     chain = dict(first_assignment_id=prior['reading_chain']['first_assignment_id'], turn=number,
                  inventory=prior['reading_chain']['inventory'],
@@ -1591,6 +1599,85 @@ def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_
 def _publish_deliveries(artifacts, packet):
     for row in packet['evidence']:
         artifacts.put(row['content'].encode('utf-8'), row['artifact']['media_type'])
+
+
+def prepare_refusal_assignment(records, artifacts, value, revision, prior, frozen, attempt_ids, diagnoses):
+    """Replace a refused position from its unchanged before-state and notice-adjusted grant."""
+    from . import review_protocol as protocol, review_prompt_paragraphs as paragraphs
+    from . import review_refusal_notice as notices
+    from .operations import immutable_record
+    reading.require_reserved_identifier(value['id'], PROTOCOL)
+    plan, inventory, state = read_bound_state(artifacts, prior, frozen)
+    route = records['review_route'][prior['route_id']]
+    kind = reading.find_stage(frozen)
+    chain = prior['reading_chain']
+    from .native_review import load_packet
+    logical = dict(protocol=protocol.PROTOCOL, role=prior['role'], reviewer_id=prior['reviewer_id'],
+                   dossier_id=prior['dossier_id'], native=load_packet(
+                       artifacts, prior['context']['native_packet'], prior['reviewer_id']))
+    parameters = paragraphs.read_paragraph_parameters(prior['prompt'])
+    versions = [version for version in parameters.get(paragraphs.PARAMETER, [])
+                if version not in paragraphs.REFUSAL_PARAGRAPH_VERSIONS.values()]
+    def prepare_turn(notice):
+        characters = len(json.dumps(notice, ensure_ascii=False, sort_keys=True, allow_nan=False))
+        limits = capacity.derive_turn_task_limits(records, artifacts, prior, kind=kind,
+                                                 notice_characters=characters)
+        try:
+            packet = build_turn_packet(artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
+                inventory, state, plan, limits, kind, requests=state.get('pending_requests', []))
+        except ResearchError as error:
+            if error.code != 'review_route_capacity_plan_violated' or error.details.get('kind') != 'final':
+                raise
+            raise ResearchError('review_input_too_large', notices.NOTICE_DELIVERY_MSG, error.details)
+        base = protocol.canonical_prompt(prior['role'], reading_stage=kind, reading_protocol=PROTOCOL,
+            common_version=protocol.find_common_prompt_version(prior['prompt']))
+        prompt = paragraphs.append_prompt_paragraphs(base, prior['role'],
+            parameters.get(paragraphs.CARRY_PARAMETER), versions + [paragraphs.REFUSAL_PARAGRAPH_VERSIONS[notice['form']]])
+        prompt['parameters']['capacity'] = packet.get('reading_turn', packet.get('reading_final'))['capacity']
+        return packet, prompt
+    limit = capacity.derive_turn_task_limits(records, artifacts, prior, kind=kind)['request_bound']['text_characters']
+    selected = notices.select_refusal_notice(records, artifacts, attempt_ids, route=route, role=prior['role'],
+        prompt=None, packet=None, prepare_turn=prepare_turn, task_characters=None,
+        task_limit_characters=limit, diagnoses=diagnoses, capacity_plan=plan, turn_kind=kind)
+    if selected['notice'] is None:
+        raise ResearchError('review_input_too_large', notices.NOTICE_DELIVERY_MSG, dict(trials=selected['trials']))
+    packet = review_excerpts.read_sent_packet(selected['request'])
+    _publish_deliveries(artifacts, packet)
+    record = copy.deepcopy(prior)
+    for key in ('capacity_replacement_of', 'history_ref', 'history', 'history_assignment_id'):
+        record.pop(key, None)
+    record.update(value, packet=protocol._put_json(artifacts, packet), packet_digest=packet['digest'],
+        prompt=selected['prompt'], prompt_hash=selected['prompt']['rendered_prompt_hash'], history=[],
+        recorded_revision=revision, slot_id=prior.get('slot_id', prior['id']))
+    record.update({key: prior[key] for key in ('reviewer_id', 'author_id')})
+    return [immutable_record(records, 'review_assignment', value['id'], record)], record
+
+
+def prepare_notice_capacity_assignment(records, artifacts, value, revision, prior):
+    """Keep a frozen notice when capacity recovery reduces its pending turn."""
+    from . import review_protocol as protocol, review_prompt_paragraphs as paragraphs
+    from .native_review import load_packet
+    from .operations import immutable_record
+    route = records['review_route'][prior['route_id']]
+    native = load_packet(artifacts, prior['context']['native_packet'], prior['reviewer_id'])
+    logical = dict(protocol=protocol.PROTOCOL, role=prior['role'], dossier_id=prior['dossier_id'],
+                   reviewer_id=prior['reviewer_id'], native=native)
+    packet, chain = prepare_next_assignment(records, artifacts, value, route, logical)
+    kind = reading.find_stage(packet)
+    base = protocol.canonical_prompt(prior['role'], reading_stage=kind, reading_protocol=PROTOCOL,
+        common_version=protocol.find_common_prompt_version(prior['prompt']))
+    versions = paragraphs.read_paragraph_parameters(prior['prompt']).get(paragraphs.PARAMETER, [])
+    prompt = paragraphs.append_prompt_paragraphs(base, prior['role'], versions=versions)
+    prompt['parameters']['capacity'] = packet.get('reading_turn', packet.get('reading_final'))['capacity']
+    record = copy.deepcopy(prior)
+    for key in ('history', 'history_ref', 'history_assignment_id'):
+        record.pop(key, None)
+    record.update(value, capacity_replacement_of=chain.pop('capacity_replacement_of'), slot_id=chain.pop('slot_id'),
+        capacity_plan=chain.pop('capacity_plan'), capacity_plan_kind=chain.pop('capacity_plan_kind'),
+        reading_chain=chain, packet=protocol._put_json(artifacts, packet), packet_digest=packet['digest'],
+        prompt=prompt, prompt_hash=prompt['rendered_prompt_hash'], history=[], recorded_revision=revision)
+    record.update({key: prior[key] for key in ('reviewer_id', 'author_id')})
+    return [immutable_record(records, 'review_assignment', value['id'], record)], record
 
 
 RATIO_EXPORT_MESSAGE = 'The chain measured a denser token ratio than its plan and its granted final no longer fits one request. Export a new packet; its admission inherits this measurement and keeps the verified turns available.'
@@ -1626,13 +1713,11 @@ def describe_ratio_handoff(records, artifacts, assignment):
     final_limits = capacity.derive_turn_task_limits(records, artifacts, assignment, kind='final')
     if required <= room and granted <= final_limits['material_allowance']:
         return None
-    from .review_plan_steps import describe_step
-    step = describe_step(records, artifacts, assignment, 4)
-    step['then'] = [dict(step['then'][0], check=True), step['then'][0]]
-    return dict(state='handoff', code=reading.PROJECTION_STOP, command='export',
-        details=dict(message=RATIO_EXPORT_MESSAGE, ratio=inherited, plan_digest=digest(plan),
+    from .openness_successor import describe_successor_handoff
+    return describe_successor_handoff(records, artifacts, assignment, reading.PROJECTION_STOP,
+        dict(message=RATIO_EXPORT_MESSAGE, ratio=inherited, plan_digest=digest(plan),
                      required_characters=required, available_characters=room,
-                     final_material_allowance=final_limits['material_allowance'], granted_characters=granted, step=step))
+                     final_material_allowance=final_limits['material_allowance'], granted_characters=granted))
 
 
 def has_deliverable_requests(artifacts, packet, output, assignment):
@@ -1674,9 +1759,10 @@ def describe_admission_stop(records, artifacts, assignment, route, packet, selec
     from .review_plan_steps import describe_step
     from .review_protocol import canonical_prompt
     export = describe_step(records, artifacts, assignment, 4)
-    export['prerequisites'].insert(0, dict(condition='Record a statement with fewer neighbours, then bind that record in a new export.'))
     step = export['then'][0]
     export['then'] = [dict(step, check=True), step]
+    smaller = copy.deepcopy(export)
+    smaller['prerequisites'].insert(0, dict(condition='Record a statement with fewer neighbours, then bind that record in a new export.'))
     route_step = describe_step(records, artifacts, assignment, 7)
     prompt = canonical_prompt('native_math', version=7)['text']
     serving = capacity.find_serving_routes(records, 'native_math', packet, artifacts=artifacts,
@@ -1687,7 +1773,7 @@ def describe_admission_stop(records, artifacts, assignment, route, packet, selec
         largest_one_request_targets=refusal.get('largest_one_request_targets', 0), serving_routes=serving,
         unserved_range=FINAL_PAGES_STATEMENT if not serving else None,
         decision=dict(owner_decides=ADMISSION_QUESTION,
-            then=[dict(answer=ADMISSION_SMALLER_ANSWER, steps=[export]),
+            then=[dict(answer=ADMISSION_SMALLER_ANSWER, steps=[smaller]),
                   dict(answer=ADMISSION_ROUTE_ANSWER, steps=[route_step, export])]))
 
 
@@ -1714,12 +1800,19 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
     from .review_continuation import _find_unused_id
     value['id'] = _find_unused_id(records, value['id'] + '-replacement', maximum=reading.RESERVED_IDENTIFIER_CHARACTERS)
     value['context']['reading_replacement'] = assignment['id']
+    from .review_refusal_replacement import read_position_context
     logical = review_protocol.build_packet(records, artifacts, value['dossier_id'], value['role'], value['reviewer_id'],
-                                           **value['context'])
+                                           **read_position_context(value))
     overlay = _PlanningArtifacts(artifacts)
     packet, chain = prepare_next_assignment(records, overlay, value, route, logical, prove_replacement=False)
     prompt = review_protocol.canonical_prompt('native_math', reading_stage=kind, reading_protocol=PROTOCOL,
         capacity=packet.get('reading_turn', packet.get('reading_final'))['capacity'])
+    if packet.get('output_refusal'):
+        from . import review_prompt_paragraphs as paragraphs
+        prompt['parameters'].pop('capacity', None)
+        versions = paragraphs.read_paragraph_parameters(assignment['prompt']).get(paragraphs.PARAMETER, [])
+        prompt = paragraphs.append_prompt_paragraphs(prompt, 'native_math', versions=versions)
+        prompt['parameters']['capacity'] = packet.get('reading_turn', packet.get('reading_final'))['capacity']
     candidate = dict(value, prompt=prompt, packet=overlay.put(serialize_record(packet), 'application/json'),
                      reading_chain=chain, capacity_plan=assignment['capacity_plan'], capacity_plan_kind=kind)
     request = review_protocol.transport.request_body(route, prompt['text'], packet)
@@ -1786,7 +1879,11 @@ def _verify_turn_binding(records, artifacts, first, assignment, packet, native, 
         and assignment['capacity_plan'] == first['capacity_plan']
         and binding.get('plan_digest') == digest(plan) and binding.get('inventory_digest') == digest(inventory),
         BINDING_VERIFICATION_MESSAGE, assignment_id=assignment['id'])
-    prior_id = assignment.get('capacity_replacement_of') or assignment['context'].get('prior_assignment_id')
+    refusal = assignment['context'].get('output_refusal')
+    notice_characters = len(json.dumps(packet['output_refusal'], ensure_ascii=False, sort_keys=True,
+                                      allow_nan=False)) if refusal else 0
+    prior_id = (assignment.get('capacity_replacement_of') or (refusal['assignment_id'] if refusal else
+                assignment['context'].get('prior_assignment_id')))
     if prior_id is None:
         limits = capacity.derive_plan_task_limits(plan, kind)
     else:
@@ -1794,7 +1891,8 @@ def _verify_turn_binding(records, artifacts, first, assignment, packet, native, 
         historical = dict(records, review_attempt={key: row for key, row in records.get('review_attempt', {}).items()
             if row['recorded_revision'] < assignment['recorded_revision']})
         prior = records['review_assignment'][prior_id]
-        limits = capacity.derive_turn_task_limits(historical, artifacts, prior, kind=kind)
+        limits = capacity.derive_turn_task_limits(historical, artifacts, prior, kind=kind,
+                                                 notice_characters=notice_characters)
         if (assignment.get('capacity_replacement_of') and kind == 'final'
                 and state.get('material_state', {}).get('pending')):
             frozen = json.loads(artifacts.read(prior['packet']))
@@ -1804,10 +1902,19 @@ def _verify_turn_binding(records, artifacts, first, assignment, packet, native, 
                    dossier_id=first['dossier_id'], native=native)
     expected = build_turn_packet(artifacts, route, logical, first['id'], number, inventory, state, plan,
                                  limits, kind, requests=state.get('pending_requests', []))
+    if refusal:
+        from .review_refusal_notice import attach_refusal_notice
+        expected = attach_refusal_notice(expected, packet['output_refusal'])
     _require_verification(packet == expected and protocol._prompt_matches(assignment, packet)
         and assignment['prompt']['parameters'].get('reading_stage') == kind
         and assignment['prompt']['parameters'].get('capacity') == binding['capacity'],
         BINDING_VERIFICATION_MESSAGE, assignment_id=assignment['id'])
+
+
+def _verify_replacement_origin(records, artifacts, assignment, packet):
+    """Condition 6: authenticate the frozen refusals of this position without rechecking them."""
+    from .review_refusal_replacement import validate_replacement_origin
+    validate_replacement_origin(records, artifacts, assignment, packet)
 
 
 def _verify_required_coverage(artifacts, inventory, state, plan, selection):
@@ -1873,6 +1980,7 @@ def verify_problem_coverage(records, artifacts, assignment, *, final=False):
     own = []
     for number, member in enumerate(chain, 1):
         packet = json.loads(overlay.read(member['packet']))
+        _verify_replacement_origin(records, overlay, member, packet)
         _verify_rebuilt_state(overlay, member, packet, state)
         _verify_turn_binding(records, overlay, first, member, packet, native, route, inventory, state, plan, number)
         observed = assignment_state(records, overlay, member['id'])

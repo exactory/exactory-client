@@ -10,7 +10,7 @@ from . import review_refusal_notice as notices
 KEY = 'output_refusal'
 INELIGIBLE_REPLACEMENT_MSG = (
     'This assignment does not admit a replacement that carries a refusal. Such a replacement needs the head of a '
-    'turn that is neither staged nor part of a reading chain, in the role bar, slate, result or adjudicator or in a '
+    'v7 reading turn or final, an unstaged turn in the role bar, slate, result or adjudicator, or a turn in a '
     'series in parts, with a verified context, no pending call, and no pending or accepted correction. The head '
     'needs at least one completed output with an observed context, and each such output must authenticate and '
     'still be refused. The position holds at most four refusal records. Run review-series on the head and take '
@@ -82,6 +82,14 @@ def prepare_replacement(records, artifacts, value, revision):
     binding = value['context'][KEY]
     fields(binding, ('assignment_id',), code='invalid_review_context')
     text(binding['assignment_id'], 'Refused assignment ID', code='invalid_review_context')
+    capacity_prior = records.get('review_assignment', {}).get(value['context'].get('reading_replacement'))
+    if capacity_prior is not None and capacity_prior.get('context', {}).get(KEY) == binding:
+        if (any(capacity_prior.get(key) != value.get(key) for key in ('role', 'dossier_id', 'subject', 'route_id'))
+                or any(normalized_text(capacity_prior[key]) != normalized_text(value[key])
+                       for key in ('reviewer_id', 'author_id'))):
+            raise ResearchError('review_refusal_replacement_mismatch', REPLACEMENT_IDENTITY_MSG)
+        from .openness_reading_v7 import prepare_notice_capacity_assignment
+        return prepare_notice_capacity_assignment(records, artifacts, value, revision, capacity_prior)
     prior = protocol._get(records, 'review_assignment', binding['assignment_id'])
     members = [records['review_assignment'][identifier] for identifier in list_turn_assignments(records, prior)]
     if max(members, key=lambda row: row['recorded_revision'])['id'] != prior['id']:
@@ -95,9 +103,11 @@ def prepare_replacement(records, artifacts, value, revision):
     if selected_correction(records, artifacts, prior['id']) is not None:
         raise ResearchError('review_refusal_replacement_ineligible', INELIGIBLE_REPLACEMENT_MSG)
     packet = protocol._read_json(artifacts, prior['packet'])
-    if (prior.get('staged_review') or prior.get('reading_chain')
-            or prior['role'] == 'native_math' and review_parts.KEY not in prior
-            or prior['role'] not in protocol.bar_sources.ROLES + ('adjudicator',) and review_parts.KEY not in prior
+    from . import openness_reading_v7 as v7
+    is_v7 = protocol.openness_reading.find_protocol(packet) == v7.PROTOCOL
+    if (prior.get('staged_review') or prior.get('reading_chain') and not is_v7
+            or prior['role'] == 'native_math' and review_parts.KEY not in prior and not is_v7
+            or prior['role'] not in protocol.bar_sources.ROLES + ('adjudicator',) and review_parts.KEY not in prior and not is_v7
             or prior['context_state']['context_status'] != 'verified_for_route'):
         raise ResearchError('review_refusal_replacement_ineligible', INELIGIBLE_REPLACEMENT_MSG)
     if (any(prior.get(key) != value.get(key) for key in ('role', 'dossier_id', 'subject', 'route_id'))
@@ -119,6 +129,9 @@ def prepare_replacement(records, artifacts, value, revision):
                    or not protocol.authenticate_attempt(records, artifacts, prior, attempt)
                    or diagnoses.get(attempt['id']) is None for attempt in completed)):
         raise ResearchError('review_refusal_replacement_ineligible', INELIGIBLE_REPLACEMENT_MSG)
+    if is_v7:
+        return v7.prepare_refusal_assignment(records, artifacts, value, revision, prior, packet,
+                                             refused_ids, diagnoses)
     packet.pop(KEY, None)
     base_prompt = paragraphs.strip_prompt_paragraphs(prior['prompt'], prior['role'])
     parameters = paragraphs.read_paragraph_parameters(prior['prompt'])
@@ -208,10 +221,12 @@ def validate_replacement_origin(records, artifacts, assignment, packet=None):
         if (parent.get('context', {}).get(KEY) is None
                 or protocol._read_json(artifacts, parent['packet']).get(KEY) != notice):
             break
+        require({key: value for key, value in read_position_context(origin).items() if key != 'reading_replacement'}
+                == {key: value for key, value in read_position_context(parent).items() if key != 'reading_replacement'})
         origin = parent
     prior = records.get('review_assignment', {}).get(binding['assignment_id'])
     require(prior is not None and prior['recorded_revision'] < assignment['recorded_revision'])
-    require(read_position_context(prior) == read_position_context(assignment))
+    require(read_position_context(prior) == read_position_context(origin))
     require(all(prior.get(key) == assignment.get(key) for key in ('role', 'dossier_id', 'subject', 'route_id')))
     require(protocol.context_repair.slot_id(records, prior) == protocol.context_repair.slot_id(records, assignment))
     require(all(normalized_text(prior[key]) == normalized_text(assignment[key]) for key in ('reviewer_id', 'author_id')))

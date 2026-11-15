@@ -5560,7 +5560,7 @@
       "test_kind": "real_shape",
       "tests": [
         "test_reading_forecast.AdversarialProjectionTests.test_adversarial_shapes_fit_the_projected_total_in_reading_and_final_builders",
-        "test_reading_forecast.SeriesReadingForecastTests.test_v5_turn_50_cannot_fit_and_series_stops_before_a_call",
+        "test_reading_forecast.SeriesReadingForecastTests.test_v5_turn_50_cannot_fit_and_series_stops_with_executable_answers",
         "test_reading_forecast.LegacyReadingForecastTests.test_chain_admitted_by_0870_keeps_packets_prompts_and_request_digests"
       ]
     },
@@ -5695,7 +5695,8 @@
         "test_problem_openness_source_delivery.SourceDeliveryTests.test_actual_delivery_contract_must_match_the_immutable_packet",
         "test_problem_openness_source_delivery.SourceDeliveryTests.test_missing_or_changed_actual_container_cannot_supply_a_contained_source",
         "test_problem_openness_source_delivery.SourceDeliveryTests.test_legacy_packet_without_delivery_keeps_all_source_bodies",
-        "test_problem_openness_source_delivery.SourceDeliveryTests.test_new_source_capture_stales_selection_without_erasing_prior_readings"
+        "test_problem_openness_source_delivery.SourceDeliveryTests.test_new_source_capture_stales_selection_without_erasing_prior_readings",
+        "test_openness_reading_v7_refusal.V7RefusalTests.test_a7_refused_old_contract_final_replaces_authenticates_and_records"
       ]
     },
     {
@@ -6693,6 +6694,26 @@
         "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
         "test_openness_reading_v7_verification.V5VerificationTests.test_carried_contamination_makes_recorded_finding_stale",
         "test_openness_reading_v7_verification.AffectedNoteVerificationTests.test_required_two_notes_need_both_ranges_but_on_request_note_can_be_undelivered"
+      ]
+    },
+    {
+      "id": "v7-refused-turn-replacement-and-admitted-successor",
+      "record": "20261114070000-openness-finding-unrecordable-and-unbindable-captures",
+      "class": "review-continuity",
+      "summary": "A v7 final returned an earlier decision/objections/reason contract; refused reading and final positions need frozen-notice replacements, while an exhausted or oversized chain needs an admitted successor.",
+      "expected": "Replace at the same position and reviewer with notice-adjusted material; record and verify the corrected finding. Exhausted and input-limited chains export only to an admitted v7 or v6 successor, or stop with executable answers while preserving verified history.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_refusal.V7RefusalTests.test_a7_refused_old_contract_final_replaces_authenticates_and_records",
+        "test_openness_reading_v7_refusal.V7RefusalTests.test_a7_refused_reading_uses_notice_room_and_leaves_rest_for_later_turns",
+        "test_openness_reading_v7_refusal.V7RefusalTests.test_a7_third_replacement_refused_and_export_carries_verified_readings",
+        "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_v5_input_limit_exports_to_v7_carries_and_records",
+        "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_nine_targets_v7_refuses_v6_exports_reads_again_and_records",
+        "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_no_successor_stops_with_two_answers_and_an_executable_route",
+        "test_openness_reading_v7_refusal.V7RefusalTests.test_k7_repeated_dense_ratios_end_after_two_successor_chains",
+        "test_openness_reading_v7_refusal.V7RefusalTests.test_a7_series_executes_refusal_replacement_and_records_without_losing_forecast",
+        "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_reading_output_cap_decision_names_admitted_export"
       ]
     }
   ]

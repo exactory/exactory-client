@@ -453,6 +453,7 @@ _NAMED_CAUSE_CODES_ENTRY = (
     'screening_audit_failed',
     'screening_audit_reading_missing',
     'screening_missing',
+    'search_page_capture_interval',
     'search_page_metadata_mismatch',
     'search_pagination_unsupported',
     'search_pending',

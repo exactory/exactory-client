@@ -1,0 +1,11 @@
+{
+  "named_cause": {
+    "members": {
+      "search_page_capture_interval": {
+        "research_harness/search_pages.py:find_capture_interval_warnings#1": [
+          "entry"
+        ]
+      }
+    }
+  }
+}

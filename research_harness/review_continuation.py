@@ -128,6 +128,11 @@ def _find_head(records, artifacts, identifier, *, context_failures=None):
         assignment = assignments.get(identifier)
         if not isinstance(assignment, dict):
             raise ResearchError('invalid_review_context', 'The review controller is missing')
+    if assignment.get('capacity_plan') and assignment.get('reading_chain'):
+        replacement = protocol.find_replacement(records, assignment)
+        while replacement is not None:
+            identifier, assignment = replacement['id'], replacement
+            replacement = protocol.find_replacement(records, assignment)
     candidates = []
     for head in list_chain_heads(records, artifacts, context_failures=context_failures):
         row = assignments[head]
@@ -605,6 +610,10 @@ def _plan_head(records, artifacts, assignment):
         outdated = _plan_openness_freshness(records, artifacts, assignment)
         if outdated is not None:
             return outdated
+        from .openness_successor import describe_input_handoff
+        handoff = describe_input_handoff(records, artifacts, assignment)
+        if handoff is not None:
+            return handoff
         return _plan_capacity(records, assignment, dict(state='run', command='review-run',
                               payload=_build_run_payload(records, assignment)), artifacts)
     packet = protocol._read_json(artifacts, assignment['packet'])
@@ -623,8 +632,10 @@ def _plan_head(records, artifacts, assignment):
         outdated = _plan_openness_freshness(records, artifacts, assignment)
         if outdated is not None:
             return outdated
-        return dict(state='continue', command='review-assignment',
-                    payload=_build_assignment_payload(records, assignment))
+        payload = _build_assignment_payload(records, assignment)
+        from .openness_successor import describe_input_handoff
+        handoff = describe_input_handoff(records, artifacts, assignment, continuation=payload)
+        return handoff or dict(state='continue', command='review-assignment', payload=payload)
     return _plan_recording(records, artifacts, assignment, state)
 
 

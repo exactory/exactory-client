@@ -1048,7 +1048,12 @@ def describe_attempt(route, role, packet, request, response, *, operation='revie
     if binding.get('protocol') == 'exactory-openness-reading-v7':
         bound = binding['capacity']
         result['task'].update(material_allowance=bound['material_allowance'],
-                              level_material_allowance=bound['material_allowance'], notice_characters=0)
+                              level_material_allowance=bound.get('level_material_allowance', bound['material_allowance']),
+                              notice_characters=0)
+        if packet.get('output_refusal'):
+            notice_characters = len(json.dumps(packet['output_refusal'], ensure_ascii=False,
+                                               sort_keys=True, allow_nan=False))
+            result['task']['notice_characters'] = notice_characters
         result['answer']['bound'] = bound['answer_bound']
     return result
 
@@ -1756,8 +1761,11 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
     if measure is not None:
         limits['request_measure'] = measure['rule']
         ratio = measure['characters_per_token']
+        room = math.floor(limits['input_tokens']['value'] * ratio)
+        if limits['input_characters']['value'] is not None:
+            room = min(room, limits['input_characters']['value'])
         limits['input_text_characters'].update(
-            value=math.floor(limits['input_tokens']['value'] * ratio), characters_per_token=ratio)
+            value=room, characters_per_token=ratio)
     text_room = limits['input_text_characters']['value']
     handles = [row if isinstance(row, str) else row['handle'] for row in targets]
     inventory_summary = _summarize_capacity_inventory(inventory)
@@ -1969,7 +1977,8 @@ def describe_plan_preflight(records, route, request, plan, kind, *, observations
     sent = read_sent_packet(request) or {}
     binding = sent.get('reading_turn', sent.get('reading_final', {}))
     if binding.get('protocol') == 'exactory-openness-reading-v7':
-        observations = [dict(material_allowance=binding['capacity']['material_allowance'])]
+        bounds = binding['capacity']
+        observations = [dict(material_allowance=bounds.get('level_material_allowance', bounds['material_allowance']))]
     bounds = derive_plan_task_limits(plan, kind, observations)['request_bound']
     comparisons = {name: dict(value=measured[name], bound=value,
                               fits=value is None or measured[name] <= value)
@@ -2126,9 +2135,10 @@ def derive_turn_task_limits(records, artifacts, assignment, *, kind=None, notice
                 if measured is not None:
                     ratio = min(ratio, measured)
         room = math.floor(plan['limits']['input_tokens']['value'] * ratio)
+        ceiling = selected.get('level_material_allowance', selected['material_allowance'])
         fitting = [row['material_allowance'] for row in plan['task'][kind]['levels']
-                   if row['task_characters'] <= room and row['material_allowance'] <= selected['material_allowance']]
-        if fitting and max(fitting) < selected['material_allowance']:
+                   if row['task_characters'] <= room and row['material_allowance'] <= ceiling]
+        if fitting and max(fitting) < ceiling:
             selected = derive_plan_task_limits(plan, kind, [dict(material_allowance=max(fitting))],
                                                 notice_characters=notice_characters)
     return selected
@@ -2230,9 +2240,19 @@ def describe_capacity_decision(records, artifacts, assignment, outcome, details)
                 step['prerequisites'].insert(0, dict(condition='The installed release holds ' + details['required_unit'] + '.'))
     details = dict(details, message=(OUTPUT_OVER_CAP_DECISION_MESSAGE if outcome == 'output_over_cap'
                                     else CAPACITY_DECISION_MESSAGE))
+    answers = [dict(answer='Move to another route', steps=steps)]
+    if outcome == 'output_over_cap' and assignment.get('reading_chain'):
+        from . import openness_reading as reading, review_protocol as protocol
+        packet = protocol._read_json(artifacts, assignment['packet'])
+        if reading.find_protocol(packet) in (reading.PROTOCOL_V5, reading.PROTOCOL_V6):
+            from .openness_successor import describe_successor_handoff, OUTPUT_CAP_EXPORT_MESSAGE
+            handoff = describe_successor_handoff(records, artifacts, assignment, OUTCOME_CODES[outcome])
+            if handoff is not None and handoff['state'] == 'handoff':
+                details['successor'] = handoff['details']['successor']
+                details['export_message'] = OUTPUT_CAP_EXPORT_MESSAGE
+                answers.insert(0, dict(answer=OUTPUT_CAP_EXPORT_MESSAGE, steps=[handoff['details']['step']]))
     return dict(kind='decision', code=details.get('code', OUTCOME_CODES[outcome]),
-                owner_decides=ROUTE_DECISION_QUESTION,
-                then=[dict(answer='Move to another route', steps=steps)], details=details)
+                owner_decides=ROUTE_DECISION_QUESTION, then=answers, details=details)
 
 
 def plan_capacity_recovery(records, artifacts, assignment, outcome) -> 'RecoveryResult':

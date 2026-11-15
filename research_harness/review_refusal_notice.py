@@ -146,7 +146,8 @@ def attach_refusal_notice(packet, notice):
 
 
 def select_refusal_notice(records, artifacts, attempt_ids, *, route, role, prompt, packet,
-                          task_characters=0, task_limit_characters=None, diagnoses=None, forms=('whole', 'bounded')):
+                          task_characters=0, task_limit_characters=None, diagnoses=None, forms=('whole', 'bounded'),
+                          prepare_turn=None, capacity_plan=None, turn_kind=None):
     """Try whole then bounded as fresh requests, reporting the notice charged to each task.
 
     The caller supplies versioned prompt text, a recorded prompt, or a function from form to either.
@@ -164,15 +165,26 @@ def select_refusal_notice(records, artifacts, attempt_ids, *, route, role, promp
     trials = []
     for form in forms:
         notice = build_refusal_notice(records, artifacts, attempt_ids, form=form, diagnoses=diagnoses)
-        rendered_prompt = prompt(form) if callable(prompt) else prompt
+        trial = {'form': form, 'fits': False}
+        trials.append(trial)
+        if prepare_turn is None:
+            turn_packet = packet
+            rendered_prompt = prompt(form) if callable(prompt) else prompt
+        else:
+            try:
+                turn_packet, rendered_prompt = prepare_turn(notice)
+            except ResearchError as error:
+                if error.code != 'review_input_too_large':
+                    raise
+                trial['error'] = error.as_dict()
+                continue
         prompt_text = rendered_prompt['text'] if isinstance(rendered_prompt, dict) else rendered_prompt
         base_task_characters = task_characters(form) if callable(task_characters) else task_characters
         characters = len(_serialize_value(notice))
         task = {'notice_characters': characters, 'characters': (base_task_characters or 0) + characters,
                 'limit_characters': task_limit_characters}
-        supplied = attach_refusal_notice(packet, notice)
-        trial = {'form': form, 'task': task, 'fits': False}
-        trials.append(trial)
+        supplied = attach_refusal_notice(turn_packet, notice)
+        trial['task'] = task
         try:
             request = review_transport.request_body(route, prompt_text, supplied, order=())
             trial['request_measure'] = capacity.measure_request(route, request, records=records, artifacts=artifacts)
@@ -183,6 +195,8 @@ def select_refusal_notice(records, artifacts, attempt_ids, *, route, role, promp
             if not trial['request_measure']['fits']:
                 continue
             report = review_preflight.build_report(records, artifacts, route, role, rendered_prompt, supplied, request)
+            if capacity_plan is not None:
+                report.update(capacity.describe_plan_preflight(records, route, request, capacity_plan, turn_kind))
             trial['preflight'] = report
             review_preflight.check_request(report, request, packet=supplied, artifacts=artifacts)
             sent = review_excerpts.read_sent_packet(request)
@@ -190,7 +204,8 @@ def select_refusal_notice(records, artifacts, attempt_ids, *, route, role, promp
                 raise ResearchError('review_input_too_large', NOTICE_DELIVERY_MSG,
                                     {'phase': 'refusal_notice', 'form': form, 'preflight': report})
         except ResearchError as error:
-            if error.code != 'review_input_too_large':
+            if error.code != 'review_input_too_large' and not (
+                    capacity_plan is not None and error.code == 'review_route_capacity_plan_violated'):
                 raise
             trial['error'] = error.as_dict()
             continue

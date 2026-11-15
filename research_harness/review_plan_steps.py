@@ -280,17 +280,27 @@ def complete_plan(records, artifacts, assignment, plan):
         return dict(plan, state='handoff', command='read')
     if (code in ('review_input_too_large', 'review_chain_projection_over_limit')
             and assignment.get('reading_chain')):
-        # Reading-v7 changes the problem-chain row to export when it can carry these verified turns.
+        from .openness_successor import describe_successor_handoff
+        successor = describe_successor_handoff(records, artifacts, assignment, code, details)
+        if successor is not None:
+            plan.pop('command', None)
+            plan.pop('payload', None)
+            return dict(plan, **successor)
         from .openness_reading import describe_projection_decision, find_protocol
         packet = protocol._read_json(artifacts, assignment['packet'])
-        if find_protocol(packet) == 'exactory-openness-reading-v7' and details.get('ratio'):
-            return dict(plan, state='handoff', command='export')
         details['decision'] = describe_projection_decision(find_protocol(packet), records=records,
                                                            artifacts=artifacts, assignment=assignment)
         plan['state'] = 'stop'
         plan.pop('command', None)
         return plan
     terminal = describe_terminal(code)
+    if code in ('review_slot_exhausted', 'review_refusal_notice_metadata_too_large') and assignment.get('reading_chain'):
+        from .openness_successor import describe_successor_handoff
+        successor = describe_successor_handoff(records, artifacts, assignment, code, details)
+        if successor is not None:
+            plan.pop('command', None)
+            plan.pop('payload', None)
+            return dict(plan, **successor)
     if terminal['details'].get('next', {}).get('kind') == 'role' and plan.get('command') != 'review-output-correction':
         return dict(plan, **describe_role_handoff(records, artifacts, assignment, code, details))
     context_status = assignment.get('context_state', {}).get('context_status')

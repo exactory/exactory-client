@@ -144,8 +144,9 @@ def _enrich_line(store, row, capacity_records, *, usage_snapshot=None):
                 artifacts = store.build_artifact_store()
                 packet = review_protocol._read_json(artifacts, assignment['packet'])
                 route = capacity_records['review_route'][assignment['route_id']]
+                from .review_refusal_replacement import read_position_context
                 logical = review_protocol.build_packet(capacity_records, artifacts, assignment['dossier_id'],
-                    assignment['role'], assignment['reviewer_id'], **assignment['context'])
+                    assignment['role'], assignment['reviewer_id'], **read_position_context(assignment))
                 request = review_protocol.build_assignment_request(capacity_records, artifacts, assignment)
                 receipt = openness_reading.describe_reading_receipt(capacity_records, artifacts, assignment,
                     route, logical, packet, request, admit_turn=False)
