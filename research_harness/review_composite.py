@@ -15,6 +15,8 @@ list_turns returns None unless the assignment belongs to a paged final of its
 family; finals in one response also return None. It resolves selected replacement
 assignments and lists the same final from each member turn, using only stored
 bindings. packet is the role packet used by the composition rule and validator.
+read_currency returns the currency recorded by the turn's page plan. A successor
+plan can supersede pages at an earlier currency without changing those records.
 Every member assignment binds capacity_plan in the ordinary capacity-plan form.
 The stored plan owns targets.handles. Family lanes own their packet verification.
 
@@ -61,8 +63,9 @@ def build_composite(records, artifacts, assignment):
     rule = find_composition_rule(selected['role'], turns['packet'])
     if rule is None:
         _refuse_composite(4)
-    output = expand_handles(turns['packet'], rule['compose_output'](
-        turns['packet'], [output for _, output in pages], closing_output), artifacts=artifacts, assignment=selected)
+    output = expand_handles(turns['packet'], rule['compose'](turns['packet'],
+        [dict(targets=row['targets'], output=output) for row, output in pages], closing_output),
+        artifacts=artifacts, assignment=selected)
     content = _canonical(output).encode('utf-8')
     reference = describe_artifact(content, 'application/json')
     record = dict(id=closing['attempt_id'], protocol=COMPOSITE_PROTOCOL,
@@ -78,12 +81,16 @@ FINAL_FAMILIES = {}
 
 
 def find_composition_rule(role, packet):
-    """Bind the composition module's public interface in this one lazy import."""
+    """Return None or {id, compose}, binding the public rule and composer lazily.
+
+    compose receives the role packet, pages in order as {targets, output} after
+    handle expansion, and the recorded closing output.
+    """
     from . import review_composition
     rule = review_composition.find_rule(role, packet)
     if rule is None:
         return None
-    return dict(id=rule['id'], compose_output=partial(review_composition.compose_output, rule))
+    return dict(id=rule['id'], compose=partial(review_composition.compose_output, rule))
 
 
 def _refuse_composite(condition, **details):
@@ -122,7 +129,7 @@ def _check_selected_attempts(records, artifacts, composite):
 
 
 def _check_chain_currency(records, artifacts, composite, authenticated):
-    """Condition 2: bind one chain, route, reviewer, plan and currency."""
+    """Condition 2: bind final turns to one chain, route, reviewer, plan and currency."""
     try:
         if (set(composite) != {'id', 'protocol', 'chain', 'composition', 'pages', 'closing', 'currency', 'output'}
                 or composite['protocol'] != COMPOSITE_PROTOCOL
@@ -133,9 +140,10 @@ def _check_chain_currency(records, artifacts, composite, authenticated):
         root = records['review_assignment'][composite['chain']['assignment_id']]
         family, turns = _find_family(records, artifacts, closing)
         if (family is None or turns['chain'] != root['id'] or composite['id'] != composite['closing']['attempt_id']
+                or root['capacity_plan']['digest'] != composite['chain']['plan_digest']
                 or closing['capacity_plan']['digest'] != composite['chain']['plan_digest']):
             _refuse_composite(2)
-        for assignment in [root] + [assignment for _, assignment, _ in authenticated]:
+        for _, assignment, _ in authenticated:
             listed = family['list_turns'](records, artifacts, assignment)
             if (listed is None or listed['chain'] != root['id']
                     or assignment['route_id'] != root['route_id']
@@ -198,8 +206,9 @@ def _check_recomposed_output(artifacts, composite, turns, closing, authenticated
                 or not rule['id'].startswith('exactory-final-composition-v1/')):
             _refuse_composite(4)
         page_count = len(composite['pages'])
-        output = rule['compose_output'](turns['packet'],
-            [output for _, _, output in authenticated[:page_count]], authenticated[page_count][2])
+        output = rule['compose'](turns['packet'],
+            [dict(targets=row['targets'], output=output) for row, _, output in authenticated[:page_count]],
+            authenticated[page_count][2])
         output = expand_handles(turns['packet'], output, artifacts=artifacts, assignment=closing)
         recorded = json.loads(artifacts.read(composite['output']['artifact']))
         output_digest = digest(output)

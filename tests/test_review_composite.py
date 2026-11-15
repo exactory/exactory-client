@@ -44,7 +44,7 @@ def validate_fixture_output(records, artifacts, assignment, packet, output):
 
 
 def compose_fixture_output(packet, pages, closing):
-    return dict(items=[item for page in pages for item in page['items']], summary=closing['summary'])
+    return dict(items=[item for page in pages for item in page['output']['items']], summary=closing['summary'])
 
 
 class CompositeFinalTests(LiteratureCase):
@@ -88,7 +88,7 @@ class CompositeFinalTests(LiteratureCase):
         families.start()
         self.addCleanup(families.stop)
         rule = patch.object(self.composites, 'find_composition_rule',
-            return_value=dict(id='exactory-final-composition-v1/fixture', compose_output=compose_fixture_output))
+            return_value=dict(id='exactory-final-composition-v1/fixture', compose=compose_fixture_output))
         rule.start()
         self.addCleanup(rule.stop)
         self.closing = self.records_value['review_assignment']['closing']
@@ -181,7 +181,7 @@ class CompositeFinalTests(LiteratureCase):
         def compose_boolean(packet, pages, closing):
             return dict(compose_fixture_output(packet, pages, closing), flag=True)
         with patch.object(self.composites, 'find_composition_rule', return_value=dict(
-                id='exactory-final-composition-v1/fixture', compose_output=compose_boolean)):
+                id='exactory-final-composition-v1/fixture', compose=compose_boolean)):
             composite, artifact = self.composites.build_composite(self.records_value, self.artifacts, self.closing)
             altered = json.loads(artifact[1])
             altered['flag'] = 1
@@ -255,7 +255,7 @@ class CompositeFinalTests(LiteratureCase):
         def compose_with_handle(packet, pages, closing):
             return dict(compose_fixture_output(packet, pages, closing), evidence=[dict(ref='m1')])
         with patch.object(self.composites, 'find_composition_rule', return_value=dict(
-                id='exactory-final-composition-v1/fixture', compose_output=compose_with_handle)):
+                id='exactory-final-composition-v1/fixture', compose=compose_with_handle)):
             composite, artifact = self.composites.build_composite(self.records_value, self.artifacts, self.closing)
             self.artifacts.put(artifact[1], artifact[0]['media_type'])
             self.assertEqual(self.composites.authenticate_composite(self.records_value, self.artifacts, composite)['evidence'],
@@ -265,7 +265,7 @@ class CompositeFinalTests(LiteratureCase):
                 self.composites.authenticate_composite(self.records_value, self.artifacts, composite)
             self.assertEqual(caught.exception.details['condition'], 4)
 
-    def test_page_attempt_replays_its_real_handle_expansion_certificate(self):
+    def record_handled_page(self):
         reference = self.artifacts.put(b'A retained page argument.', 'text/plain')
         build_packet = protocol.build_packet
         def build_handle_packet(*args, **kwargs):
@@ -283,6 +283,10 @@ class CompositeFinalTests(LiteratureCase):
         self.invoke(dict(items=[dict(ref='m1')]), identifier='handled-attempt', assignment=assignment['id'])
         records = self.records()
         attempt = records['review_attempt']['handled-attempt']
+        return records, reference, attempt
+
+    def test_page_attempt_replays_its_real_handle_expansion_certificate(self):
+        records, reference, attempt = self.record_handled_page()
         self.assertEqual(attempt['handle_expansion']['references'], 1)
         composite, artifact = self.composites.build_composite(records, self.artifacts, records['review_assignment']['closing'])
         self.artifacts.put(artifact[1], artifact[0]['media_type'])
@@ -293,12 +297,114 @@ class CompositeFinalTests(LiteratureCase):
             self.composites.authenticate_composite(records, self.artifacts, composite)
         self.assertEqual(caught.exception.details['condition'], 1)
 
+    def test_composer_receives_ordered_targets_and_expanded_page_outputs(self):
+        records, reference, _ = self.record_handled_page()
+        expected = [dict(targets=['t1'], output=dict(items=['page-1'])),
+                    dict(targets=['t2'], output=dict(items=[reference])),
+                    dict(targets=['t3'], output=dict(items=['page-3']))]
+        received = []
+
+        def compose(packet, page_outputs, closing_output):
+            self.assertEqual(page_outputs, expected)
+            self.assertEqual(closing_output, dict(summary='Recorded final 雪.'))
+            received.append(copy.deepcopy(page_outputs))
+            return dict(items=[item for page in page_outputs for item in page['output']['items']],
+                        summary=closing_output['summary'])
+
+        def find_rule(role, packet):
+            return dict(id='exactory-final-composition-v1/fixture', compose=compose)
+
+        with patch.object(self.composites, 'find_composition_rule', side_effect=find_rule):
+            closing = records['review_assignment']['closing']
+            composite, artifact = self.composites.build_composite(records, self.artifacts, closing)
+            self.artifacts.put(artifact[1], artifact[0]['media_type'])
+            output = self.composites.authenticate_composite(records, self.artifacts, composite)
+            self.assertEqual(output['items'], ['page-1', reference, 'page-3'])
+            self.assertEqual(composite['composition'], 'exactory-final-composition-v1/fixture')
+            prepared, _ = self.composites.prepare_composite(records, self.artifacts, closing,
+                records['review_attempt']['attempt-closing'], dict(summary='Recorded final 雪.'))
+            self.assertEqual(prepared, composite)
+        self.assertEqual(received, [expected, expected, expected])
+
+    def test_condition_2_refuses_mixed_page_plan_currencies_and_accepts_successor(self):
+        old_turns = copy.deepcopy(self.turns)
+        old_page_plan = protocol._put_json(self.artifacts, dict(currency=self.currency, turns=old_turns))
+        for identifier in ['page-1', 'page-2', 'page-3', 'condense', 'closing']:
+            assignment = self.records()['review_assignment'][identifier]
+            assignment['fixture_page_plan'] = old_page_plan
+            self.seed('review_assignment', identifier, assignment)
+        old_records = self.records()
+        old_assignment = old_records['review_assignment']['page-1']
+        old_attempt = old_records['review_attempt']['attempt-page-1']
+        old_output = self.artifacts.read(old_attempt['output'])
+        old_digests = (digest(old_assignment), digest(old_attempt), old_attempt['output']['sha256'])
+
+        currency = dict(self.currency, packet_digest=digest({'native': 'later-fixture'}),
+                        inventory_digest=digest(['unit-1', 'late-unit']))
+        turns = dict(chain='page-1', packet={},
+            pages=[dict(assignment_id='later-page-%d' % n, targets=['t%d' % n]) for n in range(1, 4)],
+            closing=dict(assignment_id='later-closing', targets=[]),
+            condensing=[dict(assignment_id='later-condense', targets=['t1', 't2', 't3'])])
+        page_plan = protocol._put_json(self.artifacts, dict(currency=currency, turns=turns,
+            replaces=old_page_plan, cause='inventory'))
+        for identifier in ['later-page-1', 'later-page-2', 'later-page-3', 'later-condense', 'later-closing']:
+            self.assign(identifier=identifier)
+            assignment = self.records()['review_assignment'][identifier]
+            assignment.update(fixture_page_plan=page_plan, capacity_plan=old_assignment['capacity_plan'])
+            self.seed('review_assignment', identifier, assignment)
+            output = (dict(items=[identifier]) if identifier.startswith('later-page-') else
+                      dict(summary='Later final.') if identifier == 'later-closing' else dict(notes='Later rows.'))
+            self.invoke(output, identifier='attempt-' + identifier, assignment=identifier)
+
+        def list_plan_turns(records, artifacts, assignment):
+            if 'fixture_page_plan' not in assignment:
+                return None
+            active = records['fixture_final_plan']['page-1']['page_plan']
+            return json.loads(artifacts.read(active))['turns']
+
+        def read_plan_currency(records, artifacts, assignment):
+            return json.loads(artifacts.read(assignment['fixture_page_plan']))['currency']
+
+        def record_composite(records, reference, content, composite):
+            def apply(tx):
+                tx.put(*immutable_record(records, 'review_composite', composite['id'], composite))
+            self.assertEqual(self.artifacts.put(content, reference['media_type']), reference)
+            self.sequence += 1
+            self.store.mutate('fixture.composite', {}, apply, expected_revision=self.store.revision,
+                              request_id='successor-composite-' + str(self.sequence))
+
+        self.seed('fixture_final_plan', 'page-1', dict(page_plan=page_plan))
+        records = self.records()
+        row = self.composites.FINAL_FAMILIES[FAMILY]
+        with patch.dict(row, list_turns=list_plan_turns, read_currency=read_plan_currency):
+            closing = records['review_assignment']['later-closing']
+            composite, artifact = self.composites.build_composite(records, self.artifacts, closing)
+            mixed = copy.deepcopy(composite)
+            mixed['pages'][0] = copy.deepcopy(self.composite['pages'][0])
+            with self.assertRaises(ResearchError) as caught:
+                self.composites.authenticate_composite(records, self.artifacts, mixed)
+            self.assertEqual(caught.exception.code, 'review_composite_unverified')
+            self.assertEqual(caught.exception.details['condition'], 2)
+
+            record_composite(records, artifact[0], artifact[1], composite)
+            records = self.records()
+            output = self.composites.authenticate_composite(records, self.artifacts, composite)
+            self.assertEqual(output, dict(items=['later-page-1', 'later-page-2', 'later-page-3'], summary='Later final.'))
+            self.assertEqual(composite['currency'], currency)
+            self.assertEqual(self.composites.read_final_output(records, self.artifacts, closing), (output, composite))
+
+        self.assertEqual([page['assignment_id'] for page in composite['pages']],
+                         ['later-page-1', 'later-page-2', 'later-page-3'])
+        retained = records['review_assignment']['page-1'], records['review_attempt']['attempt-page-1']
+        self.assertEqual((digest(retained[0]), digest(retained[1]), retained[1]['output']['sha256']), old_digests)
+        self.assertEqual(self.artifacts.read(retained[1]['output']), old_output)
+
     def test_build_and_prepare_do_not_publish_artifacts(self):
         before = {str(path) for path in self.root.rglob('*')}
         def compose_new_output(packet, pages, closing):
             return dict(compose_fixture_output(packet, pages, closing), extra='Not published.')
         with patch.object(self.composites, 'find_composition_rule', return_value=dict(
-                id='exactory-final-composition-v1/fixture', compose_output=compose_new_output)):
+                id='exactory-final-composition-v1/fixture', compose=compose_new_output)):
             composite, artifact = self.composites.build_composite(self.records_value, self.artifacts, self.closing)
             self.composites.prepare_composite(self.records_value, self.artifacts, self.closing,
                 self.records_value['review_attempt']['attempt-closing'], dict(summary='Recorded final 雪.'))
