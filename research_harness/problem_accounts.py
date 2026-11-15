@@ -102,9 +102,6 @@ def find_evidence_availability(records, reference):
         availability = find_imported_availability(records, reference)
         dates = [row['date'] for row in availability if row['date'] is not None]
         return max(dates) if dates and len(dates) == len(availability) else None
-    if reference["kind"] == "reading":
-        year = records["work"][reference["version_id"]].get("year")
-        return None if year is None else str(year)
     if reference["kind"] == "result":
         snapshot = find_result_snapshot(records, reference)
         return None if snapshot is None else snapshot.get("recorded_at")
@@ -112,6 +109,20 @@ def find_evidence_availability(records, reference):
 
 
 def derive_evidence_date(records, reference):
+    if reference["kind"] == "reading":
+        from .literature import collect_version_dates
+        work = records["work"][reference["version_id"]]
+        dates = [timestamp(value) for value in collect_version_dates(work)]
+        if not dates:
+            return None
+        assertions = [assertion["values"] for assertion in work["date_assertions"]]
+        published = [timestamp(row["published"]) for row in assertions if row.get("published")]
+        contradicted = {timestamp(row["updated"]) for row in assertions if row.get("updated")
+                        and any(item.get("code") == "nonmonotone_version_dates" for item in row.get("diagnostics", []))}
+        # An independent assertion cannot make a contradictory version date reliable.
+        if any(date in contradicted or any(date < original for original in published) for date in dates):
+            return None
+        return max(dates).date().isoformat()
     availability = find_evidence_availability(records, reference)
     return None if availability is None else availability[:10]
 
@@ -462,8 +473,7 @@ def find_date_start(date):
     return timestamp(date).astimezone(timezone.utc)
 
 
-def require_prior_form(records, statement, before_revision, before_date=None, *, evidence_origin=None,
-                       accounts_version=1, evidence_source=None):
+def collect_candidate_form_history(records, statement, evidence_origin=None):
     forms = collect_candidate_forms(records, statement)
     candidates = []
     for call in records.get("forming_call", {}).values():
@@ -496,6 +506,24 @@ def require_prior_form(records, statement, before_revision, before_date=None, *,
                 imported_calls[key] = row
             identifiers = imported_calls[key]["form_ids"]
             identifiers.extend(identifier for identifier in member["form_ids"] if identifier not in identifiers)
+    return candidates
+
+
+def require_candidate_form(records, statement, *, accounts_version=1):
+    # This is an exception to the order rule: the candidate cites a form,
+    # but this check does not show when that form was recorded.
+    candidates = collect_candidate_form_history(records, statement)
+    if candidates:
+        return
+    details = None
+    if accounts_version == 2:
+        details = {"evidence": {"revision": None, "date": None}, "forms": [row for row, _, _ in candidates]}
+    raise ResearchError("problem_accounts_history_missing", HISTORY_MISSING_MESSAGE, details)
+
+
+def require_prior_form(records, statement, before_revision, before_date=None, *, evidence_origin=None,
+                       accounts_version=1, evidence_source=None):
+    candidates = collect_candidate_form_history(records, statement, evidence_origin)
     ambiguous = False
     for row, revision, eligible in candidates:
         revision_passes = before_revision is None or revision is not None and revision < before_revision
@@ -740,9 +768,13 @@ def validate_tier_two(records, value, accounts, entries, alternatives):
     if gain["new_object_justification"] is not None:
         text(gain["new_object_justification"], "The new_object_justification of the gain")
     accounts_version = value.get("accounts_version", 1)
-    revisions, dates, native_evidence = [], [], False
+    revisions, dates, native_evidence, ordered_evidence = [], [], False, False
     choose_date = (lambda row: find_date_start(row["date"])) if accounts_version == 2 else (lambda row: row["date"])
     for reference in establishing:
+        if (reference["kind"] == "reading"
+                or reference["kind"] == "record" and reference.get("origin") and reference["record_kind"] == "reading"):
+            continue
+        ordered_evidence = True
         if reference['kind'] == 'record' and 'origin' in reference:
             from .problem_forming_import import find_imported_availability
             availability = find_imported_availability(records, reference)
@@ -759,8 +791,6 @@ def validate_tier_two(records, value, accounts, entries, alternatives):
             revision = find_result_revision(records, reference)
         elif reference["kind"] == "computation":
             revision = records["execution"][reference["execution_id"]]["recorded_revision"]
-        elif reference["kind"] == "reading":
-            revision = records["reading"][reference["reading_id"]].get("recorded_revision")
         date = find_evidence_availability(records, reference)
         dated = None if date is None else {"date": date, "reference": reference}
         if date is None and revision is None:
@@ -774,6 +804,8 @@ def validate_tier_two(records, value, accounts, entries, alternatives):
             revisions.append((revision, reference))
         if dated is not None:
             dates.append(dated)
+    if not ordered_evidence:
+        require_candidate_form(records, statement, accounts_version=accounts_version)
     if native_evidence:
         earliest_revision = min(revisions, key=lambda row: row[0]) if revisions else (None, None)
         earliest_date = min(dates, key=choose_date) if dates else None

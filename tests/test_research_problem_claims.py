@@ -56,12 +56,14 @@ class ProblemCase(LiteratureCase):
         statement = self.load_problem_module().find_current_statement(self.store.snapshot()["records"])
         return build_account_value(evidence, identifier, () if statement is None else statement["neighbours"])
 
-    def record_full_reading(self):
-        version = self.metadata()
-        bundle = self.bundle(version)
+    def record_full_reading(self, version_id=None, note_id="read-full", **metadata):
+        version = self.metadata(**metadata) if version_id is None else version_id
+        capture = None if version_id is None else self.capture(
+            version, abstract=self.store.snapshot()["records"]["work"][version]["abstract"] is not None)
+        bundle = self.bundle(version, capture=capture, bundle_id="bundle" if note_id == "read-full" else "bundle-" + note_id)
         self.mutate(import_bundle, bundle)
-        self.mutate(record_reading, self.full_note(bundle, "read-full"))
-        return {"kind": "reading", "version_id": version, "reading_id": "read-full"}
+        self.mutate(record_reading, self.full_note(bundle, note_id))
+        return {"kind": "reading", "version_id": version, "reading_id": note_id}
 
 
 class ProblemRecordTests(ProblemCase):

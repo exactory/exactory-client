@@ -691,3 +691,40 @@ class FormingImportTests(unittest.TestCase):
         from research_harness.problem_forming_import import describe_imports
         delivered = describe_imports(self.destination.store.snapshot()['records'], self.destination.artifacts)
         self.assertEqual(next(row['record'] for row in delivered[0]['records'] if row['cite']['id'] == identifier), native)
+
+
+    def prepare_reading_gain(self, *, outcome=False, empty_form=False):
+        from test_problem_accounts import ReadingDateCase
+        from test_problem_forming_evidence import build_evidence
+        reading = self.source.record_full_reading()
+        established = self.source.mutate(problem_forming.record_form_outcome, build_outcome(
+            "reading-outcome", standing="found_in_literature", evidence=[build_evidence(reading)]))["result"]
+        call = self.call
+        if empty_form:
+            call = self.source.mutate(problem_forming.record_forming, build_forming("empty", forms=[]))["result"]
+        imported = self.import_history()
+        candidate = build_candidate()
+        candidate["source"]["evidence"] = [self.reference("forming_call", call, imported["source_origin"])]
+        self.destination.mutate(cli.OPERATIONS["problem-candidate"], candidate)
+        self.destination.select_statement(candidate_id=candidate["id"])
+        source_record = established if outcome else self.source.store.snapshot()["records"]["reading"][reading["reading_id"]]
+        reference = self.reference("form_outcome" if outcome else "reading", source_record, imported["source_origin"])
+        self.destination.value = self.destination.build_value([reference])
+        self.destination.value["accounts"]["explanatory_use"][0]["date"] = "2026-02-01"
+        ReadingDateCase.add_gain(self.destination)
+        return imported
+
+    def test_c6_gain_on_direct_imported_reading_leaves_it_unordered(self):
+        self.prepare_reading_gain()
+        saved = self.destination.mutate(problem_claims.record_value, self.destination.value)["result"]
+        self.assertEqual(saved["accounts"]["gain"]["id"], "gain")
+
+    def test_p3_imported_call_without_forms_cannot_support_reading_only_gain(self):
+        self.prepare_reading_gain(empty_form=True)
+        self.destination.assert_error("problem_accounts_history_missing", lambda:
+            self.destination.mutate(problem_claims.record_value, self.destination.value))
+
+    def test_p7_imported_outcome_on_reading_keeps_history_refusal(self):
+        self.prepare_reading_gain(outcome=True)
+        self.destination.assert_error("problem_accounts_history_missing", lambda:
+            self.destination.mutate(problem_claims.record_value, self.destination.value))

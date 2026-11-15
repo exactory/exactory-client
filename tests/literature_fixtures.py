@@ -30,11 +30,12 @@ class LiteratureCase(unittest.TestCase):
         return function(self.store, payload, expected_revision=self.store.revision,
                         request_id="task3-" + str(self.sequence), **kwargs)
 
-    def metadata(self, number=1, version=1, abstract=None, references=None):
+    def metadata(self, number=1, version=1, abstract=None, references=None,
+                 published="2026-01-03T12:00:00Z", updated="2026-02-01T10:00:00Z"):
         identifier = "arxiv:2601.%05dv%d" % (number, version)
         text = abstract if abstract is not None else "Source %d studies bounded sequences and reports a finite example." % number
         self.sequence += 1
-        import_response(self.store, "arxiv", atom([entry(identifier[6:], abstract=text)], total=1),
+        import_response(self.store, "arxiv", atom([entry(identifier[6:], abstract=text, published=published, updated=updated)], total=1),
                         source_url="https://export.arxiv.org/api/query?id_list=" + identifier[6:],
                         captured_at="2026-09-07T12:00:00Z", expected_revision=self.store.revision,
                         request_id="metadata-" + str(self.sequence))

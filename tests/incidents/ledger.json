@@ -7239,6 +7239,18 @@
         "test_series_rows_close_closing.ClosingConditionTests.test_actual_planner_built_payload_checks_keep_payload_before_form",
         "test_openness_final_turn.AlternateRepresentationTests.test_an_omitted_alternate_representation_is_not_a_reading_unit"
       ]
+    },
+    {
+      "id": "reading-date-version-and-unordered-history",
+      "record": "20261115000626-reading-date-reads-a-year-the-store-never-writes",
+      "class": "reading dates and gain history",
+      "summary": "Accounts read a work year and reading revision that production never writes.",
+      "expected": "Command-written readings date facts by reliable arXiv version assertions and remain unordered in gain history.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_accounts.ReadingDateTests.test_c7_command_written_incident_derives_date_without_invented_members"
+      ]
     }
   ]
 }

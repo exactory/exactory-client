@@ -117,8 +117,6 @@ def describe_availability(records, origin, reference):
         revision = find_result_revision(records, reference)
     elif reference['kind'] == 'computation':
         revision = records['execution'][reference['execution_id']]['recorded_revision']
-    elif reference['kind'] == 'reading':
-        revision = records['reading'][reference['reading_id']].get('recorded_revision')
     return [dict(origin=origin, revision=revision, date=find_evidence_availability(records, reference))]
 
 
