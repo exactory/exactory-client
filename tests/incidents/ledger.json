@@ -5748,6 +5748,21 @@
         "test_series_rows_close_entry.EntryRowTests.test_both_printed_answers_run_on_a_supported_retained_state",
         "test_series_rows_close_entry.EntryRowTests.test_entry_evidence_passes_writing_place_and_condition_group_guards"
       ]
+    },
+    {
+      "id": "series-record-prerequisites-retain-reviewed-group-decisions",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "review continuity (record-code group memberships)",
+      "summary": "Missing, stale, pending and incomplete record refusals had no reviewed registry row and ended with an unlisted-code decision.",
+      "expected": "Every admitted record-code member ends with its group decision inside the driver code recorder. The printed named-cause answers execute record-check and status against a retained review chain. Numbered places and their conditions determine each membership; asynchronous/output-contract candidates stay for executed recovery tests.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_series_rows_close_record.RecordGroupTests.test_each_named_cause_member_ends_with_the_group_decision",
+        "test_series_rows_close_record.RecordGroupTests.test_each_stored_state_member_ends_with_the_group_decision",
+        "test_series_rows_close_record.RecordGroupTests.test_printed_named_cause_answers_execute_record_check_and_status",
+        "test_series_rows_close_record.RecordGroupGuardTests.test_member_places_and_conditions_pass_rr5_and_determine_the_group"
+      ]
     }
   ]
 }

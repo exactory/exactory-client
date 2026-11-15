@@ -155,5 +155,5 @@ class StudyRowTests(unittest.TestCase):
         with self.assertRaises(ResearchError) as caught:
             validate_result_reference(case.store.snapshot()['records'], case.artifacts, reference)
         self.assertEqual(caught.exception.code, 'unknown_execution')
-        self.assertNotIn('unknown_execution', stop_classes.STOP_REGISTRY)
+        self.assertEqual(stop_classes.STOP_REGISTRY['unknown_execution']['group'], 'named_cause')
         self.assertNotIn('unknown_execution', stop_classes._STORED_STATE_CODES_STUDY)
