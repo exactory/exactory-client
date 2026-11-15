@@ -6781,6 +6781,25 @@
         "test_review_failure_class.V7SizeRecoveryTests.test_response_limit_visits_each_smaller_reading_level_before_stopping",
         "test_openness_reading_v7_refusal.V7RefusalTests.test_v7_input_floor_keeps_size_decision_and_verified_turns"
       ]
+    },
+    {
+      "id": "unread-final-shares-reserve-after-refusal",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "unread final capacity",
+      "summary": "A refused final with full retained entries placed the unread member and refusal notice in the same reserve.",
+      "expected": "Reserve the required unread core in the final frame, then charge rows and pending pages only against free material room and the reserve left by the wire notice; retain and authenticate the complete unread set.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_unread_final.UnreadNoticeReplacementTests.test_u_t1_short_and_long_refused_full_unread_final_replace_and_record_the_complete_set",
+        "test_openness_unread_final.UnreadNoticeReplacementTests.test_u_t2_refused_pending_unread_page_replays_the_same_cursor_and_records",
+        "test_openness_unread_final.UnreadFrameTests.test_u_t3_every_admitted_count_and_label_set_keeps_unread_and_notice_within_the_bound",
+        "test_openness_unread_final.UnreadFrameTests.test_u_t4_largest_unread_core_with_key_and_paragraph_fits_the_frame",
+        "test_openness_unread_final.UnreadFrameTests.test_u_t5_unread_frame_preserves_levels_and_allocation_on_both_fixtures",
+        "test_openness_unread_final.UnreadNoticeReplacementTests.test_u_t5_real_full_grant_fixture_preserves_the_final_level_and_allocation",
+        "test_openness_unread_final.UnreadFrameTests.test_unread_rows_yield_free_material_room_to_a_whole_notice_above_the_reserve",
+        "test_openness_reading_v7_turns.RatioAndAdmissionTests.test_unread_core_refuses_when_the_final_frame_exceeds_the_measured_text_room"
+      ]
     }
   ]
 }

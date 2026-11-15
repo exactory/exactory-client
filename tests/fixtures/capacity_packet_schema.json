@@ -18317,7 +18317,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "d4014c1b9fa9ec7e37851136a5b4fd3da933ebb6ba7a4c2217664b0bc3c9708a",
+      "ast_sha256": "03462412414bf42fe250e17b33c1a5742fc3eb4c4f91be6eb171bc362d236d23",
       "functions": {
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
         "_append_unit": "f6cb4ac11ffc0db1bbc01ecf87ec1ca4e26a2ccc64a24c9aebe0b2c8d2ce16a7",
@@ -18331,7 +18331,7 @@
         "build_inventory": "543bab306bae3a905a1169963dd36f45157da878818d28597eb1ec34f091f24f",
         "compute_allowance_rows_bound": "43cedd0b96e55219fc11fc700beb8044053e677919c8c6088032814fc1e4703e",
         "describe_carried_pool": "b8c0046b42a8d1d5d4d96483e43f2c49afbc294acad7e86f5b965bc922646932",
-        "measure_turn_frames": "39c2c48a99b673719c0ff499488416dace7038c9d15ec10fd4d975ebd32f59ab",
+        "measure_turn_frames": "978b0db4ae227ddd1f3871bcde87ff42a799adfd09ace5e7035dd54bea9dfefe",
         "observe_carried_chain": "7830acc80f56e928029aec9390682f3131b0401efcfae5710bc27f826ef9fe5c",
         "plan_inventory": "427d865ada5c730d6601f112e91becc1da90deba9d364145001dcbdee033d0d0",
         "project_carried_turn": "0c984a434694f523c26e101401f7d285b7d189fdf69c5cab89491985e5cbb682"

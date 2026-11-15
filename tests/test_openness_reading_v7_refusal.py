@@ -549,7 +549,7 @@ class FullGrantFinalRefusalTests(OpennessReadingCase):
         enabled.start()
         self.addCleanup(enabled.stop)
 
-    def prepare_full_final(self):
+    def prepare_full_final(self, *, stop_when_full=False, stop_after_assignment=False):
         from test_review_output_profile import build_row
         from test_research_problem_openness_minimum import ProblemOpennessMinimumTests
         from research_harness.problem_openness import export_openness
@@ -566,10 +566,19 @@ class FullGrantFinalRefusalTests(OpennessReadingCase):
                 minimum=dict(searches=searches, settling_work_id=None, duplicate_resolutions=[])),
                 self.root / 'eight-target-packet')['native_packet']
             self.assign('turn-1', native)
+        if stop_after_assignment:
+            return 'turn-1'
         current = 'turn-1'
         route = self.store.snapshot()['records']['review_route']['route']
         for number in range(1, 40):
             packet = self.read_packet(current)
+            if stop_when_full and 'reading_turn' in packet:
+                assigned = self.store.snapshot()['records']['review_assignment'][current]
+                _, _, retained = v7.read_bound_state(self.artifacts, assigned, packet)
+                if (retained['latest_notes'] is not None
+                        and len(retained['latest_notes']) == retained['allowances']['notes']
+                        and all(row['used'] == row['characters'] for row in retained['allowances']['targets'])):
+                    return current
             if 'reading_final' in packet:
                 assignment = self.store.snapshot()['records']['review_assignment'][current]
                 plan, _, state = v7.read_bound_state(self.artifacts, assignment, packet)
@@ -1028,7 +1037,7 @@ class NoticeRoomTests(unittest.TestCase):
         reserve_values(skeleton['native'], ('scientific_context',), fields['minimum'])
         return cost + excess
 
-    def check_final_wire_case(self, fixture, records, native, admission, *, pending=False, carried=False):
+    def check_final_wire_case(self, fixture, records, native, admission, *, pending=False, carried=False, unread=False):
         from research_harness import review_prompt_paragraphs as paragraphs
         from research_harness.operations import text
         plan = copy.deepcopy(admission['capacity_plan'])
@@ -1105,9 +1114,15 @@ class NoticeRoomTests(unittest.TestCase):
         self.assertLessEqual(after, bound)
         comparison = capacity.describe_plan_preflight(records, fixture.route, request, plan, 'final')['plan_comparison']
         self.assertTrue(comparison['fits'], comparison)
+        if unread:
+            from test_openness_unread_final import UnreadFrameTests
+            UnreadFrameTests().check_unread_wire_case(fixture, logical, identifier, inventory, state, plan, limits)
         return dict(level=level, envelope=envelope, without_notice_margin=bound - 47000 - before, margin=bound - after)
 
     def test_t2_every_admitted_count_at_floor_and_highest_level_has_reserved_wire_room(self):
+        self.run_final_wire_matrix()
+
+    def run_final_wire_matrix(self, *, unread=False):
         from test_review_capacity_closure import build_capacity_records
         from test_review_output_profile import build_row
         fixture = turn_fixtures.TurnPacketTests()
@@ -1148,7 +1163,7 @@ class NoticeRoomTests(unittest.TestCase):
                             self.assertEqual(caught.exception.code, 'review_route_capacity_below_floor')
                         endpoints = [endpoints[0], (count, native, admission)] if endpoints else [(count, native, admission)]
                         with self.subTest(level=level, labels=label_set, targets=count):
-                            result = self.check_final_wire_case(fixture, records, native, admission)
+                            result = self.check_final_wire_case(fixture, records, native, admission, unread=unread)
                             margins.append(result)
                     else:
                         self.fail('The fixture must reach its first unadmitted target count.')
@@ -1157,7 +1172,7 @@ class NoticeRoomTests(unittest.TestCase):
                         for pending, carried in ((True, False), (False, True), (True, True)):
                             with self.subTest(level=level, labels=label_set, targets=targets, pending=pending, carried=carried):
                                 margins.append(self.check_final_wire_case(fixture, records, native, admission,
-                                    pending=pending, carried=carried))
+                                    pending=pending, carried=carried, unread=unread))
                 if margins:
                     summaries.append(dict(level=level, labels=label_set, maximum=count - 1, cases=len(margins),
                         maximum_envelope=max(row['envelope'] for row in margins),
@@ -1246,10 +1261,10 @@ class NoticeRoomTests(unittest.TestCase):
         final = v7.build_turn_packet(fixture.artifacts, fixture.route, fixture.packet, 'chain', 2,
             inventory, state, plan, capacity.derive_plan_task_limits(plan, 'final'), 'final')
         for kind, value, expected_packet, expected_prompt, expected_without_plan in (
-            ('reading', packet, '55783626e8fb12869c6fee198c0bdd5d83d1e6702f6ce5ffb4ff15b73c92101e',
+            ('reading', packet, '20d60f244b35fd566a23df8ecd927702ff794ad6ec42922c932ae0f3deb908c3',
              '1ee257be7dc40a135dce006f8d2911744a22f925488252d31992c788a4dce50c',
              '73dbac96ae90f5726bf1fbaf9e8d5194e27a61e624c698243478cddb3accda7e'),
-            ('final', final, '09c85ff3f9ceb8f145651dcfe4495b9a1956a572d451e177cfe42a6f13375f7e',
+            ('final', final, 'bbdb8aed18c37c99573d19d108085f38b8f8dcce6d8c28ec4db8aa1f788f36cb',
              'aa25b66defa740bc21346b3a8c6dabe2d7a305b1468f39a70707a149fbecc675',
              '44874553d13b5c6d4ae31c7c9fc671fddc7f3b2504b4db88c61637757068600b')):
             with self.subTest(kind=kind):

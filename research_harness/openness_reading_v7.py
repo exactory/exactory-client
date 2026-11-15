@@ -129,6 +129,7 @@ def list_target_labels(native):
 
 
 UNREAD_PACKET_CHARACTERS = 30000
+UNREAD_CORE_CHARACTERS = 1500
 UNREAD_FINAL_MESSAGE = 'Assign the final over the unread ranges after the last provider-refused sequence at the reading floor.'
 
 
@@ -212,11 +213,19 @@ def describe_unread_packet(artifacts, state, *, route=None, allowance=None):
         count=len(value['rows']), rows=[], omitted=len(value['rows']))
     for row in value['rows']:
         candidate = dict(result, rows=result['rows'] + [row], omitted=result['omitted'] - 1)
-        if (len(serialize_record(candidate).decode('utf-8')) > UNREAD_PACKET_CHARACTERS
-                or allowance is not None and capacity.measure_capacity_value(route, candidate) > allowance):
+        size = (capacity.measure_capacity_value(route, candidate) if route is not None
+                else len(serialize_record(candidate).decode('utf-8')))
+        if (size > UNREAD_PACKET_CHARACTERS
+                or allowance is not None and compute_unread_rows_charge(route, candidate) > allowance):
             break
         result = candidate
     return result
+
+
+def compute_unread_rows_charge(route, unread):
+    """Charge the rows as material; the final frame holds the required metadata."""
+    return (capacity.measure_capacity_value(route, unread['rows'])
+            - capacity.measure_capacity_value(route, []))
 
 
 def _read_unread_history(records, unread):
@@ -459,7 +468,7 @@ def measure_turn_frames(route, native, *, fixed_bounds=None):
             handles = [row['handle'] for row in labels]
             fields.update(allowances=compute_allowance_rows_bound(route, handles),
                           page=capacity.measure_capacity_value(route, dict(number=1, pages=1, targets=handles)),
-                          refusal_paragraph=NOTICE_PARAGRAPH_CHARACTERS)
+                          refusal_paragraph=NOTICE_PARAGRAPH_CHARACTERS, unread=UNREAD_CORE_CHARACTERS)
         else:
             fields['affected_notes_index'] = AFFECTED_INDEX_CHARACTERS * 2
         # Bound envelope keys, capacity/allowance scalars, handles and counters;
@@ -1138,7 +1147,7 @@ def _pack_deliveries(artifacts, route, inventory, state, allowance, requests, *,
 
 
 def build_turn_packet(artifacts, route, logical, chain, number, inventory, state, plan, limits, kind,
-                      *, requests=()):
+                      *, requests=(), notice=None):
     """Render a bounded v7 turn from its pinned artifacts and current allowance."""
     native = logical['native']
     binding = _describe_binding(native, chain, number, inventory, state, plan)
@@ -1213,16 +1222,14 @@ def build_turn_packet(artifacts, route, logical, chain, number, inventory, state
         material = {key: binding[key] for key in FINAL_MATERIAL_FIELDS}
         unread_cost, extra_room = 0, 0
         if 'unread' in state:
-            # No-notice requests already reserve 45k in the immutable plan.
-            # Share that fixed frame with unread metadata and pages; leave 2k
-            # for the new paragraph and binding keys. Notice-bearing requests
-            # use their separately measured, smaller task bound instead.
-            if 'level_material_allowance' not in limits:
-                extra_room = max(0, plan['task']['final']['notice_characters'] - 2000)
+            # The required unread metadata is in the frame. Its rows and pages
+            # share the remaining material room and the unused notice reserve.
+            notice_cost = capacity.measure_capacity_value(route, notice) if notice else 0
+            extra_room = plan['task']['final']['notice_characters'] - notice_cost
             room = limits['material_allowance'] + extra_room - _measure_final_material(route, material)
             binding['unread'] = describe_unread_packet(artifacts, state, route=route,
                 allowance=room - (8000 if requests else 0))
-            unread_cost = capacity.measure_capacity_value(route, binding['unread'])
+            unread_cost = compute_unread_rows_charge(route, binding['unread'])
         used = _measure_final_material(route, material) + unread_cost
         for note in (reversed(state['notes'][:-1]) if not requests else ()):
 
@@ -1776,7 +1783,7 @@ def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_
         limits['answer_bound'] = max(plan['task']['final']['smallest_answer_bound'],
                                     frozen['reading_final']['capacity']['answer_bound'] // 2)
     packet = build_turn_packet(artifacts, route, logical, prior['reading_chain']['first_assignment_id'],
-                               number, inventory, state, plan, limits, kind, requests=requests)
+                               number, inventory, state, plan, limits, kind, requests=requests, notice=notice)
     if notice:
         from .review_refusal_notice import attach_refusal_notice
         packet = attach_refusal_notice(packet, notice)
@@ -1817,7 +1824,7 @@ def prepare_refusal_assignment(records, artifacts, value, revision, prior, froze
                                                  notice_characters=compute_notice_material_charge(kind, notice))
         try:
             packet = build_turn_packet(artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
-                inventory, state, plan, limits, kind, requests=state.get('pending_requests', []))
+                inventory, state, plan, limits, kind, requests=state.get('pending_requests', []), notice=notice)
         except ResearchError as error:
             if error.code != 'review_route_capacity_plan_violated' or error.details.get('kind') != 'final':
                 raise
@@ -2095,7 +2102,8 @@ def _verify_turn_binding(records, artifacts, first, assignment, packet, native, 
     logical = dict(protocol=protocol.PROTOCOL, role=first['role'], reviewer_id=first['reviewer_id'],
                    dossier_id=first['dossier_id'], native=native)
     expected = build_turn_packet(artifacts, route, logical, first['id'], number, inventory, state, plan,
-                                 limits, kind, requests=state.get('pending_requests', []))
+                                 limits, kind, requests=state.get('pending_requests', []),
+                                 notice=packet['output_refusal'] if refusal else None)
     if refusal:
         from .review_refusal_notice import attach_refusal_notice
         expected = attach_refusal_notice(expected, packet['output_refusal'])

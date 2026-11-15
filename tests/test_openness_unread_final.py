@@ -51,6 +51,9 @@ class UnreadFinalSupport(OpennessReadingCase):
                 following = 'refused' if index + 1 == self.completed_prefix else 'read-%d' % (index + 2)
                 self.assign(following, native, prior=head)
                 head = following
+        return self.exhaust_head(native, head)
+
+    def exhaust_head(self, native, head):
         # Only the wait clock is advanced; every planned run and replacement is real.
         class LaterClock(failures.datetime):
             @classmethod
@@ -769,7 +772,7 @@ class UnreadCompatibilityTests(unittest.TestCase):
     def test_no_unread_v7_final_and_prompt_keep_the_frozen_bytes(self):
         from test_openness_reading_v7_refusal import NoticeRoomTests
         fixture = NoticeRoomTests()
-        fixture.test_no_notice_reading_and_final_packet_and_prompt_digests_stay_frozen()
+        fixture.test_t7_no_notice_packets_change_only_plan_digest_and_keep_prompt_hashes()
         self.assertEqual(reading.NEW_PROBLEM_CHAIN_PROTOCOLS, (reading.PROTOCOL_V6,))
 
     def test_without_unread_validator_keeps_existing_v6_v7_and_single_turn_rules(self):
@@ -796,3 +799,245 @@ class UnreadCompatibilityTests(unittest.TestCase):
                     else:
                         with self.assertRaises(ResearchError):
                             validate_finding(supplied, output)
+
+
+class UnreadNoticeReplacementTests(UnreadFinalSupport):
+    """U-T1/U-T2: full grants and a large real-shape unread set share the notice reserve."""
+    text_sizes = (1500000,)
+
+    def prepare_filled_unread(self):
+        from test_openness_reading_v7_refusal import FullGrantFinalRefusalTests
+        original = v7.build_inventory
+
+        def build(records, artifacts, native, *, review=None):
+            result = original(records, artifacts, native, review=review)
+            inventory = result['inventory']
+            by_digest = {row['sha256']: row for row in inventory['material']}
+            for index in range(400):
+                content = ('%06d' % index + 'r' * 19994).encode('utf-8')
+                reference = v7.describe_artifact(content, 'text/plain')
+                unit = v7._append_unit(inventory, dict(kind='record', record_kind='synthetic_required',
+                    record_id='required-%d' % index, artifact=reference), content)
+                v7._bind_body(inventory, by_digest, unit, reference, content, 'record')
+                result['bodies'][reference['sha256']] = content
+            return result
+
+        enabled = patch.object(v7, 'build_inventory', side_effect=build)
+        enabled.start()
+        self.addCleanup(enabled.stop)
+        head = FullGrantFinalRefusalTests.prepare_full_final(self, stop_when_full=True)
+        native = self.store.snapshot()['records']['review_assignment'][head]['context']['native_packet']
+        _, final, packet = self.exhaust_head(native, head)
+        unread = packet['reading_final']['unread']
+        value = json.loads(self.artifacts.read(unread['artifact']))
+        self.assertGreater(len(problem_openness.serialize_record(value)), 30000)
+        self.assertGreater(unread['omitted'], 0)
+        from research_harness import review_route_capacity as capacity
+        route = self.store.snapshot()['records']['review_route']['route']
+        self.assertGreater(v7._measure_final_material(route,
+            {key: packet['reading_final'][key] for key in v7.FINAL_MATERIAL_FIELDS}), 476000)
+        return final, packet
+
+    def record_complete_set(self, final, packet):
+        self.invoke(final['id'], self.build_v7_finding(packet, 'x1'))
+        records = self.store.snapshot()['records']
+        self.assertTrue(reading.verify_chain(records, self.artifacts, records['review_assignment'][final['id']]))
+        result = self.mutate(self.load_problem_module().record_openness, dict(assignment_id=final['id']))['result']
+        unread = packet['reading_final']['unread']
+        self.assertEqual(result['outcome'], 'unresolved')
+        self.assertEqual(result['unread']['rows'], json.loads(self.artifacts.read(unread['artifact']))['rows'])
+        self.assertGreater(len(result['unread']['rows']), len(unread['rows']))
+
+    def replace_refused_final(self, final, packet, characters):
+        from test_openness_reading_v7_refusal import FullGrantFinalRefusalTests
+        from research_harness import review_route_capacity as capacity
+        FullGrantFinalRefusalTests.refuse_final(self, final['id'], characters)
+        records = self.store.snapshot()['records']
+        action = plan_next(records, self.artifacts, final['id'])
+        self.assertEqual(action['state'], 'replace', action)
+        assigned = self.mutate(protocol.record_assignment, action['payload'])['result']
+        following = self.read_packet(assigned['id'])
+        before, after = packet['reading_final'], following['reading_final']
+        for key in v7.FINAL_MATERIAL_FIELDS:
+            self.assertEqual(after[key], before[key], key)
+        for key in ('count', 'causes', 'artifact', 'digest'):
+            self.assertEqual(after['unread'][key], before['unread'][key], key)
+        full_rows = json.loads(self.artifacts.read(after['unread']['artifact']))['rows']
+        self.assertEqual(after['unread']['rows'], full_rows[:len(after['unread']['rows'])])
+        request = protocol.build_assignment_request(self.store.snapshot()['records'], self.artifacts, assigned)
+        plan = capacity.read_chain_capacity_plan(self.artifacts, assigned)
+        self.assertTrue(capacity.describe_plan_preflight(records, records['review_route']['route'],
+            request, plan, 'final')['plan_comparison']['fits'])
+        return assigned, following
+
+    def test_u_t5_real_full_grant_fixture_preserves_the_final_level_and_allocation(self):
+        from research_harness import review_route_capacity as capacity
+        from research_harness.native_review import load_packet
+        from test_openness_reading_v7_refusal import FullGrantFinalRefusalTests
+        from test_review_output_profile import build_row
+        head = FullGrantFinalRefusalTests.prepare_full_final(self, stop_after_assignment=True)
+        records = self.store.snapshot()['records']
+        assignment = records['review_assignment'][head]
+        route = records['review_route']['route']
+        plan = capacity.read_chain_capacity_plan(self.artifacts, assignment)
+        native = load_packet(self.artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
+        priors = [build_row(level=None, thinking=1000, count=8),
+                  build_row(kind='final', level=None, thinking=1000, count=8)]
+        with patch.object(v7, 'UNREAD_CORE_CHARACTERS', 0), patch.object(capacity,
+                'read_profile_priors', return_value=priors):
+            admission = v7.check_v7_admission(records, self.artifacts, route, native)
+        self.assertEqual(admission['state'], 'record')
+        previous = admission['capacity_plan']
+        self.assertEqual(plan['task']['final']['material_allowance'], 480000)
+        self.assertEqual(previous['task']['final']['material_allowance'], plan['task']['final']['material_allowance'])
+        for key in ('page_room', 'carried_turn_pool', 'notes', 'targets'):
+            self.assertEqual(previous['allocation'][key], plan['allocation'][key], key)
+        self.assertEqual(plan['frame']['final']['bound'] - previous['frame']['final']['bound'], 1500)
+
+    def test_u_t1_short_and_long_refused_full_unread_final_replace_and_record_the_complete_set(self):
+        final, packet = self.prepare_filled_unread()
+        short, short_packet = self.replace_refused_final(final, packet, 4000)
+        long, long_packet = self.replace_refused_final(short, short_packet, 100000)
+        self.assertEqual(short_packet['output_refusal']['form'], 'whole')
+        self.assertEqual(long_packet['output_refusal']['form'], 'bounded')
+        self.assertLess(len(long_packet['reading_final']['unread']['rows']),
+                        len(short_packet['reading_final']['unread']['rows']))
+        self.record_complete_set(long, long_packet)
+
+    def test_u_t2_refused_pending_unread_page_replays_the_same_cursor_and_records(self):
+        final, packet = self.prepare_filled_unread()
+        answer = self.build_v7_answer(packet)
+        answer['notes'] = packet['reading_final']['notes']
+        answer['passage_requests'] = [dict(id='unread-page', kind='list_page', list='unread', after=None)]
+        self.invoke(final['id'], answer)
+        action = plan_next(self.store.snapshot()['records'], self.artifacts, final['id'])
+        paged = self.mutate(protocol.record_assignment, action['payload'])['result']
+        packet = self.read_packet(paged['id'])
+        page = json.loads(packet['evidence'][0]['content'])
+        self.assertEqual((page['list'], page['after']), ('unread', None))
+        replaced, following = self.replace_refused_final(paged, packet, 100000)
+        repeated = json.loads(following['evidence'][0]['content'])
+        self.assertEqual((repeated['list'], repeated['after']), (page['list'], page['after']))
+        self.assertTrue(repeated['rows'])
+        self.assertEqual(repeated['rows'], page['rows'][:len(repeated['rows'])])
+        self.record_complete_set(replaced, following)
+
+
+class UnreadFrameTests(unittest.TestCase):
+    def build_unread_value(self, artifacts):
+        reference = artifacts.put(b'A synthetic unread text.', 'text/plain')
+        value = dict(rows=[dict(id='u1:1:%d' % index, unit='u1', label='x' * 120, part=index + 1,
+            start=index, end=index + 1, characters=1, cause='not_delivered', artifact=reference)
+            for index in range(300)], attempts=[])
+        return dict(artifact=artifacts.put_json(value), digest=digest(value))
+
+    def check_unread_wire_case(self, fixture, logical, identifier, inventory, state, plan, limits):
+        from research_harness import review_route_capacity as capacity, review_prompt_paragraphs as paragraphs
+        from test_openness_reading_v7_refusal import NoticeRoomTests
+        state = dict(state, unread=self.build_unread_value(fixture.artifacts))
+        page_request = dict(id='unread-page', kind='list_page', list='unread', after=None)
+        bound = plan['task']['final']['request_bound']['text_characters']
+        base = protocol.canonical_prompt('native_math', reading_stage='final', reading_protocol=v7.PROTOCOL)
+        for size in (45000, 30000, 0):
+            notice = NoticeRoomTests().build_bounded_notice(fixture.artifacts, route=fixture.route)
+            if 0 < size < 45000:
+                notice['refused'] = notice['refused'][:1]
+                notice['output_ref']['artifact']['path'] += 'x' * (size - capacity.measure_capacity_value(fixture.route, notice))
+            if size:
+                self.assertEqual(capacity.measure_capacity_value(fixture.route, notice), size)
+            else:
+                notice = None
+            packet = v7.build_turn_packet(fixture.artifacts, fixture.route, logical, identifier, 999999999,
+                inventory, state, plan, limits, 'final', requests=[page_request], notice=notice)
+            binding = packet['reading_final']
+            self.assertEqual(binding['unread']['count'], 300)
+            self.assertEqual(plan['frame']['final']['fields']['unread'], v7.UNREAD_CORE_CHARACTERS)
+            versions = [paragraphs.UNREAD_FINAL_PARAGRAPH_VERSION]
+            if size:
+                if size == 45000:
+                    self.assertEqual(binding['unread']['rows'], [])
+                    self.assertEqual(packet['evidence'], [])
+                    prompt = paragraphs.append_prompt_paragraphs(base, 'native_math', versions=versions)
+                    request = protocol.transport.request_body(fixture.route, prompt['text'], packet)
+                    self.assertLessEqual(capacity.measure_request(fixture.route, request)['text_characters'], bound - 47000)
+                else:
+                    self.assertTrue(packet['evidence'])
+                from research_harness.review_refusal_notice import attach_refusal_notice
+                packet = attach_refusal_notice(packet, notice)
+                versions.append(paragraphs.REFUSAL_PARAGRAPH_VERSIONS['bounded'])
+            else:
+                self.assertTrue(packet['evidence'])
+                member_size = capacity.measure_capacity_value(fixture.route, binding['unread'])
+                self.assertLessEqual(member_size, 30000)
+                self.assertGreater(member_size, 29000)
+            prompt = paragraphs.append_prompt_paragraphs(base, 'native_math', versions=versions)
+            request = protocol.transport.request_body(fixture.route, prompt['text'], packet)
+            self.assertLessEqual(capacity.measure_request(fixture.route, request)['text_characters'], bound)
+
+    def test_u_t3_every_admitted_count_and_label_set_keeps_unread_and_notice_within_the_bound(self):
+        from test_openness_reading_v7_refusal import NoticeRoomTests
+        NoticeRoomTests().run_final_wire_matrix(unread=True)
+
+    def test_u_t4_largest_unread_core_with_key_and_paragraph_fits_the_frame(self):
+        from research_harness import review_route_capacity as capacity, review_prompt_paragraphs as paragraphs
+        artifacts, route, _, _, state, _ = UnreadArtifactTests().build_fixture(units=2)
+        core = v7.describe_unread_packet(artifacts, state, route=route, allowance=0)
+        largest = 9999999999999999999
+        core.update(count=largest, omitted=largest,
+            causes={cause:dict(rows=largest, characters=largest) for cause in core['causes']})
+        core['artifact']['size'] = largest
+        self.assertEqual(core['rows'], [])
+        charge = capacity.measure_capacity_value(route, dict(unread=core)) + len(paragraphs.UNREAD_FINAL_PROMPT)
+        self.assertLessEqual(charge, v7.UNREAD_CORE_CHARACTERS)
+
+    def test_u_t5_unread_frame_preserves_levels_and_allocation_on_both_fixtures(self):
+        from research_harness import review_route_capacity as capacity
+        from test_review_capacity_closure import build_capacity_records
+        from test_review_output_profile import build_row
+        fixture = turn_fixtures.TurnPacketTests()
+        fixture.setUp()
+        records = build_capacity_records(fixture.route, tokens=487900, capacity_probe=True)
+        for targets, priors in ((3, []), (8, [build_row(level=None, thinking=1000, count=8),
+                build_row(kind='final', level=None, thinking=1000, count=8)])):
+            with self.subTest(targets=targets), patch.object(v7, 'build_inventory', return_value=fixture.built), patch.object(
+                    capacity, 'read_profile_priors', return_value=priors):
+                plans = []
+                for reserve in (0, v7.UNREAD_CORE_CHARACTERS):
+                    with patch.object(v7, 'UNREAD_CORE_CHARACTERS', reserve):
+                        admitted = v7.check_v7_admission(records, fixture.artifacts, fixture.route,
+                                                       turn_fixtures.build_native(targets))
+                        self.assertEqual(admitted['state'], 'record')
+                        plans.append(admitted['capacity_plan'])
+                self.assertEqual(plans[0]['task']['final']['material_allowance'], plans[1]['task']['final']['material_allowance'])
+                for key in ('page_room', 'carried_turn_pool', 'notes', 'targets'):
+                    self.assertEqual(plans[0]['allocation'][key], plans[1]['allocation'][key], key)
+                self.assertEqual(plans[1]['frame']['final']['bound'] - plans[0]['frame']['final']['bound'], 1500)
+
+    def test_unread_rows_yield_free_material_room_to_a_whole_notice_above_the_reserve(self):
+        from research_harness import review_route_capacity as capacity, review_prompt_paragraphs as paragraphs
+        from research_harness.review_refusal_notice import attach_refusal_notice, PROTOCOL
+        fixture = turn_fixtures.TurnPacketTests()
+        fixture.setUp()
+        _, chain = fixture.prepare()
+        plan = capacity.read_chain_capacity_plan(fixture.artifacts, chain)
+        inventory = json.loads(fixture.artifacts.read(chain['inventory']))
+        state = json.loads(fixture.artifacts.read(chain['state']))
+        limits = capacity.derive_plan_task_limits(plan, 'final')
+        state['latest_notes'] = 'n' * (limits['material_allowance'] - 30000)
+        state['unread'] = self.build_unread_value(fixture.artifacts)
+        notice = dict(protocol=PROTOCOL, form='whole', refused=[], refused_output='')
+        notice['refused_output'] = 'x' * (55000 - capacity.measure_capacity_value(fixture.route, notice))
+        self.assertEqual(capacity.measure_capacity_value(fixture.route, notice), 55000)
+        packet = v7.build_turn_packet(fixture.artifacts, fixture.route, fixture.packet, 'chain', 2,
+            inventory, state, plan, limits, 'final', notice=notice)
+        member = packet['reading_final']['unread']
+        self.assertTrue(member['rows'])
+        self.assertLessEqual(v7.compute_unread_rows_charge(fixture.route, member), 20000)
+        self.assertEqual(packet['reading_final']['capacity']['material_allowance'], limits['material_allowance'])
+        packet = attach_refusal_notice(packet, notice)
+        prompt = protocol.canonical_prompt('native_math', reading_stage='final', reading_protocol=v7.PROTOCOL)
+        prompt = paragraphs.append_prompt_paragraphs(prompt, 'native_math', versions=[
+            paragraphs.UNREAD_FINAL_PARAGRAPH_VERSION, paragraphs.REFUSAL_PARAGRAPH_VERSIONS['whole']])
+        request = protocol.transport.request_body(fixture.route, prompt['text'], packet)
+        self.assertLessEqual(capacity.measure_request(fixture.route, request)['text_characters'],
+                             limits['request_bound']['text_characters'])

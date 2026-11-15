@@ -112,7 +112,7 @@ class RatioAndAdmissionTests(unittest.TestCase):
         built = build_inventory(artifacts)
         with patch.object(v7, 'build_inventory', return_value=built), patch.object(
                 capacity, 'read_profile_priors', return_value=[]), patch.object(v7, 'derive_inherited_ratio',
-                return_value=dict(characters_per_token=.5, source=dict(chain='old', attempt='measured'))):
+                return_value=dict(characters_per_token=.51, source=dict(chain='old', attempt='measured'))):
             admission = v7.check_v7_admission({}, artifacts, route, native)
         self.assertEqual(admission['state'], 'record')
         self.assertTrue(any(row['kind'] in ('fixed_field', 'target_page') for row in admission['inventory']['inventory']['units']))
@@ -122,6 +122,25 @@ class RatioAndAdmissionTests(unittest.TestCase):
         from research_harness.review_transport import request_body
         request = request_body(route, canonical_prompt('native_math', reading_stage='reading', reading_protocol=v7.PROTOCOL)['text'], packet)
         self.assertTrue(capacity.describe_plan_preflight({}, route, request, admission['capacity_plan'], 'reading')['plan_comparison']['fits'])
+
+    def test_unread_core_refuses_when_the_final_frame_exceeds_the_measured_text_room(self):
+        route = build_route('codex_cli_v1', 'gpt-6-astra')
+        native = build_native()
+        native['subject']['statement'] = 's' * 90000
+        native['scientific_context']['openness_minimum']['statement'] = 's' * 90000
+        built = build_inventory(self.artifacts)
+        with patch.object(v7, 'build_inventory', return_value=built), patch.object(
+                capacity, 'read_profile_priors', return_value=[]), patch.object(v7, 'derive_inherited_ratio',
+                return_value=dict(characters_per_token=.5, source=dict(chain='old', attempt='measured'))):
+            with patch.object(v7, 'UNREAD_CORE_CHARACTERS', 0):
+                before = v7.check_v7_admission({}, self.artifacts, route, native)
+            after = v7.check_v7_admission({}, self.artifacts, route, native)
+        self.assertEqual(before['state'], 'record')
+        self.assertEqual(before['capacity_plan']['task']['final']['request_bound']['text_characters'], 115431)
+        self.assertEqual((after['state'], after['code']), ('stop', 'review_route_capacity_below_floor'))
+        self.assertEqual(after['details']['reason'], 'fixed_frame')
+        self.assertEqual(after['details']['room'], 115950)
+        self.assertEqual(after['details']['frames']['final']['characters'] + 45000 + 60000, 116931)
 
     def test_same_measurement_does_not_compound_margin_across_three_successors(self):
         self.add_chain('first', ratio=1.36, measured=1.0)
