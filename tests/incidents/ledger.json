@@ -7263,6 +7263,22 @@
         "test_review_composition.FindingFinalCompositionTests.test_incident_five_thousand_decision_rows_fit_serialized_policy_limit",
         "test_review_composition.FindingFinalCompositionTests.test_unresolved_ground_order_and_recorded_refs_are_preserved"
       ]
+    },
+    {
+      "id": "parts-v3-card-rate-and-carried-entry-condensing",
+      "record": "20261112150500-result-review-frame-holds-cited-search-records",
+      "class": "review carried-state capacity",
+      "summary": "Moving cited search records into units requires card budgets that follow text read and condensation when carried entries outgrow a request.",
+      "expected": "Pure helpers use the stored rate and entry sizes, preserve original handles through quarter-summary rounds, and forecast a store-free 10000-unit inventory at thirty input limits for fitting, scoped max-prior and unlisted classes. Packet and series integration remain separate lanes.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_condensing.CondensingTests.test_ten_thousand_entries_fit_ordered_blocks_and_finish",
+        "test_review_condensing.CombinationTests.test_invalid_combinations_refuse_under_shape_check",
+        "test_review_parts_v3_budget.SeriesSimulationTests.test_measured_fits_series_uses_every_allowance_and_finishes",
+        "test_review_parts_v3_budget.SeriesSimulationTests.test_scoped_max_prior_series_uses_every_allowance_and_finishes",
+        "test_review_parts_v3_budget.SeriesSimulationTests.test_unlisted_model_series_uses_every_allowance_and_finishes"
+      ]
     }
   ]
 }
