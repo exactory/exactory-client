@@ -1,4 +1,4 @@
-"""Pure v3 read sizing: divisible content and separately charged card entries.
+"""Pure v3 read sizing: balanced groups, divisible content and reserved entries.
 
 Only the stored plan supplies rates, reserves and levels. Unit rows are unique
 text bodies with handle/characters and an optional ``late`` flag. A read cursor
@@ -7,6 +7,7 @@ is the returned ``next`` value; failed/unselected attempts consume no cursor.
 from fractions import Fraction
 
 from .errors import ResearchError
+from .evidence import digest
 from .review_parts import CARD_CHARACTERS
 from .review_condensing import cut_condensing_blocks, plan_condensing
 from .review_route_capacity import BELOW_FLOOR_MESSAGE
@@ -83,122 +84,238 @@ def compute_content_allocation(plan, delivered_before, delivered_through):
     return _allocate_content(read_content_rate(plan), delivered_before, delivered_through)
 
 
-def _describe_card_allowance(entry, rate, parts):
+def _describe_card_allowance(entry, rate, groups):
     content, late_content = 0, 0
-    for part in parts:
+    for part in groups:
         allocated = _allocate_content(rate, part['delivered_before'], part['delivered_through'])
         content += allocated
         if part.get('late', False):
             late_content += allocated
-    entries = len(parts) * entry
-    normal_entries = sum(not part.get('late', False) for part in parts) * entry
+    entries = len(groups) * entry
+    normal_entries = sum(not part.get('late', False) for part in groups) * entry
     return dict(content_characters=content, entry_characters=entries, characters=content + entries,
                 card_budget=content - late_content, card_reserve=normal_entries,
                 late_unit_reserve=late_content + entries - normal_entries)
 
 
-def compute_card_allowance(plan, parts):
+def compute_card_allowance(plan, groups):
     """Return content, full entries and their three separate reserve charges.
 
-    This arithmetic never clamps to the answer cap. size_read_turn chooses a
-    fitting parts and card count. Each part states its series delivered_before
-    and delivered_through; cached content allocations are not trusted. Parts
-    marked late charge their content and full entry to the late reserve.
+    This arithmetic never clamps to the answer cap. Each group states its series
+    delivered_before and delivered_through; cached allocations are not trusted.
+    Late groups charge their content and full entry to the late reserve.
     """
     return _describe_card_allowance(plan['allocation']['entry_sizes']['card'], read_content_rate(plan),
-                                    parts)
+                                    groups)
 
 
-def _can_pay_card(plan, cursor, content, late):
-    allocation = plan['allocation']
-    entry = allocation['entry_sizes']['card']
-    if late:
-        return cursor['late_unit_reserve'] + content + entry <= allocation['late_unit_reserve']
-    return (cursor['card_count'] < allocation['largest_card_count']
-            and cursor['card_reserve'] + entry <= allocation['card_reserve']
-            and cursor['card_budget'] + content <= allocation['card_budget'])
+def _describe_read_window(inventory, cursor, level):
+    """Measure the available prefix and its initial/late ownership boundary."""
+    index, offset = cursor['unit_index'], cursor['unit_offset']
+    late = inventory[index].get('late', False)
+    characters, boundary = 0, None
+    while index < len(inventory):
+        unit = inventory[index]
+        if unit.get('late', False) != late and boundary is None:
+            boundary = characters
+        characters += min(unit['characters'] - offset, level - characters)
+        index, offset = index + 1, 0
+        if characters == level:
+            break
+    return characters, boundary, late
 
 
-def _size_card(plan, rate, cursor, unit, material_left, answer_left, card_bound):
-    """Use available room without making a nonfinal part smaller than the floor."""
-    remaining = unit['characters'] - cursor['unit_offset']
-    floor = _read_floor(plan)
-    entry = plan['allocation']['entry_sizes']['card']
-    ceiling = min(answer_left, card_bound)
-    if remaining == 0:
-        return 0 if entry <= ceiling and _can_pay_card(plan, cursor, 0, unit.get('late', False)) else None
-    minimum = min(remaining, floor)
-    if material_left < minimum:
+def _limit_content_characters(rate, before, maximum, content_bound):
+    """Invert the integer interval allocation, including its rounding phase."""
+    if content_bound < 0:
+        return -1
+    if rate == 0:
+        return maximum
+    start = _allocate_content(rate, 0, before)
+    threshold = Fraction(start + content_bound + 1) / rate
+    last = (threshold.numerator + threshold.denominator - 1) // threshold.denominator - 1
+    return min(maximum, last - before)
+
+
+def _balance_groups(rate, before, characters, count, card_bound, entry, boundary=None, initial_count=None):
+    """Balance lengths exactly; a small DP resolves rounding and ownership."""
+    width, long_count = divmod(characters, count)
+    if boundary is None:
+        lengths = [width + 1] * long_count + [width] * (count - long_count)
+    else:
+        initial_long = boundary - initial_count * width
+        later_long = long_count - initial_long
+        if not 0 <= initial_long <= initial_count or not 0 <= later_long <= count - initial_count:
+            return None
+        lengths = ([width + 1] * initial_long + [width] * (initial_count - initial_long) +
+                   [width + 1] * later_long + [width] * (count - initial_count - later_long))
+    at = before
+    for length in lengths:
+        if _allocate_content(rate, at, at + length) + entry > card_bound:
+            break
+        at += length
+    else:
+        return lengths
+    # At (i,j), i groups and j longer groups have consumed i*width+j characters.
+    layers = [{0: None}]
+    for index in range(count):
+        following = {}
+        for used_long in layers[-1]:
+            start = index * width + used_long
+            for extra in (0, 1):
+                next_long = used_long + extra
+                if next_long > long_count or long_count - next_long > count - index - 1:
+                    continue
+                end = start + width + extra
+                if boundary is not None:
+                    if index < initial_count and end > boundary or index >= initial_count and start < boundary:
+                        continue
+                    if index + 1 == initial_count and end != boundary:
+                        continue
+                if _allocate_content(rate, before + start, before + end) + entry <= card_bound:
+                    following.setdefault(next_long, (used_long, width + extra))
+        if not following:
+            return None
+        layers.append(following)
+    if long_count not in layers[-1]:
         return None
-    low, high = minimum - 1, min(remaining, material_left)
-    while low < high:
-        size = (low + high + 1) // 2
-        content = _allocate_content(rate, cursor['delivered'], cursor['delivered'] + size)
-        fits = (content + entry <= ceiling
-                and _can_pay_card(plan, cursor, content, unit.get('late', False)))
-        if fits:
-            low = size
+    result, used_long = [], long_count
+    for layer in reversed(layers[1:]):
+        used_long, length = layer[used_long]
+        result.append(length)
+    return list(reversed(result))
+
+
+def _choose_groups(plan, rate, cursor, maximum, boundary, late, bounds):
+    """Maximize material first and card count second, using only reserved room."""
+    allocation = plan['allocation']
+    entry, floor = allocation['entry_sizes']['card'], _read_floor(plan)
+    turn_bound, card_bound = bounds['turn_characters'], bounds['card_characters']
+    normal_slots = min(allocation['largest_card_count'] - cursor['card_count'],
+                       (allocation['card_reserve'] - cursor['card_reserve']) // entry)
+    normal_content = allocation['card_budget'] - cursor['card_budget']
+    late_room = allocation['late_unit_reserve'] - cursor['late_unit_reserve']
+    before = cursor['delivered']
+    # A homogeneous prefix also covers the short final tail of an ownership epoch.
+    limit = maximum if boundary is None else boundary
+    slots = late_room // entry if late else normal_slots
+    upper = min(max(1, limit // floor), turn_bound // entry, slots)
+    best = None
+    for count in range(upper, 0, -1):
+        budget = min(turn_bound - count * entry, count * (card_bound - entry),
+                     late_room - count * entry if late else normal_content)
+        material = _limit_content_characters(rate, before, limit, budget)
+        minimum = count * floor if count > 1 else min(floor, limit)
+        while material >= minimum:
+            lengths = _balance_groups(rate, before, material, count, card_bound, entry)
+            if lengths is not None:
+                if best is None or (material, count) > best[:2]:
+                    best = (material, count, lengths)
+                break
+            material -= 1
+        if best is not None and best[0] == limit:
+            break
+    if boundary is None or late or boundary == 0:
+        return best
+    # A crossing layout has h initial groups. Its balanced base width is one of
+    # floor(boundary/h) and floor((boundary-1)/h); only <=k late extras remain.
+    initial_content = _allocate_content(rate, before, before + boundary)
+    upper = min(maximum // floor, turn_bound // entry)
+    for count in range(upper, 1, -1):
+        for initial_count in range(1, min(count - 1, normal_slots) + 1):
+            if initial_content > normal_content:
+                continue
+            for width in sorted({boundary // initial_count, (boundary - 1) // initial_count}, reverse=True):
+                if width < floor:
+                    continue
+                initial_long = boundary - initial_count * width
+                if not 0 <= initial_long <= initial_count:
+                    continue
+                for later_long in range(count - initial_count, -1, -1):
+                    long_count = initial_long + later_long
+                    if long_count >= count:
+                        continue
+                    material = count * width + long_count
+                    if material > maximum or best is not None and (material, count) <= best[:2]:
+                        continue
+                    content = _allocate_content(rate, before, before + material)
+                    if content + count * entry > turn_bound:
+                        continue
+                    if content - initial_content + (count - initial_count) * entry > late_room:
+                        continue
+                    lengths = _balance_groups(rate, before, material, count, card_bound, entry,
+                                               boundary, initial_count)
+                    if lengths is not None:
+                        best = (material, count, lengths)
+        if best is not None and best[:2] == (maximum, count):
+            break
+    return best
+
+
+def _advance_group(inventory, cursor, characters):
+    """Return compact endpoints and the next cursor, retaining zero-size units."""
+    index, offset = cursor['unit_index'], cursor['unit_offset']
+    first_index = index
+    first = dict(unit=inventory[index]['handle'], offset=offset)
+    late = inventory[index].get('late', False)
+    remaining = characters
+    last = first
+    last_index = index
+    while index < len(inventory) and inventory[index].get('late', False) == late:
+        unit = inventory[index]
+        available = unit['characters'] - offset
+        if remaining == 0 and available > 0:
+            break
+        take = min(available, remaining)
+        last, last_index = dict(unit=unit['handle'], offset=offset + take), index
+        remaining -= take
+        if take == available:
+            index, offset = index + 1, 0
         else:
-            high = size - 1
-    return None if low < minimum else low
+            offset += take
+            break
+    return dict(first=first, last=last, unit_count=last_index - first_index + 1, late=late), \
+        dict(unit_index=index, unit_offset=offset)
 
 
 def size_read_turn(plan, level, inventory, *, position=None):
-    """Size one read under its pinned material/answer bounds and reserved entries.
+    """Return maximal material in balanced, separately funded groups.
 
-    inventory is the ordered unique inventory. position is the previous next
-    cursor, or None at the start. Return None at its end. Every part has at least
-    the lowest read level in characters except its unit's last part. Thus the
-    number of cards cannot exceed the stored sum of ceil(unit size / floor),
-    even after repeated division.
-    Late units are appended and charged entirely to late_unit_reserve.
+    cards are group records, with constant-size first/last endpoints instead of
+    a list of unit handles. Last offsets are exclusive. position is the previous
+    next cursor. Initial units precede late units; a final ownership-epoch tail
+    may be shorter than the floor when it cannot share a balanced crossing turn.
     """
     if type(level) is not int or level <= 0:
         raise ResearchError('invalid_input', 'The read material allowance must be a positive integer.')
-    bounds = describe_card_bounds(plan, level)
-    turn_bound = bounds['turn_characters']
-    rate = read_content_rate(plan)
+    bounds, rate = describe_card_bounds(plan, level), read_content_rate(plan)
     cursor = dict(unit_index=0, unit_offset=0, delivered=0, card_count=0,
                   card_budget=0, card_reserve=0, late_unit_reserve=0)
     cursor.update(position or {})
     if cursor['unit_index'] == len(inventory):
         return None
-    before = cursor['delivered']
-    cards, material, answer = [], 0, 0
+    maximum, boundary, late = _describe_read_window(inventory, cursor, level)
+    chosen = _choose_groups(plan, rate, cursor, maximum, boundary, late, bounds)
+    if chosen is None:
+        raise ResearchError('invalid_input', READ_TURN_CANNOT_FIT_MESSAGE,
+                            dict(unit=inventory[cursor['unit_index']]['handle'], level=level, position=cursor))
+    before, cards = cursor['delivered'], []
     entry = plan['allocation']['entry_sizes']['card']
-    while cursor['unit_index'] < len(inventory):
-        unit = inventory[cursor['unit_index']]
-        size = _size_card(plan, rate, cursor, unit, level - material, turn_bound - answer,
-                          bounds['card_characters'])
-        if size is None:
-            if not cards:
-                raise ResearchError('invalid_input', READ_TURN_CANNOT_FIT_MESSAGE,
-                                    dict(unit=unit['handle'], level=level, position=cursor))
-            break
-        start = cursor['unit_offset']
-        through = cursor['delivered'] + size
-        content = _allocate_content(rate, cursor['delivered'], through)
-        late = unit.get('late', False)
-        cards.append(dict(handle='c/' + unit['handle'] + '/' + str(start), unit=unit['handle'],
-                          start=start, end=start + size, unit_characters=size, late=late,
-                          delivered_before=cursor['delivered'], delivered_through=through,
+    for length in chosen[2]:
+        metadata, following = _advance_group(inventory, cursor, length)
+        start, through = cursor['delivered'], cursor['delivered'] + length
+        content = _allocate_content(rate, start, through)
+        identity = dict(metadata, delivered_before=start, delivered_through=through)
+        cards.append(dict(identity, handle='c' + digest(identity), unit_characters=length,
                           content_characters=content, entry_characters=entry, characters=content + entry))
-        if late:
-            cursor['late_unit_reserve'] += content + entry
-        else:
-            cursor['card_count'] += 1
-            cursor['card_budget'] += content
-            cursor['card_reserve'] += entry
-        material += size
-        answer += content + entry
+        cursor.update(following)
         cursor['delivered'] = through
-        cursor['unit_offset'] += size
-        if cursor['unit_offset'] == unit['characters']:
-            cursor['unit_index'] += 1
-            cursor['unit_offset'] = 0
-    return dict(delivered_before=before, delivered_through=cursor['delivered'], unit_characters=material,
-                cards=cards, allowance=_describe_card_allowance(entry, rate, cards),
-                next=cursor)
+    allowance = _describe_card_allowance(entry, rate, cards)
+    cursor['card_count'] += sum(not group['late'] for group in cards)
+    for reserve in ('card_budget', 'card_reserve', 'late_unit_reserve'):
+        cursor[reserve] += allowance[reserve]
+    return dict(delivered_before=before, delivered_through=cursor['delivered'], unit_characters=chosen[0],
+                cards=cards, allowance=allowance, next=cursor)
 
 
 def plan_read_turns(plan, inventory, *, material_allowance=None):
