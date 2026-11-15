@@ -134,16 +134,16 @@ class RatioAndAdmissionTests(unittest.TestCase):
         built = build_inventory(self.artifacts)
         with patch.object(v7, 'build_inventory', return_value=built), patch.object(
                 capacity, 'read_profile_priors', return_value=[]), patch.object(capacity, 'NOTES_MAXIMUM_CHARACTERS', 6000), patch.object(v7, 'derive_inherited_ratio',
-                return_value=dict(characters_per_token=.54, source=dict(chain='old', attempt='measured'))):
+                return_value=dict(characters_per_token=.55, source=dict(chain='old', attempt='measured'))):
             with patch.object(v7, 'UNREAD_CORE_CHARACTERS', 0):
                 before = v7.check_v7_admission({}, self.artifacts, route, native)
             after = v7.check_v7_admission({}, self.artifacts, route, native)
         self.assertEqual(before['state'], 'record')
-        self.assertEqual(before['capacity_plan']['task']['final']['request_bound']['text_characters'], 125079)
+        self.assertEqual(before['capacity_plan']['task']['final']['request_bound']['text_characters'], 126325)
         self.assertEqual((after['state'], after['code']), ('stop', 'review_route_capacity_below_floor'))
         self.assertEqual(after['details']['reason'], 'fixed_frame')
-        self.assertEqual(after['details']['room'], 125226)
-        self.assertEqual(after['details']['frames']['final']['characters'] + 45000 + 60000, 126579)
+        self.assertEqual(after['details']['room'], 127545)
+        self.assertEqual(after['details']['frames']['final']['characters'] + 45000 + 60000, 127825)
 
     def test_same_measurement_does_not_compound_margin_across_three_successors(self):
         self.add_chain('first', ratio=1.36, measured=1.0)

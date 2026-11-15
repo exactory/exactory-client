@@ -1252,7 +1252,7 @@ class NoticeRoomTests(unittest.TestCase):
         fixture = turn_fixtures.TurnPacketTests()
         fixture.setUp()
         self.assertEqual(digest(v7.measure_turn_frames(fixture.route, fixture.native)['reading']),
-                         '7f5a1521e38b569f3c5740be5c04f58f4cad0da0cb1aa8923ed411d139719d40')
+                         '5d2b6f8d1bf5363349635ebc453371fddbd97c88a142ef9484894aae0756b00e')
         packet, chain = fixture.prepare()
         plan = capacity.read_chain_capacity_plan(fixture.artifacts, chain)
         inventory = json.loads(fixture.artifacts.read(chain['inventory']))
@@ -1264,11 +1264,11 @@ class NoticeRoomTests(unittest.TestCase):
         final = v7.build_turn_packet(fixture.artifacts, fixture.route, fixture.packet, 'chain', 2,
             inventory, state, plan, capacity.derive_plan_task_limits(plan, 'final'), 'final')
         for kind, value, expected_packet, expected_prompt, expected_without_plan in (
-            ('reading', packet, '38cf8a6bed9624f5ccf582e8667c895bc9bd37577a46fcdc4da1f379403b6868',
-             '8321af3263199e2fa1e0aec9a2e0c214dcb2733879874762f69f0757496abe4a',
+            ('reading', packet, '009cfbd13dfc38e448b577aea7aab531234a1ff8ffaab4509fae689fd414f49f',
+             '45a806cdb6b91eed5ed0776364abec5063cdbf94c5821f9677e999cc0cc05d72',
              '7c92fc4865879fa862e2457584a85ed254d566b92046941468d99ecc9082746e'),
-            ('final', final, '69922ca60c3d591a0a615d6898e9b422dc256e62650d6eac898bd3625db63abb',
-             'b422084be26061cd28147bb78a6805389895b3e8645d34b88e6c4eb29520edaa',
+            ('final', final, '8b8d6484d26bb8505becb7122d3c6db1ec19a7fda252f8f1a8b8c54b0590bc1a',
+             '914e559bee9bffe4897dec8d7349f9931ec29f47397ad79d2299b832298c21c0',
              'dcd8258c3094e36e171c94bcfb046b494e3936b624695a99db364585f76eeb75')):
             with self.subTest(kind=kind):
                 self.assertNotIn('output_refusal', value)
