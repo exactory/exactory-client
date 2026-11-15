@@ -1,6 +1,7 @@
 """Compose the recorded review protocols into one prospective next action."""
 
 import copy
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import json
 
@@ -13,23 +14,48 @@ from .operations import text
 from .review_task_execution import has_call_terminated, identify_call
 
 
+def describe_context_failure(error, assignment_id=None):
+    """Keep a retained-context refusal visible in a read-only inspection."""
+    failure = (error.as_dict() if isinstance(error, ResearchError) else
+               dict(code='review_input_unreadable', message='The retained review input is not readable JSON.',
+                    details=dict(kind=type(error).__name__)))
+    if assignment_id is not None:
+        failure = dict(assignment_id=assignment_id, **failure)
+    return failure
+
+
+@contextmanager
+def _collect_context_failure(failures, assignment_id):
+    try:
+        yield
+    except (ResearchError, json.JSONDecodeError) as error:
+        if failures is None:
+            raise
+        failure = describe_context_failure(error, assignment_id)
+        if failure not in failures:
+            failures.append(failure)
+
+
 def _find_parent(records, assignment):
     context = assignment.get('context', {})
     history_id = assignment.get('history_assignment_id')
-    if records.get('problem_post'):
-        if not isinstance(context, dict):
-            raise ResearchError('invalid_review_context', 'Review ancestry requires an object context')
-        if not isinstance(assignment.get('staged_review', {}), dict):
-            raise ResearchError('invalid_review_context', 'Review staging requires an object binding')
-        for key in ('context_repair', 'staged_upgrade'):
-            binding = context.get(key)
-            if binding is not None:
-                if not isinstance(binding, dict) or 'assignment_id' not in binding:
-                    raise ResearchError('invalid_review_context', 'Review ancestry requires an exact predecessor')
-                text(binding['assignment_id'], 'Review predecessor', code='invalid_review_context')
-        for identifier in (history_id, context.get('prior_assignment_id'), assignment.get('slot_id')):
-            if identifier is not None:
-                text(identifier, 'Review ancestry identity', code='invalid_review_context')
+    if not isinstance(context, dict):
+        raise ResearchError('invalid_review_context', 'Review ancestry requires an object context')
+    if not isinstance(assignment.get('staged_review', {}), dict):
+        raise ResearchError('invalid_review_context', 'Review staging requires an object binding')
+    has_posts = bool(records.get('problem_post'))
+    for key in ('context_repair', 'staged_upgrade', 'output_refusal'):
+        binding = context.get(key)
+        if binding is not None or (key == 'output_refusal' and key in context):
+            if not isinstance(binding, dict) or ((has_posts or key == 'output_refusal')
+                                                and 'assignment_id' not in binding):
+                raise ResearchError('invalid_review_context', 'Review ancestry requires an exact predecessor')
+            identifier = binding.get('assignment_id')
+            if has_posts or key == 'output_refusal' or (identifier is not None and not isinstance(identifier, str)):
+                text(identifier, 'Review predecessor', code='invalid_review_context')
+    for identifier in (history_id, context.get('prior_assignment_id'), assignment.get('slot_id')):
+        if identifier is not None and (has_posts or not isinstance(identifier, str)):
+            text(identifier, 'Review ancestry identity', code='invalid_review_context')
     history_parent = records.get('review_assignment', {}).get(history_id, {})
     # A result may inherit its bar's scientific history. That history is a
     # different phase, not another turn of the result chain.
@@ -38,6 +64,16 @@ def _find_parent(records, assignment):
     return (assignment.get('capacity_replacement_of') or context.get('prior_assignment_id') or history_id
             or (context.get('context_repair') or {}).get('assignment_id')
             or (context.get('staged_upgrade') or {}).get('assignment_id'))
+
+
+def validate_context_bindings(records, artifacts, assignment):
+    """Read retained container and controller bindings at an inspection's edge."""
+    _find_parent(records, assignment)
+    staged = assignment.get('staged_review', {})
+    controller = staged.get('controller_assignment_id')
+    if (staged.get('kind') == 'task' and
+            (not isinstance(controller, str) or controller not in records.get('review_assignment', {}))):
+        _find_head(records, artifacts, assignment['id'])
 
 
 def _list_lineage(records, assignment):
@@ -52,52 +88,55 @@ def _list_lineage(records, assignment):
     return result
 
 
-def list_chain_heads(records, artifacts):
+def list_chain_heads(records, artifacts, *, context_failures=None):
     """List current terminal assignment IDs; staged children belong to their controller."""
-    assignments = records.get('review_assignment', {})
-    parents = {_find_parent(records, row) for row in assignments.values()}
+    assignments, parents = {}, set()
+    for identifier, row in records.get('review_assignment', {}).items():
+        with _collect_context_failure(context_failures, identifier):
+            parents.add(_find_parent(records, row))
+            assignments[identifier] = row
+    checked = dict(records, review_assignment=assignments)
     result = []
     for row in assignments.values():
-        if row.get('staged_review', {}).get('kind') == 'task' or row['id'] in parents:
-            continue
-        if protocol.find_replacement(records, row) is not None:
-            continue
-        peers = [other for other in assignments.values()
-                 if row.get('slot_id') is not None and other.get('slot_id') == row['slot_id']
-                 and other['role'] == row['role'] and other.get('dossier_id') == row.get('dossier_id')
-                 and other.get('staged_review', {}).get('kind') != 'task'
-                 and other.get('recorded_revision', 0) > row.get('recorded_revision', 0)]
-        if not peers:
-            result.append(row['id'])
+        with _collect_context_failure(context_failures, row['id']):
+            if row.get('staged_review', {}).get('kind') == 'task' or row['id'] in parents:
+                continue
+            if protocol.find_replacement(checked, row) is not None:
+                continue
+            peers = [other for other in assignments.values()
+                     if row.get('slot_id') is not None and other.get('slot_id') == row['slot_id']
+                     and other['role'] == row['role'] and other.get('dossier_id') == row.get('dossier_id')
+                     and other.get('staged_review', {}).get('kind') != 'task'
+                     and other.get('recorded_revision', 0) > row.get('recorded_revision', 0)]
+            if not peers:
+                result.append(row['id'])
     return sorted(result)
 
 
-def _find_head(records, artifacts, identifier):
+def _find_head(records, artifacts, identifier, *, context_failures=None):
     assignments = records.get('review_assignment', {})
     assignment = protocol._get(records, 'review_assignment', identifier)
     staged = assignment.get('staged_review', {})
     has_posts = bool(records.get('problem_post'))
-    if has_posts and not isinstance(staged, dict):
+    if not isinstance(staged, dict):
         raise ResearchError('invalid_review_context', 'Review staging requires an object binding')
     if staged.get('kind') == 'task':
-        if has_posts:
+        if has_posts or not isinstance(staged.get('controller_assignment_id'), str):
             text(staged.get('controller_assignment_id'), 'Review controller', code='invalid_review_context')
         identifier = assignment['staged_review']['controller_assignment_id']
-        if has_posts:
-            assignment = assignments.get(identifier)
-            if not isinstance(assignment, dict):
-                raise ResearchError('invalid_review_context', 'The review controller is missing')
-        else:
-            assignment = assignments[identifier]
+        assignment = assignments.get(identifier)
+        if not isinstance(assignment, dict):
+            raise ResearchError('invalid_review_context', 'The review controller is missing')
     candidates = []
-    for head in list_chain_heads(records, artifacts):
+    for head in list_chain_heads(records, artifacts, context_failures=context_failures):
         row = assignments[head]
-        if (identifier in {entry['id'] for entry in _list_lineage(records, row)}
-                or (row.get('slot_id') is not None
-                    and row.get('slot_id') == assignment.get('slot_id', assignment['id'])
-                    and row['role'] == assignment['role']
-                    and row.get('dossier_id') == assignment.get('dossier_id'))):
-            candidates.append(row)
+        with _collect_context_failure(context_failures, head):
+            if (identifier in {entry['id'] for entry in _list_lineage(records, row)}
+                    or (row.get('slot_id') is not None
+                        and row.get('slot_id') == assignment.get('slot_id', assignment['id'])
+                        and row['role'] == assignment['role']
+                        and row.get('dossier_id') == assignment.get('dossier_id'))):
+                candidates.append(row)
     if len(candidates) > 1:
         raise ResearchError('review_source_continuation_fork', 'The review has more than one live continuation',
                             dict(assignment_ids=sorted(row['id'] for row in candidates)))
@@ -172,7 +211,7 @@ def _list_recorded_finals(records, identifiers):
     return sorted(result)
 
 
-def _describe_progress(records, artifacts, assignment):
+def _describe_progress(records, artifacts, assignment, *, context_failures=None):
     lineage = _list_lineage(records, assignment)
     identifiers = {row['id'] for row in lineage}
     epochs = {row.get('staged_review', {}).get('epoch_id') for row in lineage} - {None}
@@ -185,7 +224,10 @@ def _describe_progress(records, artifacts, assignment):
                         key=lambda row: (row['assignment_id'], row['request_digest'] or ''))
     parent = assignment.get('context', {}).get('prior_assignment_id')
     position = {assignment['id']}
+    failed_contexts = {row.get('assignment_id') for row in context_failures or []}
     for row in records.get('review_assignment', {}).values():
+        if row['id'] in failed_contexts:
+            continue
         if any(row.get(key) != assignment.get(key) for key in ('role', 'dossier_id')):
             continue
         if parent is not None and row.get('context', {}).get('prior_assignment_id') == parent:
@@ -382,7 +424,7 @@ def _plan_staged(records, artifacts, assignment, state):
     epoch = protocol._get(records, 'review_epoch', assignment['staged_review']['epoch_id'])
     effective = state.get('effective') or {}
     if effective.get('incomplete_outcome') is not None:
-        return dict(state='handoff', code='assessment_incomplete', command='review-assignment',
+        return dict(state='stop', code='assessment_incomplete',
                     details=effective['incomplete_outcome'])
     if state.get('output') is not None:
         return _plan_recording(records, artifacts, assignment, state)
@@ -557,15 +599,15 @@ def _plan_head(records, artifacts, assignment):
     return _plan_recording(records, artifacts, assignment, state)
 
 
-def plan_next(records, artifacts, head_id):
+def plan_next(records, artifacts, head_id, *, context_failures=None):
     """Describe one exact action; the named operation retains every mutation validator."""
     artifacts = Evaluation.of(records, artifacts)
     result = dict(state='stop', chain=None, head_id=head_id, progress=None)
     assignment = None
     try:
-        assignment = _find_head(records, artifacts, head_id)
+        assignment = _find_head(records, artifacts, head_id, context_failures=context_failures)
         result.update(chain=_describe_chain(assignment), head_id=assignment['id'],
-                      progress=_describe_progress(records, artifacts, assignment))
+                      progress=_describe_progress(records, artifacts, assignment, context_failures=context_failures))
         from .problem_delivery import find_review_post
         if find_review_post(records, assignment, artifacts) is not None:
             result['state'] = 'done'
@@ -578,7 +620,7 @@ def plan_next(records, artifacts, head_id):
             result.update(state='stop', code=error.code, details=error.details or {})
         else:
             result.update(state='stop', code='review_input_unreadable', details=dict(kind=type(error).__name__))
-        from .stop_classes import describe_terminal
+        from .stop_classes import describe_terminal, describe_unlisted_step
         terminal = describe_terminal(result['code'])
         details = dict(result['details'], **terminal['details'])
         for field in ('command', 'payload', 'not_before', 'request_id'):
@@ -593,12 +635,15 @@ def plan_next(records, artifacts, head_id):
                 result = complete_plan(records, artifacts, assignment, result)
             except (ResearchError, json.JSONDecodeError) as detail_error:
                 # A damaged binding cannot supply an executable repair payload.
-                decision = describe_terminal('unrecognized')['details']['decision']
+                decision = describe_unlisted_step()
+                decision.pop('kind')
                 result.update(state='stop', code=getattr(detail_error, 'code', 'review_input_unreadable'),
                               details=dict(decision=decision, reason=str(detail_error)))
                 result.pop('command', None)
         elif result['state'] not in ('done', 'stop'):
-            result.update(state='stop', details=describe_terminal('unrecognized')['details'])
+            decision = describe_unlisted_step()
+            decision.pop('kind')
+            result.update(state='stop', details=dict(unlisted=True, decision=decision))
     if result.get('code'):
         from .stop_classes import describe_terminal
         action = ({key: copy.deepcopy(result[key]) for key in ('command', 'state', 'payload') if key in result}
@@ -613,9 +658,9 @@ def plan_next(records, artifacts, head_id):
     return copy.deepcopy(result)
 
 
-def describe_next_actions(records, artifacts, assignment_id, actions=()):
+def describe_next_actions(records, artifacts, assignment_id, actions=(), *, context_failures=None):
     """Add executable actions while preserving existing navigation fields."""
-    plan = plan_next(records, artifacts, assignment_id)
+    plan = plan_next(records, artifacts, assignment_id, context_failures=context_failures)
     from .problem_delivery import find_review_post
     assignment = records.get('review_assignment', {}).get(assignment_id, {})
     resolved_assignment = records.get('review_assignment', {}).get(plan['head_id'], {})
@@ -647,8 +692,8 @@ def describe_next_actions(records, artifacts, assignment_id, actions=()):
     return result
 
 
-def annotate_review_obligations(records, artifacts, report):
-    """Attach the common action wherever a gate already names a review assignment."""
+def annotate_review_obligations(records, artifacts, report, *, context_failures=None):
+    """Attach review actions, optionally collecting unreadable contexts for status."""
     if 'review' in report and 'obligations' in report:
         from .problem_delivery import describe_after_post_obligations, find_review_post
         rows = []
@@ -657,7 +702,10 @@ def annotate_review_obligations(records, artifacts, report):
         for item in report['obligations']:
             identifier = item.get('assignment_id') or item.get('controller_assignment_id')
             assignment = records.get('review_assignment', {}).get(identifier)
-            if assignment is not None and find_review_post(records, assignment, artifacts) is not None:
+            posted = False
+            with _collect_context_failure(context_failures, identifier):
+                posted = assignment is not None and find_review_post(records, assignment, artifacts) is not None
+            if posted:
                 closed_rows.append(item)
                 after_post.extend(describe_after_post_obligations([item]))
             else:
@@ -671,40 +719,45 @@ def annotate_review_obligations(records, artifacts, report):
         represented = {item.get('assignment_id') or item.get('controller_assignment_id')
                        for item in rows}
         retained_findings = {digest(item) for item in after_post}
-        for identifier in list_chain_heads(records, artifacts):
+        for identifier in list_chain_heads(records, artifacts, context_failures=context_failures):
             if identifier in represented:
                 continue
-            assignment = records['review_assignment'][identifier]
-            if assignment['role'] == 'native_math':
-                try:
-                    from .native_review import load_packet
-                    packet = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
-                except (ResearchError, json.JSONDecodeError):
-                    continue
-                if not openness_reading.is_openness_packet(packet):
-                    continue
-            state = protocol.assignment_state(records, artifacts, identifier)
-            pending = [dict(item, assignment_id=identifier) for item in state.get('obligations', [])]
-            binding = records.get('review_attempt', {}).get(state.get('attempt_id'))
-            if (not state.get('obligations') and binding is not None
-                    and not state.get('output_correction_id')
-                    and not protocol._context_observed(artifacts, binding)):
-                from .graph import obligation
-                pending.append(obligation('review_output_pending',
-                    'A complete observed reviewer response is required.', assignment_id=identifier))
-            if state.get('pending_source_requests'):
-                from .graph import obligation
-                pending.append(obligation('review_sources_pending',
-                    'Deliver the sources requested by the observed reviewer.',
-                    assignment_id=identifier, requests=state['pending_source_requests']))
-            if find_review_post(records, assignment, artifacts) is not None:
-                for item in describe_after_post_obligations(pending):
-                    identity = digest(item)
-                    if identity not in retained_findings:
-                        after_post.append(item)
-                        retained_findings.add(identity)
-            else:
-                rows.extend(pending)
+            with _collect_context_failure(context_failures, identifier):
+                assignment = records['review_assignment'][identifier]
+                if assignment['role'] == 'native_math':
+                    try:
+                        from .native_review import load_packet
+                        packet = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
+                    except (ResearchError, json.JSONDecodeError) as error:
+                        if context_failures is not None:
+                            failure = describe_context_failure(error, identifier)
+                            if failure not in context_failures:
+                                context_failures.append(failure)
+                        continue
+                    if not openness_reading.is_openness_packet(packet):
+                        continue
+                state = protocol.assignment_state(records, artifacts, identifier)
+                pending = [dict(item, assignment_id=identifier) for item in state.get('obligations', [])]
+                binding = records.get('review_attempt', {}).get(state.get('attempt_id'))
+                if (not state.get('obligations') and binding is not None
+                        and not state.get('output_correction_id')
+                        and not protocol._context_observed(artifacts, binding)):
+                    from .graph import obligation
+                    pending.append(obligation('review_output_pending',
+                        'A complete observed reviewer response is required.', assignment_id=identifier))
+                if state.get('pending_source_requests'):
+                    from .graph import obligation
+                    pending.append(obligation('review_sources_pending',
+                        'Deliver the sources requested by the observed reviewer.',
+                        assignment_id=identifier, requests=state['pending_source_requests']))
+                if find_review_post(records, assignment, artifacts) is not None:
+                    for item in describe_after_post_obligations(pending):
+                        identity = digest(item)
+                        if identity not in retained_findings:
+                            after_post.append(item)
+                            retained_findings.add(identity)
+                else:
+                    rows.extend(pending)
         if after_post != report.get('after_post', []):
             report = dict(report, after_post=after_post)
         if len(rows) != len(report['obligations']):
@@ -723,24 +776,29 @@ def annotate_review_obligations(records, artifacts, report):
         for original in report[key]:
             item = dict(original)
             identifier = item.get('assignment_id') or item.get('controller_assignment_id')
-            if identifier in records.get('review_assignment', {}):
-                item['next'] = describe_next_actions(records, artifacts, identifier, item.get('next', []))
-            elif records.get('review_epoch'):
-                # Legacy staged diagnostics have no assignment identity in the
-                # gate digest. Resolve their controllers only in the reader.
-                if staged_outcomes is None:
-                    from .problem_delivery import collect_review_outcomes
-                    staged_outcomes = [row for row in collect_review_outcomes(records, artifacts)
-                                       if row['epoch'] is not None]
-                identifiers = [row['assignment']['id'] for row in staged_outcomes
-                               if original in row['state'].get('obligations', [])]
-                if identifiers:
-                    item['next'] = [action for identifier in identifiers for action in
-                        describe_next_actions(records, artifacts, identifier, item.get('next', []))]
+            with _collect_context_failure(context_failures, identifier):
+                if identifier in records.get('review_assignment', {}):
+                    item['next'] = describe_next_actions(
+                        records, artifacts, identifier, item.get('next', []), context_failures=context_failures)
+                elif records.get('review_epoch'):
+                    # Legacy staged diagnostics have no assignment identity in the
+                    # gate digest. Resolve their controllers only in the reader.
+                    if staged_outcomes is None:
+                        from .problem_delivery import collect_review_outcomes
+                        staged_outcomes = []
+                        staged_outcomes = [row for row in collect_review_outcomes(records, artifacts)
+                                           if row['epoch'] is not None]
+                    identifiers = [row['assignment']['id'] for row in staged_outcomes
+                                   if original in row['state'].get('obligations', [])]
+                    if identifiers:
+                        item['next'] = [action for identifier in identifiers for action in
+                            describe_next_actions(records, artifacts, identifier, item.get('next', []),
+                                                  context_failures=context_failures)]
             rows.append(item)
         result[key] = rows
     if report.get('preparation'):
-        result['preparation'] = annotate_review_obligations(records, artifacts, report['preparation'])
+        result['preparation'] = annotate_review_obligations(
+            records, artifacts, report['preparation'], context_failures=context_failures)
     if report.get('next') is not None:
         upcoming = report['next']
         if 'code' in upcoming:
@@ -752,6 +810,10 @@ def annotate_review_obligations(records, artifacts, report):
             else:
                 identifier = upcoming.get('assignment_id') or upcoming.get('controller_assignment_id')
                 if identifier in records.get('review_assignment', {}):
-                    result['next'] = dict(upcoming, next=describe_next_actions(
-                        records, artifacts, identifier, upcoming.get('next', [])))
+                    with _collect_context_failure(context_failures, identifier):
+                        result['next'] = dict(upcoming, next=describe_next_actions(
+                            records, artifacts, identifier, upcoming.get('next', []),
+                            context_failures=context_failures))
+    if context_failures:
+        result['review_context_failures'] = list(context_failures)
     return result

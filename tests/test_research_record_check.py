@@ -179,11 +179,14 @@ class RecordCheckTests(unittest.TestCase):
         output = self.case.build_review_output('bar')
         output['value']['status'] = 'invalid'
         self.observe(output)
+        before = digest_tree(self.case.root)
         report = self.check()
         self.assertTrue(report['ready'], report)
         chain = self.step(report, 'continuation')['result']['chains'][0]
-        self.assertEqual([row['state'] for row in chain['actions']], ['record', 'run'])
+        self.assertEqual([row['state'] for row in chain['actions']], ['record', 'replace', 'run'])
+        self.assertEqual(chain['actions'][1]['command'], 'review-assignment')
         self.assertFalse(self.case.read_records().get('review_output_refusal'))
+        self.assertEqual(digest_tree(self.case.root), before)
 
     def test_mutation_runtime_handoff_is_an_enumerated_external_boundary(self):
         from research_harness import record_check
@@ -291,7 +294,7 @@ class RecordCheckTests(unittest.TestCase):
     def test_continuation_refusal_fails_at_exact_planning_step(self):
         from research_harness import record_check
         refusal = dict(state='stop', head_id=self.assignment['id'], progress={},
-                       code='review_parts_no_progress', details={'phase': 'continuation'})
+                       code='unlisted_test_boundary', details={'phase': 'continuation'})
         with patch.object(record_check, 'plan_next', return_value=refusal):
             report = self.check()
         self.assertFalse(report['ready'])
@@ -366,7 +369,8 @@ class RecordCheckTests(unittest.TestCase):
         for state, command, expected in [('continue', 'review-probe', 'qualification_unavailable'),
                                          ('stop', 'review-assignment', 'record_unlisted_stop')]:
             action = dict(state=state, command=command, payload={}, head_id=self.assignment['id'],
-                          progress={}, code='review_parts_final_too_large', details={})
+                          progress={}, code=('unlisted_test_boundary' if state == 'stop'
+                                             else 'review_parts_final_too_large'), details={})
             with self.subTest(state=state), patch.object(record_check, 'plan_next', return_value=action):
                 report = self.check()
             self.assertFalse(report['ready'])
@@ -899,11 +903,11 @@ else:
         output['value']['status'] = 'unresolved'
         self.observe(output)
         with patch.dict(cli.OPERATIONS, {'review-assignment': lambda *args, **kwargs: (
-                (_ for _ in ()).throw(ResearchError('review_parts_no_progress', 'Refused continuation')))}):
+                (_ for _ in ()).throw(ResearchError('unlisted_test_boundary', 'Refused continuation')))}):
             report = self.check()
         error = self.step(report, 'continuation')['error']
         self.assertEqual(error['code'], 'record_unlisted_stop')
-        self.assertEqual(error['details']['error']['code'], 'review_parts_no_progress')
+        self.assertEqual(error['details']['error']['code'], 'unlisted_test_boundary')
         self.assertEqual(error['details']['refused_action']['command'], 'review-assignment')
 
     def test_run_boundary_cannot_qualify_an_unlisted_command(self):

@@ -1,0 +1,24 @@
+{
+  "stored_state": {
+    "members": {
+      "invalid_review_prompt_version": {
+        "research_harness/review_protocol.py:_select_common_prompt#1": [
+          "content"
+        ]
+      },
+      "invalid_review_role": {
+        "research_harness/review_protocol.py:canonical_prompt#1": [
+          "content"
+        ],
+        "research_harness/review_protocol.py:canonical_prompt#2": [
+          "content"
+        ]
+      },
+      "value_review_output_mismatch": {
+        "research_harness/research_decisions.py:record_value_review.prepare#1": [
+          "payload"
+        ]
+      }
+    }
+  }
+}

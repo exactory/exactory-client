@@ -3,7 +3,7 @@
 import copy
 
 from . import review_protocol as protocol
-from .stop_classes import describe_terminal
+from .stop_classes import STOP_REGISTRY, describe_terminal
 
 
 PLAN_STEPS = {
@@ -186,6 +186,15 @@ def complete_plan(records, artifacts, assignment, plan):
     plan = copy.deepcopy(plan)
     details = plan.setdefault('details', {})
     code = plan.get('code')
+    if STOP_REGISTRY.get(code, {}).get('group'):
+        terminal = describe_terminal(code)
+        details.update(terminal['details'])
+        details.pop('step', None)
+        details.pop('steps', None)
+        plan.update(state='stop', stop_class=terminal['stop_class'])
+        plan.pop('command', None)
+        plan.pop('payload', None)
+        return plan
     if code == 'reading_missing':
         from .review_reading import collect_missing_readings, READING_HANDOFF_MESSAGE
         if 'readings' not in details:
@@ -303,6 +312,11 @@ def complete_plan(records, artifacts, assignment, plan):
             details.setdefault('decision', terminal['details'].get('decision', dict(
                 owner_decides='How should the retained review record be repaired?',
                 then=[dict(answer='Inspect the record', steps=[dict(command='record-check')])])))
+    elif 'step' not in details and 'payload' in terminal['details'].get('next', {}):
+        rule = terminal['details']['next']
+        details['step'] = dict(id=plan['command'], command=plan['command'],
+            payload=copy.deepcopy(rule['payload']), chooses=copy.deepcopy(rule['chooses']),
+            prerequisites=copy.deepcopy(rule.get('prerequisites', [])))
     elif 'step' not in details:
         # Existing recording boundaries retain their command-specific input choices.
         command = plan.get('command')
@@ -311,6 +325,10 @@ def complete_plan(records, artifacts, assignment, plan):
         if command == 'review-output-correction':
             payload['route_id'] = assignment['route_id']
             chooses = ['id']
+        elif command == 'search':
+            payload = dict(profile='research', purpose='direct')
+            chooses = ['id', 'question', 'scope', 'queries', 'responses', 'captured_at',
+                       'found_work_ids', 'verdict', 'cited_work_ids', 'impact', 'gaps', 'dispositions']
         elif command == 'search accept':
             payload = {}
             chooses = ['target', 'acceptance', 'digest']

@@ -1,0 +1,120 @@
+[
+  {
+    "code": "gate_override_stop_untrusted",
+    "message": "Need a stored assignment with a pinned capacity plan."
+  },
+  {
+    "code": "gate_override_stop_untrusted",
+    "message": "Need an exact request that exceeds its stored capacity plan."
+  },
+  {
+    "code": "gate_override_stop_missing",
+    "message": "Need the identity of a recorded review-series stop."
+  },
+  {
+    "code": "gate_override_stop_untrusted",
+    "message": "Need an unchanged stop written by the review-series harness."
+  },
+  {
+    "code": "gate_override_stop_untrusted",
+    "message": "Need a stop whose scope and defect proof were read successfully.",
+    "details": {
+      "read_errors": {
+        "scope": {
+          "code": "artifact_missing"
+        }
+      }
+    }
+  },
+  {
+    "code": "gate_override_stop_class",
+    "message": "Need a retained stop; a handoff, wait or completed review is not an automatic-pass basis."
+  },
+  {
+    "code": "gate_override_stop_class",
+    "message": "Need a harness-defect stop; follow its schedule or obtain the user's instruction.",
+    "details": {
+      "stop_code": "review_series_no_progress",
+      "stop_class": "harness_defect"
+    }
+  },
+  {
+    "code": "gate_override_stop_untrusted",
+    "message": "Need the unchanged stored request and capacity-plan comparison."
+  },
+  {
+    "code": "gate_override_stop_untrusted",
+    "message": "Need the recorded successful dispatch and repeated progress position."
+  },
+  {
+    "code": "gate_override_budget_exhausted",
+    "message": "Need a budget authorized for further work; otherwise report the stop."
+  },
+  {
+    "code": "gate_override_quality_condition",
+    "message": "The current intent contains an explicit quality condition, so automatic continuation is unavailable. Continue through the ordinary gates, or record a user instruction that expressly covers this stop."
+  },
+  {
+    "code": "gate_override_internal_only",
+    "message": "Need a review stop for the next internal study step; public writes need the user's instruction."
+  },
+  {
+    "code": "gate_override_user_required",
+    "message": "An automatic pass of this gate is already recorded. To continue on the user's instruction, record a user override with `exactory-research gate-override`."
+  },
+  {
+    "code": "gate_override_stop_stale",
+    "message": "Need a recorded stop for the current stage and exact review target."
+  },
+  {
+    "code": "gate_override_gate_ready",
+    "message": "The gate is ready; use the ordinary stage transition. No automatic pass is needed."
+  },
+  {
+    "code": "gate_override_other_obligations",
+    "message": "Need every remaining gate item satisfied except the reviews prevented by the defect.",
+    "details": {
+      "obligations": [
+        {
+          "code": "pending"
+        }
+      ]
+    }
+  },
+  {
+    "code": "gate_override_stop_stale",
+    "message": "Need a stop for this exact current review target."
+  },
+  {
+    "code": "gate_override_other_obligations",
+    "message": "Need retained rejecting reviews resolved through the ordinary gate.",
+    "details": {
+      "review_id": "review"
+    }
+  },
+  {
+    "code": "gate_override_stop_stale",
+    "message": "Need a new harness stop after the review's progress or next action changed."
+  },
+  {
+    "code": "gate_override_reviews_uncovered",
+    "message": "Need an exhausted harness-defect stop for every missing independent review."
+  },
+  {
+    "code": "gate_override_public_write",
+    "message": "Need the user's instruction recorded for this public write.",
+    "details": {
+      "gate": "submitted",
+      "public_action": "POST /synthetic",
+      "next": "exactory-research gate-override"
+    }
+  },
+  {
+    "code": "gate_override_public_write",
+    "message": "Need a readable store or a local user instruction covering this public write.",
+    "details": {
+      "gate": "submitted",
+      "public_action": "POST /synthetic"
+    }
+  }
+]

@@ -168,7 +168,9 @@ class OutcomeTests(unittest.TestCase):
         self.assertEqual(steps[-1]['state'], 'wait')
         self.assertEqual(steps[-1]['code'], 'review_capacity_wait')
         self.assertIn('not_before', steps[-1])
-        self.assertNotIn('review_series_stop', fixture.case.store.snapshot()['records'])
+        retained = fixture.case.store.snapshot()['records']['review_series_stop'][steps[-1]['stop_id']]
+        self.assertEqual(retained['plan']['state'], 'wait')
+        self.assertEqual(retained['plan']['details']['step']['command'], 'review-series')
 
     def raise_capacity(self):
         raise ResearchError('review_capacity_wait', 'A different call owns this capacity.')

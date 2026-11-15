@@ -233,11 +233,30 @@ class ContinuationRegressionTests(unittest.TestCase):
                      render_views=lambda workspace: None)
         self.assertEqual(exited.exception.code, 3)
         after = case.store.snapshot()
-        self.assertEqual(after, before)
-        self.assertNotIn('review_series_stop', after['records'])
+        stops = after['records']['review_series_stop']
+        self.assertEqual(len(stops), 1)
+        stop = next(iter(stops.values()))
+        for member in ('state', 'chain', 'head_id', 'progress', 'code'):
+            self.assertEqual(stop['plan'][member], plan[member])
+        self.assertIsNone(stop['retry'])
+        self.assertEqual(after['revision'], before['revision'] + 1)
+        expected_records = dict(before['records'], review_series_stop=stops)
+        expected_records['literature_operation'] = dict(before['records']['literature_operation'])
+        expected_records['literature_operation'][stop['request_id']] = dict(
+            operation='review.series_stop', runtime=case.store.describe_runtime())
+        self.assertEqual(after['records'], expected_records)
         lines = [json.loads(line) for line in output.getvalue().splitlines()]
-        self.assertEqual(lines,
-                         [dict(plan, provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0))])
+        self.assertEqual(stop['plan'], {key: value for key, value in lines[-1].items() if key != 'provider_usage'})
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(lines[0]['state'], 'handoff')
+        self.assertEqual(lines[0]['provider_usage'], dict(windows=[], warnings=[], planned_remaining_turns=0))
+        self.assertEqual(lines[0]['stop_id'], stop['id'])
+        self.assertEqual(lines[0]['revision_after_stop'], after['revision'])
+        self.assertEqual(lines[0]['stop_class'], 'decision')
+        receipt = case.store.committed_request(stop['request_id'])
+        self.assertEqual(receipt['operation'], 'review.series_stop')
+        self.assertEqual(receipt['payload'], {'stop': stop})
+        self.assertEqual(receipt['response']['result'], stop)
         repaired = self.admit_exhaustion_repair(case, plan)
         self.assertEqual(repaired['slot_id'], 'bar-first')
 
@@ -368,7 +387,7 @@ class ContinuationRegressionTests(unittest.TestCase):
             second = cli.run(args)
             second_status = cli.status_report(fixture.case.store)
             with patch('research_harness.review_continuation.annotate_review_obligations',
-                       side_effect=lambda records, artifacts, report: report):
+                       side_effect=lambda records, artifacts, report, **kwargs: report):
                 baseline = cli.run(args)
                 baseline_status = cli.status_report(fixture.case.store)
         self.assertEqual(first['digest'], second['digest'])

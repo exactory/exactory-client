@@ -34,9 +34,9 @@ class FailureClassTests(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.artifacts = ArtifactStore(Path(directory.name))
         self.assignment = dict(id='head', role='result', route_id='route', context={},
+                               context_state=dict(context_status='verified_for_route'),
                                reviewer_id='reviewer', author_id='author', dossier_id=None,
-                               packet=self.put({}), recorded_revision=1,
-                               context_state=dict(context_status='verified_for_route'))
+                               packet=self.put({}), recorded_revision=1)
         # These small output stubs do not include authenticated request envelopes.
         # Supply the contract reader explicitly; real observations are covered in test_d2_outcomes.
         recheck = patch('research_harness.review_refusal.classify_observed_output',
