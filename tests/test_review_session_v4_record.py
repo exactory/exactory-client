@@ -14,8 +14,10 @@ import unittest
 from unittest.mock import patch
 
 from research_harness import bar_sources, review_route_capacity as capacity
+from research_harness import review_transport as transport
 from research_harness.artifacts import ArtifactStore
 from research_harness.evidence import digest
+from research_harness.errors import ResearchError
 from research_harness.problem_openness import serialize_record
 from test_review_capacity_plan import build_plan
 from v7_capacity_fixtures import build_route
@@ -374,7 +376,9 @@ class SessionPlanTests(unittest.TestCase):
                 plan = capacity.read_chain_capacity_plan(artifacts, binding)
                 self.assertEqual(set(plan['task']), {'request', 'final'})
                 self.assertEqual(plan['task']['request']['carried_characters'],
-                                 plan['allocation']['notes'] + declaration['allowance_rows_bound'])
+                                 plan['allocation']['notes'] + declaration['allowance_rows_bound'] +
+                                 declaration['pending_requests_bound'])
+                self.assertEqual(plan['task']['request']['carried_components']['allowances'], 30000)
                 self.assertEqual(plan['task']['request']['task_characters'], plan['frame']['request']['bound'] +
                     plan['task']['request']['material_allowance'] + plan['task']['request']['carried_characters'] +
                     plan['task']['request']['notice_characters'])
@@ -414,6 +418,194 @@ class SessionPlanTests(unittest.TestCase):
             reused = capacity.prepare_assignment_capacity({}, artifacts, build_route(effort='xhigh'),
                                                           dict(kind='reading', plan=reference))
             self.assertEqual(reused['capacity_plan'], reference)
+
+
+class SessionAllowancePlanTests(unittest.TestCase):
+    def setUp(self):
+        from capacity_evidence_fixtures import build_capacity_runtime
+        from test_openness_reading_v7_turns import MemoryArtifacts
+        self.session = importlib.import_module('research_harness.review_session_v4')
+        self.artifacts = MemoryArtifacts()
+        self.route = dict(build_route('openai_responses_v1', 'fixture-model'),
+                          runtime=build_capacity_runtime('openai_responses_v1'))
+        # The common target minimums need room independently of the bounded
+        # request projection. This is a synthetic, keyed input-capacity witness.
+        self.records = dict(review_route=dict(route=self.route), review_route_probe=dict(probe=dict(
+            id='probe', route_id='route', capacity=dict(input_tokens=4128000), usage={},
+            capacity_evidence=dict(key=capacity.describe_capacity_key(self.route), input_tokens=4128000))))
+        self.frames = {kind: dict(instructions=2000, bindings=1000, envelope=1000)
+                       for kind in ('request', 'final')}
+        text = 'A finite comparison.'
+        reference = self.artifacts.put(text.encode(), 'text/plain')
+        self.unit = dict(handle='u1', kind='fulltext', identity=dict(version_id='2601.00000v1'),
+                         artifact=reference, sha256=reference['sha256'], characters=len(text), label='A source.')
+        self.inventory = dict(protocol=self.session.PROTOCOL, units=[self.unit])
+
+    def admit_plan(self, count=500):
+        declaration = self.session.describe_session_plan(self.route, self.frames,
+            self.inventory['units'], ['t%d' % index for index in range(count)])
+        binding = capacity.prepare_assignment_capacity(self.records, self.artifacts, self.route, declaration)
+        plan = capacity.read_chain_capacity_plan(self.artifacts, binding)
+        return declaration, binding, plan
+
+    def build_request(self, plan, state, material):
+        limits = capacity.derive_plan_task_limits(plan, 'request')
+        packet = dict(source_rules=self.session.PROTOCOL, inventory_digest=digest(self.inventory),
+            state_digest=digest(state), plan_digest=digest(plan), session_turn=dict(
+                allowances=self.session.describe_session_allowances(self.route, state, plan, limits)),
+            material=material)
+        return transport.request_body(self.route, 'Read the delivered material and return a request answer.', packet)
+
+    def test_finding_10_many_targets_share_admission_bound_and_page_every_allowance_row_once(self):
+        declaration, binding, plan = self.admit_plan()
+        self.assertEqual(declaration['allowance_rows_bound'], 30000)
+        self.assertEqual(set(plan['task']), {'request', 'final'})
+        components = plan['task']['request']['carried_components']
+        self.assertEqual(components, dict(notes=plan['allocation']['notes'], allowances=30000,
+            pending_requests=self.session.PENDING_REQUESTS_CHARACTERS + self.session.STATE_FIELDS_CHARACTERS))
+        self.assertEqual(plan['task']['request']['carried_characters'], sum(components.values()))
+        plan_bytes = self.artifacts.read(binding['capacity_plan']['artifact'])
+        turns, delivered, page_ids, request_count = [], [], [], 0
+
+        def check_request(material):
+            nonlocal request_count
+            # Re-read the plan artifact and rebuild state, rather than continuing
+            # from a mutated display object or a current output profile.
+            frozen = capacity.read_chain_capacity_plan(self.artifacts, binding)
+            state = self.session.build_session_state(self.inventory, turns, self.route, frozen)['state']
+            request = self.build_request(frozen, state, material)
+            report = capacity.describe_plan_preflight(self.records, self.route, request, frozen, 'request')
+            self.assertTrue(report['plan_comparison']['fits'], report['plan_comparison'])
+            self.assertLessEqual(report['request_measure']['text_characters'], frozen['task']['request'][
+                'request_bound']['text_characters'])
+            with patch.object(capacity, 'read_profile_priors', return_value=[]):
+                again = json.loads(serialize_record(state))
+                self.assertEqual(self.build_request(frozen, again, material), request)
+            self.assertEqual(self.artifacts.read(binding['capacity_plan']['artifact']), plan_bytes)
+            request_count += 1
+            return state
+
+        for number in (1, 2):
+            check_request(dict(text='A finite comparison.'))
+            turn = build_turn(self.unit, 'A finite comparison.', number, excerpts=[dict(unit='u1',
+                text='A finite comparison.', purpose='The last target is used first.',
+                targets=plan['targets']['handles'] if number == 1 else ['t499'])],
+                requests=[dict(id='r%d-%d' % (number, index), kind='unit', unit='u1')
+                          for index in range(10)])
+            turn['output']['notes'] = 'n' * (plan['allocation']['notes'] - 4)
+            self.assertLessEqual(capacity.measure_capacity_value(self.route, turn['output']),
+                                 plan['task']['request']['answer_bound'])
+            turns.append(turn)
+        state = self.session.build_session_state(self.inventory, turns, self.route, plan)['state']
+        view = self.session.describe_session_allowances(self.route, state, plan, plan['task']['request'])
+        complete_rows = [dict(row, remaining=row['characters'] - row['used'])
+                         for row in state['allowances']['targets']]
+        self.assertGreater(capacity.measure_capacity_value(self.route, complete_rows), 30000)
+        self.assertEqual(view['target_count'], 500)
+        self.assertGreater(view['omitted'], 0)
+        self.assertEqual(view['omitted'] + len(view['targets']), 500)
+        core = {key: value for key, value in view.items()
+                if key not in ('latest_notes', 'delivered_sources', 'pending_requests')}
+        self.assertGreater(capacity.measure_capacity_value(self.route, core), 29000)
+        self.assertLessEqual(capacity.measure_capacity_value(self.route, core), 30000)
+        self.assertEqual(view['targets'][0]['handle'], 't499')
+        self.assertEqual(len(view['pending_requests']), 20)
+        omitted = set(plan['targets']['handles']) - {row['handle'] for row in view['targets']}
+        after = None
+        while True:
+            page = self.session.build_session_allowance_page(self.route, state, plan, after, 5000)
+            self.assertLessEqual(capacity.measure_capacity_value(self.route, serialize_record(page).decode()), 5000)
+            delivered.extend(page['rows'])
+            page_ids.append(page['next'])
+            check_request(dict(allowance_page=page))
+            turn = build_turn(self.unit, '', len(turns) + 1)
+            turn['deliveries'] = []
+            turn['output']['notes'] = 'n' * (plan['allocation']['notes'] - 4)
+            turn['list_pages'] = [dict(list=page['list'], after=page['after'], next=page['next'])]
+            turns.append(turn)
+            state = self.session.build_session_state(self.inventory, turns, self.route, plan)['state']
+            after = page['next']
+            if after is None:
+                break
+        handles = [row['handle'] for row in delivered]
+        self.assertEqual(handles, plan['targets']['handles'])
+        self.assertEqual(len(handles), len(set(handles)))
+        self.assertTrue(omitted <= set(handles))
+        self.assertGreater(len(page_ids), 1)
+        self.assertEqual(request_count, 2 + len(page_ids))
+        self.assertEqual(state['list_pages']['allowances'], dict(next=None, ended=True))
+        self.assertEqual(digest(self.session.build_session_state(
+            self.inventory, turns, self.route, plan)['state']), digest(state))
+
+    def test_pending_rows_are_separate_from_the_single_allowance_projection_bound(self):
+        small, _, first = self.admit_plan(1)
+        large, _, second = self.admit_plan(500)
+        self.assertEqual(small['allowance_rows_bound'], 30000)
+        self.assertEqual(large['allowance_rows_bound'], 30000)
+        self.assertEqual(small['pending_requests_bound'], large['pending_requests_bound'])
+        for plan in (first, second):
+            components = plan['task']['request']['carried_components']
+            self.assertEqual(components['allowances'], 30000)
+            self.assertGreater(components['pending_requests'], 40000)
+            self.assertEqual(plan['task']['final']['carried_characters'], 0)
+
+    def test_pending_request_bound_is_validated_before_any_plan_publication(self):
+        declaration = self.session.describe_session_plan(self.route, self.frames, [], ['t1'])
+        capacity.prepare_assignment_capacity(self.records, self.artifacts, self.route,
+            dict(declaration, pending_requests_bound=0))
+        for bound in (-1, True, '40042'):
+            before = copy.deepcopy(self.artifacts.bodies)
+            with self.subTest(bound=bound), self.assertRaises(ResearchError) as caught:
+                capacity.prepare_assignment_capacity(self.records, self.artifacts, self.route,
+                    dict(declaration, pending_requests_bound=bound))
+            self.assertEqual(caught.exception.code, 'invalid_input')
+            self.assertEqual(self.artifacts.bodies, before)
+        before = copy.deepcopy(self.artifacts.bodies)
+        with self.assertRaises(ResearchError) as caught:
+            capacity.prepare_assignment_capacity(self.records, self.artifacts, self.route,
+                dict(declaration, kind='final', frames=dict(final=self.frames['final']), pending_requests_bound=1))
+        self.assertEqual(caught.exception.code, 'invalid_input')
+        self.assertEqual(self.artifacts.bodies, before)
+
+    def test_allowance_page_cursor_is_rebuilt_from_the_authenticated_turn(self):
+        _, _, plan = self.admit_plan()
+        state = self.session.build_session_state(self.inventory, [], self.route, plan)['state']
+        page = self.session.build_session_allowance_page(self.route, state, plan, None, 1000)
+        turn = build_turn(self.unit, 'A finite comparison.')
+        turn['list_pages'] = [dict(list='allowances', after=None, next=page['next'])]
+        state = self.session.build_session_state(self.inventory, [turn], self.route, plan)['state']
+        self.assertEqual(state['list_pages']['allowances'], dict(next=page['next'], ended=False))
+        with self.assertRaises(ResearchError) as caught:
+            self.session.build_session_allowance_page(self.route, state, plan, None, 1000)
+        self.assertEqual(caught.exception.code, 'invalid_reading_response')
+        following = self.session.build_session_allowance_page(self.route, state, plan, page['next'], 1000)
+        self.assertEqual(following['rows'][0]['handle'], 't%d' % len(page['rows']))
+
+    def test_v7_fixture_admission_plan_artifacts_keep_their_base_digests(self):
+        from research_harness import openness_reading_v7 as v7
+        from test_openness_reading_v7_turns import MemoryArtifacts, build_native
+        cases = [
+            ('claude_cli_v1', 'claude-opus-5-5', 1,
+             '6023808e45cc15c32e4d2df35bf01977a6817ba3a81dc54389fda4be2f226fd9',
+             '35cae188e99b9034977c0485d875c23585fac4090622292b0e643dac438827c4'),
+            ('claude_cli_v1', 'claude-opus-5-5', 2,
+             '2f5100c6bae013b91553f594aa087386a4e3d226305d440dab7c4010c2cd29e3',
+             'd01129cc38f734ead4f8e4bcd0d23bfceb730aa060bddb2c327ed79000110c63'),
+            ('codex_cli_v1', 'gpt-6-astra', 1,
+             '30cfb4f3e30cea2766ea5a3dda90cd6247fb1c9fcb54bb7c570332e3ad632152',
+             'dd515142d8dfc97f422e315e54d637abe240fc7362a1b063d8893e55711a7e83'),
+            ('codex_cli_v1', 'gpt-6-astra', 8,
+             '9c1e4e8e34949a6a8226008a8bd6a1627fde10786efa7c2dfe669d5bba167595',
+             'd6787406e9242e67ff26d81521cc76da7cd5b5f006d575affcee88bd485ed898')]
+        for adapter, model, targets, expected, expected_artifact in cases:
+            with self.subTest(adapter=adapter, targets=targets), patch.object(v7, 'build_inventory',
+                    return_value=v7.plan_inventory([], {})):
+                result = v7.check_v7_admission({}, MemoryArtifacts(), build_route(adapter, model, effort='xhigh'),
+                                                build_native(targets))
+                self.assertEqual(result['state'], 'record')
+                self.assertEqual(digest(result['capacity_plan']), expected)
+                self.assertEqual(result['capacity_members']['capacity_plan']['digest'], expected)
+                self.assertEqual(result['capacity_members']['capacity_plan']['artifact']['sha256'], expected_artifact)
 
 
 if __name__ == '__main__':

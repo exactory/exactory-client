@@ -105,7 +105,9 @@ def build_session_inventory(records, artifacts, packet, frame_units=()):
 def project_session_turn(inventory, observation):
     """Project one authenticated observation, without storage or earlier state.
 
-    Observation: {number, assignment_id, attempt_id, deliveries, output}.
+    Observation: {number, assignment_id, attempt_id, deliveries, output,
+    list_pages?}. A delivered list page records {list, after, next}; rows remain
+    material of that request and are not copied into carried state.
     Deliveries: {unit, part, start, end, text, request_kind?, request_id?,
     request_complete?}; offsets address the inventory unit, and text is the
     authenticated text of this request's part.
@@ -145,6 +147,7 @@ def project_session_turn(inventory, observation):
         settled_requests=copy.deepcopy(output['settled_requests']),
         completed_requests=list(dict.fromkeys(row['request_id'] for row in deliveries
                                               if row.get('request_complete'))),
+        list_pages=copy.deepcopy(observation.get('list_pages', [])),
         passage_characters=sum(row['end'] - row['start'] for row in observation['deliveries']
                                if row.get('request_kind') == 'passage'))
 
@@ -208,6 +211,8 @@ def build_session_state(inventory, turns, route, plan):
                     pending[request['id']] = request
             state['requests'].append(request)
         state['allowances']['passages']['used'] += projected['passage_characters']
+        for page in projected['list_pages']:
+            state.setdefault('list_pages', {})[page['list']] = dict(next=page['next'], ended=page['next'] is None)
     state['delivered_sources'] = len(delivered_sources)
     state['pending_requests'] = list(pending.values())
     return dict(state=state, artifact=_describe_json(state))
@@ -220,19 +225,14 @@ def describe_session_plan(route, frames, units, targets):
     targets are the composition rule's handles (or handle/source_rows/gap_rows).
     The capacity manifest binds their sizing fields. The assignment builder also
     binds the complete inventory artifact by inventory_digest, as for v7. The
-    carried-row reserve covers both the bounded target object and pending list.
+    target allowance object and pending list have separate serialized reserves.
     """
-    rows = [dict(handle=handle, characters=999999999, used=999999999, remaining=999999999)
-            for handle in (row if isinstance(row, str) else row['handle'] for row in targets)]
-    target_rows_bound = min(ALLOWANCES_CHARACTERS, capacity.measure_capacity_value(route,
-        dict(notes=20000, excerpts=40000, targets=rows, passages=dict(characters=100000, used=100000)))
-        + STATE_FIELDS_CHARACTERS)
     # Pending rows are mandatory carried state, so a lowered frame cannot move
     # their reserve into unit_fields. Only the target object has the 30,000 share.
-    allowance_rows_bound = target_rows_bound + PENDING_REQUESTS_CHARACTERS + STATE_FIELDS_CHARACTERS
     return dict(kind='request', frames={kind: copy.deepcopy(frames[kind]) for kind in ('request', 'final')},
         inventory=[{key: row[key] for key in ('handle', 'kind', 'characters', 'sha256') if key in row}
-                   for row in units], targets=copy.deepcopy(targets), allowance_rows_bound=allowance_rows_bound)
+                   for row in units], targets=copy.deepcopy(targets), allowance_rows_bound=ALLOWANCES_CHARACTERS,
+        pending_requests_bound=PENDING_REQUESTS_CHARACTERS + STATE_FIELDS_CHARACTERS)
 
 
 def _describe_pending_request(request):
@@ -276,3 +276,14 @@ def describe_session_final_entries(state, targets):
     selected = set(targets)
     return [copy.deepcopy(row) for row in state['excerpts']
             if row['status'] == 'verified' and selected.intersection(row['targets'])]
+
+
+def build_session_allowance_page(route, state, plan, after, material_allowance):
+    """Return the fixed-order allowance list through the v7 cursor/size contract.
+
+    The usage-sorted summary never changes this list's order. The turn observer
+    records the delivered page's {list, after, next} in observation.list_pages;
+    rebuilding state pins the next cursor without carrying earlier page rows.
+    """
+    from .openness_reading_v7 import build_list_page
+    return build_list_page('allowances', after, plan, state, route, material_allowance)

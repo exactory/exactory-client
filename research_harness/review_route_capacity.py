@@ -1751,7 +1751,8 @@ def _summarize_capacity_inventory(inventory):
 
 
 def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_budget=None,
-                        records=None, artifacts=None, measure=None, allowance_rows_bound=None):
+                        records=None, artifacts=None, measure=None, allowance_rows_bound=None,
+                        pending_requests_bound=0):
     """Pin a chain's budgets; builders supply serialized field sizes and stable target handles.
 
     Fixture declarations and v7 assignment builders bind the returned artifact
@@ -1786,6 +1787,8 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
     for kind, fields in frames.items():
         floor = describe_material_levels(kind)[-1]
         carried_minimum = carried_bound if kind in ('reading', 'read', 'request') else 0
+        if kind == 'request':
+            carried_minimum += pending_requests_bound
         bound = min(sum(fields.values()), FRAME_MAXIMUM_CHARACTERS,
                     text_room - BOUNDED_NOTICE_CHARACTERS - floor - carried_minimum)
         if bound < 0:
@@ -1869,6 +1872,8 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
     tasks = {}
     for kind, value in frame.items():
         carried_characters = notes + allowance_rows if kind in ('reading', 'read', 'request') else 0
+        if kind == 'request':
+            carried_characters += pending_requests_bound
         selected = select_task_limits(route, profile, kind, targets=len(handles),
             frame_characters=value['bound'] + BOUNDED_NOTICE_CHARACTERS,
             carried_characters=carried_characters, calibrated=limits['request_measure'] == 'calibrated', text_room=text_room)
@@ -1883,6 +1888,9 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
         selected['levels'] = level_limits['levels']
         tasks[kind] = dict(selected, carried_characters=carried_characters,
                            notice_characters=BOUNDED_NOTICE_CHARACTERS)
+        if kind == 'request' and pending_requests_bound:
+            tasks[kind]['carried_components'] = dict(notes=notes, allowances=allowance_rows,
+                                                     pending_requests=pending_requests_bound)
         policy_ceiling = (describe_material_levels(kind)[0] if selected['state'] == 'unmeasured'
                           else selected['material_allowance'])
         input_ceiling = max(row['material_allowance'] for row in selected['levels']
@@ -2011,7 +2019,7 @@ def prepare_assignment_capacity(records, artifacts, route, declaration):
     from .errors import ResearchError
     from .review_field_classes import FRAME_UNIT_FIELD_PREFIX
     fields(declaration, ('kind',), ('plan', 'frames', 'inventory', 'targets', 'carried_budget',
-                                  'measure', 'allowance_rows_bound'))
+                                  'measure', 'allowance_rows_bound', 'pending_requests_bound'))
     if 'plan' in declaration:
         fields(declaration, ('kind', 'plan'))
         reference = declaration['plan']
@@ -2021,7 +2029,7 @@ def prepare_assignment_capacity(records, artifacts, route, declaration):
             raise ResearchError('invalid_input', 'A continued capacity plan keeps its route class.')
     else:
         fields(declaration, ('kind', 'frames', 'inventory', 'targets'),
-               ('carried_budget', 'measure', 'allowance_rows_bound'))
+               ('carried_budget', 'measure', 'allowance_rows_bound', 'pending_requests_bound'))
         frames, inventory, targets = (declaration[key] for key in ('frames', 'inventory', 'targets'))
         if not isinstance(frames, dict) or not frames or any(kind not in TURN_KINDS or kind == 'staged' for kind in frames):
             raise ResearchError('invalid_input', 'A capacity declaration needs bounded frames for supported turn kinds.')
@@ -2061,10 +2069,16 @@ def prepare_assignment_capacity(records, artifacts, route, declaration):
         budget = declaration.get('carried_budget')
         if budget is not None and (type(budget) is not int or budget < 0):
             raise ResearchError('invalid_input', 'The carried budget must be a nonnegative integer.')
+        pending_bound = declaration.get('pending_requests_bound', 0)
+        if (type(pending_bound) is not int or pending_bound < 0
+                or pending_bound and 'request' not in frames):
+            raise ResearchError('invalid_input',
+                'A pending request bound is a nonnegative integer for a plan with a request turn.')
         plan = plan_chain_capacity(route, read_output_profile(records, route), frames=frames,
                                    inventory=inventory, targets=targets, carried_budget=budget,
                                    measure=declaration.get('measure'),
                                    allowance_rows_bound=declaration.get('allowance_rows_bound'),
+                                   pending_requests_bound=pending_bound,
                                    records=records, artifacts=artifacts)
         from .review_protocol import _put_json
         reference = dict(protocol=CAPACITY_PLAN_PROTOCOL, digest=digest(plan), artifact=_put_json(artifacts, plan))

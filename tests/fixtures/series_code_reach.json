@@ -1014,6 +1014,7 @@
           "research_harness/review_route_capacity.py:divide_room#1": ["form","limit"],
           "research_harness/review_route_capacity.py:prepare_assignment_capacity#1": ["content"],
           "research_harness/review_route_capacity.py:prepare_assignment_capacity#10": ["content"],
+          "research_harness/review_route_capacity.py:prepare_assignment_capacity#11": ["content"],
           "research_harness/review_route_capacity.py:prepare_assignment_capacity#2": ["content"],
           "research_harness/review_route_capacity.py:prepare_assignment_capacity#3": ["content"],
           "research_harness/review_route_capacity.py:prepare_assignment_capacity#4": ["content"],

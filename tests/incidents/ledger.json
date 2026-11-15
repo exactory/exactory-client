@@ -7324,6 +7324,22 @@
         "test_review_session_v4_record.SessionRecordTests.test_same_authenticated_turns_rebuild_the_same_state_digest",
         "test_review_session_v4_record.SessionRecordTests.test_thousand_delivered_sources_are_one_count_and_final_still_retains_early_excerpt"
       ]
+    },
+    {
+      "id": "session-v4-bounded-allowance-admission-and-pages",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "bounded session allowance projection under a stored request plan",
+      "summary": "The initial session state tests summarized large target tables without proving admission or access to omitted rows, and the declaration combined target and pending row reserves.",
+      "expected": "Admission pins one 30000-character allowance projection separately from notes and pending requests. A keyed synthetic route admits 500 targets, every rebuilt request fits its stored request task, list pages return each allowance row once, and v7 fixture plan values and artifact digests stay unchanged.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_record.SessionAllowancePlanTests.test_finding_10_many_targets_share_admission_bound_and_page_every_allowance_row_once",
+        "test_review_session_v4_record.SessionAllowancePlanTests.test_pending_rows_are_separate_from_the_single_allowance_projection_bound",
+        "test_review_session_v4_record.SessionAllowancePlanTests.test_pending_request_bound_is_validated_before_any_plan_publication",
+        "test_review_session_v4_record.SessionAllowancePlanTests.test_allowance_page_cursor_is_rebuilt_from_the_authenticated_turn",
+        "test_review_session_v4_record.SessionAllowancePlanTests.test_v7_fixture_admission_plan_artifacts_keep_their_base_digests"
+      ]
     }
   ]
 }
