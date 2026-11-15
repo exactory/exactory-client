@@ -1,4 +1,4 @@
-"""Divisible content, separate entry reserves and sized reads (finding 4)."""
+"""Balanced delivery groups, applied content rates and separate entry reserves."""
 import copy
 from fractions import Fraction
 import json
@@ -56,7 +56,7 @@ def build_small_plan(rate=0.01, entry=300, start=30000, room=60000):
                           combine=dict(material_allowance=room, levels=[dict(material_allowance=room)])))
 
 
-def build_fixture_plan(state, small_units=False):
+def build_fixture_plan(state, small_units=False, inventory=None):
     route = build_route(model='unlisted-model' if state == 'unmeasured' else 'claude-opus-5-5',
                         effort='max' if state == 'over_limit_expected' else 'xhigh',
                         output=32000 if state == 'unmeasured' else 128000)
@@ -68,8 +68,9 @@ def build_fixture_plan(state, small_units=False):
         profile = capacity.read_output_profile({}, route, priors=[row])
     limit = capacity.describe_route_capacity(route, profile)['input_text_characters']['value']
     total = 2000000 if small_units else 30 * limit
-    inventory = [dict(handle='u' + str(index), kind='text',
-                      characters=total // 10000 + (index < total % 10000)) for index in range(10000)]
+    if inventory is None:
+        inventory = [dict(handle='u' + str(index), kind='text',
+                          characters=total // 10000 + (index < total % 10000)) for index in range(10000)]
     plan = capacity.plan_chain_capacity(route, profile,
         frames={kind: dict(instructions=3000) for kind in ('read', 'combine', 'check', 'final')},
         inventory=inventory, targets=[])
@@ -100,11 +101,13 @@ class CardAllowanceTests(unittest.TestCase):
         before = copy.deepcopy((plan, given))
         self.assertEqual(parts.compute_card_allowance(plan, groups=given),
                          dict(content_characters=1, entry_characters=600, characters=601,
-                              card_budget=0, card_reserve=300, late_unit_reserve=301))
+                              card_budget=0, card_reserve=300, late_unit_reserve=301,
+                              late_characters_beyond_reserve=0))
         self.assertEqual((plan, given), before)
         self.assertEqual(parts.compute_card_allowance(plan, []),
                          dict(content_characters=0, entry_characters=0, characters=0,
-                              card_budget=0, card_reserve=0, late_unit_reserve=0))
+                              card_budget=0, card_reserve=0, late_unit_reserve=0,
+                              late_characters_beyond_reserve=0))
 
     def test_revised_examples_keep_full_allocations_and_reserves_at_every_level(self):
         floor_plan = build_small_plan(rate=5, entry=2200, start=15000)
@@ -120,7 +123,7 @@ class CardAllowanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=Path(__file__).parent) as root:
             artifacts = ArtifactStore(Path(root))
             reference = artifacts.put(base_raw, 'application/json')
-            cases = ((floor_plan, 15000, 57800), (answer_plan, 60000, 75000), (base, 450000, 338999))
+            cases = ((floor_plan, 15000, 57800), (answer_plan, 60000, 27500), (base, 450000, 43350))
             for plan, characters, expected_content in cases:
                 before = copy.deepcopy(plan)
                 units = [dict(handle='u', characters=characters)]
@@ -166,13 +169,13 @@ class CardAllowanceTests(unittest.TestCase):
 
     def test_integer_content_allocations_telescope_at_arbitrary_boundaries(self):
         plan = build_small_plan(rate=0.1234567, start=600000)
-        self.assertEqual(parts.read_content_rate(plan), Fraction(1234567, 10000000))
+        self.assertEqual(parts.read_content_rate(plan), Fraction(199, 2000))
         whole = parts.compute_content_allocation(plan, 0, 10001)
         first = parts.compute_content_allocation(plan, 0, 5000)
         second = parts.compute_content_allocation(plan, 5000, 10001)
-        self.assertEqual((whole, first, second), (1234, 617, 617))
+        self.assertEqual((whole, first, second), (995, 497, 498))
         self.assertEqual(first + second, whole)
-        self.assertEqual(parts.compute_content_allocation(plan, 11, 10012), 1235)
+        self.assertEqual(parts.compute_content_allocation(plan, 11, 10012), 995)
 
     def test_repeated_level_division_keeps_content_and_the_base_plan_artifact(self):
         raw = BASE_PLAN_PATH.read_bytes()
@@ -185,7 +188,7 @@ class CardAllowanceTests(unittest.TestCase):
             reference = artifacts.put(raw, 'application/json')
             for level in (600000, 300000, 150000, 75000, 37500, 18750, 15000):
                 turns = parts.plan_read_turns(plan, units, material_allowance=level)
-                self.assertEqual(sum(turn['allowance']['content_characters'] for turn in turns), 338999)
+                self.assertEqual(sum(turn['allowance']['content_characters'] for turn in turns), 43350)
                 count = sum(len(turn['cards']) for turn in turns)
                 entries = sum(turn['allowance']['card_reserve'] for turn in turns)
                 self.assertLessEqual(count, plan['allocation']['largest_card_count'])
@@ -196,7 +199,7 @@ class CardAllowanceTests(unittest.TestCase):
             with patch.object(capacity, 'CARD_ENTRY_CHARACTERS', 999999), \
                     patch.object(capacity, 'read_output_profile', side_effect=AssertionError('Use the stored plan')):
                 self.assertEqual(sum(turn['allowance']['content_characters']
-                    for turn in parts.plan_read_turns(plan, units)), 338999)
+                    for turn in parts.plan_read_turns(plan, units)), 43350)
                 parts.count_series_turns(plan, units)
             self.assertEqual(artifacts.read(reference), raw)
 
@@ -220,7 +223,7 @@ class CardAllowanceTests(unittest.TestCase):
         for level in (60000, 15000):
             turns = parts.plan_read_turns(plan, units, material_allowance=level)
             self.assertTrue(all(turn['allowance']['characters'] <= 30000 for turn in turns))
-            self.assertEqual(sum(turn['allowance']['content_characters'] for turn in turns), 75000)
+            self.assertEqual(sum(turn['allowance']['content_characters'] for turn in turns), 27500)
             self.assertLessEqual(sum(len(turn['cards']) for turn in turns), 4)
         self.assertEqual(digest(plan), before)
 
@@ -229,7 +232,7 @@ class CardAllowanceTests(unittest.TestCase):
         plan['task']['read']['levels'][-1]['answer_bound'] = 30000
         plan['task']['read']['adaptation'] = dict(ceiling=60000)
         plan['task']['read']['levels'].insert(0, dict(material_allowance=120000, answer_bound=100))
-        self.assertEqual(parts.read_content_rate(plan), Fraction(27800, 15000))
+        self.assertEqual(parts.read_content_rate(plan), Fraction(57800, 60000))
         plan['task']['read']['levels'][-1]['answer_bound'] = 2200
         with self.assertRaises(ResearchError) as caught:
             parts.read_content_rate(plan)
@@ -264,14 +267,33 @@ class CardAllowanceTests(unittest.TestCase):
         turns = parts.plan_read_turns(plan, units)
         allowance = {key: sum(turn['allowance'][key] for turn in turns) for key in turns[0]['allowance']}
         self.assertEqual(allowance, dict(content_characters=20, entry_characters=600, characters=620,
-                                        card_budget=10, card_reserve=300, late_unit_reserve=310))
-        plan['allocation']['late_unit_reserve'] = 309
-        with self.assertRaises(ResearchError) as caught:
-            parts.plan_read_turns(plan, units)
-        self.assertEqual(caught.exception.code, 'invalid_input')
+                                        card_budget=10, card_reserve=300, late_unit_reserve=310,
+                                        late_characters_beyond_reserve=0))
+
+    def test_partial_late_reserve_keeps_whole_entry_and_drops_content(self):
+        for reserve, charged, beyond in ((309, 300, 0), (299, 0, 300), (0, 0, 300)):
+            with self.subTest(reserve=reserve):
+                plan = build_small_plan(rate=0.01)
+                plan['allocation']['late_unit_reserve'] = reserve
+                units = [dict(handle='late', characters=1000, late=True)]
+                turn = parts.size_read_turn(plan, 30000, units)
+                self.assertEqual(turn['cards'][0]['content_characters'], 0)
+                self.assertEqual(turn['cards'][0]['characters'], 300)
+                self.assertEqual(turn['allowance']['late_unit_reserve'], charged)
+                self.assertEqual(turn['allowance']['late_characters_beyond_reserve'], beyond)
+                self.assertEqual(turn['next']['late_characters_beyond_reserve'], beyond)
 
 
 class CardCondensingTests(unittest.TestCase):
+    def test_pinned_rate_selects_condensing_even_when_applied_rate_is_lower(self):
+        plan = build_small_plan(rate=1, start=600000)
+        plan['task']['read']['answer_bound'] = 4000
+        for row in plan['task']['read']['levels']:
+            row['answer_bound'] = 4000
+        self.assertLess(parts.read_content_rate(plan), Fraction(20, 1000))
+        turns = [dict(cards=[dict(handle='c' + str(index), characters=300)]) for index in range(300)]
+        self.assertEqual(parts.plan_card_condensing(plan, turns), [])
+
     def test_forecast_returns_sized_reads_without_using_the_total_forecast(self):
         plan = build_small_plan(rate=0)
         units = [dict(handle='a', characters=10000), dict(handle='b', characters=10000)]
@@ -343,6 +365,43 @@ class CardCondensingTests(unittest.TestCase):
 
 
 class GroupSizingTests(unittest.TestCase):
+    def test_late_funding_rounding_can_require_the_shorter_group_first(self):
+        plan = build_small_plan(rate=0.01, start=37500)
+        plan['task']['read']['answer_bound'] = 750
+        plan['allocation']['late_unit_reserve'] = 451
+        units = [dict(handle='prior', characters=99), dict(handle='late', characters=30001, late=True)]
+        cursor = dict(unit_index=1, unit_offset=0, delivered=99, card_count=1, card_reserve=300, card_budget=0)
+        turn = parts.size_read_turn(plan, 37500, units, position=cursor)
+        self.assertEqual(turn['unit_characters'], 30001)
+        self.assertEqual([card['unit_characters'] for card in turn['cards']], [15000, 15001])
+        self.assertEqual([card['content_characters'] for card in turn['cards']], [150, 0])
+        self.assertEqual(turn['allowance']['characters'], 750)
+        self.assertEqual(turn['allowance']['late_unit_reserve'], 450)
+        self.assertEqual(turn['allowance']['late_characters_beyond_reserve'], 300)
+
+    def test_exhausted_late_reserve_keeps_maximal_balanced_cards(self):
+        for level, count in ((60000, 4), (600000, 36)):
+            with self.subTest(level=level):
+                plan = build_small_plan(rate=2, entry=2200, start=level)
+                plan['allocation']['late_unit_reserve'] = 0
+                units = [dict(handle='late', characters=level, late=True)]
+                turn = parts.size_read_turn(plan, level, units)
+                self.assertEqual(turn['unit_characters'], level)
+                self.assertEqual(len(turn['cards']), count)
+                self.assertEqual(turn['allowance']['characters'], count * 2200)
+                self.assertEqual(turn['next']['late_characters_beyond_reserve'], count * 2200)
+
+    def test_funded_late_turn_keeps_its_whole_level_before_maximizing_cards(self):
+        plan = build_small_plan(rate=2, entry=2200, start=600000)
+        plan['allocation']['late_unit_reserve'] = 1000000
+        units = [dict(handle='late', characters=600000, late=True)]
+        turn = parts.size_read_turn(plan, 600000, units)
+        self.assertEqual(turn['unit_characters'], 600000)
+        self.assertEqual(len(turn['cards']), 10)
+        self.assertEqual(turn['allowance']['characters'], 79800)
+        self.assertEqual(turn['next']['late_unit_reserve'], 79800)
+        self.assertEqual(turn['next']['late_characters_beyond_reserve'], 0)
+
     def test_a_card_groups_consecutive_units_with_bounded_endpoint_metadata(self):
         plan = build_small_plan(rate=0)
         units = [dict(handle='u' + str(index), characters=5000) for index in range(6)]
@@ -368,12 +427,12 @@ class GroupSizingTests(unittest.TestCase):
     def test_maximum_material_precedes_card_count_and_no_allowance_is_cut(self):
         plan = build_small_plan(rate=2, entry=2200, start=60000)
         turn = parts.size_read_turn(plan, 60000, [dict(handle='u', characters=60000)])
-        self.assertEqual(turn['unit_characters'], 37800)
-        self.assertEqual(len(turn['cards']), 2)
-        self.assertEqual(turn['allowance']['characters'], 80000)
-        self.assertEqual([group['unit_characters'] for group in turn['cards']], [18900, 18900])
+        self.assertEqual(turn['unit_characters'], 60000)
+        self.assertEqual(len(turn['cards']), 4)
+        self.assertEqual(turn['allowance']['characters'], 66600)
+        self.assertEqual([group['unit_characters'] for group in turn['cards']], [15000] * 4)
 
-    def test_balanced_rounding_can_require_the_shorter_group_first(self):
+    def test_balanced_intervals_keep_rounding_phase_under_whole_level_rate(self):
         plan = build_small_plan(rate=5, entry=2200, start=60000, room=12201)
         plan['task']['read']['answer_bound'] = 24402
         plan['task']['read']['levels'][-1]['answer_bound'] = 12200
@@ -382,9 +441,9 @@ class GroupSizingTests(unittest.TestCase):
                       card_count=1, card_reserve=2200, card_budget=10000)
         turn = parts.size_read_turn(plan, 60000, units, position=cursor)
         self.assertEqual(turn['unit_characters'], 30003)
-        self.assertEqual([group['unit_characters'] for group in turn['cards']], [15001, 15002])
-        self.assertEqual([group['content_characters'] for group in turn['cards']], [10001, 10001])
-        self.assertEqual(turn['cards'][0]['last'], dict(unit='u', offset=15001))
+        self.assertEqual([group['unit_characters'] for group in turn['cards']], [15002, 15001])
+        self.assertEqual([group['content_characters'] for group in turn['cards']], [2501, 2500])
+        self.assertEqual(turn['cards'][0]['last'], dict(unit='u', offset=15002))
 
     def test_initial_and_late_groups_can_share_a_turn_without_mixing(self):
         plan = build_small_plan(rate=0, start=60000)
@@ -486,27 +545,133 @@ class BudgetPolicyMeasurementsTests(unittest.TestCase):
                 assert_inventory_coverage(self, inventory, [group for turn in turns for group in turn['cards']])
                 self.assertEqual(json.dumps(plan, sort_keys=True), before)
 
-    def test_unit_density_does_not_change_read_turns(self):
+    def test_same_delivery_characters_take_same_reads_with_different_row_counts(self):
         for state in ('fits', 'over_limit_expected', 'unmeasured'):
             with self.subTest(state=state):
                 original, units = build_fixture_plan(state, small_units=True)
-                route = build_route(model='unlisted-model' if state == 'unmeasured' else 'claude-opus-5-5',
-                                    effort='max' if state == 'over_limit_expected' else 'xhigh',
-                                    output=32000 if state == 'unmeasured' else 128000)
-                many_units = [dict(handle='v' + str(index), kind='text', characters=20) for index in range(100000)]
-                many = capacity.plan_chain_capacity(route, original['profile'],
-                    frames={kind: frame['fields'] for kind, frame in original['frame'].items()},
-                    inventory=many_units, targets=[], carried_budget=original['allocation']['carried_turn_pool'])
-                before = (digest(original), digest(many))
+                # Both inventories state delivery characters, including their rows.
+                other_units = [dict(handle='v' + str(index), kind='text', characters=20000) for index in range(100)]
+                other, other_units = build_fixture_plan(state, inventory=other_units)
+                before = (digest(original), digest(other))
+                self.assertEqual(sum(unit['characters'] for unit in units), 2000000)
+                self.assertEqual(sum(unit['characters'] for unit in other_units), 2000000)
                 for level in (original['task']['read']['material_allowance'], 15000):
-                    sparse = parts.plan_read_turns(original, units, material_allowance=level)
-                    dense = parts.plan_read_turns(many, many_units, material_allowance=level)
-                    self.assertEqual([turn['unit_characters'] for turn in dense],
-                                     [turn['unit_characters'] for turn in sparse])
-                    self.assertEqual([len(turn['cards']) for turn in dense],
-                                     [len(turn['cards']) for turn in sparse])
-                    assert_inventory_coverage(self, many_units, [group for turn in dense for group in turn['cards']])
-                self.assertEqual((digest(original), digest(many)), before)
+                    first = parts.plan_read_turns(original, units, material_allowance=level)
+                    second = parts.plan_read_turns(other, other_units, material_allowance=level)
+                    self.assertEqual([turn['unit_characters'] for turn in first],
+                                     [turn['unit_characters'] for turn in second])
+                    assert_inventory_coverage(self, other_units, [group for turn in second for group in turn['cards']])
+                self.assertEqual((digest(original), digest(other)), before)
+
+
+class AppliedRateRegressionTests(unittest.TestCase):
+    def test_positive_rate_fills_reachable_levels_for_large_units(self):
+        cases = (('fits', 5, 200000, 2, 28, 96333, 61600),
+                 ('over_limit_expected', 5, 200000, 27, 27, 48000, 59400),
+                 ('fits', 1, 100000, 1, 6, 9633, 13200),
+                 ('over_limit_expected', 1, 100000, 3, 3, 4800, 6600))
+        for state, count, size, read_count, card_count, content, entries in cases:
+            with self.subTest(state=state, count=count, size=size):
+                units = [dict(handle='u' + str(index), kind='text', characters=size) for index in range(count)]
+                plan, units = build_fixture_plan(state, inventory=units)
+                before = json.dumps(plan, sort_keys=True), digest(plan)
+                self.assertGreater(plan['allocation']['card_rate'], 0)
+                level = plan['task']['read']['material_allowance']
+                turns = parts.plan_read_turns(plan, units)
+                self.assertEqual(len(turns), read_count)
+                self.assertTrue(all(turn['unit_characters'] == level for turn in turns[:-1]))
+                cards = [card for turn in turns for card in turn['cards']]
+                self.assertEqual(len(cards), card_count)
+                self.assertLessEqual(len(cards), plan['allocation']['largest_card_count'])
+                self.assertEqual(turns[-1]['next']['card_budget'], content)
+                self.assertEqual(turns[-1]['next']['card_reserve'], entries)
+                self.assertEqual(turns[-1]['next']['late_unit_reserve'], 0)
+                bounds = parts.describe_card_bounds(plan, level)
+                self.assertTrue(all(card['characters'] <= bounds['card_characters'] for card in cards))
+                self.assertTrue(all(turn['allowance']['characters'] <= bounds['turn_characters'] for turn in turns))
+                assert_inventory_coverage(self, units, cards)
+                self.assertEqual((json.dumps(plan, sort_keys=True), digest(plan)), before)
+
+
+class LateCardRegressionTests(unittest.TestCase):
+    def run_appended_units(self, initial_size, late_sizes):
+        units = [dict(handle='initial', kind='text', characters=initial_size)]
+        plan, units = build_fixture_plan('unmeasured', inventory=units)
+        before = json.dumps(plan, sort_keys=True), digest(plan)
+        level = plan['task']['read']['material_allowance']
+        self.assertEqual(level, 15000)
+        self.assertEqual(plan['task']['read']['adaptation']['ceiling'], 75000)
+        self.assertEqual(parts.read_content_rate(plan), Fraction(3, 125))
+        turns = [parts.size_read_turn(plan, level, units)]
+        units.extend(dict(handle='late' + str(index), kind='text', characters=size, late=True)
+                     for index, size in enumerate(late_sizes))
+        while True:
+            turn = parts.size_read_turn(plan, level, units, position=turns[-1]['next'])
+            if turn is None:
+                break
+            turns.append(turn)
+        cards = [card for turn in turns for card in turn['cards']]
+        initial = [card for card in cards if not card['late']]
+        self.assertLessEqual(len(initial), plan['allocation']['largest_card_count'])
+        self.assertEqual(turns[-1]['next']['card_count'], len(initial))
+        self.assertTrue(all(card['characters'] <= 4000 for card in cards))
+        self.assertTrue(all(turn['allowance']['characters'] <= 4000 for turn in turns))
+        for turn in turns:
+            self.assertEqual(parts.compute_card_allowance(plan, turn['cards']), turn['allowance'])
+        for card in cards:
+            value = dict(card, summary='')
+            value['summary'] = 's' * (card['characters'] - measure(value))
+            self.assertEqual(measure(value), card['characters'])
+        assert_inventory_coverage(self, units, cards)
+        self.assertEqual((json.dumps(plan, sort_keys=True), digest(plan)), before)
+        return plan, turns, initial, [card for card in cards if card['late']]
+
+    def test_appended_half_floor_unit_uses_only_late_reserve(self):
+        plan, turns, initial, late = self.run_appended_units(7500, [7500])
+        self.assertEqual(plan['allocation']['largest_card_count'], 1)
+        self.assertEqual(plan['allocation']['card_reserve'], 2200)
+        self.assertEqual(plan['allocation']['late_unit_reserve'], 12000)
+        self.assertEqual([turn['unit_characters'] for turn in turns], [7500, 7500])
+        self.assertEqual([card['characters'] for card in initial + late], [2380, 2380])
+        final = turns[-1]['next']
+        self.assertEqual((final['card_budget'], final['card_reserve'], final['late_unit_reserve'],
+                          final['late_characters_beyond_reserve']), (180, 2200, 2380, 0))
+
+    def test_initial_tail_ends_before_the_late_group(self):
+        plan, turns, initial, late = self.run_appended_units(22500, [7500])
+        self.assertEqual([turn['unit_characters'] for turn in turns], [15000, 7500, 7500])
+        self.assertEqual([card['characters'] for card in initial], [2560, 2380])
+        self.assertEqual([card['characters'] for card in late], [2380])
+        final = turns[-1]['next']
+        self.assertEqual((final['card_budget'], final['card_reserve'], final['late_unit_reserve'],
+                          final['late_characters_beyond_reserve']), (540, 4400, 2380, 0))
+
+    def test_forty_late_units_continue_and_condense_unfunded_entries(self):
+        plan, turns, initial, late = self.run_appended_units(7500, [15000] * 40)
+        self.assertEqual(len(turns), 41)
+        self.assertEqual([card['characters'] for card in initial], [2380])
+        self.assertEqual([card['characters'] for card in late], [2560] * 4 + [2200] * 36)
+        self.assertEqual([card['content_characters'] for card in late], [360] * 4 + [0] * 36)
+        final = turns[-1]['next']
+        self.assertEqual((final['card_budget'], final['card_reserve'], final['late_unit_reserve'],
+                          final['late_characters_beyond_reserve']), (180, 2200, 10240, 79200))
+        before = json.dumps(plan, sort_keys=True), digest(plan)
+        events = parts.plan_card_condensing(plan, turns)
+        self.assertEqual([event['after_read_turn'] for event in events], [32, 41])
+        self.assertEqual([event['block']['characters'] for event in events], [59400, 19800])
+        self.assertEqual([handle for event in events for handle in event['block']['entries']],
+                         [card['handle'] for card in late[4:]])
+        self.assertEqual((json.dumps(plan, sort_keys=True), digest(plan)), before)
+
+    def test_allowance_replays_noncontiguous_late_groups_without_regranting(self):
+        plan, turns, initial, late = self.run_appended_units(7500, [15000] * 40)
+        selected = [late[0], late[4], late[-1]]
+        for card in selected:
+            card['content_characters'] = 999
+        allowance = parts.compute_card_allowance(plan, selected)
+        self.assertEqual(allowance, dict(content_characters=360, entry_characters=6600, characters=6960,
+                                        card_budget=0, card_reserve=0, late_unit_reserve=2560,
+                                        late_characters_beyond_reserve=4400))
 
 
 class SeriesSimulationTests(unittest.TestCase):
