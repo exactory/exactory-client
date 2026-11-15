@@ -37105,6 +37105,30 @@
         }
       }
     },
+    "v7_forecast_gap": {
+      "bound": {
+        "serialized_characters": 400
+      },
+      "class": "fixed",
+      "ground": "The forecast form of reading_final.gaps[]: one row per native minimum gap, budgeted by gap_rows and GAP_ROW_CHARACTERS.",
+      "members": {
+        "condition": {
+          "class": "fixed"
+        },
+        "handle": {
+          "class": "fixed"
+        },
+        "outcomes": {
+          "class": "fixed",
+          "items": {
+            "class": "fixed"
+          }
+        },
+        "target": {
+          "class": "fixed"
+        }
+      }
+    },
     "v7_passage_request": {
       "class": "fixed",
       "members": {
@@ -37126,6 +37150,27 @@
         },
         "unit": {
           "class": "fixed"
+        }
+      }
+    },
+    "v7_reviewer_gap": {
+      "bound": {
+        "serialized_characters": "target allowance"
+      },
+      "class": "material",
+      "ground": "The reviewer form of reading_final.gaps[]: its serialized row, with the reserved handle width, is charged to the target grant. An over_allowance gap is not shown.",
+      "members": {
+        "formulation": {
+          "class": "fixed"
+        },
+        "handle": {
+          "class": "fixed"
+        },
+        "text": {
+          "bound": {
+            "characters": 600
+          },
+          "class": "material"
         }
       }
     }
@@ -92942,7 +92987,7 @@
                     "serialized_characters": "gap_rows plus target allowances"
                   },
                   "class": "material",
-                  "ground": "Forecast rows cost at most GAP_ROW_CHARACTERS (400) per gap_rows; reviewer rows include text of at most 600 characters and charge their exact wire size to the target grant.",
+                  "ground": "Forecast rows cost at most GAP_ROW_CHARACTERS (400) per gap_rows; reviewer rows include text of at most 600 characters and charge their exact wire size to the target grant. The two row classes and their exact closed members are declared separately as v7_forecast_gap and v7_reviewer_gap; items admits their combined vocabulary.",
                   "items": {
                     "class": "material",
                     "members": {

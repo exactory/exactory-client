@@ -1,6 +1,5 @@
 """The five v7 gaps, with synthetic command chains and immutable artifact requests."""
 
-import copy
 import json
 import unittest
 from unittest.mock import patch
@@ -185,6 +184,11 @@ class GapCommandTests(OpennessReadingCase):
 
 class GapBudgetTests(unittest.TestCase):
     def test_forecast_vocabulary_rows_fit_both_routes(self):
+        from pathlib import Path
+        declarations = json.loads((Path(__file__).parent / 'fixtures' / 'capacity_packet_schema.json').read_text())['definitions']
+        self.assertEqual(declarations['v7_forecast_gap']['class'], 'fixed')
+        self.assertEqual(declarations['v7_forecast_gap']['bound']['serialized_characters'], capacity.GAP_ROW_CHARACTERS)
+        self.assertEqual(declarations['v7_reviewer_gap']['class'], 'material')
         for adapter, model in [('codex_cli_v1', 'gpt-6-astra'), ('claude_cli_v1', 'claude-opus-5-5')]:
             route = build_route(adapter, model)
             for condition in GAP_REFUSALS:
@@ -262,14 +266,26 @@ class GapBudgetTests(unittest.TestCase):
         inventory = prepared['inventory']
         for body in prepared['bodies'].values(): artifacts.put(body)
         unit = next(row for row in inventory['units'] if row['label'] == 'search-0')
+        fixture = turns.TurnPacketTests()
+        fixture.setUp()
+        fixture.artifacts, fixture.built = artifacts, built
+        packet, chain = fixture.prepare()
+        assignment = dict(reading_chain=chain, capacity_plan=chain['capacity_plan'])
         parts = []
         for anchor in ('shared phrase', 'residual phrase 0'):
             row = v7.resolve_request_part(inventory, artifacts, dict(unit=unit['handle'], anchor=anchor))
             self.assertIsNotNone(row)
             self.assertIn(anchor, artifacts.read(row['artifact']).decode())
             parts.append(row['handle'])
+            answer = fixture.answer(packet)
+            answer['passage_requests'] = [dict(id='field', unit=unit['handle'], anchor=anchor, characters=10)]
+            v7.validate_turn_output(packet, answer, artifacts=artifacts, assignment=assignment)
         self.assertNotEqual(*parts)
         self.assertIsNone(v7.resolve_request_part(inventory, artifacts, dict(unit=unit['handle'], anchor='shared phrase residual phrase')))
+        answer['passage_requests'][0]['anchor'] = 'shared phrase residual phrase'
+        with self.assertRaises(ResearchError) as error:
+            v7.validate_turn_output(packet, answer, artifacts=artifacts, assignment=assignment)
+        self.assertEqual(error.exception.code, 'invalid_reading_response')
 
     def test_invalid_anchors_and_unknown_handles_keep_the_reading_refusal(self):
         fixture = turns.TurnPacketTests()
@@ -416,3 +432,5 @@ class AffectedNoteGapTests(carried.CarriedIntegrationSupport, OpennessReadingCas
                     if row.get('reading_chain', {}).get('first_assignment_id') == 'new'),
                    key=lambda row: row['reading_chain']['turn'])
         self.assertTrue(v7.verify_chain(records, self.artifacts, head))
+        finding = self.mutate(self.load_problem_module().record_openness, dict(assignment_id=head['id']))['result']
+        self.assertEqual(finding['outcome'], 'unresolved')

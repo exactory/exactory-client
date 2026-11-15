@@ -114,7 +114,7 @@ class RatioAndAdmissionTests(unittest.TestCase):
         built = build_inventory(artifacts)
         with patch.object(v7, 'build_inventory', return_value=built), patch.object(
                 capacity, 'read_profile_priors', return_value=[]), patch.object(v7, 'derive_inherited_ratio',
-                return_value=dict(characters_per_token=.51, source=dict(chain='old', attempt='measured'))):
+                return_value=dict(characters_per_token=.6, source=dict(chain='old', attempt='measured'))):
             admission = v7.check_v7_admission({}, artifacts, route, native)
         self.assertEqual(admission['state'], 'record')
         self.assertTrue(any(row['kind'] in ('fixed_field', 'target_page') for row in admission['inventory']['inventory']['units']))
@@ -130,19 +130,20 @@ class RatioAndAdmissionTests(unittest.TestCase):
         native = build_native()
         native['subject']['statement'] = 's' * 90000
         native['scientific_context']['openness_minimum']['statement'] = 's' * 90000
+        # Keep the reading notes reserve at its minimum so this boundary isolates the final frame.
         built = build_inventory(self.artifacts)
         with patch.object(v7, 'build_inventory', return_value=built), patch.object(
-                capacity, 'read_profile_priors', return_value=[]), patch.object(v7, 'derive_inherited_ratio',
-                return_value=dict(characters_per_token=.5, source=dict(chain='old', attempt='measured'))):
+                capacity, 'read_profile_priors', return_value=[]), patch.object(capacity, 'NOTES_MAXIMUM_CHARACTERS', 6000), patch.object(v7, 'derive_inherited_ratio',
+                return_value=dict(characters_per_token=.54, source=dict(chain='old', attempt='measured'))):
             with patch.object(v7, 'UNREAD_CORE_CHARACTERS', 0):
                 before = v7.check_v7_admission({}, self.artifacts, route, native)
             after = v7.check_v7_admission({}, self.artifacts, route, native)
         self.assertEqual(before['state'], 'record')
-        self.assertEqual(before['capacity_plan']['task']['final']['request_bound']['text_characters'], 115431)
+        self.assertEqual(before['capacity_plan']['task']['final']['request_bound']['text_characters'], 125079)
         self.assertEqual((after['state'], after['code']), ('stop', 'review_route_capacity_below_floor'))
         self.assertEqual(after['details']['reason'], 'fixed_frame')
-        self.assertEqual(after['details']['room'], 115950)
-        self.assertEqual(after['details']['frames']['final']['characters'] + 45000 + 60000, 116931)
+        self.assertEqual(after['details']['room'], 125226)
+        self.assertEqual(after['details']['frames']['final']['characters'] + 45000 + 60000, 126579)
 
     def test_same_measurement_does_not_compound_margin_across_three_successors(self):
         self.add_chain('first', ratio=1.36, measured=1.0)
@@ -538,11 +539,13 @@ class TurnPacketTests(unittest.TestCase):
         records = dict(witnessed, review_assignment={'chain': assignment}, review_route={'route': self.route}, review_attempt={
             'dense': dict(id='dense', assignment_id='chain', recorded_revision=2,
                 task=dict(kind='reading', level_material_allowance=120000),
-                usage=dict(sends=1, request_characters=100000, input_tokens=250000, output_tokens=50000))})
+                usage=dict(sends=1, request_characters=120000, input_tokens=250000, output_tokens=50000))})
         with patch.object(review_failure_class, 'classify_attempt', return_value=None):
             limits = capacity.derive_turn_task_limits(records, self.artifacts, assignment)
-        # The witnessed capacity reserves the answer, then the index reserve lowers this turn to 30,000.
+        # Give the longer prompt its room while keeping a dense ratio that lowers this turn to 30,000.
         self.assertEqual(limits['material_allowance'], 30000)
+        self.assertEqual(capacity.derive_turn_task_limits(records, self.artifacts, assignment,
+                                                        kind='final')['material_allowance'], 60000)
 
     def test_exact_target_and_notes_grants_reserve_final_collection_overhead(self):
         from test_review_output_profile import build_row

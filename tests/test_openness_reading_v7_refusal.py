@@ -1252,7 +1252,7 @@ class NoticeRoomTests(unittest.TestCase):
         fixture = turn_fixtures.TurnPacketTests()
         fixture.setUp()
         self.assertEqual(digest(v7.measure_turn_frames(fixture.route, fixture.native)['reading']),
-                         'bd1c70a58c7c047501d4c9ca9b7d7ce0db0b70cbec1935bdeb02d5f3a709ab88')
+                         '7f5a1521e38b569f3c5740be5c04f58f4cad0da0cb1aa8923ed411d139719d40')
         packet, chain = fixture.prepare()
         plan = capacity.read_chain_capacity_plan(fixture.artifacts, chain)
         inventory = json.loads(fixture.artifacts.read(chain['inventory']))
@@ -1264,12 +1264,12 @@ class NoticeRoomTests(unittest.TestCase):
         final = v7.build_turn_packet(fixture.artifacts, fixture.route, fixture.packet, 'chain', 2,
             inventory, state, plan, capacity.derive_plan_task_limits(plan, 'final'), 'final')
         for kind, value, expected_packet, expected_prompt, expected_without_plan in (
-            ('reading', packet, '20d60f244b35fd566a23df8ecd927702ff794ad6ec42922c932ae0f3deb908c3',
-             '1ee257be7dc40a135dce006f8d2911744a22f925488252d31992c788a4dce50c',
-             '73dbac96ae90f5726bf1fbaf9e8d5194e27a61e624c698243478cddb3accda7e'),
-            ('final', final, 'bbdb8aed18c37c99573d19d108085f38b8f8dcce6d8c28ec4db8aa1f788f36cb',
-             'aa25b66defa740bc21346b3a8c6dabe2d7a305b1468f39a70707a149fbecc675',
-             '44874553d13b5c6d4ae31c7c9fc671fddc7f3b2504b4db88c61637757068600b')):
+            ('reading', packet, '38cf8a6bed9624f5ccf582e8667c895bc9bd37577a46fcdc4da1f379403b6868',
+             '8321af3263199e2fa1e0aec9a2e0c214dcb2733879874762f69f0757496abe4a',
+             '7c92fc4865879fa862e2457584a85ed254d566b92046941468d99ecc9082746e'),
+            ('final', final, '69922ca60c3d591a0a615d6898e9b422dc256e62650d6eac898bd3625db63abb',
+             'b422084be26061cd28147bb78a6805389895b3e8645d34b88e6c4eb29520edaa',
+             'dcd8258c3094e36e171c94bcfb046b494e3936b624695a99db364585f76eeb75')):
             with self.subTest(kind=kind):
                 self.assertNotIn('output_refusal', value)
                 self.assertEqual(value['digest'], expected_packet)

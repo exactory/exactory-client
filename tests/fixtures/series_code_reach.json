@@ -1267,8 +1267,9 @@
           "research_harness/review_handles.py:expand_handles#1": ["form"],
           "research_harness/review_handles.py:validate_material#1": ["form"],
           "research_harness/review_handles.py:validate_material#2": ["form"],
-          "research_harness/review_handles.py:validate_material#3": ["form","limit"],
-          "research_harness/review_handles.py:validate_material#4": ["form","limit"]
+          "research_harness/review_handles.py:validate_material#3": ["form"],
+          "research_harness/review_handles.py:validate_material#4": ["form","limit"],
+          "research_harness/review_handles.py:validate_material#5": ["form","limit"]
         },
         "invalid_review_route": {
           "research_harness/review_codex_framed_transport.py:validate_route#1": ["form"],
