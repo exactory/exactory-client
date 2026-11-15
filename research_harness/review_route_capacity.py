@@ -254,7 +254,7 @@ def describe_route_capacity(route, profile=None, *, records=None, artifacts=None
     if adapter == 'claude_cli_v1' and config['max_output_tokens'] >= output:
         output_limit = _describe_limit(output, 'documented', url=model[4] if model else CLAUDE_OUTPUT_URL, date=MEASUREMENT_DATE)
     threshold_models = tuple(row[0] for row in MODEL_LIMITS if row[2] == model[2]) if adapter == 'claude_cli_v1' and model is not None else ()
-    evidence = review_capacity_evidence.read_capacity_evidence(route, records or {}, artifacts=artifacts,
+    evidence = review_capacity_evidence.read_capacity_evidence(route, {} if records is None else records, artifacts=artifacts,
                                                                threshold_models=threshold_models, reservation=output)
     observed = _describe_limit(evidence['input_tokens'], 'observed', key=evidence['key'], evidence=evidence['evidence'],
                                source_record=MEASUREMENT_SOURCE, date=MEASUREMENT_DATE)
@@ -1175,14 +1175,12 @@ def read_output_profile(records, route, *, priors=None):
     routes = records.get('review_route', {})
     recent_heap = []
     verified = 0
-    from .review_capacity_evidence import read_capacity_evidence
+    from .review_capacity_evidence import read_capacity_evidence, read_capacity_records
     probe = read_capacity_evidence(route, records).get('verified_capacity_probe')
     probe_id = probe['id'] if probe is not None else None
-    completions = ((kind, attempt) for kind in ('review_attempt', 'review_route_probe', 'review_output_correction') for attempt in records.get(kind, {}).values())
+    completions = ((kind, attempt) for kind in ('review_attempt', 'review_route_probe', 'review_output_correction') for attempt in read_capacity_records(records, kind).values())
     for completion_kind, attempt in completions:
         if not qualifies_for_output_profile(attempt):
-            continue
-        if completion_kind != 'review_route_probe' and attempt.get('origin') != 'instrumented':
             continue
         assignment = assignments.get(attempt.get('assignment_id'), {})
         candidate = routes.get(attempt.get('route_id') or assignment.get('route_id'))

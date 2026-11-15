@@ -230,8 +230,8 @@ def _plan_pending_call(records, assignment):
     return None
 
 
-def _plan_capacity(records, assignment, action):
-    from .review_call_admission import list_active_calls, list_waiting_calls, can_admit_route
+def _plan_capacity(records, assignment, action, artifacts=None):
+    from .review_call_admission import list_active_calls, list_waiting_calls, can_admit_route, describe_capacity_wait
     from .review_task_execution import _policy, read_call_kinds
     from .review_stop import describe_call, build_reconciliation_step
     policy = _policy(records)
@@ -247,6 +247,7 @@ def _plan_capacity(records, assignment, action):
     eligible = [row for row in ahead if can_admit_route(active, policy, row['route_id'])]
     if can_admit_route(active, policy, assignment['route_id']) and not eligible:
         return action
+    capacity = describe_capacity_wait(records, artifacts, assignment['route_id'], active, waits)
     for owned in active:
         if owned['id'] in records.get('review_reservation', {}):
             call = dict(operation='review.task_reserve', reservation_id=owned['id'])
@@ -263,9 +264,10 @@ def _plan_capacity(records, assignment, action):
             lifecycle = _describe_call_step(records, call)[0]
             if row['state'] == 'interrupted' or not has_live_call_processes(lifecycle):
                 return dict(state='wait', not_before=_describe_wait(), code='review_capacity_wait',
-                            details=dict(calls_before=len(active) + len(ahead)), **build_reconciliation_step(records, call))
+                            details=dict(calls_before=len(active) + len(ahead), **capacity),
+                            **build_reconciliation_step(records, call))
     return dict(action, state='wait', not_before=_describe_wait(), code='review_capacity_wait',
-                details=dict(calls_before=len(active) + len(ahead), reservations=[row['id'] for row in active]))
+                details=dict(calls_before=len(active) + len(ahead), reservations=[row['id'] for row in active], **capacity))
 
 
 def _plan_recording(records, artifacts, assignment, state):
@@ -328,7 +330,7 @@ def _plan_recording(records, artifacts, assignment, state):
     return dict(state='record', command=command, payload=payload)
 
 
-def _plan_staged_action(records, epoch, task, action):
+def _plan_staged_action(records, epoch, task, action, artifacts=None):
     command, payload = action.get('command'), action.get('payload')
     if command is None or payload is None:
         from .review_staged_protocol import describe_planning_command
@@ -359,6 +361,11 @@ def _plan_staged_action(records, epoch, task, action):
     if task['state'] in ('waiting', 'reconciling'):
         result.update(state='wait', not_before=_describe_wait(),
                       code=task['code'], details=dict(task_id=task['task_id']))
+        if task['code'] == 'review_capacity_wait':
+            from .review_call_admission import describe_capacity_wait, list_active_calls, list_waiting_calls
+            controller = records['review_assignment'][epoch['controller_assignment_id']]
+            result['details'].update(describe_capacity_wait(records, artifacts, controller['route_id'],
+                list_active_calls(records), list_waiting_calls(records)))
     return result
 
 
@@ -373,7 +380,7 @@ def _plan_staged(records, artifacts, assignment, state):
         return _plan_recording(records, artifacts, assignment, state)
     for task in describe_review_tasks(records, epoch, state):
         if task['state'] != 'accepted' and task.get('next'):
-            return _plan_staged_action(records, epoch, task, task['next'][0])
+            return _plan_staged_action(records, epoch, task, task['next'][0], artifacts)
     from .review_staged_protocol import describe_planning_command
     action = describe_planning_command(assignment['id'])
     return dict(state='plan', command=action['command'], payload=action['payload'])
@@ -470,7 +477,7 @@ def _plan_head(records, artifacts, assignment):
         elif result['state'] in ('run', 'wait'):
             result.update(command='review-run', payload=_build_run_payload(records, assignment))
             if result['state'] == 'run':
-                result = _plan_capacity(records, assignment, result)
+                result = _plan_capacity(records, assignment, result, artifacts)
         return result
     blocking = [item for item in state.get('obligations', [])
                 if item['code'] not in ('review_output_pending', 'review_output_refused')]
@@ -481,7 +488,7 @@ def _plan_head(records, artifacts, assignment):
                     **(dict(command='review-assignment') if repair else {}))
     if state.get('output') is None:
         return _plan_capacity(records, assignment, dict(state='run', command='review-run',
-                              payload=_build_run_payload(records, assignment)))
+                              payload=_build_run_payload(records, assignment)), artifacts)
     packet = protocol._read_json(artifacts, assignment['packet'])
     is_parts = review_parts.KEY in assignment
     continuing = (is_parts and (assignment[review_parts.KEY]['kind'] != 'final'
@@ -584,7 +591,7 @@ def describe_next_actions(records, artifacts, assignment_id, actions=()):
             task = next((task for task in describe_review_tasks(records, epoch, state)
                          if task['task_id'] == task_id), None)
             if task is not None and task.get('next'):
-                selected = _plan_staged_action(records, epoch, task, original)
+                selected = _plan_staged_action(records, epoch, task, original, artifacts)
         for key in ('command', 'payload', 'request_id', 'not_before', 'code', 'details'):
             action.pop(key, None)
             if key in selected:

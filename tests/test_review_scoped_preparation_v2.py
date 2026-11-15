@@ -169,12 +169,14 @@ class ScopedPreparationTests(LiteratureCase):
     def test_filtered_empty_membership_and_moves_are_revalidated(self):
         for kind, where in (
                 ('review_attempt', dict(assignment_id='own')),
+                ('review_attempt', dict(origin='instrumented')),
                 ('review_invocation', dict(assignment_id='own')),
                 ('review_route_probe', dict(route_id='own')),
                 ('review_assignment', dict(slot_id='own')),
                 ('review_assignment', {'staged_review.controller_assignment_id': 'own'}),
                 ('review_context_event', dict(assignment_id='own')),
                 ('review_output_correction', dict(assignment_id='own')),
+                ('review_output_correction', dict(origin='instrumented')),
                 ('review_selection', dict(controller_assignment_id='own'))):
             with self.subTest(kind=kind, where=where):
                 def prepare(records, value):

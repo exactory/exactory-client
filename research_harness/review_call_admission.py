@@ -94,6 +94,29 @@ def can_admit_route(active, policy, route_id):
             < policy['route_limits'].get(route_id, policy['store_limit']))
 
 
+def describe_capacity_wait(records, artifacts, route_id, active, waits):
+    """Project current limits and a scheduler for verified participating routes."""
+    from .review_task_execution import _policy
+    policy = _policy(records)
+    own_active = sum(row['route_id'] == route_id for row in active)
+    limits = []
+    if len(active) >= policy['store_limit']:
+        limits.append('store_limit')
+    if own_active >= policy['route_limits'].get(route_id, policy['store_limit']):
+        limits.append('route_limit')
+    result = dict(blocking_limits=limits)
+    if 'store_limit' in limits and not own_active and artifacts is not None:
+        from .review_protocol import route_state
+        participants = {row['route_id'] for row in active + waits} | {route_id}
+        routes = records.get('review_route', {})
+        verified = sorted(identifier for identifier in participants
+            if routes.get(identifier, {}).get('adapter') in policy['covered_adapters']
+            and route_state(records, artifacts, identifier)['context_status'] == 'verified_for_route')
+        if route_id in verified:
+            result['scheduler'] = dict(store_limit=len(verified), route_limits={identifier: 1 for identifier in verified})
+    return result
+
+
 def list_waiting_calls(records, *, live_only=True):
     from .review_stop import _has_live_identity
     return sorted((row for row in records.get('review_call_wait', {}).values()

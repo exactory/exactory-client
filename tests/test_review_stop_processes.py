@@ -27,6 +27,10 @@ root, store = Path(root), Store(Path(root))
 request = store.build_artifact_store().put(b'{"history":[],"packet":{}}','application/json')
 def operate(store, payload, **identity):
     identifier = payload['id']
+    if mode == 'series-http' and not (root / (identifier + '-raced')).exists():
+        (root / (identifier + '-raced')).touch()
+        store.mutate('fixture.peer-progress', {}, lambda tx: tx.put('context', identifier, dict(version=1)),
+                     expected_revision=store.revision, request_id='peer-' + identifier)
     def start(records, value):
         row = dict(value, route_id='route', request=request)
         return [immutable_record(records,'review_invocation',identifier,row)], row
@@ -99,6 +103,13 @@ class StopProcessTests(unittest.TestCase):
         self.case.setUp()
         self.addCleanup(self.case.doCleanups)
         self.root, self.store = self.case.root, self.case.store
+        from research_harness import review_protocol as protocol
+        from research_harness.evidence import digest
+        packet = self.store.build_artifact_store().put(b'{}', 'application/json')
+        for identifier, assignment in self.store.snapshot()['records']['review_assignment'].items():
+            prompt = protocol.canonical_prompt(assignment['role'])
+            self.case.put('review_assignment', identifier, dict(assignment, packet=packet,
+                packet_digest=digest({}), prompt=prompt, prompt_hash=prompt['rendered_prompt_hash']))
 
     def launch(self, mode, identifier='call', assignment='first'):
         process = subprocess.Popen([sys.executable, '-c', PROGRAM, str(self.root), mode, identifier, assignment],
@@ -251,6 +262,8 @@ class StopProcessTests(unittest.TestCase):
             out, err = process.communicate(timeout=20)
             self.assertEqual(process.returncode, 3, out + err)
             self.assertEqual(json.loads(out.splitlines()[-1])['stop_id'], stopped['id'])
+            self.assertTrue(any(json.loads(line).get('error', {}).get('code') == 'stale_revision'
+                                for line in out.splitlines()), out)
         self.assertEqual(len(stopped['call_states']), 2)
         self.assertTrue(all(row['state'] == 'settled' for row in stopped['call_states']))
         self.assertNotIn('review_series_stop', self.store.snapshot()['records'])

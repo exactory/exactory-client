@@ -555,10 +555,12 @@ def _review_status(records, artifacts):
     result = {"assignments": {identifier: {"refused_attempts": review_refusal.refused_attempts(
                                 records, artifacts, by_assignment.get(identifier, []))}
                             for identifier in records.get("review_assignment", {})}}
-    from .review_call_admission import list_waiting_calls
+    from .review_call_admission import list_waiting_calls, list_active_calls, describe_capacity_wait
     queue = list_waiting_calls(records)
     if queue:
-        result['queue'] = queue
+        active = list_active_calls(records)
+        result['queue'] = [dict(row, **describe_capacity_wait(records, artifacts, row['route_id'], active, queue))
+                           for row in queue]
     from .review_stop import find_stop, describe_stop, list_live_drivers, _matches_call_scope
     running_drivers = list_live_drivers(records, dict(kind='store'))
     scoped_entries = result['assignments'].items() if records.get('review_stop') or running_drivers else ()

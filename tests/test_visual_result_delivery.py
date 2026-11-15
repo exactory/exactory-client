@@ -37,7 +37,9 @@ class VisualResultDeliveryTests(unittest.TestCase):
         self.native.setUp()
         self.case = case = self.native.fixture
         self.store, self.artifacts = case.store, case.artifacts
-        active = patch.object(visual, 'runtime', return_value={'adapter': visual.ADAPTER, 'fixture': 'visual-result-test'})
+        from capacity_evidence_fixtures import build_capacity_runtime
+        active = patch.object(visual, 'runtime', return_value=build_capacity_runtime(
+            visual.ADAPTER, fixture='visual-result-test'))
         active.start()
         self.addCleanup(active.stop)
         version = self.native.second_version

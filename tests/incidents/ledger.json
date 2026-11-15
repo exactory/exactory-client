@@ -5610,7 +5610,24 @@
         "test_review_single_request.FrozenSingleTests.test_replacement_refuses_changed_reviewer_route_author_or_role_and_a_fork",
         "tests.test_review_parts_native.NativePartsAcceptanceTests.test_single_output_replacement_is_consumed_and_acceptance_link_is_audited",
         "test_review_single_request.SingleEntryTests.test_parts_fitter_uses_only_keyed_store_capacity",
-        "test_review_single_request.SingleEntryTests.test_single_start_keeps_output_profile_separate_from_input_evidence"
+        "test_review_single_request.SingleEntryTests.test_single_start_keeps_output_profile_separate_from_input_evidence",
+        "test_review_scoped_preparation_v2.ScopedPreparationTests.test_bar_assignment_and_invocation_ignore_other_assignment_groups",
+        "test_review_scoped_preparation_v2.ScopedPreparationTests.test_repair_preparation_ignores_unrelated_assignments_attempts_and_exposures",
+        "test_review_scoped_preparation_v2.ScopedPreparationTests.test_filtered_empty_membership_and_moves_are_revalidated"
+      ]
+    },
+    {
+      "id": "bar-chains-serialize-and-waiting-drivers-need-restarts",
+      "record": "20261114053500-bar-chain-delivers-two-full-texts-per-turn-and-store-runs-one-reviewer",
+      "class": "review capacity diagnostics and call ordering",
+      "summary": "T3 and T4: separate verified routes were serialized without actionable capacity advice, and waiting series needed an outer restart loop.",
+      "expected": "Planned waits and queued calls name their store and route limits. A store wait on an idle verified route supplies a scheduler for participating verified routes. Three drivers on one route finish in request order without external commands or automatic stop records.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_queue_triage.QueueTriageTests.test_recording_the_suggested_scheduler_allows_two_verified_routes_to_run_together",
+        "test_review_queue_triage.QueueTriageTests.test_queue_counts_only_verified_participants_and_keeps_stored_waits_unchanged",
+        "test_review_queue_triage.QueueTriageTests.test_three_series_drivers_finish_in_request_order_without_external_commands"
       ]
     }
   ]

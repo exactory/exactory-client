@@ -1320,7 +1320,9 @@ class ProblemObjectionCarryDeliveryTests(unittest.TestCase):
             source.mutate(decisions.record_value_review, dict(legacy, id='review-legacy-visual-source', dossier_id=None, assignment_id=prior['id']))
         sender = VisualResultDeliveryTests()
         sender.case = source
-        with patch.object(visual, 'runtime', return_value=dict(adapter=visual.ADAPTER, fixture='carry-native-visual')):
+        from capacity_evidence_fixtures import build_capacity_runtime
+        with patch.object(visual, 'runtime', return_value=build_capacity_runtime(
+                visual.ADAPTER, fixture='carry-native-visual')):
             source.mutate(protocol.record_route, dict(id='visual-route', adapter=visual.ADAPTER,
                 model='fixture-model', endpoint='codex://local', configuration=dict(max_output_tokens=128000, timeout_seconds=600)))
 
