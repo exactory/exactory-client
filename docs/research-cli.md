@@ -5004,8 +5004,8 @@ single turn.
 
 A stored problem reading chain continues under its own protocol: v4 stays
 v4, v5 stays v5, and v6 stays v6. Since 0.91.0 the protocol of a new chain is
-chosen by admission, in the order `exactory-openness-reading-v7`, then
-`exactory-openness-reading-v6` ("The reading protocol v7" below). v6 keeps the
+chosen by admission, in the order of the release ("The reading protocol v7"
+below). v6 keeps the
 search delivery, the units, the withholding and the verification that this
 section describes for v5 and adds what "The reading protocol v6" states below;
 v7 has its own packets, answers and verification. Every bound
@@ -5392,11 +5392,13 @@ The reading protocol v6. Since 0.90.0 a new problem openness review runs
 under `exactory-openness-reading-v6` when it is a chain (prompt templates
 `exactory-openness-reading-v6/reading` and `exactory-openness-reading-v6/final`)
 and under the prompt template `exactory-review-v7/native_math` when it stays
-one turn. Since 0.91.0 a new review on a route with a local input limit is a
-chain, also when it fits one input, and v6 is the second protocol of the
-admission order; on other routes it stays one turn (The reading protocol v7,
-below). Both need a packet with a minimum of version 2, `minimum_gaps` and
-`audit_forecast`. The first assignment over another problem openness packet,
+one turn. Since 0.91.0 the protocol of a new chain is chosen by admission in
+the order of the release. Where that order holds
+`exactory-openness-reading-v7`, v6 is its second protocol, and a new review on
+a route with a local input limit is a chain also when it fits one input (The
+reading protocol v7, below). Both need a packet with a minimum of version 2,
+`minimum_gaps` and `audit_forecast`. The first assignment over another problem
+openness packet,
 for example one that an earlier release exported, is refused with
 `openness_packet_outdated` (`handoff: "export"` in the details): export the
 packet again. v6 keeps the turns, the search delivery, the withholding, the
@@ -5554,20 +5556,26 @@ chain carries `capacity_forecast` and `capacity_warning` as well; when they
 cannot be computed, the line keeps its state and reports `capacity_forecast:
 {status: "unavailable", reason}`.
 
-The reading protocol v7. Since 0.91.0 a new problem openness review on a route
-with a local input limit (`claude_cli_v1`, `codex_cli_v1` and
-`codex_cli_framed_v1`) is a reading chain whose protocol is chosen by
-admission, also when its packet fits one input. `review-assignment` runs the
-admission of each protocol in one order, `exactory-openness-reading-v7` and
-then `exactory-openness-reading-v6`, and it starts the chain under the first
-protocol that accepts the packet on the route. On a route without a local input
-limit (`openai_responses_v1` and `codex_cli_visual_v1`) the review stays one
-turn, as before. The receipt of a chain, also with `--check`, carries
-`protocol_selection: {protocol, admissions, message}`; `admissions` holds the
-result of each admission that ran, in order, and `status` reports the order
-under `new_problem_chain_protocols` once a record holds such a chain. A stored
-chain keeps its protocol. A chain under v6 follows "The reading protocol v6"
-above without a change.
+The reading protocol v7. Since 0.91.0 `review-assignment` chooses the protocol
+of a new problem reading chain by admission: it runs the admission of each
+protocol in the order of the release and starts the chain under the first
+protocol that accepts the packet on the route. The order is
+`exactory-openness-reading-v6` alone until a release admits
+`exactory-openness-reading-v7` for new chains, and from then on
+`exactory-openness-reading-v7` followed by `exactory-openness-reading-v6`.
+`status` reports the order under `new_problem_chain_protocols` once a record
+holds such a chain. Where the order holds v7, a new problem openness review on
+a route with a local input limit (`claude_cli_v1`, `codex_cli_v1` and
+`codex_cli_framed_v1`) is a reading chain also when its packet fits one input.
+Where the order holds v6 alone, a review whose units have at most 120,000
+characters together and whose packet fits one input stays one turn, and a
+larger one starts a chain under v6 when the admission of v6 accepts it. On a
+route without a local input limit (`openai_responses_v1` and
+`codex_cli_visual_v1`) the review stays one turn in both cases. The receipt of
+a chain, also with `--check`, carries `protocol_selection: {protocol,
+admissions, message}`; `admissions` holds the result of each admission that
+ran, in order. A stored chain keeps its protocol. A chain under v6 follows
+"The reading protocol v6" above without a change.
 
 - The admission of v7. Without writing a record, the harness builds the
   inventory of the units, measures the frame of a reading turn and of a final
@@ -5648,11 +5656,13 @@ above without a change.
   `plan.now` of this or an earlier turn, of the index of affected notes or of
   an unread row, or the unit of an entry. The unit need not have been
   delivered. The handle of a logical unit, which a carried entry shows, stands
-  for the first of its delivery parts that holds the anchor, and the row that
-  answers the request has the handle of that part. `anchor` is a phrase of 1
-  to 600 characters that occurs in the unit, or null for the start of the
+  for the first of its delivery parts that holds the anchor, or for its first
+  part when the anchor is null; the passage ends with that part, and the row
+  that answers the request has the handle of that part. `anchor` is a phrase
+  of 1 to 600 characters that occurs in the unit, or null for the start of the
   unit, and `characters` is 1 to 100,000. A request takes the smaller of its
-  characters and the text from the anchor to the end of the unit, within what
+  characters and the text from the start of the passage to the end of the
+  unit, or of that part, within what
   the passage allowance of 100,000 characters for the chain has left: the
   allowance less the passage text that earlier turns and this turn deliver,
   and less the text that is still to be delivered for earlier requests. A
@@ -5782,8 +5792,10 @@ above without a change.
   `review-assignment` and `review-run` refuse the next request with
   `review_chain_projection_over_limit`, and `review-series` ends with the
   handoff `export`, or with the decision stop of the admission when no
-  protocol admits a new chain. The plan of a new chain under v7 takes that
-  ratio; a chain under v6 is admitted by its own projection.
+  protocol admits a new chain. For a new chain under v7,
+  `details.successor.measure` gives the ratio of its plan: the measured ratio,
+  or a denser one that another earlier chain over the same statement and route
+  identity shows. A chain under v6 is admitted by its own projection.
 - The admission of a successor chain. Where a problem chain cannot go on and a
   new export can, the plan is the handoff `export`, and its details state what
   the new chain will be: `details.successor` holds the admission that the new

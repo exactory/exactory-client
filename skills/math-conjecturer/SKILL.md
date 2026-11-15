@@ -1405,12 +1405,17 @@ each of these refusals.
    reviewer id, `role: "native_math"`, `dossier_id: null`, a verified route and an author from
    the record. Run it with `review-run`.
 6. When the receipt of that assignment shows `reading_chain`, the reviewer reads the units of
-   the packet in a chain of turns. Since 0.91.0 a new openness review on `claude_cli_v1`,
-   `codex_cli_v1` or `codex_cli_framed_v1` is a chain, also when its packet fits one input, and
-   `review-assignment` chooses its protocol by admission: `exactory-openness-reading-v7` when
-   that protocol accepts the packet on the route, `exactory-openness-reading-v6` when v7
-   refuses it and v6 accepts it, and the decision stop of step 6b when neither accepts it.
-   `protocol_selection` in the receipt names the protocol and the result of each admission.
+   the packet in a chain of turns. Since 0.91.0 `review-assignment` chooses the protocol of a
+   new chain by admission, in the order of the release, and `protocol_selection` in the
+   receipt names the protocol and the result of each admission. Where that order holds
+   `exactory-openness-reading-v7`, a new openness review on `claude_cli_v1`, `codex_cli_v1` or
+   `codex_cli_framed_v1` is a chain also when its packet fits one input: under v7 when that
+   protocol accepts the packet on the route, under `exactory-openness-reading-v6` when v7
+   refuses it and v6 accepts it, and with the decision stop of step 6b when neither accepts
+   it. Where the order holds v6 alone, a review that fits one turn stays one request, and a
+   larger one is a chain under v6 when v6 accepts it. `review-assignment --check` shows which
+   case holds without writing a record: its receipt carries `protocol_selection` when the
+   review is a chain.
    On another adapter the review stays one request. Step 6b states what a v7 chain does.
    A v6 chain (prompt templates `exactory-openness-reading-v6/reading` and
    `exactory-openness-reading-v6/final`)
@@ -1612,8 +1617,7 @@ each of these refusals.
      protocol and this report without writing a record. The harness looks at every earlier
      chain of the record with the same reviewer, author, statement, formulations and route
      identity. The route identity is the adapter, the model, the endpoint and the
-     configuration, so a new route record with these four unchanged keeps it. What no such
-     chain read, the new chain reads; `carried_readings` states the ranges that remain.
+     configuration, so a new route record with these four unchanged keeps it.
    - When a reading turn fails for its size or its time (`output_over_cap`,
      `input_over_limit`, `response_over_limit`, a second `timeout`) or the provider refuses
      it three times in a sequence, `review-series` looks for a smaller reading request on
@@ -1624,8 +1628,9 @@ each of these refusals.
      (below), or ends with a decision stop. Report a decision stop with its details.
    - When the answer of a turn is refused (`output_refusal` in the receipt), `review-series`
      assigns a replacement whose request tells the reviewer which check failed and where, at
-     most two for one turn. After that the command ends with the handoff `export` of the
-     next item, or with a decision stop when no new chain is admitted.
+     most two for one turn. After that the position is exhausted, and the item below on a
+     chain that cannot go on applies: the command ends with the handoff `export` when a new
+     chain is admitted, or with a decision stop when none is.
    - When the permitted failure sequences of a reading turn are used up, its last failure is
      a refusal by the provider and the turn is at the lowest level, `review-series` assigns
      the final over the unread ranges (`context.unread`). Earlier sequences can have ended

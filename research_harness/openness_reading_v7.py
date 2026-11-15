@@ -107,7 +107,7 @@ FINAL_PAGES_STATEMENT = (
 INVALID_READING_MESSAGE = (
     'This answer is not the reading response of exactory-openness-reading-v7. Return exactly '
     '{schema_version:2,stage:"reading",subject_digest,claim_digest,reviewer,notes,excerpts,gaps,passage_requests}, '
-    'with the three bindings of the packet. notes is a nonempty string within allowances.notes, also as the request '
+    'with the three bindings of the packet. notes is a nonblank string within allowances.notes, also as the request '
     'carries it. An excerpt is {unit,text,purpose,targets}, with text copied exactly from the content that this turn '
     'delivers for that unit, or {keep,targets} for a carried entry whose unit was delivered whole. A gap is '
     '{formulation,text}, with a target handle and 1 to 600 characters. passage_requests holds at most ten requests, '
@@ -2171,10 +2171,10 @@ COVERAGE_VERIFICATION_MESSAGE = (
     'This chain does not hold everything that its finding needs. A required range or a required affected note is '
     'not delivered (details.ranges), a bound search does not rebuild from the delivered text (details.searches), a '
     'required body of the evidence of the native packet is not delivered whole (details.digests), the native packet '
-    'of the finding is not the packet that the chain verified (details.digests is then empty), or, for a final over '
-    'unread ranges, the stored records do not show the refused turn at the end of its last permitted sequence, or '
-    'the unread set, the outcome unresolved, the citation of the set in the finding or the recorded finding differs '
-    'from what the harness rebuilds. Run review-series '
+    'of the finding is not the packet that the chain verified (also when details.digests is empty), or, for a final '
+    'over unread ranges, the stored records do not show the refused turn at the end of its last permitted sequence, '
+    'or the unread set, the outcome unresolved, the citation of the set in the finding or the recorded finding '
+    'differs from what the harness rebuilds. Run review-series '
     'on the chain and take the step that it plans.')
 FINAL_VERIFICATION_MESSAGE = (
     'The turn that details.assignment_id names has no observed, authenticated output in a verified context, or its '
