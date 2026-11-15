@@ -7140,6 +7140,21 @@
         "test_route_capacity_properties.ReadingCapacityPropertyTests.test_k6_each_source_inventory_kind_delivers_three_material_allowances",
         "test_capacity_packet_inventory.QuantityFactoryTests.test_legacy_turns_use_the_v6_builder_and_other_role_frames_keep_their_owner"
       ]
+    },
+    {
+      "id": "release-0910-series-guard-declarations",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "series-guard-integration",
+      "summary": "The merged series guard retained the call inventory and entry membership expectations from before v7 refusal-turn integration.",
+      "expected": "Pin the position-context reader used by series diagnostics and combine the original entry evidence with its separately reviewed capture-interval addition; all entry refusals keep their executable decision.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_series_ending.SeriesEndingTests.test_phase_call_inventory_covers_the_driver_and_ending",
+        "test_series_rows_close_entry.EntryRowTests.test_every_entry_member_ends_with_the_named_cause_decision_inside_the_recorder",
+        "test_series_rows_close_entry.EntryRowTests.test_entry_evidence_passes_writing_place_and_condition_group_guards",
+        "test_search_receipts.SearchReceiptTests.test_check_reports_each_page_group_captured_more_than_fifteen_minutes_apart_without_writing"
+      ]
     }
   ]
 }
