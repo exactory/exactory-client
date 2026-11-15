@@ -41,7 +41,7 @@ PROTOCOL_V4 = 'exactory-openness-reading-v4'
 PROTOCOL_V5 = 'exactory-openness-reading-v5'
 PROTOCOL_V6 = 'exactory-openness-reading-v6'
 PROTOCOL_V7 = 'exactory-openness-reading-v7'
-NEW_PROBLEM_CHAIN_PROTOCOLS = (PROTOCOL_V6,)
+NEW_PROBLEM_CHAIN_PROTOCOLS = (PROTOCOL_V7, PROTOCOL_V6)
 # Version the added plan metadata at export so stored v6 packets keep their plans and requests.
 FAMILY_READING_PLAN_VERSION = 1
 # refusals lists each protocol that stands earlier in the order and refused the packet, with its reason, or is "none".

@@ -18954,7 +18954,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.openness_reading": {
-      "ast_sha256": "4274e3debd85f003346384be52d2753e7c4a5422b91a2a1c88a4603fca26d58a",
+      "ast_sha256": "754afb6fcbd69e2e756b245c0a829c68df03a0270022f6cb1e3218f1ec7581d0",
       "functions": {
         "_add_source": "bf750a7009979c804b515fe2fa49795c9649ea87dcafa53f80cef1045aeb2340",
         "_assemble_reading_turn": "9c44a6537d6d1fae1af0dc44b726cd7059da1ee593c0d2f800617c0c1655160a",
@@ -19282,7 +19282,7 @@
         "fea13f3f3eb313dbba88920c4e985bc6072537317e9c171926f9799667bda45f",
         "ff922eec603ceb40b5f28cbaba83b776ac8ef3a6e101849ac7c4fd5a774ff9cb"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the activation of 0.91.0 (ruling 37): NEW_PROBLEM_CHAIN_PROTOCOLS becomes (PROTOCOL_V7, PROTOCOL_V6); no packet member, call, write or closed shape changes."
     },
     "research_harness.openness_reading_v7": {
       "ast_sha256": "39a6d5b1e56b959d887bc750346640d66b36f1ccd7a6e10f95da56fd2de9f7f3",
