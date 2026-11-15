@@ -6641,6 +6641,26 @@
         "test_openness_reading_v7_turns.ListPageTests.test_q8_pages_keep_plan_order_when_used_order_changes",
         "test_openness_reading_v7_turns.V7CommandTests.test_max_138371_output_tokens_halves_material_on_the_same_claude_route"
       ]
+    },
+    {
+      "id": "carried-selection-preserves-unchanged-reading-ranges",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "reading continuity by authenticated range",
+      "summary": "New exports repeated unchanged full texts and searches after an earlier chain stopped.",
+      "expected": "A stored v7 selection credits unchanged delivered ranges and completed original searches from eligible v5/v6 prefixes. Changed sources affect notes and exclude their entries; later chains do not alter stored selections. First-assignment integration is a separate lane.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_carried.AcceptanceSelectionTests.test_g8_incident_29_texts_ten_searches_then_ten_more_and_minimum_v2",
+        "test_openness_carried.V5CarriedSelectionTests.test_g8_changed_neighbour_keeps_credit_and_filters_own_source_entries",
+        "test_openness_carried.V6CarriedSelectionTests.test_g8_two_complementary_chains_use_latest_first_but_record_order_in_result",
+        "test_openness_carried.V5PartialRangeTests.test_g8_two_of_three_parts_keep_exact_ranges_and_read_only_the_remainder",
+        "test_openness_carried.V6PartialRangeTests.test_g8_two_of_three_parts_keep_exact_ranges_and_read_only_the_remainder",
+        "test_openness_carried.StoredCaptureSelectionTests.test_g8_c8_completed_chosen_capture_and_stopped_pending_capture",
+        "test_openness_carried.V5CarriedSelectionTests.test_notes_wait_for_the_requesting_turns_passage_to_reach_its_successor",
+        "test_openness_carried.V6CarriedSelectionTests.test_notes_wait_for_the_requesting_turns_passage_to_reach_its_successor",
+        "test_openness_carried.V6CarriedSelectionTests.test_q12_selection_projects_to_affected_notes_and_overflow_without_source_rereading"
+      ]
     }
   ]
 }
