@@ -6,6 +6,10 @@ The caller measures them with the real packet builder; a reference-row segment
 is a unit of its own. This module counts those sizes, reads no text and builds
 no request. Rows have handle/characters and an optional ``late`` flag. A read
 cursor is the returned ``next`` value; unselected attempts consume no cursor.
+Late units from multiple additions may share a group and a turn. A series takes
+at most ceil(initial_characters / level) plus the sum of
+ceil(addition_characters / level) over additions, using the lowest read level
+when levels change.
 """
 from fractions import Fraction
 
@@ -123,8 +127,10 @@ def compute_card_allowance(plan, groups):
     delivered_before and delivered_through; cached allocations are not trusted.
     Late groups state late_reserve_before, the selected cursor's prior late
     spend. This lets a subset replay its grants without trusting cached content.
-    Content is dropped when it and the entry cannot both be paid; an unpaid
-    entry is reported in late_characters_beyond_reserve.
+    The additional content allocation is zero when it and the entry cannot both
+    be paid. late_unit_reserve reports only the amount paid, bounded by the
+    stored late reserve. late_characters_beyond_reserve reports unfunded entries.
+    Both are separate from card_budget and card_reserve.
     """
     return _describe_card_allowance(plan['allocation']['entry_sizes']['card'], read_content_rate(plan),
                                     groups, plan['allocation']['late_unit_reserve'])
@@ -328,8 +334,9 @@ def size_read_turn(plan, level, inventory, *, position=None):
     a list of unit handles. Last offsets are exclusive. position is the previous
     next cursor. Initial units precede late units; a final ownership-epoch tail
     may be shorter than the floor when it cannot share a balanced crossing turn.
-    Only initial cards count in next.card_count. Unfunded late entries accumulate
-    in next.late_characters_beyond_reserve; they never stop a read turn.
+    Only initial cards count in next.card_count. next.late_unit_reserve accumulates
+    the paid late charge within the plan's reserve. Unfunded late entries
+    accumulate in next.late_characters_beyond_reserve; they never stop a read turn.
     """
     if type(level) is not int or level <= 0:
         raise ResearchError('invalid_input', 'The read material allowance must be a positive integer.')
