@@ -6,59 +6,6 @@
           "content"
         ]
       },
-      "gate_override_instruction": {
-        "research_harness/overrides.py:parse_override_instruction#1": [
-          "content"
-        ],
-        "research_harness/overrides.py:parse_override_instruction#10": [
-          "content"
-        ],
-        "research_harness/overrides.py:parse_override_instruction#11": [
-          "content"
-        ],
-        "research_harness/overrides.py:parse_override_instruction#12": [
-          "content"
-        ],
-        "research_harness/overrides.py:parse_override_instruction#13": [
-          "content"
-        ],
-        "research_harness/overrides.py:parse_override_instruction#14": [
-          "content"
-        ],
-        "research_harness/overrides.py:parse_override_instruction#15": [
-          "content"
-        ],
-        "research_harness/overrides.py:parse_override_instruction#2": [
-          "content"
-        ],
-        "research_harness/overrides.py:parse_override_instruction#3": [
-          "content"
-        ],
-        "research_harness/overrides.py:parse_override_instruction#4": [
-          "content"
-        ],
-        "research_harness/overrides.py:parse_override_instruction#5": [
-          "content"
-        ],
-        "research_harness/overrides.py:parse_override_instruction#6": [
-          "content"
-        ],
-        "research_harness/overrides.py:parse_override_instruction#7": [
-          "content"
-        ],
-        "research_harness/overrides.py:parse_override_instruction#8": [
-          "content"
-        ],
-        "research_harness/overrides.py:parse_override_instruction#9": [
-          "content"
-        ],
-        "research_harness/overrides.py:read_unrecorded_overrides#1": [
-          "content"
-        ],
-        "research_harness/overrides.py:read_unrecorded_overrides#2": [
-          "content"
-        ]
-      },
       "gate_override_transition": {
         "research_harness/overrides.py:validate_override_payload#1": [
           "content"
@@ -166,14 +113,6 @@
           "content"
         ]
       },
-      "problem_attempt_evidence_missing": {
-        "research_harness/problem_attempt.py:validate_attempt#1": [
-          "content"
-        ],
-        "research_harness/problem_attempt.py:validate_attempt#2": [
-          "content"
-        ]
-      },
       "problem_attempt_extension_unexplained": {
         "research_harness/problem_attempt.py:validate_attempt_extension#1": [
           "content"
@@ -211,65 +150,6 @@
       },
       "publication_evidence_mismatch": {
         "research_harness/publication_scope.py:_validate_payload#1": [
-          "content"
-        ]
-      },
-      "publication_scope_correction_mismatch": {
-        "research_harness/publication_scope.py:_load_scope_snapshot#1": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_load_scope_snapshot#2": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#1": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#10": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#11": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#12": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#13": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#14": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#15": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#16": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#17": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#2": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#3": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#4": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#5": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#6": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#7": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#8": [
-          "content"
-        ],
-        "research_harness/publication_scope.py:_validate_correction#9": [
           "content"
         ]
       },

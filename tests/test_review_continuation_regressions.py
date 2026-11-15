@@ -309,7 +309,7 @@ class ContinuationRegressionTests(unittest.TestCase):
             second = cli.run(args)
             second_status = cli.status_report(fixture.case.store)
             with patch('research_harness.review_continuation.annotate_review_obligations',
-                       side_effect=lambda records, artifacts, report: report):
+                       side_effect=lambda records, artifacts, report, **kwargs: report):
                 baseline = cli.run(args)
                 baseline_status = cli.status_report(fixture.case.store)
         self.assertEqual(first['digest'], second['digest'])

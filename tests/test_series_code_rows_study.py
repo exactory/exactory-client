@@ -49,7 +49,7 @@ class StudyRowTests(unittest.TestCase):
         self.assert_new_readiness_support_shape_is_not_stored_state()
         self.assert_new_support_execution_reference_is_a_prerequisite()
         members = json.loads(GROUPS.read_text())['stored_state']['members']
-        self.assertEqual(len(members), 21)
+        self.assertEqual(len(members), 16)
         fixture = self.prepare_fixture(continuation_fixtures.ContinuationTests)
         for code in members:
             with self.subTest(code=code):

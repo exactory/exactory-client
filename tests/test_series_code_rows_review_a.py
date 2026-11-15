@@ -24,7 +24,7 @@ class ReviewARowTests(unittest.TestCase):
 
     def test_every_stored_content_code_stops_at_the_shared_record_check_row(self):
         fixture = self.prepare_fixture()
-        self.assertEqual(len(stop_classes._STORED_CONTENT_CODES_REVIEW_A), 14)
+        self.assertEqual(len(stop_classes._STORED_CONTENT_CODES_REVIEW_A), 13)
         self.assertEqual(set(stop_classes._STORED_CONTENT_CODES_REVIEW_A),
                          set(json.loads(GROUPS.read_text())['stored_state']['members']))
         for code in stop_classes._STORED_CONTENT_CODES_REVIEW_A:
@@ -155,5 +155,6 @@ class ReviewARowTests(unittest.TestCase):
                 self.assertTrue(sites)
                 for site, condition in sites.items():
                     self.assertIn(site.rsplit('#', 1)[0], functions)
-                    self.assertEqual(condition, ['content'])
+                    self.assertTrue(condition)
+                    self.assertLessEqual(set(condition), {'store', 'content', 'payload'})
         self.assertEqual(set(json.loads(GROUPS.read_text())['stored_state']), {'members'})

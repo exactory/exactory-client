@@ -15,7 +15,6 @@ _STORED_CONTENT_CODES_REVIEW_A = (
     'review_parts_delivery_invalid',
     'review_prompt_mismatch',
     'review_request_changed',
-    'review_invocation_unverified',
     'review_output_unavailable',
     'review_inventory_mismatch',
     'review_source_parent_unverified',
@@ -41,10 +40,8 @@ _OUTPUT_CONTRACT_CODES_REVIEW_A = (
 _CALL_OUTCOMES_REVIEW_A = (('review_provider_failure', 'provider_unavailable'),)
 
 _STORED_CONTENT_CODES_REVIEW_B = (
-    'invalid_native_review_packet',
     'invalid_review_prompt_version',
     'invalid_review_role',
-    'invalid_review_route',
     'value_review_output_mismatch',
 )
 
@@ -138,7 +135,7 @@ STOP_REGISTRY['assessment_incomplete'] = dict(code='assessment_incomplete',
     next=dict(kind='decision', owner_decides='How should the incomplete assessment be answered?',
         then=[dict(answer='Check the retained record', steps=[dict(command='record-check')]),
               dict(answer='List what the workspace owes', steps=[dict(command='status')])]))
-_STORED_STATE_CODES_FIRST = ('review_input_unreadable',)
+_STORED_STATE_CODES_FIRST = ()
 
 
 for _code, _command in (
@@ -163,13 +160,22 @@ for _code in ('invalid_identifier', 'unsafe_url'):
 
 
 _STORED_STATE_CODES_STUDY = (
-    'development_question_repeated', 'execution_observation_mismatch', 'execution_output_mismatch',
-    'failure_scope_mismatch', 'inheritance_assumptions_missing', 'inheritance_mismatch',
-    'inheritance_missing', 'inheritance_refresh_evidence_changed', 'inheritance_refresh_mismatch',
-    'inheritance_result_mismatch', 'invalid_import_identity',
-    'invalid_source_deferral', 'invalid_target', 'lineage_cycle', 'objective_scope_mismatch',
-    'outside_reading_unit', 'unknown_assessment', 'unknown_checkpoint', 'unknown_cycle',
-    'unknown_review', 'unknown_review_assignment',
+    'development_question_repeated',
+    'execution_output_mismatch',
+    'failure_scope_mismatch',
+    'inheritance_assumptions_missing',
+    'inheritance_mismatch',
+    'inheritance_missing',
+    'inheritance_refresh_evidence_changed',
+    'inheritance_refresh_mismatch',
+    'inheritance_result_mismatch',
+    'invalid_source_deferral',
+    'lineage_cycle',
+    'objective_scope_mismatch',
+    'outside_reading_unit',
+    'unknown_cycle',
+    'unknown_review',
+    'unknown_review_assignment',
 )
 for _code in ('review_turn_failures_exhausted', 'review_parts_budget_exhausted',
               'review_quality_measurement_pending', 'review_invocation_unverified',
@@ -213,7 +219,8 @@ STOP_REGISTRY[PROJECTION_STOP] = dict(code=PROJECTION_STOP, **{'class': 'decisio
                     prerequisites=[dict(condition='Install a bounded reading protocol for this packet.')])]),
                     dict(answer=SMALLER_PACKET_ANSWER, steps=[dict(id=4, command='export'),
                          dict(command='review-assignment', check=True)])]))
-for _code in ('stale_revision', 'review_task_dependency_changed', 'review_output_pending', 'review_sources_pending'):
+for _code in ('stale_revision', 'review_task_dependency_changed', 'review_output_pending', 'review_sources_pending',
+              'review_runtime_changed'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2', next=dict(kind='continue'))
 
 
@@ -237,15 +244,23 @@ STOP_REGISTRY.update({
 
 
 _STORED_STATE_CODES_DECISION = (
-    'gate_override_gate', 'gate_override_instruction', 'gate_override_transition',
-    'invalid_round', 'invalid_synthesis', 'objective_mismatch',
-    'problem_attempt_evidence_missing', 'problem_attempt_extension_unexplained',
-    'problem_attempt_outcome_mismatch', 'problem_attempt_scope_restricted',
-    'problem_attempt_statement_mismatch', 'problem_citation_span_mismatch',
+    'gate_override_gate',
+    'gate_override_transition',
+    'invalid_round',
+    'invalid_synthesis',
+    'objective_mismatch',
+    'problem_attempt_extension_unexplained',
+    'problem_attempt_outcome_mismatch',
+    'problem_attempt_scope_restricted',
+    'problem_attempt_statement_mismatch',
+    'problem_citation_span_mismatch',
     'problem_forming_origin_conflict',
-    'problem_post_revision_missing', 'publication_evidence_mismatch',
-    'publication_scope_correction_mismatch', 'publication_scope_corrupt',
-    'publication_scope_objective_open', 'scope_assumptions_missing', 'scoped_review_corrupt',
+    'problem_post_revision_missing',
+    'publication_evidence_mismatch',
+    'publication_scope_corrupt',
+    'publication_scope_objective_open',
+    'scope_assumptions_missing',
+    'scoped_review_corrupt',
 )
 
 for _code in ('invalid_rubric_grades', 'invalid_strategy'):
@@ -629,7 +644,33 @@ _NAMED_CAUSE_CODES_RECOVERY = (
     'verification_task_required',
     'xml_timeout',
 )
-_NAMED_CAUSE_CODES_CLOSING = ()
+_NAMED_CAUSE_CODES_CLOSING = (
+    'artifact_sealed',
+    'execution_observation_mismatch',
+    'gate_override_instruction',
+    'invalid_import_identity',
+    'invalid_input',
+    'invalid_native_review_packet',
+    'invalid_review_material',
+    'invalid_review_route',
+    'invalid_target',
+    'openness_reading_gap',
+    'openness_search_gap',
+    'openness_settling_source',
+    'problem_attempt_evidence_missing',
+    'provider_state_unavailable',
+    'publication_scope_correction_mismatch',
+    'review_context_repair_history_unrecorded',
+    'review_context_repair_pending',
+    'review_correction_duplicate',
+    'review_input_unreadable',
+    'review_invocation_unverified',
+    'review_observation_acceptance_pending',
+    'review_parts_target_label_missing',
+    'unknown_assessment',
+    'unknown_checkpoint',
+    'unsafe_path',
+)
 _STORED_STATE_CODES_RECORD = (
     'store_missing',
 )

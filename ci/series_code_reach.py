@@ -135,12 +135,6 @@ COMPUTED_CODE_SITES = {
         'sources': ['research_harness/publication_files.py:find_bundle_drift']},
     'research_harness/reading.py:required_unit_obligations:p["code"]': {
         'sources': ['research_harness/reading.py:required_unit_obligations']},
-    'research_harness/record_check.py:check_record:type(error).__name__': {
-        'codes': ['OSError', 'JSONDecodeError', 'Error', 'SameFileError', 'SpecialFileError',
-                  'ExecError', 'ReadError', 'RegistryError', 'BlockingIOError', 'ChildProcessError',
-                  'ConnectionError', 'BrokenPipeError', 'ConnectionAbortedError', 'ConnectionRefusedError',
-                  'ConnectionResetError', 'FileExistsError', 'FileNotFoundError', 'InterruptedError',
-                  'IsADirectoryError', 'NotADirectoryError', 'PermissionError', 'ProcessLookupError', 'TimeoutError']},
     'research_harness/record_check.py:describe_capacity_decision:error.code': {
         'sources': ['research_harness/record_check.py:check_prospective_request']},
     'research_harness/report_views.py:_obligations:_short(code, 48)': {
@@ -205,10 +199,6 @@ COMPUTED_CODE_SITES.update({
         'sources': ['research_harness/review_series.py:run_series']},
     'research_harness/review_series.py:_end_series:code': {
         'sources': ['research_harness/review_continuation.py:plan_next']},
-    'research_harness/automatic_overrides.py:record_series_stop:type(error).__name__':
-        COMPUTED_CODE_SITES['research_harness/record_check.py:check_record:type(error).__name__'],
-    'research_harness/review_series.py:_record_omission:type(error).__name__':
-        COMPUTED_CODE_SITES['research_harness/record_check.py:check_record:type(error).__name__'],
 })
 
 # These are public command entry points, not a second registry of error codes.
@@ -1033,6 +1023,45 @@ def bind_argument(call, target, parameter):
     return None
 
 
+def is_exception_name_diagnostic(expression, function, index):
+    """Recognize the non-refusal arm of a retained exception diagnostic.
+
+    RR8 keeps later failures as diagnostics without changing the ending's code.
+    The refusal arm serializes its ResearchError; only the other arm writes a
+    Python class name. Constructor and planner code sinks never use this rule.
+    """
+    if not (isinstance(expression, ast.Attribute) and expression.attr == '__name__'
+            and isinstance(expression.value, ast.Call)
+            and isinstance(expression.value.func, ast.Name) and expression.value.func.id == 'type'
+            and len(expression.value.args) == 1 and not expression.value.keywords
+            and isinstance(expression.value.args[0], ast.Name)):
+        return False
+    if 'type' in index['expression_shadows'].get(id(expression.value.func), ()):
+        return False
+    if any(name in scope['scope_names'] or name in scope['imports']
+           for scope in iter_reference_scopes(function, index) for name in ('type', 'isinstance')):
+        return False
+    name = expression.value.args[0].id
+    for node in function['nodes']:
+        if not isinstance(node, ast.IfExp):
+            continue
+        test, body = node.test, node.body
+        if (isinstance(test, ast.Call) and isinstance(test.func, ast.Name) and test.func.id == 'isinstance'
+                and len(test.args) == 2 and not test.keywords
+                and 'isinstance' not in index['expression_shadows'].get(id(test.func), ())
+                and isinstance(test.args[0], ast.Name) and test.args[0].id == name
+                and isinstance(test.args[1], ast.Name) and test.args[1].id in index['constructors']
+                and test.args[1].id not in index['expression_shadows'].get(id(test.args[1]), ())
+                and not any(test.args[1].id in scope['scope_names']
+                            for scope in iter_reference_scopes(function, index))
+                and isinstance(body, ast.Call) and not body.args and not body.keywords
+                and isinstance(body.func, ast.Attribute) and body.func.attr == 'as_dict'
+                and isinstance(body.func.value, ast.Name) and body.func.value.id == name
+                and any(child is expression for child in ast.walk(node.orelse))):
+            return True
+    return False
+
+
 def collect_sinks(function, index):
     sinks = []
     for node in function['nodes']:
@@ -1048,11 +1077,13 @@ def collect_sinks(function, index):
                 sinks.append(('domain', node.args[0]))
             if name in ('dict', 'update'):
                 kind = 'planned' if function['module'] in PLANNER_MODULES or getattr(function['node'], 'name', '') == 'plan_next' else 'domain'
-                sinks.extend((kind, keyword.value) for keyword in node.keywords if keyword.arg == 'code')
+                sinks.extend((kind, keyword.value) for keyword in node.keywords if keyword.arg == 'code'
+                             and not (kind == 'domain' and is_exception_name_diagnostic(keyword.value, function, index)))
         elif isinstance(node, ast.Dict):
             kind = 'planned' if function['module'] in PLANNER_MODULES else 'domain'
             sinks.extend((kind, value) for key, value in zip(node.keys, node.values)
-                         if isinstance(key, ast.Constant) and key.value == 'code')
+                         if isinstance(key, ast.Constant) and key.value == 'code'
+                         and not (kind == 'domain' and is_exception_name_diagnostic(value, function, index)))
     return sinks
 
 
@@ -1348,9 +1379,9 @@ def analyze_sources(sources, roots, computed_sites=None, declared_edges=None, se
     index = build_index(sources)
     module_graph = collect_module_imports(index)
     functions = index['functions']
-    sinks = {key: collect_sinks(function, index) for key, function in functions.items()}
     calls = collect_resolved_calls(functions, index)
     collect_reference_context(index)
+    sinks = {key: collect_sinks(function, index) for key, function in functions.items()}
     index['methods'] = set().union(*index['classes'].values())
     graph = {key: set().union(*(resolve_references(node, function, index)
         for node in function['nodes'] if isinstance(node, ast.Call) or (

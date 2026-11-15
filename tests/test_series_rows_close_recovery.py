@@ -248,7 +248,7 @@ class RecoveryRowTests(unittest.TestCase):
             expected_revision=case.store.revision,
             request_id=plan.get('request_id', 'plan-' + str(case.store.revision)))['result']
 
-    def test_staged_unverified_capture_uses_the_stored_state_decision(self):
+    def test_staged_unverified_capture_uses_the_named_cause_decision(self):
         from research_harness import review_worker
         from test_review_staged_frontier import WORKER
         fixture, controller = self.prepare_staged()
@@ -270,7 +270,7 @@ class RecoveryRowTests(unittest.TestCase):
                          stop_classes.describe_terminal('review_invocation_unverified')['details']['decision'])
         _, rows = self.run_series(case, controller['id'])
         self.assertEqual((rows[-1]['state'], rows[-1]['code']), ('stop', 'review_invocation_unverified'))
-        self.assert_inspections(case, rows[-1], 'stored_state')
+        self.assert_inspections(case, rows[-1], 'named_cause')
 
     def test_both_stale_epoch_states_keep_inspection_until_each_cause_has_a_recovery(self):
         from research_harness import review_staged_protocol

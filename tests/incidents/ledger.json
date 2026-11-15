@@ -2,6 +2,47 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "review-registry-reach-closed-and-retained-endings",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "review continuity (closed reach, per-place conditions and retained endings)",
+      "summary": "The reported reach still held unreviewed refusals and Python exception diagnostics, and earlier function-wide conditions hid independent missing-record and unsupported-input grounds.",
+      "expected": "Every reachable refusal has a reviewed registry entry. Each numbered place retains its own conditions with planner payload precedence. Only an executed recovery becomes a continuation row. Named causes retain inspection decisions; an excluded source code remains an unlisted ending finding until it gets a row.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_series_rows_close_closing.ClosingRowTests.test_every_closing_named_cause_member_ends_inside_the_driver_recorder",
+        "test_series_rows_close_closing.ClosingRowTests.test_every_closing_stored_state_member_ends_inside_the_driver_recorder",
+        "test_series_rows_close_closing.ClosingRowTests.test_runtime_drift_replans_the_captured_call_then_records_its_review",
+        "test_series_rows_close_closing.ClosingRowTests.test_named_cause_ending_is_retained_and_both_printed_answers_run",
+        "test_series_rows_close_closing.ClosingRowTests.test_source_code_outside_rule_ten_retains_unlisted_finding_until_it_has_a_row",
+        "test_series_rows_close_closing.ClosingAnalysisTests.test_every_reachable_code_has_a_reviewed_registry_entry",
+        "test_series_rows_close_closing.ClosingAnalysisTests.test_all_member_files_pass_the_live_place_and_condition_guard",
+        "test_series_rows_close_closing.ClosingAnalysisTests.test_non_refusal_exception_names_are_diagnostics_instead_of_series_codes",
+        "test_series_rows_close_closing.ClosingConditionTests.test_actual_input_reader_keeps_missing_ancestry_apart_from_retained_content",
+        "test_series_rows_close_closing.ClosingConditionTests.test_actual_planner_built_payload_checks_keep_payload_before_form",
+        "test_series_rows_close_closing.ClosingConditionTests.test_an_external_unsupported_route_keeps_form_and_named_cause",
+        "test_series_rows_close_closing.ClosingAdmissionTests.test_only_the_executed_runtime_recovery_has_a_closing_row_of_its_own"
+      ]
+    },
+    {
+      "id": "status-preserves-malformed-review-context-diagnostics",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "review continuity (executable status inspection on malformed retained context)",
+      "summary": "A malformed retained context aborted status instead of returning the inspection offered by the named-cause decision.",
+      "expected": "Every printed inspection returns its report without repairing or replacing the context validator. Status names each failed context and preserves unaffected obligations and next actions. Record-check lists the retained ending without an unlisted finding.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_series_rows_close_closing.MalformedContextAnswerTests.test_malformed_retained_ancestry_keeps_every_named_cause_answer_executable",
+        "test_series_rows_close_closing.MalformedContextAnswerTests.test_mixed_record_and_content_code_keeps_the_inspection_answers",
+        "test_series_rows_close_closing.MalformedContextAnswerTests.test_status_names_each_failure_without_dropping_unaffected_contexts",
+        "test_series_rows_close_closing.MalformedContextAnswerTests.test_unposted_malformed_context_returns_all_printed_inspections",
+        "test_series_rows_close_closing.MalformedContextAnswerTests.test_unposted_missing_controller_returns_all_printed_inspections",
+        "test_series_rows_close_closing.MalformedContextAnswerTests.test_malformed_context_preserves_nonreview_obligations",
+        "test_series_rows_close_closing.MalformedContextAnswerTests.test_unreadable_retained_packet_returns_its_code_and_preserves_other_heads"
+      ]
+    },
+    {
       "id": "reported-stop-conditions-inspection-decisions",
       "record": "20261113110022-every-open-record-and-review-capacity",
       "class": "review continuity (per-place outside, input, bound and store conditions)",
@@ -5706,7 +5747,7 @@
         "test_series_rows_close_foundation.CrossingTests.test_crossing_modules_include_their_package_initializers",
         "test_series_rows_close_foundation.CrossingTests.test_script_only_sources_do_not_expand_an_imported_root",
         "test_series_rows_close_foundation.WritingSiteTests.test_a_constructor_and_a_plan_in_one_function_keep_both_places",
-        "test_series_code_reach.CodeReachTests.test_ending_declarations_preserve_numbered_diagnostic_writers"
+        "test_series_code_reach.CodeReachTests.test_ending_declarations_preserve_codes_without_python_exception_names"
       ]
     },
     {
@@ -5787,7 +5828,7 @@
       "summary": "Staged obligation handoffs ignored group decisions and incomplete outcomes printed an unsupported assignment_id payload.",
       "expected": "Unverified captures and stale epochs carry their reviewed inspection decisions, executable tasks pass completion diagnostics, and an actual incomplete outcome prints inspections.",
       "tests": [
-        "test_series_rows_close_recovery.RecoveryRowTests.test_staged_unverified_capture_uses_the_stored_state_decision",
+        "test_series_rows_close_recovery.RecoveryRowTests.test_staged_unverified_capture_uses_the_named_cause_decision",
         "test_series_rows_close_recovery.RecoveryRowTests.test_both_stale_epoch_states_keep_inspection_until_each_cause_has_a_recovery",
         "test_series_rows_close_recovery.RecoveryRowTests.test_actual_incomplete_outcome_prints_an_inspection_instead_of_an_invalid_assignment",
         "test_series_rows_close_recovery.RecoveryRowTests.test_staged_completion_findings_remain_diagnostics_until_the_result_is_recorded"

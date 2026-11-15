@@ -741,15 +741,13 @@ def entry():
         with self.assertRaisesRegex(AssertionError, 'review_context_unverified'):
             reach.validate_registry_coverage(actual, registry)
 
-    def test_ending_declarations_preserve_numbered_diagnostic_writers(self):
+    def test_ending_declarations_preserve_codes_without_python_exception_names(self):
         fixture = json.loads(FIXTURE.read_text())
-        # The retry and scope readers each write the name; a forwarder does not.
-        sites = ['research_harness/automatic_overrides.py:record_series_stop#1',
-                 'research_harness/automatic_overrides.py:record_series_stop#2',
-                 'research_harness/review_series.py:_record_omission#1']
+        # RR8 retains later failures under omitted; they do not replace a refusal.
         for code in ('BrokenPipeError', 'ConnectionResetError', 'JSONDecodeError'):
             with self.subTest(code=code):
-                self.assertEqual(reach.read_code_sites(fixture, code), sites)
+                self.assertNotIn(code, fixture['reachable'])
+                self.assertNotIn(code, fixture['code_vocabulary'])
         for site in ("research_harness/record_check.py:describe_series_stops:row['code']",
                      "research_harness/record_check.py:read_ending_files:line['code']",
                      'research_harness/review_series.py:_end_series:error.code',

@@ -278,9 +278,10 @@ class PostedClosureCostTests(unittest.TestCase):
             raise ResearchError('synthetic_status_failure', 'Stop this synthetic status.')
 
         with runtime_scope(records, evaluation):
-            with self.assertRaises(ResearchError) as caught:
-                self.run_status(inspect, snapshot=snapshot, evaluation=evaluation)
-            self.assertEqual(caught.exception.code, 'synthetic_status_failure')
+            report = self.run_status(inspect, snapshot=snapshot, evaluation=evaluation)
+            self.assertFalse(report['ready'])
+            self.assertIn('synthetic_status_failure',
+                          [failure['code'] for failure in report['review_context_failures']])
             with self.count_walks() as walks:
                 for _ in range(2):
                     self.assertEqual(problem_delivery.find_review_post(

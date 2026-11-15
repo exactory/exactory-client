@@ -6,20 +6,6 @@
           "content"
         ]
       },
-      "execution_observation_mismatch": {
-        "research_harness/execution_evidence.py:validate_observed_execution#1": [
-          "content"
-        ],
-        "research_harness/execution_evidence.py:validate_observed_execution#2": [
-          "content"
-        ],
-        "research_harness/execution_evidence.py:validate_observed_execution#3": [
-          "content"
-        ],
-        "research_harness/execution_evidence.py:validate_observed_execution#4": [
-          "content"
-        ]
-      },
       "execution_output_mismatch": {
         "research_harness/execution_outputs.py:_inventory#1": [
           "content"
@@ -99,60 +85,8 @@
           "content"
         ]
       },
-      "invalid_import_identity": {
-        "research_harness/probe_provenance.py:check_normalized_identity#1": [
-          "content"
-        ],
-        "research_harness/probe_provenance.py:check_normalized_identity#2": [
-          "content"
-        ],
-        "research_harness/probe_provenance.py:read_import_identity#1": [
-          "content"
-        ],
-        "research_harness/probe_provenance.py:read_import_identity#2": [
-          "content"
-        ],
-        "research_harness/probe_provenance.py:read_import_identity#3": [
-          "content"
-        ]
-      },
       "invalid_source_deferral": {
         "research_harness/source_deferrals.py:_check_artifact#1": [
-          "content"
-        ]
-      },
-      "invalid_target": {
-        "research_harness/graph.py:validate_target#1": [
-          "content"
-        ],
-        "research_harness/graph.py:validate_target#2": [
-          "content"
-        ],
-        "research_harness/graph.py:validate_target#3": [
-          "content"
-        ],
-        "research_harness/graph.py:validate_target#4": [
-          "content"
-        ],
-        "research_harness/principles.py:_validate_objective#1": [
-          "content"
-        ],
-        "research_harness/principles.py:_validate_objective#2": [
-          "content"
-        ],
-        "research_harness/principles.py:_validate_objective#3": [
-          "content"
-        ],
-        "research_harness/principles.py:_validate_objective#4": [
-          "content"
-        ],
-        "research_harness/principles.py:_validate_target#1": [
-          "content"
-        ],
-        "research_harness/principles.py:_validate_target#2": [
-          "content"
-        ],
-        "research_harness/principles.py:_validate_target#3": [
           "content"
         ]
       },
@@ -171,34 +105,6 @@
       },
       "outside_reading_unit": {
         "research_harness/reading.py:_assess#1": [
-          "content"
-        ]
-      },
-      "unknown_assessment": {
-        "research_harness/development.py:_Context.assess_record#1": [
-          "content"
-        ],
-        "research_harness/development.py:_build_assessment_plan#1": [
-          "content"
-        ],
-        "research_harness/development.py:_build_assessment_plan#2": [
-          "content"
-        ]
-      },
-      "unknown_checkpoint": {
-        "research_harness/development.py:_build_assessment_plan#1": [
-          "content"
-        ],
-        "research_harness/development.py:_build_assessment_plan#2": [
-          "content"
-        ],
-        "research_harness/development.py:_compose_candidate#1": [
-          "content"
-        ],
-        "research_harness/development.py:_inheritance#1": [
-          "content"
-        ],
-        "research_harness/development.py:_inheritance#2": [
           "content"
         ]
       },

@@ -33,7 +33,7 @@ from .errors import ResearchError, describe_tool_timeout
 from .evaluation import Evaluation
 from .evidence import digest
 from . import review_preflight, review_protocol as protocol, review_transport as transport
-from .review_continuation import list_chain_heads, plan_next
+from .review_continuation import list_chain_heads, plan_next, validate_context_bindings
 from .review_failure_class import classify_attempt
 from .review_series import EXECUTABLE_COMMANDS
 from .storage import Store, _RecordHistory, _RecordedSnapshot, _validate
@@ -321,6 +321,8 @@ def check_authentication(store):
     artifacts = Evaluation(records, store.build_artifact_store())
     from .review_state_evaluation import runtime_scope
     with runtime_scope(records, artifacts):
+        for assignment in records.get('review_assignment', {}).values():
+            validate_context_bindings(records, artifacts, assignment)
         attempts = {}
         for identifier, attempt in sorted(records.get('review_attempt', {}).items()):
             assignment = records['review_assignment'][attempt['assignment_id']]

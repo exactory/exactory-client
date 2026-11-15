@@ -50,7 +50,7 @@ class DecisionRowTests(unittest.TestCase):
         Only the unrelated review head is stubbed. The check reads this store,
         the row comes through plan_next, and the repair uses its real command.
         """
-        def find_head(records, artifacts, head_id):
+        def find_head(records, artifacts, head_id, *, context_failures=None):
             check(records, artifacts)
             return dict(id=head_id, role='bar', context={})
 
@@ -78,7 +78,7 @@ class DecisionRowTests(unittest.TestCase):
     def test_each_stored_state_member_ends_with_the_group_record_check_decision(self):
         fixture = self.prepare_fixture(continuation_fixtures.ContinuationTests)
         codes = getattr(stop_classes, '_STORED_STATE_CODES_DECISION', ())
-        self.assertEqual(len(codes), 20)
+        self.assertEqual(len(codes), 17)
         self.assertEqual(set(codes), set(json.loads(GROUPS.read_text())['stored_state']['members']))
         for code in codes:
             with self.subTest(code=code):
