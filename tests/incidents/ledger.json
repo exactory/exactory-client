@@ -7219,6 +7219,19 @@
         "test_review_field_classes.FieldClassTests.test_forming_import_incident_accounts_for_twenty_eight_million_characters",
         "test_review_field_classes.FieldClassTests.test_builder_packets_keep_the_base_fixture_digests_after_classification"
       ]
+    },
+    {
+      "id": "capacity-composite-final-authentication",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "capacity-composite-final",
+      "summary": "A final that exceeds one response can retain three authenticated pages and a closing page as one composite.",
+      "expected": "Replay selected observations, require disjoint complete targets, compose again and validate the role output.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_composite.CompositeFinalTests.test_three_pages_record_authenticate_and_read_final",
+        "test_review_composite.CompositeFinalTests.test_condition_3_refuses_overlapping_targets"
+      ]
     }
   ]
 }

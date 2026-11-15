@@ -134,7 +134,8 @@ def prepare_openness(records, artifacts, value, revision):
     if not state["ready"] or assignment is None or assignment["role"] != "native_math":
         raise ResearchError("review_context_unverified", "Obtain the observed native_math openness result", {"obligations": state["obligations"]})
     packet = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
-    output = state["output"]
+    from .review_composite import read_final_output
+    output, composite = read_final_output(records, artifacts, assignment)
     from .openness_reading import PROTOCOL_V5, PROTOCOL_V6, PROTOCOL_V7, find_protocol, find_stage, verify_chain, verify_problem_coverage
     supplied = json.loads(artifacts.read(assignment["packet"]))
     stage = find_stage(supplied)
@@ -221,6 +222,8 @@ def prepare_openness(records, artifacts, value, revision):
                                 {"artifact_digests": sorted(required_artifacts - delivered)})
     record = dict(finding, id=value["assignment_id"], assignment_id=value["assignment_id"],
                   statement_id=statement["id"], review=output, recorded_revision=revision)
+    if composite is not None:
+        record['composite'] = dict(id=composite['id'], digest=digest(composite))
     if stage == "final":
         record["reading_turns"] = verified["turns"] if verified is not None else verify_chain(records, artifacts, assignment)
     from .problem_openness_reviews import validate_native_reviews
@@ -260,7 +263,7 @@ def assess_openness(records, artifacts):
             from .problem_openness_reviews import RESULT_CHANGED_MESSAGE
             return [obligation("problem_openness_stale", RESULT_CHANGED_MESSAGE,
                                cause="openness_result_changed", **affected)]
-    if "native_reviews" in finding or "source_evidence" in finding or "reading_turns" in finding:
+    if any(key in finding for key in ("native_reviews", "source_evidence", "reading_turns", "composite")):
         from .problem_openness_reviews import observed_review, validate_native_reviews
         try:
             assignment, state, packet = observed_review(records, artifacts, finding["assignment_id"])
@@ -271,8 +274,15 @@ def assess_openness(records, artifacts):
                 turns = verified["turns"] if verified is not None else verify_chain(records, artifacts, assignment)
                 if turns != finding["reading_turns"]:
                     raise ResearchError("openness_reading_incomplete", "The recorded reading turns changed")
+            observed = state['output']
+            composite_matches = True
+            if finding.get('composite') is not None:
+                from .review_composite import read_final_output
+                observed, composite = read_final_output(records, artifacts, assignment)
+                composite_matches = (composite is not None and finding['composite'] ==
+                                     dict(id=composite['id'], digest=digest(composite)))
             current = validate_native_reviews(records, artifacts, packet, state)
-            if current != finding.get("native_reviews") or state["output"] != finding["review"]:
+            if current != finding.get("native_reviews") or observed != finding["review"] or not composite_matches:
                 raise ResearchError("openness_native_review_mismatch", "The recorded native review binding changed")
             from .problem_openness_sources import validate_delivery
             if validate_delivery(records, artifacts, packet, state) != finding.get("openness_delivery"):

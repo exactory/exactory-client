@@ -4693,6 +4693,10 @@ def record_adjudication(store, payload, *, expected_revision, request_id):
         state = assignment_state(records, artifacts, value['assignment_id'])
         from .research_decisions import bind_effective_result, read_effective_result
         output, _ = read_effective_result(state)
+        from .review_composite import read_final_output
+        final_output, composite = read_final_output(records, artifacts, saved)
+        if composite is not None:
+            output = final_output
         if state.get('effective', {}).get('kind') == 'incomplete':
             raise ResearchError('assessment_incomplete',
                                 'An incomplete focused assessment occupies its slot and leaves the objection open.')
@@ -4716,6 +4720,8 @@ def record_adjudication(store, payload, *, expected_revision, request_id):
                 records['review_attempt'][state['attempt_id']], collect_adjudication_evidence(response))
         _evidence(artifacts, collect_adjudication_evidence(response), records=records)
         record = dict(value, dossier_id=state['dossier_id'], recorded_revision=expected_revision + 1)
+        if composite is not None:
+            record['composite'] = dict(id=composite['id'], digest=digest(composite))
         if assignment.get('staged_review') is not None:
             record['effective_binding'] = bind_effective_result(state['effective'])
         if packet.get('subject', {}).get('kind') == 'problem':
@@ -4753,6 +4759,15 @@ def adjudication_state(records, artifacts, adjudication_id):
     assignment = records.get('review_assignment', {}).get(saved['assignment_id'], {})
     from .research_decisions import bind_effective_result, read_effective_result
     output, _ = read_effective_result(state)
+    if saved.get('composite') is not None:
+        from .review_composite import read_final_output
+        try:
+            output, composite = read_final_output(records, artifacts, assignment)
+            if composite is None or saved['composite'] != dict(id=composite['id'], digest=digest(composite)):
+                output = None
+        except ResearchError as error:
+            obligations.append(obligation(error.code, error.message, **(error.details or {})))
+            output = None
     effective = state.get('effective')
     if assignment.get('staged_review') is not None:
         if effective is None or saved.get('effective_binding') != bind_effective_result(effective):
