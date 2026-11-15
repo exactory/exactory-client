@@ -199,7 +199,7 @@ def record_value(store, payload, *, expected_revision, request_id):
         if statement is None or value["statement_id"] != statement["id"]:
             raise ResearchError("problem_statement_missing", "Select the exact current problem statement")
         from .problem_evidence import validate_value
-        validated = validate_value(records, artifacts, value)
+        validated = validate_value(records, artifacts, dict(value, accounts_version=2))
         record = dict(validated, recorded_revision=expected_revision + 1)
         changes = [immutable_record(records, "problem_value", value["id"], record)]
         size_report = describe_value_size(records, artifacts, record)

@@ -415,6 +415,34 @@ class FormingImportTests(unittest.TestCase):
         self.destination.assert_error('problem_accounts_history_missing', lambda: problem_accounts.require_prior_form(
             records, statement, self.destination.store.revision + 1))
 
+    def test_period_refusal_names_imported_form_and_keeps_legacy_details_absent(self):
+        from research_harness.errors import ResearchError
+        imported = self.import_history()
+        candidate = build_candidate()
+        candidate["source"]["evidence"] = [self.reference("forming_call", self.call, imported["source_origin"])]
+        self.destination.mutate(cli.OPERATIONS["problem-candidate"], candidate)
+        statement = self.destination.select_statement(candidate_id=candidate["id"])
+        records = self.destination.store.snapshot()["records"]
+        date = self.call["recorded_at"][:10]
+        before_revision = self.destination.store.revision + 1
+        with self.assertRaises(ResearchError) as caught:
+            problem_accounts.require_prior_form(records, statement, before_revision, date,
+                accounts_version=2, evidence_source={"entry_id": "use"})
+        self.assertEqual(caught.exception.code, "problem_accounts_history_missing")
+        self.assertIn("period", caught.exception.message)
+        self.assertEqual(caught.exception.details, {
+            "evidence": {"entry_id": "use", "revision": before_revision, "date": date},
+            "forms": [{"origin": imported["source_origin"], "forming_call_id": self.call["id"],
+                "form_ids": ["form-1"],
+                "recorded_revision": self.call["recorded_revision"], "recorded_at": self.call["recorded_at"]}]})
+        with self.assertRaises(ResearchError) as legacy:
+            problem_accounts.require_prior_form(records, statement, before_revision, date)
+        self.assertNotIn("details", legacy.exception.as_dict())
+        with self.assertRaises(ResearchError) as too_late:
+            problem_accounts.require_prior_form(records, statement, imported["recorded_revision"], date,
+                accounts_version=2, evidence_source={"entry_id": "use"})
+        self.assertEqual(too_late.exception.message, legacy.exception.message)
+
     def test_imported_gain_uses_original_form_and_result_ordering(self):
         from test_research_problem_objective_results import build_objective_native, build_objective_result
         from test_research_problem_attempt import put_native_attempt

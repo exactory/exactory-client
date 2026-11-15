@@ -1,6 +1,7 @@
 """The accounts of a problem's value: facts once, with references between parts."""
 
 import copy
+from datetime import timezone
 
 from . import strategy
 from .errors import ResearchError
@@ -13,6 +14,13 @@ ACCOUNT_LIST_PARTS = ("answer_evidence", "boundaries", "explanatory_use", "alter
 STRENGTH_HEADS = ("range_of_instances", "constants", "exponents", "exactness")
 RELATION_KINDS = ("implies", "follows_from", "equivalent_to", "incompatible_with", "strengthens", "generalizes", "presents_anew")
 ALTERNATIVE_ROLES = ("stronger", "weaker", "same_assertion", "other_assertion", "no_alternative")
+HISTORY_MISSING_MESSAGE = ("A gain claim and a passed test need a history. The candidate of the "
+                           "statement must cite, in source.evidence, a forming call or a form outcome whose form was "
+                           "recorded before the evidence of the gain or the plan of the test. Without such a form, record "
+                           "gain as null, and record the check as an observation")
+HISTORY_DATE_PERIOD_MESSAGE = ("The evidence date names a period that contains the recording time of a candidate "
+                               "form. That date does not show which came first. Enter a timestamp with a timezone "
+                               "for the evidence to decide the order, or record gain as null and the check as an observation")
 
 
 def collect_entries(accounts):
@@ -67,18 +75,25 @@ def collect_account_evidence(accounts):
     return [reference for entry in collect_entries(accounts) for reference in entry.get("evidence", [])]
 
 
-def find_result_revision(records, reference):
+def find_result_snapshot(records, reference):
     identifier = reference.get("native_attempt_digest")
     if identifier is None:
         identifier = records["problem_attempt"][reference["attempt_id"]]["solver"]["native_attempt_digest"]
     native = records["native_attempt"][identifier]
     acceptance = next(row for row in native["acceptances"] if row["id"] == reference["acceptance_id"])
     claim = next(row["claim"] for row in native["checkpoints"] if row["id"] == acceptance["checkpoint_id"])
-    revisions = [row.get("recorded_revision") for row in records["native_attempt"].values()
+    snapshots = [row for row in records["native_attempt"].values()
                if (row["attack_root"], row["objective_id"]) == (native["attack_root"], native["objective_id"])
                and any(digest(item) == digest(acceptance) for item in row["acceptances"])
                and any(item["id"] == acceptance["checkpoint_id"] and item["claim"] == claim for item in row["checkpoints"])]
-    return None if None in revisions else min(revisions)
+    if any(row.get("recorded_revision") is None for row in snapshots):
+        return None
+    return min(snapshots, key=lambda row: row["recorded_revision"])
+
+
+def find_result_revision(records, reference):
+    snapshot = find_result_snapshot(records, reference)
+    return None if snapshot is None else snapshot["recorded_revision"]
 
 
 def find_evidence_availability(records, reference):
@@ -91,17 +106,8 @@ def find_evidence_availability(records, reference):
         year = records["work"][reference["version_id"]].get("year")
         return None if year is None else str(year)
     if reference["kind"] == "result":
-        if "native_attempt_digest" in reference:
-            native = records["native_attempt"][reference["native_attempt_digest"]]
-        else:
-            attempt = records["problem_attempt"][reference["attempt_id"]]
-            native = records["native_attempt"][attempt["solver"]["native_attempt_digest"]]
-        acceptance = next(row for row in native["acceptances"] if row["id"] == reference["acceptance_id"])
-        checkpoint = next(row for row in native["checkpoints"] if row["id"] == acceptance["checkpoint_id"])
-        for record in (acceptance, checkpoint):
-            for key in ("accepted_at", "created_at", "recorded_at", "timestamp"):
-                if record.get(key):
-                    return record[key]
+        snapshot = find_result_snapshot(records, reference)
+        return None if snapshot is None else snapshot.get("recorded_at")
     return None
 
 
@@ -171,7 +177,7 @@ def validate_fact(records, entry, entries, *, required_code=None, exploratory=Fa
                             {"id": entry["id"]})
     if "date" in entry:
         validate_evidence_date(entry["date"])
-    dates = []
+    dates, undated = [], []
     for reference in references:
         if reference["kind"] == "probe" and not exploratory:
             raise ResearchError(required_code or "invalid_input",
@@ -182,15 +188,17 @@ def validate_fact(records, entry, entries, *, required_code=None, exploratory=Fa
         if date is not None:
             validate_evidence_date(date)
             dates.append(date)
+        else:
+            undated.append(reference)
     # All sources must have dates to derive the availability of a combined fact.
     if references and len(dates) == len(references):
         entry["date"] = max(dates)
     elif "date" not in entry:
         raise ResearchError("problem_account_date_missing",
-                            "The record cannot derive the date of this entry from its evidence. Enter date, the day on "
+                            "The record cannot derive the date of this entry from the references in undated. Enter date, the day on "
                             "which the fact became available, as YYYY, YYYY-MM, YYYY-MM-DD or a timestamp with a "
                             "timezone, or enter unknown",
-                            {"id": entry["id"]})
+                            {"id": entry["id"], "undated": undated})
     validate_evidence_date(entry["date"])
 
 
@@ -447,39 +455,69 @@ def precedes_evidence_date(call, date):
     return timestamp(call["recorded_at"]) < timestamp(date)
 
 
-def require_prior_form(records, statement, before_revision, before_date=None, *, evidence_origin=None):
+def find_date_start(date):
+    """Return the UTC instant at which an evidence date's period starts."""
+    if len(date) <= 10:
+        date += {4: "-01-01", 7: "-01", 10: ""}[len(date)] + "T00:00:00+00:00"
+    return timestamp(date).astimezone(timezone.utc)
+
+
+def require_prior_form(records, statement, before_revision, before_date=None, *, evidence_origin=None,
+                       accounts_version=1, evidence_source=None):
     forms = collect_candidate_forms(records, statement)
-    if evidence_origin is None and (before_revision is not None or before_date is not None) and any(
-            (before_revision is None or call["recorded_revision"] < before_revision)
-            and (before_date is None or precedes_evidence_date(call, before_date))
-            and any(form["id"] in forms for form in call["forms"])
-            for call in records.get("forming_call", {}).values()):
-        return
+    candidates = []
+    for call in records.get("forming_call", {}).values():
+        identifiers = [form["id"] for form in call["forms"] if form["id"] in forms]
+        if identifiers:
+            row = dict(forming_call_id=call["id"], form_ids=identifiers,
+                       recorded_revision=call.get("recorded_revision"), recorded_at=call.get("recorded_at"))
+            candidates.append((row, call.get("recorded_revision"), evidence_origin is None))
     from .problem_forming_import import collect_inherited
-    candidate = records.get('problem_candidate', {}).get(statement.get('candidate_id'), {})
-    for reference in candidate.get('source', {}).get('evidence', []):
-        imported = collect_inherited(records).get(reference.get('origin'))
+    candidate = records.get("problem_candidate", {}).get(statement.get("candidate_id"), {})
+    inherited = collect_inherited(records)
+    imported_calls = {}
+    for reference in candidate.get("source", {}).get("evidence", []):
+        imported = inherited.get(reference.get("origin"))
         if imported is None:
             continue
-        if evidence_origin is not None and reference['origin'] != evidence_origin:
-            continue
-        for member in imported['members']:
-            if (member['record_kind'], member['id'], member['digest']) != (reference.get('record_kind'), reference.get('id'), reference.get('digest')):
+        for member in imported["members"]:
+            if (member["record_kind"], member["id"], member["digest"]) != (reference.get("record_kind"), reference.get("id"), reference.get("digest")):
                 continue
-            call = next((row for row in imported['members'] if row['record_kind'] == 'forming_call' and row['id'] == member['forming_call_id']), None)
-            revision = imported['recorded_revision'] if evidence_origin is None else (call or {}).get('revision')
-            if (member['form_ids'] and call is not None and (before_revision is not None or before_date is not None)
-                    and (before_revision is None or revision is not None and revision < before_revision)
-                    and (before_date is None or call['date'] != 'unknown' and precedes_evidence_date(dict(recorded_at=call['date']), before_date))):
-                return
-    raise ResearchError("problem_accounts_history_missing",
-                        "A gain claim and a passed test need a history. The candidate of the "
-                        "statement must cite, in source.evidence, a forming call or a form outcome whose form was "
-                        "recorded before the evidence of the gain or the plan of the test. Without such a form, record "
-                        "gain as null, and record the check as an observation")
+            call = next((row for row in imported["members"] if row["record_kind"] == "forming_call" and row["id"] == member["forming_call_id"]), None)
+            if not member["form_ids"] or call is None:
+                continue
+            key = (reference["origin"], call["id"])
+            if key not in imported_calls:
+                row = dict(origin=reference["origin"], forming_call_id=call["id"], form_ids=[],
+                           recorded_revision=call.get("revision"),
+                           recorded_at=None if call["date"] == "unknown" else call["date"])
+                revision = imported["recorded_revision"] if evidence_origin is None else call.get("revision")
+                candidates.append((row, revision, evidence_origin in (None, reference["origin"])))
+                imported_calls[key] = row
+            identifiers = imported_calls[key]["form_ids"]
+            identifiers.extend(identifier for identifier in member["form_ids"] if identifier not in identifiers)
+    ambiguous = False
+    for row, revision, eligible in candidates:
+        revision_passes = before_revision is None or revision is not None and revision < before_revision
+        if not eligible or not revision_passes:
+            continue
+        if ((before_revision is not None or before_date is not None)
+                and (before_date is None or precedes_evidence_date(row, before_date))):
+            return
+        if (accounts_version == 2 and before_date is not None and len(before_date) <= 10 and row["recorded_at"] is not None
+                and timestamp(row["recorded_at"]).astimezone(timezone.utc).isoformat()[:len(before_date)] == before_date):
+            ambiguous = True
+    message = HISTORY_MISSING_MESSAGE
+    details = None
+    if accounts_version == 2:
+        details = {"evidence": dict(evidence_source or {}, revision=before_revision, date=before_date),
+                   "forms": [row for row, _, _ in candidates]}
+        if ambiguous:
+            message = HISTORY_DATE_PERIOD_MESSAGE
+    raise ResearchError("problem_accounts_history_missing", message, details)
 
 
-def validate_test(records, entry, entries, alternatives, statement, revision):
+def validate_test(records, entry, entries, alternatives, statement, revision, *, accounts_version=1):
     from .development import compute_plan_statement_digest
     from .problem_claims import compute_statement_digest
     code = "problem_test_run_invalid"
@@ -591,7 +629,8 @@ def validate_test(records, entry, entries, alternatives, statement, revision):
                                 "A passed test needs each failure signal of its plan assessed as not_observed. "
                                 "Record passed false for a test with an observed or unresolved signal. A failed test "
                                 "stays with its text")
-        require_prior_form(records, statement, plan["planned_revision"])
+        require_prior_form(records, statement, plan["planned_revision"], accounts_version=accounts_version,
+                           evidence_source={"reference": reference})
 
 
 def validate_tier_two(records, value, accounts, entries, alternatives):
@@ -638,7 +677,8 @@ def validate_tier_two(records, value, accounts, entries, alternatives):
                                     "A check with the standing test needs contradiction, the outcome that would "
                                     "contradict the statement, and result, the outcome of the run. A check that no outcome "
                                     "can contradict is an observation")
-            validate_test(records, entry, entries, alternatives, statement, value.get("recorded_revision"))
+            validate_test(records, entry, entries, alternatives, statement, value.get("recorded_revision"),
+                          accounts_version=value.get("accounts_version", 1))
     for entry in accounts["answer_evidence"]:
         if entry["kind"]["kind"] == "passed_test":
             check = checks.get(entry.get("check_id"))
@@ -699,15 +739,19 @@ def validate_tier_two(records, value, accounts, entries, alternatives):
                             "an accepted result. A probe establishes no gain. Without such evidence, record gain as null")
     if gain["new_object_justification"] is not None:
         text(gain["new_object_justification"], "The new_object_justification of the gain")
+    accounts_version = value.get("accounts_version", 1)
     revisions, dates, native_evidence = [], [], False
+    choose_date = (lambda row: find_date_start(row["date"])) if accounts_version == 2 else (lambda row: row["date"])
     for reference in establishing:
         if reference['kind'] == 'record' and 'origin' in reference:
             from .problem_forming_import import find_imported_availability
             availability = find_imported_availability(records, reference)
             if not availability:
-                require_prior_form(records, statement, None)
+                require_prior_form(records, statement, None, accounts_version=accounts_version,
+                                   evidence_source={"reference": reference})
             for row in availability:
-                require_prior_form(records, statement, row['revision'], row['date'], evidence_origin=row['origin'])
+                require_prior_form(records, statement, row['revision'], row['date'], evidence_origin=row['origin'],
+                                   accounts_version=accounts_version, evidence_source={"reference": reference})
             continue
         native_evidence = True
         revision = None
@@ -718,17 +762,26 @@ def validate_tier_two(records, value, accounts, entries, alternatives):
         elif reference["kind"] == "reading":
             revision = records["reading"][reference["reading_id"]].get("recorded_revision")
         date = find_evidence_availability(records, reference)
+        dated = None if date is None else {"date": date, "reference": reference}
         if date is None and revision is None:
-            date = min((entry["date"] for entry in entries.values() if reference in entry.get("evidence", [])
-                        and entry.get("date") not in (None, "unknown")), default=None)
-        if revision is None and date is None:
-            require_prior_form(records, statement, None)
+            dated = min(({"date": entry["date"], "entry_id": entry["id"]} for entry in entries.values()
+                         if reference in entry.get("evidence", []) and entry.get("date") not in (None, "unknown")),
+                        key=choose_date, default=None)
+        if revision is None and dated is None:
+            require_prior_form(records, statement, None, accounts_version=accounts_version,
+                               evidence_source={"reference": reference})
         if revision is not None:
-            revisions.append(revision)
-        if date is not None:
-            dates.append(date)
+            revisions.append((revision, reference))
+        if dated is not None:
+            dates.append(dated)
     if native_evidence:
-        require_prior_form(records, statement, min(revisions) if revisions else None, min(dates) if dates else None)
+        earliest_revision = min(revisions, key=lambda row: row[0]) if revisions else (None, None)
+        earliest_date = min(dates, key=choose_date) if dates else None
+        source = ({key: item for key, item in earliest_date.items() if key != "date"}
+                  if earliest_date is not None else {"reference": earliest_revision[1]})
+        require_prior_form(records, statement, earliest_revision[0],
+                           None if earliest_date is None else earliest_date["date"],
+                           accounts_version=accounts_version, evidence_source=source)
 
 
 def validate_replacement(records, artifacts, accounts, entries):

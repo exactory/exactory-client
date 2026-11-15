@@ -38,10 +38,13 @@ def build_native_attempt(statement_text, acceptances, state):
                            "attestation_id": "filesystem-audit:deliver-attempt"}}
 
 
-def put_native_attempt(case, native):
-    identifier = digest({key: value for key, value in native.items() if key not in ("provenance", "recorded_revision")})
+def put_native_attempt(case, native, *, recorded_at=None):
+    identifier = digest({key: value for key, value in native.items() if key not in ("provenance", "recorded_revision", "recorded_at")})
     if identifier not in case.store.snapshot()["records"].get("native_attempt", {}):
-        case.put("native_attempt", identifier, dict(native, recorded_revision=case.store.revision + 1))
+        record = dict(native, recorded_revision=case.store.revision + 1)
+        if recorded_at is not None:
+            record["recorded_at"] = recorded_at
+        case.put("native_attempt", identifier, record)
     key = {name: native[name] for name in ("attack_root", "objective_id")}
     pointer_id = digest(key)
     current = case.store.snapshot()["records"].get("native_attempt_current", {}).get(pointer_id)

@@ -2,6 +2,37 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "phenomenon-result-delivery-date",
+      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
+      "class": "accepted result date unavailable",
+      "summary": "A result-only account could not derive a date because native acceptances carry no timestamp.",
+      "expected": "New native snapshots carry the store delivery time outside their summary digest. The earliest matching snapshot supplies the result date; an older unstamped snapshot stays undated and the refusal names the reference.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_accounts.ProblemAccountsTests.test_a_result_date_is_derived_but_history_keeps_its_precise_time",
+        "test_problem_accounts.ProblemAccountsTests.test_result_date_uses_earliest_matching_snapshot",
+        "test_problem_accounts.ProblemAccountsTests.test_unstamped_earliest_result_reports_undated_reference"
+      ]
+    },
+    {
+      "id": "phenomenon-account-period-history",
+      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
+      "class": "coarse evidence date and lexical date order",
+      "summary": "A date on the forming day gave no explanation of its precision, and string minima could accept evidence that preceded the form.",
+      "expected": "Version 2 values select both date minima by UTC instant and explain a period containing the form time with evidence and form provenance. Stored values without accounts_version retain their original validation and obligations.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_accounts.ProblemAccountsTests.test_period_dates_explain_ambiguous_form_history",
+        "test_problem_accounts.ProblemAccountsTests.test_utc_date_selection_shared_reference_preserves_v1",
+        "test_problem_accounts.ProblemAccountsTests.test_utc_date_selection_distinct_references_preserves_v1",
+        "test_problem_accounts.ProblemAccountsTests.test_offset_date_selection_shared_reference_preserves_v1",
+        "test_problem_accounts.ProblemAccountsTests.test_offset_date_selection_distinct_references_preserves_v1",
+        "test_problem_accounts.ProblemAccountsTests.test_legacy_history_refusal_keeps_message_and_obligation_bytes"
+      ]
+    },
+    {
       "id": "exhaustion-position-capacity-link-precedence",
       "record": "20261113110022-every-open-record-and-review-capacity",
       "class": "D2 exhausted position membership and R13 replacement count",

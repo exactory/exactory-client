@@ -71,6 +71,7 @@ class PostedProblemTests(delivery.ProblemDeliveryCase):
         records = self.store.snapshot()["records"]
         changed = copy.deepcopy(records["problem_value"]["value-1"])
         changed.pop("recorded_revision")
+        changed.pop("accounts_version")
         changed["id"] = "value-after-post"
         changed["motivation"][0]["text"] = "The same bound also connects two finite constructions."
         self.mutate(self.load_problem_module().record_value, changed)
