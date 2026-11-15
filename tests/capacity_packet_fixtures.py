@@ -11,6 +11,7 @@ from pathlib import Path
 from research_harness import review_protocol, review_parts, review_staged, review_staged_protocol
 from research_harness.artifacts import ArtifactStore
 from research_harness.evidence import digest
+from reading_capacity_fixtures import build_scaled_reading_deliveries
 
 ARTIFACT_FACTORY_QUANTITY_MESSAGE = 'The artifact factory scales text bytes only'
 STAGED_FACTORY_QUANTITY_MESSAGE = 'The staged original factory scales text bytes only'
@@ -403,4 +404,5 @@ FACTORIES = {
     'family_reading_plans': build_scaled_family_reading_plans,
     'correction_history_component': build_scaled_correction_history,
     'correction_reference_records': build_scaled_correction_references,
+    'v7_reading_deliveries': build_scaled_reading_deliveries,
 }

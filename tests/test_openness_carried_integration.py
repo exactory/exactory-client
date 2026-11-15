@@ -225,13 +225,35 @@ class CarriedIntegrationCases(CarriedIntegrationSupport):
                          receipt['carried_selection']['digest'])
 
     def test_q12_pool_overflow_is_delivered_and_keep_preserves_handle_span_and_target_charge(self):
-        with patch.object(v7, 'describe_carried_pool', return_value=0):
-            native, receipt = self.start_chain()
+        self.enabled.stop()
+        origin = self.export(name='pool-origin-export', assignment_id='pool-origin')
+        self.assign('pool-origin', origin)
+        origin_packet = self.read_packet('pool-origin')
+        answer = self.build_reading_response(origin_packet, excerpts=[])
+        for row in origin_packet['reading_turn']['reading_plan']['delivered_now']:
+            if row.get('kind') != 'fulltext':
+                continue
+            body = next(item['content'] for item in origin_packet['evidence']
+                        if item['artifact']['sha256'] == row['artifact']['sha256'])
+            answer['excerpts'].extend(dict(version_id=row['version_id'], text=body[:100 + index],
+                purpose='A distinct retained interval.') for index in range(100))
+        observed = self.invoke('pool-origin', answer)
+        self.assertNotIn('output_refusal', observed, observed.get('output_refusal'))
+        exposure = self.artifacts.put(b'Synthetic exposure of the short earlier prefix.', 'text/plain')
+        self.mutate(protocol.record_context_event, dict(id='short-prefix-exposure', assignment_id='turn-1',
+            kind='contamination', source='author_history', reason='Use the independently reread large prefix.',
+            evidence=[exposure]))
+        self.enabled.start()
+        native, receipt = self.start_chain()
         packet = self.read_packet('new')
         _, inventory, state = v7.read_bound_state(self.artifacts, receipt, packet)
-        self.assertEqual(state['pool'], [])
+        self.assertTrue(state['pool'])
+        self.assertTrue(any(row['kind'] == 'carried_reading' for row in inventory['units']),
+            dict(entries=len(state['entries']), pool=state['allowances']['pool']))
         self.assertEqual(packet['reading_turn']['plan']['now'][0]['kind'], 'carried_reading')
-        kept = state['entries'][0]
+        available = v7._list_delivered_carried_entries(packet, self.artifacts, receipt)
+        self.assertTrue(available)
+        kept = next(iter(available.values()))
         def answer(packet):
             output = self.answer_v7(packet)
             if packet['reading_turn']['turn'] == 1:
@@ -239,10 +261,14 @@ class CarriedIntegrationCases(CarriedIntegrationSupport):
             return output
         packets = self.finish_chain(native, answer=answer)
         final = packets[-1]['reading_final']
-        self.assertEqual([row['handle'] for row in final['entries']], [kept['handle']])
+        self.assertCountEqual([row['handle'] for row in final['entries']], state['pool'] + [kept['handle']])
+        retained = next(row for row in final['entries'] if row['handle'] == kept['handle'])
         for key in ('unit', 'start', 'end', 'sha256', 'text'):
-            self.assertEqual(final['entries'][0][key], kept[key])
+            self.assertEqual(retained[key], kept[key])
         self.assertGreater(final['allowances']['targets'][0]['used'], len(kept['text']))
+        recorded = self.mutate(self.load_problem_module().record_openness,
+            dict(assignment_id=final['chain'] if final['turn'] == 1 else 'new-%d' % final['turn']))['result']
+        self.assertEqual(recorded['outcome'], 'unresolved')
 
     def test_keep_rejects_a_handle_that_was_not_delivered(self):
         native, receipt = self.start_chain()
@@ -764,6 +790,11 @@ class Incident57IntegrationTests(OpennessReadingCase):
                              for row in packet['reading_turn']['plan']['now']))
         records = self.store.snapshot()['records']
         last = records['review_assignment']['new-%d' % len(packets)]
+        verified = reading.verify_chain(records, self.artifacts, last)
+        self.assertEqual(verified[-1]['assignment_id'], last['id'])
+        recorded = self.mutate(self.load_problem_module().record_openness,
+                              dict(assignment_id=last['id']))['result']
+        self.assertEqual(recorded['outcome'], 'unresolved')
         _, _, state = v7.read_bound_state(self.artifacts, last, packets[-1])
         request = protocol.build_assignment_request(records, self.artifacts, last)
         route = records['review_route']['route']

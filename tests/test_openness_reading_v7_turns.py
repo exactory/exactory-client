@@ -1198,6 +1198,9 @@ class IncidentV7CommandTests(OpennessReadingCase):
             self.assertTrue(observed['ready'])
             attempt = records['review_attempt'][observed['attempt_id']]
             self.assertEqual(attempt['task']['targets'], 10)
+            recorded = self.mutate(self.load_problem_module().record_openness,
+                                  dict(assignment_id=current))['result']
+            self.assertEqual(recorded['outcome'], 'unresolved')
             print(json.dumps(dict(incident_v7=dict(turns=number,
                 reading_levels=sorted({row['task']['level_material_allowance'] for row in records['review_attempt'].values()
                                        if row['task']['kind'] == 'reading'}),

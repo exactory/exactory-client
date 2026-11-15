@@ -122,10 +122,28 @@ class CapacityGuardTests(unittest.TestCase):
                 changed = copy.deepcopy(self.matrix)
                 next(entry for entry in changed['entries'] if entry['id'] == identifier)['evidence']['tests'] = []
                 self.assertTrue(guard.validate_matrix(changed))
-        for identifier in ('A4', 'A5', 'A7', 'A25'):
+        for identifier in ('A5', 'A7', 'A25'):
             self.assertEqual(rows[identifier]['coverage'], 'stop_before_call')
             self.assertIn('pending:', rows[identifier]['coverage_scope'])
             self.assertTrue(rows[identifier]['evidence']['tests'])
+
+    def test_v6_and_v7_constructions_keep_their_unit_evidence(self):
+        rows = {row['id']: row for row in self.matrix['entries']}
+        obligations = {row['unit']: row for row in self.matrix['merge_obligations']}
+        self.assertIn('capacity-guard-2', self.matrix['installed_units'])
+        for unit in ('UB10', 'carried-selection', 'carried-integration',
+                     'reading-v7-turns', 'reading-v7-verification'):
+            obligation = obligations[unit]
+            for identifier in obligation['entries']:
+                with self.subTest(unit=unit, entry=identifier):
+                    tests = set(obligation['per_entry'][identifier]['tests'])
+                    self.assertTrue(tests)
+                    self.assertTrue(tests <= set(rows[identifier]['tests']))
+                    self.assertTrue(tests <= set(rows[identifier]['evidence']['tests']))
+        for identifier in ('A4', 'Q1', 'Q4', 'Q12'):
+            self.assertEqual(rows[identifier]['coverage'], 'constructed')
+            self.assertIn('v6', rows[identifier]['coverage_scope'])
+            self.assertIn('v7', rows[identifier]['coverage_scope'])
 
     def test_stage2_production_markers_require_evidence_even_when_installation_is_omitted(self):
         sources = guard.read_plugin_sources(ROOT)

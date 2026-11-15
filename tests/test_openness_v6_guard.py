@@ -38,6 +38,7 @@ MATERIAL_PATHS = (
 )
 
 
+@patch.object(reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (reading.PROTOCOL_V6,))
 class V6GuardTests(unittest.TestCase):
     def run_material_paths(self, paths):
         self.assertEqual(len({kind for kind, _ in paths}), len(paths))
@@ -90,8 +91,11 @@ class V6GuardTests(unittest.TestCase):
                 patch.object(protocol.transport, 'send_request', side_effect=AssertionError('Admission invoked a reviewer')):
             with self.assertRaises(ResearchError) as caught:
                 case.assign('nonfinite', reference)
-        self.assertEqual(caught.exception.code, 'review_chain_projection_over_limit')
-        self.assertEqual(caught.exception.details['reason'], 'no_enforceable_bound')
+        self.assertEqual(caught.exception.code, 'review_route_capacity_below_floor')
+        refusals = caught.exception.details['admissions']
+        self.assertEqual([row['protocol'] for row in refusals], [reading.PROTOCOL_V6])
+        self.assertEqual(refusals[0]['code'], reading.PROJECTION_STOP)
+        self.assertEqual(refusals[0]['details']['reason'], 'no_enforceable_bound')
         self.assertEqual(case.store.snapshot(), before)
         assigned = case.assign('turn-1', reference)
         self.assertTrue(assigned['reading_chain_admission']['projection']['finite'])

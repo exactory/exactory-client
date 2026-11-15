@@ -5866,7 +5866,7 @@
       "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
       "class": "reading inventory and authenticated carried state",
       "summary": "Repeated metadata and growing turn records consumed input capacity; restarting a chain also lost verified source readings.",
-      "expected": "The v7 state foundation stores growing inventory and turn collections as digest-bound artifacts, factors every equal search field, projects selected authenticated v5/v6 items, and measures carried entries in their new serialized form. Overflow entries and affected notes become carried_reading units. V7 turn integration remains a later release.",
+      "expected": "The v7 state foundation stores growing inventory and turn collections as digest-bound artifacts, factors every equal search field, projects selected authenticated v5/v6 items, and measures carried entries in their new serialized form. Overflow entries and affected notes become carried_reading units. V7 turn integration now delivers and authenticates the bounded reading and final packets; the 57-turn carried fixture records its finding.",
       "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "tests": [
@@ -5875,7 +5875,10 @@
         "test_openness_reading_v7_state.V7ProjectionTests.test_q12_incident_57_turns_spill_only_carried_entries_at_starting_final",
         "test_openness_reading_v7_state.LegacyV5ProjectionTests.test_v5_checked_spans_project_with_original_request_bytes_unchanged",
         "test_openness_reading_v7_state.StoredV5ProjectionTests.test_real_shape_v5_stopped_chain_uses_its_pending_capture_binding",
-        "test_openness_reading_v7_state.V6ProjectionTests.test_real_shape_v6_observation_projects_checked_excerpts_and_passages"
+        "test_openness_reading_v7_state.V6ProjectionTests.test_real_shape_v6_observation_projects_checked_excerpts_and_passages",
+        "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+        "test_openness_reading_v7_turns.V7CommandTests.test_a13_real_commands_reach_one_request_final_with_expanded_handles",
+        "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests"
       ]
     },
     {
@@ -7034,6 +7037,72 @@
       "tests": [
         "test_openness_reading_v7_gaps.GapCommandTests.test_reading_material_refuses_without_credit_and_replacement_reads",
         "test_openness_reading_v7_gaps.GapBudgetTests.test_pending_material_is_final_only_and_legacy_material_keeps_its_bytes"
+      ]
+    },
+    {
+      "id": "v7-capacity-guard-57-turn-final",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "reading-final-capacity",
+      "summary": "A final after 57 reading turns exceeded the route while the earlier floor forecasts reported room.",
+      "expected": "A stored v7 plan bounds every turn, retains authenticated v5 readings without fulltext redelivery, and reaches an authenticated recorded finding.",
+      "fixed_in": "0.91.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery",
+        "test_openness_reading_v7_turns.V7CommandTests.test_a13_real_commands_reach_one_request_final_with_expanded_handles",
+        "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+        "test_openness_reading_v7_verification.V5VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused",
+        "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_a4_mixed_chain_records_finding_and_keeps_old_digests",
+        "test_openness_reading_v7_verification.V6VerificationTests.test_guard4_changed_observation_selection_projection_and_source_are_refused"
+      ]
+    },
+    {
+      "id": "v7-capacity-planner-stops-above-floor",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "reading-capacity-replacement",
+      "summary": "The planner exhausts its output-cap attempt allowance at 60000 characters while the stored reading ladder still has levels of 30000 and 15000.",
+      "expected": "The planner executes every lower material level at the same route and effort before applying the floor decision.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_output_cap_at_every_level_reaches_the_floor_before_decision"
+      ]
+    },
+    {
+      "id": "v7-reading-visual-route-not-admitted",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "reading-route-admission",
+      "summary": "A text-only problem reading chain on codex_cli_visual_v1 is rejected as a native visual problem-result assignment before v7 admission. The visual request builder also raises review_visual_input_mismatch for admitted scaled reading packets.",
+      "expected": "Every registered adapter reaches a recorded reading finding or an accepted capacity stop; the visual adapter must run the v7 admission instead of rejecting this role with review_visual_route_mismatch.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_every_adapter_and_profile_class_executes_a_finding_or_declared_stop",
+        "test_route_capacity_properties.ReadingCapacityPropertyTests.test_v7_every_adapter_and_profile_class_delivers_scaled_bodies"
+      ]
+    },
+    {
+      "id": "v7-full-final-refusal-reserve",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "reading-final-refusal-capacity",
+      "summary": "A refused final at a non-floor level loses earlier note fill when its notice is subtracted from material instead of charged to the plan reserve.",
+      "expected": "Ruling 39 keeps all six final material fields at the same level, charges the notice to its reserve, and reaches a recorded finding without changing earlier records.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_ruling39_a_refused_full_final_keeps_its_level_material_and_records"
+      ]
+    },
+    {
+      "id": "v7-new-unit-does-not-request-fresh-export",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "reading-packet-currency",
+      "summary": "A newly recorded material search makes a v7 packet stale after its first reading, but the planner still continues the old native packet.",
+      "expected": "The v7 planner gives the export handoff, the new chain inherits the measured ratio and verified ranges, and the successor records its finding.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_new_search_and_twenty_percent_denser_measurement_export_then_record"
       ]
     }
   ]
