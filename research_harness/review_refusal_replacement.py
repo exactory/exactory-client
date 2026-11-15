@@ -8,12 +8,31 @@ from .operations import fields, immutable_record, normalized_text, text
 from . import review_refusal_notice as notices
 
 KEY = 'output_refusal'
-INELIGIBLE_REPLACEMENT_MSG = 'Replace the current supported turn only after every observed output still fails a stored contract refusal.'
-REPLACEMENT_IDENTITY_MSG = 'A refusal replacement keeps the role, dossier, subject, slot, reviewer, route, author and original context.'
-REPLACEMENT_ATTEMPT_LIMIT_MSG = 'This refusal replacement has used its single output attempt; admit the next replacement if this position has one left.'
-REPLACEMENT_LIMIT_MSG = 'This position has used its two replacements that carry a refusal.'
-REPLACEMENT_ORIGIN_MSG = 'The refusal replacement must bind every earlier stored refusal and its exact completed output in this position.'
-NOT_SELECTED_MSG = 'This output is not selected because a later assignment holds its position or slot.'
+INELIGIBLE_REPLACEMENT_MSG = (
+    'This assignment does not admit a replacement that carries a refusal. Such a replacement needs the head of a '
+    'turn that is neither staged nor part of a reading chain, in the role bar, slate, result or adjudicator or in a '
+    'series in parts, with a verified context, no pending call, and no pending or accepted correction. The head '
+    'needs at least one completed output with an observed context, and each such output must authenticate and '
+    'still be refused. The position holds at most four refusal records. Run review-series on the head and take '
+    'the step that it plans.')
+REPLACEMENT_IDENTITY_MSG = (
+    'The replacement does not keep the role, dossier, subject, route, reviewer, author and context of the refused '
+    'assignment. Repeat these values of the refused assignment, and add only context.output_refusal.')
+REPLACEMENT_ATTEMPT_LIMIT_MSG = (
+    'A replacement that carries a refusal has one output, and the output of this replacement was refused. Run '
+    'review-series on the head. It plans another replacement that carries the refusal when one is admissible, and '
+    'the step of the role of the head otherwise.')
+REPLACEMENT_LIMIT_MSG = (
+    'This position already holds two replacements that carry a refusal, so it admits no third. Run review-series '
+    'on the head and take the step that it plans.')
+REPLACEMENT_ORIGIN_MSG = (
+    'The stored records do not verify the origin of this replacement. Its notice must list every refusal that the '
+    'position held before the replacement, each with the digest of its record and of its completed output. Take '
+    'the step that review-series plans for the head.')
+NOT_SELECTED_MSG = (
+    'A later assignment holds the position or the slot of this assignment, so the harness does not select this '
+    'output and does not continue this assignment. Continue with the head of the position, which review-series '
+    'resolves from any assignment of the chain.')
 
 
 def read_position_context(assignment):

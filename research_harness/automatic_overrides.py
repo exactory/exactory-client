@@ -123,10 +123,14 @@ def _trusted_stop(store, records, identifier):
             or stop.get("id") != identifier):
         _refuse("gate_override_stop_untrusted", "Need an unchanged stop written by the review-series harness.")
     if stop.get('read_errors'):
-        _refuse('gate_override_stop_untrusted', 'Need a stop whose scope and defect proof were read successfully.',
+        _refuse('gate_override_stop_untrusted',
+                'Need a stop that was recorded with its scope and its defect proof; a reading failed when this stop '
+                'was written, and read_errors names it. Obtain a new stop from review-series, or obtain the '
+                "user's instruction.",
                 read_errors=stop['read_errors'])
     if stop['plan'].get('state', 'stop') != 'stop':
-        _refuse('gate_override_stop_class', 'Need a retained stop; a handoff, wait or completed review is not an automatic-pass basis.')
+        _refuse('gate_override_stop_class', 'Need a retained stop; this ending is a handoff, a wait or a finished review. Take the '
+                'step of the handoff or the wait. A finished review needs no automatic pass.')
     classification = classify_stop(stop["code"])
     if classification != "harness_defect":
         _refuse("gate_override_stop_class", "Need a harness-defect stop; follow its schedule or obtain the user's instruction.",

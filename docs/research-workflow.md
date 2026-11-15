@@ -140,6 +140,17 @@ instruction passes it. The error output of
 the same function. The class names the next action; it creates no record and
 passes nothing by itself.
 
+Since 0.90.0 the registry of the harness holds one more `waiting` code,
+`output_view_render_deferred`: the render lock of the workspace is held, and
+the wait ends when the output renderer releases it. The registry also gives
+each code its next step. Two groups of decision codes carry a decision whose
+answers are inspections ([the next step of a
+code](research-cli.md#review-chains-and-review-series)): the group
+`stored_state` offers `record-check`, and the group `named_cause` offers
+`record-check` and `status`. An inspection changes nothing and does not resolve
+the stop, so the agent runs it before it reports the stop. The stop stays a
+decision stop, and only the user's instruction passes it.
+
 ### Report the stop
 
 A stop needs the user in four cases:

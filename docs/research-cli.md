@@ -751,7 +751,9 @@ harness cannot continue the chain. The exactory skills run to the end without
 stopping for questions: the agent reads `code`, `details` and `stop_class`;
 when `stop_class` is `harness_defect` and the last line carries `stop_id`, the
 agent requests the automatic pass with that `stop_id`
-([The automatic pass](research-workflow.md#the-automatic-pass)); a
+([The automatic pass](research-workflow.md#the-automatic-pass)), except that
+since 0.90.0 a line whose step names `record-check` is the fallback step, which
+the agent takes first (The fallback step, below); a
 `stop_record_error` changes no class, and the stop then follows its class
 without a `stop_id` ([The class of a stop](research-workflow.md#the-class-of-a-stop));
 when this reference names a step for that code, the agent takes it;
@@ -891,10 +893,9 @@ The handoffs:
 | `native_review_attestation_required` | `search review-packet` (openness chains: `export`, kind `problem-openness`) | A native first turn needs a replacement, which needs a new attestation. |
 | `verification_verdict_body_required` | `bind-verdict` | A verification review has its output; recording needs the verdict body. |
 | `review_recording_required` | `manuscript-review`, `export` (standalone, kind `outputs`) or `review` | Another role's output needs its recording step. |
-| `review_slot_exhausted` | `review-output-correction` when that operation accepts the head (a problem result reassessment whose latest failure is `review_reassessment_mismatch`); `export`, kind `problem-openness`, for an openness chain (a new chain); `search review-packet` for another native mathematical review (a new attestation); `review-assignment` for an initial bar (role `bar` without `prior_assignment_id`: a new eligible reviewer replaces the slot) and for a role outside `bar`, `slate`, `result` and `adjudicator`. For a bar continuation, a slate, a result or an adjudicator the plan is a `stop` with this code and no command: the slot keeps its continuity or its fixed adjudicator, and `review-assignment` of a new reviewer is refused (`review_slots_fixed`, `review_resampling_forbidden` or `review_adjudicator_fixed`). | Two outputs of the head were refused; the assignment is exhausted. |
+| `review_slot_exhausted`, `review_refusal_notice_metadata_too_large` | For `review_slot_exhausted` only, `review-output-correction` when that operation admits the head and its request fits the route (the metadata correction of a problem result reassessment, below); the position is then not exhausted, and replacements can remain. Otherwise the step of the role of the head: `review-assignment` of a new eligible reviewer for a `bar` and for an `adjudicator`; `review-assignment` of a context repair with the member `exhaustion` for a `slate` and for a `result`; `export`, kind `problem-openness`, for an openness chain (a new chain); `search review-packet` for another native mathematical review (a new attestation); `review-route` and then `review-assignment` for a `verification`, a `manuscript` and a `standalone` review. | An eligible problem result reassessment takes its one metadata correction, or the turn position is exhausted (A position whose replacements are spent, below). Follow `details.step`. |
 | `review_resampling_forbidden` | `review-assignment` | An initial bar, slate or result review ended without an output; the same reviewer identity is not sampled again, so a new eligible reviewer is needed. |
 | `review_worker_reconciliation_required` | `review-attempt` | A pending invocation has no pool membership (a call of an earlier version). |
-| `assessment_incomplete` | `review-assignment` | A staged assessment is incomplete. |
 | `review_context_*`, `review_route_retired` | `review-assignment` | A context repair is needed. |
 | `review_route_runtime_stale` | `review-route` | The head's route pins another reviewer runtime. The planner keeps the route of the chain, so `review-series` on the same head gives this handoff again. Record a new route with a new id and the same adapter, model, endpoint and configuration, probe it, and then follow the stale-route procedure of the [route instructions](research-decisions.md#commands-and-shared-state): assign the role again on the new route, or, for a slot with history, retire the stale route and continue the slot through a context repair; then run `review-series` with the new assignment. |
 | `review_chain_stopped` | `review-stop` | A review stop stands for the chain or for the store; `details.step` is its release (The stop, above). `review-series` prints this plan as a `stop`. |
@@ -919,6 +920,120 @@ reading chain (`exactory-openness-reading-math-v1`, packets from
 `search review-packet`) is another native mathematical review: its
 `review_slot_exhausted` and `native_review_attestation_required` handoffs name
 `search review-packet`, and its head belongs to the math-solver controller.
+
+The next step of a code. Since 0.90.0 one registry (`STOP_REGISTRY` in
+`research_harness/stop_classes.py`) gives each code that can end a series its
+class and its next step, and `plan_next`, `review-series` and `record-check`
+read it. The last line of a run of `review-series` carries the step. For the
+state `handoff` or `wait` it is `details.step`: `command`, `arguments` (the
+options of the command, for example `--workspace`), `payload` (the fields that
+the harness knows), `chooses` (the fields that the agent sets) and
+`prerequisites`. For the state `stop` it is `details.decision`:
+`owner_decides`, the question of the stop, and `then`, the answers, each with
+`answer` and `steps`; `details.step` then repeats the first step of the first
+answer. For a `handoff` or a `wait`, take the step with its prerequisites. When
+the driver substituted the fallback step (below), take `details.step` and its
+`then` list, `record-check` and then `review-series`; a `details.steps` that
+the line still holds belongs to the earlier plan. Otherwise take the steps of
+`details.steps` in order when the line holds that member, and `details.step`
+when it does not, each with the steps of its `then` list after it. For a
+`stop`, take the steps of the answer that is authorized in `details.decision`.
+When `details.next` is present, it names the kind of the registry row; a
+planned ending can omit it, and the step or the decision is what the agent acts
+on. Its kinds are `wait` with `ends` (what ends the wait), `handoff`,
+`continue` (the driver plans again), `outcome` with the `outcome` whose row of
+the table below applies, `role` (the step depends on the role of the head), or
+`done`.
+
+Two groups of codes share one row each, and a code of a group is a decision
+stop. A code of the group `stored_state` reports a state of the record that the
+commands of the harness do not produce in their ordinary order. Its check tests
+the store itself (its files, its lock, its schema, its history or its journal),
+compares stored content with other stored content, a schema, a digest or a
+version, or reads a payload that the planner built. The decision is `How should
+the state of the record that the refusal reports be treated?`, with the answer
+`Check the retained record` (`record-check`). A code of the group `named_cause`
+is a refusal that names its cause and for which the registry holds no recovery
+that a test executed. The cause is an entry of a report or of an obligation
+list, a record that another command writes and that is absent, stale, pending
+or incomplete, something outside the workspace (the network, a provider, a
+credential, the clock, a process, a file or a store), an input in a form that
+the harness does not read, a bound on a size or a count, or the way the code of
+the harness uses the store. The decision is `How should the cause that the
+refusal names be answered?`, with the answers `Check the retained record`
+(`record-check`) and `List what the workspace owes` (`status`). Both commands
+are inspections and change nothing: `record-check` reports the retained ending
+and the present content of the store, and `status` lists the obligations of the
+workspace. Neither answer is a recovery. Read the cause from `code` and
+`details`. When the driver ends on a refusal that it caught, `error` also holds
+the code, the message and the details of that refusal; a planned ending need
+not hold `error`. A plan of `plan_next` whose code belongs to a group is a
+`stop` with the decision of the group and no command, and the agent can run the
+inspections before it reports the stop ([Report the
+stop](research-workflow.md#report-the-stop)). `assessment_incomplete`, a staged
+assessment that is incomplete, is a decision stop with the same two
+inspections.
+
+A code without a row of the registry is a decision stop with `details.unlisted:
+true`, the decision `How should the retained error be resolved?` and the answer
+`Inspect the record` (`record-check`). `record-check` reports such a code as
+the finding `record_unlisted_stop` ([Record check](#record-check)). The agent
+reports the code and `details.refused_action` in its summary, because the
+harness has no reviewed step for the code.
+
+The ending of a series. Since 0.90.0 a run of `review-series` ends through one
+sequence for each of these endings: a plan of `plan_next` (`done`, `handoff`,
+`stop`, or a `wait` of more than 30 minutes), the refusal of an executed
+action, or the refusal of a reading of the plan. The driver first fixes the
+ending from the plan and the refusal that it holds: `state`, `head_id`, `code`,
+`stop_class`, `error` and the step. Then it reads what the line also shows (the
+usage, the forecast, the payload of the step), retains the ending, renders the
+output views and prints the line. A failure in one of these later steps does
+not change the code. The line names the failure under `details.omitted`, a map
+from the member that is missing to the error that prevented it. The members are
+`snapshot`, `step`, `provider_usage`, `capacity_forecast`, `capacity_warning`,
+`diagnostics`, `scope`, `retry`, `stop_record`, `receipt_file`, `views` and
+`output`. An exception that is not a refusal, and a failure of the printing of
+a line before the last one, leave the command outside this sequence. When the
+driver had taken a plan for execution, `details.refused_action` holds its
+`command`, `state` and `payload`.
+
+The receipt of an ending. For an ending that has a code, also a `wait` and a
+`handoff`, the driver attempts the retention before it prints the line; an
+ending without a code has no receipt. The driver first writes the record
+`review_series_stop/<id>` as described above. An ending that equals the latest
+retained ending of the head (the same head, progress, code, state, command of
+the step and refused action) writes no second record when that record has no
+`read_errors`, and the line carries the `stop_id` of the first. When the record
+cannot be written, the driver writes the line as a JSON file under
+`.exactory/series-endings/` in the workspace. `details.receipt` states the
+place: `{place: "store", id, retained_at}`, `{place: "workspace", path,
+retained_at}`, or `{place: null, errors: {store, workspace}}` when both places
+failed; no place then retains the ending. `stop_id`, `revision_after_stop` and
+`stop_record_error` keep their meanings. No command removes the files, and
+`record-check` reads them ([Record check](#record-check)). The automatic pass
+accepts only a retained ending whose state is `stop` ([The automatic
+pass](research-workflow.md#the-automatic-pass)).
+
+The fallback step. An ending whose state is `handoff` or `stop` takes the
+fallback step in three cases: a reading that its step needs fails; the snapshot
+after a refused action fails; or a harness-defect stop was not recorded, or was
+recorded without its scope or its proof, so that the automatic pass has no
+basis. The ending keeps its code and becomes a `handoff` whose `command` is
+`record-check`. `details.step` is `record-check` with `--workspace`, and under
+`then` `review-series` with `--workspace` and `--assignment`; it has no field
+to choose and no prerequisite, and its `instruction` states the two commands.
+`details.intended_step` keeps the step of the row.
+
+The recovered line. When the printing of the last line fails, the driver prints
+a newline and then a shorter line: `state` and `head_id`, and `code`,
+`stop_class` and `error` when the ending has them, `not_before` for a `wait`,
+and under `details` the members that the ending has among `decision` (for a
+`stop`) or `step` (for a `handoff` or a `wait`), `intended_step`,
+`refused_action`, `unlisted`, `receipt` and `omitted`. `details.omitted.output`
+holds the error of the printing. A receipt that was retained stands when the
+printing fails. When the printing of the shorter line fails as well, the
+command ends with that error.
 
 Outcomes of a failed reviewer call. New observations record `observed_at`
 (UTC, ISO 8601, seconds). A failed Codex call with an empty answer also
@@ -945,11 +1060,11 @@ starts a new sequence.
 | `execution_incomplete` | an interrupted invocation, an incomplete or injected turn, or an incomplete response with text | one more call; the second of this outcome stops | `review_execution_incomplete` |
 | `answer_malformed` | a completed response whose answer is not one object and is not recovered (the answer recovery below) | one more call; the second of this outcome stops | `review_answer_malformed` |
 | `context_unverified` | a completed attempt whose context was not verified | one more call; the second of this outcome stops | `review_context_unverified` |
-| `scientific_refused` | an output refusal of a completed answer | one more call; after the second, the handoff `review_slot_exhausted` | `review_slot_exhausted` |
+| `scientific_refused` | an output refusal of a completed answer | a replacement of the turn that carries the refusal, at most two for the turn position; one more call in its place for a turn of an openness reading chain, and for a problem result reassessment under the conditions of the metadata correction; the handoff `native_review_attestation_required` when the refusal recovery proposes a replacement of the first `native_math` turn; then the step of the role of the head (The replacement after a refused output, below) | `review_slot_exhausted` |
 | `input_over_limit` | the error code `review_input_too_large` | the existing initial-size replacement when it applies, else stop | `review_input_too_large` |
 | `runtime_unavailable` | the error code `review_runtime_missing` | the provider schedule with its own count; an attempt without `observed_at` runs at once | `review_runtime_missing` |
 | `runtime_stale` | the error code `review_route_runtime_stale` | the handoff `review-route` | `review_route_runtime_stale` |
-| `timeout` | an execution timeout | stop; since 0.90.0 one more call, and from the second timeout of the failure sequence a replacement at a smaller task where the turn has an admissible one, else stop (the smaller task after a capacity event, below) | `review_timeout` |
+| `timeout` | an execution timeout | stop; since 0.90.0 one more call on the same assignment, unless the task floor or the turn budget ends the recovery, and from the second timeout of the failure sequence a replacement at a smaller task where the turn has an admissible one within its allowance, else stop (the smaller task after a capacity event, below) | `review_timeout`, or the code of the recovery or of the budget that the plan returns |
 | `format_unsupported` | the error code `review_format_unsupported` | stop | `review_format_unsupported` |
 | `unknown` | none of the above | on a Codex route, the provider schedule while every failed call of the turn position had no answer and at most 120 seconds of wall time; otherwise stop | `review_failure_unknown` |
 
@@ -960,19 +1075,208 @@ recorded before 0.73.0 has no `observed_at`; its wait counts as elapsed.
 Every turn position also stops after 8 failed attempts of any outcome, with
 `review_turn_failures_exhausted`.
 
-A run that the route's time limit stopped is `timeout`: it stops with
-`review_timeout`. `plan_next` plans `replace` only for `output_over_cap` when
-the existing handler proves a smaller admissible request, for
-`input_over_limit` when the existing initial-size replacement applies, and for
-an initial turn that never ran and whose input is too large; every other
+A run that the route's time limit stopped is `timeout`. After the first timeout
+the plan is one more call on the same assignment, unless the task floor or the
+turn budget ends the recovery. From the second timeout the planner takes an
+admissible capacity replacement within its allowance, and otherwise it stops;
+the plan carries the code and the decision. `plan_next` plans `replace` for
+`output_over_cap` when the existing handler proves a smaller admissible
+request, for `input_over_limit` when the existing initial-size replacement
+applies, and for an initial turn that never ran and whose input is too large.
+Since 0.90.0 it also plans `replace` when the capacity recovery names a smaller
+task for `output_over_cap`, `input_over_limit`, `timeout` or
+`provider_refused`, within the retry rules of the outcome; for
+`scientific_refused` (The replacement after a refused output, below); and for
+an assignment that never ran and whose recorded route context was not verified,
+once its route is verified (An assignment that cannot run, below). For a failed
+first `native_math` turn, a capacity replacement of the handler
+`single_request_series` stays a `replace` plan. Every other replacement that is
+proposed for that first turn becomes the handoff
+`native_review_attestation_required`, which needs a new packet. Every other
 failed turn is run again on the same assignment, waits, or stops, by the table
-above. Reading turns and source-request continuations follow the same rules.
-An attempt imported with `review-attempt` (0.69.x calls) has no error, no
-response and no measured wall time: it is the outcome `unknown`, which is not
-eligible for the provider schedule, so its plan stops with
-`review_failure_unknown`. An uncaptured current call that the reconciliation
-ends is recorded with the error `review_invocation_interrupted`: the outcome
-`execution_incomplete`, one more call.
+above. Reading turns and source-request continuations follow the same rules. An
+attempt imported with `review-attempt` (0.69.x calls) has no error, no response
+and no measured wall time: it is the outcome `unknown`, which is not eligible
+for the provider schedule, so its plan stops with `review_failure_unknown`. An
+uncaptured current call that the reconciliation ends is recorded with the error
+`review_invocation_interrupted`: the outcome `execution_incomplete`, one more
+call.
+
+The replacement after a refused output. Since 0.90.0 `plan_next` answers a
+refused output of the head with a new turn that tells the reviewer about the
+refusal. The plan has the state `replace`, the command `review-assignment` and
+a payload that repeats the role, route, dossier, reviewer, author and context
+of the head and adds `context.output_refusal: {assignment_id}`, the id of the
+head. `review-series` executes it. One case differs. When the refusal recovery
+proposes a replacement of the first `native_math` turn, which is a first turn
+delivered in parts, `plan_next` changes the proposal to the handoff
+`native_review_attestation_required` with the command of a new packet. A later
+turn of a native review in parts takes the replacement. A native turn outside a
+series in parts admits no such replacement; when its retry rule is spent, it
+takes the handoff of its role under `review_slot_exhausted`.
+`review-assignment` admits the replacement when the named assignment is the
+head of its turn position, on a verified context, with no pending call and no
+pending or accepted correction; when it has at least one completed output with
+an observed context, and each such output authenticates and is still refused (a
+completed attempt whose context was not observed is left out of this check);
+when the position holds at most four refusal records and fewer than two earlier
+replacements of this kind; and when the role, dossier, subject, route,
+reviewer, author and the rest of the context equal those of the head. The
+refusals are `review_refusal_replacement_ineligible`,
+`review_invocation_pending`, `review_slot_exhausted` (two replacements exist)
+and `review_refusal_replacement_mismatch`. The head is then replaced, and
+`review-run`, a continuation and a recording of it are refused with
+`review_assignment_replaced`. Its attempts, outputs and refusal records stay in
+the store. The turns that admit this replacement are the turns of a `bar`,
+`slate`, `result` or `adjudicator` review and the turns of a review that is
+delivered in parts. A staged review, a turn of an openness reading chain, and a
+`native_math`, `verification`, `manuscript` or `standalone` review that is not
+delivered in parts admit none. A staged review keeps its own rule ([Staged
+problem reviews](#staged-problem-reviews)). `plan_next` runs a turn of an
+openness reading chain once more after its first refused output, and then the
+position is exhausted. Every other turn without a replacement is exhausted
+after its first refused output.
+
+The packet of the replacement is the task packet of the refused turn with the
+member `output_refusal`, which takes the place of an earlier notice: `protocol`
+(`exactory-review-output-refusal-notice-v1`), `form` and `refused`. `refused`
+lists the refusal records of the position in the order of their recording, at
+most four, each with `assignment_id`, `attempt_id`, `output_digest`,
+`refusal_digest` and `status`. An entry with the status `refused` adds `code`,
+`check`, `path`, `message` and `details`. An entry with the status
+`not_refused` is an earlier output that the installed checks no longer refuse,
+and it adds nothing. `details` holds the detail keys that the registry of
+checks permits for the check (`notice_fields` in `CONTRACT_CHECKS`,
+`review_refusal.py`); every other detail is replaced by `{sha256}`, its digest.
+An entry has at most 6,000 characters in its JSON form, and details longer than
+4,000 characters keep their start as `{head, sha256, characters, complete:
+false}`. A notice therefore holds only values of the reviewer's own output, of
+the packets of its own chain, and values computed from them. The form `whole`
+adds `output`, the latest refused output in full. The form `bounded` adds
+`output_ref: {artifact, characters}`, the stored output and its length, and
+`refused_part: {path, value, complete}`, the part of that output at the `path`
+of the latest refusal, at most 20,000 characters and cut in the same way.
+`review-assignment` chooses the form by measurement. It tries `whole` and then
+`bounded`; a head with a correction invocation, or a reassessment whose
+correction request does not fit the route, tries `bounded` only. A form is
+chosen when its request passes the measurement and the preflight of the route,
+the sent packet holds the notice unchanged, and the task stays within its
+character allowance. When no form passes, the replacement is tried as the
+smaller task that the capacity recovery names, with the packet and the base
+prompt of that task and the bounded notice. When there is no smaller task, or
+it does not pass either, the refusal is `review_input_too_large` with the
+trials in its details and the position is exhausted. The prompt is the base
+prompt of the refused turn with the paragraph of the chosen form, which takes
+the place of an earlier refusal paragraph
+(`exactory-review-output-refusal-whole-v1` or
+`exactory-review-output-refusal-bounded-v1`, recorded under
+`problem_paragraphs`), and the request is a fresh input: the prompt and the
+packet, without the replayed history of the session. The bodies that earlier
+turns of the chain delivered stay credited to its citations. The replacement
+has one output. When that output is refused, `review-run` refuses a further
+call with `review_slot_exhausted`, and the plan is the second replacement or
+the step of an exhausted position. The harness verifies the origin of a
+recorded replacement from stored records alone, without a validator, when the
+replacement runs and when its state or the provenance of an attempt is read:
+the notice lists every refusal record that the position held before the
+replacement, each with the digests of its record and of its completed output. A
+replacement whose origin does not verify is refused with
+`review_refusal_replacement_origin_invalid`.
+
+A problem result reassessment keeps the metadata correction. The rule applies
+to a problem result head with `reassessment_required: true`, no
+`context.output_refusal` and no correction invocation, whose latest observed
+completed output is refused with `review_reassessment_mismatch` under the check
+`review.reassessment`. With one such output, the plan is one more call on the
+same assignment. With more, the plan is the handoff `review-output-correction`,
+under the code `review_slot_exhausted`, when the admission of the correction
+passes (two completed, authenticated and refused outputs under one request, and
+a confirmed finding whose content differs) and its request fits the route. In
+every other case, and after a correction that was declined, failed or reached
+the output limit of the route (`review_output_over_cap`), the planner tries the
+replacement, and when none is admissible it gives the handoff of the role of
+the head. One correction invocation exhausts the correction of the assignment,
+as before.
+
+Which output governs. The head of a turn position is its only candidate. An
+output of an assignment that a replacement, a repair or a new reviewer of the
+slot has succeeded is not recorded and not continued, also when its refusal no
+longer stands; the commands answer with `review_assignment_replaced` or
+`review_assignment_superseded`, and `assignment_id` in the details names the
+successor when the harness identified it.
+
+A position whose replacements are spent. Since 0.90.0 a turn position is
+exhausted when its head has at least one completed attempt, every completed
+attempt is currently refused, no invocation is pending, no correction is
+accepted, and the refusal recovery offers neither a correction nor a
+replacement: two replacements exist, the turn admits none, or no notice fits. A
+refusal whose notice entry still exceeds 6,000 characters after its details are
+shortened gives the code `review_refusal_notice_metadata_too_large` in place of
+`review_slot_exhausted`, with the same step. The plan is the handoff of the
+role of the head (the table of the handoffs, above), with `details.step`. For a
+`bar` and for an `adjudicator` the step is `review-assignment` of a new
+eligible reviewer: the agent chooses `id`, `route_id` and `reviewer_id`, the
+step names `slot_id` and `excluded_reviewer_ids`, and its prerequisite is a
+verified route of an eligible reviewer. For a `slate` and for a `result` the
+step is `review-assignment` of a context repair whose binding carries the
+member `exhaustion`. The payload holds the complete binding and the reviewer of
+the head, and the agent chooses `id`, `route_id`,
+`context.context_repair.probe_id` and `context.context_repair.reason`. Its
+prerequisite is a probe of the new route that is verified and was recorded
+after the last bound refusal, correction and cause event. No route is retired
+for this repair, and the agent takes the step without a decision of the owner.
+
+The member is `exhaustion: {protocol:
+"exactory-review-context-repair-exhaustion-v1", head_assignment_id, position,
+refusals, correction}`. `position` lists the assignments of the exhausted
+position in the order of their recording: the first turn, each capacity
+replacement and each replacement that carries a refusal. Each member after the
+first links to the member directly before it, by `capacity_replacement_of` when
+it has that field and by `context.output_refusal.assignment_id` otherwise. A
+capacity replacement is a member, and it spends neither of the two replacements
+that carry a refusal. `refusals` lists every refusal record of the completed
+attempts of these members: `{assignment_id, attempt_id, output_digest,
+refusal_digest, recorded_revision}`. `correction` is null or `{invocation_id,
+status}`. `event_ids` and `evidence` bind the cause events of the lineage in
+the order of their recording, as for every repair, and both are empty lists
+when the lineage records none. `review-assignment` admits the repair for a
+`slate` or a `result` when the member equals what the store holds, its
+correction is neither pending nor accepted, and the head has no continuation;
+otherwise it refuses with `review_context_repair_mismatch`. A first repair also
+needs a position that is exhausted now. A repair that repeats the member of an
+earlier admitted repair of the same predecessor, for example after that repair
+became stale, keeps the evidence and is not tested again against the present
+checks. A probe that is missing, that is not the current verified probe of the
+route, or that was not recorded after every bound record, is refused with
+`review_context_repair_unverified`. The origin of a recorded repair with the
+member is verified from stored records alone, without a validator of the
+refused outputs. A refused output of the position that later becomes recordable
+does not make the repair stale. A cause event that is recorded later in the
+lineage does (`review_context_repair_stale`), and the handoff for it is the
+same step with the member kept and the new event bound. The prompt of the
+repair states this cause in its own suffix (`context_repair_exhaustion` in the
+prompt parameters), the packet delivers the member under
+`context_repair.exhaustion`, and the refused outputs of the position reach the
+reviewer as `raw_observations` of the scientific history.
+
+An assignment that cannot run. Since 0.90.0 `review-run` and the dispatch of a
+staged task refuse a call on an assignment whose route was not verified when
+the assignment was recorded, with `review_context_unverified`; the details give
+`assignment_id`, `route_id` and `next`, the plan of the head. An assignment is
+dead when its route is retired or its recorded route context was not verified,
+and no call of it ran and none is pending. For the controller of a staged
+review this covers the attempts and invocations of the assignments of its
+epoch, and the launches, observations and unreleased reservations of that
+epoch. A dead assignment holds no slot, does not count as its reviewer in the
+slot rules, and does not hold the continuation of its parent. `plan_next` first
+plans a pending call, and for a staged controller the captured or reconciling
+work of its tasks. After that, for a head that never ran and whose recorded
+route context was not verified, it gives the handoff `review-probe` while the
+route is unverified. After that it gives the handoff of a new packet for the
+first turn of a native review (`native_review_attestation_required`), and a
+replacement of the assignment (state `replace`) for every other turn. A head
+that ran on an unverified context stops with `review_context_unverified` for a
+decision about its route.
 
 The smaller task after a capacity event. Since 0.90.0 four outcomes share one
 rule: `output_over_cap`, `input_over_limit`, `timeout` from the second timeout
@@ -1552,8 +1856,9 @@ kind or turn, or a span outside its text, and
 `review_parts_request_no_progress` for a request that makes no progress. The
 ordinary final output is validated by the role's validator
 (`adjudication.shape` for an adjudicator, `verification.parts` for a
-verification). The retry after a refused output and `review_slot_exhausted`
-after two refused outputs apply as for any output. `review-series` records
+verification). The replacement after a refused output and the step of an
+exhausted position apply as for any output
+([Review chains and `review-series`](#review-chains-and-review-series)). `review-series` records
 the final that returned the review with `value-review` or
 `review-adjudication` (state `record`); for a verification or a native
 review it ends with the handoff `verification_verdict_body_required` or
@@ -2440,8 +2745,8 @@ turn. When an authenticated run of a part turn completes, `review-run` checks
 the response and, when it fails, writes the output refusal
 `invalid_value_review` under the check `review.shape` and names it in its
 receipt under `output_refusal`, as it does for a `native_math` review. A
-refused part output delivers nothing, and its units stay remaining. The retry
-after a refused output and `review_slot_exhausted` after two refused outputs
+refused part output delivers nothing, and its units stay remaining. The
+replacement after a refused output and the step of an exhausted position
 apply as above.
 
 While the latest output of the session has `phase: "evidence_part"`, continue
@@ -2584,16 +2889,21 @@ assignment is refused, and each refused output still fails its check,
 and request, and the reviewer receives nothing about the refusal. A refused
 output that has become recordable binds again, and `review-run` refuses the
 retry with `review_resampling_forbidden`. After two refused outputs,
-`review-run` refuses the next invocation with `review_slot_exhausted`, and
-`plan_next` gives the handoff of that code with its command
-([Review chains and `review-series`](#review-chains-and-review-series)). A new
-reviewer can take an exhausted initial bar slot (the handoff names
-`review-assignment`); the same reviewer is refused. A bar continuation, a
-slate or result slot and an adjudicator keep their continuity or their fixed
-adjudicator, so after the second refusal their plan is a `stop` with
-`review_slot_exhausted` and no command, and `review-assignment` of a new
-reviewer is refused (`review_slots_fixed`, `review_resampling_forbidden` or
-`review_adjudicator_fixed`). `status` lists the
+`review-run` refuses the next invocation with `review_slot_exhausted`. A
+replacement that carries a refusal has one output, and after its refused
+output `review-run` refuses the next invocation with the same code. Since
+0.90.0 `plan_next` plans the second identical call only for a turn of an
+openness reading chain and for a problem result reassessment under the
+conditions of the metadata correction (a head with `reassessment_required:
+true`, no `context.output_refusal` and no correction invocation, whose one
+observed output is refused with `review_reassessment_mismatch`). With two
+completed outputs, such a reassessment takes the handoff
+`review-output-correction` when the admission of the correction passes and its
+request fits the route. When neither a retry nor a correction is available,
+the planner tries a replacement that carries the refusal, and when none is
+admissible it gives the handoff of the role of the head
+([Review chains and `review-series`](#review-chains-and-review-series)).
+`status` lists the
 refused attempts of each assignment under `review.assignments`, and
 `usage_report` counts them as calls.
 
@@ -7877,13 +8187,7 @@ A genuine hot SQLite rollback journal makes default reads return `store_recovery
 
 `record-check --workspace W [--keep-clone DIR] [--time-budget SECONDS]` qualifies a copy of a research record offline, in six steps, and prints a JSON report. `--workspace` is required, and the command has no `--check` flag. It never opens a SQLite connection on `W`. It copies `W` file by file (APFS `clonefile` on macOS) into a clone in a new temporary directory outside `W` and checks the copy (`PRAGMA integrity_check` and the store's full history validation); it copies up to three times until one copy is consistent, otherwise the `snapshot` step fails with `record_snapshot_inconsistent`. The clone is removed when the command ends. `--keep-clone DIR` keeps the clone at `DIR`, which must not exist and must be outside `W` (`unsafe_path` otherwise).
 
-| Ending or report member | Meaning |
-| --- | --- |
-| `series_stops` | Beside `steps`, list the latest retained ending per assignment and every ending without a registry row, from the store and `.exactory/series-endings/`. Each entry gives `place`, `id` or `path`, `assignment_id`, `state`, `code`, `stop_class`, `listed`, `refused_action` and `recorded_revision`. An unlisted code adds `finding: record_unlisted_stop` and keeps `ready` false regardless of the steps. Workspace files are read even when `snapshot` fails; a `place: store`, `status: not_read` entry then carries the snapshot error and states that store endings were not read. |
-| `details.omitted` of a final series line | Map each unavailable store-backed member to the error that prevented its addition. The ending keeps its original code, continues retaining the receipt and prints the line. |
-| `details.intended_step` | The row's step when a failed reading or an unavailable automatic-pass basis requires the fallback instead. The fallback step runs `record-check` with the workspace and then `review-series` with the workspace and head, with no fields to choose or prerequisites. |
-| `details.receipt` | Where the coded ending was retained: `place: store` with `id`, `place: workspace` with `path`, or `place: null` with the errors of both attempted places. `stop_id` and `stop_record_error` retain their meanings. |
-| `.exactory/series-endings/` | Atomic JSON receipts for coded series endings that the store could not retain. `record-check` reads these files directly from the workspace; no command removes them. |
+Since 0.90.0 the report holds `series_stops` beside `steps`: the endings of `review-series` that the record retains (the receipt of an ending, in [Review chains and `review-series`](#review-chains-and-review-series)). The command reads them from the `review_series_stop` records of the clone and from the files under `.exactory/series-endings/` of `W`. The list holds the latest ending of each head assignment and every ending whose code has no row in the stop registry. An entry gives `place` (`store` or `workspace`), `id` or `path`, `assignment_id`, `state`, `code`, `stop_class`, `listed`, `refused_action` and `recorded_revision`. An ending with `listed: false` carries `finding: "record_unlisted_stop"`. A file that is not a valid ending is listed with `finding: "record_json_invalid"` and its `error`. The files are read before the copy, so the list holds them also when `snapshot` fails; it then holds one more entry, `{place: "store", status: "not_read", error, message}`, with the error of the snapshot, because the endings of the store were not read. An entry with a `finding` or with `status: "not_read"` keeps `ready` false, whatever the steps report. The step `continuation` fails with `record_unlisted_stop` when the plan of a chain head is a `handoff` or a `stop` whose code has no row; the details are that plan.
 
 The six steps run in this order. The first failed step ends the check, and the later steps do not run:
 

@@ -156,7 +156,9 @@ def build_request(records, artifacts, assignment_id, route_id):
     measured = measure_request(route, request, records=records, artifacts=artifacts)
     if not measured['fits']:
         raise ResearchError('review_input_too_large',
-                            'The complete correction request exceeds the route input limit.',
+                            'The correction request does not fit the input limit of the route; the details give '
+                            'the measurement. Run review-series on the head. It plans a replacement that carries '
+                            'the refusal when one is admissible, and the step of the role of the head otherwise.',
                             dict(phase='dispatch_preflight', preflight=preflight, measurement=measured))
     return dict(packet=packet, route=route, request=request, preflight=preflight)
 
@@ -252,7 +254,9 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
                 tokens = (observation.get('usage') or {}).get('output_tokens')
                 if type(tokens) is int and type(maximum) is int and tokens >= maximum:
                     raise ResearchError('review_output_over_cap',
-                        'The correction reached its route output limit and spent its single correction allowance.')
+                        'The correction answer reached the output limit of the route, so the harness does not use '
+                        'it, and the one correction of this assignment is spent. Run review-series on the head '
+                        'for the next step.')
                 evaluation = Evaluation.of(records, artifacts)
                 assignment, packet, output = _authenticate_observation(records, evaluation, invocation, result)
                 if set(output) == {'correction', 'reason'} and output['correction'] == 'declined':

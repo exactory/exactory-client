@@ -17,7 +17,7 @@
   },
   {
     "code": "gate_override_stop_untrusted",
-    "message": "Need a stop whose scope and defect proof were read successfully.",
+    "message": "Need a stop that was recorded with its scope and its defect proof; a reading failed when this stop was written, and read_errors names it. Obtain a new stop from review-series, or obtain the user's instruction.",
     "details": {
       "read_errors": {
         "scope": {
@@ -28,7 +28,7 @@
   },
   {
     "code": "gate_override_stop_class",
-    "message": "Need a retained stop; a handoff, wait or completed review is not an automatic-pass basis."
+    "message": "Need a retained stop; this ending is a handoff, a wait or a finished review. Take the step of the handoff or the wait. A finished review needs no automatic pass."
   },
   {
     "code": "gate_override_stop_class",

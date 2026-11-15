@@ -17,7 +17,9 @@ from .review_task_execution import has_call_terminated, identify_call
 def describe_context_failure(error, assignment_id=None):
     """Keep a retained-context refusal visible in a read-only inspection."""
     failure = (error.as_dict() if isinstance(error, ResearchError) else
-               dict(code='review_input_unreadable', message='The retained review input is not readable JSON.',
+               dict(code='review_input_unreadable',
+                    message='A retained input of this review does not parse as JSON. Check the record with '
+                            'record-check.',
                     details=dict(kind=type(error).__name__)))
     if assignment_id is not None:
         failure = dict(assignment_id=assignment_id, **failure)

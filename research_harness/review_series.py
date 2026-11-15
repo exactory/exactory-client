@@ -22,7 +22,7 @@ EXECUTABLE_STATES = frozenset(('run', 'resume', 'continue', 'replace', 'plan', '
 EXECUTABLE_COMMANDS = frozenset(('review-run', 'review-assignment', 'value-review',
                                  'review-adjudication', 'problem-openness'))
 ENDING_RECEIPTS_DIRECTORY = '.exactory/series-endings'
-FALLBACK_STEP_MESSAGE = 'Check the retained record, then resume this review head.'
+FALLBACK_STEP_MESSAGE = 'Run record-check on the workspace. Then run review-series on this head again.'
 SESSION_FORECAST_FIELD = 'capacity_forecast'
 
 
@@ -213,8 +213,8 @@ def _complete_ending_step(store, row):
         step['arguments']['--assignment'] = row['head_id']
     if row['state'] == 'stop':
         if step['command'] == 'gate-auto-pass' or not details.get('decision'):
-            details['decision'] = dict(owner_decides='How should this retained ending be resolved?',
-                then=[dict(answer='Follow the recorded step', steps=[copy.deepcopy(step)])])
+            details['decision'] = dict(owner_decides='How should this ending of the series be answered?',
+                then=[dict(answer='Take the step of this ending', steps=[copy.deepcopy(step)])])
         for answer in details['decision'].get('then', []):
             for choice in answer.get('steps', []):
                 arguments = choice.setdefault('arguments', {})
@@ -557,7 +557,11 @@ def _run_series(store, assignment_id, driver, *, emit=_emit_json):
             position = (action, digest(plan['progress']))
             if not waiting and position in executed:
                 ending = dict(plan=plan, error=ResearchError('review_series_no_progress',
-                    'The same action succeeded without changing review progress.', dict(command=plan['command'],
+                    'The driver executed this action once with success, and the progress of the review did not '
+                    'change, so the plan names the same action again. The driver does not execute it a second '
+                    'time at the same progress. Take the step of the last line. When the step names '
+                    'gate-auto-pass, request the automatic pass. When it names record-check, run it, and then '
+                    'run review-series again.', dict(command=plan['command'],
                     action_state=plan['state'], action_digest=action, progress_digest=position[1],
                     successful_request_id=executed[position])), exit_code=3, current=None)
                 break

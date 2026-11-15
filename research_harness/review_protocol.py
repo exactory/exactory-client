@@ -243,9 +243,11 @@ _LINK_EXAMPLE = ('{"kind":"source","link":{"version_id":"<version id of the deli
                  'delivery>","artifact":{"path":"<path>","sha256":"<sha256>","size":0,"media_type":"<media type>"},'
                  '"locator":{"kind":"<as delivered>"}}}')
 _RECORD_EXAMPLE = '{"kind":"record","record_kind":"<record kind>","id":"<record id>","digest":"<digest>"}'
-# Placeholder for the writer's pass; common versions 1 to 3 retain their exact grammar.
+# Common version 4 adds this sentence; common versions 1 to 3 retain their exact grammar.
 EVIDENCE_DEPTH_SENTENCE = (
-    'Cite text delivered at a depth other than fulltext by its artifact descriptor; a source link cites a full text delivered to this chain. ')
+    'A source link is accepted only when its artifact is the original or the extracted text of a full-text capture '
+    'that this chain delivered to you. Cite a text that was delivered at another depth, for example an abstract, by '
+    'its artifact descriptor. ')
 _EVIDENCE_GRAMMAR_END = 'A bare digest, a path alone or free text is refused. '
 _EVIDENCE_GRAMMAR = (
     'Every evidence entry is one reference object, copied from the packet: a held artifact descriptor '
@@ -3810,9 +3812,11 @@ def require_verified_assignment(records, artifacts, assignment):
     if assignment['context_state']['context_status'] != 'verified_for_route':
         from .review_continuation import plan_next
         raise ResearchError('review_context_unverified',
-            'This assignment was recorded on an unverified route. Verify the route with review-probe, '
-            'then use review-series for its replacement or native-packet attestation; '
-            'an assignment that already ran needs a route decision.',
+            'The route of this assignment was not verified when the assignment was recorded, so no new reviewer '
+            'call starts on it. Take the step under next in the details. A pending call and captured work of a '
+            'staged review come first. After that, an assignment that never ran needs review-probe while the '
+            'route is unverified, and then a replacement of the assignment or, for the first turn of a native '
+            'review, a new packet. An assignment that already ran stops for a decision about its route.',
             dict(assignment_id=assignment['id'], route_id=assignment['route_id'],
                  next=plan_next(records, artifacts, assignment['id'])))
 

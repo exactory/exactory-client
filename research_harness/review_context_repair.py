@@ -16,9 +16,21 @@ from . import strategy
 
 ROLES = ('bar', 'slate', 'result')
 EXHAUSTION_PROTOCOL = 'exactory-review-context-repair-exhaustion-v1'
-EXHAUSTION_MISMATCH_MSG = 'The exhaustion binding must name the current exhausted position and every exact stored refusal and correction.'
-EXHAUSTION_ORIGIN_MSG = 'The exhaustion repair must retain its exact earlier position, completed outputs, refusal records and correction.'
-EXHAUSTION_PROBE_MSG = 'A current observed route probe after every bound refusal and event must precede reassessment.'
+EXHAUSTION_MISMATCH_MSG = (
+    'The member exhaustion of this context repair does not match the store. It must equal the binding that the plan '
+    'of review-series gives for the exhausted head of a slate or result slot: the position, every refusal record '
+    'of its completed outputs, and its correction. A first repair needs a position that is exhausted now. A repair '
+    'that repeats the member of an earlier admitted repair of the same predecessor keeps that evidence. In both '
+    'cases the position has no pending or accepted correction and no continuation. Take context.context_repair '
+    'from the step of that plan.')
+EXHAUSTION_ORIGIN_MSG = (
+    'The stored records do not verify the exhaustion binding of this repair. The position, its completed outputs, '
+    'its refusal records and its correction must be those that the store held before the repair. Take the step '
+    'that review-series plans for the head.')
+EXHAUSTION_PROBE_MSG = (
+    'The named probe is missing, is not the current verified probe of the new route, or was not recorded after '
+    'every bound refusal, correction and cause event. Run review-probe on the route, and name that probe in '
+    'context.context_repair.probe_id.')
 # The recorded events that end a reviewer context: a contamination of the context, or the retirement of its route.
 CAUSE_KINDS = ('contamination', 'route_retired')
 # The suffix of 0.56.0 and earlier, kept so that assignments recorded with it stay verified: it said "Return an
@@ -101,21 +113,32 @@ PROMPT = (
     'Explain any revised or unresolved finding with exact supplied evidence. A changed judgment alone '
     'does not dispose of a historical material objection; the ordinary objection procedure still applies.'
 )
-# A separate, recorded suffix keeps every earlier contamination prompt replayable.
+# The suffix of a repair with an exhaustion binding. It is recorded apart from the contamination suffixes, so
+# every earlier prompt stays replayable. It states the cause of this repair and keeps the output rules of PROMPT.
 EXHAUSTION_PROMPT_V1 = (
-    ' This is an explicit reassessment after the predecessor review position exhausted its permitted retries. '
-    'The exhaustion binding records that cause; it does not assert context contamination or route retirement. '
-    'The historical scientific inputs, raw refused outputs and unresolved objections remain evidence. '
-    'Your output is still the one top-level JSON object of this role; add the top-level member '
-    '"reassessment": {assignment_id,findings:[{review_id,disposition:confirmed|revised|unresolved,reason,evidence}]}. '
+    ' This is an explicit reassessment, not a new blind review. Its cause is recorded in context_repair.exhaustion: '
+    'when this reassessment was first admitted, the earlier position of this review slot held no usable answer, and '
+    'the harness could admit no further replacement that carries a refusal, because the replacements were spent or '
+    'no refusal notice fit. The binding names the assignments of that position and its recorded refusals, each the '
+    'refusal of one answer by a mechanical check of the harness. It asserts no contamination of a reviewer context '
+    'and no retirement of a route, and its cause events can be an empty list. '
+    'The historical scientific inputs, the answers of that position and the unresolved objections remain '
+    'evidence. The scientific history delivers those answers as raw observations. A refused answer is not a '
+    'recorded review, and its refusal says nothing about the scientific judgment in it. '
+    'Do not treat the former independence of these materials as currently qualified. Your output is still the one '
+    'top-level JSON object of this role, with the top-level members stage, support, value, objections and '
+    'limitations; add one more top-level member beside them, "reassessment": {assignment_id,findings:[{review_id,'
+    'disposition:confirmed|revised|unresolved,reason,evidence}]}, at the same level as "value" (not inside "value", '
+    'and not after the closing brace of the object). '
     'Use the exact predecessor assignment_id from context_repair and cover every inherited final review of this '
-    'phase; use an empty findings list when none exists. A source-request turn may defer reassessment; the final '
-    'phase output must include it. Label an inherited review confirmed only when your output repeats its support, '
-    'value, objections and limitations exactly; when any of them changes, including wording, label it revised. '
+    'phase; when historical_reviews is empty, findings is an empty list. A source-request turn may defer '
+    'reassessment; the final phase output must include it. '
+    'Label an inherited review confirmed only when your output repeats its support, value, objections and limitations '
+    'exactly; when your output changes any of them, including their wording, label it revised. '
     'A prior material objection receives its finding in objection_findings and is not restated in objections; '
     'objections lists only the material objections that you raise yourself, each under a new id. '
-    'Explain revised or unresolved findings with exact supplied evidence. A changed judgment alone does not '
-    'dispose of a historical material objection; the ordinary objection procedure still applies.'
+    'Explain any revised or unresolved finding with exact supplied evidence. A changed judgment alone '
+    'does not dispose of a historical material objection; the ordinary objection procedure still applies.'
 )
 
 
@@ -313,7 +336,8 @@ def _raise_binding_mismatch(repair, events):
     missing_ids = [identifier for identifier in expected_ids if identifier not in repair['event_ids']]
     expected_evidence = [item for event in events for item in event['evidence']]
     empty_events_message = (
-        'An exhaustion repair binds empty event_ids and evidence when the lineage has no cause events.'
+        'When the lineage records no such event, a repair with the member exhaustion sets event_ids and evidence to '
+        'empty lists.'
         if 'exhaustion' in repair else
         'If the list of events is empty, the lineage records no contamination and no route retirement, and a '
         'context repair needs one.')

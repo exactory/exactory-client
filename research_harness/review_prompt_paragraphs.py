@@ -44,14 +44,30 @@ DELIVERY_NOTICE_PROMPT = (
     'in reviewer_excerpts; request a passage if the retained excerpts do not contain what you need.')
 
 
-# Placeholders for the writer's pass; each form has one recorded paragraph version.
-REFUSAL_WHOLE_PROMPT = (
-    '\n\nA mechanical harness check refused your answer. output_refusal gives the check and what it expected. '
-    'Return the complete answer of this stage again with that defect corrected. The check says nothing about '
-    'the scientific judgment. An entry with status not_refused is an earlier answer of this position that the '
-    'installed checks no longer refuse, listed for the record, with nothing to correct in it.')
-REFUSAL_BOUNDED_PROMPT = (REFUSAL_WHOLE_PROMPT +
-    ' The earlier answer is named by its digest; refused_part shows the refused part of that answer.')
+# Each form has one recorded paragraph version. A text change requires a new registered version.
+_REFUSAL_COMMON_PROMPT = (
+    '\n\nOutput refusal (exactory-review-output-refusal-notice-v1). '
+    'A mechanical check of the harness refused your earlier answer of this turn. '
+    'The check says nothing about your scientific judgment. '
+    'output_refusal.refused lists the refused answers of this turn in the order of their recording, and its last '
+    'entry is the refusal to correct. '
+    'In an entry, check names the check, path is a JSON Pointer to the refused field or item of that answer when '
+    'it is not empty, message states the rule that failed, and details gives the values of the check, for example '
+    'the value that it expected. '
+    'In details, an object that holds only sha256 stands for a value that this notice does not show, and an object '
+    'with head and complete false holds the start of a longer value. '
+    'An entry with status not_refused is an earlier answer of this turn that the installed checks no longer '
+    'refuse; it is listed for the record and has nothing to correct. '
+    'Return the complete answer of this turn again, with the defect of the last entry corrected and without the '
+    'defects of the other refused entries.')
+REFUSAL_WHOLE_PROMPT = (_REFUSAL_COMMON_PROMPT +
+    ' output_refusal.output is the refused answer of the last entry in full.')
+REFUSAL_BOUNDED_PROMPT = (_REFUSAL_COMMON_PROMPT +
+    ' output_refusal.output_ref names the refused answer of the last entry by its artifact and gives its length '
+    'in characters. '
+    'output_refusal.refused_part holds the part of that answer at the path of the last entry; an empty path '
+    'selects the whole answer. Its value is that part, and complete false means that value holds only the start '
+    'of the part or that the path names nothing in the answer.')
 REFUSAL_PARAGRAPH_VERSIONS = {'whole': 'exactory-review-output-refusal-whole-v1',
                               'bounded': 'exactory-review-output-refusal-bounded-v1'}
 

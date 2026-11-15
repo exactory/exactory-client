@@ -187,7 +187,7 @@ for _code in ('review_turn_failures_exhausted', 'review_parts_budget_exhausted',
               'review_output_unavailable', 'review_inventory_mismatch', 'review_source_parent_unverified',
               'review_history_invalid', 'artifact_missing', 'artifact_corrupt', 'review_budget_exhausted'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
-        next=dict(kind='decision', owner_decides='How should this review boundary be resolved?',
+        next=dict(kind='decision', owner_decides='How should the state of the record that the refusal reports be treated?',
                   then=[dict(answer='Check the retained record', steps=[dict(command='record-check')])]))
 STOP_REGISTRY.update({
     'openness_minimum_gaps': dict(code='openness_minimum_gaps', **{'class': 'decision'}, owner='D3',
@@ -195,11 +195,11 @@ STOP_REGISTRY.update({
                   chooses=['spec', 'accept_gaps'], prerequisites=[dict(condition=
                       'Repair the gaps named in the refusal, or export with --accept-gaps.')])),
     'gate_override_condition_unmet': dict(code='gate_override_condition_unmet', **{'class': 'decision'}, owner='D3',
-        next=dict(kind='decision', owner_decides='Whether the action proceeds without the unmet condition.',
-                  then=[dict(answer='Proceed without the condition', steps=[dict(command='gate-override',
+        next=dict(kind='decision', owner_decides='Whether to lift the unmet condition of the recorded instruction.',
+                  then=[dict(answer='Lift the condition', steps=[dict(command='gate-override',
                             chooses=['id', 'gate', 'instruction', 'lifts'])]),
                         dict(answer='Meet the condition', steps=[], prerequisites=[dict(condition=
-                            'Complete the work named by the condition-check obligations.')])])),
+                            'Complete the work that the obligations of the condition name.')])])),
 })
 
 STOP_REGISTRY['problem_bar_calibration_required'] = dict(code='problem_bar_calibration_required',
@@ -251,8 +251,9 @@ STOP_REGISTRY.update({
     'prediction_required': dict(code='prediction_required', **{'class': 'decision'}, owner='D2',
         next=dict(kind='outcome', outcome='scientific_refused')),
     'literature_comparison_stale': dict(code='literature_comparison_stale', **{'class': 'decision'}, owner='D2',
-        next=dict(kind='decision', owner_decides='How should the prospective literature comparison be renewed?',
-            then=[dict(answer='Record a plan with the current literature comparison',
+        next=dict(kind='decision', owner_decides='How should the literature comparison of the plan be brought up to date?',
+            then=[dict(answer='Record a plan whose literature comparison has the exact scope of the plan, no gaps and, '
+                               'where the plan needs one, the current literature digest',
                 steps=[dict(command='cycle', chooses=[
                     'id', 'author', 'objective', 'scope', 'hypothesis', 'question', 'strategy',
                     'predecessor', 'inheritance', 'reopening', 'distinguishing_test', 'expected_outcomes',

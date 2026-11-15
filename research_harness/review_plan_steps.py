@@ -14,7 +14,8 @@ PLAN_STEPS = {
             prerequisites=('Record the cause events.', 'Verify the new route after the latest cause event.')),
     2: dict(command='review-assignment', roles=('slate', 'result'),
             chooses=('id', 'route_id', 'context.context_repair.probe_id', 'context.context_repair.reason'),
-            prerequisites=('Verify the new route after the last bound refusal and event.',)),
+            prerequisites=('Verify the new route with a probe recorded after the last bound refusal, correction '
+                           'and cause event.',)),
     3: dict(command='review-assignment', roles=('bar', 'adjudicator'),
             chooses=('id', 'route_id', 'reviewer_id'), prerequisites=('Verify an eligible reviewer route.',)),
     4: dict(command='export', roles=('native_math',), chooses=('assignment_id', 'reviewer_id', 'minimum'),

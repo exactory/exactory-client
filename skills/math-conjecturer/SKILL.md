@@ -2219,15 +2219,17 @@ accounts with the parts that the harness derives, and the records that their ent
    - Exit status 3 with a `handoff` on the last line: the next step needs you. Perform the step
      that the handoff names. Run `review-series` again only when the step leaves more work in
      the chain, and with the new assignment id when the step starts a new chain.
-     `review_slot_exhausted` (two outputs of the head were refused; the assignment is exhausted)
-     names `review-output-correction` when that operation accepts the head (a problem result
-     reassessment whose latest failure is `review_reassessment_mismatch`), `export`, kind
-     `problem-openness`, for an openness chain (Openness, step 6), and `review-assignment` for
-     an initial bar (role `bar` without `prior_assignment_id`: a new eligible reviewer replaces
-     the slot). For a bar continuation, a slate, a result or an adjudicator the plan is a `stop`
-     with this code and no command: the slot keeps its continuity or its fixed adjudicator, and
-     `review-assignment` of a new reviewer is refused (`review_slots_fixed`,
-     `review_resampling_forbidden` or `review_adjudicator_fixed`); report the stop as below.
+     `review_slot_exhausted` names `review-output-correction` when that operation admits the
+     head and its request fits the route (the one metadata correction of a problem result
+     reassessment; replacements can then remain). Otherwise the turn position is exhausted, and
+     the code names the step of the role of the head: `export`, kind `problem-openness`, for an
+     openness chain (Openness, step 6), `review-assignment` of a new eligible reviewer for a bar
+     and for an adjudicator, and `review-assignment` of a context repair with the member
+     `exhaustion` for a slate and for a result. `review_refusal_notice_metadata_too_large` names
+     the same step of the role. `details.step` holds the payload, the fields that you choose and the
+     prerequisites. For the repair, probe the new route after the last refusal, then take the
+     step ([the CLI reference](../../docs/research-cli.md#review-chains-and-review-series), "A
+     position whose replacements are spent").
      `openness_review_not_approved` (the final turn of an openness chain
      returned a result that `problem-openness` does not accept) names `export`, kind
      `problem-openness` (Openness, step 7). `review_resampling_forbidden`
@@ -2241,8 +2243,8 @@ accounts with the parts that the harness derives, and the records that their ent
      of the [route instructions](../../docs/research-decisions.md#commands-and-shared-state):
      assign the role again on the new route, or, for a slot with history, retire the stale route
      and continue the slot through the context repair of step 2. Then run `review-series` with
-     the new assignment. `assessment_incomplete` and `review_worker_reconciliation_required` are
-     the handoffs of a staged review, below.
+     the new assignment. `review_worker_reconciliation_required` is the handoff of a staged
+     review, and `assessment_incomplete` is its stop, below.
    - Exit status 3 with a `stop` on the last line: a typed limit or refusal, with its `code` and
      `details`; the harness cannot continue the chain. A refused action of the chain ends the
      command this way with the refusal's code (for example `review_input_too_large` or a
@@ -2295,10 +2297,12 @@ accounts with the parts that the harness derives, and the records that their ent
    (`action: "accept"`) or reconciles a worker (`action: "reconcile"`), neither with a reviewer
    call, and records the final, the controller's effective result, with `value-review` naming
    the controller's assignment id (state `record`). A refused output gets one retry with the
-   same request and then a smaller task; build no task envelope by hand. Two handoffs end the
-   command with exit status 3: `review_worker_reconciliation_required` (a pending invocation of
-   an earlier version has no pool membership) names `review-attempt`, and `assessment_incomplete`
-   names `review-assignment`. An assessment that the reviewer cannot complete, or that the
+   same request and then a smaller task; build no task envelope by hand. Two endings have exit
+   status 3. The handoff `review_worker_reconciliation_required` (a pending invocation of an
+   earlier version has no pool membership) names `review-attempt`. The stop
+   `assessment_incomplete` carries the incomplete outcome in its details, and its decision
+   offers two inspections, `record-check` and `status`. An assessment that the reviewer cannot
+   complete, or that the
    bounded execution cannot finish, is recorded as `assessment_incomplete`: the slot stays
    occupied, `next` names the research or recovery work, and no second reviewer replaces it. The
    [CLI reference](../../docs/research-cli.md#staged-problem-reviews) states the records, the

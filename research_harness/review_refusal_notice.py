@@ -20,9 +20,16 @@ REFUSAL_ENTRY_CHARACTERS = 6_000
 REFUSAL_DETAILS_CHARACTERS = 4_000
 REFUSED_PART_CHARACTERS = 20_000
 BOUNDED_NOTICE_CHARACTERS = 45_000
-INVALID_NOTICE_ARGUMENTS_MSG = 'Choose whole or bounded and one to four distinct refused attempts.'
-NOTICE_METADATA_TOO_LARGE_MSG = 'The refusal identifiers, path and message leave too little room for the bounded details.'
-NOTICE_DELIVERY_MSG = 'The replacement request must carry the exact refusal notice.'
+INVALID_NOTICE_ARGUMENTS_MSG = ('These arguments build no refusal notice. Set form to whole or bounded, and give one to '
+                                'four distinct ids of refused attempts.')
+NOTICE_METADATA_TOO_LARGE_MSG = (
+    'The entry of one refusal still exceeds 6,000 characters after its details are shortened. Its identifiers, '
+    'its path and its message stay unchanged, so no replacement can carry this refusal. Run review-series on the '
+    'head and take the step of its role.')
+NOTICE_DELIVERY_MSG = (
+    'The request of the replacement does not carry the refusal notice unchanged within the limits of the route '
+    'and of the task; the details give the measurements. Run review-series on the head and take the step that it '
+    'plans.')
 
 
 def _serialize_value(value):

@@ -649,7 +649,10 @@ def _plan_sequence_end(last, classification, position):
                 not_before=deadline.isoformat(timespec='seconds') if deadline is not None else None)
 
 
-REFUSAL_NOTICE_HANDOFF_MSG = 'The refusal notice cannot fit its fixed metadata. Continue this exhausted position through the next step for its role.'
+REFUSAL_NOTICE_HANDOFF_MSG = (
+    'The notice entry of one refusal of this position still exceeds 6,000 characters after its details are '
+    'shortened, so no replacement can carry the refusal. Take the step in the details; it continues the slot as '
+    'the step of an exhausted position does.')
 
 
 def plan_refusal_recovery(records, artifacts, assignment):

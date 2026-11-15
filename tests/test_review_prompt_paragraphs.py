@@ -147,8 +147,8 @@ class OptionalParagraphTests(unittest.TestCase):
             'exactory-problem-areas-v1': 'e9a1aa5a8fa12579bbaff0cc1902f1f012c6bb7e872c02dff25131afab93da05',
             'exactory-review-delivery-notice-v1': '56dea5b68d33ecb400797772300180198ecafafa1bd1b2b77fb1ba4053284825',
             'exactory-route-capacity-notice-v1': '236975ce56b6cd564d0cb30faa61eaedff10fb2a4570c2b8b460538e4850bf98',
-            'exactory-review-output-refusal-whole-v1': 'f07d6dc263caa65c6f078eeddc4befde49a23ef05778e3429a1cdd6527aac6c0',
-            'exactory-review-output-refusal-bounded-v1': '15a205f27ba5bfb3d761612d1f7eb7c21967ce8fe4a6d5e814f0413ef799b336'}
+            'exactory-review-output-refusal-whole-v1': 'a88f7b5fbe7e14971371e9e7b6956202ccb49a2a207e74d8946502884e8d0b75',
+            'exactory-review-output-refusal-bounded-v1': '61d96ac0b67b91f1890d4c5c8216fc7e995b85859e1afeaf744f2dedafa4db65'}
         actual = {version: hashlib.sha256(text.encode()).hexdigest()
                   for paragraph in paragraphs.PARAGRAPHS[1:] for version, text in paragraph.versions}
         self.assertEqual(actual, expected)

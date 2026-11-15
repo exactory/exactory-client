@@ -9,8 +9,11 @@ from .errors import ResearchError
 
 EXHAUSTION_FINAL_PROMPT_V1 = prompts.FINAL_REPAIR.replace(
     'This series reassesses after a recorded contamination or route retirement.',
-    'This series reassesses after the predecessor position exhausted its permitted retries, '
-    'as recorded in context_repair.exhaustion.')
+    'This series reassesses under the exhaustion binding in context_repair.exhaustion. When the reassessment was '
+    'first admitted, the earlier position of this review slot held no usable answer, and the harness could admit '
+    'no further replacement that carries a refusal, because the replacements were spent or no refusal notice fit. '
+    'The binding names the assignments of that position and its recorded refusals. It asserts no contamination and '
+    'no route retirement, and its cause events can be an empty list.')
 
 
 def applies(value, packet):

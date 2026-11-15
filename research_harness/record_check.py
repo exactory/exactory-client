@@ -46,7 +46,8 @@ DEFAULT_TIME_BUDGET_SECONDS = 10800
 # A limit of the harness inside the range that macOS accepts for an interval timer (setitimer refuses 100000001 s).
 MAXIMUM_TIME_BUDGET_SECONDS = 100_000_000
 SNAPSHOT_ATTEMPTS = 3
-STORE_ENDINGS_NOT_READ_MESSAGE = 'The store endings were not read because the snapshot failed.'
+STORE_ENDINGS_NOT_READ_MESSAGE = ('The snapshot step failed, so the endings that the store retains were not read. '
+                                  'This list holds only the endings of the workspace files.')
 # Arms the processor-time interval timer of a math-solver reader, then replaces itself with the reader
 # command. Arguments: the budget in seconds, then the reader command. The timer survives execv, and the
 # default action of SIGPROF ends the reader.
@@ -501,7 +502,8 @@ def require_listed_stop(plan):
     """Name the live boundary that still needs a reviewed registry row."""
     if plan.get('code') not in STOP_REGISTRY:
         raise ResearchError('record_unlisted_stop',
-            'This review boundary has no reviewed stop-registry row. Report its code and refused action.', plan)
+            'The code of this stop or handoff has no row in the stop registry, so the harness names no reviewed '
+            'next step for it. Report the code and the refused action as a harness defect.', plan)
 
 
 def check_continuation(store):
@@ -752,12 +754,17 @@ def read_ending_files(workspace):
                     or line.get('state') not in ('done', 'stop', 'handoff', 'wait')
                     or not isinstance(line.get('details', {}), dict)
                     or (line.get('revision') is not None and type(line['revision']) is not int)):
-                raise ValueError('Need a retained series ending with its head, code, state and details.')
+                raise ValueError('This file does not have the shape of a retained series ending. Inspect the '
+                                 'file. head_id and code are nonempty strings, and state is done, stop, handoff '
+                                 'or wait. details is an object when present, and revision is absent, null or '
+                                 'an integer.')
             retained_at = line.get('details', {}).get('receipt', {}).get('retained_at')
             if retained_at is None:
                 retained_at = os.stat(Path(workspace) / path, follow_symlinks=False).st_mtime_ns
             if type(retained_at) is not int or retained_at < 0:
-                raise ValueError('Need an integer retention time in a series-ending receipt.')
+                raise ValueError('The retention time of this ending is not a non-negative integer. Inspect '
+                                 'details.receipt.retained_at when it is set, and the modification time of the '
+                                 'file when it is absent or null.')
             result.append(dict(place='workspace', path=path, id=None, assignment_id=line['head_id'],
                 state=line['state'], code=line['code'], stop_class=classify_stop(line['code']),
                 listed=line['code'] in STOP_REGISTRY, refused_action=line.get('details', {}).get('refused_action'),
