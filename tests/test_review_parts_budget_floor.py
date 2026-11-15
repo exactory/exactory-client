@@ -198,8 +198,9 @@ class BudgetFloorPlanningTests(unittest.TestCase):
             if hashes:
                 route = dict(adapter='codex_cli_v1', endpoint='codex://local', model='fixture',
                              configuration=dict(max_output_tokens=128000, timeout_seconds=5))
+                # Rebuild the captured request under its recorded common grammar.
                 prompt = parts.build_turn_prompt(
-                    'result', dict(orchestration='problem_creation', excerpts=True), clean[parts.KEY])
+                    'result', dict(orchestration='problem_creation', excerpts=True, common_version=3), clean[parts.KEY])
                 request = transport.request_body(route, prompt['text'], clean, [], order=())
                 self.assertNotIn('unit_allowance_floor', parts.render_json(request))
                 self.assertEqual((digest(clean), digest(request)), hashes[len(actual)])

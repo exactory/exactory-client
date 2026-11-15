@@ -2836,7 +2836,8 @@
         "test_review_parts_budget_floor.BudgetFloorReplacementTests.test_series_ends_with_the_floor_budget_stop_without_another_call",
         "test_review_failure_class.OutputReplacementTests.test_other_read_handler_refusal_keeps_the_output_cap_stop",
         "test_review_failure_class.OutputReplacementTests.test_real_read_handler_halves_units_and_does_not_write",
-        "test_review_failure_class.FailureClassTests.test_dispatch_and_unhandled_output_caps_stop_with_measurement"
+        "test_review_failure_class.FailureClassTests.test_dispatch_and_unhandled_output_caps_stop_with_measurement",
+        "test_review_parts_budget_floor.BudgetFloorPlanningTests.test_input_limited_journey_keeps_plans_without_downward_adaptation"
       ]
     },
     {
@@ -4468,7 +4469,7 @@
         "test_review_measurement_live.LiveSeriesTests.test_source_output_is_refused_without_dispatch",
         "test_review_measurement_live.LiveSeriesTests.test_temporary_files_stay_under_output_and_credentials_are_never_copied",
         "test_review_measurement_live.LiveCasePreparationTests.test_focused_case_recreates_retained_payload_with_fixed_route",
-        "test_review_measurement_live.LiveCasePreparationTests.test_openness_case_reexports_exact_spec_for_a_fresh_v5_chain",
+        "test_review_measurement_live.LiveCasePreparationTests.test_openness_case_reexports_exact_spec_for_a_fresh_v6_chain",
         "test_review_measurement_live.LiveSeriesTests.test_staged_worker_launch_is_refused_inside_the_campaign"
       ]
     },

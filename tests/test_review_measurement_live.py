@@ -309,11 +309,10 @@ class LiveCasePreparationTests(unittest.TestCase):
         self.assertNotEqual(head, payload['id'])
         self.assertEqual(case.read_records()['review_route']['route'], route)
 
-    def test_openness_case_reexports_exact_spec_for_a_fresh_v5_chain(self):
+    def test_openness_case_reexports_exact_spec_for_a_fresh_v6_chain(self):
         from tools.review_measurement import live_cases
-        from openness_reading_fixtures import OpennessReadingCase
-        fixture = OpennessReadingCase()
-        fixture.reading_protocol = None
+        from test_openness_v6_chain import V6ChainTests
+        fixture = V6ChainTests()
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
         native = fixture.export(assignment_id='historical-open')
@@ -329,7 +328,7 @@ class LiveCasePreparationTests(unittest.TestCase):
             path = fixture.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(value))
-        fixture.limit_input()
+        # The retained case key identifies its inputs; re-export uses the current protocol.
         head = live_cases.prepare_assignment(fixture.store, 'bunkbed-openness-v5')
         assignment = fixture.store.snapshot()['records']['review_assignment'][head]
         fresh = json.loads(fixture.artifacts.read(assignment['context']['native_packet']))
@@ -337,7 +336,7 @@ class LiveCasePreparationTests(unittest.TestCase):
         self.assertEqual(fresh['scientific_context'], prior['scientific_context'])
         self.assertEqual(fresh['reviewer']['attestation_id'], 'review-assignment:' + head)
         packet = json.loads(fixture.artifacts.read(assignment['packet']))
-        self.assertEqual(packet['reading_turn']['protocol'], 'exactory-openness-reading-v5')
+        self.assertEqual(packet['reading_turn']['protocol'], 'exactory-openness-reading-v6')
         self.assertNotIn('prior_assignment_id', assignment['context'])
 
 
