@@ -6,7 +6,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from codex_route_fixtures import invoke_codex, probe_codex_route, record_codex_route
+from codex_route_fixtures import invoke_codex, limit_codex_input, probe_codex_route, record_codex_route
 import test_research_problem_reviews as problem_fixtures
 import test_review_delivered_evidence as delivery_fixtures
 from test_reviewer_excerpt_sessions import build_body, build_lemma
