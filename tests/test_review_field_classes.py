@@ -301,6 +301,130 @@ class FieldClassTests(unittest.TestCase):
         self.assertEqual(classified['frame']['field']['sha256'], units[0]['sha256'])
         self.assertLessEqual(capacity.measure_capacity_value(self.route, classified['frame']), sum(bounds.values()))
 
+    def build_result_frame_packet(self):
+        return dict(protocol='exactory-independent-review-sources-v2', role='result', reviewer_id='reviewer',
+                    assessor=dict(id='assessor'), evidence=[],
+                    direction_evidence=dict(claim='x' * 15000), dossier=dict(objective='x' * 15000),
+                    intent=dict(full_objective='x' * 15000), readiness=dict(inputs=dict(candidate='x' * 15000)),
+                    route_capacity=dict(rules='x' * 3000), support_contract=dict(checks='x' * 3000))
+
+    def build_lowering_profile(self):
+        from test_review_output_profile import build_row
+        profile = capacity.read_output_profile({}, self.route)
+        profile['rows'] = [build_row(level=240000, kind=kind, over=1) for kind in ('request', 'final')]
+        return profile
+
+    def test_moved_field_declarations_reserve_the_complete_named_descriptors(self):
+        packet = self.build_result_frame_packet()
+        moved = ('readiness', 'role')
+        frames = self.fields.describe_role_frame(self.route, 'result', packet, ('request',), unit_fields=moved)
+        bounded = json.loads(json.dumps(frames['request'], sort_keys=True))
+        classified = self.fields.classify_packet(self.route, 'result', packet, bounded_fields=bounded)
+        units = {unit['handle']: unit for unit in classified['units']}
+        for name in moved:
+            descriptor = classified['frame'][name]
+            self.assertEqual(set(descriptor), {'handle', 'sha256', 'characters'})
+            self.assertEqual(frames['request'][name], capacity.measure_capacity_value(self.route, {name: descriptor}))
+            self.assertEqual(units[descriptor['handle']]['sha256'], digest(packet[name]))
+        plan = capacity.plan_chain_capacity(self.route, self.build_lowering_profile(), frames={
+            'request': bounded}, inventory=classified['units'], targets=[])
+        for name in moved:
+            self.assertEqual(plan['frame']['request']['bounded_fields'][name], frames['request'][name])
+            self.assertNotIn(name, plan['frame']['request']['unit_fields'])
+
+    def test_result_fixed_point_moves_nominal_zero_fields_and_rebuilds_stored_frames(self):
+        packet = self.build_result_frame_packet()
+        before = digest(packet)
+        kinds = ('request', 'final')
+        profile = self.build_lowering_profile()
+        initial = capacity.plan_chain_capacity(self.route, profile,
+            frames=self.fields.describe_role_frame(self.route, 'result', packet, kinds),
+            inventory=self.fields.list_frame_units(self.route, 'result', packet, {}), targets=['t1'])
+        nominal = initial['frame']['request']
+        self.assertGreaterEqual(len(nominal['unit_fields']), 3)
+        self.assertTrue(any(nominal['bounded_fields'][name] == 0 for name in nominal['unit_fields']))
+        result = self.fields.plan_role_capacity(self.route, 'result', packet, kinds, profile=profile, targets=['t1'])
+        self.assertEqual(result, self.fields.plan_role_capacity(
+            self.route, 'result', copy.deepcopy(packet), kinds, profile=profile, targets=['t1']))
+        self.assertEqual(result, self.fields.plan_role_capacity(
+            self.route, 'result', packet, tuple(reversed(kinds)), profile=profile, targets=['t1']))
+        plan = json.loads(json.dumps(result['plan'], sort_keys=True))
+        self.assertEqual(plan['inventory']['digest'], digest(result['units']))
+        by_handle = {unit['handle']: unit for unit in result['units']}
+        for kind in kinds:
+            grant = plan['frame'][kind]
+            self.assertEqual(grant['unit_fields'], [])
+            classified = self.fields.classify_packet(self.route, 'result', packet, bounded_fields=grant['bounded_fields'])
+            self.assertLessEqual(capacity.measure_capacity_value(self.route, classified['frame']), grant['bound'])
+            for name in initial['frame'][kind]['unit_fields']:
+                descriptor = classified['frame'][name]
+                self.assertEqual(set(descriptor), {'handle', 'sha256', 'characters'})
+                unit = by_handle[descriptor['handle']]
+                self.assertEqual(unit['sha256'], digest(packet[name]))
+                self.assertEqual(unit['characters'], capacity.measure_capacity_value(self.route, packet[name]))
+                self.assertEqual(descriptor['sha256'], unit['sha256'])
+                self.assertEqual(descriptor['characters'], unit['characters'])
+                self.assertEqual(grant['bounded_fields'][name],
+                                 capacity.measure_capacity_value(self.route, {name: descriptor}))
+            for unit in self.fields.list_frame_units(self.route, 'result', packet, grant['bounded_fields']):
+                self.assertEqual(by_handle[unit['handle']], unit)
+        self.assertEqual(digest(packet), before)
+
+    def test_result_fixed_point_refuses_one_character_below_the_descriptor_floor(self):
+        from research_harness.errors import ResearchError
+        from research_harness.review_refusal_notice import BOUNDED_NOTICE_CHARACTERS
+        packet = self.build_result_frame_packet()
+        fixed = [name for name in packet if self.fields.FIELD_CLASSES['result'][packet['protocol']][name]['class'] == 'fixed']
+        frames = self.fields.describe_role_frame(self.route, 'result', packet, ('request',), unit_fields=fixed)
+        minimum = sum(frames['request'].values())
+        profile = capacity.read_output_profile({}, self.route)
+        tokens = capacity.describe_route_capacity(self.route, profile)['input_tokens']['value']
+        floor = capacity.describe_material_levels('request')[-1] + BOUNDED_NOTICE_CHARACTERS
+        for difference in (-1, 0):
+            room = floor + minimum + difference
+            measure = dict(rule='calibrated', characters_per_token=(room + 0.5) / tokens)
+            if difference < 0:
+                with self.assertRaises(ResearchError) as caught:
+                    self.fields.plan_role_capacity(self.route, 'result', packet, ('request',),
+                                                   profile=profile, measure=measure)
+                self.assertEqual(caught.exception.code, 'review_route_capacity_below_floor')
+                self.assertEqual(caught.exception.details['minimum'], floor + minimum)
+                self.assertEqual(caught.exception.details['room'], room)
+            else:
+                result = self.fields.plan_role_capacity(self.route, 'result', packet, ('request',),
+                                                        profile=profile, measure=measure)
+                self.assertEqual(result['plan']['frame']['request']['bound'], minimum)
+                frame = self.fields.classify_packet(self.route, 'result', packet,
+                    bounded_fields=result['plan']['frame']['request']['bounded_fields'])['frame']
+                self.assertLessEqual(capacity.measure_capacity_value(self.route, frame), minimum)
+
+    def test_role_fixed_point_uses_the_route_profile_when_none_is_supplied(self):
+        packet = dict(protocol='exactory-problem-review-v2', role='result')
+        profile = capacity.read_output_profile({}, self.route)
+        result = self.fields.plan_role_capacity(self.route, 'result', packet, ('request',))
+        self.assertEqual(result, self.fields.plan_role_capacity(
+            self.route, 'result', packet, ('request',), profile=profile))
+        self.assertEqual(result['units'], [])
+
+    def test_invalid_frame_unit_tags_refuse_once_at_the_assignment_edge(self):
+        from research_harness.errors import ResearchError
+        for frame in ({'$unit:missing': 0}, {'$unit:value': 1, 'value': 200},
+                      {'$unit:$descriptors': 0, '$descriptors': 200},
+                      {'$unit:$unit:value': 0, '$unit:value': 0, 'value': 200},
+                      {'$unit:': 0, '': 200}):
+            with self.subTest(frame=frame), self.assertRaises(ResearchError) as caught:
+                capacity.prepare_assignment_capacity({}, None, self.route,
+                    dict(kind='request', frames=dict(request=frame), inventory=[], targets=[]))
+            self.assertEqual(caught.exception.code, 'invalid_input')
+        from research_harness.artifacts import ArtifactStore
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = ArtifactStore(Path(directory))
+            declaration = dict(kind='request', frames=dict(request={'$unit:value': 0, 'value': 200}),
+                               inventory=[], targets=[])
+            members = capacity.prepare_assignment_capacity({}, artifacts, self.route, declaration)
+            plan = capacity.read_chain_capacity_plan(artifacts, members)
+            self.assertEqual(plan['frame']['request']['bounded_fields'], {'$unit:value': 0, 'value': 200})
+
     def test_parts_descriptor_aliases_are_collection_units_in_each_packet_form(self):
         packet = dict(protocol='exactory-independent-review-v1', review_parts=dict(units=[dict(
             handle='u1', bodies=[dict(sha256='a' * 64, aliases=[dict(path='body.txt', sha256='a' * 64)])])]))

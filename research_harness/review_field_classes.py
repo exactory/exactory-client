@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 from .evidence import digest
-from .review_route_capacity import measure_capacity_value
+from .review_route_capacity import measure_capacity_value, plan_chain_capacity, read_output_profile
 
 # 787 stored descriptor samples: maximum reference rows 4,956, median 68.
 # Rounded to the next 1,000 characters; delivery belongs to parts protocol v3.
@@ -848,9 +848,11 @@ FIELD_CLASSES = {
     },
 }
 
-# Reserve descriptor space before the planner allocates optional fixed values.
-# A lowered allocation can be zero; its descriptor must still fit the frame.
+# The aggregate reserves the envelope and non-fixed metadata. Zero-cost tags
+# identify fixed fields whose complete descriptors are irreducible frame fields.
+# Tags survive canonical JSON ordering when a stored plan is read back.
 FRAME_DESCRIPTOR_FIELD = '$descriptors'
+FRAME_UNIT_FIELD_PREFIX = '$unit:'
 UNCLASSIFIED_FIELD_MESSAGE = 'Packet field {role}/{form}:{field} has no field class.'
 
 
@@ -955,15 +957,18 @@ def _project_field(route, value, path, row, bound, table):
     return _describe_value_reference(route, value, path), [unit], {path: 'unit'}
 
 
-def _build_classified_frame(route, role, packet, bounded_fields):
+def _build_classified_frame(route, role, packet, bounded_fields, unit_fields=()):
     form, table = _select_table(role, packet)
     frame, units, owners = {}, [], {}
+    moved = set(unit_fields) | {name[len(FRAME_UNIT_FIELD_PREFIX):] for name in bounded_fields
+                               if name.startswith(FRAME_UNIT_FIELD_PREFIX)}
     for name in sorted(packet):
         row = table.get(name)
         if row is None:
             raise ValueError(UNCLASSIFIED_FIELD_MESSAGE.format(role=role, form=form, field=name))
         overhead = _measure_field_overhead(route, name)
-        bound = min(row['characters'], max(0, bounded_fields.get(name, row['characters'] + overhead) - overhead))
+        bound = (0 if name in moved else
+                 min(row['characters'], max(0, bounded_fields.get(name, row['characters'] + overhead) - overhead)))
         frame[name], additions, places = _project_field(route, packet[name], (name,), row, bound, table)
         units.extend(additions)
         owners.update(places)
@@ -993,29 +998,69 @@ def classify_packet(route, role, packet, *, bounded_fields=None):
                 unit_characters=sum(unit['characters'] for unit in units))
 
 
-def describe_role_frame(route, role, packet, kinds):
-    """Return planner fields in allocation order, with a descriptor reserve first.
+def describe_role_frame(route, role, packet, kinds, *, unit_fields=()):
+    """Declare fixed value maxima or complete, irreducible unit descriptors.
 
-    Every packet field reserves its native field envelope and stated value size.
-    The separate reserve pays for overflow descriptors even when the plan lowers
-    a value allocation to zero. Collections, carried material and bodies use the
-    reserve alone. Reference values have a bounded digest representation.
+    unit_fields is a sequence of fixed field names, or a mapping from turn kind
+    to such a sequence. Each moved field retains its own measured descriptor
+    size, including handle, digest, characters and native field envelope. A
+    zero-cost tag preserves that ownership through a stored plan's JSON order.
+    The aggregate reserve holds the envelope and non-fixed frame metadata.
     """
-    form, table = _select_table(role, packet)
-    fields = {FRAME_DESCRIPTOR_FIELD: measure_capacity_value(route, {})}
-    for name in sorted(packet):
-        row = table.get(name)
-        if row is None:
-            raise ValueError(UNCLASSIFIED_FIELD_MESSAGE.format(role=role, form=form, field=name))
-        overhead = _measure_field_overhead(route, name)
-        fields[FRAME_DESCRIPTOR_FIELD] += DESCRIPTOR_MAXIMUM_CHARACTERS + overhead
-        fields[name] = row['characters'] + overhead if row['class'] == 'fixed' else 0
-    return {kind: dict(fields) for kind in kinds}
+    moved = unit_fields if isinstance(unit_fields, dict) else tuple(unit_fields)
+    frames = {}
+    for kind in kinds:
+        table, frame, _, owners = _build_classified_frame(
+            route, role, packet, {}, moved.get(kind, ()) if isinstance(moved, dict) else moved)
+        fields = {FRAME_DESCRIPTOR_FIELD: measure_capacity_value(route, {})}
+        for name in sorted(packet):
+            if table[name]['class'] != 'fixed':
+                fields[FRAME_DESCRIPTOR_FIELD] += measure_capacity_value(route, {name: frame[name]})
+                fields[name] = 0
+            elif owners[(name,)] == 'unit':
+                fields[name] = measure_capacity_value(route, {name: frame[name]})
+                fields[FRAME_UNIT_FIELD_PREFIX + name] = 0
+            else:
+                fields[name] = table[name]['characters'] + _measure_field_overhead(route, name)
+        frames[kind] = fields
+    return frames
 
 
 def list_frame_units(route, role, packet, bounded_fields):
     """Read all units, including fixed overflow under a stored kind's bounds."""
     return _build_classified_frame(route, role, packet, bounded_fields)[2]
+
+
+def plan_role_capacity(route, role, packet, kinds, *, profile=None, targets=(), carried_budget=None,
+                       records=None, artifacts=None, measure=None, allowance_rows_bound=None):
+    """Return {plan, units} at the fixed point of the role's frame declarations.
+
+    Each iteration permanently moves newly lowered fixed fields for their turn
+    kind. There are at most len(packet) such moves per kind. The inventory is
+    the stable union of each kind's units; list_frame_units reads a particular
+    kind from its stored bounded_fields, including the zero-cost unit tags.
+    A descriptor or task floor that cannot fit uses the planner's existing stop.
+    Canonical kind order also preserves the inventory digest on stored replay.
+    """
+    kinds = tuple(sorted(kinds))
+    targets = tuple(targets)
+    moved = {kind: set() for kind in kinds}
+    if profile is None:
+        profile = read_output_profile({} if records is None else records, route)
+    while True:
+        frames = describe_role_frame(route, role, packet, kinds, unit_fields=moved)
+        inventory = {}
+        for kind in kinds:
+            for unit in list_frame_units(route, role, packet, frames[kind]):
+                inventory.setdefault(unit['handle'], unit)
+        units = list(inventory.values())
+        plan = plan_chain_capacity(route, profile, frames=frames, inventory=units, targets=targets,
+            carried_budget=carried_budget, records=records, artifacts=artifacts, measure=measure,
+            allowance_rows_bound=allowance_rows_bound)
+        if not any(frame['unit_fields'] for frame in plan['frame'].values()):
+            return dict(plan=plan, units=units)
+        for kind in kinds:
+            moved[kind].update(plan['frame'][kind]['unit_fields'])
 
 
 def describe_unit_references(descriptor, size=REFERENCE_ROWS_MAXIMUM_CHARACTERS, *, route=None):

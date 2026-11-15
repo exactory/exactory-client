@@ -1690,6 +1690,8 @@ NOTES_MAXIMUM_CHARACTERS = 20000
 TARGET_PREFERRED_CHARACTERS = 30000
 TARGET_MAXIMUM_CHARACTERS = 60000
 FRAME_MAXIMUM_CHARACTERS = 200000
+FRAME_UNIT_TAG_MESSAGE = ('A frame unit tag must have size zero and name an existing frame field outside '
+                          'the reserved "$" namespace.')
 PLAN_VIOLATED_MESSAGE = ('The exact request of this turn is larger than the stored capacity plan of its chain allows. '
                          'The plan is computed so that this cannot occur, so this is a harness defect. Keep the plan and '
                          'the request as its evidence. For an internal step that gate-auto-pass covers, use '
@@ -1756,7 +1758,7 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
     under their own protocol version.
     """
     from .review_refusal_notice import BOUNDED_NOTICE_CHARACTERS
-    from .review_field_classes import FRAME_DESCRIPTOR_FIELD
+    from .review_field_classes import FRAME_DESCRIPTOR_FIELD, FRAME_UNIT_FIELD_PREFIX
     from .errors import ResearchError
     limits = describe_route_capacity(route, profile, records=records, artifacts=artifacts)
     if measure is not None:
@@ -1802,18 +1804,23 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
                     dict(kind=kind, room=preceding, minimum=floor + carried_minimum + BOUNDED_NOTICE_CHARACTERS,
                          command='review-route'))
             bound = min(bound, lowered)
-        descriptor_minimum = fields.get(FRAME_DESCRIPTOR_FIELD, 0)
+        minimums = {name[len(FRAME_UNIT_FIELD_PREFIX):]: fields[name[len(FRAME_UNIT_FIELD_PREFIX):]]
+                    for name in fields if name.startswith(FRAME_UNIT_FIELD_PREFIX)}
+        if FRAME_DESCRIPTOR_FIELD in fields:
+            minimums[FRAME_DESCRIPTOR_FIELD] = fields[FRAME_DESCRIPTOR_FIELD]
+        descriptor_minimum = sum(minimums.values())
         if bound < descriptor_minimum:
             raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
                 dict(kind=kind, room=bound + floor + carried_minimum + BOUNDED_NOTICE_CHARACTERS,
                      minimum=descriptor_minimum + floor + carried_minimum + BOUNDED_NOTICE_CHARACTERS,
                      command='review-route'))
-        remaining = bound
+        remaining = bound - descriptor_minimum
         bounded_fields = {}
         unit_fields = []
         for name, size in fields.items():
-            bounded_fields[name] = min(size, remaining)
-            remaining -= bounded_fields[name]
+            minimum = minimums.get(name, 0)
+            bounded_fields[name] = min(size, minimum + remaining)
+            remaining -= bounded_fields[name] - minimum
             if bounded_fields[name] < size:
                 unit_fields.append(name)
         frame[kind] = dict(fields=copy.deepcopy(fields), characters=sum(fields.values()),
@@ -2002,6 +2009,7 @@ def prepare_assignment_capacity(records, artifacts, route, declaration):
     """Validate a builder declaration once at assignment admission and publish or reuse its plan."""
     from .operations import fields, text
     from .errors import ResearchError
+    from .review_field_classes import FRAME_UNIT_FIELD_PREFIX
     fields(declaration, ('kind',), ('plan', 'frames', 'inventory', 'targets', 'carried_budget',
                                   'measure', 'allowance_rows_bound'))
     if 'plan' in declaration:
@@ -2020,6 +2028,11 @@ def prepare_assignment_capacity(records, artifacts, route, declaration):
         for frame in frames.values():
             if not isinstance(frame, dict) or any(type(size) is not int or size < 0 for size in frame.values()):
                 raise ResearchError('invalid_input', 'Frame fields state their serialized nonnegative character sizes.')
+            for name, size in frame.items():
+                if name.startswith(FRAME_UNIT_FIELD_PREFIX):
+                    target = name[len(FRAME_UNIT_FIELD_PREFIX):]
+                    if size != 0 or not target or target not in frame or target.startswith('$'):
+                        raise ResearchError('invalid_input', FRAME_UNIT_TAG_MESSAGE)
         if not isinstance(inventory, list) or not isinstance(targets, list):
             raise ResearchError('invalid_input', 'A capacity inventory and its targets must be lists.')
         unit_handles = []
