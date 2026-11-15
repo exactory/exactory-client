@@ -19210,17 +19210,18 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.record_check": {
-      "ast_sha256": "ebf995f85d7565c704affa09ff0be774e8e8ab5def7b5dce97358c7935717abd",
+      "ast_sha256": "670f2ff4b10a933773506ca2c4e992a65e09535f647b85b9ebc95d39f123c4ff",
       "functions": {
         "_rebuild_invocation": "1acc896d0015ad5e31d50f3cf2ab1e450f660f53550945aea2137f13c3c44901",
         "build_reader_timeout_error": "6ff145b44f5467abad05c9dba2ddcc8fc8347d4b4702c7933ed70eb410c6624b",
         "build_sandbox_profile": "bbed2b952558901cc000a45bd5c512f30f034c3f68da5083292ec22d73062815",
         "check_acceptance_reviews": "525f1bec1d627b6af1da4de92ab41ca9edcd32b33d281a3e919261d22b94e61d",
-        "check_authentication": "9ab7b922bc84869d44f15bfca6f0ee09d7fd7b80ab5829401fd7e4760c5c705f",
+        "check_authentication": "5591c480b0e09c69e2ef1348b95a4099db99d7b92aa9944b8d5d7e1b6ea819bd",
         "check_continuation": "2fcf4237e1b17c804c85c7245f36f5d1ec5e1335abb6f5a3fa6ac3047d257313",
         "check_integrity": "ca610392a17cda8aa6b139182570a76bc0d2f8245b204a6b9127ce9408ac6ada",
         "check_isolated_snapshot": "a19d390dac666268d40d0ccf60a0f8cdeb95a5189ceb92308a8e0381ea0c11fb",
         "check_math_roots": "c39d9551d0b86c55db981eafa2c94d50cae9386a17f89172c4e630e4364fbefd",
+        "check_openness_findings": "395dcf2196dcb0b30e38c0e46c39465690f063ec4d12c580e1d9ea0c8bfc6d12",
         "check_prospective_request": "7f9b7824ae1c9944734a24a0a8dfa38b1f95a5ed2c5b4c3a4025a0f810d0366a",
         "check_reconstruction": "7e5059bcb7f9724655a75ea3da1a990b0db7ba0afbb7f59bfae6da6538a320ee",
         "check_record": "811cb36e05d05ad17e7ecfcef647c7a85bfa32f864b2ce79b8699459724cc8af",

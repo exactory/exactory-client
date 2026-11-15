@@ -3,6 +3,7 @@
   "source": "20261113110022-every-open-record-and-review-capacity",
   "installed_units": [
     "UB1",
+    "UB10",
     "UB2",
     "UB3",
     "UB4",
@@ -360,12 +361,28 @@
           "test_review_capacity_plan.CapacityPlanTests.test_plan_pins_every_input_and_counts_carried_state_and_notice",
           "test_review_capacity_plan.StoredCapacityPlanTests.test_check_returns_complete_plan_then_stored_digest_survives_new_priors_and_attempts",
           "test_search_completes.SearchCompletionExportTests.test_two_query_repair_binds_only_later_search_and_delivers_notice_to_v6",
-          "test_supplied_eligibility.SuppliedEligibilityTests.test_supplied_reading_journey_keeps_origin_in_chain_session_export_and_post"
+          "test_supplied_eligibility.SuppliedEligibilityTests.test_supplied_reading_journey_keeps_origin_in_chain_session_export_and_post",
+          "test_openness_v6_guard.V6GuardTests.test_g3_executes_every_material_path",
+          "test_openness_v6_guard.V6GuardTests.test_g3_adding_a_kind_without_a_path_fails",
+          "test_openness_v6_guard.V6GuardTests.test_problem_first_assignment_requires_a_finite_projection_and_math_v1_keeps_c5",
+          "test_openness_v6_guard.V6GuardTests.test_every_admitted_v6_request_and_serialized_record_fit_the_first_projection",
+          "test_openness_v6_guard.FindingQualificationTests.test_check_one_reports_every_finding_including_an_older_stale_one",
+          "test_openness_v6_guard.FindingQualificationTests.test_check_one_keeps_legacy_v1_finding_and_every_stored_byte",
+          "test_continuity_guard.ContinuityGuardTests.test_scientific_refused_reading_executes_the_problem_export_handoff",
+          "test_openness_v6_guard.V6GuardTests.test_ub10_presence_requires_its_executed_evidence_in_the_matrix"
         ],
         "reports": []
       },
       "tests": [
-        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity",
+        "test_openness_v6_guard.V6GuardTests.test_g3_executes_every_material_path",
+        "test_openness_v6_guard.V6GuardTests.test_g3_adding_a_kind_without_a_path_fails",
+        "test_openness_v6_guard.V6GuardTests.test_problem_first_assignment_requires_a_finite_projection_and_math_v1_keeps_c5",
+        "test_openness_v6_guard.V6GuardTests.test_every_admitted_v6_request_and_serialized_record_fit_the_first_projection",
+        "test_openness_v6_guard.FindingQualificationTests.test_check_one_reports_every_finding_including_an_older_stale_one",
+        "test_openness_v6_guard.FindingQualificationTests.test_check_one_keeps_legacy_v1_finding_and_every_stored_byte",
+        "test_continuity_guard.ContinuityGuardTests.test_scientific_refused_reading_executes_the_problem_export_handoff",
+        "test_openness_v6_guard.V6GuardTests.test_ub10_presence_requires_its_executed_evidence_in_the_matrix"
       ],
       "required_stops": [
         {
@@ -379,7 +396,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "Installed path evidence only. Construction remains incomplete pending: UB10, carried-integration, carried-selection, reading-v7-turns, reading-v7-verification."
+      "coverage_scope": "Installed v6 path evidence; its G3 family row still requires R17 and R18 from the concurrent family-fixes lane. Construction remains incomplete pending: carried-integration, carried-selection, reading-v7-turns, reading-v7-verification."
     },
     {
       "id": "A5",
@@ -557,12 +574,14 @@
           "test_review_refusal_planner.RefusalPlannerTests.test_a7_whole_then_bounded_and_capacity_floor_end_at_role_step",
           "test_review_refusal_replacement.RefusalReplacementTests.test_replacement_freezes_one_fresh_diagnosis_and_records_corrected_answer",
           "test_review_refusal_replacement.RefusalReplacementTests.test_second_replacement_lists_revived_attempt_and_keeps_head_finality",
-          "test_review_refusal_replacement.RefusalReplacementTests.test_third_replacement_is_refused"
+          "test_review_refusal_replacement.RefusalReplacementTests.test_third_replacement_is_refused",
+          "test_continuity_guard.ContinuityGuardTests.test_g6_executes_the_validator_upgrade_through_a_recorded_second_replacement"
         ],
         "reports": []
       },
       "tests": [
-        "test_record_reading_handoff.ReadingHandoffTests.test_second_output_citing_descriptor_hands_off_only_the_fulltext_reading"
+        "test_record_reading_handoff.ReadingHandoffTests.test_second_output_citing_descriptor_hands_off_only_the_fulltext_reading",
+        "test_continuity_guard.ContinuityGuardTests.test_g6_executes_the_validator_upgrade_through_a_recorded_second_replacement"
       ],
       "required_stops": [
         {
@@ -853,12 +872,14 @@
         "tests": [
           "test_review_correction_history_planner.CorrectionHistoryPlannerTests.test_forty_long_historical_reviews_replace_without_spending_a_correction",
           "test_review_refusal_planner.CorrectionPlannerTests.test_declined_correction_gets_replacement_and_is_not_offered_again",
-          "test_review_refusal_planner.CorrectionPlannerTests.test_new_reassessment_reruns_once_then_corrects_and_records"
+          "test_review_refusal_planner.CorrectionPlannerTests.test_new_reassessment_reruns_once_then_corrects_and_records",
+          "test_continuity_guard.ContinuityGuardTests.test_stage2_evidence_executes_every_supported_chain_and_requirement"
         ],
         "reports": []
       },
       "tests": [
-        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity",
+        "test_continuity_guard.ContinuityGuardTests.test_stage2_evidence_executes_every_supported_chain_and_requirement"
       ],
       "required_stops": [
         {
@@ -1067,7 +1088,8 @@
           "test_review_single_request.FrozenSingleTests.test_opus_max_128000_output_replacement_reaches_a_recorded_native_final",
           "test_review_single_request.FrozenSingleTests.test_output_limit_plans_frozen_series_and_real_assignment_accepts_it",
           "test_review_single_request.SingleEntryTests.test_each_adapter_enters_by_task_with_profile_read_start",
-          "test_review_single_request.SingleEntryTests.test_each_adapter_replacement_is_accepted_by_the_assignment_command"
+          "test_review_single_request.SingleEntryTests.test_each_adapter_replacement_is_accepted_by_the_assignment_command",
+          "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers"
         ],
         "reports": []
       },
@@ -1211,12 +1233,14 @@
       "coverage": "constructed",
       "evidence": {
         "tests": [
-          "test_review_task_size.RecoveryRowsTests.test_a19_reduced_context_cap_replaces_a_read_and_real_assignment_halves_it"
+          "test_review_task_size.RecoveryRowsTests.test_a19_reduced_context_cap_replaces_a_read_and_real_assignment_halves_it",
+          "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers"
         ],
         "reports": []
       },
       "tests": [
-        "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry"
+        "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry",
+        "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers"
       ],
       "required_stops": [
         {
@@ -1324,7 +1348,8 @@
       "evidence": {
         "tests": [
           "test_review_task_size.RecoveryRowsTests.test_a21_timeout_and_provider_refusal_use_the_lower_read_after_their_retries",
-          "test_review_task_size.RecoveryRowsTests.test_timeout_and_safeguard_floors_keep_their_outcome_codes"
+          "test_review_task_size.RecoveryRowsTests.test_timeout_and_safeguard_floors_keep_their_outcome_codes",
+          "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers"
         ],
         "reports": []
       },
@@ -1503,12 +1528,18 @@
       "evidence": {
         "tests": [
           "test_reading_forecast.MathForecastTests.test_estimate_stops_before_call_and_owner_continue_reaches_fitting_final",
-          "test_reading_forecast.MathForecastTests.test_exact_oversize_math_turn_stops_before_any_invocation"
+          "test_reading_forecast.MathForecastTests.test_exact_oversize_math_turn_stops_before_any_invocation",
+          "test_reading_forecast.MathForecastTests.test_first_and_middle_turn_report_uncharged_diagnostics_and_chain_token_ratio",
+          "test_reading_forecast.MathForecastTests.test_math_with_no_reading_units_and_an_oversize_fixed_packet_stops_before_a_call",
+          "test_reading_forecast.MathForecastTests.test_owner_continue_on_an_existing_math_head_authorizes_that_head"
         ],
         "reports": []
       },
       "tests": [
-        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity"
+        "test_review_route_capacity.RouteLimitTests.test_every_transport_has_listed_and_unlisted_capacity",
+        "test_reading_forecast.MathForecastTests.test_first_and_middle_turn_report_uncharged_diagnostics_and_chain_token_ratio",
+        "test_reading_forecast.MathForecastTests.test_math_with_no_reading_units_and_an_oversize_fixed_packet_stops_before_a_call",
+        "test_reading_forecast.MathForecastTests.test_owner_continue_on_an_existing_math_head_authorizes_that_head"
       ],
       "required_stops": [
         {
@@ -2005,12 +2036,16 @@
           "test_review_refusal_notice.RefusalNoticeTests.test_unbounded_legacy_identity_or_diagnostic_metadata_is_reported_without_changing_types",
           "test_review_refusal_replacement.RefusalReplacementTests.test_replacement_freezes_one_fresh_diagnosis_and_records_corrected_answer",
           "test_review_refusal_replacement.RefusalReplacementTests.test_second_replacement_lists_revived_attempt_and_keeps_head_finality",
-          "test_review_refusal_replacement.RefusalReplacementTests.test_third_replacement_is_refused"
+          "test_review_refusal_replacement.RefusalReplacementTests.test_third_replacement_is_refused",
+          "test_review_refusal_replacement.RefusalReplacementTests.test_g6_validator_upgrade_authenticates_second_replacement_and_preserves_every_observation",
+          "test_continuity_guard.ContinuityGuardTests.test_exhausted_verification_executes_its_fresh_assignment"
         ],
         "reports": []
       },
       "tests": [
-        "test_record_reading_handoff.ReadingHandoffTests.test_second_output_citing_descriptor_hands_off_only_the_fulltext_reading"
+        "test_record_reading_handoff.ReadingHandoffTests.test_second_output_citing_descriptor_hands_off_only_the_fulltext_reading",
+        "test_review_refusal_replacement.RefusalReplacementTests.test_g6_validator_upgrade_authenticates_second_replacement_and_preserves_every_observation",
+        "test_continuity_guard.ContinuityGuardTests.test_exhausted_verification_executes_its_fresh_assignment"
       ],
       "required_stops": [
         {
@@ -2107,12 +2142,14 @@
           "test_review_exhaustion_repair.ExhaustionRepairTests.test_result_handoff_has_complete_binding_and_records_without_retirement",
           "test_review_exhaustion_repair.ExhaustionRepairTests.test_slate_handoff_admits_the_same_complete_binding",
           "test_review_refusal_planner.CorrectionPlannerTests.test_declined_correction_gets_replacement_and_is_not_offered_again",
-          "test_review_refusal_planner.CorrectionPlannerTests.test_new_reassessment_reruns_once_then_corrects_and_records"
+          "test_review_refusal_planner.CorrectionPlannerTests.test_new_reassessment_reruns_once_then_corrects_and_records",
+          "test_continuity_guard.ContinuityGuardTests.test_stage2_evidence_executes_every_supported_chain_and_requirement"
         ],
         "reports": []
       },
       "tests": [
-        "test_record_reading_handoff.ReadingHandoffTests.test_second_output_citing_descriptor_hands_off_only_the_fulltext_reading"
+        "test_record_reading_handoff.ReadingHandoffTests.test_second_output_citing_descriptor_hands_off_only_the_fulltext_reading",
+        "test_continuity_guard.ContinuityGuardTests.test_stage2_evidence_executes_every_supported_chain_and_requirement"
       ],
       "required_stops": [
         {
@@ -2332,12 +2369,15 @@
           "test_review_stop_queue.ClosedCallTests.test_posted_calls_keep_each_state_and_only_administrative_steps",
           "test_review_stop_queue.QueueTests.test_older_wait_runs_before_a_chain_gets_its_next_turn",
           "test_review_stop_queue.StopQueueTests.test_interrupted_call_reconciles_and_does_not_spend_failure_allowance",
-          "test_review_stop_queue.StopQueueTests.test_stop_after_plan_before_start_refuses_without_an_invocation"
+          "test_review_stop_queue.StopQueueTests.test_stop_after_plan_before_start_refuses_without_an_invocation",
+          "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers",
+          "test_d2_outcomes.OutcomeTests.test_generated_mixed_sequences_never_exceed_eight_or_renew_a_terminal_outcome"
         ],
         "reports": []
       },
       "tests": [
-        "test_d2_outcomes.OutcomeTests.test_generated_mixed_sequences_never_exceed_eight_or_renew_a_terminal_outcome"
+        "test_d2_outcomes.OutcomeTests.test_generated_mixed_sequences_never_exceed_eight_or_renew_a_terminal_outcome",
+        "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers"
       ],
       "required_stops": [
         {
@@ -4128,6 +4168,41 @@
         "Q16": {
           "tests": [
             "test_supplied_eligibility.SuppliedEligibilityTests.test_supplied_reading_journey_keeps_origin_in_chain_session_export_and_post"
+          ],
+          "stops": []
+        }
+      }
+    },
+    {
+      "unit": "UB10",
+      "entries": [
+        "A4"
+      ],
+      "stops": [],
+      "tests": [
+        "test_openness_v6_guard.V6GuardTests.test_g3_executes_every_material_path",
+        "test_openness_v6_guard.V6GuardTests.test_g3_adding_a_kind_without_a_path_fails",
+        "test_openness_v6_guard.V6GuardTests.test_problem_first_assignment_requires_a_finite_projection_and_math_v1_keeps_c5",
+        "test_openness_v6_guard.V6GuardTests.test_every_admitted_v6_request_and_serialized_record_fit_the_first_projection",
+        "test_openness_v6_guard.FindingQualificationTests.test_check_one_reports_every_finding_including_an_older_stale_one",
+        "test_openness_v6_guard.FindingQualificationTests.test_check_one_keeps_legacy_v1_finding_and_every_stored_byte",
+        "test_openness_v6_guard.V6GuardTests.test_ub10_presence_requires_its_executed_evidence_in_the_matrix"
+      ],
+      "presence": {
+        "module": "research_harness/record_check.py",
+        "name": "check_openness_findings",
+        "kind": "function"
+      },
+      "per_entry": {
+        "A4": {
+          "tests": [
+            "test_openness_v6_guard.V6GuardTests.test_g3_executes_every_material_path",
+            "test_openness_v6_guard.V6GuardTests.test_g3_adding_a_kind_without_a_path_fails",
+            "test_openness_v6_guard.V6GuardTests.test_problem_first_assignment_requires_a_finite_projection_and_math_v1_keeps_c5",
+            "test_openness_v6_guard.V6GuardTests.test_every_admitted_v6_request_and_serialized_record_fit_the_first_projection",
+            "test_openness_v6_guard.FindingQualificationTests.test_check_one_reports_every_finding_including_an_older_stale_one",
+            "test_openness_v6_guard.FindingQualificationTests.test_check_one_keeps_legacy_v1_finding_and_every_stored_byte",
+            "test_openness_v6_guard.V6GuardTests.test_ub10_presence_requires_its_executed_evidence_in_the_matrix"
           ],
           "stops": []
         }

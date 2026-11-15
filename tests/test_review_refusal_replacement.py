@@ -109,6 +109,65 @@ class RefusalReplacementTests(unittest.TestCase):
         self.assertEqual(before['review_output_refusal'], self.case.read_records()['review_output_refusal'])
         self.assertEqual(before['review_attempt']['attempt-initial'], self.case.read_records()['review_attempt']['attempt-initial'])
 
+    def test_g6_validator_upgrade_authenticates_second_replacement_and_preserves_every_observation(self):
+        from research_harness.review_refusal_replacement import validate_replacement_origin
+        from research_harness.review_continuation import plan_next
+        first = self.case.assign('bar', 'first', identifier='initial', **self.case.deliver_supporting('first'))
+        output = self.case.build_review_output('bar')
+        output['value']['status'] = 'newly_supported'
+        self.invoke(first, output)
+        with self.assertRaises(ResearchError):
+            self.record(first, output)
+        second = self.replace(first)
+        refused = copy.deepcopy(output)
+        refused['value']['status'] = 'still_invalid'
+        self.invoke(second, refused)
+        with self.assertRaises(ResearchError):
+            self.record(second, refused)
+        before = copy.deepcopy(self.case.read_records())
+        retained = [(reference, self.case.artifacts.read(reference)) for kind in (
+            'review_invocation', 'review_attempt', 'review_output_refusal')
+            for reference in protocol.collect_references(before.get(kind, {}))]
+        validate = decisions._validate_value
+
+        def validate_upgraded_value(records, artifacts, value, *args, **kwargs):
+            accepted = copy.deepcopy(value)
+            if accepted['status'] == 'newly_supported':
+                accepted['status'] = 'sufficient'
+            return validate(records, artifacts, accepted, *args, **kwargs)
+
+        # Change the validator, not the classifier or the planner. All paths see the same new rule.
+        with patch.object(decisions, '_validate_value', side_effect=validate_upgraded_value):
+            self.assertIsNone(refusal.classify_observed_output(before, self.case.artifacts, 'attempt-initial'))
+            self.assertIsNotNone(refusal.classify_observed_output(before, self.case.artifacts, 'attempt-replacement'))
+            plan = plan_next(before, self.case.artifacts, second['id'])
+            self.assertEqual((plan['state'], plan['command']), ('replace', 'review-assignment'))
+            third = self.case.mutate(protocol.record_assignment, plan['payload'])['result']
+            entries = self.read_notice(third)['refused']
+            self.assertEqual(entries[0], dict(assignment_id=first['id'], attempt_id='attempt-initial',
+                output_digest=digest(output), refusal_digest=digest(before['review_output_refusal']['attempt-initial']),
+                status='not_refused'))
+            self.assertEqual(entries[1]['status'], 'refused')
+            self.assertEqual(entries[1]['path'], '/value/status')
+            current = self.case.read_records()
+            validate_replacement_origin(current, self.case.artifacts, third)
+            state = protocol.assignment_state(current, self.case.artifacts, first['id'])
+            self.assertFalse(state['ready'])
+            self.assertEqual(state['not_selected']['assignment_id'], second['id'])
+            corrected = self.case.build_review_output('bar')
+            self.invoke(third, corrected)
+            current = self.case.read_records()
+            attempt = current['review_attempt']['attempt-' + third['id']]
+            self.assertTrue(protocol.authenticate_attempt(current, self.case.artifacts, third, attempt))
+            self.record(third, corrected)
+            self.assertEqual(plan_next(self.case.read_records(), self.case.artifacts, third['id'])['state'], 'done')
+        current = self.case.read_records()
+        for kind in ('review_invocation', 'review_attempt', 'review_output_refusal'):
+            for identifier, row in before.get(kind, {}).items():
+                self.assertEqual(current[kind][identifier], row)
+        for reference, body in retained:
+            self.assertEqual(self.case.artifacts.read(reference), body)
+
     def test_third_replacement_is_refused(self):
         first, output = self.build_refused()
         for number in (1, 2):

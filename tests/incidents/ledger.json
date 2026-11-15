@@ -5181,7 +5181,8 @@
         "test_research_work_families.WorkFamilyTests.test_shared_doi_between_provider_families_still_requires_matching_authors",
         "test_research_work_families.WorkFamilyTests.test_found_and_version_identifiers_may_be_asserted_by_either_linked_family",
         "test_research_work_families.WorkFamilyTests.test_datacite_doi_and_resolved_arxiv_id_may_be_asserted_by_either_linked_family",
-        "test_research_work_families.WorkFamilyTests.test_different_author_names_membership_or_order_block_doi_links"
+        "test_research_work_families.WorkFamilyTests.test_different_author_names_membership_or_order_block_doi_links",
+        "test_openness_v6_guard.MaterialJourneyTests.test_family_reading_is_cited_bound_planned_and_required"
       ]
     },
     {
@@ -5706,7 +5707,7 @@
       "class": "problem openness finding answer",
       "summary": "Final reviewers honestly reported unresolved openness with decision revise, leaving no recordable finding.",
       "expected": "A v6 final or prompt v7 single-turn answer follows the forecast rule and records unresolved as a complete finding; legacy revise answers remain valid only under their stored earlier contracts.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "further_occurrences": [
         {
@@ -5752,13 +5753,14 @@
       "record": "20261113074000-openness-packet-cannot-deliver-what-its-searches-cite",
       "class": "openness evidence (supporting readings)",
       "summary": "A search claimed a reading of an out-of-scope work but its openness packet delivered no reading record.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "expected": "The v2 export binds exact reading-id citations from the six search text fields and explicit supporting IDs, reports their citing fields, and v6 plans and verifies complete delivery of their supporting reading records. Stored v1 evidence and prompts keep their bytes.",
       "test_kind": "real_shape",
       "tests": [
         "test_openness_supporting_readings.SupportingReadingTests.test_g3_search_export_plan_and_verification_require_the_supporting_reading",
         "test_openness_supporting_readings.SupportingReadingTests.test_each_of_the_six_search_text_fields_binds_and_reports_a_reading",
-        "test_openness_supporting_readings.SupportingReadingTests.test_stored_v1_search_reading_rows_and_prompts_keep_the_released_projection"
+        "test_openness_supporting_readings.SupportingReadingTests.test_stored_v1_search_reading_rows_and_prompts_keep_the_released_projection",
+        "test_openness_v6_guard.MaterialJourneyTests.test_decisive_reading_is_cited_bound_planned_and_required"
       ]
     },
     {
@@ -5766,7 +5768,7 @@
       "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
       "class": "openness reviewer search field guide",
       "summary": "The openness reviewer treated provisional search scope binding as a coverage or reading gap.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "expected": "One table covers every key of real recorded searches and renders one guide line per key in both v6 prompts. The provisional and scope_digest lines explain scope binding independently of coverage and outstanding readings; old prompts stay unchanged.",
       "test_kind": "real_shape",
       "further_occurrences": [
@@ -6653,6 +6655,23 @@
       ],
       "fixed_in": "open",
       "test_kind": "real_shape"
+    },
+    {
+      "id": "refused-output-retry-without-the-refusal",
+      "record": "20261112072628-bar-final-refused-for-part-citation-with-whole-text-offsets",
+      "summary": "A refused final output was retried without its contract diagnosis or the delivered part-relative offsets.",
+      "expected": "The planner executes an authenticated replacement carrying the current refusal, bounded to its route, and reaches a recorded review or the exhausted role handoff. Validator upgrades retain successor finality and every stored request, observation and refusal.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_refusal_replacement_incident.PartOffsetReplacementIncidentTests.test_revision_200_repaired_bar_gets_part_offsets_and_records_in_its_slot",
+        "test_continuity_guard.ContinuityGuardTests.test_stage2_evidence_executes_every_supported_chain_and_requirement",
+        "test_continuity_guard.ContinuityGuardTests.test_g6_executes_the_validator_upgrade_through_a_recorded_second_replacement",
+        "test_review_refusal_replacement.RefusalReplacementTests.test_g6_validator_upgrade_authenticates_second_replacement_and_preserves_every_observation",
+        "test_review_exhaustion_repair.ExhaustionRepairTests.test_result_handoff_has_complete_binding_and_records_without_retirement",
+        "test_continuity_guard.ContinuityGuardTests.test_exhausted_verification_executes_its_fresh_assignment"
+      ],
+      "class": "refused output continuity"
     }
   ]
 }
