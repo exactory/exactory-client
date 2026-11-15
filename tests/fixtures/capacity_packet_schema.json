@@ -22636,7 +22636,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_route_capacity": {
-      "ast_sha256": "81ca16006b426cd62dbbca6b1f2aef93e123addfc076f3b91a99bf531256464e",
+      "ast_sha256": "354226613a09883a2386e2e24535a99711e8b08d14ab5f037af0df1fa7b10cda",
       "functions": {
         "_build_serving_parts": "8f2f7be1d7e1d4cc20fa124af779a48e77d41ab31cb6c7aed1fe3ed6a3de3afe",
         "_build_serving_repair": "c50aaef3ccfcccf6064f9a4cdaa0a0f52111886dd9b185936b6d1e5a38ab47ca",
@@ -22704,7 +22704,7 @@
         "merge_profile_rows": "be408c3437ff8b29f6436f534c5c9d273232ad182c39cc7068eb587fb2648b3b",
         "pack_profile_prior": "cf2f899f6e103c3086dc749c6ad02492e7cb9d493c94d904c9e468847b82f22d",
         "plan_capacity_recovery": "3410862b70e8e3391102986923ceee2711b015c54c7554c4d74f1d9faf8156b6",
-        "plan_chain_capacity": "f13a609a9a039dbf79a6e738777a4d6404e7b31e9f1ca624d7385b5df112846e",
+        "plan_chain_capacity": "f3384ef95893f40acb168714a2c8f38c84fb181abcaec1a8e704414c5011e99d",
         "prepare_assignment_capacity": "d96b0bdd7a9f87cad83917d10e304e7df2624b649a774c234da7d6d79b0c9b46",
         "qualifies_for_output_profile": "0b6dc9c47e30814e0677cf564d8471f1242e0b88c51e852b32df6b03846c08fd",
         "read_chain_capacity_plan": "bf38987008e1c94cba95973349a93c3130505138d155212b78db7f5650e32bb3",

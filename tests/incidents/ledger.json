@@ -7193,6 +7193,32 @@
         "test_series_rows_close_closing.ClosingConditionTests.test_actual_planner_built_payload_checks_keep_payload_before_form",
         "test_openness_final_turn.AlternateRepresentationTests.test_an_omitted_alternate_representation_is_not_a_reading_unit"
       ]
+    },
+    {
+      "id": "field-classes-bound-cited-search-frame",
+      "record": "20261112150500-result-review-frame-holds-cited-search-records",
+      "class": "role field ownership and bounded frame",
+      "summary": "Cited search records and their captured responses could remain in a result frame above route capacity.",
+      "expected": "Every packet field has an inherited class. A 7.5 million character cited-search shape leaves a bounded frame and exact deterministic units; lowered fixed allocations retain bounded descriptors.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_field_classes.FieldClassTests.test_cited_search_incident_has_no_body_left_outside_the_units",
+        "test_review_field_classes.FieldClassTests.test_a_lowered_fixed_field_keeps_its_descriptor_and_exact_unit"
+      ]
+    },
+    {
+      "id": "field-classes-bound-forming-import-frame",
+      "record": "20261112012956-slate-review-cannot-carry-a-forming-import",
+      "class": "slate field ownership and bounded frame",
+      "summary": "A slate with imported forming records and their artifact bodies could require a 28.6 million character request.",
+      "expected": "Forming-import entries and artifact bodies have unit rules, their frame carries bounded counts, and all original characters remain in stable unit rows without changing the frozen builder packet.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_field_classes.FieldClassTests.test_forming_import_incident_accounts_for_twenty_eight_million_characters",
+        "test_review_field_classes.FieldClassTests.test_builder_packets_keep_the_base_fixture_digests_after_classification"
+      ]
     }
   ]
 }
