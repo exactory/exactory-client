@@ -7296,6 +7296,34 @@
         "test_review_parts_v3_budget.SeriesSimulationTests.test_scoped_max_prior_series_uses_every_allowance_and_finishes",
         "test_review_parts_v3_budget.SeriesSimulationTests.test_unlisted_model_series_uses_every_allowance_and_finishes"
       ]
+    },
+    {
+      "id": "session-v4-bounded-record-after-output-cap",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "bounded session state foundation under a stored plan",
+      "summary": "A replayed source session grew across turns while an effort-max reviewer exceeded its output cap.",
+      "expected": "The v4 state foundation keeps authenticated history behind a digest and carries only bounded latest notes, allowance rows and pending requests. Request notes respect the selected answer bound and all pending rows have reserved serialized room. Reviewer-call recovery and final integration belong to the session-turn units.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_record.SessionRecordTests.test_three_large_source_turns_on_max_keep_only_current_notes_and_bounded_rows",
+        "test_review_session_v4_record.SessionRecordTests.test_forty_source_turns_carry_no_history_rows",
+        "test_review_session_v4_record.SessionRecordTests.test_pending_request_rows_fit_the_carried_reserve_and_oversized_rows_stay_diagnostic",
+        "test_review_session_v4_record.SessionPlanTests.test_each_request_level_keeps_notes_excerpts_and_request_reserve_within_its_answer_bound"
+      ]
+    },
+    {
+      "id": "session-v4-record-keeps-earlier-delivered-excerpts",
+      "record": "20261111235418-bar-final-refused-for-text-delivered-in-reduced-history",
+      "class": "authenticated session history independent of current input",
+      "summary": "A final lost citation credit when a reduced request no longer carried text delivered in an earlier source turn.",
+      "expected": "Rebuilding v4 state from authenticated observations deterministically retains accepted excerpts with unit offsets and span digests. A request carries the delivered-source count without source rows, and final-entry selection can still return the earliest excerpt. Final authentication belongs to the session-turn unit.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_record.SessionRecordTests.test_same_authenticated_turns_rebuild_the_same_state_digest",
+        "test_review_session_v4_record.SessionRecordTests.test_thousand_delivered_sources_are_one_count_and_final_still_retains_early_excerpt"
+      ]
     }
   ]
 }

@@ -1772,7 +1772,7 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
     text_room = limits['input_text_characters']['value']
     handles = [row if isinstance(row, str) else row['handle'] for row in targets]
     inventory_summary = _summarize_capacity_inventory(inventory)
-    # A reading request carries the latest notes and every allowance row, even before entries exist.
+    # A reading or session request carries the latest notes and allowance rows before entries exist.
     maximum_rows = []
     for handle, target in zip(handles, targets):
         counts = target if isinstance(target, dict) else {}
@@ -1785,7 +1785,7 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
     rooms = {}
     for kind, fields in frames.items():
         floor = describe_material_levels(kind)[-1]
-        carried_minimum = carried_bound if kind in ('reading', 'read') else 0
+        carried_minimum = carried_bound if kind in ('reading', 'read', 'request') else 0
         bound = min(sum(fields.values()), FRAME_MAXIMUM_CHARACTERS,
                     text_room - BOUNDED_NOTICE_CHARACTERS - floor - carried_minimum)
         if bound < 0:
@@ -1868,7 +1868,7 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
     card_budget = max(0, pool - card_reserve - late_reserve)
     tasks = {}
     for kind, value in frame.items():
-        carried_characters = notes + allowance_rows if kind in ('reading', 'read') else 0
+        carried_characters = notes + allowance_rows if kind in ('reading', 'read', 'request') else 0
         selected = select_task_limits(route, profile, kind, targets=len(handles),
             frame_characters=value['bound'] + BOUNDED_NOTICE_CHARACTERS,
             carried_characters=carried_characters, calibrated=limits['request_measure'] == 'calibrated', text_room=text_room)
