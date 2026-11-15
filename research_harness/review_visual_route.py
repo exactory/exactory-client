@@ -73,12 +73,14 @@ def validate_lineage_bridge(records, artifacts, child, parent):
     from .evaluation import Evaluation
     artifacts = Evaluation.of(records, artifacts)
     packet = json.loads(artifacts.read(child['packet']))
-    # Later probes govern current qualification without rewriting this origin.
+    # Later observations govern current qualification without rewriting this origin.
     # Keep this filtered view stable only within the caller's immutable snapshot.
     origin = artifacts.once(('review_visual_bridge_origin', child['id'], child['recorded_revision']),
-        lambda: Evaluation.of(dict(records, review_route_probe={key: probe
-            for key, probe in records.get('review_route_probe', {}).items()
-            if probe['recorded_revision'] < child['recorded_revision']}), artifacts))
+        lambda: Evaluation.of(dict(records, **{kind: {key: row for key, row in records.get(kind, {}).items()
+            if row['recorded_revision'] < child['recorded_revision']} for kind in (
+                'review_assignment', 'review_invocation', 'review_attempt', 'review_context_event',
+                'review_probe_invocation', 'review_route_probe', 'review_output_refusal',
+                'review_output_correction_invocation', 'review_output_correction')}), artifacts))
     expected = validate_transition(origin.records, origin, parent, records['review_route'][child['route_id']],
         {'packet': packet, 'history': child['history'], 'reviewer_id': child['reviewer_id'],
          'author_id': child['author_id'], 'slot_id': child['slot_id'], 'subject': child['subject'], 'role': child['role']})

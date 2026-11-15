@@ -2,6 +2,20 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "visual-bridge-origin-precedes-later-slot-repair",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "stored visual route origin and current slot selection",
+      "summary": "Current reviewer replacements and contamination made a previously authenticated native image route transition fail its historical origin check.",
+      "expected": "Origin validation uses review observations before the route-changing assignment, while later probes, contamination and replacements still govern current qualification. The stored packet and request stay byte-for-byte equal.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_visual_bridge_origin.VisualBridgeOriginTests.test_later_predecessor_contamination_keeps_the_recorded_bridge_verifiable",
+        "test_review_output_correction_visual.VisualCorrectionTests.test_original_visual_delivery_and_negative_science_survive_observed_text_delta",
+        "test_visual_bridge_origin.VisualBridgeOriginTests.test_unrelated_execution_plan_without_revision_does_not_change_the_bridge"
+      ]
+    },
+    {
       "id": "capacity-task-size-keeps-route-effort",
       "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
       "class": "output capacity recovery at pinned task levels",

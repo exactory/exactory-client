@@ -325,8 +325,10 @@ class HistoricalAdmissionTests(unittest.TestCase):
                         case.input_limit)
         with self.assertRaises(ResearchError) as caught:
             case.invoke('turn-1', case.build_reading_response(case.read_packet('turn-1')))
-        self.assertEqual(caught.exception.code, 'review_input_too_large')
+        self.assertEqual(caught.exception.code, 'review_chain_projection_over_limit')
         self.assertEqual(caught.exception.details['phase'], 'final_preflight')
+        self.assertEqual(caught.exception.details['reason'], 'no_enforceable_bound')
+        self.assertFalse(caught.exception.details['projection']['finite'])
         records = case.store.snapshot()['records']
         self.assertFalse(records.get('review_invocation'))
         self.assertEqual(protocol.build_assignment_request(records, case.artifacts, assignment), request)

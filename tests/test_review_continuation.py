@@ -266,6 +266,10 @@ class ContinuationTests(unittest.TestCase):
         fixture = NativePartsTests()
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        # This row exercises a single native request, below D1's task entry.
+        body = fixture.artifacts.put(b'A short exact argument.', 'text/plain')
+        fixture.native['evidence'] = [dict(kind='artifact', digest=body['sha256'], artifact=body)]
+        fixture.reference = fixture.artifacts.put(json.dumps(fixture.native).encode(), 'application/json')
         assignment = fixture.assign()
         self.assertNotIn('review_parts', assignment)
         for identifier in ('native-refused-1', 'native-refused-2'):

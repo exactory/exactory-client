@@ -77,6 +77,35 @@ class VisualBridgeOriginTests(unittest.TestCase):
                 self.validate(changed, child)
         self.assertLess(original['recorded_revision'], self.child['recorded_revision'])
 
+    def test_later_predecessor_contamination_keeps_the_recorded_bridge_verifiable(self):
+        packet = self.artifacts.read(self.child['packet'])
+        request = protocol.build_assignment_request(self.case.read_records(), self.artifacts, self.child)
+        self.case.mutate(protocol.record_context_event, dict(id='later-parent-contamination',
+            assignment_id=self.parent['id'], kind='contamination', source='author_history',
+            reason='Author input was observed after the native route transition.',
+            evidence=[self.case.supporting]))
+        records = self.case.read_records()
+        self.assertFalse(protocol.assignment_state(records, self.artifacts, self.parent['id'])['ready'])
+        self.validate(records)
+        self.assertEqual(self.artifacts.read(self.child['packet']), packet)
+        self.assertEqual(protocol.build_assignment_request(records, self.artifacts, self.child), request)
+
+    def test_unrelated_execution_plan_without_revision_does_not_change_the_bridge(self):
+        from test_review_task_execution import TaskExecutionFixture
+        from research_harness import review_task_execution as execution
+        tasks = TaskExecutionFixture()
+        tasks.setUp()
+        self.addCleanup(tasks.doCleanups)
+        execution.plan_task(tasks.store, tasks.payload(), request_id='plan')
+        plans = tasks.store.snapshot()['records']['review_execution_plan']
+        self.assertTrue(plans)
+        self.assertTrue(all('recorded_revision' not in row for row in plans.values()))
+        self.case.mutate(protocol.record_context_event, dict(id='later-parent-input-with-plan',
+            assignment_id=self.parent['id'], kind='contamination', source='author_history',
+            reason='Later author input does not change the earlier native transition.',
+            evidence=[self.case.supporting]))
+        self.validate(dict(self.case.read_records(), review_execution_plan=plans))
+
 
 if __name__ == '__main__':
     unittest.main()
