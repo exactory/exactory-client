@@ -57,6 +57,9 @@
         ],
         "research_harness/workspace.py:read_file#1": [
           "content"
+        ],
+        "research_harness/review_composition.py:_PacketArtifacts.read#1": [
+          "content"
         ]
       },
       "review_answer_recovery_invalid": {

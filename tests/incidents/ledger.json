@@ -7232,6 +7232,22 @@
         "test_review_composite.CompositeFinalTests.test_three_pages_record_authenticate_and_read_final",
         "test_review_composite.CompositeFinalTests.test_condition_3_refuses_overlapping_targets"
       ]
+    },
+    {
+      "id": "final-page-composition-has-complete-owners-and-bounded-decision-rows",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "review-capacity",
+      "summary": "A reading chain could not give its finding after its final grew beyond the route input limit.",
+      "expected": "Pure role rules split stored final outputs into target pages and a closing answer, recompose identical digests, refuse page fields under their role checks and bound every decision row.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_composition.FinalCompositionRuleTests.test_every_rule_round_trips_stored_real_shape_outputs_and_digests",
+        "test_review_composition.FinalCompositionRuleTests.test_guard2_removing_any_owner_fails",
+        "test_review_composition.FinalCompositionRuleTests.test_guard2_duplicating_any_owner_fails",
+        "test_review_composition.FindingFinalCompositionTests.test_incident_five_thousand_decision_rows_fit_serialized_policy_limit",
+        "test_review_composition.FindingFinalCompositionTests.test_unresolved_ground_order_and_recorded_refs_are_preserved"
+      ]
     }
   ]
 }
