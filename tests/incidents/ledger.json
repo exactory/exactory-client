@@ -5204,6 +5204,20 @@
       ]
     },
     {
+      "id": "final-texts-leave-warning-assertion-and-source-certificates-stale",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "final text integration",
+      "summary": "The reviewed 0.90.0 texts removed a protocol label that G2 asserted and changed certified source ASTs; a new prompt lookup dictionary also introduced an undeclared literal key.",
+      "expected": "G2 checks that the accepted export warns that both resolved outcomes are blocked and only an unresolved finding can be recorded, with the same refusal code and forecast. Refresh source certificates only after reviewing their text changes. A changed declaration remains reported until it has its own declaration review.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_minimum_assessment.MinimumAssessmentTests.test_g2_incident_shape_refuses_without_writes_and_accepts_with_identical_warning",
+        "test_capacity_packet_inventory.ProductionPacketInventoryTests.test_current_production_sources_have_reviewed_closed_inventory",
+        "test_capacity_packet_inventory.ProductionPacketInventoryTests.test_reviewed_production_member_passes_only_with_complete_declaration"
+      ]
+    },
+    {
       "id": "openness-invalid-finding-keeps-refusal-over-changed-records",
       "record": "20261113110022-every-open-record-and-review-capacity",
       "class": "openness finding refusal recovery",

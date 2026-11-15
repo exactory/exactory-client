@@ -310,7 +310,11 @@ class MinimumAssessmentTests(ProblemCase):
         result = problem_openness.export_openness(self.store, spec, destination, accept_gaps=True)
         self.assertEqual(result["audit_forecast"], forecast)
         self.assertEqual(result["warnings"][0]["details"], forecast)
-        self.assertIn("v6", result["warnings"][0]["message"])
+        warning = result["warnings"][0]
+        self.assertEqual(warning["code"], caught.exception.code)
+        for outcome in forecast["outcomes"]:
+            self.assertIn(outcome, warning["message"])
+        self.assertIn("can record only an unresolved finding", warning["message"])
         packet = json.loads(self.artifacts.read(result["native_packet"]))
         self.assertNotIn("accept_gaps", json.dumps(packet))
         self.assertEqual(set(packet["scientific_context"]), {"openness_minimum", "minimum_gaps",
