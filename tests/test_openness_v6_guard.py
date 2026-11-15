@@ -193,14 +193,15 @@ class MaterialJourneyTests(OpennessReadingCase):
                 with self.assertRaises(ResearchError) as caught:
                     reading.verify_chain(records, self.artifacts, assignment)
             self.assertEqual(caught.exception.code, 'openness_reading_incomplete')
-        # R17 and R18 are supplied by the concurrent family-fixes lane.
+        # R17: the found work is decisive. R18: each delivered text of the read version names, in family_of,
+        # the sorted found records that it stands for.
         if family:
             with self.subTest(requirement='R17'):
                 self.assertIn(found, native['scientific_context']['decisive_work_ids'])
             with self.subTest(requirement='R18'):
                 texts = [row for row in deliveries if row['kind'] == 'fulltext' and row['version_id'] == version]
                 self.assertTrue(texts)
-                self.assertTrue(all(row.get('family_of') == found for row in texts))
+                self.assertTrue(all(row.get('family_of') == [found] for row in texts))
 
     def test_decisive_reading_is_cited_bound_planned_and_required(self):
         self.run_reading_material()
