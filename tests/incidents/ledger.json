@@ -5152,7 +5152,7 @@
       "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
       "class": "openness evidence (work-family relation)",
       "summary": "Versionless citation-list hits and registry records need an explicit link to a read exact version of the work.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "expected": "The R15 relation links versionless arXiv, registered DataCite DOI and shared DOI records under the two-family and author guards. The version 2 builder binds the latest completely read linked version or the valid explicit choice, includes its readings and text, and reports the link and whether authors were compared. A supported_open finding over that exported minimum passes audit; invalid links and unpinned readings remain gaps. New family text plans deliver family_of and the found work is eligible for a source_settles ground. A decisive work without its own or a family reading still fails decisive_work. Stored family-chain packets, prompts and requests keep their digests. Version 1 keeps exact-work coverage.",
       "test_kind": "real_shape",
       "tests": [
@@ -6662,7 +6662,7 @@
       "class": "reading continuity by authenticated range",
       "summary": "New exports repeated unchanged full texts and searches after an earlier chain stopped.",
       "expected": "A stored v7 selection credits unchanged delivered ranges and completed original searches from eligible v5/v6 prefixes. Changed sources affect notes and exclude their entries; later chains do not alter stored selections. First-assignment integration is a separate lane.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.0",
       "test_kind": "real_shape",
       "tests": [
         "test_openness_carried.AcceptanceSelectionTests.test_g8_incident_29_texts_ten_searches_then_ten_more_and_minimum_v2",
@@ -6715,7 +6715,7 @@
       "class": "review-continuity",
       "summary": "A v7 final returned an earlier decision/objections/reason contract; refused reading and final positions need frozen-notice replacements, while an exhausted or oversized chain needs an admitted successor.",
       "expected": "Replace at the same position and reviewer: reading material pays the notice charge with its floor, while a one-request final retains its material level and uses the stored notice reserve. A reduced-level capacity replacement preserves its material and frozen notice, records the level and actual notice size, and authenticates historically. Planned notices obey route wire bounds; no-plan notices keep their earlier bytes, acceptance and errors. The final frame independently bounds its allowance rows, page and remaining envelope. Record and verify the corrected finding without rewriting history. Exhausted and input-limited chains export only to an admitted v7 or v6 successor, or stop with executable answers while preserving verified history.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.0",
       "test_kind": "real_shape",
       "tests": [
         "test_openness_reading_v7_refusal.V7RefusalTests.test_a7_refused_old_contract_final_replaces_authenticates_and_records",
@@ -6750,7 +6750,7 @@
       "class": "reading continuity after provider refusal",
       "summary": "A provider safeguard stop at one reading position ended the chain and repeated completed readings on the next export.",
       "expected": "After the last floor sequence, admit an unresolved final over the authenticated complete unread set; page all ranges and attempts in fixed order, preserve refusal replacements, and carry completed readings into later exports.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.0",
       "test_kind": "real_shape",
       "tests": [
         "test_openness_unread_final.UnreadFinalTests.test_g1_k7_provider_refused_reaches_recorded_unresolved_and_record_check",
@@ -6784,7 +6784,7 @@
       "class": "v7 size recovery",
       "summary": "A v7 reading response body limit retried the same task and stopped before smaller levels, while plain and compacted input limits at reading and final floors restarted the same route through a new export.",
       "expected": "Response limits visit the next smaller pinned reading level on the same route and effort before the floor decision. Input limits retain that size decision and its executable answers at the floor, preserving verified turns; legacy input and v7 denser-ratio successor admissions remain available.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.0",
       "test_kind": "real_shape",
       "tests": [
         "test_review_failure_class.V7SizeRecoveryTests.test_response_limit_visits_each_smaller_reading_level_before_stopping",
@@ -6797,7 +6797,7 @@
       "class": "unread final capacity",
       "summary": "A refused final with full retained entries placed the unread member and refusal notice in the same reserve.",
       "expected": "Reserve the required unread core in the final frame, then charge rows and pending pages only against free material room and the reserve left by the wire notice; retain and authenticate the complete unread set.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.0",
       "test_kind": "real_shape",
       "tests": [
         "test_openness_unread_final.UnreadNoticeReplacementTests.test_u_t1_short_and_long_refused_full_unread_final_replace_and_record_the_complete_set",
@@ -7062,7 +7062,7 @@
       "class": "reading-capacity-replacement",
       "summary": "The planner exhausts its output-cap attempt allowance at 60000 characters while the stored reading ladder still has levels of 30000 and 15000.",
       "expected": "The planner executes every lower material level at the same route and effort before applying the floor decision.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.0",
       "test_kind": "real_shape",
       "tests": [
         "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_output_cap_at_every_level_reaches_the_floor_before_decision",
@@ -7075,7 +7075,7 @@
       "class": "reading-route-admission",
       "summary": "A text-only problem reading chain on codex_cli_visual_v1 is rejected as a native visual problem-result assignment before v7 admission. The visual request builder also raises review_visual_input_mismatch for admitted scaled reading packets.",
       "expected": "On 0.91.0 a visual v7 reading stops before any request and its declared decision registers and probes a text route of the same model, then exports, checks and records a first assignment there. Native visual text turns belong to the 0.93.0 transport release.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.0",
       "test_kind": "real_shape",
       "tests": [
         "test_route_capacity_properties.ReadingCapacityCommandTests.test_every_adapter_and_profile_class_executes_a_finding_or_declared_stop",
@@ -7092,7 +7092,7 @@
       "class": "reading-final-refusal-capacity",
       "summary": "A refused final at a non-floor level loses earlier note fill when its notice is subtracted from material instead of charged to the plan reserve.",
       "expected": "Ruling 39 keeps all six final material fields at the same level, charges the notice to its reserve, and reaches a recorded finding without changing earlier records.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.0",
       "test_kind": "real_shape",
       "tests": [
         "test_route_capacity_properties.ReadingCapacityCommandTests.test_ruling39_a_refused_full_final_keeps_its_level_material_and_records"
@@ -7104,7 +7104,7 @@
       "class": "reading-packet-currency",
       "summary": "A newly recorded material search makes a v7 packet stale after its first reading, but the planner still continues the old native packet.",
       "expected": "The v7 planner gives the export handoff, the new chain inherits the measured ratio and verified ranges, and the successor records its finding.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.0",
       "test_kind": "real_shape",
       "tests": [
         "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_new_search_and_twenty_percent_denser_measurement_export_then_record",
@@ -7117,7 +7117,7 @@
       "class": "scoped-review-preparation",
       "summary": "The unread-final replacement lookup read all assignment membership and invalidated an ordinary bar preparation after an unrelated assignment was added.",
       "expected": "Bind only assignments whose context.unread.assignment_id names the origin; unrelated assignments preserve preparation and a newly inserted successor for that origin invalidates it.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.0",
       "test_kind": "real_shape",
       "tests": [
         "test_review_scoped_preparation_v2.ScopedPreparationTests.test_bar_assignment_and_invocation_ignore_other_assignment_groups",
@@ -7130,7 +7130,7 @@
       "class": "closed-packet-inventory",
       "summary": "The 0.91.0 integration omitted carried/successor source declarations and retained certificates from before v7 dispatch; the concurrent guard schema also predated the final gap and affected-note shapes.",
       "expected": "Declare both source modules, retain the closed current v7 shapes and both v6/v7 evidence sets, and review source and call differences before certifying them.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.0",
       "test_kind": "real_shape",
       "tests": [
         "test_capacity_packet_inventory.ProductionPacketInventoryTests.test_reviewed_production_member_passes_only_with_complete_declaration",
@@ -7147,7 +7147,7 @@
       "class": "series-guard-integration",
       "summary": "The merged series guard retained the call inventory and entry membership expectations from before v7 refusal-turn integration.",
       "expected": "Pin the position-context reader used by series diagnostics and combine the original entry evidence with its separately reviewed capture-interval addition; all entry refusals keep their executable decision.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.0",
       "test_kind": "real_shape",
       "tests": [
         "test_series_ending.SeriesEndingTests.test_phase_call_inventory_covers_the_driver_and_ending",
