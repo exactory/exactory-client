@@ -79,28 +79,28 @@ class ManagedStrategy:
     def review(self, dossier, reviewer, stage, identifier, bars):
         assignment_id = identifier + '-assignment'
         route_id = self.ensure_route()
-        from visual_capacity_fixtures import install_bounded_binary_backend
-        install_bounded_binary_backend(self.case, [self.records()['review_route'][route_id]])
-        self.mutate(review_protocol.record_assignment, {'id': assignment_id, 'route_id': route_id,
-            'dossier_id': dossier['id'], 'role': stage, 'reviewer_id': reviewer,
-            'author_id': 'fixture-author', 'context': {}})
-        packet = json.loads(self.artifacts.read(self.records()['review_assignment'][assignment_id]['packet']))
-        value = StrategyCase.review_response(self, stage)
-        value['value'].update(bar_ids=bars, consequence='Establish and preserve the stated finite fixture result.',
-            reason='The authored fixture tests the supported finite claim and its actual observed execution.')
-        if stage != 'bar':
-            value['value']['work_items'] = [{'id': identifier, 'classification': self.records()['research_work_item'][identifier]['payload']['classification'],
-                'status': 'accepted', 'reason': 'The retained request is assessed against the fixed finite objective.',
-                'evidence': [self.evidence]} for identifier in dossier['payload']['work_items']]
-        if stage == 'result':
-            support = self.case.review(self.case.execution_payload, identifier='support-' + identifier)
-            support['assessor'] = packet['assessor']
-            value['support'] = support
-        with patch('research_harness.review_transport.send_request', return_value=provider_response(value)):
-            review_protocol.invoke_assignment(self.store, {'id': identifier + '-attempt', 'assignment_id': assignment_id},
-                expected_revision=self.store.revision, request_id=identifier + '-invoke', credential='fixture-only')
-        return self.mutate(research_decisions.record_value_review,
-            dict(value, id=identifier, dossier_id=dossier['id'], assignment_id=assignment_id))
+        from visual_capacity_fixtures import patch_bounded_binary_backend
+        with patch_bounded_binary_backend([self.records()['review_route'][route_id]]):
+            self.mutate(review_protocol.record_assignment, {'id': assignment_id, 'route_id': route_id,
+                'dossier_id': dossier['id'], 'role': stage, 'reviewer_id': reviewer,
+                'author_id': 'fixture-author', 'context': {}})
+            packet = json.loads(self.artifacts.read(self.records()['review_assignment'][assignment_id]['packet']))
+            value = StrategyCase.review_response(self, stage)
+            value['value'].update(bar_ids=bars, consequence='Establish and preserve the stated finite fixture result.',
+                reason='The authored fixture tests the supported finite claim and its actual observed execution.')
+            if stage != 'bar':
+                value['value']['work_items'] = [{'id': identifier, 'classification': self.records()['research_work_item'][identifier]['payload']['classification'],
+                    'status': 'accepted', 'reason': 'The retained request is assessed against the fixed finite objective.',
+                    'evidence': [self.evidence]} for identifier in dossier['payload']['work_items']]
+            if stage == 'result':
+                support = self.case.review(self.case.execution_payload, identifier='support-' + identifier)
+                support['assessor'] = packet['assessor']
+                value['support'] = support
+            with patch('research_harness.review_transport.send_request', return_value=provider_response(value)):
+                review_protocol.invoke_assignment(self.store, {'id': identifier + '-attempt', 'assignment_id': assignment_id},
+                    expected_revision=self.store.revision, request_id=identifier + '-invoke', credential='fixture-only')
+            return self.mutate(research_decisions.record_value_review,
+                dict(value, id=identifier, dossier_id=dossier['id'], assignment_id=assignment_id))
 
     def decide(self, *, phase='prospective', plan=None, bundle=None):
         if phase == 'prospective':

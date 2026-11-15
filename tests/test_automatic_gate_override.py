@@ -1012,6 +1012,8 @@ class AutomaticStudyPassTests(DevelopmentCase):
             claim_evidence=[dict(claim_id="bound", evidence=[self.result_evidence(self.execution_payload)])],
             citation_accounting=account_fixture_citations(self)))["result"]
         self.mutate(integration.update_study, {"stage": "evaluate"})
+        from visual_capacity_fixtures import install_bounded_binary_backend
+        install_bounded_binary_backend(self, [self.store.snapshot()["records"]["review_route"]["managed-fixture-route"]])
         self.mutate(review_protocol.record_assignment, dict(id="blocked-manuscript", route_id="managed-fixture-route",
             dossier_id=None, role="manuscript", reviewer_id="blocked-manuscript-reader", author_id="cycle-author",
             context=dict(bundle=bundle)))

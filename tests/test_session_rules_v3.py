@@ -87,8 +87,15 @@ class SessionRulesTests(ExcerptSessionCase):
 
     def test_result_support_source_citations_require_v3_delivery_without_changing_v2(self):
         case = study_fixtures.ReadinessPartsTests()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
+        from research_harness import review_route_capacity as capacity
+        from test_review_output_profile import build_row
+        # This test compares source citation rules in ordinary single reviews.
+        row = dict(build_row(level=None, kind='single', thinking=1), largest_output_tokens=12)
+        profile = patch.object(capacity, 'read_profile_priors', return_value=[row])
+        profile.start()
+        self.addCleanup(profile.stop)
         version = case.case.metadata(91)
         case.case.capture(version, pdf_text='A held source that neither result reviewer received.')
         capture = case.records()['work'][version]['fulltexts'][0]

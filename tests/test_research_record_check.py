@@ -123,8 +123,8 @@ class RecordIntegrityTests(unittest.TestCase):
 class RecordCheckTests(unittest.TestCase):
     def setUp(self):
         self.case = fixtures.ProblemReviewTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.case.prepare_review_route()
         self.case.supporting = self.case.artifacts.put(b'A synthetic field standard.', 'text/plain')
         with patch.object(bar_sources, 'SESSION_PROTOCOL', getattr(self, 'source_rules_protocol', bar_sources.SESSION_PROTOCOL)):
@@ -249,8 +249,8 @@ class RecordCheckTests(unittest.TestCase):
         from codex_route_fixtures import record_codex_route, limit_codex_input
         import test_research_review_protocol as protocol_fixtures
         case = protocol_fixtures.ReviewProtocolTests()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         record_codex_route(case)
         assignment = case.assign()['result']
         packet = protocol._read_json(case.artifacts, assignment['packet'])
@@ -651,8 +651,8 @@ class RecordCheckTests(unittest.TestCase):
     def test_fingerprint_matches_0724_on_the_same_snapshot(self):
         legacy = RecordCheckTests()
         legacy.source_rules_protocol = bar_sources.PROTOCOL
-        legacy.setUp()
         self.addCleanup(legacy.doCleanups)
+        legacy.setUp()
         legacy.observe()
         from research_harness.record_check import copy_snapshot
         with tempfile.TemporaryDirectory() as directory:
@@ -968,8 +968,8 @@ class RecordCheckFollowupTests(unittest.TestCase):
     def build_openness_case(self):
         from openness_reading_fixtures import OpennessReadingCase
         case = OpennessReadingCase()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         return case
 
     def test_native_packet_without_inline_native_field_can_be_annotated(self):
