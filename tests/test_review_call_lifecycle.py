@@ -22,7 +22,8 @@ from research_harness import review_codex_transport as codex
 from research_harness.storage import Store
 root, command, payload, mode = Path(sys.argv[1]), sys.argv[2], json.loads(sys.argv[3]), sys.argv[4]
 store = Store(root)
-codex.runtime = lambda: {'adapter':'codex_cli_v1','fixture':'reviewer-excerpt-test'}
+runtime = json.loads(sys.argv[5])
+codex.runtime = lambda: runtime
 codex.NATIVE_DECLARATIONS = ()
 codex.NATIVE_DECLARATION_SETS = {()}
 def observe(*args):
@@ -67,8 +68,10 @@ class PublicCallLifecycleTests(ResultPartsCase):
         self.assertTrue(path.exists(), str(path))
 
     def launch(self, command, payload, mode='die'):
+        runtime = self.case.read_records()['review_route']['route']['runtime']
         process = subprocess.Popen([sys.executable, '-c', _PROGRAM, str(self.case.root), command,
-                                    json.dumps(payload), mode], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                    json.dumps(payload), mode, json.dumps(runtime)],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         def cleanup():
             if process.poll() is None:
                 process.kill()
