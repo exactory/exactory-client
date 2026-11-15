@@ -17741,7 +17741,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.openness_reading": {
-      "ast_sha256": "1a077adc46b97b5f0ba44185fbbe7443d6528a1b62b785578bcf7927b2c62028",
+      "ast_sha256": "4e58a52cf290350aa5cede9c7dc066978fef4dffacaef28aebbd1bf9c20ac4f2",
       "functions": {
         "_add_source": "bf750a7009979c804b515fe2fa49795c9649ea87dcafa53f80cef1045aeb2340",
         "_assemble_reading_turn": "9c44a6537d6d1fae1af0dc44b726cd7059da1ee593c0d2f800617c0c1655160a",
@@ -17812,7 +17812,7 @@
         "list_math_response_rows": "4f8b959451ea11c31489ecf3551bcc949226eb8478bb228281119ca34f158131",
         "list_math_text_rows": "e6a05f2c283924c780afc4ef20ce64b13f22194f10d548336c7224b659886fc1",
         "list_reading_rows": "06d463821e8dfe61ca6cfa8242764c9aaf232ccdca64369c4c47154851a27b0e",
-        "list_reading_texts": "763b082e16866673833fd3f154ebaf672a00df3f1dad6bd15cca94498150782d",
+        "list_reading_texts": "c5c95f2d52307d8125172c1cfdc2cbc45d04ea29b834824a40ad1068a52f54ef",
         "list_reading_units": "ac46d224706201e6825607ee1dca2b5197245a19538564dfa1b5cd66ea8d9471",
         "list_record_rows": "8aaa88db71248768ec7fba8b558ce77eb98160867f34816d4fcc3ac958aa75d4",
         "list_result_texts": "216f7f98136359c12f39212164e93786615bc5e5ff0f1cad08ad45da9bdc5778",
@@ -18749,7 +18749,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.problem_openness": {
-      "ast_sha256": "d18ddb84de8a07a8a721986ab7c8472649db62cc47f33b6bf971cb78e5ed4dfe",
+      "ast_sha256": "88e10b5600c058fdb8d3e7ac4178b2f0fe1182a63c7872ee341bc37d849b15e8",
       "functions": {
         "_is_utf8": "802384d729df9c710bdc631eac4e0a7c325b5239cf38258e5f37412a5cae902c",
         "assess_openness": "7b066abf8c21d4f02ac737e7c79d8ebdc7f182bd680d65be0d7ef6a2281fd714",
@@ -18759,7 +18759,7 @@
         "collect_reading_artifacts": "b63b0f429513e0f895d968c72f40969a2724732715e006454e340a98c4cd772b",
         "describe_family_readings": "ad0295317f9f534de6ac57d08a2d0c8d074afa1f922228a1cecd6858b286f7df",
         "describe_gap_fact": "23dcb18ade44f5a8d2fdfc01d68d1484828e68884d61bff384b46f47c7ddf298",
-        "export_openness": "4ebce391866487e34fdd24e9d6bbc66f90ece985e1641ba2523445775db141ec",
+        "export_openness": "059b7ec53c5702791a1618a8bdb388dfefb72e4cbac8f90f3de06fb026660f1d",
         "list_reading_citations": "1e10edb49b268265b79893763303217b089a037928712089e634bd7c4eeb086b",
         "prepare_openness": "51eb386834b7edef773cd288b45d8322cc791c864039a94b41090228ecc6ddd4",
         "serialize_record": "f7243934e28cc8ee92a7c6af903b9056bd8864249cf01df9d8466a5a00442d69"
@@ -36558,6 +36558,10 @@
     "canonical:correction_reference_records": {
       "builder": "research_harness.review_output_correction.prepare_packet",
       "test": "test_capacity_packet_inventory.QuantityFactoryTests.test_correction_record_and_source_references_use_real_eligible_builder"
+    },
+    "canonical:family_reading_plans": {
+      "builder": "research_harness.openness_reading._assemble_reading_turn",
+      "test": "tests.test_capacity_packet_inventory.QuantityFactoryTests.test_shipped_properties_execute_scaled_upstream_factories_and_gaps_are_explicit"
     },
     "canonical:stage2_native_records": {
       "builder": "research_harness.review_protocol.build_packet",
@@ -80130,6 +80134,11 @@
       "builder": "research_harness.review_output_correction.prepare_packet",
       "input": "Real held synthetic problem-value and account records, actual acquired/full-read source bytes, prospective repair assignment, two authenticated instrumented native refusals, then the actual eligible correction builder. Synthetic provider probe observations supply construction room; the separately keyed stage1 allowance sizes the upstream stress input, not a claim that this complete correction is admitted there."
     },
+    "family_reading_plans": {
+      "builder": "research_harness.openness_reading._assemble_reading_turn",
+      "input": "Scale bound found work ids upstream of list_reading_texts and emit each physical plan position.",
+      "multiple_values": true
+    },
     "stage2_native_records": {
       "builder": "research_harness.review_protocol.build_packet",
       "scale_quantities": {
@@ -91713,6 +91722,13 @@
                       },
                       "sample": "x"
                     },
+                    "family_reading_plan_version": {
+                      "bound": {
+                        "value": 1
+                      },
+                      "class": "fixed",
+                      "ground": "The export sets FAMILY_READING_PLAN_VERSION, currently 1, only when family readings are bound."
+                    },
                     "minimum_gaps": {
                       "bound": {
                         "serialized_characters": "selected_request_input_limit"
@@ -94415,7 +94431,185 @@
                   "class": "fixed",
                   "members": {
                     "delivered_before": {
-                      "$ref": "field_6e4bcf2573da"
+                      "bound": "open",
+                      "class": "open",
+                      "entry": "Q2",
+                      "fixture": "native_math/exactory-independent-review-v1",
+                      "grows": true,
+                      "items": {
+                        "class": "fixed",
+                        "members": {
+                          "acceptance_id": {
+                            "class": "fixed"
+                          },
+                          "artifact": {
+                            "class": "fixed",
+                            "members": {
+                              "location": {
+                                "class": "fixed"
+                              },
+                              "media_type": {
+                                "class": "fixed"
+                              },
+                              "path": {
+                                "class": "fixed"
+                              },
+                              "sha256": {
+                                "class": "fixed"
+                              },
+                              "size": {
+                                "class": "fixed"
+                              }
+                            }
+                          },
+                          "artifact_descriptor": {
+                            "class": "fixed",
+                            "members": {
+                              "location": {
+                                "class": "fixed"
+                              },
+                              "media_type": {
+                                "class": "fixed"
+                              },
+                              "path": {
+                                "class": "fixed"
+                              },
+                              "sha256": {
+                                "class": "fixed"
+                              },
+                              "size": {
+                                "class": "fixed"
+                              }
+                            }
+                          },
+                          "characters": {
+                            "class": "fixed"
+                          },
+                          "cited_by": {
+                            "class": "fixed",
+                            "items": {
+                              "class": "fixed"
+                            }
+                          },
+                          "content_kind": {
+                            "class": "fixed"
+                          },
+                          "end": {
+                            "class": "fixed"
+                          },
+                          "family_of": {
+                            "bound": {
+                              "serialized_characters": "selected_request_input_limit"
+                            },
+                            "class": "fixed",
+                            "entry": "Q2",
+                            "fixture": "canonical:family_reading_plans",
+                            "ground": "The v6 projection includes the complete family_of lists in every physical plan position; _fit_turn admits each exact request before delivery.",
+                            "grows": true,
+                            "items": {
+                              "class": "fixed"
+                            },
+                            "quantity": "sources",
+                            "quantity_contract": {
+                              "canonical": {
+                                "dimension": "entries",
+                                "entry": "Q2",
+                                "factory": "family_reading_plans",
+                                "fixture": "canonical:family_reading_plans",
+                                "path": [
+                                  "reading_turn",
+                                  "reading_plan",
+                                  "delivered_before",
+                                  "*",
+                                  "family_of"
+                                ],
+                                "property_kind": "family_reading_plan",
+                                "quantity": "sources"
+                              }
+                            },
+                            "sample": "found-work"
+                          },
+                          "field": {
+                            "class": "fixed"
+                          },
+                          "kind": {
+                            "class": "fixed"
+                          },
+                          "native_attempt_digest": {
+                            "class": "fixed"
+                          },
+                          "origin": {
+                            "class": "fixed",
+                            "members": {
+                              "acquired_at": {
+                                "class": "fixed"
+                              },
+                              "capture_method": {
+                                "class": "fixed"
+                              },
+                              "identifier": {
+                                "class": "fixed"
+                              },
+                              "kind": {
+                                "class": "fixed"
+                              },
+                              "name": {
+                                "class": "fixed"
+                              },
+                              "observed_identifier": {
+                                "class": "fixed"
+                              },
+                              "origin_verified": {
+                                "class": "fixed"
+                              },
+                              "provider": {
+                                "class": "fixed"
+                              },
+                              "reason": {
+                                "class": "fixed"
+                              },
+                              "url": {
+                                "class": "fixed"
+                              },
+                              "version": {
+                                "class": "fixed"
+                              }
+                            }
+                          },
+                          "part": {
+                            "class": "fixed"
+                          },
+                          "parts": {
+                            "class": "fixed"
+                          },
+                          "record_id": {
+                            "class": "fixed"
+                          },
+                          "record_kind": {
+                            "class": "fixed"
+                          },
+                          "role": {
+                            "class": "fixed"
+                          },
+                          "search_digest": {
+                            "class": "fixed"
+                          },
+                          "source_id": {
+                            "class": "fixed"
+                          },
+                          "start": {
+                            "class": "fixed"
+                          },
+                          "text_sha256": {
+                            "class": "fixed"
+                          },
+                          "version_id": {
+                            "class": "fixed"
+                          }
+                        }
+                      },
+                      "quantity": "units",
+                      "sample": "x"
                     },
                     "delivered_now": {
                       "bound": "open",
@@ -94483,6 +94677,38 @@
                           },
                           "end": {
                             "class": "fixed"
+                          },
+                          "family_of": {
+                            "bound": {
+                              "serialized_characters": "selected_request_input_limit"
+                            },
+                            "class": "fixed",
+                            "entry": "Q2",
+                            "fixture": "canonical:family_reading_plans",
+                            "ground": "The v6 projection includes the complete family_of lists in every physical plan position; _fit_turn admits each exact request before delivery.",
+                            "grows": true,
+                            "items": {
+                              "class": "fixed"
+                            },
+                            "quantity": "sources",
+                            "quantity_contract": {
+                              "canonical": {
+                                "dimension": "entries",
+                                "entry": "Q2",
+                                "factory": "family_reading_plans",
+                                "fixture": "canonical:family_reading_plans",
+                                "path": [
+                                  "reading_turn",
+                                  "reading_plan",
+                                  "delivered_now",
+                                  "*",
+                                  "family_of"
+                                ],
+                                "property_kind": "family_reading_plan",
+                                "quantity": "sources"
+                              }
+                            },
+                            "sample": "found-work"
                           },
                           "field": {
                             "class": "fixed"
@@ -94632,6 +94858,38 @@
                           },
                           "end": {
                             "class": "fixed"
+                          },
+                          "family_of": {
+                            "bound": {
+                              "serialized_characters": "selected_request_input_limit"
+                            },
+                            "class": "fixed",
+                            "entry": "Q2",
+                            "fixture": "canonical:family_reading_plans",
+                            "ground": "The v6 projection includes the complete family_of lists in every physical plan position; _fit_turn admits each exact request before delivery.",
+                            "grows": true,
+                            "items": {
+                              "class": "fixed"
+                            },
+                            "quantity": "sources",
+                            "quantity_contract": {
+                              "canonical": {
+                                "dimension": "entries",
+                                "entry": "Q2",
+                                "factory": "family_reading_plans",
+                                "fixture": "canonical:family_reading_plans",
+                                "path": [
+                                  "reading_turn",
+                                  "reading_plan",
+                                  "remaining",
+                                  "*",
+                                  "family_of"
+                                ],
+                                "property_kind": "family_reading_plan",
+                                "quantity": "sources"
+                              }
+                            },
+                            "sample": "found-work"
                           },
                           "field": {
                             "class": "fixed"

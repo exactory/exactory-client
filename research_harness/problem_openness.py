@@ -516,10 +516,15 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
         include_record(reading)
     include_record(statement)
     from .capture_selection import describe_capture_selections
+    read_decisive_work_ids = {reading["version_id"] for reading in readings.values()
+                              if reading["version_id"] in decisive}
+    read_decisive_work_ids.update(row["work_id"] for row in minimum.get("family_readings", []))
     scientific_context = {"openness_minimum": minimum, "minimum_gaps": gaps, "audit_forecast": forecast,
-                          "decisive_work_ids": sorted({reading["version_id"] for reading in readings.values()
-                                                       if reading["version_id"] in decisive}),
+                          "decisive_work_ids": sorted(read_decisive_work_ids),
                           **describe_capture_selections(records)}
+    if minimum.get("family_readings"):
+        from .openness_reading import FAMILY_READING_PLAN_VERSION
+        scientific_context["family_reading_plan_version"] = FAMILY_READING_PLAN_VERSION
     if "source_evidence" in spec:
         from .problem_openness_screening import resolve_source_evidence
         source_evidence, source_artifacts = resolve_source_evidence(records, artifacts, spec["source_evidence"], materialize=True)
