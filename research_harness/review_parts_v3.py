@@ -1,203 +1,261 @@
-"""Pure card budgets and turn forecasts for the parts protocol v3.
+"""Pure v3 read sizing: divisible content and separately charged card entries.
 
-The stored plan owns the rate, entry sizes and task levels. No current route
-profile, policy constant or store is consulted. Read-turn card rows have
-``handle``, ``unit``, ``unit_characters``, ``entry_characters`` and ``characters``;
-the last member is the whole card budget, not just its summary.
+Only the stored plan supplies rates, reserves and levels. Unit rows are unique
+text bodies with handle/characters and an optional ``late`` flag. A read cursor
+is the returned ``next`` value; failed/unselected attempts consume no cursor.
 """
 from fractions import Fraction
 
 from .errors import ResearchError
 from .review_parts import CARD_CHARACTERS
 from .review_condensing import cut_condensing_blocks, plan_condensing
+from .review_route_capacity import BELOW_FLOOR_MESSAGE
 
 
 CARD_CONDENSING_RATE = Fraction(20, 1000)
-IMPOSSIBLE_CARD_MINIMUM_MESSAGE = (
-    'The entry sizes of these cards exceed the card allowance ceiling. Read fewer card entries in this turn.'
-)
-UNFIT_CARD_RATE_MESSAGE = (
-    'The stored rate grants more than a condensing block for one character of text. '
-    'A positive text segment cannot fit this block room.'
+READ_TURN_CANNOT_FIT_MESSAGE = (
+    'The next read segment and its full card entry do not fit the read level, the card ceiling or the '
+    'remaining reserve. Use a fitting stored level or provide enough reserve before reading this unit.'
 )
 
 
-def compute_card_allowance(plan, unit_characters, cards):
-    """Return an exact rational card budget, clamped to entry sizes and 80000.
-
-    cards is a list of card rows; entry_characters overrides the stored default
-    for a measured entry. Integer wire allowances round this result down once.
-    Exact additivity holds for proportional budgets and for partitions where
-    both sides use their entry minimum. A cap or mixed minimum can prevent it.
-    """
-    allocation = plan['allocation']
-    minimum = sum(card.get('entry_characters', allocation['entry_sizes']['card']) for card in cards)
-    if minimum > CARD_CHARACTERS:
-        raise ResearchError('invalid_input', IMPOSSIBLE_CARD_MINIMUM_MESSAGE,
-                            dict(minimum=minimum, maximum=CARD_CHARACTERS))
-    proportional = Fraction(str(allocation['card_rate'])) * unit_characters
-    return max(Fraction(minimum), min(Fraction(CARD_CHARACTERS), proportional))
+def _read_floor(plan):
+    return min(row['material_allowance'] for row in plan['task']['read']['levels'])
 
 
-def _find_block_room(plan):
+def _read_card_ceiling(plan):
+    return min(plan['allocation']['rooms']['combine'],
+               min(row['material_allowance'] for row in plan['task']['combine']['levels']))
+
+
+def _read_block_room(plan):
     return min(plan['allocation']['rooms']['combine'], plan['task']['combine']['material_allowance'])
 
 
-def _plan_card_events(cards, room, last_reads):
-    result = plan_condensing(cards, room)
-    events = []
-    for round_index, blocks in enumerate(result['rounds'], 1):
-        for block in blocks:
-            after = max(last_reads[entry['handle']] for entry in block['entries'])
-            last_reads['c' + block['block']] = after
-            events.append(dict(after_read_turn=after, round=round_index, block=block))
-    # Stable sorting keeps each round's consecutive blocks in their input order.
-    return sorted(events, key=lambda event: (event['after_read_turn'], event['round']))
+def _read_turn_bound(plan, level):
+    task = plan['task']['read']
+    row = next((row for row in task['levels'] if row['material_allowance'] == level), None)
+    if row is None:
+        raise ResearchError('invalid_input', 'Select a read material level from the stored plan.')
+    if level == task['material_allowance']:
+        answer = task['answer_bound']
+    elif 'answer_bound' in row:
+        answer = row['answer_bound']
+    else:
+        answer = (min(row['default_answer_bound'], row['answer_room_characters']) if row['qualifies']
+                  else row['smallest_answer_bound'])
+    return min(CARD_CHARACTERS, answer)
+
+
+def read_content_rate(plan):
+    """Bound the pinned rate by one full floor card at every reachable level.
+
+    Each level pins an answer bound. Its turn and card bounds must leave room
+    beside one entry. Unused content budget is never moved into another reserve.
+    """
+    allocation = plan['allocation']
+    entry = allocation['entry_sizes']['card']
+    task = plan['task']['read']
+    ceiling = task.get('adaptation', {}).get('ceiling', max(row['material_allowance'] for row in task['levels']))
+    rate = Fraction(str(allocation['card_rate']))
+    for row in task['levels']:
+        level = row['material_allowance']
+        if level > ceiling:
+            continue
+        bound = min(_read_turn_bound(plan, level), _read_card_ceiling(plan))
+        if bound <= entry:
+            raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
+                                dict(kind='read', level=level, room=bound, minimum=entry + 1,
+                                     command='review-route'))
+        rate = min(rate, Fraction(bound - entry, _read_floor(plan)))
+    return rate
+
+
+def _allocate_content(rate, delivered_before, delivered_through):
+    before, through = rate * delivered_before, rate * delivered_through
+    return through.numerator // through.denominator - before.numerator // before.denominator
+
+
+def compute_content_allocation(plan, delivered_before, delivered_through):
+    """Allocate an integer interval; adjacent intervals telescope without loss."""
+    return _allocate_content(read_content_rate(plan), delivered_before, delivered_through)
+
+
+def _describe_card_allowance(entry, rate, delivered_before, delivered_through, cards):
+    content = _allocate_content(rate, delivered_before, delivered_through)
+    late_content = 0
+    at = delivered_before
+    for card in cards:
+        through = at + card['unit_characters']
+        if card.get('late', False):
+            late_content += _allocate_content(rate, at, through)
+        at = through
+    entries = len(cards) * entry
+    normal_entries = sum(not card.get('late', False) for card in cards) * entry
+    return dict(content_characters=content, entry_characters=entries, characters=content + entries,
+                card_budget=content - late_content, card_reserve=normal_entries,
+                late_unit_reserve=late_content + entries - normal_entries)
+
+
+def compute_card_allowance(plan, delivered_before, delivered_through, cards):
+    """Return content, full entries and their three separate reserve charges.
+
+    This arithmetic never clamps to the answer cap. size_read_turn chooses a
+    fitting interval and card count. Mixed late/initial cards state their
+    unit_characters so their content intervals can be charged independently.
+    """
+    return _describe_card_allowance(plan['allocation']['entry_sizes']['card'], read_content_rate(plan),
+                                    delivered_before, delivered_through, cards)
+
+
+def _can_pay_card(plan, cursor, content, late):
+    allocation = plan['allocation']
+    entry = allocation['entry_sizes']['card']
+    if late:
+        return cursor['late_unit_reserve'] + content + entry <= allocation['late_unit_reserve']
+    return (cursor['card_count'] < allocation['largest_card_count']
+            and cursor['card_reserve'] + entry <= allocation['card_reserve']
+            and cursor['card_budget'] + content <= allocation['card_budget'])
+
+
+def _size_card(plan, rate, cursor, unit, material_left, answer_left):
+    """Use available room without making a nonfinal part smaller than the floor."""
+    remaining = unit['characters'] - cursor['unit_offset']
+    floor = _read_floor(plan)
+    entry = plan['allocation']['entry_sizes']['card']
+    ceiling = min(answer_left, _read_card_ceiling(plan))
+    if remaining == 0:
+        return 0 if entry <= ceiling and _can_pay_card(plan, cursor, 0, unit.get('late', False)) else None
+    minimum = min(remaining, floor)
+    if material_left < minimum:
+        return None
+    low, high = minimum - 1, min(remaining, material_left)
+    while low < high:
+        size = (low + high + 1) // 2
+        content = _allocate_content(rate, cursor['delivered'], cursor['delivered'] + size)
+        fits = (content + entry <= ceiling
+                and _can_pay_card(plan, cursor, content, unit.get('late', False)))
+        if fits:
+            low = size
+        else:
+            high = size - 1
+    return None if low < minimum else low
+
+
+def size_read_turn(plan, level, inventory, *, position=None):
+    """Size one read under its pinned material/answer bounds and reserved entries.
+
+    inventory is the ordered unique inventory. position is the previous next
+    cursor, or None at the start. Return None at its end. Every part has at least
+    the lowest read level in characters except its unit's last part. Thus the
+    number of cards cannot exceed the stored sum of ceil(unit size / floor),
+    even after repeated division.
+    Late units are appended and charged entirely to late_unit_reserve.
+    """
+    if type(level) is not int or level <= 0:
+        raise ResearchError('invalid_input', 'The read material allowance must be a positive integer.')
+    turn_bound = _read_turn_bound(plan, level)
+    rate = read_content_rate(plan)
+    cursor = dict(unit_index=0, unit_offset=0, delivered=0, card_count=0,
+                  card_budget=0, card_reserve=0, late_unit_reserve=0)
+    cursor.update(position or {})
+    if cursor['unit_index'] == len(inventory):
+        return None
+    before = cursor['delivered']
+    cards, material, answer = [], 0, 0
+    entry = plan['allocation']['entry_sizes']['card']
+    while cursor['unit_index'] < len(inventory):
+        unit = inventory[cursor['unit_index']]
+        size = _size_card(plan, rate, cursor, unit, level - material, turn_bound - answer)
+        if size is None:
+            if not cards:
+                raise ResearchError('invalid_input', READ_TURN_CANNOT_FIT_MESSAGE,
+                                    dict(unit=unit['handle'], level=level, position=cursor))
+            break
+        start = cursor['unit_offset']
+        through = cursor['delivered'] + size
+        content = _allocate_content(rate, cursor['delivered'], through)
+        late = unit.get('late', False)
+        cards.append(dict(handle='c/' + unit['handle'] + '/' + str(start), unit=unit['handle'],
+                          start=start, end=start + size, unit_characters=size, late=late,
+                          content_characters=content, entry_characters=entry, characters=content + entry))
+        if late:
+            cursor['late_unit_reserve'] += content + entry
+        else:
+            cursor['card_count'] += 1
+            cursor['card_budget'] += content
+            cursor['card_reserve'] += entry
+        material += size
+        answer += content + entry
+        cursor['delivered'] = through
+        cursor['unit_offset'] += size
+        if cursor['unit_offset'] == unit['characters']:
+            cursor['unit_index'] += 1
+            cursor['unit_offset'] = 0
+    return dict(delivered_before=before, delivered_through=cursor['delivered'], unit_characters=material,
+                cards=cards, allowance=_describe_card_allowance(entry, rate, before, cursor['delivered'], cards),
+                next=cursor)
+
+
+def plan_read_turns(plan, inventory, *, material_allowance=None):
+    """Size every read once, deduplicating body identities before cursor traversal."""
+    unique = {}
+    for unit in inventory:
+        unique.setdefault(unit.get('sha256', unit['handle']), unit)
+    units = list(unique.values())
+    level = plan['task']['read']['material_allowance'] if material_allowance is None else material_allowance
+    turns, position = [], None
+    while True:
+        turn = size_read_turn(plan, level, units, position=position)
+        if turn is None:
+            return turns
+        turns.append(turn)
+        position = turn['next']
 
 
 def plan_card_condensing(plan, read_turns):
-    """Return low-rate combine events, indexed by one-based completed read turn.
+    """Schedule entry-aware combines after their last one-based read turn.
 
-    read_turns supplies measured or budgeted cards with handle and characters.
-    Higher rounds follow as soon as their last input block is available. A final
-    partial block is included when needed to bring the entire state within room.
-    At or above the threshold there are no scheduled interleaved combines.
+    Later rounds describe answers at their quarter bounds. A chain remeasures
+    actual answers and rebuilds those blocks before assignment if an earlier
+    answer used less, including a lower turn answer cap. It stores the resulting
+    measured block artifacts, not an unmeasured future block.
     """
-    if Fraction(str(plan['allocation']['card_rate'])) >= CARD_CONDENSING_RATE:
+    if read_content_rate(plan) >= CARD_CONDENSING_RATE:
         return []
     cards = [card for turn in read_turns for card in turn['cards']]
     last_reads = {card['handle']: index for index, turn in enumerate(read_turns, 1) for card in turn['cards']}
-    return _plan_card_events(cards, _find_block_room(plan), last_reads)
+    result = plan_condensing(cards, _read_block_room(plan))
+    events = []
+    for round_index, blocks in enumerate(result['rounds'], 1):
+        for block in blocks:
+            after = max(last_reads[handle] for handle in block['entries'])
+            last_reads[block['handle']] = after
+            events.append(dict(after_read_turn=after, round=round_index, block=block))
+    return sorted(events, key=lambda event: (event['after_read_turn'], event['round']))
 
 
 def plan_target_condensing(plan, cards, page_room):
     """Return initial whole-card blocks if this target exceeds its page room."""
     if sum(card['characters'] for card in cards) <= page_room:
         return []
-    return cut_condensing_blocks(cards, min(page_room, _find_block_room(plan)))
-
-
-def _finish_read_turn(plan, cards):
-    characters = sum(card['unit_characters'] for card in cards)
-    allowance = int(compute_card_allowance(plan, characters, cards))
-    minimum = sum(card['entry_characters'] for card in cards)
-    extra = allowance - minimum
-    # A size-only maximum realization: apportion the content by text read.
-    # Remainders go in order, so the integer card sizes use the full allowance.
-    weights = [card['unit_characters'] for card in cards] if characters else [1] * len(cards)
-    total = sum(weights)
-    shares = [extra * weight // total for weight in weights]
-    for index in range(extra - sum(shares)):
-        shares[index] += 1
-    for card, share in zip(cards, shares):
-        card['characters'] = card['entry_characters'] + share
-    return dict(unit_characters=characters, cards=cards)
-
-
-def _find_segment_characters(plan, level):
-    rate = Fraction(str(plan['allocation']['card_rate']))
-    if rate > 0 and _find_block_room(plan) < CARD_CHARACTERS:
-        return min(level, int(Fraction(_find_block_room(plan)) / rate))
-    return level
-
-
-def plan_read_turns(plan, inventory, *, material_allowance=None):
-    """Pack unique text bodies, segmenting at a read level and the card floor cap.
-
-    A zero-character unit still produces one card. Segments are fixed per unit
-    before packing, so unused tail room cannot create extra structural cards.
-    A turn stops before its entries exceed the card cap or a condensing block.
-    The text segment ceiling may be below the stored read floor when needed to
-    keep a single granted card inside a condensing block. The forecast exposes
-    that ceiling and any cards beyond the stored structural reserve. The maximum
-    realization apportions the integer allowance among its cards; actual
-    reviewer cards can distribute that allowance differently.
-    """
-    level = plan['task']['read']['material_allowance'] if material_allowance is None else material_allowance
-    if type(level) is not int or level <= 0:
-        raise ResearchError('invalid_input', 'The read material allowance must be a positive integer.')
-    level = _find_segment_characters(plan, level)
-    entry_size = plan['allocation']['entry_sizes']['card']
-    card_count = min(CARD_CHARACTERS, _find_block_room(plan)) // entry_size
-    if card_count < 1:
-        raise ResearchError('invalid_input', IMPOSSIBLE_CARD_MINIMUM_MESSAGE)
-    unique = {}
-    for unit in inventory:
-        unique.setdefault(unit.get('sha256', unit['handle']), unit)
-    if level == 0 and any(unit['characters'] > 0 for unit in unique.values()):
-        raise ResearchError('invalid_input', UNFIT_CARD_RATE_MESSAGE)
-    turns, cards, characters = [], [], 0
-    for unit in unique.values():
-        remaining, part = unit['characters'], 0
-        while True:
-            size = min(remaining, level)
-            if cards and (characters + size > level or len(cards) == card_count):
-                turns.append(_finish_read_turn(plan, cards))
-                cards, characters = [], 0
-            cards.append(dict(handle='c/' + unit['handle'] + '/' + str(part), unit=unit['handle'],
-                              unit_characters=size, entry_characters=entry_size))
-            characters += size
-            remaining -= size
-            if not remaining:
-                break
-            part += 1
-    if cards:
-        turns.append(_finish_read_turn(plan, cards))
-    return turns
-
-
-def _count_card_condensing(plan, turns):
-    cards = [card for turn in turns for card in turn['cards']]
-    room = _find_block_room(plan)
-    total = sum(card['characters'] for card in cards)
-    bounds = []
-    discretionary = False
-    for turn in turns:
-        extra = sum(card['characters'] - card['entry_characters'] for card in turn['cards'])
-        discretionary = discretionary or extra > 0
-        # Any one card can receive the whole discretionary turn budget. These
-        # simultaneous upper bounds need not themselves be a possible answer.
-        bounds.extend(dict(handle=card['handle'], characters=card['entry_characters'] + extra)
-                      for card in turn['cards'])
-    if not discretionary or total <= room:
-        condensed = plan_condensing(cards, room)
-        return dict(condensing_turns=condensed['turns'], condensing_rounds=len(condensed['rounds']),
-                    remaining_characters=condensed['remaining_characters'], count_basis='entry_sizes')
-    blocks = len(cut_condensing_blocks(bounds, room))
-    count, rounds = blocks, 1
-    remaining = min(total // 4, blocks * (room // 4))
-    while remaining > room:
-        blocks = (blocks + 3) // 4
-        count += blocks
-        rounds += 1
-        remaining = min(remaining // 4, blocks * (room // 4))
-    return dict(condensing_turns=count, condensing_rounds=rounds,
-                remaining_characters=remaining, count_basis='entry_upper_bounds')
+    return cut_condensing_blocks(cards, min(page_room, _read_block_room(plan)))
 
 
 def count_series_turns(plan, inventory):
-    """Bound read and combine counts at the start and lowest stored read level.
+    """Return sized reads and a marked forecast at every granted card bound.
 
-    Counts cover every distribution of the granted card budgets, with summaries
-    at every quarter bound, through a state that fits a combine request. They are
-    exact when all cards use their entry minimum; otherwise conservative
-    independent entry bounds protect against an uneven answer. Finals/checks
-    themselves are outside these counts. High-rate chains defer any necessary
-    condensing until after the reads rather than scheduling it between reads.
+    The forecast uses entry sizes, not the total-only forecast_condensing helper.
+    It is advisory: actual whole answers may use less than their allocations.
+    Final/check turns themselves are outside these counts.
     """
     result = {}
-    start = plan['task']['read']['material_allowance']
-    lowest = min(row['material_allowance'] for row in plan['task']['read']['levels'])
-    for name, level in (('start', start), ('lowest', lowest)):
+    for name, level in (('start', plan['task']['read']['material_allowance']), ('lowest', _read_floor(plan))):
         turns = plan_read_turns(plan, inventory, material_allowance=level)
         cards = [card for turn in turns for card in turn['cards']]
-        condensed = _count_card_condensing(plan, turns)
-        count = len(turns)
-        result[name] = dict(material_allowance=level, read_turns=count,
-                            segment_characters=_find_segment_characters(plan, level),
-                            planned_card_count=len(cards),
-                            card_count_over_reserve=max(0, len(cards) -
-                                plan['allocation'].get('largest_card_count', len(cards))),
-                            card_characters=sum(card['characters'] for card in cards),
-                            turns=count + condensed['condensing_turns'], **condensed)
+        condensed = plan_condensing(cards, _read_block_room(plan))
+        result[name] = dict(material_allowance=level, read_turns=len(turns), reads=turns,
+                            condensing=dict(forecast=True, turns=condensed['turns'],
+                                remaining_characters=condensed['remaining_characters']),
+                            turns_upper_bound=len(turns) + condensed['turns'])
     return result

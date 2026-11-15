@@ -1,9 +1,8 @@
-"""Pure block and summary budgets shared by planned review protocols.
+"""Pure, entry-aware condensation; chain families store the returned blocks.
 
-An entry has a stable ``handle`` and its measured ``characters``. A block binds
-the ordered entries by digest. Round forecasts charge the summary body; the
-protocol builder must reserve its serialization envelope and reference fields
-beside that body. This module does not build or measure transport requests.
+``characters`` is the caller's serialized charge for an entry. ``room`` is the
+sum of those charges that a request permits beside its frame. A combination is
+measured whole by the route's serializer, including its block handle and refs.
 """
 import copy
 
@@ -12,14 +11,18 @@ from .evidence import digest
 from .review_refusal import contract_check
 
 
+MINIMUM_CONDENSING_BLOCK_CHARACTERS = 1024
 CONDENSING_TURN_TEXT = (
-    'Read this block of carried entries. Return {block, summary, refs}, using the block handle supplied. '
-    'The summary has at most one quarter of the characters of the block, rounded down. '
-    'Cite the entries the summary rests on in refs, a nonempty array of distinct handles from this block.'
+    'A block is an ordered group of carried entries retained under a block handle. '
+    'Read its entries and return {block, summary, refs}. block is the supplied block handle. '
+    'The complete serialized answer, including escapes and refs, fits the smaller of one quarter of the '
+    'block characters and this turn\'s answer bound. Cite a nonempty array of distinct entry handles from '
+    'this block. The block remains available by handle; request a page of its entry handles or an entry '
+    'by its handle when you need the original material.'
 )
 INVALID_COMBINATION_MESSAGE = (
-    'Return {block, summary, refs} for this block. summary is text within the stated quarter-block bound; '
-    'refs is a nonempty array of distinct entry handles from this block.'
+    'Return {block, summary, refs} for this block, with text in summary and a nonempty array of distinct '
+    'local entry handles in refs. The whole serialized combination must fit its stated bound.'
 )
 INVALID_SIZE_MESSAGE = 'A room is a positive integer and entry characters are nonnegative integers.'
 OVERSIZED_ENTRY_MESSAGE = 'An entry exceeds the block room; deliver that entry in segments before condensing it.'
@@ -31,16 +34,13 @@ def _validate_size(characters, room):
 
 
 def _build_block(entries, characters):
-    return dict(block=digest(entries), entries=copy.deepcopy(entries), characters=characters,
-                summary_bound=characters // 4)
+    handles = [entry['handle'] for entry in entries]
+    identity = [dict(handle=entry['handle'], characters=entry['characters']) for entry in entries]
+    return dict(handle='b' + digest(identity), entries=handles, characters=characters)
 
 
 def cut_condensing_blocks(entries, room):
-    """Return consecutive whole-entry blocks, each with a quarter-summary bound.
-
-    Entries larger than room need segmentation by their owning protocol first.
-    All entry sizes already include the serialization the caller charges to them.
-    """
+    """Return consecutive whole-entry blocks as artifact values with stable handles."""
     _validate_size(0, room)
     blocks, current, characters = [], [], 0
     for entry in entries:
@@ -59,81 +59,105 @@ def cut_condensing_blocks(entries, room):
     return blocks
 
 
-def validate_combination(block, output):
-    """Validate one reviewer output once, at its protocol's shape boundary."""
+def describe_combination_bound(block, answer_bound):
+    """Bound the complete serialized combination, not just its summary string."""
+    return min(block['characters'] // 4, answer_bound)
+
+
+def validate_combination(block, output, measure, answer_bound):
+    """Validate one complete reviewer answer at the protocol's shape boundary."""
     with contract_check('review.shape'):
-        handles = {entry['handle'] for entry in block['entries']}
+        handles = set(block['entries'])
+        bound = describe_combination_bound(block, answer_bound)
         if (not isinstance(output, dict) or set(output) != {'block', 'summary', 'refs'}
-                or output['block'] != block['block']
-                or not isinstance(output['summary'], str)
-                or len(output['summary']) > block['summary_bound']
+                or output['block'] != block['handle'] or not isinstance(output['summary'], str)
                 or not isinstance(output['refs'], list) or not output['refs']
                 or any(not isinstance(ref, str) or ref not in handles for ref in output['refs'])
-                or len(set(output['refs'])) != len(output['refs'])):
+                or len(set(output['refs'])) != len(output['refs']) or measure(output) > bound):
             raise ResearchError('invalid_value_review', INVALID_COMBINATION_MESSAGE,
-                                dict(block=block['block'], summary_bound=block['summary_bound']))
+                                dict(block=block['handle'], combination_bound=bound))
     return copy.deepcopy(output)
 
 
-def _build_summary_entry(block, characters):
-    return dict(handle='c' + block['block'], characters=characters)
-
-
 def plan_condensing(entries, room):
-    """Return rounds of blocks, turn count and remaining summary-body bound.
+    """Return exact blocks/rounds and the remaining bound at whole-output quarters.
 
-    Only overflowing lists are condensed. Later rounds use combinations at
-    their bounds. Whole-entry packing, including its unused room, is retained.
+    A block below MINIMUM_CONDENSING_BLOCK_CHARACTERS keeps its entries,
+    unchanged, in the next round, including a small block before a large entry.
+    Later blocks refer to combinations by their block handle. Actual answers
+    may be smaller, including a lower answer cap.
     """
-    _validate_size(0, room)
-    remaining = list(entries)
+    remaining = [dict(handle=entry['handle'], characters=entry['characters']) for entry in entries]
+    blocks = cut_condensing_blocks(remaining, room)
+    initial = blocks
     rounds = []
     characters = sum(entry['characters'] for entry in remaining)
-    # Check even a list that already fits, without adding an unnecessary round.
-    blocks = cut_condensing_blocks(remaining, room)
     while characters > room:
-        rounds.append(blocks)
-        remaining = [_build_summary_entry(block, block['summary_bound']) for block in blocks]
+        by_handle = {entry['handle']: entry for entry in remaining}
+        condensed, next_entries = [], []
+        for block in blocks:
+            if block['characters'] < MINIMUM_CONDENSING_BLOCK_CHARACTERS:
+                next_entries.extend(by_handle[handle] for handle in block['entries'])
+            else:
+                condensed.append(block)
+                next_entries.append(dict(handle=block['handle'], characters=block['characters'] // 4))
+        if not condensed:
+            raise ResearchError('invalid_input', 'The overflowing list has no block large enough to condense.',
+                                dict(room=room, minimum=MINIMUM_CONDENSING_BLOCK_CHARACTERS))
+        rounds.append(condensed)
+        remaining = next_entries
         characters = sum(entry['characters'] for entry in remaining)
         if characters > room:
             blocks = cut_condensing_blocks(remaining, room)
-    return dict(rounds=rounds, turns=sum(len(round_) for round_ in rounds),
-                remaining_characters=characters)
+    return dict(blocks=initial, rounds=rounds, entries=remaining,
+                turns=sum(len(round_) for round_ in rounds), remaining_characters=characters)
 
 
-def condense(characters, room):
-    """Return (turns, remaining bound) for densely packed total characters.
+def forecast_condensing(characters, room, largest_entry):
+    """Return a marked upper forecast from a total, never an execution plan.
 
-    A total does not describe unused room between indivisible entries. Call
-    plan_condensing when those entries are available. Quarter bounds round down
-    for each block, exactly as the entry-aware plan does.
+    A nonfinal greedy block contains more than room-largest_entry characters;
+    adjacent blocks together exceed room. Both bounds limit the block count.
+    Carried small blocks add at most three quarters of their combined size to
+    contraction; their count is no greater than the block-count upper bound.
+    No plan builder or verification calls this aggregate estimate.
     """
     _validate_size(characters, room)
-    turns = 0
+    _validate_size(largest_entry, room)
+    if largest_entry > room or characters > 0 and largest_entry == 0:
+        raise ResearchError('invalid_input', OVERSIZED_ENTRY_MESSAGE)
+    turns, rounds = 0, 0
     while characters > room:
-        full, tail = divmod(characters, room)
-        turns += full + bool(tail)
-        characters = full * (room // 4) + tail // 4
-    return turns, characters
+        fill = room - largest_entry + 1
+        blocks = min((characters + fill - 1) // fill, 2 * ((characters + room - 1) // room) - 1)
+        turns += blocks
+        rounds += 1
+        small = min(MINIMUM_CONDENSING_BLOCK_CHARACTERS - 1, room)
+        carried = min(characters, blocks * small)
+        characters = min(characters - 1, (characters + 3 * carried) // 4)
+        largest_entry = max(room // 4, min(largest_entry, small))
+    return dict(forecast=True, turns=turns, rounds=rounds, remaining_characters=characters)
 
 
-def apply_combination(state, block, output):
-    """Replace a consecutive block using an already validated combination.
+def apply_combination(state, block, output, measure):
+    """Replace a block with a validated whole combination and retain its archive.
 
-    State is {entries: [...], handles: {handle: entry}}. handles is the retained
-    archive, never a request member. It keeps originals and earlier combinations
-    available to later requests. characters charges only the new summary body.
+    ``entries`` carries handle/characters/value rows. ``handles`` retains every
+    entry; ``blocks`` retains block artifact values. Neither archive belongs in
+    a request. A combination's entry handle is the handle of its original block.
     """
     entries = state['entries']
     handles = [entry['handle'] for entry in entries]
-    replaced = [entry['handle'] for entry in block['entries']]
+    replaced = block['entries']
     start = next((index for index in range(len(entries))
                   if handles[index:index + len(replaced)] == replaced), None)
     if start is None:
         raise ResearchError('invalid_input', 'The block is not consecutive in the current carried state.')
     archive = copy.deepcopy(state['handles'])
     archive.update((entry['handle'], copy.deepcopy(entry)) for entry in entries)
-    combination = dict(_build_summary_entry(block, len(output['summary'])), **copy.deepcopy(output))
+    combination = dict(handle=block['handle'], characters=measure(output), value=copy.deepcopy(output))
     archive[combination['handle']] = copy.deepcopy(combination)
+    blocks = copy.deepcopy(state.get('blocks', {}))
+    blocks[block['handle']] = copy.deepcopy(block)
     return dict(entries=copy.deepcopy(entries[:start]) + [combination] +
-                copy.deepcopy(entries[start + len(replaced):]), handles=archive)
+                copy.deepcopy(entries[start + len(replaced):]), handles=archive, blocks=blocks)
