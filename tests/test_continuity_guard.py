@@ -40,8 +40,8 @@ class StagedPartsCase(parts_fixtures.ResultPartsCase):
 class ContinuityGuardTests(unittest.TestCase):
     def prepare(self, cls):
         case = cls()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         return case
 
     def test_other_installed_parts_execute_the_refusal_replacement(self):
@@ -57,11 +57,27 @@ class ContinuityGuardTests(unittest.TestCase):
 
     def test_stage2_evidence_executes_every_supported_chain_and_requirement(self):
         from research_harness.review_parts_roles import ADAPTERS
-        supported = {'session', 'adjudication', 'context_repair', 'parts_v1'}
+        supported = {'session', 'adjudication', 'context_repair', 'parts_v1', 'reading', 'native_math', 'staged'}
         supported.update('parts_v2:' + adapter for adapter in ADAPTERS)
-        outcomes = guard.run_evidence_tests(guard.list_stage2_evidence_tests())
+        rows = list(copy.deepcopy(guard.STAGE2_EVIDENCE))
+        rows.extend((
+            dict(id='reading-scientific-refusal', requirement='scientific_refused', chains=('reading',), tests=(
+                'test_continuity_guard.ContinuityGuardTests.test_scientific_refused_reading_executes_the_problem_export_handoff',)),
+            dict(id='native-scientific-refusal', requirement='scientific_refused', chains=('native_math',), tests=(
+                'test_review_continuation.ContinuationTests.test_two_refused_native_outputs_need_a_new_controller_attestation',
+                'test_d2_outcomes.OutcomeTests.test_native_math_handoff_accepts_a_new_attested_packet')),
+            dict(id='staged-scientific-refusal', requirement='scientific_refused', chains=('staged',), tests=(
+                'test_continuity_guard.ContinuityGuardTests.test_staged_refusal_preserves_the_slot_and_series_records_the_review',)),
+            dict(id='verification-exhaustion', requirement='exhaustion', chains=(), tests=(
+                'test_continuity_guard.ContinuityGuardTests.test_exhausted_verification_executes_its_fresh_assignment',)),
+        ))
+        for row in rows:
+            if row['requirement'] == 'finality':
+                row['tests'] += ('test_review_refusal_replacement.RefusalReplacementTests.'
+                                 'test_g6_validator_upgrade_authenticates_second_replacement_and_preserves_every_observation',)
+        outcomes = guard.run_evidence_tests(guard.list_stage2_evidence_tests(rows))
         failed = {identifier: status for identifier, status in outcomes.items() if status != 'passed'}
-        self.assertEqual(guard.validate_stage2_evidence(guard.STAGE2_EVIDENCE, outcomes, supported), [], failed)
+        self.assertEqual(guard.validate_stage2_evidence(rows, outcomes, supported), [], failed)
 
     def test_stage2_missing_skipped_and_failed_journeys_get_no_execution_credit(self):
         from research_harness.review_parts_roles import ADAPTERS
@@ -90,6 +106,57 @@ class ContinuityGuardTests(unittest.TestCase):
         report = json.loads(path.read_text())
         self.assertEqual(report['unreviewed_rows'], {})
         validate_registry_coverage(report, stop_classes.STOP_REGISTRY)
+
+    def test_g6_executes_the_validator_upgrade_through_a_recorded_second_replacement(self):
+        identifier = ('test_review_refusal_replacement.RefusalReplacementTests.'
+                      'test_g6_validator_upgrade_authenticates_second_replacement_and_preserves_every_observation')
+        self.assertEqual(guard.run_evidence_tests([identifier]), {identifier: 'passed'})
+
+    def test_scientific_refused_reading_executes_the_problem_export_handoff(self):
+        from test_openness_v6_chain import V6ChainTests
+        fixture = self.prepare(V6ChainTests)
+        reference = fixture.export()
+        first = fixture.assign('turn-1', reference)
+        for identifier in ('refused-reading-1', 'refused-reading-2'):
+            fixture.invoke(first['id'], {}, attempt=identifier)
+        records = fixture.store.snapshot()['records']
+        self.assertEqual({failures.classify_attempt(records, fixture.artifacts, attempt)['outcome']
+                          for attempt in records['review_attempt'].values()}, {'scientific_refused'})
+        plan = plan_next(records, fixture.artifacts, first['id'])
+        self.assertEqual((plan['state'], plan['command'], plan['code']),
+                         ('handoff', 'export', 'review_slot_exhausted'))
+        self.assertEqual(plan['details']['step']['id'], 4)
+        # The author supplies the minimum for the current export, as step 4 requires.
+        native = fixture.export(name='renewed-packet', assignment_id='renewed')
+        payload = dict(plan['details']['step']['then'][0]['payload'], id='renewed',
+                       reviewer_id='openness-reviewer', route_id='route', context=dict(native_packet=native))
+        following = fixture.mutate(protocol.record_assignment, payload)['result']
+        self.assertEqual(plan_next(fixture.store.snapshot()['records'], fixture.artifacts, following['id'])['state'], 'run')
+        fixture.invoke(following['id'], fixture.build_reading_response(fixture.read_packet(following['id']), excerpts=[]))
+        self.assertTrue(protocol.assignment_state(fixture.store.snapshot()['records'], fixture.artifacts, following['id'])['ready'])
+
+    def test_exhausted_verification_executes_its_fresh_assignment(self):
+        from test_review_parts_study import VerificationPartsTests
+        fixture = self.prepare(VerificationPartsTests)
+        fixture.enlarge_verification()
+        head = fixture.assign()
+        for number in range(3):
+            bad = review_parts_fixtures.make_output(fixture.packet(head))
+            bad.pop('kind')
+            fixture.invoke(head, bad)
+            plan = plan_next(fixture.records(), fixture.case.artifacts, head['id'])
+            if number < 2:
+                self.assertEqual(plan['state'], 'replace', plan)
+                head = matrix_fixtures.execute(fixture.case, plan['command'], plan['payload'])
+        self.assertEqual((plan['state'], plan['code']), ('handoff', 'review_slot_exhausted'))
+        self.assertEqual([step['id'] for step in plan['details']['steps']], [7, 6])
+        route = fixture.records()['review_route'][head['route_id']]
+        record_codex_route(fixture.case, 'fresh-route', model=route['model'], output_tokens=128000)
+        step = plan['details']['steps'][-1]
+        payload = dict(step['payload'], id='fresh-verification', route_id='fresh-route', reviewer_id='fresh-verifier')
+        following = matrix_fixtures.execute(fixture.case, step['command'], payload)
+        self.assertTrue(matrix_fixtures.check_preflight(fixture.case, following))
+        self.assertEqual(plan_next(fixture.records(), fixture.case.artifacts, following['id'])['state'], 'run')
 
     def test_registration_alone_cannot_finish_an_existing_head_stop(self):
         stop = dict(code='review_response_too_large', details=dict(decision=dict(

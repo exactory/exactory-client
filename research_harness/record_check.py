@@ -385,10 +385,13 @@ def check_authentication(store):
             assignments[identifier] = {'ready': state['ready'], 'attempt_id': state.get('attempt_id'),
                                        'refusal_codes': sorted(row['code'] for row in state['obligations'])}
         links = check_acceptance_reviews(records, artifacts)
+        findings = check_openness_findings(records, artifacts)
     result = {'attempts': attempts, 'assignments': assignments, 'probes': probes,
               'captures': captures, 'corrections': corrections}
     if links:
         result['acceptance_reviews'] = links
+    if findings:
+        result['openness_findings'] = findings
     from .acquisition import check_supplied_sources
     supplied_texts = check_supplied_sources(records)
     if completions:
@@ -398,6 +401,25 @@ def check_authentication(store):
     if supplied_texts:
         result['supplied_texts'] = supplied_texts
     return result
+
+
+def check_openness_findings(records, artifacts):
+    """Validate each stored minimum under its version and read that finding's obligations."""
+    from .openness_minimum import validate_minimum
+    from .problem_openness import assess_openness
+    findings = {}
+    for identifier, finding in sorted(records.get('problem_openness', {}).items()):
+        minimum = finding.get('minimum')
+        if minimum is not None:
+            validate_minimum(minimum)
+        # The ordinary reader selects the latest finding. Qualify older findings
+        # too, against today's statement and evidence, without rewriting them.
+        selected = records.copy()
+        selected['problem_openness'] = {identifier: finding}
+        findings[identifier] = dict(
+            minimum_version=None if minimum is None else minimum['schema_version'],
+            obligations=assess_openness(selected, artifacts))
+    return findings
 
 
 def check_acceptance_reviews(records, artifacts):

@@ -4810,7 +4810,7 @@
       "class": "bounded refusal notice",
       "summary": "A synthetic split-text citation reproduces the whole-text offsets on a part artifact and the notice of the resulting mechanical refusal.",
       "expected": "A replacement is admitted in the preserved slot with the same reviewer at the synthetic revision-200 boundary. Fresh diagnostics supply part-relative offsets while stored refusals, repair, prompts and requests keep their bytes. The corrected part citation records through value-review; its reading prerequisite uses its authenticated whole-text origin. The planner and later exhaustion recovery remain separate units.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "tests": [
         "test_review_refusal_notice.RefusalNoticeTests.test_part_offset_notice_preserves_expected_offsets_and_every_stored_digest",
@@ -4831,7 +4831,7 @@
       "class": "filtered refusal notice",
       "summary": "An observed final review cites evidence that its frozen input does not establish as delivered, and its authenticated refusal supplies a retry notice in a store holding the other slot's judgments.",
       "expected": "The notice carries the reviewer's own refused output and current mechanical diagnosis without another slot's judgment. Replacement admission freezes each refusal identity and digest; only the position head can record, and later validator changes leave the frozen origin and requests authentic. Chain delivery counts actual replaced inputs. Planner exhaustion recovery remains separate.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "tests": [
         "test_review_refusal_notice.UndeliveredNoticeTests.test_reduced_history_final_refusal_is_delivered_without_other_reviewer_judgments",
@@ -5153,9 +5153,13 @@
       "class": "openness evidence (work-family relation)",
       "summary": "Versionless citation-list hits and registry records need an explicit link to a read exact version of the work.",
       "fixed_in": "open",
-      "expected": "The R15 relation links versionless arXiv, registered DataCite DOI and shared DOI records under the two-family and author guards. The version 2 builder binds the latest completely read linked version or the valid explicit choice, includes its readings and text, and reports the link and whether authors were compared. A supported_open finding over that exported minimum passes audit; invalid links and unpinned readings remain gaps. Version 1 keeps exact-work coverage.",
+      "expected": "The R15 relation links versionless arXiv, registered DataCite DOI and shared DOI records under the two-family and author guards. The version 2 builder binds the latest completely read linked version or the valid explicit choice, includes its readings and text, and reports the link and whether authors were compared. A supported_open finding over that exported minimum passes audit; invalid links and unpinned readings remain gaps. New family text plans deliver family_of and the found work is eligible for a source_settles ground. A decisive work without its own or a family reading still fails decisive_work. Stored family-chain packets, prompts and requests keep their digests. Version 1 keeps exact-work coverage.",
       "test_kind": "real_shape",
       "tests": [
+        "test_openness_family_delivery.FamilyDeliveryTests.test_family_plan_and_delivered_text_support_a_ground_naming_the_found_work",
+        "test_openness_family_delivery.FamilyDeliveryTests.test_a_decisive_work_without_either_reading_still_fails_the_decisive_work_rule",
+        "test_openness_family_delivery.FamilyDeliveryTests.test_one_text_names_all_found_records_once_across_searches",
+        "test_openness_family_delivery.FamilyDeliveryTests.test_stored_v6_family_chain_keeps_its_packets_prompts_and_request_digests",
         "test_openness_family_readings.FamilyReadingTests.test_search_export_family_reading_and_supported_open_audit_journey",
         "test_openness_family_readings.FamilyReadingTests.test_shared_doi_asserted_by_both_acquired_families_binds_and_reports_author_comparison",
         "test_openness_family_readings.FamilyReadingTests.test_third_family_doi_assertion_prevents_derivation_and_invalidates_a_bound_link",
@@ -5177,7 +5181,8 @@
         "test_research_work_families.WorkFamilyTests.test_shared_doi_between_provider_families_still_requires_matching_authors",
         "test_research_work_families.WorkFamilyTests.test_found_and_version_identifiers_may_be_asserted_by_either_linked_family",
         "test_research_work_families.WorkFamilyTests.test_datacite_doi_and_resolved_arxiv_id_may_be_asserted_by_either_linked_family",
-        "test_research_work_families.WorkFamilyTests.test_different_author_names_membership_or_order_block_doi_links"
+        "test_research_work_families.WorkFamilyTests.test_different_author_names_membership_or_order_block_doi_links",
+        "test_openness_v6_guard.MaterialJourneyTests.test_family_reading_is_cited_bound_planned_and_required"
       ]
     },
     {
@@ -5559,7 +5564,7 @@
       "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
       "class": "reading chain admission and forecast",
       "summary": "Text-only allowances left diagnostic entries and serialized metadata outside the final-input forecast.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "expected": "A bounded protocol projects fixed requests plus its serialized record total. Earlier protocols report exact requests and a labelled forecast, and a turn that cannot fit stops before any call while its verified turns stay.",
       "test_kind": "real_shape",
       "tests": [
@@ -5574,7 +5579,7 @@
       "class": "unverified assignment replacement",
       "summary": "A bar assigned before its route probe kept both its frozen unverified context and its reviewer slot after the probe succeeded.",
       "expected": "Unrun assignments recorded on an unverified route release their reviewer and position, and the planner executes a verified replacement. A historical attempt on that context requires a route decision.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "tests": [
         "test_review_dead_assignments.DeadAssignmentTests.test_both_occupied_slots_accept_same_reviewer_after_probe",
@@ -5600,7 +5605,7 @@
       "class": "reachable stop registry coverage",
       "summary": "The series code guard missed a refusal raised by an imported openness validator.",
       "expected": "Whole-package source reach includes imported validator codes. A refusal awaiting a reviewed row retains its code and action as an unlisted decision; record-check names record_unlisted_stop.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "tests": [
         "test_review_unlisted_stops.UnlistedStopTests.test_series_retains_unlisted_code_and_refused_action",
@@ -5645,7 +5650,7 @@
       "class": "review output capacity",
       "summary": "Problem review prompts did not state the shared reasoning and answer output cap or the answer bound selected for the turn.",
       "expected": "New profiled bar, slate and result assignments state both limits; session turns use request rows, old turns authenticate, and routes without profile rows retain their exact input bytes.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "tests": [
         "test_review_capacity_notice.CapacityAssignmentTests.test_new_bar_slate_and_result_assignments_take_the_profile_rule",
@@ -5664,7 +5669,7 @@
       "record": "20261114043000-certified-computation-has-no-light-path-into-problem-accounts",
       "class": "problem certificate evidence journey",
       "summary": "A problem record held an exploratory certificate but had no worked solver path from the stored probe through native verification and acceptance to a boundary result reference.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "expected": "A once-produced probe certificate keeps its provenance, receives one admitted native certificate run and a proof-candidate interpretation, is accepted at certificate standard with four stubbed reviewer assignments, is delivered to the problem store and supports a boundary through a result reference. Probe-backed contract evidence, an already-determined research proposal, an analytical wrapper, a missing interpretation and direct probe boundary credit stay refused.",
       "test_kind": "real_shape",
       "tests": [
@@ -5678,7 +5683,7 @@
       "class": "problem openness finding answer",
       "summary": "Final reviewers honestly reported unresolved openness with decision revise, leaving no recordable finding.",
       "expected": "A v6 final or prompt v7 single-turn answer follows the forecast rule and records unresolved as a complete finding; legacy revise answers remain valid only under their stored earlier contracts.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "further_occurrences": [
         {
@@ -5725,13 +5730,14 @@
       "record": "20261113074000-openness-packet-cannot-deliver-what-its-searches-cite",
       "class": "openness evidence (supporting readings)",
       "summary": "A search claimed a reading of an out-of-scope work but its openness packet delivered no reading record.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "expected": "The v2 export binds exact reading-id citations from the six search text fields and explicit supporting IDs, reports their citing fields, and v6 plans and verifies complete delivery of their supporting reading records. Stored v1 evidence and prompts keep their bytes.",
       "test_kind": "real_shape",
       "tests": [
         "test_openness_supporting_readings.SupportingReadingTests.test_g3_search_export_plan_and_verification_require_the_supporting_reading",
         "test_openness_supporting_readings.SupportingReadingTests.test_each_of_the_six_search_text_fields_binds_and_reports_a_reading",
-        "test_openness_supporting_readings.SupportingReadingTests.test_stored_v1_search_reading_rows_and_prompts_keep_the_released_projection"
+        "test_openness_supporting_readings.SupportingReadingTests.test_stored_v1_search_reading_rows_and_prompts_keep_the_released_projection",
+        "test_openness_v6_guard.MaterialJourneyTests.test_decisive_reading_is_cited_bound_planned_and_required"
       ]
     },
     {
@@ -5739,7 +5745,7 @@
       "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
       "class": "openness reviewer search field guide",
       "summary": "The openness reviewer treated provisional search scope binding as a coverage or reading gap.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "expected": "One table covers every key of real recorded searches and renders one guide line per key in both v6 prompts. The provisional and scope_digest lines explain scope binding independently of coverage and outstanding readings; old prompts stay unchanged.",
       "test_kind": "real_shape",
       "further_occurrences": [
@@ -6031,7 +6037,7 @@
       "class": "review continuity source reach",
       "summary": "Module closures, name-only matches and shared callback pointers gave all planned commands the same code domain.",
       "expected": "Only executable commands join series reach; source rules retain lexical and callback scope, list unfollowed lookups, and keep every found code in the registry or pending table. Group entries match source sites, and the recorder checks constructors and lines with only source-absent injections.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "tests": [
         "test_review_unlisted_stops.UnlistedStopTests.test_readable_store_keeps_the_last_line_and_reports_the_unlisted_continuation",
@@ -6051,7 +6057,7 @@
       "class": "review chain stop coverage",
       "summary": "Reachable review refusal codes lacked reviewed registry rows and explicit site conditions.",
       "expected": "The stored_state group records each reviewed site and condition; every member ends a series with the shared decision and record-check answer. Codes needing workflow or environmental recovery are reported for design.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "tests": [
         "test_series_code_rows_review_a.ReviewARowTests.test_every_stored_content_code_stops_at_the_shared_record_check_row",
@@ -6080,7 +6086,7 @@
       "class": "review series store-code continuation",
       "summary": "Reachable store, transfer and math-controller refusals lacked reviewed registry rows.",
       "expected": "Stored-state members end with the shared record-check decision; documented recovery rows admit their public commands without rewriting earlier records; render contention waits and malformed review identifiers retain authenticated output-refusal recovery.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "tests": [
         "test_d2_rows_store.StoreRowTests.test_public_handoff_roots_follow_the_cli_dispatch_paths",
@@ -6102,7 +6108,7 @@
       "class": "review series decision-record boundaries",
       "summary": "Decision and problem record refusals reached a series without reviewed next steps, conflating workflow prerequisites with damaged retained records.",
       "expected": "Stored-state refusals keep their reviewed record-check decision, output evidence refusals use scientific_refused, and documented prerequisites accept their named command without a review assignment_id.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "tests": [
         "test_series_code_rows_decision.DecisionRowTests.test_each_stored_state_member_ends_with_the_group_record_check_decision",
@@ -6118,7 +6124,7 @@
       "class": "study series stop classification",
       "summary": "Study record validators could end a series on codes with no reviewed registry row.",
       "expected": "Inconsistent retained study bindings end at the shared record-check decision. A current literature plan or an exact citation locator resolves its named workflow boundary without replacing prior readings. A missing verdict prediction remains an authenticated scientific output refusal and can retry.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "tests": [
         "test_series_code_rows_study.StudyRowTests.test_every_stored_state_member_ends_the_series_at_record_check",
@@ -6130,7 +6136,7 @@
     {
       "id": "series-reach-import-boundaries-and-writing-sites",
       "record": "20261113110022-every-open-record-and-review-capacity",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "class": "review continuity source boundaries",
       "summary": "Import boundaries discarded declared crossings, and function-level evidence combined distinct writing places.",
@@ -6159,7 +6165,7 @@
       "class": "review series ending",
       "summary": "Wait rereads, step completion and capacity diagnostics could escape without a final line; record-check did not read retained stops.",
       "expected": "Every unanswered refusal, including a nonterminal output refusal, enters the ending; other nonterminal output exceptions leave the command. The receipt freezes before output, whose failure is added only to the recovered line. record-check lists receipts independently of replay and blocks unlisted codes.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "tests": [
         "test_series_ending.SeriesEndingTests.test_wait_second_read_refusal_ends_the_series",
@@ -6185,7 +6191,7 @@
       "class": "review series entry code membership",
       "summary": "Codes written as report, obligation, parser, warning or line entries could end a series without a reviewed registry row.",
       "expected": "All audited entry members end at the named_cause decision inside the reach recorder. Both printed inspections run on a supported retained state, and writing-place evidence covers every member with the entry condition.",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "tests": [
         "test_series_rows_close_entry.EntryRowTests.test_every_entry_member_ends_with_the_named_cause_decision_inside_the_recorder",
@@ -6211,7 +6217,7 @@
     {
       "id": "series-recovery-candidates-require-executed-steps",
       "record": "20261113110022-every-open-record-and-review-capacity",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "class": "review continuity recovery admission",
       "summary": "Candidate recoveries lacked executed payload rules and could promise one repair for unrelated causes.",
@@ -6225,7 +6231,7 @@
     {
       "id": "staged-obligations-keep-reviewed-inspection-decisions",
       "record": "20261113110022-every-open-record-and-review-capacity",
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "class": "review continuity staged obligation planning",
       "summary": "Staged obligation handoffs ignored group decisions and incomplete outcomes printed an unsupported assignment_id payload.",
@@ -6624,7 +6630,7 @@
         "test_review_parts_views.PartsStatusTests.test_two_refusals_offer_the_planned_replacement_without_claiming_exhaustion",
         "test_review_parts_views.PartsStatusTests.test_spent_refusal_replacements_show_exhaustion_without_a_forbidden_run"
       ],
-      "fixed_in": "open",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape"
     },
     {
@@ -6799,6 +6805,165 @@
         "test_openness_unread_final.UnreadNoticeReplacementTests.test_u_t5_real_full_grant_fixture_preserves_the_final_level_and_allocation",
         "test_openness_unread_final.UnreadFrameTests.test_unread_rows_yield_free_material_room_to_a_whole_notice_above_the_reserve",
         "test_openness_reading_v7_turns.RatioAndAdmissionTests.test_unread_core_refuses_when_the_final_frame_exceeds_the_measured_text_room"
+      ]
+    },
+    {
+      "id": "final-texts-leave-warning-assertion-and-source-certificates-stale",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "final text integration",
+      "summary": "The reviewed 0.90.0 texts removed a protocol label that G2 asserted and changed certified source ASTs; a new prompt lookup dictionary also introduced an undeclared literal key.",
+      "expected": "G2 checks that the accepted export warns that both resolved outcomes are blocked and only an unresolved finding can be recorded, with the same refusal code and forecast. Refresh source certificates only after reviewing their text changes. A changed declaration remains reported until it has its own declaration review.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_minimum_assessment.MinimumAssessmentTests.test_g2_incident_shape_refuses_without_writes_and_accepts_with_identical_warning",
+        "test_capacity_packet_inventory.ProductionPacketInventoryTests.test_current_production_sources_have_reviewed_closed_inventory",
+        "test_capacity_packet_inventory.ProductionPacketInventoryTests.test_reviewed_production_member_passes_only_with_complete_declaration"
+      ]
+    },
+    {
+      "id": "openness-invalid-finding-keeps-refusal-over-changed-records",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "openness finding refusal recovery",
+      "summary": "G12 still expected an identical rerun of a refused first native assignment after D2 introduced the exhausted-position handoff for native assignments that cannot carry a refusal replacement.",
+      "expected": "Keep the openness.finding refusal with code openness_finding_invalid when searches change, and hand off the first native assignment to export with review_slot_exhausted and outcome scientific_refused. A valid resolved answer over changed records instead hands off with openness_packet_outdated, while a valid unresolved answer remains recordable.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_packet_freshness.PacketFreshnessTests.test_g12_invalid_answer_keeps_its_contract_refusal_over_changed_records",
+        "test_openness_packet_freshness.PacketFreshnessTests.test_g12_resolved_final_is_exported_without_an_answer_refusal",
+        "test_openness_packet_freshness.PacketFreshnessTests.test_g12_unresolved_answer_is_recordable_over_changed_records"
+      ]
+    },
+    {
+      "id": "refused-output-retry-without-the-refusal",
+      "record": "20261112072628-bar-final-refused-for-part-citation-with-whole-text-offsets",
+      "summary": "A refused final output was retried without its contract diagnosis or the delivered part-relative offsets.",
+      "expected": "The planner executes an authenticated replacement carrying the current refusal, bounded to its route, and reaches a recorded review or the exhausted role handoff. Validator upgrades retain successor finality and every stored request, observation and refusal.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_refusal_replacement_incident.PartOffsetReplacementIncidentTests.test_revision_200_repaired_bar_gets_part_offsets_and_records_in_its_slot",
+        "test_continuity_guard.ContinuityGuardTests.test_stage2_evidence_executes_every_supported_chain_and_requirement",
+        "test_continuity_guard.ContinuityGuardTests.test_g6_executes_the_validator_upgrade_through_a_recorded_second_replacement",
+        "test_review_refusal_replacement.RefusalReplacementTests.test_g6_validator_upgrade_authenticates_second_replacement_and_preserves_every_observation",
+        "test_review_exhaustion_repair.ExhaustionRepairTests.test_result_handoff_has_complete_binding_and_records_without_retirement",
+        "test_continuity_guard.ContinuityGuardTests.test_exhausted_verification_executes_its_fresh_assignment"
+      ],
+      "class": "refused output continuity"
+    },
+    {
+      "id": "release-0892-shared-fixture-state",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "CI shared test process state",
+      "summary": "Synthetic binary backends escaped integration helpers; nested setup failures then left claim modules, Codex runtime declarations and historical openness protocols patched. Reviewer subprocesses also lost the fixture import path.",
+      "expected": "Review helpers scope backend patches, nested fixtures clean up even after setup fails, and reviewer children import their fixture dependencies without inherited PYTHONPATH.",
+      "fixed_in": "0.89.3",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_fixture_isolation.FixtureIsolationTests.test_managed_research_and_manuscript_restore_binary_backend",
+        "test_fixture_isolation.FixtureIsolationTests.test_failed_nested_setup_restores_claims_and_codex_runtime",
+        "test_fixture_isolation.FixtureIsolationTests.test_failed_openness_setup_restores_current_protocol",
+        "test_review_queue_triage.QueueTriageTests.test_reviewer_child_imports_fixtures_without_inherited_pythonpath"
+      ]
+    },
+    {
+      "id": "release-0892-synthetic-capacity-drift",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "historical synthetic review backend",
+      "summary": "Archived synthetic routes lacked the newly explicit fixture runtime capacity contract, and a source-rule comparison unintentionally entered multipart review under the default output profile.",
+      "expected": "Historical synthetic executors declare keyed capacity without rewriting stored bytes, and ordinary source-rule comparisons declare their synthetic single-output profile.",
+      "fixed_in": "0.89.3",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_archived_stopped_plans_keep_pending_capture_and_delivery_credit",
+        "test_session_rules_v3.SessionRulesTests.test_result_support_source_citations_require_v3_delivery_without_changing_v2"
+      ]
+    },
+    {
+      "id": "release-0892-uncovered-test-assignments",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "synthetic review assignment capacity",
+      "summary": "The legacy slate byte-preservation test and the large streamed publication fixture recorded requests that their synthetic routes could not cover under the admission introduced in 0.89.2.",
+      "expected": "Only the pre-0.89.2 legacy assignment is built without the later admission; new slates use current admission, and large streamed publications retain files above 1 MiB and two ready manuscript reviews using keyed capacity evidence restored by class cleanup.",
+      "fixed_in": "0.89.3",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_slate_forming_descriptors.SlateFormingTests.test_imported_history_keeps_origin_citations_and_delivers_requested_text",
+        "test_publication_streaming.ManagedStreamingTests.test_large_streamed_files_keep_two_ready_manuscript_reviews",
+        "test_publication_streaming.ManagedStreamingTests.test_validate_deposit_compares_large_bundle_files_with_bounded_reads"
+      ]
+    },
+    {
+      "id": "release-0900-ci-failures-a",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "release merge compatibility and synthetic fixture drift",
+      "summary": "PR 143 exposed revisionless legacy assignment selection, omitted capacity parameters in staged estimates, stale synthetic review inputs, and an admission race that hid a missing assignment binding. Nested staged fixture setup could also leak an observation backend after an exception.",
+      "expected": "Legacy revisionless assignments retain their admission and later replacements remain selected. Staged estimates retain frame capacity parameters without rewriting packets. Synthetic reviews bind stored attempts and prompts, preserve historical protocol journeys, exhaust permitted refusal replacements before a new repair, and restore nested fixture patches even after setup fails.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_posted_closure_compatibility.LegacyUnpostedAdmissionTests.test_unposted_native_review_without_revision_plans_and_invokes",
+        "test_problem_result_reassessment_binding.ResultReassessmentBindingTests.test_current_and_earlier_problem_result_prompts_bind_records_without_a_digest",
+        "test_research_claude_result_text.ClaudeResultTextTests.test_recursive_candidate_returns_response_and_records_failed_attempt",
+        "test_research_problem_second_post.ProblemSecondPostTests.test_a_second_selected_candidate_is_posted_from_the_same_workspace",
+        "test_research_route_retirement.ExhaustedRepairTests.test_a_new_repair_continues_the_slot_after_two_refused_outputs",
+        "test_review_budget_concurrency.ReviewBudgetConcurrencyTests.test_ordinary_and_staged_processes_compete_for_the_last_admission",
+        "test_review_staged_adjudication.IncompleteAdjudicationTests.test_incomplete_outcome_cannot_be_recorded_as_a_scientific_finding",
+        "test_review_staged_adjudication.IncompleteAdjudicationTests.test_incomplete_result_cannot_be_recorded_as_a_value_review",
+        "test_review_staged_adjudication.StagedAdjudicationTests.test_changed_selection_invalidates_recorded_effective_finding",
+        "test_review_staged_adjudication.StagedAdjudicationTests.test_current_source_gap_blocks_recording_and_historical_readiness",
+        "test_review_staged_adjudication.StagedAdjudicationTests.test_paged_finding_records_effective_disposition_and_raw_binding",
+        "test_review_staged_adjudication.StagedAdjudicationTests.test_repaired_adjudicator_records_and_revalidates_exact_reassessment",
+        "test_review_staged_adjudication.StagedAdjudicationTests.test_repaired_ordinary_adjudicator_records_exact_reassessment",
+        "test_review_staged_adjudication.StagedAdjudicationTests.test_unavailable_selected_graph_returns_a_historical_obligation",
+        "test_review_staged_binary.StagedBinaryTests.test_prepare_task_plan_with_artifact_store_freezes_exact_native_request",
+        "test_review_staged_integration_partitions.IntegrationPartitionTests.test_actual_renderer_partitions_hierarchy_fanout",
+        "test_review_staged_integration_partitions.IntegrationPartitionTests.test_actual_renderer_splits_large_integration_to_complete_card_leaves",
+        "test_review_staged_output_evidence.StagedComputationOutputTests.test_render_with_search_computation_formal_check_and_native_result_matches_full_store",
+        "test_review_staged_output_evidence.StagedOutputEvidenceTests.test_render_with_retained_problem_evidence_matches_full_store_state",
+        "test_review_staged_output_evidence.StagedOutputEvidenceTests.test_staged_context_events_refuse_record_reference_dependencies",
+        "test_review_staged_scale.StagedScaleTests.test_passing_entry_empty_state_and_view_have_bounded_exact_work",
+        "test_review_staged_scale.StagedScaleTests.test_protocol_planning_does_not_rehash_the_epoch_when_remapping_tasks",
+        "test_review_staged_scale.StagedScaleTests.test_upgrade_refuses_output_overflow_without_changing_the_existing_slot",
+        "test_review_staged_scale_entry.StagedScaleEntryTests.test_automatic_large_entry_skips_scale_checks_and_records_byte_exact_06918_part",
+        "test_review_staged_sizing.RenderedSizingTests.test_card_only_integration_partitions_against_output_and_duration",
+        "test_review_budget_concurrency.ReviewBudgetConcurrencyTests.test_ordinary_process_can_spend_the_last_admission",
+        "test_fixture_isolation.FixtureIsolationTests.test_failed_staged_integration_setup_restores_observation_backend",
+        "test_review_staged_output_evidence.StagedProfileTests.test_profile_estimates_include_the_frozen_frame_capacity_parameters",
+        "test_incident_ledger.IncidentLedgerTests.test_every_listed_test_resolves_without_running_the_method"
+      ]
+    },
+    {
+      "id": "release-0900-ci-failures-b",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "release CI contract and fixture drift",
+      "summary": "Stage 2 moved snapshot authentication outside status timing, retained stale expectations for new capacity notices, finding and lineage refusals, watched the former provenance derivation function, and combined archived-runtime refusal tests with an available synthetic backend. The incident ledger also retained a renamed test identifier.",
+      "expected": "Status timing includes snapshot authentication on healthy and malformed contexts; tests exercise current contracts while replaying stored prompt versions and hashes unchanged, and archived-backend refusal tests explicitly leave that backend unavailable.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_capacity_guard.CapacityGuardTests.test_matrix_evidence_executes_and_no_evidence_can_be_silently_skipped",
+        "test_command_evaluation_costs.HistoryAuthenticationTests.test_status_elapsed_time_includes_snapshot_authentication",
+        "test_incident_ledger.IncidentLedgerTests.test_every_listed_test_resolves_without_running_the_method",
+        "test_openness_v6_guard.MaterialJourneyTests.test_family_reading_is_cited_bound_planned_and_required",
+        "test_openness_v6_guard.V6GuardTests.test_g3_executes_every_material_path",
+        "test_problem_openness_screening_evidence.ScreeningEvidenceTests.test_screening_evidence_cannot_replace_required_full_reading",
+        "test_problem_result_earlier_series_delivery.EarlierSeriesDeliveryTests.test_cycle_stops_before_revisiting_current_series",
+        "test_problem_result_earlier_series_delivery.EarlierSeriesDeliveryTests.test_missing_ancestor_stops_credit",
+        "test_problem_result_parts.ProblemResultPartsTests.test_changed_series_digest_uses_ordinary_delivery_when_new_evidence_fits",
+        "test_problem_result_parts.ProblemResultPartsTests.test_fitting_packet_prompt_and_request_are_unchanged",
+        "test_reading_budget.EarlierPromptTests.test_the_current_prompts_state_the_turn_budget",
+        "test_review_account_record_units.AccountRecordUnitTests.test_recorded_inventory_turn_prompt_and_request_keep_their_hashes",
+        "test_review_request_fit.RecordedFitTests.test_predicates_bind_same_id_substitutions_and_historical_views",
+        "test_review_request_fit.RecordedFitTests.test_repeated_provenance_derives_output_once_within_runtime_scope",
+        "test_review_request_fit.RecordedFitTests.test_runtime_and_emitter_drift_discard_command_predicates",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_an_uncalled_archived_turn_keeps_its_plan_and_refuses_an_obsolete_runtime",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_archived_case_two_keeps_v5_reexport_and_v4_obsolete_capacity_refusals",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_archived_stopped_plans_keep_pending_capture_and_delivery_credit",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_later_choice_keeps_the_archived_capture_named_only_in_remaining",
+        "test_command_evaluation_costs.HistoryAuthenticationTests.test_status_elapsed_time_includes_authentication_with_malformed_context",
+        "test_unbound_packet_captures.UnboundPacketCaptureTests.test_stored_0870_findings_replay_with_their_delivered_capture_and_unchanged_bytes"
       ]
     }
   ]

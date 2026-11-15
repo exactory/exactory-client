@@ -78,8 +78,8 @@ def build_scaled_record_units(quantity, size):
     """Build exact search/source records before the canonical result builder."""
     from review_parts_fixtures import PartsResultCase
     case = PartsResultCase()
-    case.setUp()
     try:
+        case.setUp()
         fixture = case.case
         count = size if quantity in ('units', 'searches', 'sources', 'identifiers') else 1
         text = 'x' * size if quantity == 'texts' else 'A captured finite result.'
@@ -122,14 +122,14 @@ def build_scaled_record_units(quantity, size):
         case.doCleanups()
 
 
-def _build_native_quantity_packet(artifacts, statement, context):
+def _build_native_quantity_packet(artifacts, statement, context, evidence=()):
     from research_harness import native_review
     subject = dict(statement=statement)
     native = dict(protocol=native_review.PROTOCOL, kind='result', root='synthetic-root',
         objective_id='synthetic-objective', contract=dict(orchestration='problem_creation'),
         subject=subject, subject_digest=digest(subject), claim_digest=digest(subject),
         reviewer=dict(source='host', actor_id='reviewer', attestation_id='review-assignment:quantity'),
-        scientific_context=context, evidence=[], execution_provenance=[], unmaterialized_digests=[])
+        scientific_context=context, evidence=list(evidence), execution_provenance=[], unmaterialized_digests=[])
     reference = artifacts.put(json.dumps(native).encode('utf-8'), 'application/json')
     return review_protocol.build_packet({}, artifacts, None, 'native_math', 'reviewer', native_packet=reference)
 
@@ -207,6 +207,33 @@ def build_scaled_v6_reading_records(quantity, size):
         packet = _build_native_quantity_packet(artifacts, formulation,
                                                dict(scope='objective', openness_minimum=minimum))
         return reading._assemble_reading_turn(artifacts, packet, record, [], [], [], 1)
+
+
+def build_scaled_family_reading_plans(quantity, size):
+    """Scale found records bound to one text, then emit each position of its reading plan."""
+    from research_harness import openness_reading as reading
+    if quantity != 'sources':
+        raise ValueError('The family reading factory scales found work ids')
+    with tempfile.TemporaryDirectory() as directory:
+        artifacts = ArtifactStore(Path(directory))
+        reference = artifacts.put(b'A synthetic complete article.', 'text/plain')
+        version = 'arxiv:2601.00001v1'
+        note = dict(id='reading', version_id=version)
+        minimum = dict(schema_version=2, statement='A finite bound.', neighbours=[], reading_digests=[digest(note)],
+            searches=[], settling_work_id=None, duplicate_resolutions=[], supporting_reading_digests=[], results=[],
+            family_readings=[dict(search_digest='a' * 64, work_id='found-' + str(index), version_id=version)
+                             for index in range(size)])
+        context = dict(openness_minimum=minimum, family_reading_plan_version=reading.FAMILY_READING_PLAN_VERSION)
+        records = dict(reading=dict(reading=note), source=dict(capture={}), work={version: dict(
+            id=version, fulltexts=[dict(availability='available', extraction_status='extracted',
+                source_id='capture', original=reference, text=reference)])})
+        packet = _build_native_quantity_packet(artifacts, minimum['statement'], context,
+            [dict(digest=reference['sha256'], kind='artifact', artifact=reference)])
+        rows = reading.list_reading_texts(records, packet['native'])
+        units = reading.list_reading_units(artifacts, rows)
+        record = reading._create_record(reading.PROTOCOL_V6)
+        return [reading._assemble_reading_turn(artifacts, packet, record, before, now, remaining, 1)
+                for before, now, remaining in ((units, [], []), ([], units, []), ([], [], units))]
 
 
 def build_scaled_correction_history(quantity, size):
@@ -373,6 +400,7 @@ FACTORIES = {
     'canonical_record_units': build_scaled_record_units,
     'stage2_native_records': build_scaled_stage2_native_records,
     'v6_reading_records': build_scaled_v6_reading_records,
+    'family_reading_plans': build_scaled_family_reading_plans,
     'correction_history_component': build_scaled_correction_history,
     'correction_reference_records': build_scaled_correction_references,
 }

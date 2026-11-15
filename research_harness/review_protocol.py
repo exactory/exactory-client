@@ -3013,12 +3013,12 @@ def find_replacement(records, assignment):
     successor = next((other for other in read_filtered_records(records, 'review_assignment',
         **{'context.output_refusal.assignment_id': assignment['id']}).values()
         if other.get('context', {}).get('output_refusal', {}).get('assignment_id') == assignment['id']
-        and other['recorded_revision'] > assignment['recorded_revision']), None)
+        and other.get('recorded_revision', 0) > assignment.get('recorded_revision', 0)), None)
     if successor is not None:
         return successor
     unread = next((other for other in records.get('review_assignment', {}).values()
         if other.get('context', {}).get('unread') == dict(assignment_id=assignment['id'])
-        and other['recorded_revision'] > assignment['recorded_revision']), None)
+        and other.get('recorded_revision', 0) > assignment.get('recorded_revision', 0)), None)
     if unread is not None:
         return unread
     parent = assignment.get('context', {}).get('prior_assignment_id')
@@ -3033,13 +3033,13 @@ def find_replacement(records, assignment):
                      if other['role'] == assignment['role'] and other.get('slot_id') == slot_identifier
                      and other.get('staged_review', {}).get('kind') != 'task'
                      and other.get('context', {}).get('prior_assignment_id') is None
-                     and other['recorded_revision'] > assignment['recorded_revision']), None)
+                     and other.get('recorded_revision', 0) > assignment.get('recorded_revision', 0)), None)
     return next((other for other in read_filtered_records(records, 'review_assignment',
                  role=assignment['role'], **{'context.prior_assignment_id': parent}).values()
                  if other['id'] != assignment['id'] and other['role'] == assignment['role']
                  and other.get('context', {}).get('prior_assignment_id') == parent
                  and other.get('context', {}).get('unread') == assignment.get('context', {}).get('unread')
-                 and other['recorded_revision'] > assignment['recorded_revision']), None)
+                 and other.get('recorded_revision', 0) > assignment.get('recorded_revision', 0)), None)
 
 
 def _source_parent(records, artifacts, identifier, dossier_id, reviewer_id, role):

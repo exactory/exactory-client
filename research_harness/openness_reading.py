@@ -44,6 +44,8 @@ PROTOCOL_V7 = 'exactory-openness-reading-v7'
 NEW_PROBLEM_CHAIN_PROTOCOLS = (PROTOCOL_V6,)
 PROTOCOL_SELECTION_TEXT = 'The chain uses {protocol}; earlier admission refusals: {refusals}.'
 NEW_PROBLEM_CHAIN_TEXT = 'New problem chains try {protocols} in order, using the first protocol that admits the packet.'
+# Version the added plan metadata at export so stored v6 packets keep their plans and requests.
+FAMILY_READING_PLAN_VERSION = 1
 # The protocol of a math-solver result review's chain: the units of v3 in the math order, no statement record, and a
 # final passage request that must deliver characters.
 MATH_PROTOCOL = 'exactory-openness-reading-math-v1'
@@ -761,7 +763,8 @@ def list_reading_texts(records, native, *, artifacts=None, review=None):
     its bound main captures carried as evidence, so that a capture recorded after the export does not enlarge the
     chain. An alternate main body that the packet's openness_delivery contract omits is not read; the
     selected representation of its version is. A row is {kind, version_id, text_sha256, artifact}; the rows follow
-    the packet's text_delivery_priority, then the version id and the text digest."""
+    the packet's text_delivery_priority, then the version id and the text digest. Versioned family plans add
+    family_of, the sorted distinct ids of the found records that the text covers."""
     from .graph import main_captures
     from .capture_selection import bind_packet_selections
     records = bind_packet_selections(records, native['scientific_context'], artifacts=artifacts, review=review)
@@ -770,6 +773,10 @@ def list_reading_texts(records, native, *, artifacts=None, review=None):
     carried = {entry['artifact']['sha256'] for entry in native['evidence']} - omitted
     priority = {sha256: index for index, sha256 in
                 enumerate(native['scientific_context'].get('text_delivery_priority', []))}
+    family_of = {}
+    if native['scientific_context'].get('family_reading_plan_version') == FAMILY_READING_PLAN_VERSION:
+        for binding in native['scientific_context']['openness_minimum'].get('family_readings', []):
+            family_of.setdefault(binding['version_id'], set()).add(binding['work_id'])
     ranks, rows = {}, {}
     for version in {reading['version_id'] for reading in records.get('reading', {}).values()
                     if digest(reading) in bound}:
@@ -785,6 +792,8 @@ def list_reading_texts(records, native, *, artifacts=None, review=None):
                     and reference['sha256'] in carried):
                 rows[version, reference['sha256']] = {'kind': 'fulltext', 'version_id': version,
                                                       'text_sha256': reference['sha256'], 'artifact': reference}
+                if version in family_of:
+                    rows[version, reference['sha256']]['family_of'] = sorted(family_of[version])
                 source = records['source'][capture['source_id']]
                 if 'supplied' in source:
                     rows[version, reference['sha256']]['origin'] = source['supplied']

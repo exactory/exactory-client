@@ -681,6 +681,7 @@ def _review_status(records, artifacts):
 
 
 def status_report(store, *, counters=False):
+    started = time.monotonic()
     from .review_continuation import (annotate_review_obligations, describe_context_failure,
                                       list_chain_heads, validate_context_bindings)
     failures = []
@@ -693,7 +694,8 @@ def status_report(store, *, counters=False):
         for examined_id, assignment in records.get('review_assignment', {}).items():
             validate_context_bindings(records, store.build_artifact_store(), assignment)
         examined_id = None
-        return _build_status_report(store, counters=counters, context_failures=failures, snapshot=snapshot)
+        return _build_status_report(store, counters=counters, context_failures=failures,
+                                    snapshot=snapshot, started=started)
     except (ResearchError, json.JSONDecodeError) as error:
         # Gate readers can encounter a damaged context before annotation starts.
         # The inspection still names every failed context and the healthy heads'
@@ -725,7 +727,7 @@ def status_report(store, *, counters=False):
                          for kind, rows in records.items()}
             try:
                 report = _build_status_report(store, counters=counters, context_failures=failures,
-                                              snapshot=dict(snapshot, records=projected))
+                                              snapshot=dict(snapshot, records=projected), started=started)
             except (ResearchError, json.JSONDecodeError) as projection_error:
                 failure = describe_context_failure(projection_error)
                 if failure not in failures:
@@ -733,14 +735,15 @@ def status_report(store, *, counters=False):
             report['ready'] = False
         report['review_context_failures'] = list(failures)
         if counters and 'evaluation' not in report:
-            report['evaluation'] = dict(evaluation.counters, retention=evaluation.retention_report())
+            report['evaluation'] = dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3),
+                                        retention=evaluation.retention_report())
         return report
 
 
-def _build_status_report(store, *, counters=False, context_failures=None, snapshot=None):
+def _build_status_report(store, *, counters=False, context_failures=None, snapshot=None, started=None):
     from .review_state_evaluation import runtime_scope
     from .review_continuation import annotate_review_obligations, describe_next_actions
-    started = time.monotonic()
+    started = time.monotonic() if started is None else started
     snapshot = store.snapshot() if snapshot is None else snapshot
     evaluation = Evaluation(snapshot['records'], store.build_artifact_store())
     runtime = store.describe_runtime()

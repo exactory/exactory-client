@@ -98,6 +98,25 @@ class SuppliedEligibilityTests(unittest.TestCase):
         case.search = minimum_fixtures.ProblemOpennessMinimumTests.search(case, [version])
         case.searches = [case.search]
 
+    def require_supplied_delivery(self, case, identifier):
+        records = case.store.snapshot()['records']
+        assignment = records['review_assignment'][identifier]
+        observe = openness_reading._observe_turns
+        identities = [case.unit_identity(case.versions[0]),
+                      dict(kind='record', record_kind='reading', record_id='supplied-reading')]
+        for identity in identities:
+            key = openness_reading.review_excerpts.find_identity(identity)
+            def omit_supplied(*args, **kwargs):
+                observations = copy.deepcopy(observe(*args, **kwargs))
+                for observation in observations:
+                    observation['whole'].discard(key)
+                    observation['parts'] = {part for part in observation['parts'] if part[0] != key}
+                return observations
+            with self.subTest(required_unit=key), patch.object(openness_reading, '_observe_turns', side_effect=omit_supplied):
+                with self.assertRaises(ResearchError) as caught:
+                    openness_reading.verify_problem_coverage(records, case.artifacts, assignment, final=True)
+                self.assertEqual(caught.exception.code, 'openness_reading_incomplete')
+
     def test_supplied_reading_journey_keeps_origin_in_chain_session_export_and_post(self):
         # G3's single journey function covers a saved PDF and both shapes of record 18, T3.
         for shape in ('pdf', 'markdown', 'question'):
@@ -130,6 +149,7 @@ class SuppliedEligibilityTests(unittest.TestCase):
                     packet = case.read_packet(identifier)
                     if openness_reading.find_stage(packet) == 'final':
                         case.invoke(identifier, build_answer(packet))
+                        self.require_supplied_delivery(case, identifier)
                         case.mutate(problem_claims.record_openness, dict(assignment_id=identifier))
                         break
                     units = packet['reading_turn']['reading_plan']['delivered_now']

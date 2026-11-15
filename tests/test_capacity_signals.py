@@ -33,8 +33,8 @@ from research_harness.review_series import run_series
 class CapacitySignalTests(unittest.TestCase):
     def setUp(self):
         self.case = failure_fixtures.FailureClassTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.case.records['review_route']['route'] = build_route()
         self.case.assignment['context_state'] = dict(context_status='verified_for_route')
 
@@ -229,8 +229,8 @@ class ResponseLimitJourneyTests(unittest.TestCase):
 
     def prepare(self, cls):
         fixture = cls()
-        fixture.setUp()
         self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
         return fixture
 
     def execute(self, case, command, payload, **options):

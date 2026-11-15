@@ -1968,9 +1968,11 @@ def build_profiles(records, artifacts, route, epoch=None):
                 claim_ids=[], occurrence_ids=[], group_ids=[]))
         frame = {} if epoch is None else epoch.get('manifest', {}).get('frame')
         if epoch is not None and isinstance(frame, dict):
+            parameters = prompt_paragraphs.select_prompt_parameters(epoch['role'], frame)
             prompt = prompt_paragraphs.append_prompt_paragraphs(prompt, epoch['role'],
                 frame.get(prompt_paragraphs.CARRY_PARAMETER),
-                prompt_paragraphs.select_prompt_parameters(epoch['role'], frame).get(prompt_paragraphs.PARAMETER))
+                parameters.get(prompt_paragraphs.PARAMETER),
+                parameters.get(prompt_paragraphs.CAPACITY_PARAMETER))
         profiles[kind] = dict(context_characters=len(prompt['text']), envelope_characters=4000,
             output_base_tokens=128, output_tokens_per_claim=100, output_tokens_per_character=0.5 if kind == 'frame' else 0.01,
             seconds_per_character=0.0001, seconds_per_claim=0.1, duration_base_seconds=1,

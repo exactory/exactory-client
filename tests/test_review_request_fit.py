@@ -9,7 +9,7 @@ from literature_fixtures import LiteratureCase
 from problem_parts_fixtures import ResultPartsCase
 from codex_route_fixtures import capture_codex_response
 from research_harness import cli, review_protocol as protocol, review_transport as transport
-from research_harness import review_request_evaluation as requests
+from research_harness import review_handles, review_request_evaluation as requests
 from research_harness.evaluation import Evaluation
 from research_harness.evidence import digest
 from research_harness.review_state_evaluation import runtime_scope
@@ -293,7 +293,8 @@ class RecordedFitTests(ResultPartsCase):
         assignment = records['review_assignment']['bar-first']
         attempt = records['review_attempt']['attempt-bar-first']
         evaluation = Evaluation(records, self.case.artifacts)
-        with runtime_scope(records, evaluation), patch.object(protocol, 'derive_output', wraps=protocol.derive_output) as derive:
+        with runtime_scope(records, evaluation), patch.object(review_handles, 'derive_expanded_output',
+                wraps=review_handles.derive_expanded_output) as derive:
             for _ in range(3):
                 self.assertTrue(protocol.authenticate_provenance(records, evaluation, assignment, attempt))
         self.assertEqual(derive.call_count, 3)
@@ -365,11 +366,12 @@ class RecordedFitTests(ResultPartsCase):
                                        (assignment, dict(attempt, origin='imported'))):
                 self.assertFalse(protocol.authenticate_provenance(records, evaluation, assigned, observed))
             historical = evaluation.read_snapshot(records.read_revision() - 1)
-            with patch.object(protocol, 'derive_output', wraps=protocol.derive_output) as derive:
+            with patch.object(review_handles, 'derive_expanded_output', wraps=review_handles.derive_expanded_output) as derive:
                 self.assertTrue(protocol.authenticate_provenance(historical.records, historical, assignment, attempt))
             self.assertEqual(derive.call_count, 1)
         self.assertEqual(records, before)
-        with runtime_scope(records, evaluation), patch.object(protocol, 'derive_output', wraps=protocol.derive_output) as derive:
+        with runtime_scope(records, evaluation), patch.object(review_handles, 'derive_expanded_output',
+                wraps=review_handles.derive_expanded_output) as derive:
             self.assertTrue(protocol.authenticate_provenance(records, evaluation, assignment, attempt))
         self.assertEqual(derive.call_count, 1)
 
@@ -410,7 +412,8 @@ class RecordedFitTests(ResultPartsCase):
                 changed.start()
             changed.stop()
             self.assertEqual(error.exception.code, 'review_runtime_changed')
-            with runtime_scope(records, evaluation), patch.object(protocol, 'derive_output', wraps=protocol.derive_output) as derive:
+            with runtime_scope(records, evaluation), patch.object(review_handles, 'derive_expanded_output',
+                    wraps=review_handles.derive_expanded_output) as derive:
                 self.assertTrue(protocol.authenticate_provenance(records, evaluation, assignment, attempt))
             self.assertEqual(derive.call_count, 1)
 

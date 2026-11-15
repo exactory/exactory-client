@@ -56,7 +56,7 @@ def find_output_successor(records, assignment):
         return replacement
     slot = protocol.context_repair.slot_id(records, assignment)
     return next((later for later in records.get('review_assignment', {}).values()
-        if later['recorded_revision'] > assignment['recorded_revision']
+        if later.get('recorded_revision', 0) > assignment.get('recorded_revision', 0)
         and all(later.get(key) == assignment.get(key) for key in ('role', 'dossier_id'))
         and protocol.context_repair.is_same_subject(later, assignment)
         and protocol.context_repair.slot_id(records, later) == slot

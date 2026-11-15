@@ -191,7 +191,21 @@ class ScreeningEvidenceTests(unittest.TestCase):
         work = f.metadata()
         f.search = minimum_fixtures.ProblemOpennessMinimumTests.search(f, [work])
         packet = self.export(accept_gaps=True)
-        f.assert_error("openness_reading_gap", lambda: f.record_openness(packet, "screen-review"))
+        context = packet['scientific_context']
+        self.assertIn('openness_reading_gap', [gap['code'] for gap in context['minimum_gaps']])
+        self.assertEqual(context['audit_forecast']['outcomes'],
+                         dict(supported_open='blocked', already_solved='blocked'))
+        # D3 R46 and R48 refuse a blocked resolved finding when its output is observed.
+        f.assert_error('review_context_unverified', lambda: f.record_openness(packet, 'screen-review'))
+        refusal = f.store.snapshot()['records']['review_output_refusal']['observed-screen-review']
+        self.assertEqual((refusal['code'], refusal['check'], refusal['details']['rule']),
+                         ('openness_finding_invalid', 'openness.finding', 2))
+        packet = self.export('screen-unresolved', accept_gaps=True)
+        f.observe_packet(packet, 'screen-unresolved', change_output=lambda output:
+                         output['findings']['openness'].update(outcome='unresolved'))
+        saved = f.mutate(f.load_problem_module().record_openness, {'assignment_id': 'screen-unresolved'})['result']
+        self.assertEqual(saved['outcome'], 'unresolved')
+        self.assertIn('openness_reading_gap', [gap['code'] for gap in saved['minimum_gaps']])
 
     def test_legacy_packet_has_no_screening_contract(self):
         f = self.case

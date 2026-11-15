@@ -16981,7 +16981,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.acquisition": {
-      "ast_sha256": "d2ba24bff47ac9de52967899c791a22d0a9d5c7e2d26a67f244e9e10ccd3771b",
+      "ast_sha256": "326370d007ddac387e85c55ba5fe479fbd5022f6d17c4c7d7938756ec5f2ccac",
       "functions": {
         "_begin": "01971de6b858fde242c2676ef97d3b0818d4102354aa1b9564d44547126b58f0",
         "_collection_members": "d5c211c6ab1e26eba61e6cac4a142ef6c78073431fa932bd0b44bf96c699640b",
@@ -17011,18 +17011,18 @@
         "describe_supplied_texts": "a72e133d41c4309bd9bda9977e68241390d4f8ae079cc1518b031b310a0c6cfd",
         "digest_bytes": "c4852d2242e57b053ab3df9e5db93a75d2f21a00b72b1c1188cb36bb435263e1",
         "hold_operation": "8baa76bc99a1b73cdff122c5a2904e622250f208fd81c65291775556a7051ff1",
-        "import_fulltext": "09dcd385ea7695dcffb23f0049a88262d6d431464967f25bc7365a75b1f22409",
+        "import_fulltext": "94b8c8b95b005e63c3b6ce341b238a717708886da0aded10587238f44343a2ca",
         "import_oai_cohort": "9d3a07558b624e61664458cb75f3181d4d5ba83c32426d06558294d1b0914b2c",
         "import_response": "e218adb31576e4a966d1b0f935abb05f4dcbe64925a7547367adfe5d4500d481",
         "import_response_file": "51a1b386c64b25e7cd44908cd19ad888a0852d36ddba215ad34bfbc735106619",
         "preview_import_response": "9d1fc5c03c4a551a192981badeda78ea6750fbfdc607bca5ce9a8d95f4a7a0e4",
-        "read_supplied_fulltext": "b8a7eaac422484c83df6764286e6a4ae5f6b78391fb3d87f9743f9939eb58190",
+        "read_supplied_fulltext": "3129e4806b4fec61d610ad817a38d96af8b66b6a4bf8ab20c4aef904971d273c",
         "resume_cohort": "463e4cea5997b21c322623a089a96312d45125d4e28eb87bbb1b07d4e9b547c5",
         "serialize_acquisition": "092910d6950d3aa39df755a6b5da6d40e7918a30efa019566b0b36c7634ff47e",
         "validate_supplied_origin": "40fafa84ee3d263fccd5e3971733559cf4703687fa3be2a04cc0a69cf69daaab"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.artifacts": {
       "ast_sha256": "d038166cf3411bdf883203fd6381be594fa89f0b11a007ccae800f0b44ca0caa",
@@ -17042,7 +17042,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.automatic_overrides": {
-      "ast_sha256": "3eef023ba5143be8de4c93420a74d0fdbf3fd8b41bc0e9fba22b73770b041bbc",
+      "ast_sha256": "76c70949a8250baef33891e354589d2ca48d99b2b9bab8ea38f8b6d5a385200b",
       "functions": {
         "_check_limits": "cc5947eaeb3004a411cc6643fb77bcdc40474b2ef1d9de11b29c4b70cd4a7ba3",
         "_check_reviews": "6b32ad9034e84c3947203e646eb83291df8e2b09d0ca8a25c4b164bbfab77f83",
@@ -17050,7 +17050,7 @@
         "_describe_plan_violation_proof": "0085ca5312474071df00bd182b5da529b9aae8c24ad92ea11cdfda60c9df2949",
         "_refuse": "b9891fb5d5f277ec643289c7d9ec797ba4e36e6bc0d401ab9f975ca10abcd66f",
         "_scope": "b346a921a7f948ddec327236e761e7307b61d26d8841f59afc162343a41f3216",
-        "_trusted_stop": "4d0b83a329370c83ce5e41bed46a141536dd5b79d55229195f94c322b3561a96",
+        "_trusted_stop": "0482e0e37b3d202e3c54bd808a38f0021e18d8a8a9dd884c1ec073a2367f951c",
         "_write_report": "adf76c508caf46ed09042b50f87f299a4e1653e3cd188624979fda4327defad3",
         "check_public_write": "ca7d666728071a8f9ae40885c7a96e8aa7738420d88388d016e5fccf902b355a",
         "record_automatic_override": "a09355bd890048bb158eba7c39367ef5e2ad921ab8989335ce9e2560dde82d7d",
@@ -17060,7 +17060,7 @@
       "packet_call_digests": [
         "c98dcd3078c7188bbb3525c9679d30eb5fdd3fceead775e8b0e9f27c3d879bbc"
       ],
-      "reason": "Reviewed requested-stop source identity, separate series receipt identity and recovered ending projection; changed AST requires declaration review."
+      "reason": "Reviewed requested-stop source identity, separate series receipt identity and recovered ending projection; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.bar_sources": {
       "ast_sha256": "3263fc40a36e4f127b1a049e2f17623ecec05dac949791999c795867f5d15603",
@@ -17244,9 +17244,9 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.cli": {
-      "ast_sha256": "ca5db6834c85a612c1214a6f2c5cb49f003de3fd627533a31e15f8946b080542",
+      "ast_sha256": "75dc616d20d70111751eefd0ae12b93fd212e6ac8f69da5430b7687e23d9965b",
       "functions": {
-        "_build_status_report": "d6140a5a66c889ae8f131091f9a3530c49d2f5dcdbfd4452aa7fac73ef4123d3",
+        "_build_status_report": "d66e55cb0dab6385c501dd53ebe53f6d1348d3c3d9c469ca8c53a79050987e9b",
         "_is_recording_command": "05655a0a1dadde896d4de40e67283b9eedfc8feb68651142be7c2b6f25c9a43c",
         "_reconcile_run": "659e17086c81534ff7bcfb3e709dda44c73ea6c0783a2faffac2206f9f9e4ea7",
         "_review_output_correction": "dcbff6d8cffee41e4f4a58da058a3650935006b1f9bfb8e9f453f58629d25b77",
@@ -17268,7 +17268,7 @@
         "read_payload_receipt": "2d1c12371fc8c034e9045344fdc1f109a3cf44474a8842f20f88df7461b3df71",
         "run": "e874ae0b72033ac2861ded4c3f6985ce7c0e60d034326910dd17822bd4c23245",
         "select_managed_path": "307453796f4641a08002dc73f36400a17479404432fa704bba73667ce93bc6a6",
-        "status_report": "dbcbe407b70e5f57ef9f52101e249891c2cb02fa430e357d65caad75c4121515"
+        "status_report": "cb4919418def8917a5c941ade4db82d7558069ee5b20f515d5b7c91cb8049068"
       },
       "packet_call_digests": [
         "249cf162f1fe2c07e6cf69cf4208a9b8ee08752e0f99baeeb8ebb0c92215de66",
@@ -17813,7 +17813,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.literature": {
-      "ast_sha256": "fec608c656d18a94d0547b8114f7639f084d130bffc28c2457e26cae4d9e197e",
+      "ast_sha256": "06d439fbcfe97d8fc3703e2bde281e22bf7d2e2743a9df0196a96729341cda66",
       "functions": {
         "_build_judged_records": "0ac42e17ba74059bad33550c0c9804d2e5e2f52a50b320ed666cbd0396d08d38",
         "_foundation_state": "b33dd1c803ca6a73d08dfd8dbfad31f504387c6729a05bf613a93752e5975c29",
@@ -17852,7 +17852,7 @@
         "validate_search_dispositions": "251b3727bd19cfd411b768d71798051d1ecddb5d82781f0b75889f2513f50df1"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.native_export": {
       "ast_sha256": "6971122d84071f2a0e3914124869330472e91cfb2600b5252477ae7a2b7be74b",
@@ -17896,7 +17896,7 @@
         "edde9f7779736bc2d05a672eae4b409cda3096b36296ea180c2fc366d5c0292b",
         "fecc5e5ad3f4216ae7afd54011d18fc02220252228da22a95dac824118248417"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "prompt text lookup keyed by the grounds selectors of FINDING_RULES; read only by render_finding_rule"
     },
     "research_harness.native_writes": {
       "ast_sha256": "fbbed9384941aabe8d671f17f3082a503272800c8b31e17fc1ece1d12467f4db",
@@ -17987,7 +17987,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.openness_reading": {
-      "ast_sha256": "fc5c4f7e3e06dfeffce2e8a956d7f1353dee7372db80c1f1c2ed93611571b4c7",
+      "ast_sha256": "2979409a140d4fd7c04fdba78e872e600a0775b23297840e11059e111d29d3e0",
       "functions": {
         "_add_source": "bf750a7009979c804b515fe2fa49795c9649ea87dcafa53f80cef1045aeb2340",
         "_assemble_reading_turn": "9c44a6537d6d1fae1af0dc44b726cd7059da1ee593c0d2f800617c0c1655160a",
@@ -18058,7 +18058,7 @@
         "list_math_response_rows": "4f8b959451ea11c31489ecf3551bcc949226eb8478bb228281119ca34f158131",
         "list_math_text_rows": "e6a05f2c283924c780afc4ef20ce64b13f22194f10d548336c7224b659886fc1",
         "list_reading_rows": "06d463821e8dfe61ca6cfa8242764c9aaf232ccdca64369c4c47154851a27b0e",
-        "list_reading_texts": "763b082e16866673833fd3f154ebaf672a00df3f1dad6bd15cca94498150782d",
+        "list_reading_texts": "c5c95f2d52307d8125172c1cfdc2cbc45d04ea29b834824a40ad1068a52f54ef",
         "list_reading_units": "ac46d224706201e6825607ee1dca2b5197245a19538564dfa1b5cd66ea8d9471",
         "list_record_rows": "8aaa88db71248768ec7fba8b558ce77eb98160867f34816d4fcc3ac958aa75d4",
         "list_result_texts": "216f7f98136359c12f39212164e93786615bc5e5ff0f1cad08ad45da9bdc5778",
@@ -18406,7 +18406,7 @@
         "e9998aa48e9485ab2b20bec6cc0034e330b920b589625aac2c32361fe1447e03",
         "ee40fa0154dd550b5e1956b30fd0089c7e28eceb5a623ab0241aba4b4f0fd5c8"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.operations": {
       "ast_sha256": "7a7259d4608d2d8309156acf6ea55d3779a24ba3d2abb9468f34a62a9f977408",
@@ -19013,7 +19013,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.problem_openness": {
-      "ast_sha256": "2077e9218895979b8c6f67a3c837714af19958c69eaf9354403b0831f1fa74f3",
+      "ast_sha256": "478cd43c1018528b2c64dab01c7f06c76edf5a488563795eb115c544d1f54940",
       "functions": {
         "_is_utf8": "802384d729df9c710bdc631eac4e0a7c325b5239cf38258e5f37412a5cae902c",
         "assess_openness": "c410e5151ddd5e8dc8acb9fd52a000a8a4ff9f87869e0077ccd8ce2440d53f68",
@@ -19023,7 +19023,7 @@
         "collect_reading_artifacts": "b63b0f429513e0f895d968c72f40969a2724732715e006454e340a98c4cd772b",
         "describe_family_readings": "ad0295317f9f534de6ac57d08a2d0c8d074afa1f922228a1cecd6858b286f7df",
         "describe_gap_fact": "23dcb18ade44f5a8d2fdfc01d68d1484828e68884d61bff384b46f47c7ddf298",
-        "export_openness": "928249db2b199b1ff61587247fe2b32d629ae57bb8e78e55ed33abf52ef8fe75",
+        "export_openness": "059b7ec53c5702791a1618a8bdb388dfefb72e4cbac8f90f3de06fb026660f1d",
         "list_reading_citations": "1e10edb49b268265b79893763303217b089a037928712089e634bd7c4eeb086b",
         "prepare_openness": "5a4f2b61c30306a7d1d1bf56e9bfa9d03eb83a71df43cf848fed89dfb8456e90",
         "serialize_record": "f7243934e28cc8ee92a7c6af903b9056bd8864249cf01df9d8466a5a00442d69"
@@ -19046,7 +19046,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.problem_openness_reviews": {
-      "ast_sha256": "cbe431f1cc5f93807edc8f41abc51a48d28227b739839a03ffa707b76f8dd601",
+      "ast_sha256": "6cb4ecdc01073b2103e59676712e5e2d7f80da910630c2c09dfca0fb804aea6d",
       "functions": {
         "actual_delivery": "2969ffed0fcac558a7b9ed9b9017856d5f5d87f2c032c0f5fef8cf7efa993400",
         "bind_results": "e0557ec8e2e2db1eb41bdeb01e3204ed795f87f07109a0658051a9b8f4eb5f16",
@@ -19059,11 +19059,11 @@
         "require": "af264ca178177edafced70b58fb9b62d13581503aeabb26b94f56fe97ebf4d5a",
         "required_evidence": "dca864c2c37e706e523c20219734b251091034a733c05b0927b0c40a0015b3e0",
         "resolve_native_reviews": "e93bee5a5ff39c87b1b2242c42a61150a7f03588824784a3d3106e7aba7324f0",
-        "resolve_result_review": "518a18777c6eefb606e339876e927f7274c7b79a99e8bdd8b51b4f215ed3c1fc",
+        "resolve_result_review": "643aa3fe4c15f4c08eb1ab73524f024666b2e09758494bb6c069a4644910f322",
         "validate_approval": "98274be3e966ddca4fd0c6d4ee57bb28c897b631f5358548aa3ba4d15f29ee5d",
         "validate_bound_results": "b914ee089b80e662e7ac13054a96ab21e9cf553e0866be6dacd95a896a19497c",
         "validate_native_reviews": "e68a210d23d6d4a216e2cc3aaa975adc461f62c3c259f0ce415656f19d9411a1",
-        "validate_result_specs": "b7715d9420b51ff8f862b72f0dff68d8fc06dde939d89376a111a638083ec6d6"
+        "validate_result_specs": "9c629e935b13bc9e77e63aa4ebe03323504ff2959ca5fba9dd296ff3c9a9fccb"
       },
       "packet_call_digests": [
         "00aefb49c4b96c15f80cf534e17b534ab223c75da78bc9ceaf9c4d45b0a904d9",
@@ -19147,7 +19147,7 @@
         "fa1479e08a5df3bc95463dc412ca02f39be2e0003a24657072bf3d089e85b7ca",
         "fca691a936c245fc3eb23712c89033afac7e68eeb2a15fdf262de5711f3bb88a"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.problem_openness_screening": {
       "ast_sha256": "3246a462c1a39554d52f90b651c0b48a3f4ab817a954b5f141a572d3d7285727",
@@ -19474,17 +19474,18 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.record_check": {
-      "ast_sha256": "aef16364d996061bb2a0f0882f781b9e5821fe032e916391636eeaa9c99f1d77",
+      "ast_sha256": "670f2ff4b10a933773506ca2c4e992a65e09535f647b85b9ebc95d39f123c4ff",
       "functions": {
         "_rebuild_invocation": "1acc896d0015ad5e31d50f3cf2ab1e450f660f53550945aea2137f13c3c44901",
         "build_reader_timeout_error": "6ff145b44f5467abad05c9dba2ddcc8fc8347d4b4702c7933ed70eb410c6624b",
         "build_sandbox_profile": "bbed2b952558901cc000a45bd5c512f30f034c3f68da5083292ec22d73062815",
         "check_acceptance_reviews": "525f1bec1d627b6af1da4de92ab41ca9edcd32b33d281a3e919261d22b94e61d",
-        "check_authentication": "9ab7b922bc84869d44f15bfca6f0ee09d7fd7b80ab5829401fd7e4760c5c705f",
+        "check_authentication": "5591c480b0e09c69e2ef1348b95a4099db99d7b92aa9944b8d5d7e1b6ea819bd",
         "check_continuation": "2fcf4237e1b17c804c85c7245f36f5d1ec5e1335abb6f5a3fa6ac3047d257313",
         "check_integrity": "ca610392a17cda8aa6b139182570a76bc0d2f8245b204a6b9127ce9408ac6ada",
         "check_isolated_snapshot": "a19d390dac666268d40d0ccf60a0f8cdeb95a5189ceb92308a8e0381ea0c11fb",
         "check_math_roots": "c39d9551d0b86c55db981eafa2c94d50cae9386a17f89172c4e630e4364fbefd",
+        "check_openness_findings": "395dcf2196dcb0b30e38c0e46c39465690f063ec4d12c580e1d9ea0c8bfc6d12",
         "check_prospective_request": "7f9b7824ae1c9944734a24a0a8dfa38b1f95a5ed2c5b4c3a4025a0f810d0366a",
         "check_reconstruction": "7e5059bcb7f9724655a75ea3da1a990b0db7ba0afbb7f59bfae6da6538a320ee",
         "check_record": "811cb36e05d05ad17e7ecfcef647c7a85bfa32f864b2ce79b8699459724cc8af",
@@ -19500,15 +19501,15 @@
         "main": "71a95b8c8cde37bcee20c09c89e35cc6da5a89ccc67423de0128e87c972c3ca5",
         "qualify_snapshot": "26e0c2d03af1a7b89e8a36d9e45ce1362da9448f609b3168aec6434639ae0622",
         "raise_tree_error": "4d2148a56715085b127ad86d7b88b3ff7786b82fc1d44fd11ed5c9b6b955b8f6",
-        "read_ending_files": "5f957d360f76abac15ba155cac61d562c051cabd3e902db188602a6daba1a230",
+        "read_ending_files": "8827e21b013ce39afb19589236ff24f9a65f048fc4dbe34fae23e8d13f116107",
         "read_processor_seconds": "aa8705292eb06d2051a3bbc958d6243b02c1be915851f29082edcc33e3c22930",
         "rebuild_invocation": "555f3e089aec75c044181a77e441c4c1bc7ca6656529167be1233053fbf08d80",
         "rebuild_staged_request": "4a697c3c0472ec93bad43870e7e49f2f73787194491ceafb78cac57804deb372",
-        "require_listed_stop": "a1f871144d6fb70ff57e172f109c397fec61449d6ca96eb09ff52cd932ae2217",
+        "require_listed_stop": "a3865a28e9e6c4d61e76bf1d0e542cd0e8fc371eea9f8da81bb682cfe59848ed",
         "run_timed_check": "1b036cf9e08be718add474e56867e0555381712eb624af1d77b59c1584fb7e7c"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.remote": {
       "ast_sha256": "897072ca205d979c3f6a3a964936b3958452730ba4fe9e5532c59ce05b6a2114",
@@ -19919,7 +19920,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_context_repair": {
-      "ast_sha256": "1c48ed450e9e8607b6a953384b622d90bc693e899c957e21bf79a952110a4035",
+      "ast_sha256": "91822b315f4da10a52982ccae636685d9ddd5bab4a75dd67cc1174942e2cebb4",
       "functions": {
         "_assignment": "dc3dccd91bf18f17b04d64ca887c63fd89393a9441c73b7d45a5b70ebea77148",
         "_exposure_lineage": "b5ac9dd0e470179fb518bc15df1cde9900a67bcb5ea118654d0d0d068450b3c0",
@@ -19927,7 +19928,7 @@
         "_has_recorded_exhaustion_repair": "d54571a3d8f80de5994e581fb43a984de553cb23f2eab44ec6592b672454d7cf",
         "_is_unchanged": "a3c4597e03761f3388292665d1e38888c4072f801da82a4f904a79ba150abdb6",
         "_lineage": "103aa355d474100cc370aa8f581a9db85927109b49bed407cfb258e13abb7659",
-        "_raise_binding_mismatch": "e6cdbe6bba0cd0300c4de16583a548cc0ba0277cb6e4d20714d6755a3c6cdf98",
+        "_raise_binding_mismatch": "d71242de2946d13e75cd67cca6f5d1bd23c1cbd0e91fa888663c2b76056dd1ed",
         "_reviews": "dbd2542fe3eb0ab920d99392b29a8a6201bf0e0564758fb487a2c829fbf20ff2",
         "_scientific_content": "f52ccf10506fb55fcc3be6f844c19cad5b4e8cf3e67473acbfd836a8cdca7ff7",
         "_validate_exhaustion_records": "265472032eadcb826da625b524330bfdf8c7b4e080c9b8154f5d469836c51f88",
@@ -19955,7 +19956,7 @@
         "c2a428540d7d05dc378f28d188a7d102aff41528fd8c660368b616af59e7885a",
         "c3be66f3f57ad03ff5fed07ad9e39c66d61e5b6268fc12d887d8bc64538f400c"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_continuation": {
       "ast_sha256": "ccf293ec88f3c5cbb50df543e079c8fe8c09248746adb98cb268772234dd047f",
@@ -19994,7 +19995,7 @@
         "a818bb9dd2888f3485740b4f47e07cc197cdd55fdc8befa8a39604351e566028",
         "f2348c8b962b96093effe1bac671b28bfea9e07217876102e0e949a27fea8c7e"
       ],
-      "reason": "Reviewed initial/native guard exception only for an already-proved replace recovery whose capacity_replacement names this exact assignment; existing handoff protections remain. Changed AST requires declaration review."
+      "reason": "Reviewed initial/native guard exception only for an already-proved replace recovery whose capacity_replacement names this exact assignment; existing handoff protections remain. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_delivered_evidence": {
       "ast_sha256": "532ac96cd4ab5d939c27d4444291d809ccc4571f693221c146c1c37a847f88e0",
@@ -20238,7 +20239,7 @@
         "970177577bb835b5c5ac97a0d64163966e523d06e418589e16eca0c8b79f9e11",
         "cbe54a67fb69e0e1fe1dc5085d4b2e4fcc27a2019eee930193876a86c72fa49d"
       ],
-      "reason": "Reviewed explicit capacity replacement command context and frozen refusal notice forwarding into both real parts fitters, with exact candidate preflight and strict smaller-request checks. Changed AST requires declaration review."
+      "reason": "Reviewed explicit capacity replacement command context and frozen refusal notice forwarding into both real parts fitters, with exact candidate preflight and strict smaller-request checks. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_handles": {
       "ast_sha256": "62caa83444e693065ef92b7bc5300edd0fd48f37fff0b2c004e8027d5f758d64",
@@ -20284,7 +20285,7 @@
         "e6073a699e918e9e62f101144415463a598070ca270e8c69118b271085873789",
         "f71df93e3effb278f474cea48473ab543f2e3e9f35807725d57775c354ddc1d9"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_input_projection": {
       "ast_sha256": "d80dcb0e2f1b7985130cf94a1b023a143725fe366dd627a6ee8091236bd355f2",
@@ -20356,15 +20357,15 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_output_correction": {
-      "ast_sha256": "e4945bdbf3fd249e7af9a80e23b7c4f0cd86a91a75029f840da924e0eef1bea0",
+      "ast_sha256": "1f104a50c51691bf96bfa57eef871b4d1de12ff964633368c5ca1908656df7aa",
       "functions": {
         "_authenticate_observation": "b65c1f5fe929269e60583485528818c2ddefaa233f32789f36dd1801578cc12f",
         "_prepare_packet": "11d07c3cbf338a2830f2f4cc76304af8354d7f3d172d9942504d21540a2166d5",
         "_read_raw_target": "4491addb389010953e627b64b99ade851445436bea01683ba65009c014798554",
         "_reject": "4743e9a7a1e670066edc35edc538406087276a3f77d56949c49895d68a2394b1",
         "_route": "15f109e391988a3a6a732ebe1275c3523d8bbac1f741dcc729de2a7c63c16246",
-        "build_request": "c315507232e4c1d86af703a053b4e94fd894886b3e8098a6fb7cc741b7be672e",
-        "invoke_correction": "fe1ffd14f1e6c2ae43118a0d48ee8ca132cef6b8a35c2cba8110294e50635ee8",
+        "build_request": "6ef05d388564cc965f2cb578c298272d8eb21867d40186de38b0089ab8035f9b",
+        "invoke_correction": "89abe308e62d26fbd3a38463aeec925ea98774dbc557b0500afbd876d3ead259",
         "prepare_packet": "55895aa00ffc512dd5bc1cab786282efed38950f5e22bf1b38f77168a8b69b0a",
         "selected_correction": "e4b84d6094d3587ef5d35d7fee8c6db4cf1748b52228925b9000d3452cbd149e",
         "validate_output": "0ea580f50a270c5957c7838fb2f5d8378ef11b7e7a898d81972d8ffdd37e21e4"
@@ -20377,7 +20378,7 @@
         "87c3cc57e36f8e70d05658c7fe8bb9587ecbf2042822c79ae198232ee273f72b",
         "a4e3e4d7d464207ad59c43b6e4096cd4217718b57dddf92dc2eefdc928bef8d7"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_packets": {
       "ast_sha256": "c9e9237b96b4d8b790b4b9d7f07f12fd8cf0f412d8c3b993efe3f73010b43e21",
@@ -20794,13 +20795,13 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_parts_prompts": {
-      "ast_sha256": "5baeba3ecf0b4621947393d3896ea3e375736f6ec366b5b5521bc7ac7d48123b",
+      "ast_sha256": "b0086d438f84a267617a6715e956fd315e9b349a263ba10dcc0b909b0134bc9f",
       "functions": {},
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_parts_repair": {
-      "ast_sha256": "27b2cf2584a4396f156c8802da03e9eb2fd5bf8e1cfd6ddde3562affa6b83c7f",
+      "ast_sha256": "79389931768b5a6f62eeb88e8755a1c5edf5905e7b9be73e435a1d8b91e1bb25",
       "functions": {
         "_supports_parts_route": "17b3d2fb506080f05f3524da3f13fb62186d7d99def90c39677ee56ed6995cbc",
         "applies": "222d6c02e3fc78446e1f34ef7a32179c7c4d995a965f9f037bbc408fed089f5b",
@@ -20915,7 +20916,7 @@
         "fcc884bd67ae74873bdd99e654d0761c03b436b5ac83583bf0823c8a497bd98c",
         "fe145f79a161fcc35b54de1115f8aa43b040f089d8116037519793e92c6c8c76"
       ],
-      "reason": "Reviewed optional frozen refusal notice attachment before every actual fit and after prioritize_fill; omitted/None path restores the previous exact AST and stored behavior. Changed AST requires declaration review."
+      "reason": "Reviewed optional frozen refusal notice attachment before every actual fit and after prioritize_fill; omitted/None path restores the previous exact AST and stored behavior. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_parts_roles": {
       "ast_sha256": "caddb9050c81ca90fd3763ec0b1155f6ee65974de61403e3c9b3d5c4c5400586",
@@ -21006,7 +21007,7 @@
         "78548c36c7cc5bb377d14d1244f711e05dfa5277795ce8cd541d00119f739603",
         "b8b5c33a4bfba3471cd01e8011931d6115a8c93dc2fecce646b5fe3839895214"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_preflight": {
       "ast_sha256": "03aa53408f6d59eb23b4a59ace59184c42d7ab52d834c98cad8e0331538e2a44",
@@ -21209,10 +21210,10 @@
         "bd01b36e067355a8f0c1e765513e33161679a741f0cc47e75c8ba682741d2e43",
         "c028215c5274d690c4dbc9e561a96faefb9da20033afaeee3184646b0134c60e"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "20b2df961a68876c037756d64cbcee583024b0b43d245b17b220c05d296e71da",
+      "ast_sha256": "08628d53cda0e816b90b54411d4c6644e4f3dd48e3f48f7403d87fc83c93c3c2",
       "functions": {
         "_assignment_state": "805eca7b4483852dbee0f8e05928cde22acbc7c7be8ec46ba127c3e71a0ddcbc",
         "_bars": "fd41a7b94078e8e0761696db4a7cc67b063cbb5787f76d6d3dae65fcc7fe5f9f",
@@ -21296,7 +21297,7 @@
         "find_common_prompt_version": "6703a50571e3b46cfad68c28e864395900405707189ba798c45360fd4725e44f",
         "find_current_problem_bar_ids": "a036fa4d45d9540f193b9d85cb1bd8421bd1a6c9ff7aa6d25b15289ca9b99e48",
         "find_historical_bar_reviews": "c8bb404a069fd9c0016aa0dad013a15778a4e697bdd76ae0c2a19de67c2ef3c5",
-        "find_replacement": "2eb201c01420fe1ad7b02fb7015c550405e42891b9259cef8e1187873df420f1",
+        "find_replacement": "5a631844c1f654dd3ee9dcc1df593eabc7909538ac7bb70f78efbe74209d01c3",
         "has_ended_without_output": "f21d60ceabff57cdfa464f0a0b05ddd53ba4358dc46fd5b541060fceeec9d057",
         "has_exhausted_position": "a6a36d007af0c26245e0fdb1edb9a4e261a1fb5c301586ba7ea56d2f4665e141",
         "has_pending_invocation": "1100f816ca4769d642bcb040f697439bfd738a2a00c832bbbf9b153965e9ac76",
@@ -21389,7 +21390,7 @@
         "f71df93e3effb278f474cea48473ab543f2e3e9f35807725d57775c354ddc1d9",
         "f9de906674de2fc03fd882f06649fc77f3536e68a95d398f173553e2a01ce4df"
       ],
-      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review."
+      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged."
     },
     "research_harness.review_provider_usage": {
       "ast_sha256": "2007b2994c6a401bf46b4f9341daf0442821c2c6a6cdb85abb14f7329a23dd4f",
@@ -21501,12 +21502,12 @@
         "fc7119fff4ca416fd850b718e9eb16eaceb0e68a07e9dd0061446b69bd0c922d",
         "fe3a38d31f166377de67b03eb4b20df6de1a56da8e3f3d83aa450c572a7685c2"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_refusal_replacement": {
-      "ast_sha256": "a8ac8db98ab5c521ae23ccd711c90e8d85ea5da469ab6eecbce918ddc0aefb48",
+      "ast_sha256": "4db67a0ba02ffa8b80f9c7c820e1c632855029c4c7286eaf59a5eba940eee8a0",
       "functions": {
-        "find_output_successor": "a35ca231185f8ef46cc1489faa070bf70ba93f228750f106c1e7940d001beb85",
+        "find_output_successor": "f9aa987eea6760e2a7fd3e29888f5e43903e4365d1e50938ea4b17c429b79967",
         "prepare_replacement": "a7ddbaa90806583c3dde8eb3d95f2ab761970823c1a4b66aca47a5dae2efe6fc",
         "read_position_context": "cdede8c28f9431efad8671676884d4e166ee1d9ad3e3728ac4414cc53cf87d32",
         "read_replacement_link": "c532b998f7ab3e173deea48b4d2b41ab8df7bcba6534694b9be6e35a17e27160",
@@ -21533,7 +21534,7 @@
         "f39814fa03694fc06afd107a8e76d88a1044a005183edc72cd8ea55b0d57508f",
         "f94bff00439cfb92fe19efa32bf359ad60d305548b0148aaad4243cb4d2ea818"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless successor ordering; packet construction is unchanged."
     },
     "research_harness.review_request_evaluation": {
       "ast_sha256": "0907cb21fc2c40c98f294d1c49ce2f9712aee0ecaa3f8401ad9d201a9c81179b",
@@ -21822,7 +21823,7 @@
         "fc5b7c32b023357b2fb7c9a8d9d5624677a2845dd5a2e022120779e13eb9cbda",
         "ffdfc783a549c42578e6236ef07694427415cee2147068c18cd11ab6d1bd4c94"
       ],
-      "reason": "Reviewed task-kind precedence: explicit staged/parts markers, then session request marker, then native reading markers; changed AST requires declaration review."
+      "reason": "Reviewed task-kind precedence: explicit staged/parts markers, then session request marker, then native reading markers; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_search_delivery": {
       "ast_sha256": "a38342246d0a658b81d42fcadbee55b2c23fe5a1056dd7c3e340a6bde7d786da",
@@ -21843,7 +21844,7 @@
       "functions": {
         "_bind_ending_receipt": "fd38b5531ffa06a25d4a1eb3ca22d6d66e8ed981d79082ed77b30fb13e25e4e0",
         "_build_check_step": "4b2347650fb596f1d9461652debc7c9f375e493f4c6c234af1adc8f20520f24c",
-        "_complete_ending_step": "6d1429a8fe8ed631a5379db4759bb659ae9921d948b1bb509ef2800967783a44",
+        "_complete_ending_step": "d70c4b3c2b73234fdf02ef7ebbb39db32028fbcb608db960b7ae4ae5ffe4443c",
         "_describe_requested_ending": "abeb59f4d280789065e7ad8f0dac9a23fc9df9f28f7be12de34f7513b259702c",
         "_describe_stop": "15c25ece855cdac6d1ec6269155110861cf560e668347c14c380ac716ee9a303",
         "_emit_json": "dbbed1d765fe841a04765b4a502b9b303aa6d6df1c15a20113dbbc017bca2267",
@@ -21855,7 +21856,7 @@
         "_record_omission": "fe80f63b02d829f499c8552030842a71f99276855ec40905b6e586dbfa9f5a89",
         "_recover_ending_line": "adec4cb1612bcc9862fca41c9b102b248ea3af33e7f3031defc982ed999236d7",
         "_render_views": "16a0f955e98d94830f067dab01fb8b80f82e956f3ce91c4b88349740752c57f3",
-        "_run_series": "754c28a5ffa810556fc9c837054851a3d60b0140fe15a63b9fe952513538e107",
+        "_run_series": "6b8a06c7cea8fecf18ecebdb05e3389126aba36b7a44637c4e735298361f20c3",
         "_use_fallback_step": "55a82f2ad5254991e1636a0060e80bcb4c74b85b7e49f79f1fa42b0e72e997e1",
         "_write_ending_file": "a9b54197e3893464b4c2a9a95c9f5cb17f9a250eaa6861d37299a14c64e4a0ed",
         "run_series": "c7e361654f3bac2b9edf1906ebff980cbea0f4c24e3cf8538e959b290c671bd2"
@@ -21868,17 +21869,17 @@
         "ce3d632c43cd98ea8eb54e2acc5ce058df26a5a646f054388a8a92cc0c3efaac",
         "f7598854c85c37169821c5a5f8de589f782bf1c8e28d95fe256c2711354c79bb"
       ],
-      "reason": "Reviewed requested-stop signals bypassing the diagnostic boundary handler while every other BaseException preserves the original operation refusal and retained boundary omission; changed AST requires declaration review."
+      "reason": "Reviewed requested-stop signals bypassing the diagnostic boundary handler while every other BaseException preserves the original operation refusal and retained boundary omission; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_single_request": {
-      "ast_sha256": "30417c082690b8dd3fc3a529453e22fe43bc16643cb55aaf749cb3a0d665f605",
+      "ast_sha256": "ab05f30662deab8518abed569f5c124ff8e78ebe75ab7e535c0e44c730417613",
       "functions": {
         "build_output_replacement": "091972586fce9538d5a10f2d0bcc09d8279ed88bf9406547966bcef5ec7e53c9",
         "describe_assignment_delivery": "daa9992f6b45c81e0ec0beb5caa4de4fc31900c96c2f26a967821cd5c8288578",
         "describe_task_entry": "ee0203adff876ab6b8b90ce3ec0601e2c2eb4fbe54fcdd5ca590f162bd8bec3d",
         "is_first_output_read": "ba74c7dcaf06ae95ce24819ebc115e6c67856e95fbb0448b46c70f1bb1e7dcff",
         "measure_parts_request": "bc026076944ba6a4d1364042309a329c8cd3cee286acac7dd7830d190781a84d",
-        "prepare_replacement": "31a6f308647d6f53e15d62ed0aac1f4a69c8fd31c9eb7db384b4a7bc6f821ba4"
+        "prepare_replacement": "6fe4eab583d7524d150d38d4e653cb0c8dc4c7838498b40be70363f6f4ffc059"
       },
       "packet_call_digests": [
         "052ddce82202b9f6b851551cdce2b938792299dd434848e29854105877acc815",
@@ -21891,7 +21892,7 @@
         "e09ba18d76ae841e1ae960a595667ec5bab2ff6cb16feef5fa01915dd1ede907",
         "f7c5e26f154df98af490aa8dff6fe99a10a29ecebf94f9cd88a27dc6688ea13e"
       ],
-      "reason": "Reviewed exact current recovery/outcome authorization, reconstruction of that candidate, direct capacity parent and original-slot retention, plus optional frozen header identity fields. Changed AST requires declaration review."
+      "reason": "Reviewed exact current recovery/outcome authorization, reconstruction of that candidate, direct capacity parent and original-slot retention, plus optional frozen header identity fields. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_source_batches": {
       "ast_sha256": "849662404fac84e85d63937dceb00baf75d6bb23f8c30b5fac6b5daacd2aad09",
@@ -22244,7 +22245,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_staged_protocol": {
-      "ast_sha256": "7baf2c88fbf76dc46583a41091479c56ce24b60a7c94f2c85d46a10911844668",
+      "ast_sha256": "7649c49a7f1aecff230080137e8e615bfd42c1f5cd1dfe8ba8184276bf1518c0",
       "functions": {
         "_collect_successor_ancestry": "adaba0e3062a55abcff00aa835b6634c57342a5b0a5ba4a6f3b0b8c418a9a6d5",
         "_collect_successor_findings": "e295526cf1f0cfcdc760b01f3008a7f3e8b9465975d29647e4bd89c286b494b4",
@@ -22261,7 +22262,7 @@
         "build_incomplete_outcome": "fd032327ed0232d651f4dbd2d556bada73379cd2c66fb70059deba25d94abadf",
         "build_manifest": "61193ae248086af0fa2ace3757ab28f5eeb171e7611a04e6a3fd98d7b0181421",
         "build_packet": "90b3257e5b4fb19db7515ffcdb297193cfab57772fadb882bb2ea16eaa318324",
-        "build_profiles": "f3f61316ccbdc11085a02f8beb464134be50e9f1d6fd40966699062883ab8b93",
+        "build_profiles": "d4da30834eab4aca7a0697d25a4273947a4ba096ed0844fac775213dc6b6f749",
         "build_prompt": "2a43f773ed2c13d3f425a945558ba7909269f1428501fa2df10f057709e407cd",
         "build_request": "eee8de954398c8de1ec9ae54d4b28c84790eeed96e2fcb3cc74176d3ec2daedc",
         "build_selection": "c79ae2cd8fbf02b8359d3591e93ee7e403054200c4bf9d85fa68329ca502e00b",
@@ -22414,7 +22415,7 @@
         "f4c3ef51b8f0e65211e7b558f0a57e04aa43e0c83c2a9066fcc9e79c9907fdff",
         "f6d243d594e08bd80942e0a306c538cad678aacd0b5964d838ccb8a29bea004e"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed PR 143 profile estimation forwarding the selected capacity parameters; packet construction is unchanged."
     },
     "research_harness.review_state_evaluation": {
       "ast_sha256": "02df3d94a0b5e8d1e70c52927c0863e1696d5431d92e7388a3ecad4a46feba64",
@@ -23010,7 +23011,7 @@
         "validate_registry": "6619e05e41649d4165c7960423e883318d3c9e454d2a03a246db865e2af3c0cd"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.storage": {
       "ast_sha256": "65b752c5e4c022f554bb4e0aec704bd121c5b0d2081632a43a68b2d2f5faf7ab",
@@ -37121,6 +37122,10 @@
       "builder": "research_harness.review_output_correction.prepare_packet",
       "test": "test_capacity_packet_inventory.QuantityFactoryTests.test_correction_record_and_source_references_use_real_eligible_builder"
     },
+    "canonical:family_reading_plans": {
+      "builder": "research_harness.openness_reading._assemble_reading_turn",
+      "test": "tests.test_capacity_packet_inventory.QuantityFactoryTests.test_shipped_properties_execute_scaled_upstream_factories_and_gaps_are_explicit"
+    },
     "canonical:stage2_native_records": {
       "builder": "research_harness.review_protocol.build_packet",
       "test": "tests.test_capacity_packet_inventory.QuantityFactoryTests.test_shipped_properties_execute_scaled_upstream_factories_and_gaps_are_explicit"
@@ -38687,6 +38692,7 @@
   ],
   "non_packet_names": {
     "context.output_refusal.assignment_id": "An allowlisted scoped-storage equality selector over an existing assignment context. It is query metadata, not a reviewer packet field.",
+    "present_or_both_blocked": "prompt text lookup keyed by the grounds selectors of FINDING_RULES; read only by render_finding_rule",
     "series_stop_id": "Driver ending/receipt metadata only: review_series._bind_ending_receipt retains a requested review_stop identifier in stop_id and binds its distinct review_series_stop receipt in series_stop_id. It is not a reviewer packet member."
   },
   "non_packet_sites": [
@@ -80692,6 +80698,11 @@
       "builder": "research_harness.review_output_correction.prepare_packet",
       "input": "Real held synthetic problem-value and account records, actual acquired/full-read source bytes, prospective repair assignment, two authenticated instrumented native refusals, then the actual eligible correction builder. Synthetic provider probe observations supply construction room; the separately keyed stage1 allowance sizes the upstream stress input, not a claim that this complete correction is admitted there."
     },
+    "family_reading_plans": {
+      "builder": "research_harness.openness_reading._assemble_reading_turn",
+      "input": "Scale bound found work ids upstream of list_reading_texts and emit each physical plan position.",
+      "multiple_values": true
+    },
     "stage2_native_records": {
       "builder": "research_harness.review_protocol.build_packet",
       "scale_quantities": {
@@ -92275,6 +92286,13 @@
                       },
                       "sample": "x"
                     },
+                    "family_reading_plan_version": {
+                      "bound": {
+                        "value": 1
+                      },
+                      "class": "fixed",
+                      "ground": "The export sets FAMILY_READING_PLAN_VERSION, currently 1, only when family readings are bound."
+                    },
                     "minimum_gaps": {
                       "bound": {
                         "serialized_characters": "selected_request_input_limit"
@@ -94985,7 +95003,185 @@
                   "class": "fixed",
                   "members": {
                     "delivered_before": {
-                      "$ref": "field_6e4bcf2573da"
+                      "bound": "open",
+                      "class": "open",
+                      "entry": "Q2",
+                      "fixture": "native_math/exactory-independent-review-v1",
+                      "grows": true,
+                      "items": {
+                        "class": "fixed",
+                        "members": {
+                          "acceptance_id": {
+                            "class": "fixed"
+                          },
+                          "artifact": {
+                            "class": "fixed",
+                            "members": {
+                              "location": {
+                                "class": "fixed"
+                              },
+                              "media_type": {
+                                "class": "fixed"
+                              },
+                              "path": {
+                                "class": "fixed"
+                              },
+                              "sha256": {
+                                "class": "fixed"
+                              },
+                              "size": {
+                                "class": "fixed"
+                              }
+                            }
+                          },
+                          "artifact_descriptor": {
+                            "class": "fixed",
+                            "members": {
+                              "location": {
+                                "class": "fixed"
+                              },
+                              "media_type": {
+                                "class": "fixed"
+                              },
+                              "path": {
+                                "class": "fixed"
+                              },
+                              "sha256": {
+                                "class": "fixed"
+                              },
+                              "size": {
+                                "class": "fixed"
+                              }
+                            }
+                          },
+                          "characters": {
+                            "class": "fixed"
+                          },
+                          "cited_by": {
+                            "class": "fixed",
+                            "items": {
+                              "class": "fixed"
+                            }
+                          },
+                          "content_kind": {
+                            "class": "fixed"
+                          },
+                          "end": {
+                            "class": "fixed"
+                          },
+                          "family_of": {
+                            "bound": {
+                              "serialized_characters": "selected_request_input_limit"
+                            },
+                            "class": "fixed",
+                            "entry": "Q2",
+                            "fixture": "canonical:family_reading_plans",
+                            "ground": "The v6 projection includes the complete family_of lists in every physical plan position; _fit_turn admits each exact request before delivery.",
+                            "grows": true,
+                            "items": {
+                              "class": "fixed"
+                            },
+                            "quantity": "sources",
+                            "quantity_contract": {
+                              "canonical": {
+                                "dimension": "entries",
+                                "entry": "Q2",
+                                "factory": "family_reading_plans",
+                                "fixture": "canonical:family_reading_plans",
+                                "path": [
+                                  "reading_turn",
+                                  "reading_plan",
+                                  "delivered_before",
+                                  "*",
+                                  "family_of"
+                                ],
+                                "property_kind": "family_reading_plan",
+                                "quantity": "sources"
+                              }
+                            },
+                            "sample": "found-work"
+                          },
+                          "field": {
+                            "class": "fixed"
+                          },
+                          "kind": {
+                            "class": "fixed"
+                          },
+                          "native_attempt_digest": {
+                            "class": "fixed"
+                          },
+                          "origin": {
+                            "class": "fixed",
+                            "members": {
+                              "acquired_at": {
+                                "class": "fixed"
+                              },
+                              "capture_method": {
+                                "class": "fixed"
+                              },
+                              "identifier": {
+                                "class": "fixed"
+                              },
+                              "kind": {
+                                "class": "fixed"
+                              },
+                              "name": {
+                                "class": "fixed"
+                              },
+                              "observed_identifier": {
+                                "class": "fixed"
+                              },
+                              "origin_verified": {
+                                "class": "fixed"
+                              },
+                              "provider": {
+                                "class": "fixed"
+                              },
+                              "reason": {
+                                "class": "fixed"
+                              },
+                              "url": {
+                                "class": "fixed"
+                              },
+                              "version": {
+                                "class": "fixed"
+                              }
+                            }
+                          },
+                          "part": {
+                            "class": "fixed"
+                          },
+                          "parts": {
+                            "class": "fixed"
+                          },
+                          "record_id": {
+                            "class": "fixed"
+                          },
+                          "record_kind": {
+                            "class": "fixed"
+                          },
+                          "role": {
+                            "class": "fixed"
+                          },
+                          "search_digest": {
+                            "class": "fixed"
+                          },
+                          "source_id": {
+                            "class": "fixed"
+                          },
+                          "start": {
+                            "class": "fixed"
+                          },
+                          "text_sha256": {
+                            "class": "fixed"
+                          },
+                          "version_id": {
+                            "class": "fixed"
+                          }
+                        }
+                      },
+                      "quantity": "units",
+                      "sample": "x"
                     },
                     "delivered_now": {
                       "bound": "open",
@@ -95053,6 +95249,38 @@
                           },
                           "end": {
                             "class": "fixed"
+                          },
+                          "family_of": {
+                            "bound": {
+                              "serialized_characters": "selected_request_input_limit"
+                            },
+                            "class": "fixed",
+                            "entry": "Q2",
+                            "fixture": "canonical:family_reading_plans",
+                            "ground": "The v6 projection includes the complete family_of lists in every physical plan position; _fit_turn admits each exact request before delivery.",
+                            "grows": true,
+                            "items": {
+                              "class": "fixed"
+                            },
+                            "quantity": "sources",
+                            "quantity_contract": {
+                              "canonical": {
+                                "dimension": "entries",
+                                "entry": "Q2",
+                                "factory": "family_reading_plans",
+                                "fixture": "canonical:family_reading_plans",
+                                "path": [
+                                  "reading_turn",
+                                  "reading_plan",
+                                  "delivered_now",
+                                  "*",
+                                  "family_of"
+                                ],
+                                "property_kind": "family_reading_plan",
+                                "quantity": "sources"
+                              }
+                            },
+                            "sample": "found-work"
                           },
                           "field": {
                             "class": "fixed"
@@ -95202,6 +95430,38 @@
                           },
                           "end": {
                             "class": "fixed"
+                          },
+                          "family_of": {
+                            "bound": {
+                              "serialized_characters": "selected_request_input_limit"
+                            },
+                            "class": "fixed",
+                            "entry": "Q2",
+                            "fixture": "canonical:family_reading_plans",
+                            "ground": "The v6 projection includes the complete family_of lists in every physical plan position; _fit_turn admits each exact request before delivery.",
+                            "grows": true,
+                            "items": {
+                              "class": "fixed"
+                            },
+                            "quantity": "sources",
+                            "quantity_contract": {
+                              "canonical": {
+                                "dimension": "entries",
+                                "entry": "Q2",
+                                "factory": "family_reading_plans",
+                                "fixture": "canonical:family_reading_plans",
+                                "path": [
+                                  "reading_turn",
+                                  "reading_plan",
+                                  "remaining",
+                                  "*",
+                                  "family_of"
+                                ],
+                                "property_kind": "family_reading_plan",
+                                "quantity": "sources"
+                              }
+                            },
+                            "sample": "found-work"
                           },
                           "field": {
                             "class": "fixed"

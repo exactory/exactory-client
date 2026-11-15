@@ -2,10 +2,13 @@
 
 import copy
 import json
+import os
+from pathlib import Path
 import subprocess
 import sys
 import time
 import unittest
+from unittest.mock import patch
 
 from codex_route_fixtures import record_codex_route
 from research_harness import cli, review_call_admission as admission
@@ -146,8 +149,12 @@ class QueueTriageTests(unittest.TestCase):
             time.sleep(.02)
 
     def launch(self, assignment, mode):
+        environment = dict(os.environ)
+        paths = [str(Path(__file__).resolve().parent), environment.get('PYTHONPATH', '')]
+        environment['PYTHONPATH'] = os.pathsep.join(path for path in paths if path)
         process = subprocess.Popen([sys.executable, '-c', REVIEWER_PROGRAM, str(self.root), assignment['id'], mode],
-                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True,
+                                   env=environment)
         def cleanup():
             (self.root / (assignment['id'] + '-finish')).touch()
             if process.poll() is None:
@@ -155,6 +162,17 @@ class QueueTriageTests(unittest.TestCase):
             process.communicate(timeout=20)
         self.addCleanup(cleanup)
         return process
+
+    def test_reviewer_child_imports_fixtures_without_inherited_pythonpath(self):
+        with patch.dict(os.environ, {'PYTHONPATH': ''}):
+            process = self.launch(self.first, 'hold')
+        self.await_condition(lambda: process.poll() is not None or (self.root / 'bar-a-started').exists())
+        if process.poll() is not None:
+            out, err = process.communicate()
+            self.fail(out + err)
+        (self.root / 'bar-a-finish').touch()
+        out, err = process.communicate(timeout=20)
+        self.assertEqual(process.returncode, 0, out + err)
 
     def test_planned_store_wait_names_its_limit_and_the_two_route_scheduler(self):
         self.start(self.first)

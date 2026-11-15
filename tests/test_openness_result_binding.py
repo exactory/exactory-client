@@ -152,6 +152,7 @@ class ResultBindingTests(OpennessReadingCase):
                 expected.update(row.get('text_sha256', row['sha256']) for row in body['artifacts']
                                 if row['delivery'] in ('text', 'pdf_text'))
                 self.assertEqual({row['text_sha256'] for row in units if row['kind'] == 'result_text'}, expected)
+                self.require_result_delivery(records, records['review_assignment'][identifier], units)
                 saved = self.mutate(self.load_problem_module().record_openness, dict(assignment_id=identifier))['result']
                 self.assertEqual(saved['minimum']['results'], minimum['results'])
                 self.assertEqual(saved['outcome'], 'unresolved' if gapped else 'supported_open')
@@ -160,6 +161,24 @@ class ResultBindingTests(OpennessReadingCase):
             self.invoke(identifier, self.build_reading_response(packet, excerpts=[]))
             prior = identifier
         self.fail('The result journey must reach a recorded finding')
+
+    def require_result_delivery(self, records, assignment, units):
+        from research_harness.errors import ResearchError
+        observe = reading._observe_turns
+        for unit in units:
+            if unit['kind'] != 'result_text' and unit.get('record_kind') != 'accepted_result':
+                continue
+            key = reading.review_excerpts.find_identity(unit)
+            def omit_result(*args, **kwargs):
+                observations = copy.deepcopy(observe(*args, **kwargs))
+                for observation in observations:
+                    observation['whole'].discard(key)
+                    observation['parts'] = {part for part in observation['parts'] if part[0] != key}
+                return observations
+            with self.subTest(required_unit=key), patch.object(reading, '_observe_turns', side_effect=omit_result):
+                with self.assertRaises(ResearchError) as caught:
+                    reading.verify_problem_coverage(records, self.artifacts, assignment, final=True)
+                self.assertEqual(caught.exception.code, 'openness_reading_incomplete')
 
     def test_g3_analytical_incident_delivers_cited_claim_and_proof(self):
         exported = self.export_result()
