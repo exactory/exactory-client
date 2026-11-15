@@ -139,7 +139,7 @@ def attach_refusal_notice(packet, notice):
 
 
 def select_refusal_notice(records, artifacts, attempt_ids, *, route, role, prompt, packet,
-                          task_characters=0, task_limit_characters=None, diagnoses=None):
+                          task_characters=0, task_limit_characters=None, diagnoses=None, forms=('whole', 'bounded')):
     """Try whole then bounded as fresh requests, reporting the notice charged to each task.
 
     The caller supplies versioned prompt text, a recorded prompt, or a function from form to either.
@@ -155,7 +155,7 @@ def select_refusal_notice(records, artifacts, attempt_ids, *, route, role, promp
         from .review_refusal import classify_observed_output
         diagnoses = {key: classify_observed_output(records, artifacts, key) for key in attempt_ids}
     trials = []
-    for form in ('whole', 'bounded'):
+    for form in forms:
         notice = build_refusal_notice(records, artifacts, attempt_ids, form=form, diagnoses=diagnoses)
         rendered_prompt = prompt(form) if callable(prompt) else prompt
         prompt_text = rendered_prompt['text'] if isinstance(rendered_prompt, dict) else rendered_prompt

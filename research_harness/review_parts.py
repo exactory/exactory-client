@@ -631,7 +631,7 @@ def prepare_plan(packet, inventory, observations, *, series_id, input_limit, mea
             allowance = int(1.5 * characters)
         else:
             allowance = characters
-    if replacement and replacement.get('over_cap'):
+    if replacement and (replacement.get('over_cap') or replacement.get('input_over_limit')):
         allowance = replacement['unit_characters'] // 2
     turn = len(observations) + 1
     header = dict(protocol=PROTOCOL, adapter=inventory['adapter'], series_assignment_id=series_id,
@@ -1882,7 +1882,8 @@ def validate_turn_output(records, artifacts, assignment, packet, output, *, atte
 
 def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
                    base_prompt_parameters=None, slot_id=None, legacy_refusal=None,
-                   entry=None, read_allowance=None, replaces_assignment_id=None, refusal_notice=None):
+                   entry=None, read_allowance=None, replaces_assignment_id=None, refusal_notice=None,
+                   capacity_replacement=None):
     """Enter or continue parts with the same base prompt and adapter-owned series key."""
     from . import review_problem_parts as legacy, review_transport as transport
     from .review_parts_roles import find_adapter, get_adapter
@@ -1918,7 +1919,7 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
                 raise
             continuing = False
     if not continuing:
-        if legacy_refusal is None:
+        if legacy_refusal is None and capacity_replacement is None:
             ordinary = transport.request_body(route, prompt['text'], packet, history)
             from .review_single_request import describe_task_entry
             ordinary_fits = (legacy._measure(route, ordinary) <= transport.local_input_limit(route)
@@ -1958,7 +1959,7 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
     packet.pop('digest', None)
     packet['digest'] = digest(packet)
     logical_reference = artifacts.put(render_json(packet).encode('utf-8'), 'application/json')
-    replacement = find_failed_replacement(records, artifacts, value, adapter, series_key, slot_id,
+    replacement = capacity_replacement or find_failed_replacement(records, artifacts, value, adapter, series_key, slot_id,
                                     prior_id, route['configuration']['max_output_tokens'], logical_packet=packet)
 
     def attach_notice(candidate):

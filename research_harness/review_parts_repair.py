@@ -7,6 +7,11 @@ from . import review_parts as parts, review_parts_prompts as prompts
 from .evidence import digest
 from .errors import ResearchError
 
+EXHAUSTION_FINAL_PROMPT_V1 = prompts.FINAL_REPAIR.replace(
+    'This series reassesses after a recorded contamination or route retirement.',
+    'This series reassesses after the predecessor position exhausted its permitted retries, '
+    'as recorded in context_repair.exhaustion.')
+
 
 def applies(value, packet):
     return (value.get('role') in ('bar', 'slate', 'result', 'adjudicator')
@@ -225,11 +230,15 @@ def compute_series_key(packet):
 
 
 def build_final_prompt(role, parameters):
+    from .review_context_repair import EXHAUSTION_PROMPT_V1
+
     packet = dict(role=role, subject=dict(kind='problem' if parameters.get('orchestration') ==
                                          'problem_creation' else 'study'))
     adapter = find_role_adapter(packet)
     texts = [adapter['final_prompt']] if adapter is not None else []
-    return '\n\n'.join(texts + [prompts.FINAL_REPAIR])
+    suffix = (EXHAUSTION_FINAL_PROMPT_V1 if parameters.get('repair_prompt') == EXHAUSTION_PROMPT_V1
+              else prompts.FINAL_REPAIR)
+    return '\n\n'.join(texts + [suffix])
 
 
 def validate_final(records, artifacts, assignment, output, *, attempt=None):
@@ -347,7 +356,7 @@ def requires_parts(records, artifacts, value, route, packet, prompt, history, sl
 
 
 def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
-                   base_prompt_parameters, slot_id=None, repair=None):
+                   base_prompt_parameters, slot_id=None, repair=None, capacity_replacement=None):
     """Plan a repair using the engine, including entry after ordinary output overflow."""
     from . import review_transport as transport
     from .review_problem_parts import _measure
@@ -359,7 +368,7 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
     from .review_single_request import describe_task_entry
     entry = (None if continuing else describe_task_entry(records, route, value['role'], packet,
         transport.request_body(route, prompt['text'], packet, history)))
-    if not continuing and not requires_parts(records, artifacts, value, route, packet, prompt, history, slot_id):
+    if capacity_replacement is None and not continuing and not requires_parts(records, artifacts, value, route, packet, prompt, history, slot_id):
         return packet
     if continuing:
         previous = parts.read_logical_packet(artifacts, json.loads(
@@ -423,7 +432,7 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
     logical_reference = artifacts.put(parts.render_json(packet).encode('utf-8'), 'application/json')
     inventory_reference = parts.store_inventory(artifacts, inventory)
     series_id = observations[0]['packet'][parts.KEY]['series_assignment_id'] if observations else value['id']
-    replacement = parts.find_failed_replacement(records, artifacts, value, 'context_repair', series_key,
+    replacement = capacity_replacement or parts.find_failed_replacement(records, artifacts, value, 'context_repair', series_key,
         slot_id, value.get('context', {}).get('prior_assignment_id'), route['configuration']['max_output_tokens'])
     if continuing:
         entry = observations[0]['packet'][parts.KEY].get('entry') if observations else None

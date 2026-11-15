@@ -385,7 +385,8 @@ def list_turn_assignments(records, assignment):
     return result
 
 
-def plan_output_replacement(records, artifacts, assignment, *, allow_single=True):
+def plan_output_replacement(records, artifacts, assignment, *, allow_single=True, include_packet=False,
+                            outcome='output_over_cap', replacement_id=None):
     """Prove the existing handler produces a smaller request that passes preflight."""
     from .review_staged_protocol import ControllerArtifacts
     from . import review_preflight
@@ -398,26 +399,29 @@ def plan_output_replacement(records, artifacts, assignment, *, allow_single=True
     if (single or is_first_output_read(assignment, packet)) and not repair.applies(assignment, packet):
         if single and not allow_single:
             return None
-        staged = ControllerArtifacts(artifacts)
+        staged = artifacts if include_packet else ControllerArtifacts(artifacts)
         try:
-            replacement = build_output_replacement(records, staged, assignment)
+            replacement = build_output_replacement(records, staged, assignment, identifier=replacement_id)
         except ResearchError:
             return None
         if replacement is None:
             return None
-        return dict(state='replace', code=OUTCOME_CODES['output_over_cap'], handler='single_request_series',
-                    unit_characters=replacement['packet'][parts.KEY]['unit_characters'],
-                    context=replacement['context'], preflight=replacement['preflight'])
+        result = dict(state='replace', code=OUTCOME_CODES['output_over_cap'], handler='single_request_series',
+                      unit_characters=replacement['packet'][parts.KEY]['unit_characters'],
+                      context=replacement['context'], preflight=replacement['preflight'])
+        if include_packet:
+            result.update(packet=replacement['packet'], prompt=replacement['prompt'])
+        return result
     is_read = parts.find_kind(packet) == 'read'
     is_repair = repair.applies(assignment, packet)
     if not is_read and not is_repair:
         return None
     route = records['review_route'][assignment['route_id']]
-    staged = ControllerArtifacts(artifacts)
+    staged = artifacts if include_packet else ControllerArtifacts(artifacts)
     logical = parts.read_logical_packet(staged, packet[parts.KEY]) if is_read else packet
     value = {key: copy.deepcopy(assignment[key]) for key in
              ('id', 'role', 'route_id', 'dossier_id', 'reviewer_id', 'author_id', 'context')}
-    value['id'] += '-replacement'
+    value['id'] = replacement_id or value['id'] + '-replacement'
     if 'subject' in assignment:
         value['subject'] = copy.deepcopy(assignment['subject'])
     base = assignment['prompt']['parameters']
@@ -427,6 +431,8 @@ def plan_output_replacement(records, artifacts, assignment, *, allow_single=True
         parameters = dict(repair=bool(base.get('context_repair')),
             orchestration=base.get('orchestration'), excerpts='reviewer_excerpts' in base,
             common_version=protocol.find_common_prompt_version(assignment['prompt']))
+    if base.get('context_repair_exhaustion') == protocol.context_repair.EXHAUSTION_PROTOCOL:
+        parameters['repair_prompt'] = protocol.context_repair.EXHAUSTION_PROMPT_V1
     from .review_prompt_paragraphs import read_paragraph_parameters
     parameters.update(read_paragraph_parameters(assignment['prompt']))
     prompt = protocol.canonical_prompt(assignment['role'], **parameters)
@@ -435,15 +441,34 @@ def plan_output_replacement(records, artifacts, assignment, *, allow_single=True
     prepare = repair.prepare_packet if is_repair else parts.prepare_packet
     try:
         options = dict(base_prompt_parameters=parameters, slot_id=slot_id)
-        if is_repair and 'context_repair' in value['context']:
-            options['repair'] = protocol.context_repair.prepare_repair(records, staged, value)
+        if outcome == 'input_over_limit':
+            options['capacity_replacement'] = dict(input_over_limit=True,
+                unit_characters=packet[parts.KEY]['unit_characters'] if is_read else parts.READ_CHARACTERS)
+        if is_repair and not is_read:
+            predecessor = records['review_assignment'][value['context']['context_repair']['assignment_id']]
+            chain = protocol.context_repair._exposure_lineage(records, predecessor)
+            scientific_history = protocol.context_repair.collect_scientific_history(
+                records, staged, chain, protocol.context_repair.ROLES + ('adjudicator',))
+            predecessor_state = protocol.assignment_state(records, staged, predecessor['id'])
+            options['repair'] = dict(scientific_history=scientific_history,
+                predecessor_binding=protocol.context_repair.bind_predecessor(
+                    records, predecessor, predecessor_state, scientific_history))
         candidate = prepare(records, staged, value, route, logical, prompt, history, **options)
         if parts.find_kind(candidate) != 'read':
             return None
+        candidate = protocol.prepare_capacity_notice(records, route, assignment['role'], candidate)
         header = candidate[parts.KEY]
         if is_read and header['unit_characters'] >= packet[parts.KEY]['unit_characters']:
             return None
         turn_prompt = parts.build_turn_prompt(assignment['role'], parameters, header)
+        from . import review_prompt_paragraphs as paragraphs
+        selected = paragraphs.select_prompt_parameters(assignment['role'], candidate)
+        if paragraphs.CAPACITY_PARAMETER in selected or paragraphs.CAPACITY_PARAMETER in turn_prompt['parameters']:
+            base_prompt = paragraphs.strip_prompt_paragraphs(turn_prompt, assignment['role'])
+            recorded = paragraphs.read_paragraph_parameters(turn_prompt)
+            turn_prompt = paragraphs.append_prompt_paragraphs(base_prompt, assignment['role'],
+                recorded.get(paragraphs.CARRY_PARAMETER), selected.get(paragraphs.PARAMETER),
+                selected.get(paragraphs.CAPACITY_PARAMETER))
         request = protocol.transport.request_body(route, turn_prompt['text'], candidate, [], order=())
         preflight = review_preflight.check_request(review_preflight.build_report(
             records, staged, route, assignment['role'], turn_prompt['text'], candidate, request),
@@ -457,10 +482,13 @@ def plan_output_replacement(records, artifacts, assignment, *, allow_single=True
         return dict(state='stop', code=OUTCOME_CODES['output_over_cap'],
                     reason='replacement_inadmissible',
                     handler_error=getattr(error, 'code', 'invalid_json'))
-    return dict(state='replace', code=OUTCOME_CODES['output_over_cap'],
+    replacement = dict(state='replace', code=OUTCOME_CODES['output_over_cap'],
                 handler='context_repair' if is_repair else 'parts_v2_read',
                 unit_characters=header['unit_characters'],
                 context=copy.deepcopy(value['context']), preflight=preflight)
+    if include_packet:
+        replacement.update(packet=candidate, prompt=turn_prompt)
+    return replacement
 
 
 def plan_scheduled_retry(attempt, failure_count, reset_at=None):
@@ -618,6 +646,77 @@ def _plan_sequence_end(last, classification, position):
                 not_before=deadline.isoformat(timespec='seconds') if deadline is not None else None)
 
 
+REFUSAL_NOTICE_HANDOFF_MSG = 'The refusal notice cannot fit its fixed metadata. Continue this exhausted position through the next step for its role.'
+
+
+def plan_refusal_recovery(records, artifacts, assignment):
+    """Measure the current refusal through admission without publishing its candidate."""
+    from . import review_output_correction as correction, review_refusal, review_refusal_replacement
+    from .review_staged_protocol import ControllerArtifacts
+
+    completed = sorted((attempt for attempt in records.get('review_attempt', {}).values()
+                        if attempt['assignment_id'] == assignment['id'] and attempt['status'] == 'completed'
+                        and protocol._context_observed(artifacts, attempt)),
+                       key=lambda row: row['recorded_revision'])
+    members = [records['review_assignment'][identifier] for identifier in list_turn_assignments(records, assignment)]
+    identifiers = {member['id'] for member in members}
+    position_attempts = sorted((attempt for attempt in records.get('review_attempt', {}).values()
+                                if attempt['assignment_id'] in identifiers and attempt['status'] == 'completed'),
+                               key=lambda row: row['recorded_revision'])
+    details = dict(assignment_id=assignment['id'],
+                   refused_attempts=review_refusal.refused_attempts(records, artifacts, position_attempts))
+    result = dict(state='stop', code='review_slot_exhausted', details=details)
+    if not completed:
+        return dict(result, state='run')
+    latest = review_refusal.classify_observed_output(records, artifacts, completed[-1]['id'])
+    correction_used = any(row['assignment_id'] == assignment['id']
+                          for row in records.get('review_output_correction_invocation', {}).values())
+    reassessment = (assignment['role'] == 'result' and assignment.get('subject', {}).get('kind') == 'problem'
+                    and assignment.get('reassessment_required') is True
+                    and latest is not None and latest['code'] == 'review_reassessment_mismatch'
+                    and latest['check'] == 'review.reassessment'
+                    and not assignment.get('context', {}).get('output_refusal'))
+    if reassessment and not correction_used:
+        if len(completed) == 1:
+            return dict(result, state='run')
+        try:
+            measured = correction.build_request(records, artifacts, assignment['id'], assignment['route_id'])
+        except ResearchError as error:
+            if error.code == 'review_input_too_large':
+                details['correction_preflight'] = error.details
+        else:
+            details['preflight'] = measured['preflight']
+            return dict(result, state='handoff', command='review-output-correction')
+    if sum('output_refusal' in member.get('context', {}) for member in members) >= 2:
+        return result
+    payload = {key: copy.deepcopy(assignment[key]) for key in
+               ('role', 'route_id', 'dossier_id', 'reviewer_id', 'author_id', 'context')}
+    payload['id'] = assignment['id'] + '-refusal'
+    while payload['id'] in records.get('review_assignment', {}):
+        payload['id'] += '-next'
+    payload['context']['output_refusal'] = {'assignment_id': assignment['id']}
+    value = dict(payload)
+    if 'subject' in assignment:
+        value['subject'] = assignment['subject']
+    staged = ControllerArtifacts(artifacts)
+    revision = max(row['recorded_revision'] for row in records['review_assignment'].values()) + 1
+    try:
+        _, candidate = review_refusal_replacement.prepare_replacement(records, staged, value, revision)
+    except ResearchError as error:
+        details.update(error.details or {})
+        if error.code == 'review_refusal_notice_metadata_too_large':
+            details['message'] = REFUSAL_NOTICE_HANDOFF_MSG
+            result['code'] = error.code
+        elif error.code == 'review_refusal_replacement_ineligible' and assignment.get('reading_chain') and len(completed) == 1:
+            return dict(result, state='run')
+        elif error.code not in ('review_slot_exhausted', 'review_refusal_replacement_ineligible', 'review_input_too_large'):
+            raise
+        return result
+    packet = protocol._read_json(staged, candidate['packet'])
+    details['form'] = packet['output_refusal']['form']
+    return dict(result, state='replace', payload=payload)
+
+
 def plan_after_failure(records, artifacts, assignment_id):
     """Select the outcome row with one counter and one bounded recovery interface."""
     assignment = records['review_assignment'][assignment_id]
@@ -633,6 +732,13 @@ def plan_after_failure(records, artifacts, assignment_id):
                    sequences_remaining=position['sequences_remaining'], replacements=position['replacements'])
     result = dict(state='run', not_before=None, code=OUTCOME_CODES[outcome], details=details)
     used = position['failures_by_outcome'][outcome]
+    if (assignment.get('context', {}).get('output_refusal')
+            and not any(row['assignment_id'] == assignment_id for row in records.get('review_attempt', {}).values())):
+        return result
+    if outcome == 'scientific_refused' and last['assignment_id'] == assignment_id:
+        recovery = plan_refusal_recovery(records, artifacts, assignment)
+        recovery['details'] = dict(details, **recovery['details'])
+        return dict(result, **recovery)
     if position['sequence'] > position['permitted_sequences']:
         result.update(state='stop', code='review_turn_failures_exhausted')
         return result

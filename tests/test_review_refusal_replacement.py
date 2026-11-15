@@ -190,6 +190,11 @@ class RefusalReplacementTests(unittest.TestCase):
         self.invoke(first, output, 'second-refusal')
         with self.assertRaises(ResearchError):
             self.record(first, output)
+        for number in (1, 2):
+            first = self.replace(first, identifier='refusal-' + str(number))
+            self.invoke(first, output, 'replacement-refusal-' + str(number))
+            with self.assertRaises(ResearchError):
+                self.record(first, output)
         successor = self.case.assign('bar', 'another', identifier='new-reviewer')
         self.assertEqual(successor['slot_id'], first['slot_id'])
         with patch.object(decisions, 'validate_review_contract', return_value=None):

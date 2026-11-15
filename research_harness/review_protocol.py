@@ -974,6 +974,8 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
             if role == 'bar':
                 prompt += ' For a final bar reassessment, objection_findings must cover every inherited material objection despite the ordinary empty-bar default.'
             parameters['context_repair'] = True
+            if repair_suffix == context_repair.EXHAUSTION_PROMPT_V1:
+                parameters['context_repair_exhaustion'] = context_repair.EXHAUSTION_PROTOCOL
             suffix = '/context-repair'
         if current_result and version != 3:
             # A new contract avoids native CLI trimming while exact v3 replay stays unchanged.
@@ -1027,6 +1029,8 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
             raise ResearchError('invalid_review_context', 'Context reassessment uses a current strategic review phase')
         prompt += repair_suffix + ' Source-request turns need no final reassessment; final output must include it. For a final bar reassessment, objection_findings must cover every inherited material objection despite the ordinary empty-bar default.'
         parameters['context_repair'] = True
+        if repair_suffix == context_repair.EXHAUSTION_PROMPT_V1:
+            parameters['context_repair_exhaustion'] = context_repair.EXHAUSTION_PROTOCOL
         suffix = '/context-repair'
     if excerpts:
         excerpt_rules = excerpt_rules or review_excerpts.PROTOCOL
@@ -2617,6 +2621,11 @@ def _prompt_matches(assignment, packet=None):
         from .review_staged_protocol import matches_prompt
         return matches_prompt(assignment, common_version)
     repair = assignment.get('reassessment_required') is True
+    repair_prompt = None
+    if 'context_repair_exhaustion' in parameters:
+        if not repair or parameters['context_repair_exhaustion'] != context_repair.EXHAUSTION_PROTOCOL:
+            return False
+        repair_prompt = context_repair.EXHAUSTION_PROMPT_V1
     evidence_parts = assignment['prompt'].get('parameters', {}).get('evidence_parts')
     if evidence_parts is not None:
         if assignment['role'] != 'result' or assignment.get('subject', {}).get('kind') != 'problem' or repair:
@@ -2637,12 +2646,14 @@ def _prompt_matches(assignment, packet=None):
     # A continuation or repair recorded since the excerpt rules carries them; an earlier one keeps its prompt.
     if (assignment['role'] in bar_sources.ROLES and ('prior_assignment_id' in context or 'context_repair' in context)
             and any(assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair, excerpts=True,
+                                                             repair_prompt=repair_prompt,
                                                              orchestration='problem_creation' if problem else None,
                                                              excerpt_rules=rules, common_version=common_version)
                     for rules in review_excerpts.PHASE_PROMPTS)):
         return True
     if assignment.get('subject', {}).get('kind') == 'problem' and assignment['role'] in _PROBLEM_PROMPTS:
         return (assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair,
+                                                         repair_prompt=repair_prompt,
                                                          orchestration='problem_creation', common_version=common_version)
                 or (assignment['role'] in ('bar', 'slate') and assignment['prompt'] == canonical_prompt(
                     assignment['role'], repair=repair, version=2, orchestration='problem_creation',
@@ -2654,7 +2665,8 @@ def _prompt_matches(assignment, packet=None):
                      'adjudicator', orchestration='problem_creation', common_version=common_version,
                      adjudicator_prompt=_PROBLEM_ADJUDICATOR_PROMPT_BEFORE_NOT_BINDING))):
         return True
-    if (assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair, common_version=common_version)
+    if (assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair, repair_prompt=repair_prompt,
+                                                common_version=common_version)
             or is_previous_prompt(assignment) or _uses_previous_repair_suffix(assignment)):
         return True
     # The problem finding contract and older native result contracts remain independently verifiable.
@@ -2698,6 +2710,8 @@ def _repair_packet(records, artifacts, value, repair):
     packet['context_repair'] = {'assignment_id': repair['predecessor']['id'], 'slot_id': repair['slot_id'],
         'event_ids': repair['event_ids'], 'probe_id': repair['probe_id'], 'cause': repair['cause'],
         'historical_review_ids': [review['id'] for review in repair['historical_reviews']]}
+    if 'exhaustion' in repair:
+        packet['context_repair']['exhaustion'] = copy.deepcopy(repair['exhaustion'])
     packet['scientific_history'] = _reference_templates(repair['scientific_history'])
     packet['historical_reviews'] = _reference_templates(repair['historical_reviews'])
     supplied = {digest(entry['artifact']): entry['artifact']
@@ -2944,8 +2958,15 @@ def has_exhausted_position(records, artifacts, assignment):
                   read_filtered_records(records, 'review_invocation', assignment_id=assignment['id']).values())
     from .review_refusal import refused_attempts
     completed = [row for row in attempts if row['status'] == 'completed']
-    return (not pending and len(completed) >= 2
-            and len(refused_attempts(records, artifacts, completed)) == len(completed))
+    if pending or not completed or len(refused_attempts(records, artifacts, completed)) != len(completed):
+        return False
+    from .review_output_correction import selected_correction
+    if selected_correction(records, artifacts, assignment['id']) is not None:
+        return False
+    from .review_failure_class import plan_refusal_recovery
+    recovery = plan_refusal_recovery(records, artifacts, assignment)
+    return recovery['state'] == 'stop' and recovery['code'] in (
+        'review_slot_exhausted', 'review_refusal_notice_metadata_too_large')
 
 
 def _initial_slot(records, artifacts, value):
@@ -2955,7 +2976,6 @@ def _initial_slot(records, artifacts, value):
         if (prior['dossier_id'] == value['dossier_id'] and prior['role'] == value['role']
                 and context_repair.is_same_subject(prior, value)):
             slots.setdefault(context_repair.slot_id(records, prior), []).append(prior)
-    from .review_refusal import refused_attempts
     replaceable = []
     for identifier, members in slots.items():
         same_reviewer = any(normalized_text(prior['reviewer_id']) == normalized_text(value['reviewer_id'])
@@ -2977,10 +2997,8 @@ def _initial_slot(records, artifacts, value):
             pending = any(a['assignment_id'] == prior['id'] and a['id'] not in records.get('review_attempt', {})
                           for a in read_filtered_records(records, 'review_invocation', assignment_id=prior['id']).values())
             completed = [a for a in attempts if a['status'] == 'completed']
-            exhausted = (value['role'] == 'bar' and len(completed) >= 2
-                         and len(refused_attempts(records, artifacts, completed)) == len(completed))
             dead = is_dead_assignment(records, prior)
-            if pending or (not attempts and not dead) or (completed and not exhausted):
+            if pending or (not attempts and not dead) or completed:
                 replaceable_members = False
         if replaceable_members:
             replaceable.append(priority)
@@ -3375,6 +3393,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             excerpts=value['role'] in bar_sources.ROLES and review_excerpts.KEY in packet,
             reading_stage=openness_reading.find_stage(packet),
             reading_protocol=openness_reading.find_protocol(packet))
+        if packet.get('context_repair', {}).get('exhaustion') is not None:
+            base_prompt_parameters['repair_prompt'] = context_repair.EXHAUSTION_PROMPT_V1
         if staged_repair and value['role'] == 'adjudicator':
             base_prompt_parameters['repair'] = True
         prompt_parent = parent or focused_parent

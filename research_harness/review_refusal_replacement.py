@@ -60,8 +60,13 @@ def prepare_replacement(records, artifacts, value, revision):
     if max(members, key=lambda row: row['recorded_revision'])['id'] != prior['id']:
         raise ResearchError('review_assignment_replaced', NOT_SELECTED_MSG)
     protocol.context_repair.require_current_slot(records, prior)
-    if protocol.describe_assignment_calls(records, prior)['pending']:
+    if (protocol.describe_assignment_calls(records, prior)['pending']
+            or any(row['assignment_id'] == prior['id'] and row['id'] not in records.get('review_output_correction', {})
+                   for row in records.get('review_output_correction_invocation', {}).values())):
         raise ResearchError('review_invocation_pending', INELIGIBLE_REPLACEMENT_MSG)
+    from .review_output_correction import selected_correction
+    if selected_correction(records, artifacts, prior['id']) is not None:
+        raise ResearchError('review_refusal_replacement_ineligible', INELIGIBLE_REPLACEMENT_MSG)
     packet = protocol._read_json(artifacts, prior['packet'])
     if (prior.get('staged_review') or prior.get('reading_chain')
             or prior['role'] == 'native_math' and review_parts.KEY not in prior
@@ -81,7 +86,7 @@ def prepare_replacement(records, artifacts, value, revision):
     diagnoses = {identifier: review_refusal.classify_observed_output(records, artifacts, identifier)
                  for identifier in refused_ids}
     completed = [attempt for attempt in attempts if attempt['assignment_id'] == prior['id']
-                 and attempt['status'] == 'completed']
+                 and attempt['status'] == 'completed' and protocol._context_observed(artifacts, attempt)]
     if (not completed or len(refused_ids) > notices.REFUSED_ATTEMPT_LIMIT
             or any(not protocol._context_observed(artifacts, attempt)
                    or not protocol.authenticate_attempt(records, artifacts, prior, attempt)
@@ -101,11 +106,40 @@ def prepare_replacement(records, artifacts, value, revision):
     task = latest.get('task') or capacity.describe_task(prior['role'], packet, route=route,
         request=protocol._read_json(artifacts, latest['request']))
     limit = capacity._find_task_level(task['characters'])
+    forms = ('whole', 'bounded')
+    from . import review_output_correction as correction
+    if any(row['assignment_id'] == prior['id']
+           for row in records.get('review_output_correction_invocation', {}).values()):
+        forms = ('bounded',)
+    elif (prior['role'] == 'result' and len(completed) == 2
+          and diagnoses[latest['id']]['code'] == 'review_reassessment_mismatch'
+          and diagnoses[latest['id']]['check'] == 'review.reassessment'):
+        try:
+            correction.build_request(records, artifacts, prior['id'], prior['route_id'])
+        except ResearchError as error:
+            if error.code == 'review_input_too_large':
+                forms = ('bounded',)
     selection = notices.select_refusal_notice(records, artifacts, refused_ids, diagnoses=diagnoses,
         route=route, role=prior['role'], prompt=render_prompt, packet=packet,
-        task_characters=None, task_limit_characters=limit)
+        task_characters=None, task_limit_characters=limit, forms=forms)
     if selection['notice'] is None:
-        raise ResearchError('review_input_too_large', notices.NOTICE_DELIVERY_MSG, {'trials': selection['trials']})
+        from .review_failure_class import plan_capacity_recovery, plan_output_replacement
+        recovery = plan_capacity_recovery(records, artifacts, prior, 'input_over_limit')
+        if recovery['kind'] == 'replace':
+            lower = plan_output_replacement(records, artifacts, prior, include_packet=True,
+                                            outcome='input_over_limit', replacement_id=value['id'])
+            if lower is not None and lower['state'] == 'replace':
+                packet = lower['packet']
+                base_prompt = paragraphs.strip_prompt_paragraphs(lower['prompt'], prior['role'])
+                parameters = paragraphs.read_paragraph_parameters(lower['prompt'])
+                versions = [version for version in parameters.get(paragraphs.PARAMETER, [])
+                            if version not in paragraphs.REFUSAL_PARAGRAPH_VERSIONS.values()]
+                selection = notices.select_refusal_notice(records, artifacts, refused_ids, diagnoses=diagnoses,
+                    route=route, role=prior['role'], prompt=render_prompt, packet=packet,
+                    task_characters=None, task_limit_characters=limit, forms=('bounded',))
+        if selection['notice'] is None:
+            raise ResearchError('review_input_too_large', notices.NOTICE_DELIVERY_MSG,
+                                {'trials': selection['trials'], 'recovery': recovery})
     packet[KEY] = selection['notice']
     packet.pop('digest', None)
     packet['digest'] = digest(packet)
@@ -120,6 +154,8 @@ def prepare_replacement(records, artifacts, value, revision):
     record.update({key: prior[key] for key in ('reviewer_id', 'author_id')})
     # The scientific parent stays the same. The replaced turn is counted separately for citations.
     record['slot_id'] = protocol.context_repair.slot_id(records, prior)
+    if review_parts.find_kind(packet) is not None:
+        record[review_parts.KEY] = copy.deepcopy(packet[review_parts.KEY])
     return [immutable_record(records, 'review_assignment', value['id'], record)], record
 
 

@@ -1797,7 +1797,7 @@ def plan_capacity_recovery(records, artifacts, assignment, outcome) -> 'Recovery
                    effort_message=CAPACITY_EFFORT_MESSAGE,
                    at_or_over_limit_share=share, profile_rows=profile_rows, attempts=attempts)
     replacement = (failures.plan_output_replacement(records, artifacts, assignment,
-                    allow_single=outcome == 'output_over_cap')
+                    allow_single=outcome == 'output_over_cap', outcome=outcome)
                    if row['handler'] in ('single_request_series', 'parts_v2_read', 'context_repair')
                    and outcome in ('output_over_cap', 'input_over_limit', 'timeout', 'provider_refused') else None)
     if replacement is not None:

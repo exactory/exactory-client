@@ -5831,6 +5831,59 @@
         "test_review_single_request.FrozenSingleTests.test_first_output_read_timeout_replaces_it_without_changing_the_frozen_origin",
         "tests.test_review_parts_native.NativePartsAcceptanceTests.test_first_output_read_timeout_preserves_the_accepted_review_link"
       ]
+    },
+    {
+      "id": "refusal-planner-part-offsets",
+      "record": "20261112072628-bar-final-refused-for-part-citation-with-whole-text-offsets",
+      "class": "review-continuity",
+      "summary": "A refused repaired bar final repeated its request without the refusal.",
+      "expected": "The plan executes a same-position replacement carrying the current exact part-offset refusal, then records the corrected final.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_refusal_planner.PlannerChainRowsTests.test_repaired_bar_final_executes_the_planned_row"
+      ]
+    },
+    {
+      "id": "refusal-planner-instalment-citation",
+      "record": "20261114054500-bar-cannot-be-recorded-after-instalment-deliveries",
+      "class": "review-continuity",
+      "summary": "A bar final is refused after instalment deliveries and a retry must receive its mechanical refusal.",
+      "expected": "Authenticated earlier deliveries stay credited; a standing refusal reaches a replacement carrying the current notice, then the handoff of its role when exhausted.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_refusal_planner.PlannerChainRowsTests.test_c12_a_bar_abstract_link_executes_planned_replacement_and_records",
+        "test_review_refusal_planner.PlannerChainRowsTests.test_c12_b_bar_mixed_links_executes_replacement_and_reading_handoff",
+        "test_review_refusal_planner_citations.CitationPlannerRoleTests.test_c12_c_result_abstract_alone_and_beside_unread_fulltext_reach_repair",
+        "test_review_refusal_planner_citations.CitationPlannerRoleTests.test_c12_c_adjudication_abstract_alone_and_beside_unread_fulltext_reach_new_reviewer",
+        "test_review_session_delivery.SessionDeliveryTests.test_final_credits_the_actual_delivering_turn_after_history_reduction"
+      ]
+    },
+    {
+      "id": "exhaustion-repair-without-retirement",
+      "record": "20261112072628-bar-final-refused-for-part-citation-with-whole-text-offsets",
+      "class": "review-continuity",
+      "summary": "A fixed result or slate position needs continuity after its refusal replacements are exhausted.",
+      "expected": "A complete exhaustion binding authenticates a context repair without inventing contamination or retirement, preserves raw observations, and stays verifiable after validator changes.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_exhaustion_repair.ExhaustionRepairTests.test_result_handoff_has_complete_binding_and_records_without_retirement",
+        "test_review_exhaustion_repair.ExhaustionRepairTests.test_origin_uses_stored_evidence_after_the_validator_changes"
+      ]
+    },
+    {
+      "id": "refusal-planner-large-correction-history",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "review-continuity",
+      "summary": "The planner repeatedly offers a correction whose whole historical request cannot fit.",
+      "expected": "Forty historical reviews of 60000 characters yield a bounded-notice replacement without starting an oversized correction.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_correction_history_planner.CorrectionHistoryPlannerTests.test_forty_long_historical_reviews_replace_without_spending_a_correction"
+      ]
     }
   ]
 }

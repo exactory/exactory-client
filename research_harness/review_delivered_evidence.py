@@ -131,11 +131,67 @@ def read_attempt_delivery(records, artifacts, assignment, attempt=None):
     return _read_authenticated_delivery(records, evaluation, assignment, attempt)
 
 
+def collect_exhaustion_predecessor_turns(records, artifacts, assignment):
+    """Credit exact earlier inputs only across an exhaustion repair of the same identity and route."""
+    from . import review_context_repair as repair
+
+    repairs = [row for row in repair._lineage(records, assignment)
+               if row.get('context', {}).get('context_repair') is not None]
+    if not repairs:
+        return []
+    bound = repairs[-1]
+    binding = bound['context']['context_repair']
+    if binding.get('exhaustion', {}).get('protocol') != repair.EXHAUSTION_PROTOCOL:
+        return []
+    if records.get('review_assignment', {}).get(bound['id']) != bound:
+        return []
+    predecessor = records['review_assignment'][binding['assignment_id']]
+    if (bound['route_id'] != predecessor['route_id']
+            or protocol.normalized_text(bound['reviewer_id']) != protocol.normalized_text(predecessor['reviewer_id'])):
+        return []
+    evaluation = Evaluation.of(records, artifacts)
+    evaluation.once(('exhaustion_delivery_origin', bound['id']),
+                    lambda: repair.validate_repair_origin(records, evaluation, bound))
+    exposure = repair._exposure_lineage(records, predecessor)
+    context_roots = [row for row in exposure if row.get('context', {}).get('context_repair')
+                     and 'output_refusal' not in row.get('context', {})]
+    context_start = max((row['recorded_revision'] for row in context_roots),
+                        default=exposure[0]['recorded_revision'])
+    if any(context_start < event['recorded_revision'] < bound['recorded_revision']
+           for event in repair.cause_events(records, {row['id'] for row in exposure})):
+        return []
+    ancestors, pending, seen = [], [predecessor['id']], set()
+    while pending:
+        identifier = pending.pop()
+        if identifier in seen:
+            continue
+        seen.add(identifier)
+        prior = records['review_assignment'][identifier]
+        if (prior['role'] != bound['role'] or prior['route_id'] != bound['route_id']
+                or protocol.normalized_text(prior['reviewer_id']) != protocol.normalized_text(bound['reviewer_id'])
+                or repair.slot_id(records, prior) != repair.slot_id(records, bound)):
+            continue
+        ancestors.append(prior)
+        context = prior.get('context', {})
+        parents = [prior.get('history_assignment_id'), context.get('prior_assignment_id'),
+                   context.get('output_refusal', {}).get('assignment_id')]
+        pending.extend(parent for parent in parents if parent is not None)
+    turns = []
+    for prior in sorted(ancestors, key=lambda row: (row['recorded_revision'], row['id'])):
+        attempts = sorted((row for row in records.get('review_attempt', {}).values()
+                           if row['assignment_id'] == prior['id'] and row['status'] == 'completed'),
+                          key=lambda row: (row['recorded_revision'], row['id']))
+        for attempt in attempts:
+            if protocol.authenticate_attempt(records, evaluation, prior, attempt):
+                turns.append((prior, attempt))
+    return turns
+
+
 def collect_prior_session_turns(records, artifacts, assignment):
     """Select verified earlier turns of this session, oldest first.
 
-    Follow only the recorded session history. Repairs, replacements and carried
-    chains have their own counting contracts, outside this session projection.
+    Exhaustion repairs additionally retain the authenticated inputs of their
+    predecessor when both reviewer and route identities remain the same.
     """
     from .bar_sources import ROLES
     if (assignment.get('role') not in ROLES or assignment.get(fresh.KEY)
@@ -156,7 +212,10 @@ def collect_prior_session_turns(records, artifacts, assignment):
                 and protocol.authenticate_attempt(records, artifacts, parent, attempt)):
             turns.append((parent, attempt))
         identifier = parent.get('history_assignment_id')
-    return list(reversed(turns))
+    earlier = collect_exhaustion_predecessor_turns(records, artifacts, assignment)
+    seen_attempts = {attempt['id'] for _, attempt in earlier}
+    return earlier + [(parent, attempt) for parent, attempt in reversed(turns)
+                      if attempt['id'] not in seen_attempts]
 
 
 def _read_session_delivery(records, artifacts, assignment, delivery):

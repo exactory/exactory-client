@@ -14,8 +14,7 @@ PLAN_STEPS = {
             prerequisites=('Record the cause events.', 'Verify the new route after the latest cause event.')),
     2: dict(command='review-assignment', roles=('slate', 'result'),
             chooses=('id', 'route_id', 'context.context_repair.probe_id', 'context.context_repair.reason'),
-            prerequisites=('An exhaustion binding is supported by the installed release.',
-                           'Verify the new route after the last bound refusal and event.')),
+            prerequisites=('Verify the new route after the last bound refusal and event.',)),
     3: dict(command='review-assignment', roles=('bar', 'adjudicator'),
             chooses=('id', 'route_id', 'reviewer_id'), prerequisites=('Verify an eligible reviewer route.',)),
     4: dict(command='export', roles=('native_math',), chooses=('assignment_id', 'reviewer_id', 'minimum'),
@@ -72,6 +71,7 @@ def describe_step(records, artifacts, assignment, number, *, stop_id=None, readi
     payload = _build_identity_payload(assignment)
     context = copy.deepcopy(assignment.get('context', {}))
     context.pop('prior_assignment_id', None)
+    context.pop('output_refusal', None)
     result = dict(id=number, command=row['command'], chooses=list(row['chooses']),
                   prerequisites=[dict(condition=condition) for condition in row['prerequisites']])
     if number in (1, 2):
@@ -79,6 +79,9 @@ def describe_step(records, artifacts, assignment, number, *, stop_id=None, readi
         events = protocol.context_repair.cause_events(records, {item['id'] for item in lineage})
         binding = dict(assignment_id=assignment['id'], event_ids=[event['id'] for event in events],
                        evidence=[item for event in events for item in event['evidence']])
+        if number == 2:
+            binding['exhaustion'] = protocol.context_repair.build_exhaustion_binding(records, artifacts, assignment)
+            payload['reviewer_id'] = assignment['reviewer_id']
         payload['context'] = dict(context_repair=binding)
         result['excluded_reviewer_ids'] = list_excluded_reviewers(records, assignment, include_slot=False)
     elif number == 3:
@@ -156,17 +159,20 @@ def select_route_steps(records, artifacts, assignment):
 
 
 def describe_role_handoff(records, artifacts, assignment, code, details=None):
-    """Describe exhaustion without inventing an event-free repair before that unit ships."""
+    """Give each exhausted role its executable preserved-slot handoff."""
     details = copy.deepcopy(details or {})
+    exhaustion = code in ('review_slot_exhausted', 'review_refusal_notice_metadata_too_large')
     if assignment['role'] in ('bar', 'adjudicator'):
         numbers = [3]
+    elif assignment['role'] in ('slate', 'result') and exhaustion:
+        numbers = [2]
     else:
         numbers = select_route_steps(records, artifacts, assignment)
     steps = [describe_step(records, artifacts, assignment, number) for number in numbers]
     details['step'] = steps[0]
     if len(steps) > 1:
         details['steps'] = steps
-    if assignment['role'] in ('slate', 'result'):
+    if assignment['role'] in ('slate', 'result') and not exhaustion:
         details['decision'] = dict(owner_decides='Whether to retire this route and repair the preserved review slot.',
             then=[dict(answer='Retire the route', steps=steps)])
         return dict(state='stop', code=code, details=details)
@@ -218,6 +224,16 @@ def complete_plan(records, artifacts, assignment, plan):
         plan['state'] = 'stop'
     elif code in ('review_context_contaminated', 'review_route_retired', 'review_context_repair_required',
                   'review_context_repair_stale', 'review_context_repair_mismatch', 'review_context_repair_unverified'):
+        if code == 'review_context_repair_stale':
+            repairs = [row for row in protocol.context_repair._lineage(records, assignment)
+                       if row.get('context', {}).get('context_repair') is not None]
+            binding = repairs[-1]['context']['context_repair'] if repairs else {}
+            if binding.get('exhaustion') is not None:
+                predecessor = records['review_assignment'][binding['assignment_id']]
+                details['step'] = describe_step(records, artifacts, predecessor, 2)
+                details['step']['payload']['context']['context_repair']['exhaustion'] = copy.deepcopy(
+                    binding['exhaustion'])
+                return dict(plan, state='handoff', command='review-assignment')
         steps = select_route_steps(records, artifacts, assignment)
         # An existing cause event already meets retirement's prerequisite.
         steps = [number for number in steps if number != 8]

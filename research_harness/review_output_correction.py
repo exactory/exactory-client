@@ -141,6 +141,26 @@ def prepare_packet(records, artifacts, assignment_id):
                           lambda: _prepare_packet(records, artifacts, assignment_id))
 
 
+def build_request(records, artifacts, assignment_id, route_id):
+    """Build and measure the same complete correction request for planning and admission."""
+    from . import review_preflight
+    from .review_route_capacity import measure_request
+    artifacts = Evaluation.of(records, artifacts)
+    packet = prepare_packet(records, artifacts, assignment_id)
+    assignment = records['review_assignment'][assignment_id]
+    route = _route(records, artifacts, assignment, route_id)
+    request = transport.request_body(route, PROMPT, packet)
+    preflight = review_preflight.check_request(
+        review_preflight.build_report(records, artifacts, route, assignment['role'], PROMPT, packet, request),
+        request, correction_packet=packet)
+    measured = measure_request(route, request)
+    if not measured['fits']:
+        raise ResearchError('review_input_too_large',
+                            'The complete correction request exceeds the route input limit.',
+                            dict(phase='dispatch_preflight', preflight=preflight, measurement=measured))
+    return dict(packet=packet, route=route, request=request, preflight=preflight)
+
+
 def validate_output(records, artifacts, assignment, packet, output):
     from .research_decisions import validate_review_contract
     expected = copy.deepcopy(packet['original_output'])
@@ -207,16 +227,10 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
         if any(invocation['assignment_id'] == value['assignment_id']
                for invocation in records.get('review_output_correction_invocation', {}).values()):
             raise ResearchError('review_correction_exhausted', 'One correction invocation exhausts this assignment, including failure or decline.')
-        evaluation = Evaluation.of(records, artifacts)
-        packet = prepare_packet(records, evaluation, value['assignment_id'])
-        route = _route(records, evaluation, assignment, value['route_id'])
-        request = transport.request_body(route, PROMPT, packet)
-        from . import review_preflight
-        preflight = review_preflight.check_request(
-            review_preflight.build_report(records, evaluation, route, assignment['role'], PROMPT, packet, request),
-            request, correction_packet=packet)
+        built = build_request(records, artifacts, value['assignment_id'], value['route_id'])
+        packet, route, request = (built['packet'], built['route'], built['request'])
         invocation = dict(value, protocol=PROTOCOL, diagnostic=packet['diagnostic'], packet_digest=digest(packet),
-            preflight=preflight,
+            preflight=built['preflight'],
             prompt_hash=digest(PROMPT), route_digest=digest(route), request=protocol._put_json(artifacts, request),
             recorded_revision=expected_revision + 1)
         return [immutable_record(records, 'review_output_correction_invocation', value['id'], invocation)], invocation
@@ -232,6 +246,13 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
                 if observation.get('native_rollout_error') is not None:
                     error = observation['native_rollout_error']
                     raise ResearchError(error['code'], error['reason'])
+                from .review_route_capacity import describe_route_capacity
+                route = records['review_route'][invocation['route_id']]
+                maximum = describe_route_capacity(route)['output_tokens']['value']
+                tokens = (observation.get('usage') or {}).get('output_tokens')
+                if type(tokens) is int and type(maximum) is int and tokens >= maximum:
+                    raise ResearchError('review_output_over_cap',
+                        'The correction reached its route output limit and spent its single correction allowance.')
                 evaluation = Evaluation.of(records, artifacts)
                 assignment, packet, output = _authenticate_observation(records, evaluation, invocation, result)
                 if set(output) == {'correction', 'reason'} and output['correction'] == 'declined':

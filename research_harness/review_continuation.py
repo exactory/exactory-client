@@ -217,6 +217,16 @@ def plan_route_handoff(assignment):
 
 
 def _plan_pending_call(records, assignment):
+    for invocation in records.get('review_output_correction_invocation', {}).values():
+        if invocation['assignment_id'] == assignment['id'] and invocation['id'] not in records.get('review_output_correction', {}):
+            identifier = identify_call('review.output_correction', invocation['id'])
+            captured = records.get('review_call_observation', {}).get(identifier)
+            if captured is not None:
+                return dict(state='resume', command='review-output-correction', request_id=captured['request_id'],
+                    payload={key: invocation[key] for key in ('id', 'assignment_id', 'route_id')})
+            return dict(state='wait', command='review-run',
+                payload=dict(action='reconcile', operation='review.output_correction', invocation_id=invocation['id']),
+                not_before=_describe_wait(), code='review_invocation_pending', details={})
     for invocation in records.get('review_invocation', {}).values():
         if invocation['assignment_id'] != assignment['id']:
             continue
@@ -459,18 +469,6 @@ def _plan_head(records, artifacts, assignment):
                     or protocol._context_observed(artifacts, binding))
         usable = state.get('output') is not None and observed
         refused = state.get('refused_attempts', [])
-        if not usable and len(refused) >= 2:
-            from . import review_output_correction
-            command = 'review-output-correction'
-            details = dict(assignment_id=assignment['id'], refused_attempts=refused)
-            if any(row['assignment_id'] == assignment['id'] for row in
-                   records.get('review_output_correction_invocation', {}).values()):
-                return dict(state='stop', code='review_slot_exhausted', details=details)
-            try:
-                review_output_correction.prepare_packet(records, artifacts, assignment['id'])
-            except ResearchError:
-                return dict(state='stop', code='review_slot_exhausted', details=details)
-            return dict(state='handoff', command=command, code='review_slot_exhausted', details=details)
         if attempts and not usable:
             latest = max(attempts, key=lambda row: row.get('recorded_revision', 0))
             failed = bool(refused) or latest['status'] != 'completed' or not protocol._context_observed(artifacts, latest)
@@ -505,6 +503,7 @@ def _plan_head(records, artifacts, assignment):
             if (not single_replacement and assignment['role'] in bar_sources.ROLES
                     and not assignment.get('context', {}).get('prior_assignment_id')
                     and not assignment.get('context', {}).get('context_repair')
+                    and not result.get('payload', {}).get('context', {}).get('output_refusal')
                     and not (initial and protocol._initial_size_failure(
                         records, artifacts, assignment, assignment))):
                 return dict(state='handoff', command='review-assignment',
@@ -512,14 +511,14 @@ def _plan_head(records, artifacts, assignment):
                             details=dict(assignment_id=assignment['id'],
                                          failure_code=result.get('code'),
                                          failure_details=result.get('details', {})))
-            payload = _build_assignment_payload(records, assignment, replace=True)
+            payload = result.get('payload') or _build_assignment_payload(records, assignment, replace=True)
             recovery = result.get('details', {}).get('recovery', {})
             if recovery.get('kind') == 'replace':
                 payload = copy.deepcopy(recovery['payload'])
                 payload['id'] = _find_unused_id(records, payload['id'])
             result.update(command='review-assignment', payload=payload)
         elif result['state'] == 'handoff':
-            result['command'] = 'review-probe'
+            result.setdefault('command', 'review-probe')
         elif result['state'] in ('run', 'wait'):
             result.update(command='review-run', payload=_build_run_payload(records, assignment))
             if result['state'] == 'run':

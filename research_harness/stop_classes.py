@@ -45,7 +45,8 @@ for _code, _outcome in (
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
                                 next=dict(kind='outcome', outcome=_outcome))
 for _code in ('review_slots_fixed', 'review_resampling_forbidden', 'review_adjudicator_fixed',
-              'review_slot_exhausted', 'review_correction_exhausted', 'review_correction_ineligible'):
+              'review_slot_exhausted', 'review_correction_exhausted', 'review_correction_ineligible',
+              'review_refusal_notice_metadata_too_large'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2', next=dict(kind='role'))
 for _code, _step, _command in (
         ('review_runtime_missing', 7, 'review-probe'), ('review_route_runtime_stale', 7, 'review-route'),
