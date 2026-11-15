@@ -17,6 +17,22 @@ class CapacityGuardTests(unittest.TestCase):
         self.matrix = guard.read_matrix()
         self.inventory = guard.read_transport_inventory()
 
+    def test_forecast_limit_readers_have_declared_sites(self):
+        sources = guard.read_plugin_sources(ROOT)
+        self.assertEqual(guard.inspect_limit_readers(sources, self.inventory), [])
+        sources['research_harness/new_forecast.py'] = 'def estimate():\n    return SESSION_PENDING_TURN_LIMIT\n'
+        self.assertTrue(guard.inspect_limit_readers(sources, self.inventory))
+
+    def test_forecast_admission_functions_are_pinned(self):
+        sites = self.inventory['admission_functions']
+        self.assertIn('research_harness/review_route_capacity.py:describe_session_stop', sites)
+        self.assertIn('research_harness/review_protocol.py:invoke_assignment', sites)
+        sources = guard.read_plugin_sources(ROOT)
+        path = 'research_harness/review_route_capacity.py'
+        sources[path] = sources[path].replace('def describe_session_stop(forecast):',
+            'def describe_session_stop(forecast):\n    return None', 1)
+        self.assertTrue(guard.inspect_call_sources(sources, self.inventory, review_budget.CALL_OPERATIONS))
+
     def test_prior_guard_requires_the_release_configuration_and_runtime_key(self):
         from research_harness.review_capacity_evidence import read_capacity_priors
         row = read_capacity_priors()[1]
@@ -201,9 +217,13 @@ class CapacityGuardTests(unittest.TestCase):
         self.assertTrue(guard.inspect_task_tables(self.inventory, ROLES, capacity.TURN_KINDS + ('new_kind',)))
         sources = guard.read_plugin_sources(ROOT)
         self.assertEqual(guard.inspect_merge_obligations(self.matrix, sources), [])
-        key = 'research_harness/review_continuation.py'
-        sources[key] += "\ndef forecast_stop():\n    return 'review_pending_delivery_over_plan'\n"
-        self.assertTrue(guard.inspect_merge_obligations(self.matrix, sources))
+        missing = copy.deepcopy(self.matrix)
+        missing['installed_units'].remove('session-forecast-stop')
+        obligation = next(row for row in missing['merge_obligations'] if row['unit'] == 'session-forecast-stop')
+        obligation['per_entry']['A2']['tests'].append(
+            'test_session_forecast.SessionForecastTests.test_non_session_has_no_session_forecast')
+        self.assertEqual(guard.validate_matrix(missing), [])
+        self.assertTrue(guard.inspect_merge_obligations(missing, sources))
 
     def test_every_declaration_points_into_the_closure_matrix(self):
         from ci.capacity_packet_inventory import read_packet_registry

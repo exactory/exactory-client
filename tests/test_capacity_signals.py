@@ -313,6 +313,11 @@ class ResponseLimitJourneyTests(unittest.TestCase):
         self.assertEqual(plan_next(case.store.snapshot()['records'], case.artifacts, 'new')['state'], 'done')
 
     def test_verification_moves_by_probe_and_first_assignment_to_recorded_verdict(self):
+        from test_review_output_profile import build_row
+        profile = patch.object(capacity, 'read_profile_priors', return_value=[
+            dict(build_row(level=None, kind='single', thinking=1), largest_output_tokens=12)])
+        profile.start()
+        self.addCleanup(profile.stop)
         fixture = self.prepare(study_fixtures.VerificationPartsTests)
         case = fixture.case
         self.register_https(case)
@@ -324,7 +329,9 @@ class ResponseLimitJourneyTests(unittest.TestCase):
             route_id='serving', reviewer_id=assignment['reviewer_id']))['result']
         output = dict(verdict=case.verdict(), checks=[dict(dimension=kind, reason='Checked the exact evidence.',
             evidence=fixture.references) for kind in ('soundness', 'novelty', 'impact')])
-        self.drive(case, 'new', lambda packet: output)
+        self.assertEqual(self.drive(case, 'new', lambda packet: output), 3)
+        boundary = plan_next(case.store.snapshot()['records'], case.artifacts, 'new')
+        self.assertEqual((boundary['state'], boundary['command']), ('handoff', 'bind-verdict'))
         # The role's terminal handoff requires the owner's supplied verdict body.
         payload = case.build_bind_payload(fixture.task['digest'], case.verdict(), observed=False)
         payload['assessment'].update(assignment_id=following['id'], checks=output['checks'])

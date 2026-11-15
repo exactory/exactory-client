@@ -111,6 +111,12 @@ def prepare_assignment(owner, kind):
 
 def prepare_correction(owner):
     case = owner.prepare(ProblemReviewTests)
+    from research_harness import review_route_capacity as capacity
+    from test_review_output_profile import build_row
+    profile = patch.object(capacity, 'read_profile_priors', return_value=[
+        dict(build_row(level=None, kind='single', thinking=1), largest_output_tokens=12)])
+    profile.start()
+    case.addCleanup(profile.stop)
     case.supporting = case.artifacts.put(b'A synthetic field standard.', 'text/plain')
     record_codex_route(case, output_tokens=128000)
     for role, reviewer in (('bar', 'first'), ('bar', 'second'), ('result', 'first')):

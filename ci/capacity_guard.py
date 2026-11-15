@@ -213,7 +213,8 @@ def inspect_call_sources(sources, inventory, operations):
 
 
 def collect_limit_readers(sources):
-    names = {'INPUT_LIMIT_CHARACTERS', 'CODEX_INPUT_LIMIT_CHARS', 'MAX_USER_TEXT', 'local_input_limit'}
+    names = {'INPUT_LIMIT_CHARACTERS', 'CODEX_INPUT_LIMIT_CHARS', 'MAX_USER_TEXT', 'local_input_limit',
+             'SESSION_PENDING_TURN_LIMIT'}
     return sorted(path for path, source in sources.items() if any(
         isinstance(node, ast.Name) and node.id in names or
         isinstance(node, ast.Attribute) and node.attr in names or

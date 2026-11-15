@@ -39,7 +39,7 @@ class SessionForecastTests(unittest.TestCase):
         from visual_capacity_fixtures import install_bounded_binary_backend
         install_bounded_binary_backend(self, [self.case.read_records()['review_route']['route']], tokens_upper=512)
 
-    def request_texts(self, sizes, *, html=False, escaped=False):
+    def request_texts(self, sizes, *, html=False, escaped=False, repeated=False):
         requests = []
         for index, size in enumerate(sizes):
             version = self.case.metadata(81000 + index)
@@ -50,6 +50,8 @@ class SessionForecastTests(unittest.TestCase):
                               for part in range((size + segment - 1) // segment))[:size]
             if escaped:
                 content = ('\"\\' * ((size + 1) // 2))[:size]
+            if repeated:
+                content = 'x' * size
             if html:
                 content = str(index) + 'a' * (size - 1)
                 self.case.capture(version, body=content, abstract=False)
@@ -88,6 +90,92 @@ class SessionForecastTests(unittest.TestCase):
             forecast = capacity.describe_session_forecast(records, self.case.artifacts, self.assignment)
         self.assertEqual(forecast['request']['token_limit'], 0)
         self.assertFalse(forecast['request']['fits'])
+
+    def test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting(self):
+        from research_harness import bar_sources
+        for rules, remaining in ((bar_sources.PROTOCOL_V3, 34), (bar_sources.PROTOCOL, 0)):
+            with self.subTest(rules=rules), patch.object(bar_sources, 'SESSION_PROTOCOL', rules):
+                scenario = SessionForecastTests()
+                scenario.setUp()
+                self.addCleanup(scenario.doCleanups)
+                with patch.object(review_excerpts, 'TURN_FULLTEXT_CHARACTERS', 100):
+                    scenario.request_texts([3500], repeated=True)
+                    with patch.object(capacity, 'SESSION_PENDING_TURN_LIMIT', 64):
+                        scenario.fixture.execute(scenario.plan())
+                        head = scenario.plan()['head_id']
+                        output = scenario.case.build_review_output('bar')
+                        output['value']['status'] = 'unresolved'
+                        with patch.object(protocol.transport, 'send_request',
+                                          return_value=scenario.case.build_provider_response(output)):
+                            scenario.case.mutate(protocol.invoke_assignment,
+                                dict(id='repeated-part', assignment_id=head), credential='fixture')
+                    records = scenario.case.read_records()
+                    attempt = records['review_attempt']['repeated-part']
+                    request_bytes = scenario.case.artifacts.read(attempt['request'])
+                    plan = scenario.plan()
+                    self.assertEqual(plan['capacity_forecast']['pending_parts'], remaining)
+                    self.assertEqual(plan['capacity_forecast']['pending_turns'], remaining)
+                    if rules == bar_sources.PROTOCOL_V3:
+                        self.assertEqual(plan['code'], 'review_pending_delivery_over_plan')
+                        with patch.object(protocol.transport, 'send_request',
+                                          side_effect=AssertionError(FORECAST_CALL_ERROR)) as send:
+                            self.assertEqual(run_series(scenario.case.store, head, emit=lambda row: None), 3)
+                        send.assert_not_called()
+                    else:
+                        self.assertIsNone(plan['capacity_forecast']['reason'])
+                    self.assertEqual(scenario.case.artifacts.read(attempt['request']), request_bytes)
+                    self.assertTrue(protocol.authenticate_attempt(records, scenario.case.artifacts,
+                        records['review_assignment'][head], attempt))
+
+    def test_artifact_parts_are_forecast_once_and_stop_before_another_call(self):
+        from research_harness import bar_sources
+        reference = self.case.artifacts.put(b'x' * 3500, 'text/plain')
+        packet = protocol._read_json(self.case.artifacts, self.assignment['packet'])
+        self.assertEqual(packet['source_rules'], bar_sources.PROTOCOL_V3)
+        packet['source_artifacts'] = [bar_sources.descriptor(reference)]
+        packet.pop('digest')
+        packet['digest'] = digest(packet)
+        self.assignment = dict(self.assignment, packet=self.case.artifacts.put(
+            json.dumps(packet, sort_keys=True, ensure_ascii=False).encode(), 'application/json'),
+            packet_digest=packet['digest'])
+        self.case.put('review_assignment', self.assignment['id'], self.assignment)
+        self.fixture.assignment = self.assignment
+        output = self.case.build_review_output('bar')
+        output['value']['status'] = 'unresolved'
+        output['source_requests'] = [dict(id='artifact', kind='artifact', sha256=reference['sha256'])]
+        with patch.object(review_excerpts, 'TURN_FULLTEXT_CHARACTERS', 100):
+            self.fixture.invoke(output)
+            stopped = self.plan()
+            self.assertEqual(stopped['code'], 'review_pending_delivery_over_plan')
+            self.assertEqual(stopped['capacity_forecast']['pending_parts'], 35)
+            self.assertEqual(stopped['capacity_forecast']['pending_sources'][0]['sha256'], reference['sha256'])
+            from research_harness.review_plan_steps import complete_plan
+            projected = dict(stopped['capacity_forecast'], reason='projected_input')
+            projection_stop = complete_plan(self.case.read_records(), self.case.artifacts, self.assignment,
+                                             capacity.describe_session_stop(projected))
+            self.assertEqual([answer['answer'] for answer in projection_stop['details']['decision']['then']],
+                             [capacity.SESSION_ROUTE_ANSWER])
+            self.assertNotEqual(projection_stop['details']['step']['command'], 'select-main-capture')
+            with patch.object(protocol.transport, 'send_request',
+                              side_effect=AssertionError(FORECAST_CALL_ERROR)) as send:
+                self.assertEqual(run_series(self.case.store, self.assignment['id'], emit=lambda row: None), 3)
+            send.assert_not_called()
+            with patch.object(capacity, 'SESSION_PENDING_TURN_LIMIT', 64):
+                self.fixture.execute(self.plan())
+                head = self.plan()['head_id']
+                output['source_requests'].append(dict(output['source_requests'][0], id='same-artifact'))
+                with patch.object(protocol.transport, 'send_request',
+                                  return_value=self.case.build_provider_response(output)):
+                    self.case.mutate(protocol.invoke_assignment,
+                        dict(id='artifact-part', assignment_id=head), credential='fixture')
+            forecast = self.plan()['capacity_forecast']
+            self.assertEqual((forecast['pending_parts'], forecast['pending_turns']), (34, 34))
+            self.assertEqual(forecast['pending_characters'], 3400)
+            step = self.plan()['details']['decision']['then'][0]['steps'][0]
+            self.assertEqual(step['command'], 'review-stop')
+            self.case.mutate(cli.OPERATIONS[step['command']], dict(step['payload'],
+                id='end-artifact-session', reason='Prepare a smaller independent input.'))
+            self.assertEqual(self.plan()['code'], 'review_chain_stopped')
 
     def test_four_padded_texts_stop_with_capture_details_before_another_call(self):
         requested = self.request_texts([2493595, 137153, 3947312, 19073281])

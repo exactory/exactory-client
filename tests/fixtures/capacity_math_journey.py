@@ -16,7 +16,8 @@ from tests.test_search_reviewer import NativeReviewerTests
 from tests.test_search_evidence import EvidenceTests
 from tests.native_reviewer_support import mutate, response
 from codex_route_fixtures import record_codex_route, invoke_codex
-from research_harness import review_protocol as protocol
+from research_harness import review_protocol as protocol, review_route_capacity as capacity
+from test_review_output_profile import build_row
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
 from research_harness.storage import Store
@@ -27,6 +28,11 @@ from research_harness.review_series import run_series
 def run_journey():
     case = NativeReviewerTests()
     case.setUp()
+    # This transport recovery submits an ordinary native final, not a parts output.
+    profile = patch.object(capacity, 'read_profile_priors', return_value=[
+        dict(build_row(level=None, kind='single', thinking=1), largest_output_tokens=12)])
+    profile.start()
+    case.addCleanup(profile.stop)
     try:
         case.artifact = lambda path, text: EvidenceTests.artifact(case, path, text)
         spec = EvidenceTests.external_checkpoint(case)

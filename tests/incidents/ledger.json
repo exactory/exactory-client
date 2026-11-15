@@ -5653,7 +5653,9 @@
         "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
         "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
         "test_session_forecast.SessionForecastTests.test_versions_with_a_shared_body_fit_and_continue_to_a_recorded_review",
-        "test_session_forecast.SessionForecastTests.test_forecast_uses_keyed_input_evidence_instead_of_output_profile"
+        "test_session_forecast.SessionForecastTests.test_forecast_uses_keyed_input_evidence_instead_of_output_profile",
+        "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
+        "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call"
       ],
       "fixed_in": "open",
       "test_kind": "real_shape"

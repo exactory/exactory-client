@@ -266,16 +266,24 @@ def complete_plan(records, artifacts, assignment, plan):
                    for row in records.get('review_attempt', {}).values())
     if code == 'review_pending_delivery_over_plan':
         from .review_route_capacity import (SESSION_FORECAST_DECISION, SESSION_CAPTURE_ANSWER,
-                                           SESSION_CAPTURE_REPAIR_ANSWER, SESSION_ROUTE_ANSWER)
+            SESSION_CAPTURE_REPAIR_ANSWER, SESSION_ROUTE_ANSWER, SESSION_ARTIFACT_DECISION, SESSION_STOP_ANSWER)
+        forecast = details['capacity_forecast']
+        if forecast['reason'] == 'pending_turns' and any(row.get('sha256') and row.get('pending_parts')
+                                                       for row in details['pending_sources']):
+            step = dict(command='review-stop', payload=dict(action='stop', mode='now',
+                assignment_id=assignment['id']), chooses=['id', 'reason'])
+            details.update(step=step, decision=dict(owner_decides=SESSION_ARTIFACT_DECISION,
+                then=[dict(answer=SESSION_STOP_ANSWER, steps=[step])]))
+            return dict(plan, state='stop', command='review-stop')
         captures = []
         for source in details['pending_sources']:
-            if not source.get('pending_parts'):
+            if not source.get('pending_parts') or 'version_id' not in source:
                 continue
             step = describe_step(records, artifacts, assignment, 12)
             step['payload'] = dict(version_id=source['version_id'])
             step['chooses'].remove('version_id')
             captures.append(step)
-        forecast = details['capacity_forecast']
+        has_captures = bool(captures)
         packet = protocol._read_json(artifacts, assignment['packet'])
         keeps_source_delivery = any(row.get('request', {}).get('kind') == 'source'
             and row['request'].get('depth') == 'fulltext' for row in packet.get('source_deliveries', []))
@@ -286,13 +294,13 @@ def complete_plan(records, artifacts, assignment, plan):
         else:
             captures.append(dict(command='review-series', assignment_id=assignment['id']))
             capture_answer = SESSION_CAPTURE_ANSWER
-        answers = [dict(answer=capture_answer, steps=captures)]
+        answers = [dict(answer=capture_answer, steps=captures)] if has_captures else []
         if details['capacity_forecast']['reason'] == 'projected_input':
             answers.append(dict(answer=SESSION_ROUTE_ANSWER,
                                 steps=_describe_session_route_steps(records, artifacts, assignment)))
         details['decision'] = dict(owner_decides=SESSION_FORECAST_DECISION, then=answers)
-        details['step'] = captures[0]
-        plan.update(state='stop', command='select-main-capture')
+        details['step'] = answers[0]['steps'][0]
+        plan.update(state='stop', command=details['step']['command'])
     elif code in ('native_review_attestation_required', 'openness_review_not_approved'):
         number = select_route_steps(records, artifacts, assignment)[-1]
         details['step'] = describe_step(records, artifacts, assignment, number)

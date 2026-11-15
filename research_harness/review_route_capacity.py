@@ -1638,6 +1638,10 @@ SESSION_FORECAST_DECISION = 'How should the pending source delivery be brought w
 SESSION_CAPTURE_ANSWER = 'Select compact captures and continue this session'
 SESSION_CAPTURE_REPAIR_ANSWER = 'Select compact captures and repair the preserved slot'
 SESSION_ROUTE_ANSWER = 'Move the preserved slot to another route'
+SESSION_ARTIFACT_STOP_MESSAGE = ('The pending artifact delivery exceeds this session plan. Stop this session '
+    'before preparing a smaller review input.')
+SESSION_ARTIFACT_DECISION = 'Whether to stop this session before preparing a smaller review input.'
+SESSION_STOP_ANSWER = 'Stop this session'
 SESSION_PROJECTION_NOTE = ('The final input is an estimate that adds the pending text to the fitted request. '
     'Later answers, exact-text sharing and history reductions can change it.')
 SESSION_USAGE_UNAVAILABLE = 'No matching completed attempt supplies this measurement.'
@@ -1706,22 +1710,34 @@ def describe_session_forecast(records, artifacts, assignment, *, request=None, o
     turns, used = 0, 0
     for item in pending:
         version = item.get('version_id')
-        if item.get('kind') != 'source' or item.get('depth') != 'fulltext' or version in seen:
+        artifact_request = item.get('kind') == 'artifact'
+        if not artifact_request and (item.get('kind') != 'source' or item.get('depth') != 'fulltext'):
             continue
-        seen.add(version)
-        capture = review_excerpts.find_fulltext_capture(records, version)
+        identity = dict(sha256=item['sha256']) if artifact_request else dict(version_id=version)
+        key = ('artifact', item['sha256']) if artifact_request else ('source', version)
+        if key in seen:
+            continue
+        seen.add(key)
+        if artifact_request:
+            reference = next(row for row in bar_sources.collect_record_artifacts(sent)
+                             if row['sha256'] == item['sha256'])
+            capture = dict(text=bar_sources._reference(reference))
+        else:
+            capture = review_excerpts.find_fulltext_capture(records, version)
         if capture is None:
-            sources.append(dict(version_id=version, parts=None, pending_parts=None, pending_characters=None,
+            sources.append(dict(identity, parts=None, pending_parts=None, pending_characters=None,
                                 whitespace_fraction=None, expansion_ratio=None))
             continue
         content = artifacts.read(capture['text']).decode('utf-8')
         spans = review_excerpts.compute_part_spans(content)
         hashes = review_excerpts.compute_part_digests(content)
-        earlier = delivered.get(hashes[0]) if len(spans) == 1 else None
+        keys = ([(capture['text']['sha256'], start, end) for start, end in spans]
+                if artifact_request or sent.get('source_rules') == bar_sources.PROTOCOL_V3 else hashes)
+        earlier = (delivered.get(capture['text']['sha256']) or delivered.get(keys[0])) if len(spans) == 1 else None
         redeliver = False
         deliver_whole = False
         delivery_characters = len(content)
-        if len(spans) == 1:
+        if len(spans) == 1 and not artifact_request:
             if original_rows is None:
                 inventory = bar_sources.validate_inventory(artifacts, sent['source_inventory'])
                 original_rows = {row['id']: row for row in inventory}
@@ -1734,7 +1750,8 @@ def describe_session_forecast(records, artifacts, assignment, *, request=None, o
             if whole_characters <= review_excerpts.TURN_FULLTEXT_CHARACTERS:
                 delivery_characters = whole_characters
                 deliver_whole = True
-        remaining = [(span, sha) for span, sha in zip(spans, hashes) if sha not in delivered or redeliver]
+        remaining = [(span, sha) for span, sha, key in zip(spans, hashes, keys)
+                     if key not in delivered or redeliver]
         if capture['text']['sha256'] in delivered and not redeliver:
             remaining = []
         for (start, end), part_hash in remaining:
@@ -1753,7 +1770,7 @@ def describe_session_forecast(records, artifacts, assignment, *, request=None, o
                 additions.append(content[start:end])
                 held.add(part_hash)
         extraction = capture.get('extraction', {})
-        sources.append(dict(version_id=version, source_id=capture['source_id'],
+        sources.append(dict(identity, **({} if artifact_request else dict(source_id=capture['source_id'])),
             parts=len(spans), pending_parts=len(remaining), pending_characters=sum(end - start for (start, end), _ in remaining),
             whitespace_fraction=extraction.get('whitespace_fraction'), expansion_ratio=extraction.get('expansion_ratio')))
     measured = measure_request(route, request, profile=profile, records=records, artifacts=artifacts)
@@ -1783,6 +1800,9 @@ def describe_session_stop(forecast):
     if forecast is None or forecast['reason'] is None:
         return None
     message = SESSION_FORECAST_STOP_MESSAGE if forecast['reason'] == 'pending_turns' else SESSION_PROJECTION_STOP_MESSAGE
+    if forecast['reason'] == 'pending_turns' and any(row.get('sha256') and row.get('pending_parts')
+                                                   for row in forecast['pending_sources']):
+        message = SESSION_ARTIFACT_STOP_MESSAGE
     return dict(state='stop', code='review_pending_delivery_over_plan', capacity_forecast=forecast,
                 details=dict(message=message, capacity_forecast=forecast,
                              pending_sources=forecast['pending_sources']))

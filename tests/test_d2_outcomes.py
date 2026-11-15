@@ -390,6 +390,13 @@ class OutcomeTests(unittest.TestCase):
 
     def test_native_math_handoff_accepts_a_new_attested_packet(self):
         import test_review_parts_native as native_fixtures
+        from research_harness import review_route_capacity as capacity
+        from test_review_output_profile import build_row
+        # This handoff fixture supplies a complete ordinary native output.
+        profile = patch.object(capacity, 'read_profile_priors', return_value=[
+            dict(build_row(level=None, kind='single', thinking=1), largest_output_tokens=12)])
+        profile.start()
+        self.addCleanup(profile.stop)
         fixture = self.prepare(native_fixtures.NativePartsTests)
         assignment = fixture.assign()
         evidence = fixture.artifacts.put(b'Observed context exposure.', 'text/plain')
