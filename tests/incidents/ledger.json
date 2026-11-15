@@ -2,6 +2,21 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "final-page-plan-bounds-each-target-and-closing",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "review capacity (pure final page allocation and replay)",
+      "summary": "A final could exceed the route after 57 reading turns even though its retained entries were within the advertised text allowances.",
+      "expected": "Serialized entry sizes produce an ordered bounded final page plan at both 60,000 and 480,000 characters, with target and decision-row condensation supplied by the pinned policy. Splits and level changes replay from linked artifacts while preserving assigned turns.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_final_pages.FinalIncidentTests.test_fifty_seven_turn_final_has_a_bounded_page_plan_at_both_rooms",
+        "test_review_final_pages.FinalIncidentTests.test_all_acceptance_shapes_have_bounded_pages_at_both_rooms",
+        "test_review_final_pages.PagePlanTests.test_verifies_two_successors_from_their_causes_and_authenticated_assignments",
+        "test_review_final_pages.PagePlanTests.test_refuses_changed_turn_changed_cause_missing_predecessor_and_wrong_roots"
+      ]
+    },
+    {
       "id": "exhaustion-position-capacity-link-precedence",
       "record": "20261113110022-every-open-record-and-review-capacity",
       "class": "D2 exhausted position membership and R13 replacement count",
