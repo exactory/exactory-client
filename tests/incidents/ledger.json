@@ -5312,13 +5312,17 @@
       "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
       "class": "provider refusal sequences",
       "summary": "Two safeguard stops ended a reading chain and lost its earlier completed turns.",
-      "expected": "The current turn retains the measured three-attempt allowance and then waits for a new sequence, up to three sequences and later evidenced owner extensions. Cross-chain carried readings remain later units.",
+      "expected": "Provider refusals retain the completed prefix, descend through reading levels and wait through the allowed sequences. The last v7 reading sequence reaches an authenticated unresolved finding over the complete unread set; a later export carries verified unchanged readings.",
       "fixed_in": "0.89.0",
       "test_kind": "real_shape",
       "tests": [
         "test_d2_outcomes.OutcomeTests.test_sequences_reset_outcome_counts_and_owner_grants_one_more",
         "test_d2_outcomes.OutcomeTests.test_later_provider_reset_controls_sequence_wait",
-        "test_d2_outcomes.OutcomeTests.test_two_provider_refusals_at_turn_three_finish_without_rereading"
+        "test_d2_outcomes.OutcomeTests.test_two_provider_refusals_at_turn_three_finish_without_rereading",
+        "test_continuity_guard_stage3.Stage3MatrixTests.test_g1_k7_provider_sequences_reading_reach_verified_unresolved",
+        "test_continuity_guard_stage3.Stage3MatrixTests.test_g1_k7_unread_final_refusal_preserves_set_and_authenticates_origin",
+        "test_openness_unread_final.IncidentUnreadTests.test_g1_k7_six_completed_turns_survive_refusal_at_turn_seven_and_next_export_reads_one_text",
+        "test_openness_carried.V5CarriedSelectionTests.test_g8_changed_neighbour_keeps_credit_and_filters_own_source_entries"
       ]
     },
     {
@@ -6731,6 +6735,23 @@
         "test_openness_unread_final.LegacyUnreadTests.test_g1_k7_incident_v5_two_safeguards_retry_then_last_sequence_names_row4",
         "test_openness_unread_final.IncidentUnreadTests.test_g1_k7_six_completed_turns_survive_refusal_at_turn_seven_and_next_export_reads_one_text",
         "test_openness_unread_final.UnreadFinalTests.test_g1_list_only_provider_refusal_reaches_an_empty_unread_finding"
+      ]
+    },
+    {
+      "id": "new-reading-chain-reads-unchanged-units",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "cross-chain reading continuity",
+      "summary": "New chains read unchanged full texts again after an earlier chain stopped before its final finding.",
+      "expected": "A new v7 chain selects verified unchanged units across v5/v6 origins, delivers only missing or changed ranges and required affected notes, and records a finding whose mixed-chain origins verify without changing the stored selection.",
+      "fixed_in": "0.91.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_carried.V5CarriedSelectionTests.test_g8_changed_neighbour_keeps_credit_and_filters_own_source_entries",
+        "test_openness_carried.V6CarriedSelectionTests.test_g8_changed_neighbour_keeps_credit_and_filters_own_source_entries",
+        "test_continuity_selection.V5SelectionTests.test_g8_a4_changed_neighbour_and_changed_entry_source_record_and_verify",
+        "test_continuity_selection.V6SelectionTests.test_g8_a4_changed_neighbour_and_changed_entry_source_record_and_verify",
+        "test_continuity_selection.StoredCaptureJourneyTests.test_g8_c8_chosen_and_stopped_capture_new_export_records_and_verifies",
+        "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery"
       ]
     }
   ]
