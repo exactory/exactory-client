@@ -1632,11 +1632,12 @@ SESSION_FORECAST_SOURCES = (
     '20261111235418-bar-final-refused-for-text-delivered-in-reduced-history',
 )
 SESSION_FORECAST_PROTOCOL = 'exactory-session-capacity-forecast-v1'
-SESSION_FORECAST_STOP_MESSAGE = ('The pending source delivery exceeds this session plan. Inspect the listed captures '
-    'and select compact captures.')
-SESSION_PROJECTION_STOP_MESSAGE = ('The projected final input exceeds the route capacity. Select compact captures, '
-    'or retire the route and repair the preserved slot on a serving route.')
-SESSION_FORECAST_DECISION = 'How should the pending source delivery be brought within this session plan?'
+SESSION_FORECAST_STOP_MESSAGE = ('The pending full-text delivery of this session is estimated at more than 32 turns. '
+    'Report this stop, and take the steps that the owner selects for the sources with pending parts.')
+SESSION_PROJECTION_STOP_MESSAGE = ('With its pending full texts, the request of this session is projected to exceed '
+    'the input limit of the route. Select compact captures, or move the preserved slot to a serving route, '
+    'as the listed steps state.')
+SESSION_FORECAST_DECISION = 'How should the pending full texts be brought within the limits of this session?'
 SESSION_CAPTURE_ANSWER = 'Select compact captures and continue this session'
 SESSION_CAPTURE_REPAIR_ANSWER = 'Select compact captures and repair the preserved slot'
 SESSION_ROUTE_ANSWER = 'Move the preserved slot to another route'
@@ -1646,7 +1647,8 @@ SESSION_ARTIFACT_DECISION = 'Whether to stop this session before preparing a sma
 SESSION_STOP_ANSWER = 'Stop this session'
 SESSION_PROJECTION_NOTE = ('The final input is an estimate that adds the pending text to the fitted request. '
     'Later answers, exact-text sharing and history reductions can change it.')
-SESSION_USAGE_UNAVAILABLE = 'No matching completed attempt supplies this measurement.'
+SESSION_USAGE_UNAVAILABLE = ('The latest completed request attempts of this route class and task level do not supply '
+    'the expected output, the expected duration, or both. Use each of the two values that is not null.')
 
 
 def _measure_added_text(route, request, content, profile, *, records=None, artifacts=None):
@@ -1814,7 +1816,7 @@ SIZE_REPORT_PROTOCOL = 'exactory-review-material-size-v1'
 SIZE_REPORT_WARNING_MESSAGE = ('This material needs more than one delivery turn or exceeds a registered route input '
     'limit. Inspect the body counts and route measures before starting the review.')
 SIZE_REPORT_IMPORT_LABEL = 'Imported forming records and their artifact bodies.'
-SIZE_REPORT_VALUE_LABEL = 'Records cited by the value accounts and their artifact bodies.'
+SIZE_REPORT_VALUE_LABEL = 'Account records and their artifact bodies.'
 
 
 def describe_size_report(records, material, *, bodies=0, body_characters=0, artifacts=None):

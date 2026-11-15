@@ -545,6 +545,10 @@ CLI reference gives the payloads, the records and the refusals.
    it. It keeps in the destination a verified snapshot of the source at that revision, as the
    carry keeps the proof of its source, and it records one manifest of that snapshot,
    `problem_forming_import/<id>`. No record of the source becomes a record of the destination.
+   Read the `size_report` of the `--check` response before you record the import: it gives the
+   character counts and the artifact counts of the imported material and its measure against the
+   input limits of each registered route, and it has a `warning` when the material is estimated at
+   more than one turn of 120,000 characters or exceeds an input limit of a registered route.
 4. The receipt of the command lists under `members` every record of the source that the
    destination can cite: the forming calls and the outcomes of the source, its probes, its
    plans, runs and assessments, the searches that its test declarations name, and the readings

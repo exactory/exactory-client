@@ -1058,6 +1058,68 @@ a wait ends more than 30 minutes ahead, `review-series` exits with status 4,
 and the agent runs it again at `not_before`.
 Name a warning in the summary of the run.
 
+The forecast of a session. Since 0.89.2 a `bar`, `slate` or `result`
+assignment whose packet holds a source inventory, and that is neither a turn
+of a parts series nor part of a staged review, has a forecast of the source
+delivery that its session still owes (`exactory-session-capacity-forecast-v1`).
+The forecast leaves the packet, the prompt and the request of the assignment
+unchanged, and the stored receipt of `review-assignment` does not hold it.
+When `review-series` records a terminal stop, the stop record and its receipt
+keep the plan, with the forecast that the plan carries. The forecast appears as `capacity_forecast` on a plan of
+`plan_next` whose state is `run`, `continue` or `record`, on the receipt of
+`review-assignment`, and on the lines of `review-series` for such a head; the
+`done` line carries the last forecast of the run. `status` lists the forecasts
+of the open heads of a route under `review.routes.<route id>.capacity_forecasts`.
+The fields: `assignment_id`; `request`, the measure of the request of the
+present assignment against the limits of the route (on a `continue` plan this
+is still the request of the existing head); `pending_sources`, one row for
+each distinct version among the full-text requests that the forecast reads
+(`version_id`, `source_id`, `parts`, `pending_parts`, `pending_characters`,
+and the `whitespace_fraction` and `expansion_ratio` of the capture's
+extraction). A row has zero pending parts when its text was already delivered.
+When the version has no main capture with an extracted text, the row has no
+`source_id`, its other fields are null, and it adds nothing to the sums or to
+the turns. Then the sums `pending_parts` and
+`pending_characters`; `pending_turns`, the turns that deliver the pending
+parts at 120,000 characters for a turn, also as `turns: [{kind: "request",
+count}]`, with `units: [{kind: "fulltext_part", count, characters}]`;
+`pending_turn_limit`, which is 32, and `threshold_sources`, the records that
+the number comes from; `projected_final`, the measure of the request with the
+pending text added, marked `estimated: true` with a `note`, because later
+answers and reductions of the history can change it; `expected_calls`, which
+is `pending_turns / (1 - at_or_over_limit_share)` when the share is known and
+below 1, and null otherwise; and `reason`. `attempts` and
+`at_or_over_limit_share` come from the `request` row of the route's output
+profile for the task level of the request: the number of its attempts and the
+share of them at or over the output limit. That row can hold attempts that did
+not complete, and earlier measurements. `expected_output_tokens` and
+`expected_duration_seconds` are separate medians over the 500 latest completed
+attempts of the same route class, turn kind and task level that hold the
+measurement. Each is null when no such attempt holds it, and
+`unavailable_reason` is set when at least one of them is null. `capacity_warning` repeats the reason with the projected
+input under `input` and these output figures under `output`.
+
+The forecast stop. `reason` is `pending_turns` when `pending_turns` is more
+than 32, `projected_input` when at least one turn is pending and the
+projected request does not fit the route, and null otherwise. With a reason,
+a plan whose state is `run` or `continue` becomes a `stop` with the code
+`review_pending_delivery_over_plan`, a decision stop, before any call. The
+plan keeps `capacity_forecast` and has no `payload`. `review-run` of such an
+assignment refuses with the same code after the dispatch preflight and before
+the invocation is recorded, with the same details. A request that fails the
+dispatch preflight keeps its own refusal. The details are `message`,
+`capacity_forecast`, `pending_sources`, `decision: {owner_decides, then}` and
+`step`, the first step of the first answer. `then` lists the answers:
+
+| `answer` | Steps | Offered when |
+| --- | --- | --- |
+| `Select compact captures and continue this session` | For each source with pending parts, `select-main-capture` with `{version_id}`, where the agent chooses `source_id` and `reason` after it captured the original in a size that fits. Then `review-series` on the assignment. | The head has run, its packet holds no full-text delivery, and its present request fits the route. |
+| `Select compact captures and repair the preserved slot` | The same `select-main-capture` steps, then the steps of the role for a move to another route: for these roles the retirement of the route (`review-context`, `kind: "route_retired"`), a route record with its probe, and the context repair, whose `event_ids` and `evidence` come from the receipt of the retirement. | In every other case: a capture that is chosen later cannot replace text that the head or its history already holds. |
+| `Move the preserved slot to another route` | The steps of the role for a move to another route alone. | The reason is `projected_input`. A larger route does not shorten the pending turns, so the reason `pending_turns` has no such answer. |
+
+Report the stop with its details; the owner decides which answer is taken
+([The class of a stop](research-workflow.md#the-class-of-a-stop)).
+
 Answer recovery. The protocol `exactory-review-answer-recovery-v1` applies to
 a new observation of a completed response with a non-empty `id` whose answer
 text the transport cannot decode. Attempts recorded before 0.73.0 stay as
@@ -4041,7 +4103,7 @@ since 0.73.0, and is checked, not refused.
 | `problem-statement` | `{id, title, area, statement, resolution_criteria, neighbours, formal_statement, candidate_id}` and the optional `revises_statement_id` | `problem_statement/<id>` and `problem_selection/current = {statement_id}`. Statement and criteria are nonempty text with TeX mathematics. Write `statement` in the two parts of [math-conjecturer Formulation step 1](../skills/math-conjecturer/SKILL.md#formulation), with the optional `---` line and the details in the same field. Neighbours are formulation texts, possibly empty. Formal statement is optional, null or `{language, text}`. `candidate_id` is optional, null or the id of a current candidate that the statement formulates (`problem_candidate_missing`). The area must equal the immutable problem record's area (`problem_area_mismatch`); for another subject class, the rule of [math-conjecturer Exploration](../skills/math-conjecturer/SKILL.md#exploration) applies. Any other changed field requires a new statement id and moves the selection. `revises_statement_id` is optional: the id of the statement record that this one revises (`problem_statement_missing` when the store holds no statement record with that id). The harness reads these references to list the runs on the earlier texts of a statement beside the runs on its current text ([The accounts of a value record](#the-accounts-of-a-value-record)). The statement digest covers `statement` and `resolution_criteria`, so a revision that changes only the neighbours keeps the digest. A record without the field keeps the bytes of 0.82.0. |
 | `problem-attempt` | `{id, statement_id, kind, solver, literature, outcomes, proportion}` | Appends `problem_attempt/<id>`, adding `recorded_revision`. Binds the current statement to a solver attempt delivered in this store or a critically assessed full-reading literature attempt. The latest record by recorded revision is current; a resolved attempt blocks posting as an open problem. |
 | `problem-openness` | `{assignment_id}` | Records `problem_openness/<id>` from the observed native result review. Every supplied minimum must pass the shared closed-schema validation. `supported_open` advances the claim; `unresolved` records the gap without an evidence audit; `already_solved` redirects to the settling result and blocks posting as open. |
-| `problem-value` | `{id, statement_id, accounts, motivation, current_state}` | `problem_value/<id>` holds the accounts of the statement and two ordered paragraph arrays. Each paragraph is `{text, evidence}` with the optional `field_fact`, and its nonempty evidence cites entries of the accounts. `accounts` is required (`problem_accounts_required` otherwise). The record adds `recorded_revision` and the dates that the harness derives. [The accounts of a value record](#the-accounts-of-a-value-record) gives the parts, the rules, the derived parts and the refusals. A value record that an earlier release recorded has no accounts and keeps its contract. |
+| `problem-value` | `{id, statement_id, accounts, motivation, current_state}` | `problem_value/<id>` holds the accounts of the statement and two ordered paragraph arrays. Each paragraph is `{text, evidence}` with the optional `field_fact`, and its nonempty evidence cites entries of the accounts. `accounts` is required (`problem_accounts_required` otherwise). The record adds `recorded_revision` and the dates that the harness derives. [The accounts of a value record](#the-accounts-of-a-value-record) gives the parts, the rules, the derived parts and the refusals. A value record that an earlier release recorded has no accounts and keeps its contract. Since 0.89.2 the response of a new `problem-value` carries `size_report`; [Imported forming history](#imported-forming-history) gives its scope and its fields (the size report). The stored receipt holds none. |
 | `problem-citation-metadata` | `{id, version_id, title, authors, year, evidence}` | Appends `problem_citation_metadata/<id>`, adding `provenance` and `recorded_revision`, for an existing `url:` work with no DOI and no arXiv identity among its id, its aliases and its metadata (`problem_citation_work_ineligible` otherwise) that a valid full reading of this store covers (`problem_value_reading_missing` otherwise). `title` is nonblank text, `authors` is a nonempty ordered array of nonblank names, and `year`, optional, is four ASCII digits; a record without a year is cited without one, with no fallback to the work's year. `evidence` is `{title: span, authors: [span, ...], year: span}`: one span for the title, one span per author in the same order, and a year span exactly when `year` is given. A span is `{kind, source_id, sha256, start, end}`. `kind` is `fulltext`, the extracted text of a `fulltext` capture of this exact version, or `response`, the captured response of a `source` record; `source_id` names that source record; `sha256` is the hash of the retained object, the `text.sha256` of the capture or the `response.sha256` of the source record; `start` and `end` are zero-based UTF-8 byte offsets into that object, end exclusive, with `0 <= start < end <= size`. The selected bytes must equal the UTF-8 encoding of the field value exactly (`problem_citation_span_mismatch` otherwise): no JSON escape is decoded, no whitespace is normalized and no fragments are combined, so a line-wrapped title in a PDF text needs another retained capture that holds the clean title. An offset inside a multibyte character, or an object that is not valid UTF-8, is `invalid_input`. Every object is resolved through the stored records and the artifact store, never through a caller path: an absent source record is `unknown_source`; a source whose response is not a complete capture, or a capture that is not available and extracted, is `source_pending`; a `sha256` that is not the response of that source, a full text that no capture of this version with that source holds, or a retained object that is missing is `problem_citation_evidence_unbound`; retained bytes that fail their integrity check are `artifact_corrupt`. The record keeps the resolved provenance of every span: the source record's identity fields and digest, the response hash and, for a full text, the capture digest with the text and original hashes. The latest record for a version by `(recorded_revision, id)` is selected and revalidated at every projection. A correction is a new id with the complete replacement payload; a changed payload under an existing id is `record_conflict`. The selected record supplies the citation text alone; the locator does not change. |
 | `problem-citation-locator` | `{id, version_id, reading_id, original_sha256, url, source_id}` | Appends `citation_locator/<id>`, adding `reading_digest`, `source_digest` and `recorded_revision`: the HTTPS location of the exact original that an existing reading read. It supplies the locator of a read work that has no DOI, no arXiv id and no bundle HTTPS URL, for example a manuscript PDF in a GitHub repository, after those three in the locator order of `export --kind problem` (below); the citation text does not change. Every field is nonblank text. A payload that fails any of these conditions is refused with `problem_citation_locator_unbound`: `url` is an absolute `https` URL with a host, without a user name, a password, a fragment, whitespace or the port 0; `reading_id` names a reading of `version_id`; the bundle of that reading has `original_sha256`; `source_id` names a `source` record with this exact `url`, status `captured`, a complete response and a verified origin, whose response has the hash `original_sha256`; for a `url:` work, the text after `url:` equals `url`; a full-text capture of the work names this source and this original. The reading itself must still be valid (its own codes). Retained bytes that fail their integrity check are `artifact_corrupt`. The reading, its bundle and the work stay unchanged, and no new reading is needed. The latest record of a reading by `(recorded_revision, id)` is selected and revalidated at every projection; a selected record whose reading or source record changed after it was made is refused with `problem_citation_locator_unbound`. A correction is a new id; a changed payload under an existing id is `record_conflict`. |
 | `problem-assessment` | `{id, statement_id, grades, items, primary}` | `problem_assessment/<id>` binds the rubric self-assessment to the current statement, adding `recorded_revision`. Each item has evidence and a note; `primary` names its significance ground and criterion. |
@@ -6354,6 +6416,32 @@ under [Problem creation](#problem-creation)). Both take the ordinary `--file`,
 problem-candidate-transfer` print the payloads. With `--check` and a reachable
 source, `forming-import` validates the complete import and writes neither
 store. A record without an import behaves as before.
+
+The size report. Since 0.89.2 the response of `forming-import --check` and
+the response of a new `problem-value` carry `size_report`
+(`exactory-review-material-size-v1`). The report measures selected review
+material as a text delivery. For the import it measures the projections of
+the imported records and the bodies of the artifacts that they reach. For
+`problem-value` it measures `account_records`, with the derived forming
+history and the run checks, and the bodies of the artifacts that they reach.
+Other review material, for example the readings that a review delivers apart
+from `account_records`, is outside the report. The report is outside the
+stored records. The recorded import, its receipt, the stored receipt of
+`problem-value` and a replay of either hold no report, and a replay reads no
+body. When a body that the report needs cannot be read, `problem-value`
+refuses and records nothing. The fields: `description`; `characters`, the
+serialized records and bodies together, and `tokens_upper`, their bound in
+tokens when one byte of UTF-8 counts as one token; `import_records_characters`
+or `account_records_characters`, the records alone; `evidence_characters`, the
+serialized bodies; `bodies`, `text_bodies` and `binary_bodies`, where a binary
+body counts as omitted (`representation: "text_delivery"`); `body_characters`,
+the characters of the text bodies themselves; `turns`, the characters divided
+by 120,000 and rounded up; and `routes`, one row for each registered route
+with its `capacity`, the `measure` of the material against it and its own
+`turns`, marked `estimated: true`. `warning` is present when `turns` is more
+than 1 or the material does not fit a registered route. It asks the agent to
+read the counts and the measures before a review of the material starts. No
+command is refused for the size that the report states.
 
 The payload of `forming-import`:
 
