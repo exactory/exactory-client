@@ -18768,7 +18768,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.native_review": {
-      "ast_sha256": "78675ae505771786eda42b1776b6573090123af94118443686bb5a7266ec57c1",
+      "ast_sha256": "4fd7843cda6c970d3706f46aa76efd0af55be8e688cb85231cb560cff6ea6e52",
       "functions": {
         "_closed": "42e89b4afe40f000d59d6f9b80dc1335795381afadd36f76fc48f62e7f944cb3",
         "_nonempty": "9a6abcbc7e7271ccb4bb730efbeb22ba18339942e47553315e7c90ecd98da2bb",
@@ -18801,7 +18801,7 @@
         "edde9f7779736bc2d05a672eae4b409cda3096b36296ea180c2fc366d5c0292b",
         "fecc5e5ad3f4216ae7afd54011d18fc02220252228da22a95dac824118248417"
       ],
-      "reason": "prompt text lookup keyed by the grounds selectors of FINDING_RULES; read only by render_finding_rule Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
+      "reason": "prompt text lookup keyed by the grounds selectors of FINDING_RULES; read only by render_finding_rule Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.native_writes": {
       "ast_sha256": "fbbed9384941aabe8d671f17f3082a503272800c8b31e17fc1ece1d12467f4db",
@@ -19285,7 +19285,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "2c6f8ca72ec690e622940113183cec21db062bade9e09584a2970879f4f4e2eb",
+      "ast_sha256": "39a6d5b1e56b959d887bc750346640d66b36f1ccd7a6e10f95da56fd2de9f7f3",
       "functions": {
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
         "_append_unit": "f6cb4ac11ffc0db1bbc01ecf87ec1ca4e26a2ccc64a24c9aebe0b2c8d2ce16a7",
@@ -19381,10 +19381,10 @@
         "ee40fa0154dd550b5e1956b30fd0089c7e28eceb5a623ab0241aba4b4f0fd5c8",
         "f6afa337053d9231a7eadb9660e4668eba9b23c47a14ad648702ca89f7060179"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.openness_successor": {
-      "ast_sha256": "60c35b13682b56d6ad703220a08bde5e4ab0df73705cf394124cd4f3954b31d5",
+      "ast_sha256": "91e33ae51aaa4aaaa5a11842aecdc89727a46f9edbd61df28b3c48dd769117c3",
       "functions": {
         "_project_successor_native": "0de9e1c43a0bc6110caade10147bf3141daf94c700348e79ec671ad52b2a55f1",
         "admit_successor_chain": "890932ee7823dd7ee815ec347f4ad6168994950ba3d864cdd567dff1eed6b46b",
@@ -19415,7 +19415,7 @@
         "e329d33d1a8025401c5690c83003115c71c1abbd082c8611b481563fd21e98f2",
         "f1d2db70dd01c36ab300c219150805519decc3b147df41ccac68d4ce44c07017"
       ],
-      "reason": "Reviewed complete selection/successor module: selection and planning collections stay in digest-bound artifacts or planner receipts; logical native packet and projected minimum fields use the existing closed native declarations. Whole source and functions are pinned, including unexecuted branches."
+      "reason": "Reviewed complete selection/successor module: selection and planning collections stay in digest-bound artifacts or planner receipts; logical native packet and projected minimum fields use the existing closed native declarations. Whole source and functions are pinned, including unexecuted branches. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.operations": {
       "ast_sha256": "7a7259d4608d2d8309156acf6ea55d3779a24ba3d2abb9468f34a62a9f977408",
@@ -21225,7 +21225,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_failure_class": {
-      "ast_sha256": "900484478795a6f6592ffa0f3ac674650f50dbcf1b241467e37f73e8d2c849bb",
+      "ast_sha256": "a95e75652f935db14e8050ee5fcaeae7693ea91c0e05b40240be89fe3f936ee5",
       "functions": {
         "_describe_sequence_counts": "1903571802ceebaa2e6413b445ccec82fa398d7cf4b738a57b18c5747957e01c",
         "_is_scheduled_unknown": "18dbfaffb3993eab30b42d6bf376556828c162d79bcca21ce050df0f51cd2f2e",
@@ -21251,7 +21251,7 @@
         "970177577bb835b5c5ac97a0d64163966e523d06e418589e16eca0c8b79f9e11",
         "cbe54a67fb69e0e1fe1dc5085d4b2e4fcc27a2019eee930193876a86c72fa49d"
       ],
-      "reason": "Reviewed explicit capacity replacement command context and frozen refusal notice forwarding into both real parts fitters, with exact candidate preflight and strict smaller-request checks. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Reviewed explicit capacity replacement command context and frozen refusal notice forwarding into both real parts fitters, with exact candidate preflight and strict smaller-request checks. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_handles": {
       "ast_sha256": "7257d93f0eccad48edf5fef1587f80cad93ebfba8e1b1c5fe5e51b2c7481d91e",
@@ -22180,7 +22180,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_prompt_paragraphs": {
-      "ast_sha256": "af1763c664b2c28ca40fde1da8aa05dfb5f4bc4535cf328cb3c480c9eb1054d4",
+      "ast_sha256": "cae06c2d24b9027377a560e1a370d52b7a53c731558779950d5db000b34a4603",
       "functions": {
         "_append_selected_paragraphs": "b463ad8836dd7f7e2c0961c4c64ade4a0ed5bfbbce62519f3b113f910050ffd6",
         "_describe_template_suffix": "c3800a380dad412ec2eabb656c368209f4434960ad3366bc2706d64ad49d51b1",
@@ -22222,10 +22222,10 @@
         "bd01b36e067355a8f0c1e765513e33161679a741f0cc47e75c8ba682741d2e43",
         "c028215c5274d690c4dbc9e561a96faefb9da20033afaeee3184646b0134c60e"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "5de8f9c216cd7a2036ecaf86d613692895aa93adf45174fbe7bdbffce5e19463",
+      "ast_sha256": "82b0faf94b96bb740579dcef577e5f8dd9bf555a4b8df077338dbafc54ad0ddd",
       "functions": {
         "_assignment_state": "805eca7b4483852dbee0f8e05928cde22acbc7c7be8ec46ba127c3e71a0ddcbc",
         "_bars": "fd41a7b94078e8e0761696db4a7cc67b063cbb5787f76d6d3dae65fcc7fe5f9f",
@@ -22403,7 +22403,7 @@
         "f71df93e3effb278f474cea48473ab543f2e3e9f35807725d57775c354ddc1d9",
         "f9de906674de2fc03fd882f06649fc77f3536e68a95d398f173553e2a01ce4df"
       ],
-      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
+      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_provider_usage": {
       "ast_sha256": "8b45cdd4c5b5a98325852d3040a320283c876c25fc99d358556999417a76c986",
@@ -22465,7 +22465,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.review_refusal_notice": {
-      "ast_sha256": "39f21327f4e9cfcdc27c6706f8cb59b0d24173711dad93d4bbde44e0cc98ca81",
+      "ast_sha256": "3819f43b1cfd5e1cd24138088280ad3e7ccf8e7bef69ec514bc2917832088234",
       "functions": {
         "_build_refused_entry": "3f83c63a139e506a9700f94259ce4353c10392f97c11b2367a92835af7acdfed",
         "_check_entry_bound": "a4fbb9550c41a60dbf422b328efaed2067f9cc9a3fa25dd6f1b10b82dbcecaee",
@@ -22518,7 +22518,7 @@
         "fc7119fff4ca416fd850b718e9eb16eaceb0e68a07e9dd0061446b69bd0c922d",
         "fe3a38d31f166377de67b03eb4b20df6de1a56da8e3f3d83aa450c572a7685c2"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_refusal_replacement": {
       "ast_sha256": "c17dcdeffc2f15202cbec9c5e4f43bc39c931111cc6ea6dc1fa44819c25e9af4",
