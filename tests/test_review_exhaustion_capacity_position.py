@@ -248,6 +248,9 @@ class MixedCapacityPositionTests(unittest.TestCase):
                 with self.assertRaises(ResearchError) as caught:
                     validate_replacement_origin(records, self.artifacts, legacy, changed)
                 self.assertEqual(caught.exception.code, 'review_refusal_replacement_origin_invalid')
+        legacy_records = dict(records, review_assignment=dict(records['review_assignment'], C=legacy))
+        self.assertEqual(failures.count_position(legacy_records, self.artifacts,
+            records['review_assignment']['D'])['replacements'], dict(capacity=2, output_refused=1))
 
     def check_invalid_link(self, *, wrong_member):
         head = self.build_mixed_position()
