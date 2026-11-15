@@ -1,5 +1,6 @@
 """Capacity signals retain the evidence and use D2's existing recovery vocabulary."""
 
+import base64
 import copy
 import json
 import os
@@ -21,7 +22,7 @@ import test_research_claude_transport as stream_fixtures
 import test_review_continuation as continuation_fixtures
 import test_review_parts_study as study_fixtures
 import openness_reading_fixtures as reading_fixtures
-from codex_route_fixtures import record_codex_route, build_codex_response, install_codex_runtime, probe_codex_route
+from codex_route_fixtures import record_codex_route, build_codex_response, install_codex_runtime
 from research_harness import review_codex_transport as codex_transport
 from research_harness import cli, review_excerpts
 from research_harness.errors import ResearchError
@@ -164,11 +165,15 @@ class ResponseLimitJourneyTests(unittest.TestCase):
                 dict(state='stop', code='review_response_too_large', details={}))['details']['serving_routes']
         self.assertEqual(describe(records), ['serving'])
         packet = protocol._read_json(case.artifacts, fixture.assignment['packet'])
-        unsupported = dict(packet, evidence=[dict(encoding='base64', content='AA==',
-            artifact=case.artifacts.put(b'\x00', 'application/octet-stream'))])
+        # Its base64 body exceeds one read turn and has no captured text form.
+        binary = b'\x00' * 450000
+        unsupported = dict(packet, evidence=[dict(encoding='base64',
+            content=base64.b64encode(binary).decode('ascii'),
+            artifact=case.artifacts.put(binary, 'application/octet-stream'))])
         self.assertEqual(capacity.find_serving_routes(records, 'bar', unsupported, artifacts=case.artifacts,
             assignment=fixture.assignment, prompt=fixture.assignment['prompt']['text']), [])
-        oversized = dict(packet, synthetic_material='x' * 700000)
+        # This indivisible frame exceeds both the HTTPS bound and the local transport limit.
+        oversized = dict(packet, synthetic_material='x' * 2000000)
         self.assertEqual(capacity.find_serving_routes(records, 'bar', oversized, artifacts=case.artifacts,
             assignment=fixture.assignment, prompt=fixture.assignment['prompt']['text']), [])
         second = self.execute(case, 'review-assignment', dict(id='second', role='bar', dossier_id=None,
@@ -204,17 +209,22 @@ class ResponseLimitJourneyTests(unittest.TestCase):
         self.addCleanup(runtime.stop)
         self.execute(case, 'review-route', dict(id='serving', adapter='codex_cli_v1', model='fixture-model',
             endpoint='codex://local', configuration=dict(max_output_tokens=128000, timeout_seconds=5)))
-        probe_codex_route(case, 'probe-serving', 'serving')
+        # Verify the input boundary without borrowing the shared fixture's large capacity witness.
+        self.probe_serving_capacity(case, identifier='probe-serving', input_tokens=None)
 
-    def probe_serving_capacity(self, case):
+    def probe_serving_capacity(self, case, *, identifier='capacity-serving', input_tokens=200000):
         def respond(route, request, credential):
             packet = review_excerpts.read_sent_packet(request)
             response = build_codex_response(route, request, dict(allowed_control=packet['allowed_control'],
                 evidence_control=packet['evidence_control'], excluded_controls=[]))
-            response['usage']['input_tokens'] = 200000
+            response['usage']['input_tokens'] = (capacity.measure_request(route, request)['tokens_upper']
+                if input_tokens is None else input_tokens)
             return response
+        payload = dict(id=identifier, route_id='serving')
+        if input_tokens is not None:
+            payload['capacity'] = dict(input_tokens=input_tokens)
         with patch.object(protocol.transport, 'send_request', side_effect=respond):
-            self.execute(case, 'review-probe', dict(id='capacity-serving', route_id='serving'))
+            self.execute(case, 'review-probe', payload)
 
     def prepare(self, cls):
         fixture = cls()
