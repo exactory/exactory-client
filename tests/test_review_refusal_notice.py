@@ -55,7 +55,7 @@ class WireNoticeTests(unittest.TestCase):
                         records, artifacts, diagnoses = self.build_records(self.build_refused_output(shape, characters))
                         diagnoses['attempt']['details']['rule'] = dict(expected='"\\\n' * 10000)
                         notice = notices.build_refusal_notice(records, artifacts, ('attempt',), form='bounded',
-                            diagnoses=diagnoses, measure=measure)
+                            diagnoses=diagnoses, measure=measure, enforce_bounded_limit=True)
                         self.assertLessEqual(measure(notice), 45000)
                         self.assertLessEqual(measure(notice['refused_part']), 20000)
                         self.assertTrue(all(measure(row) <= 6000 for row in notice['refused']))
@@ -72,30 +72,98 @@ class WireNoticeTests(unittest.TestCase):
                         actual = hashlib.sha256(notices._serialize_value(notice).encode('utf-8')).hexdigest()
                         self.assertEqual(actual, baseline['notices']['%s-%d' % (shape, characters)][form])
 
+    def test_t5_no_plan_keeps_base_acceptance_and_errors_without_changing_records(self):
+        from research_harness import review_refusal_notice as notices
+        baseline = json.loads((Path(__file__).parent / 'fixtures' / 'refusal-notice-no-plan-2f9507fd.json').read_text())
+        for case, expected in baseline['behavior'].items():
+            with self.subTest(case=case):
+                records, artifacts, diagnoses = self.build_records(dict(value='short'))
+                if case == 'bounded_descriptor_above_45000':
+                    records['review_attempt']['attempt']['output']['path'] += 'x' * 45000
+                else:
+                    records['review_output_refusal']['attempt']['assignment_id'] = 'x' * 7000
+                before = serialize(records).encode('utf-8')
+                old_digest = digest(records)
+                bodies = copy.deepcopy(artifacts.bodies)
+                if expected['accepted']:
+                    notice = notices.build_refusal_notice(records, artifacts, ('attempt',), form='bounded', diagnoses=diagnoses)
+                    actual = notices._serialize_value(notice).encode('utf-8')
+                    self.assertGreater(len(actual), 45000)
+                    self.assertEqual(hashlib.sha256(actual).hexdigest(), expected['sha256'])
+                else:
+                    with self.assertRaises(ResearchError) as caught:
+                        notices.build_refusal_notice(records, artifacts, ('attempt',), form='bounded', diagnoses=diagnoses)
+                    self.assertEqual(caught.exception.as_dict(), expected['error'])
+                self.assertEqual(serialize(records).encode('utf-8'), before)
+                self.assertEqual(digest(records), old_digest)
+                self.assertEqual(artifacts.bodies, bodies)
+
     def test_t5_wire_entry_refuses_fixed_metadata_that_only_fits_before_escaping(self):
         from research_harness import review_refusal_notice as notices, review_route_capacity as capacity
         from v7_capacity_fixtures import build_route
         records, artifacts, diagnoses = self.build_records(dict(value='short'))
         diagnoses['attempt']['details']['message'] = '"' * 1800
         self.assertTrue(notices.build_refusal_notice(records, artifacts, ('attempt',), diagnoses=diagnoses))
+        before = serialize(records).encode('utf-8')
+        old_digest = digest(records)
+        bodies = copy.deepcopy(artifacts.bodies)
         route = build_route('codex_cli_v1', 'gpt-6-astra')
         with self.assertRaises(ResearchError) as caught:
             notices.build_refusal_notice(records, artifacts, ('attempt',), diagnoses=diagnoses,
-                measure=lambda value: capacity.measure_capacity_value(route, value))
+                measure=lambda value: capacity.measure_capacity_value(route, value), enforce_bounded_limit=True)
         self.assertEqual(caught.exception.code, 'review_refusal_notice_metadata_too_large')
         self.assertEqual(caught.exception.details['limit_characters'], 6000)
+        self.assertEqual(serialize(records).encode('utf-8'), before)
+        self.assertEqual(digest(records), old_digest)
+        self.assertEqual(artifacts.bodies, bodies)
+
+    def test_t5_selection_applies_the_total_limit_only_with_a_capacity_plan(self):
+        from research_harness import review_refusal_notice as notices, review_route_capacity as capacity
+        from test_openness_reading_v7_turns import TurnPacketTests
+        records, artifacts, diagnoses = self.build_records(dict(value='short'))
+        records['review_attempt']['attempt']['output']['path'] += 'x' * 45000
+        fixture = TurnPacketTests()
+        fixture.setUp()
+        packet, chain = fixture.prepare()
+        artifacts.bodies.update(fixture.artifacts.bodies)
+        records['review_route'] = dict(route=fixture.route)
+        plan = capacity.read_chain_capacity_plan(artifacts, chain)
+        before = serialize(records).encode('utf-8')
+        old_digest = digest(records)
+        bodies = copy.deepcopy(artifacts.bodies)
+        options = dict(route=fixture.route, role='native_math', prompt='Return JSON.', packet=packet,
+                       forms=('bounded',), diagnoses=diagnoses, turn_kind='reading')
+        legacy = notices.select_refusal_notice(records, artifacts, ('attempt',), **options)
+        self.assertIsNotNone(legacy['notice'])
+        self.assertGreater(len(notices._serialize_value(legacy['notice'])), 45000)
+        baseline = json.loads((Path(__file__).parent / 'fixtures' / 'refusal-notice-no-plan-2f9507fd.json').read_text())
+        self.assertEqual(hashlib.sha256(notices._serialize_value(legacy['notice']).encode('utf-8')).hexdigest(),
+                         baseline['behavior']['bounded_descriptor_above_45000']['sha256'])
+        with self.assertRaises(ResearchError) as caught:
+            notices.select_refusal_notice(records, artifacts, ('attempt',), capacity_plan=plan, **options)
+        self.assertEqual(caught.exception.code, 'review_refusal_notice_metadata_too_large')
+        self.assertEqual(caught.exception.details['limit_characters'], 45000)
+        self.assertEqual(serialize(records).encode('utf-8'), before)
+        self.assertEqual(digest(records), old_digest)
+        self.assertEqual(artifacts.bodies, bodies)
 
     def test_t5_bounded_notice_refuses_fixed_metadata_over_the_total_wire_bound(self):
         from research_harness import review_refusal_notice as notices, review_route_capacity as capacity
         from v7_capacity_fixtures import build_route
         records, artifacts, diagnoses = self.build_records(dict(value='short'))
         records['review_attempt']['attempt']['output']['path'] += 'x' * 45000
+        before = serialize(records).encode('utf-8')
+        old_digest = digest(records)
+        bodies = copy.deepcopy(artifacts.bodies)
         route = build_route('codex_cli_v1', 'gpt-6-astra')
         with self.assertRaises(ResearchError) as caught:
             notices.build_refusal_notice(records, artifacts, ('attempt',), form='bounded', diagnoses=diagnoses,
-                measure=lambda value: capacity.measure_capacity_value(route, value))
+                measure=lambda value: capacity.measure_capacity_value(route, value), enforce_bounded_limit=True)
         self.assertEqual(caught.exception.code, 'review_refusal_notice_metadata_too_large')
         self.assertEqual(caught.exception.details['limit_characters'], 45000)
+        self.assertEqual(serialize(records).encode('utf-8'), before)
+        self.assertEqual(digest(records), old_digest)
+        self.assertEqual(artifacts.bodies, bodies)
 
     def test_t6_registered_refusal_paragraphs_and_member_key_fit_the_stated_bound(self):
         from research_harness import review_prompt_paragraphs as paragraphs, review_refusal_notice as notices

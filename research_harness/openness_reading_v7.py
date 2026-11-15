@@ -447,9 +447,13 @@ def measure_turn_frames(route, native, *, fixed_bounds=None):
         fields = {key: capacity.measure_capacity_value(route, value) for key, value in fixed.items()}
         if kind == 'final':
             from .review_refusal_notice import NOTICE_PARAGRAPH_CHARACTERS
+            # The outer identity is repeated; full provenance also bounds its actor_id.
+            fields['bindings'] += capacity.measure_capacity_value(route, dict(reviewer_id=native['reviewer']))
             value = _describe_native_fields(native)
+            compact = {key: native[key] for key in ('subject_digest', 'claim_digest', 'reviewer')}
+            compact['context_unit'] = 'u999999999'
             fields['native_frame'] = capacity.measure_capacity_value(route, value if capacity.measure_capacity_value(
-                route, value) <= fixed_bounds.get('native_frame', 100000) else dict(unit='native_frame'))
+                route, value) <= fixed_bounds.get('native_frame', 100000) else compact)
             fields['material_envelope'] = capacity.measure_capacity_value(route, {
                 key: '' if key == 'notes' else [] for key in FINAL_MATERIAL_FIELDS})
             handles = [row['handle'] for row in labels]

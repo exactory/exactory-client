@@ -15483,7 +15483,7 @@
       ]
     },
     {
-      "ast_sha256": "789a9d0cb8e87ca8b247f2c901b9759a39c6be5b3ac1b059a04bff8ef6767b7c",
+      "ast_sha256": "5130013af1dce7e18bbd7a6ab19abaec94ffa9461f6584be18b44574fe8d628a",
       "callee": "research_harness.review_refusal_notice.build_refusal_notice",
       "caller": "research_harness.review_refusal_notice.select_refusal_notice",
       "classification": "listed module",
@@ -16889,6 +16889,15 @@
       ]
     },
     {
+      "ast_sha256": "7788b1595e8a690f9eca32629acf0e5dd64358b870d271c04f9e67aa69e30b99",
+      "callee": "research_harness.review_route_capacity.measure_capacity_value",
+      "caller": "research_harness.openness_reading_v7.measure_turn_frames",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_route_capacity.measure_capacity_value"
+      ]
+    },
+    {
       "ast_sha256": "7b4b39ecdf51bd665dc4361868cf5a9d5402a7cc4b8a3f314986a18f788c7367",
       "callee": "research_harness.review_route_capacity.measure_capacity_value",
       "caller": "research_harness.openness_reading_v7.measure_turn_frames",
@@ -16907,7 +16916,7 @@
       ]
     },
     {
-      "ast_sha256": "a339fb124e19e2d75727cf9c6091916251abd599872137afb387007f3300d260",
+      "ast_sha256": "cc5fa27c9c340fba5554fe3038b4764f1b8a65e13bdc9d9bf37f1c3549a66ab2",
       "callee": "research_harness.review_route_capacity.measure_capacity_value",
       "caller": "research_harness.openness_reading_v7.measure_turn_frames",
       "classification": "listed module",
@@ -16916,7 +16925,7 @@
       ]
     },
     {
-      "ast_sha256": "cc5fa27c9c340fba5554fe3038b4764f1b8a65e13bdc9d9bf37f1c3549a66ab2",
+      "ast_sha256": "ee40fa0154dd550b5e1956b30fd0089c7e28eceb5a623ab0241aba4b4f0fd5c8",
       "callee": "research_harness.review_route_capacity.measure_capacity_value",
       "caller": "research_harness.openness_reading_v7.measure_turn_frames",
       "classification": "listed module",
@@ -18308,7 +18317,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "fd75be9497d9025c3e8134f60742b847684f784b6ee05565ad835266af329111",
+      "ast_sha256": "d4014c1b9fa9ec7e37851136a5b4fd3da933ebb6ba7a4c2217664b0bc3c9708a",
       "functions": {
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
         "_append_unit": "f6cb4ac11ffc0db1bbc01ecf87ec1ca4e26a2ccc64a24c9aebe0b2c8d2ce16a7",
@@ -18322,7 +18331,7 @@
         "build_inventory": "543bab306bae3a905a1169963dd36f45157da878818d28597eb1ec34f091f24f",
         "compute_allowance_rows_bound": "43cedd0b96e55219fc11fc700beb8044053e677919c8c6088032814fc1e4703e",
         "describe_carried_pool": "b8c0046b42a8d1d5d4d96483e43f2c49afbc294acad7e86f5b965bc922646932",
-        "measure_turn_frames": "3b75567ff83a724bca5c4521ac46fceec2fb51f1c693659b30f5059ba97c9a43",
+        "measure_turn_frames": "39c2c48a99b673719c0ff499488416dace7038c9d15ec10fd4d975ebd32f59ab",
         "observe_carried_chain": "7830acc80f56e928029aec9390682f3131b0401efcfae5710bc27f826ef9fe5c",
         "plan_inventory": "427d865ada5c730d6601f112e91becc1da90deba9d364145001dcbdee033d0d0",
         "project_carried_turn": "0c984a434694f523c26e101401f7d285b7d189fdf69c5cab89491985e5cbb682"
@@ -18359,6 +18368,7 @@
         "7120daebcb3571cd7a0bca91c1dedb2b42b3da4624354883b342b802ea34425d",
         "7457c18206f33d442264aca1d1264338e24414cf6b2e3c4305d25cd95020bd6d",
         "77426d748debde496c253d79bff3ab0fd9a9ad7b56c69219ee3d5ec5542831ed",
+        "7788b1595e8a690f9eca32629acf0e5dd64358b870d271c04f9e67aa69e30b99",
         "7a0193ff63f145f2aa6572494f3d68a96d19ad8c50b9799c2f7ef6a0642c6963",
         "7b4b39ecdf51bd665dc4361868cf5a9d5402a7cc4b8a3f314986a18f788c7367",
         "7c4267e09bb3baf0ca2db88b2f7c8f33ad210011414ea1b4d7949910b81bbd00",
@@ -18371,7 +18381,6 @@
         "97bf071a33b2cf3306b03ff6f7986d0490d3f9f407d23e9f6c26483e41668c9b",
         "9c58fa76137e27bf1059f12f680a3740b9589155457682aefb2a631d981f0801",
         "a2d7ffc4cdbc97055901394268f25abcc493c3ce0c542527a8368d7f826ff51e",
-        "a339fb124e19e2d75727cf9c6091916251abd599872137afb387007f3300d260",
         "a6c49106396e83c1d2ee89094285ee2a815ad7c792c060338380f144a66cd4b6",
         "a7a1f2a721611126b9282f0588d4b351fd0307ddf0c9fdf6abaaf3dcc6e9e824",
         "aa38555f9cae6dcd4b6df210413d0947e5bedc46691db5430248331275ebc7a5",
@@ -18394,7 +18403,8 @@
         "e4aa9301b918b47cd572ff364eb50a01ebd9b4d283cc5e1fb7446929f06e0d2b",
         "e4f641e7d225670e29e68020a2aa6c4a8503d028b537770c77cbccf56f17d5db",
         "e51623f6e3326fb8ecab24b09c5894a3cc1ded6baa24d8235cc8772104768cdc",
-        "e9998aa48e9485ab2b20bec6cc0034e330b920b589625aac2c32361fe1447e03"
+        "e9998aa48e9485ab2b20bec6cc0034e330b920b589625aac2c32361fe1447e03",
+        "ee40fa0154dd550b5e1956b30fd0089c7e28eceb5a623ab0241aba4b4f0fd5c8"
       ],
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
@@ -21438,7 +21448,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.review_refusal_notice": {
-      "ast_sha256": "c900182b477975dc0ec4645b3a317c5be4584b9c2d47d6586206f52b2e4d671b",
+      "ast_sha256": "39f21327f4e9cfcdc27c6706f8cb59b0d24173711dad93d4bbde44e0cc98ca81",
       "functions": {
         "_build_refused_entry": "3f83c63a139e506a9700f94259ce4353c10392f97c11b2367a92835af7acdfed",
         "_check_entry_bound": "a4fbb9550c41a60dbf422b328efaed2067f9cc9a3fa25dd6f1b10b82dbcecaee",
@@ -21447,8 +21457,8 @@
         "_retain_value": "75cfad9afa482a158393e739e5e20e8289e2553bf967919bf0fa415a223aa297",
         "_serialize_value": "bf81ec558c4e462f8e1a915b1468cd47edc3b2bbd5e10e5282fb731599e15689",
         "attach_refusal_notice": "189c81cb5a42f2f2b28dc28714140dd1420294baaea574a6817bcdb85aa035ca",
-        "build_refusal_notice": "a4bcafdee8c18bb930994e58919da9a5e5cf0b4223a811cf513e72418f76f9b6",
-        "select_refusal_notice": "3d95de78d14839c4b09cc3326c2dd12e93e17d9f6942fb64507f29a4b7fd57e7"
+        "build_refusal_notice": "3791e3babd61fe31dc394711e0c5eb6da293a771c7b28b1e6c36e5832b54435c",
+        "select_refusal_notice": "2054333f5325e4d541db9a564cc3bce4c6e8b994af585a9c01686c1a03861dc6"
       },
       "packet_call_digests": [
         "00246e9e62650b93f39f074de607f7a7592017854ef39853d1b39cb86d69822f",
@@ -21460,6 +21470,7 @@
         "3e4b8bd9929943f0aa014bceb81812668f9e9f5d178c664e57f5b2c0efc169a8",
         "41ac62743b46787c9640952dc7e619e0b4de15671d6d4c6ea0bd58a1f7d6ccea",
         "41adf1baaecbf6b093e1ff366ea51675ce054fcd62cc5c02c62cebbecd5faea8",
+        "5130013af1dce7e18bbd7a6ab19abaec94ffa9461f6584be18b44574fe8d628a",
         "534e41fd64cbdbf53611269b879f588005bc0098059006f7ba7f115ab2cce600",
         "55987467c8d38b4ae0b324453a4b434fab4ac2ab7e1ba9180d989fc35ad1578d",
         "5d494c5c5c152a0fb501209783e4aae9c338582f32e22e053368dc9654ea983a",
@@ -21470,7 +21481,6 @@
         "6c679d3654d798d64b7bf8efe2f9af9f875eed2243c546f569289118d68dd167",
         "6e6a5ef11931e46a9d9a2829889158e1426aa8c806aa1f53073c3aea75af4579",
         "744f95d1ddbcfd4a695bb14c6960bf626b52b10f299fa19a46f43e8c58909133",
-        "789a9d0cb8e87ca8b247f2c901b9759a39c6be5b3ac1b059a04bff8ef6767b7c",
         "81d99ef281f60fc27979b87589c0c01f9fd33868445bf2a4f5dac457069328ec",
         "835ff0eb8ae1584796660ff734631af4197812ab082acae5e0efa1b46a0039bc",
         "8434049770cbfbc61f72c933d2c0e77a06c2b4f9554125b802234c81f242936a",

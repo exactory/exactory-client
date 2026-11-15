@@ -1,4 +1,22 @@
 {
+  "behavior": {
+    "bounded_descriptor_above_45000": {
+      "accepted": true,
+      "sha256": "c4ea0b6896d39159d3ed701969ad32c49c39a1edeab3668385003245096f7279"
+    },
+    "entry_metadata_above_6000": {
+      "accepted": false,
+      "error": {
+        "code": "review_refusal_notice_metadata_too_large",
+        "details": {
+          "characters": 7503,
+          "limit_characters": 6000,
+          "refusal_digest": "0a674a3c620d51f656812daecc4dcb93faae164310a1bec7fff98af8d208cff9"
+        },
+        "message": "The entry of one refusal still exceeds 6,000 characters after its details are shortened. Its identifiers, its path and its message stay unchanged, so no replacement can carry this refusal. Run review-series on the head and take the step of its role."
+      }
+    }
+  },
   "notices": {
     "backslashes-10000": {
       "bounded": "2bd15a4ea74cfd79e1f1b143c95a118143c29138c9f8f73b3c368ed9e6bd1063",

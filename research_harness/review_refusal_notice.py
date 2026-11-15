@@ -115,8 +115,8 @@ def _read_refused_part(output, path):
 
 
 def build_refusal_notice(records, artifacts, attempt_ids, *, form='whole', diagnoses=None,
-                         measure=_measure_serialized_value):
-    """Build a new notice from admitted certificates, leaving every stored byte and digest unchanged."""
+                         measure=_measure_serialized_value, enforce_bounded_limit=False):
+    """Build from admitted certificates; only planned callers enable the aggregate limit."""
     attempt_ids = tuple(attempt_ids)
     if (form not in ('whole', 'bounded') or not 1 <= len(attempt_ids) <= REFUSED_ATTEMPT_LIMIT
             or len(set(attempt_ids)) != len(attempt_ids)):
@@ -143,10 +143,11 @@ def build_refusal_notice(records, artifacts, attempt_ids, *, form='whole', diagn
         part['value'] = _retain_value(value, allowance, measure)
         part['complete'] = found and measure(value) <= allowance
         notice.update(output_ref={'artifact': copy.deepcopy(artifact), 'characters': len(text)}, refused_part=part)
-        characters = measure(notice)
-        if characters > BOUNDED_NOTICE_CHARACTERS:
-            raise ResearchError('review_refusal_notice_metadata_too_large', BOUNDED_NOTICE_METADATA_TOO_LARGE_MSG,
-                                dict(characters=characters, limit_characters=BOUNDED_NOTICE_CHARACTERS))
+        if enforce_bounded_limit:
+            characters = measure(notice)
+            if characters > BOUNDED_NOTICE_CHARACTERS:
+                raise ResearchError('review_refusal_notice_metadata_too_large', BOUNDED_NOTICE_METADATA_TOO_LARGE_MSG,
+                                    dict(characters=characters, limit_characters=BOUNDED_NOTICE_CHARACTERS))
     return notice
 
 
@@ -179,7 +180,8 @@ def select_refusal_notice(records, artifacts, attempt_ids, *, route, role, promp
     measure = ((lambda value: capacity.measure_capacity_value(route, value))
                if capacity_plan is not None else _measure_serialized_value)
     for form in forms:
-        notice = build_refusal_notice(records, artifacts, attempt_ids, form=form, diagnoses=diagnoses, measure=measure)
+        notice = build_refusal_notice(records, artifacts, attempt_ids, form=form, diagnoses=diagnoses, measure=measure,
+                                      enforce_bounded_limit=capacity_plan is not None)
         trial = {'form': form, 'fits': False}
         trials.append(trial)
         if prepare_turn is None:

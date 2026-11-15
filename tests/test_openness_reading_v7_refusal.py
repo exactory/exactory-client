@@ -456,18 +456,36 @@ class V7RefusalTests(OpennessReadingCase):
             response = build_codex_response(route, request, {})
             response['status'] = 'incomplete'
             response['usage']['output_tokens'] = 128001
+            response['usage']['input_tokens'] = capacity.measure_request(route, request)['text_characters']
             return bind_codex_response(route, request, response)
         with patch.object(protocol.transport, 'send_request', side_effect=fail):
             self.mutate(protocol.invoke_assignment, dict(id='final-over-cap',
                 assignment_id=replacement['id']), credential='fixture')
         before = copy.deepcopy(self.store.snapshot()['records'])
+        record_bytes = {kind: {key: v7.serialize_record(row) for key, row in rows.items()}
+                        for kind, rows in before.items()}
+        old_artifacts = {}
+        def retain_artifacts(value):
+            if isinstance(value, dict):
+                if set(value) == {'path', 'sha256', 'size', 'media_type'}:
+                    old_artifacts[value['sha256']] = (copy.deepcopy(value), self.artifacts.read(value))
+                for item in value.values():
+                    retain_artifacts(item)
+            elif isinstance(value, list):
+                for item in value:
+                    retain_artifacts(item)
+        retain_artifacts(before)
         frozen = self.read_packet(replacement['id'])
+        self.assertEqual(frozen['reading_final']['capacity']['material_allowance'], 480000)
+        route = before['review_route']['route']
+        self.assertLessEqual(v7._measure_final_material(route,
+            {key: frozen['reading_final'][key] for key in v7.FINAL_MATERIAL_FIELDS}), 240000)
         reduced = self.replace_head(replacement['id'])
         packet = self.read_packet(reduced['id'])
         self.assertEqual(packet['output_refusal'], notice)
         for key in v7.FINAL_MATERIAL_FIELDS:
             self.assertEqual(packet['reading_final'][key], frozen['reading_final'][key], key)
-        self.assertEqual(packet['reading_final']['capacity']['material_allowance'], 480000)
+        self.assertEqual(packet['reading_final']['capacity']['material_allowance'], 240000)
         self.assertNotIn('level_material_allowance', packet['reading_final']['capacity'])
         self.assertLess(packet['reading_final']['capacity']['answer_bound'],
                         self.read_packet(replacement['id'])['reading_final']['capacity']['answer_bound'])
@@ -475,14 +493,18 @@ class V7RefusalTests(OpennessReadingCase):
         self.assign('corrected-final', native, prior=reduced['id'])
         self.finish_from(native, 'corrected-final')
         attempt = self.store.snapshot()['records']['review_attempt']['attempt-' + reduced['id']]
-        self.assertEqual(attempt['task']['material_allowance'], 480000)
-        self.assertEqual(attempt['task']['level_material_allowance'], 480000)
+        self.assertEqual(attempt['task']['material_allowance'], 240000)
+        self.assertEqual(attempt['task']['level_material_allowance'], 240000)
         self.assertEqual(attempt['task']['notice_characters'], len(json.dumps(
             notice, ensure_ascii=False, sort_keys=True, allow_nan=False)))
         after = self.store.snapshot()['records']
+        self.assertTrue(protocol.authenticate_attempt(after, self.artifacts, after['review_assignment'][reduced['id']], attempt))
         for kind, rows in before.items():
             for key, row in rows.items():
+                self.assertEqual(v7.serialize_record(after[kind][key]), record_bytes[kind][key], (kind, key))
                 self.assertEqual(digest(after[kind][key]), digest(row), (kind, key))
+        for reference, content in old_artifacts.values():
+            self.assertEqual(self.artifacts.read(reference), content)
 
     def test_a7_third_replacement_refused_and_export_carries_verified_readings(self):
         native = self.export()
@@ -962,27 +984,58 @@ class NoticeRoomTests(unittest.TestCase):
     def build_label_native(self, route, count, label_set):
         native = turn_fixtures.build_native(count)
         labels = ['s'] + ['n'] * (count - 1)
-        if label_set in ('just_under', 'above'):
+        if label_set in ('just_under', 'exact', 'above'):
             native['scientific_context']['openness_minimum'].update(statement=labels[0], neighbours=labels[1:])
             base = capacity.measure_capacity_value(route, v7.list_target_labels(native))
-            width = 1 + (100000 - base) // count + (2 if label_set == 'above' else 0)
-            labels = ['x' * width] * count
+            boundary = {'just_under': 99999, 'exact': 100000, 'above': 100001}[label_set]
+            width, remainder = divmod(boundary - base, count)
+            labels = ['x' * (1 + width + int(index < remainder)) for index in range(count)]
         elif label_set == 'mixed':
             labels = ['s'] + ['n' if number <= 16 else 'n' * 1000 for number in range(1, count)]
         native['scientific_context']['openness_minimum'].update(statement=labels[0], neighbours=labels[1:])
         size = capacity.measure_capacity_value(route, v7.list_target_labels(native))
-        if label_set == 'just_under':
-            self.assertLessEqual(size, 100000)
-            self.assertGreater(size, 100000 - count)
-        elif label_set == 'above':
-            self.assertGreater(size, 100000)
+        if label_set in ('just_under', 'exact', 'above'):
+            self.assertEqual(size, {'just_under': 99999, 'exact': 100000, 'above': 100001}[label_set])
         return native
+
+    def measure_remaining_frame(self, route, packet, native, fields, level):
+        # Consume only actual wire cost of each declared component. Unused component
+        # budget, including the absent label vector, never reduces the envelope.
+        skeleton = copy.deepcopy(packet)
+        binding = skeleton['reading_final']
+        def measure(prompt=''):
+            request = protocol.transport.request_body(route, prompt, skeleton)
+            return capacity.measure_request(route, request)['text_characters']
+        cost = measure()
+        prompt = protocol.canonical_prompt('native_math', reading_stage='final', reading_protocol=v7.PROTOCOL)
+        excess = max(0, measure(prompt['text']) - cost - fields['instructions'])
+        def reserve_values(container, keys, budget, *, outer_keys=()):
+            nonlocal cost, excess
+            for key in keys:
+                container.pop(key, None)
+            for key in outer_keys:
+                skeleton.pop(key)
+            remaining = measure()
+            excess += max(0, cost - remaining - budget)
+            cost = remaining
+        reserve_values(binding, ('protocol', 'chain', 'turn', 'plan_digest', 'inventory_digest', 'state_digest',
+            'subject_digest', 'claim_digest', 'reviewer'), fields['bindings'], outer_keys=('reviewer_id',))
+        reserve_values(binding, v7.FINAL_MATERIAL_FIELDS, level + fields['material_envelope'])
+        reserve_values(binding, ('allowances',), fields['allowances'])
+        reserve_values(binding, ('page',), fields['page'])
+        reserve_values(skeleton['native'], tuple(v7._describe_native_fields(native)) + ('context_unit',), fields['native_frame'])
+        reserve_values(skeleton['native'], ('subject',), fields['statement'])
+        reserve_values(skeleton['native'], ('scientific_context',), fields['minimum'])
+        return cost + excess
 
     def check_final_wire_case(self, fixture, records, native, admission, *, pending=False, carried=False):
         from research_harness import review_prompt_paragraphs as paragraphs
+        from research_harness.operations import text
         plan = copy.deepcopy(admission['capacity_plan'])
         inventory = admission['inventory']['inventory']
-        logical = dict(fixture.packet, native=native)
+        logical = dict(fixture.packet, native=native,
+                       reviewer_id=(native['reviewer']['actor_id'] if isinstance(native['reviewer'], dict)
+                                    else native['reviewer']))
         if carried:
             origin = dict(chain='origin', protocol=reading.PROTOCOL_V6, assignment_id='old', attempt_id='old-attempt')
             projection = dict(turn=dict(origin=origin, assignment_id='old', attempt_id='old-attempt', kind='reading'),
@@ -999,19 +1052,41 @@ class NoticeRoomTests(unittest.TestCase):
             state = v7.build_chain_state(inventory, [], route=fixture.route, plan=plan)['state']
         level = plan['task']['final']['material_allowance']
         state['latest_notes'] = 'n' * level
+        state['notes'].append(dict(classification='current', turn=999999999, text=state['latest_notes']))
         # All three target counters have their largest serialized width, consistently.
         for row in state['allowances']['targets']:
             row.update(characters=999999999, used=499999999)
         state['allowances']['notes'] = 20000
         state['allowances']['passages'].update(characters=100000, used=100000)
         if pending:
-            state['material_state'] = dict(arguments={}, pending=dict(ref='m999999999', part=999999999))
-            state['material_request'] = dict(stage='material', title='t' * 120, ref='m999999999', part=999999999)
+            from research_harness.review_handles import MATERIAL_PART_LIMIT
+            state['material_state'] = dict(arguments={}, pending=dict(ref='m999999999', part=MATERIAL_PART_LIMIT))
+            state['material_request'] = dict(stage='material', title='\x01' * 120, ref='m999999999', part=MATERIAL_PART_LIMIT)
+            text(state['material_request']['title'], 'Maximum material title')
         limits = capacity.derive_plan_task_limits(plan, 'final')
-        packet = v7.build_turn_packet(fixture.artifacts, fixture.route, logical, 'x' * reading.RESERVED_IDENTIFIER_CHARACTERS,
+        logical['protocol'] = protocol.PROTOCOL
+        identifier = '\x01' * reading.RESERVED_IDENTIFIER_CHARACTERS
+        text(identifier, 'Maximum chain identifier')
+        reading.require_reserved_identifier(identifier, v7.PROTOCOL)
+        packet = v7.build_turn_packet(fixture.artifacts, fixture.route, logical, identifier,
             999999999, inventory, state, plan, limits, 'final')
         packet['reading_final']['allowances']['excerpts'] = 40000
+        context = packet['native']['scientific_context']
+        context['audit_forecast'].update(gaps=999999999, notices=999999999)
+        context['decisive_work_ids']['count'] = 999999999
+        for key in ('evidence', 'execution_provenance', 'unmaterialized_digests'):
+            packet['native'][key] = dict(count=999999999)
         packet['digest'] = digest({key: value for key, value in packet.items() if key != 'digest'})
+        fields = plan['frame']['final']['fields']
+        handles = plan['targets']['handles']
+        allowance_bound = v7.compute_allowance_rows_bound(fixture.route, handles)
+        self.assertEqual(fields['allowances'], allowance_bound)
+        self.assertLessEqual(capacity.measure_capacity_value(fixture.route, packet['reading_final']['allowances']), allowance_bound)
+        self.assertEqual(packet['reading_final']['page']['targets'], handles)
+        self.assertLessEqual(capacity.measure_capacity_value(fixture.route, packet['reading_final']['page']), fields['page'])
+        self.assertEqual(fields['envelope'], 3000)
+        envelope = self.measure_remaining_frame(fixture.route, packet, native, fields, level)
+        self.assertLessEqual(envelope, 3000)
         self.assertEqual(v7._measure_final_material(fixture.route,
             {key: packet['reading_final'][key] for key in v7.FINAL_MATERIAL_FIELDS}), level)
         prompt = protocol.canonical_prompt('native_math', reading_stage='final', reading_protocol=v7.PROTOCOL)
@@ -1030,19 +1105,26 @@ class NoticeRoomTests(unittest.TestCase):
         self.assertLessEqual(after, bound)
         comparison = capacity.describe_plan_preflight(records, fixture.route, request, plan, 'final')['plan_comparison']
         self.assertTrue(comparison['fits'], comparison)
-        return dict(level=level, without_notice_margin=bound - 47000 - before, margin=bound - after)
+        return dict(level=level, envelope=envelope, without_notice_margin=bound - 47000 - before, margin=bound - after)
 
     def test_t2_every_admitted_count_at_floor_and_highest_level_has_reserved_wire_room(self):
         from test_review_capacity_closure import build_capacity_records
         from test_review_output_profile import build_row
         fixture = turn_fixtures.TurnPacketTests()
         fixture.setUp()
+        self.assertEqual(capacity.describe_route_class(fixture.route),
+                         dict(adapter='codex_cli_v1', model='gpt-6-astra', effort='high'))
+        self.assertEqual(fixture.route['configuration']['max_output_tokens'], 128000)
         records = build_capacity_records(fixture.route, tokens=487900, capacity_probe=True)
         summaries = []
         for level in (60000, 480000):
-            priors = [] if level == 60000 else [build_row(level=None, thinking=1000, count=8),
-                build_row(kind='final', level=None, thinking=1000, count=8)]
-            for label_set in ('short', 'just_under', 'above', 'mixed'):
+            priors = [] if level == 60000 else [build_row(level=None, thinking=1000, count=8, over=0),
+                build_row(kind='final', level=None, thinking=1000, count=8, over=0)]
+            if priors:
+                self.assertEqual([(row['kind'], row['task_level'], row['attempts'],
+                    row['largest_thinking_tokens'], row['largest_output_tokens']) for row in priors],
+                    [('reading', None, 8, 1000, 65000), ('final', None, 8, 1000, 65000)])
+            for label_set in ('short', 'just_under', 'exact', 'above', 'mixed'):
                 margins, endpoints = [], []
                 with patch.object(v7, 'build_inventory', return_value=fixture.built), patch.object(
                         capacity, 'read_profile_priors', return_value=priors):
@@ -1053,6 +1135,11 @@ class NoticeRoomTests(unittest.TestCase):
                             self.assertEqual(admission['largest_one_request_targets'], count - 1)
                             break
                         self.assertEqual(admission['capacity_plan']['task']['final']['material_allowance'], level)
+                        self.assertEqual(admission['capacity_plan']['measure']['characters_per_token'], 2.1)
+                        moved_labels = any(row['identity'].get('field') == 'formulations'
+                                           for row in admission['inventory']['inventory']['units'])
+                        if label_set in ('just_under', 'exact', 'above'):
+                            self.assertEqual(moved_labels, label_set == 'above')
                         if level == 60000 and label_set == 'short' and count == 2:
                             parts = admission['capacity_plan']['allocation']['carried']['parts']
                             self.assertEqual([row['minimum'] for row in parts], [6000, 6700, 6700])
@@ -1073,6 +1160,7 @@ class NoticeRoomTests(unittest.TestCase):
                                     pending=pending, carried=carried))
                 if margins:
                     summaries.append(dict(level=level, labels=label_set, maximum=count - 1, cases=len(margins),
+                        maximum_envelope=max(row['envelope'] for row in margins),
                         minimum_margin=min(row['margin'] for row in margins),
                         minimum_without_notice_margin=min(row['without_notice_margin'] for row in margins)))
         print(json.dumps(dict(f14_wire_matrix=summaries), sort_keys=True))
@@ -1090,6 +1178,36 @@ class NoticeRoomTests(unittest.TestCase):
         self.assertEqual(admission['capacity_plan']['task']['final']['material_allowance'], 240000)
         result = self.check_final_wire_case(fixture, {}, native, admission)
         print(json.dumps(dict(f14_review_17_targets=result), sort_keys=True))
+
+    def test_t2_long_reviewer_identity_fits_the_frame_inline_and_after_native_frame_moves(self):
+        from research_harness.operations import text
+        from test_review_capacity_closure import build_capacity_records
+        fixture = turn_fixtures.TurnPacketTests()
+        fixture.setUp()
+        records = build_capacity_records(fixture.route, tokens=487900, capacity_probe=True)
+        for characters, compact in ((120, False), (3000, True), (20000, True)):
+            with self.subTest(characters=characters, compact=compact):
+                native = self.build_label_native(fixture.route, 1, 'short')
+                native['reviewer'] = dict(actor_id='\x01' * characters, source='host',
+                                          attestation_id='review-assignment:synthetic')
+                text(native['reviewer']['actor_id'], 'Reviewer identifier')
+                if compact:
+                    native['contract'] = dict(question='x' * 100001)
+                with patch.object(v7, 'build_inventory', return_value=fixture.built), patch.object(
+                        capacity, 'read_profile_priors', return_value=[]):
+                    admission = v7.check_v7_admission(records, fixture.artifacts, fixture.route, native)
+                if characters == 20000:
+                    self.assertEqual(admission['state'], 'stop')
+                    self.assertEqual(admission['details']['reason'], 'fixed_frame')
+                    continue
+                self.assertEqual(admission['state'], 'record')
+                moved = any(row['identity'].get('field') == 'native_frame'
+                            for row in admission['inventory']['inventory']['units'])
+                self.assertEqual(moved, compact)
+                for pending, carried in ((False, False), (True, False), (False, True), (True, True)):
+                    with self.subTest(pending=pending, carried=carried):
+                        self.check_final_wire_case(fixture, records, native, admission,
+                                                   pending=pending, carried=carried)
 
     def build_bounded_notice(self, artifacts, *, route=None):
         def measure(value):
@@ -1115,6 +1233,8 @@ class NoticeRoomTests(unittest.TestCase):
         import hashlib
         fixture = turn_fixtures.TurnPacketTests()
         fixture.setUp()
+        self.assertEqual(digest(v7.measure_turn_frames(fixture.route, fixture.native)['reading']),
+                         'bd1c70a58c7c047501d4c9ca9b7d7ce0db0b70cbec1935bdeb02d5f3a709ab88')
         packet, chain = fixture.prepare()
         plan = capacity.read_chain_capacity_plan(fixture.artifacts, chain)
         inventory = json.loads(fixture.artifacts.read(chain['inventory']))
@@ -1126,10 +1246,10 @@ class NoticeRoomTests(unittest.TestCase):
         final = v7.build_turn_packet(fixture.artifacts, fixture.route, fixture.packet, 'chain', 2,
             inventory, state, plan, capacity.derive_plan_task_limits(plan, 'final'), 'final')
         for kind, value, expected_packet, expected_prompt, expected_without_plan in (
-            ('reading', packet, '832db303dac69642d8d1b8334d822a1146e281e0786dbbb80019f109cee1c24d',
+            ('reading', packet, '55783626e8fb12869c6fee198c0bdd5d83d1e6702f6ce5ffb4ff15b73c92101e',
              '1ee257be7dc40a135dce006f8d2911744a22f925488252d31992c788a4dce50c',
              '73dbac96ae90f5726bf1fbaf9e8d5194e27a61e624c698243478cddb3accda7e'),
-            ('final', final, '9cb07f0c03d18608e3f2b564cc9bce4028ca895ce433e33b064b8e0e7d1f7063',
+            ('final', final, '09c85ff3f9ceb8f145651dcfe4495b9a1956a572d451e177cfe42a6f13375f7e',
              'aa25b66defa740bc21346b3a8c6dabe2d7a305b1468f39a70707a149fbecc675',
              '44874553d13b5c6d4ae31c7c9fc671fddc7f3b2504b4db88c61637757068600b')):
             with self.subTest(kind=kind):
