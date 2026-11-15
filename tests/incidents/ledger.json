@@ -2,6 +2,22 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "reported-stop-conditions-inspection-decisions",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "review continuity (per-place outside, input, bound and store conditions)",
+      "summary": "Reported conditions lacked registry decisions, and a function-level classification could hide different grounds of the same code.",
+      "expected": "Every assigned group member raised by an executed series operation ends with its group decision under the reach recorder. Printed record-check and status inspections run from a valid retained review state. RR5 checks every writing place and derives the group from the recorded conditions.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_series_rows_close_conditions.ConditionsRowTests.test_every_named_cause_member_ends_with_the_group_decision",
+        "test_series_rows_close_conditions.ConditionsRowTests.test_every_stored_state_member_ends_with_the_group_decision",
+        "test_series_rows_close_conditions.ConditionsRowTests.test_named_cause_answers_execute_the_printed_inspections",
+        "test_series_rows_close_conditions.ConditionsRowTests.test_stored_state_answer_executes_the_printed_inspection",
+        "test_series_rows_close_conditions.ConditionsRowTests.test_guard_accepts_every_recorded_place_and_derives_its_group"
+      ]
+    },
+    {
       "id": "review-registry-designed-recovery-rows",
       "record": "20261113110022-every-open-record-and-review-capacity",
       "class": "review continuity (designed registry rows and retained-record boundaries)",
