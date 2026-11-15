@@ -16998,9 +16998,9 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.cli": {
-      "ast_sha256": "ca5db6834c85a612c1214a6f2c5cb49f003de3fd627533a31e15f8946b080542",
+      "ast_sha256": "75dc616d20d70111751eefd0ae12b93fd212e6ac8f69da5430b7687e23d9965b",
       "functions": {
-        "_build_status_report": "d6140a5a66c889ae8f131091f9a3530c49d2f5dcdbfd4452aa7fac73ef4123d3",
+        "_build_status_report": "d66e55cb0dab6385c501dd53ebe53f6d1348d3c3d9c469ca8c53a79050987e9b",
         "_is_recording_command": "05655a0a1dadde896d4de40e67283b9eedfc8feb68651142be7c2b6f25c9a43c",
         "_reconcile_run": "659e17086c81534ff7bcfb3e709dda44c73ea6c0783a2faffac2206f9f9e4ea7",
         "_review_output_correction": "dcbff6d8cffee41e4f4a58da058a3650935006b1f9bfb8e9f453f58629d25b77",
@@ -17022,7 +17022,7 @@
         "read_payload_receipt": "2d1c12371fc8c034e9045344fdc1f109a3cf44474a8842f20f88df7461b3df71",
         "run": "e874ae0b72033ac2861ded4c3f6985ce7c0e60d034326910dd17822bd4c23245",
         "select_managed_path": "307453796f4641a08002dc73f36400a17479404432fa704bba73667ce93bc6a6",
-        "status_report": "dbcbe407b70e5f57ef9f52101e249891c2cb02fa430e357d65caad75c4121515"
+        "status_report": "cb4919418def8917a5c941ade4db82d7558069ee5b20f515d5b7c91cb8049068"
       },
       "packet_call_digests": [
         "249cf162f1fe2c07e6cf69cf4208a9b8ee08752e0f99baeeb8ebb0c92215de66",

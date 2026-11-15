@@ -6754,6 +6754,38 @@
         "test_review_staged_output_evidence.StagedProfileTests.test_profile_estimates_include_the_frozen_frame_capacity_parameters",
         "test_incident_ledger.IncidentLedgerTests.test_every_listed_test_resolves_without_running_the_method"
       ]
+    },
+    {
+      "id": "release-0900-ci-failures-b",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "release CI contract and fixture drift",
+      "summary": "Stage 2 moved snapshot authentication outside status timing, retained stale expectations for new capacity notices, finding and lineage refusals, watched the former provenance derivation function, and combined archived-runtime refusal tests with an available synthetic backend. The incident ledger also retained a renamed test identifier.",
+      "expected": "Status timing includes snapshot authentication on healthy and malformed contexts; tests exercise current contracts while replaying stored prompt versions and hashes unchanged, and archived-backend refusal tests explicitly leave that backend unavailable.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_capacity_guard.CapacityGuardTests.test_matrix_evidence_executes_and_no_evidence_can_be_silently_skipped",
+        "test_command_evaluation_costs.HistoryAuthenticationTests.test_status_elapsed_time_includes_snapshot_authentication",
+        "test_incident_ledger.IncidentLedgerTests.test_every_listed_test_resolves_without_running_the_method",
+        "test_openness_v6_guard.MaterialJourneyTests.test_family_reading_is_cited_bound_planned_and_required",
+        "test_openness_v6_guard.V6GuardTests.test_g3_executes_every_material_path",
+        "test_problem_openness_screening_evidence.ScreeningEvidenceTests.test_screening_evidence_cannot_replace_required_full_reading",
+        "test_problem_result_earlier_series_delivery.EarlierSeriesDeliveryTests.test_cycle_stops_before_revisiting_current_series",
+        "test_problem_result_earlier_series_delivery.EarlierSeriesDeliveryTests.test_missing_ancestor_stops_credit",
+        "test_problem_result_parts.ProblemResultPartsTests.test_changed_series_digest_uses_ordinary_delivery_when_new_evidence_fits",
+        "test_problem_result_parts.ProblemResultPartsTests.test_fitting_packet_prompt_and_request_are_unchanged",
+        "test_reading_budget.EarlierPromptTests.test_the_current_prompts_state_the_turn_budget",
+        "test_review_account_record_units.AccountRecordUnitTests.test_recorded_inventory_turn_prompt_and_request_keep_their_hashes",
+        "test_review_request_fit.RecordedFitTests.test_predicates_bind_same_id_substitutions_and_historical_views",
+        "test_review_request_fit.RecordedFitTests.test_repeated_provenance_derives_output_once_within_runtime_scope",
+        "test_review_request_fit.RecordedFitTests.test_runtime_and_emitter_drift_discard_command_predicates",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_an_uncalled_archived_turn_keeps_its_plan_and_refuses_an_obsolete_runtime",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_archived_case_two_keeps_v5_reexport_and_v4_obsolete_capacity_refusals",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_archived_stopped_plans_keep_pending_capture_and_delivery_credit",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_later_choice_keeps_the_archived_capture_named_only_in_remaining",
+        "test_command_evaluation_costs.HistoryAuthenticationTests.test_status_elapsed_time_includes_authentication_with_malformed_context",
+        "test_unbound_packet_captures.UnboundPacketCaptureTests.test_stored_0870_findings_replay_with_their_delivered_capture_and_unchanged_bytes"
+      ]
     }
   ]
 }

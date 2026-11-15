@@ -75,7 +75,7 @@ def install_stored_backend(case, route):
         case.addCleanup(patcher.stop)
 
 
-def open_stored_case(owner, version, scenario):
+def open_stored_case(owner, version, scenario, *, declare_stored_backend=True):
     prefix = 'v%d' % version if isinstance(version, int) else version
     root, metadata = copy_stored_store(owner, prefix + '-' + scenario)
     case = StoredReadingCase()
@@ -90,7 +90,8 @@ def open_stored_case(owner, version, scenario):
     case.selected = records.get('problem_statement', {}).get('statement-1')
     case.searches = list(records['literature_search'].values())
     install_codex_runtime(case)
-    install_stored_backend(case, records['review_route']['route'])
+    if declare_stored_backend:
+        install_stored_backend(case, records['review_route']['route'])
     if version == 4:
         patcher = patch('research_harness.openness_reading.find_chain_protocol',
                         return_value='exactory-openness-reading-v4')

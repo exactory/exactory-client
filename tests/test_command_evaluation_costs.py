@@ -254,6 +254,32 @@ class HistoryAuthenticationTests(LiteratureCase):
             result = cli.status_report(self.store, counters=True)
         self.assertEqual(result['evaluation']['elapsed_seconds'], 7.0)
 
+    def test_status_elapsed_time_includes_authentication_with_malformed_context(self):
+        from research_harness import cli
+        from test_research_review_protocol import ReviewProtocolTests
+        fixture = ReviewProtocolTests()
+        self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
+        fixture.route()
+        fixture.run_probe()
+        fixture.assign()
+        assignment = fixture.records()['review_assignment']['assignment']
+        fixture.seed('review_assignment', assignment['id'], dict(assignment, context=[]))
+        clock = [10.0]
+        snapshot = fixture.store.snapshot
+
+        def authenticate():
+            clock[0] += 7.0
+            return snapshot()
+
+        with patch.object(fixture.store, 'snapshot', side_effect=authenticate), \
+                patch.object(cli.time, 'monotonic', side_effect=lambda: clock[0]):
+            result = cli.status_report(fixture.store, counters=True)
+        self.assertFalse(result['ready'])
+        self.assertEqual([(row['assignment_id'], row['code']) for row in result['review_context_failures']],
+                         [('assignment', 'invalid_review_context')])
+        self.assertEqual(result['evaluation']['elapsed_seconds'], 7.0)
+
     def test_warm_command_does_not_hide_event_receipt_or_projection_corruption(self):
         import sqlite3
         from research_harness.cli import status_report

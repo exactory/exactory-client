@@ -288,7 +288,8 @@ class EarlierPromptTests(unittest.TestCase):
 
     def test_the_current_prompts_state_the_turn_budget(self):
         for text in (review_excerpts.PHASE_PROMPT, openness_reading.READING_PROMPT,
-                     openness_reading.PROMPTS[openness_reading.PROTOCOL_V5]['reading']):
+                     openness_reading.PROMPTS[openness_reading.PROTOCOL_V5]['reading'],
+                     openness_reading.PROMPTS[openness_reading.PROTOCOL_V6]['reading']):
             self.assertIn('120,000', text)
             self.assertIn('part', text)
         self.assertIn('deferred_reading_budget', review_excerpts.PHASE_PROMPT)
@@ -296,4 +297,5 @@ class EarlierPromptTests(unittest.TestCase):
         self.assertEqual(json.dumps(sorted(openness_reading.PROMPTS)),
                          json.dumps(sorted([openness_reading.PROTOCOL_V1, openness_reading.PROTOCOL_V2,
                                             openness_reading.PROTOCOL, openness_reading.PROTOCOL_V4,
-                                            openness_reading.PROTOCOL_V5, openness_reading.MATH_PROTOCOL])))
+                                            openness_reading.PROTOCOL_V5, openness_reading.PROTOCOL_V6,
+                                            openness_reading.MATH_PROTOCOL])))

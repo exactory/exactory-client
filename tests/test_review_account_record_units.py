@@ -329,7 +329,9 @@ class AccountRecordUnitTests(unittest.TestCase):
         turn = parts.plan_turn(packet, old, [], series_id='stored', input_limit=1300000,
                                measure=lambda value: len(parts.render_json(value)), output_tokens=128000)
         self.assertEqual(digest(turn), frozen['turn_digest'])
-        prompt = parts.build_turn_prompt('result', dict(orchestration='problem_creation', excerpts=True), turn[parts.KEY])
+        # This stored inventory predates common version 4; replay its recorded grammar.
+        parameters = dict(orchestration='problem_creation', excerpts=True, common_version=3)
+        prompt = parts.build_turn_prompt('result', parameters, turn[parts.KEY])
         self.assertEqual(digest(prompt), frozen['prompt_digest'])
         request = protocol.transport.request_body(frozen['route'], prompt['text'], turn, [], order=())
         self.assertEqual(digest(request), frozen['request_digest'])
@@ -338,8 +340,7 @@ class AccountRecordUnitTests(unittest.TestCase):
                                     measure=lambda value: len(parts.render_json(value)), output_tokens=128000)
         self.assertNotIn('unit_rule', following[parts.KEY])
         self.assertEqual(digest(following), frozen['next_turn_digest'])
-        prompt = parts.build_turn_prompt('result', dict(orchestration='problem_creation', excerpts=True),
-                                         following[parts.KEY])
+        prompt = parts.build_turn_prompt('result', parameters, following[parts.KEY])
         self.assertEqual(digest(prompt), frozen['next_prompt_digest'])
         request = protocol.transport.request_body(frozen['route'], prompt['text'], following, [], order=())
         self.assertEqual(digest(request), frozen['next_request_digest'])

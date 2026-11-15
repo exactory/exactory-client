@@ -12,7 +12,7 @@ from research_harness import review_protocol as protocol, review_transport as tr
 from research_harness import research_decisions as decisions, review_excerpts, review_refusal
 from research_harness import review_codex_transport as codex, review_claude_transport as claude
 from research_harness.evidence import digest
-from research_harness import cli
+from research_harness import cli, review_prompt_paragraphs
 from test_research_problem_citation_metadata import CitationMetadataCase
 
 
@@ -68,7 +68,10 @@ class ProblemResultPartsTests(ResultPartsCase):
         records, artifacts = self.case.read_records(), self.case.artifacts
         with transport.text_only_delivery(True):
             expected = protocol.build_packet(records, artifacts, None, 'result', 'first')
-        prompt = protocol.canonical_prompt('result', orchestration='problem_creation')
+        # D1 section 8.6 adds the capacity notice to new profiled assignments.
+        expected = protocol.prepare_capacity_notice(records, records['review_route']['route'], 'result', expected)
+        prompt = protocol.canonical_prompt('result', orchestration='problem_creation',
+            **review_prompt_paragraphs.select_prompt_parameters('result', expected))
         assignment = self.assign()
         self.assertEqual(artifacts.read(assignment['packet']), json.dumps(expected, sort_keys=True, ensure_ascii=False, allow_nan=False).encode())
         self.assertEqual(assignment['prompt'], prompt)
@@ -510,7 +513,8 @@ class ProblemResultPartsTests(ResultPartsCase):
         request = self.request(restarted)
         self.assertEqual(review_excerpts.read_sent_packet(request), packet)
         self.assertEqual(restarted['prompt'], protocol.canonical_prompt(
-            'result', orchestration='problem_creation', excerpts=True))
+            'result', orchestration='problem_creation', excerpts=True,
+            **review_prompt_paragraphs.select_prompt_parameters('result', packet)))
 
     def test_stage_prompts_match_every_supported_excerpt_and_common_version(self):
         for stage in ('part', 'final'):

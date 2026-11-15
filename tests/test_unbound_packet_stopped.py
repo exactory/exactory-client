@@ -142,7 +142,8 @@ class UnboundStoppedPacketTests(unittest.TestCase):
     def test_archived_stopped_plans_keep_pending_capture_and_delivery_credit(self):
         for version, variant in self.variants:
             with self.subTest(protocol=version, variant=variant), ExitStack() as stack:
-                case, metadata = open_stored_case(self, version, 'stopped-' + variant + '-observed')
+                case, metadata = open_stored_case(self, version, 'stopped-' + variant + '-observed',
+                                                  declare_stored_backend=False)
                 stack.callback(case.doCleanups)
                 self.assert_stored_prefix(case, metadata, observed=True)
                 self.assert_obsolete_route_refuses_new_call(case, metadata)
@@ -150,7 +151,8 @@ class UnboundStoppedPacketTests(unittest.TestCase):
     def test_later_choice_keeps_the_archived_capture_named_only_in_remaining(self):
         for version, variant in self.variants:
             with self.subTest(protocol=version, variant=variant), ExitStack() as stack:
-                case, metadata = open_stored_case(self, version, 'stopped-' + variant + '-observed')
+                case, metadata = open_stored_case(self, version, 'stopped-' + variant + '-observed',
+                                                  declare_stored_backend=False)
                 stack.callback(case.doCleanups)
                 case.mutate(select_main_capture, dict(version_id=metadata['work'],
                     source_id=metadata['first']['source_id'], reason='A later choice cannot rewrite this chain.'))
@@ -160,7 +162,8 @@ class UnboundStoppedPacketTests(unittest.TestCase):
     def test_an_uncalled_archived_turn_keeps_its_plan_and_refuses_an_obsolete_runtime(self):
         for version in (4, 5, 'math'):
             with self.subTest(protocol=version), ExitStack() as stack:
-                case, metadata = open_stored_case(self, version, 'stopped-chosen-uncalled')
+                case, metadata = open_stored_case(self, version, 'stopped-chosen-uncalled',
+                                                  declare_stored_backend=False)
                 stack.callback(case.doCleanups)
                 self.assert_stored_prefix(case, metadata, observed=False)
                 packet = case.artifacts.read(case.store.snapshot()['records']['review_assignment']['turn-1']['packet'])
@@ -171,7 +174,8 @@ class UnboundStoppedPacketTests(unittest.TestCase):
     def test_archived_case_two_keeps_v5_reexport_and_v4_obsolete_capacity_refusals(self):
         for version in (4, 5):
             with self.subTest(protocol=version), ExitStack() as stack:
-                case, metadata = open_stored_case(self, version, 'stopped-choice-observed')
+                case, metadata = open_stored_case(self, version, 'stopped-choice-observed',
+                                                  declare_stored_backend=False)
                 stack.callback(case.doCleanups)
                 if version == 5:
                     before = case.store.snapshot()

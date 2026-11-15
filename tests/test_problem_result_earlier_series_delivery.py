@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from problem_parts_fixtures import KEY, ResultPartsCase
 from research_harness import research_decisions as decisions, review_problem_parts as parts
-from research_harness import review_context_repair, review_protocol as protocol, review_transport as transport
+from research_harness import review_protocol as protocol, review_transport as transport
 from research_harness.direction_sources import build_inline_passages, has_attachment
 from research_harness.evidence import digest
 
@@ -184,10 +184,10 @@ class EarlierSeriesDeliveryTests(ResultPartsCase):
         self.invoke(final, self.final_output())
         records = self.case.read_records()
         records['review_assignment'][first['id']]['context']['prior_assignment_id'] = 'missing'
-        # Isolate delivery from the separate repair-lineage validator's malformed-graph refusal.
-        with patch.object(review_context_repair, 'frozen_reassessment_packet', return_value=self.packet(final)):
-            self.assert_code('review_evidence_undelivered', lambda: decisions.validate_review_contract(
-                records, self.case.artifacts, final, self.cited_output()))
+        self.assertEqual(parts.collect_earlier_series_packets(records, self.case.artifacts, final), [])
+        # D2 R61 selects the head before granting delivery credit and refuses broken ancestry.
+        self.assert_code('review_context_repair_mismatch', lambda: decisions.validate_review_contract(
+            records, self.case.artifacts, final, self.cited_output()))
 
     def test_cycle_stops_before_revisiting_current_series(self):
         _, earlier = self.finish_earlier()
@@ -198,11 +198,11 @@ class EarlierSeriesDeliveryTests(ResultPartsCase):
         self.invoke(final, self.final_output())
         records = self.case.read_records()
         records['review_assignment'][middle['id']]['context']['prior_assignment_id'] = first['id']
-        with patch.object(review_context_repair, 'frozen_reassessment_packet', return_value=self.packet(final)), \
-                patch.object(parts, 'collect_series_packets', wraps=parts.collect_series_packets) as collect:
-            self.assert_code('review_evidence_undelivered', lambda: decisions.validate_review_contract(
-                records, self.case.artifacts, final, self.cited_output()))
+        with patch.object(parts, 'collect_series_packets', wraps=parts.collect_series_packets) as collect:
+            self.assertEqual(parts.collect_earlier_series_packets(records, self.case.artifacts, final), [])
         self.assertNotIn(final['id'], [call.args[2] for call in collect.call_args_list])
+        self.assert_code('review_context_repair_mismatch', lambda: decisions.validate_review_contract(
+            records, self.case.artifacts, final, self.cited_output()))
 
     def test_two_delivered_digests_require_explicit_selection(self):
         _, earlier = self.finish_earlier()
