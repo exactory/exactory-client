@@ -773,7 +773,7 @@ class UnreadCompatibilityTests(unittest.TestCase):
         from test_openness_reading_v7_refusal import NoticeRoomTests
         fixture = NoticeRoomTests()
         fixture.test_t7_no_notice_packets_change_only_plan_digest_and_keep_prompt_hashes()
-        self.assertEqual(reading.NEW_PROBLEM_CHAIN_PROTOCOLS, (reading.PROTOCOL_V6,))
+        self.assertEqual(reading.NEW_PROBLEM_CHAIN_PROTOCOLS, (reading.PROTOCOL_V7, reading.PROTOCOL_V6))
 
     def test_without_unread_validator_keeps_existing_v6_v7_and_single_turn_rules(self):
         from research_harness.native_review import validate_finding
