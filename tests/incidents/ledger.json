@@ -5744,6 +5744,20 @@
         "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_observed_stopped_plans_keep_pending_capture_and_delivery_credit",
         "test_session_rules_v3.SessionRulesTests.test_result_support_source_citations_require_v3_delivery_without_changing_v2"
       ]
+    },
+    {
+      "id": "release-0892-uncovered-test-assignments",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "synthetic review assignment capacity",
+      "summary": "The legacy slate byte-preservation test and the large streamed publication fixture recorded requests that their synthetic routes could not cover under the admission introduced in 0.89.2.",
+      "expected": "Only the pre-0.89.2 legacy assignment is built without the later admission; new slates use current admission, and large streamed publications retain files above 1 MiB and two ready manuscript reviews using keyed capacity evidence restored by class cleanup.",
+      "fixed_in": "0.89.3",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_slate_forming_descriptors.SlateFormingTests.test_imported_history_keeps_origin_citations_and_delivers_requested_text",
+        "test_publication_streaming.ManagedStreamingTests.test_large_streamed_files_keep_two_ready_manuscript_reviews",
+        "test_publication_streaming.ManagedStreamingTests.test_validate_deposit_compares_large_bundle_files_with_bounded_reads"
+      ]
     }
   ]
 }

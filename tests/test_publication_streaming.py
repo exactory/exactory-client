@@ -11,7 +11,9 @@ import unittest
 import urllib.error
 from unittest.mock import patch
 
+from capacity_evidence_fixtures import build_capacity_prior
 from research_harness import publication, zenodo
+from research_harness import review_capacity_evidence, review_protocol, review_transport
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
 from research_harness.remote import get_intent
@@ -70,6 +72,15 @@ class ManagedStreamingTests(unittest.TestCase):
     def setUpClass(cls):
         cls.pdf = b"%PDF-1.4\n" + b"paper content\n" * 80000
         cls.sources = b"PK\x03\x04" + b"source content\n" * 80000
+        # This synthetic manuscript executor must cover the large streamed publication's text envelope.
+        route = dict(adapter=review_transport.ADAPTER, model="fixture-model",
+                     endpoint="https://api.openai.com/v1/responses", configuration={},
+                     runtime=review_transport.runtime())
+        prior = build_capacity_prior(route, 2000000, "streaming-manuscript-fixture")
+        priors = tuple(review_capacity_evidence.read_capacity_priors()) + (prior,)
+        capacity = patch.object(review_capacity_evidence, "CAPACITY_PRIORS", priors)
+        capacity.start()
+        cls.addClassCleanup(capacity.stop)
 
         def prepare(case, **kwargs):
             (case.root / "draft/paper.pdf").write_bytes(cls.pdf)
@@ -103,6 +114,18 @@ class ManagedStreamingTests(unittest.TestCase):
     def validate(self):
         return zenodo.validate_deposit(self.store, Path("draft/paper.pdf"), Path("draft/abstract.txt"),
                                        Path("sources.zip"), new_version=False, environment="sandbox")
+
+    def test_large_streamed_files_keep_two_ready_manuscript_reviews(self):
+        for kind in ("pdf", "sources"):
+            self.assertGreater(self.bundle["files"][kind]["artifact"]["size"], 1024 * 1024)
+        records = self.store.snapshot()["records"]
+        assignments = [row for row in records["review_assignment"].values()
+                       if row["role"] == "manuscript" and row["context"]["bundle"]["digest"] == self.bundle["digest"]]
+        self.assertGreaterEqual(len(assignments), 2)
+        for assignment in assignments:
+            state = review_protocol.assignment_state(records, self.store.build_artifact_store(), assignment["id"])
+            self.assertTrue(state["ready"], state["obligations"])
+        self.assertTrue(self.validate()["ready"])
 
     def test_validate_upload_retains_no_optional_readiness_or_review_values(self):
         def validate():

@@ -158,7 +158,9 @@ class SlateFormingTests(unittest.TestCase):
         reference = fixture.reference('forming_call', call, imported['source_origin'])
         case.record_candidate(source=dict(kind='phenomenon', reference='An imported observation.', evidence=[reference]))
         case.observe_bars()
-        with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL):
+        # Freeze the legacy assignment as releases before 0.89.2 stored it, without capacity admission.
+        with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL), \
+                patch('research_harness.review_route_capacity.require_covered_assignment'):
             legacy = case.assign('slate', 'first', identifier='legacy-slate')
         old_packet_bytes = case.artifacts.read(legacy['packet'])
         old_packet = json.loads(old_packet_bytes)
