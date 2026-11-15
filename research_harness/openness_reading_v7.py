@@ -419,6 +419,14 @@ def _describe_plan_measure(records, artifacts, native, route, inventory):
                 ratio_margin=capacity.TOKEN_RATIO_MARGIN, margin_applied=True)
 
 
+def compute_allowance_rows_bound(route, handles):
+    """Bound the full allowance view or its compact form at the reserved counter widths."""
+    return min(ALLOWANCES_CHARACTERS, capacity.measure_capacity_value(route,
+        dict(notes=20000, excerpts=40000, targets=[dict(handle=handle, characters=999999999,
+            used=999999999, remaining=999999999) for handle in handles],
+            passages=dict(characters=100000, used=100000))) + 512)
+
+
 def measure_turn_frames(route, native, *, fixed_bounds=None):
     """Measure each fixed field independently; growing bodies are inventory units."""
     from .review_protocol import canonical_prompt
@@ -438,11 +446,16 @@ def measure_turn_frames(route, native, *, fixed_bounds=None):
     for kind in ('reading', 'final'):
         fields = {key: capacity.measure_capacity_value(route, value) for key, value in fixed.items()}
         if kind == 'final':
+            from .review_refusal_notice import NOTICE_PARAGRAPH_CHARACTERS
             value = _describe_native_fields(native)
             fields['native_frame'] = capacity.measure_capacity_value(route, value if capacity.measure_capacity_value(
                 route, value) <= fixed_bounds.get('native_frame', 100000) else dict(unit='native_frame'))
             fields['material_envelope'] = capacity.measure_capacity_value(route, {
                 key: '' if key == 'notes' else [] for key in FINAL_MATERIAL_FIELDS})
+            handles = [row['handle'] for row in labels]
+            fields.update(allowances=compute_allowance_rows_bound(route, handles),
+                          page=capacity.measure_capacity_value(route, dict(number=1, pages=1, targets=handles)),
+                          refusal_paragraph=NOTICE_PARAGRAPH_CHARACTERS)
         else:
             fields['affected_notes_index'] = AFFECTED_INDEX_CHARACTERS * 2
         # Bound envelope keys, capacity/allowance scalars, handles and counters;
@@ -501,10 +514,7 @@ def _check_v7_admission(records, artifacts, route, native, *, include_largest):
             declaration = dict(kind='reading', frames=frames,
                 inventory=[{key: row[key] for key in ('handle', 'kind', 'characters', 'sha256')}
                            for row in inventory['material']], targets=targets, measure=measure,
-                allowance_rows_bound=min(ALLOWANCES_CHARACTERS, capacity.measure_capacity_value(route,
-                    dict(notes=20000, excerpts=40000, targets=[dict(handle=row['handle'], characters=999999999,
-                         used=999999999, remaining=999999999) for row in targets],
-                         passages=dict(characters=100000, used=100000))) + 512))
+                allowance_rows_bound=compute_allowance_rows_bound(route, [row['handle'] for row in targets]))
             members = capacity.prepare_assignment_capacity(records, overlay, route, declaration)
             plan = capacity.read_chain_capacity_plan(overlay, members)
             if not any(row['unit_fields'] for row in plan['frame'].values()):
@@ -1699,6 +1709,13 @@ def _rebuild_own_state(records, artifacts, prior, inventory, plan, route):
     return build_chain_state(inventory, projections, route=route, plan=plan, initial_state=initial)
 
 
+def compute_notice_material_charge(kind, notice):
+    """Charge reading material for the notice; finals use the stored plan's reserve."""
+    if kind == 'final' or notice is None:
+        return 0
+    return len(json.dumps(notice, ensure_ascii=False, sort_keys=True, allow_nan=False))
+
+
 def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_replacement=True):
     """Continue authenticated own turns, or rebuild one failed pending position."""
     from .review_protocol import assignment_state, find_replacement, has_ended_without_output, is_dead_assignment
@@ -1748,9 +1765,9 @@ def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_
                              or notes_cost > state['allowances']['notes']) else 'final')
         number = prior['reading_chain']['turn'] + 1
     notice = frozen.get('output_refusal') if replacement else None
-    notice_characters = len(json.dumps(notice, ensure_ascii=False, sort_keys=True, allow_nan=False)) if notice else 0
     limits = capacity.derive_turn_task_limits(records, artifacts, prior, kind=kind,
-        notice_characters=notice_characters, response_replacement=prior_id if replacement else None)
+        notice_characters=compute_notice_material_charge(kind, notice),
+        response_replacement=prior_id if replacement else None)
     if replacement and kind == 'final' and state.get('material_state', {}).get('pending'):
         limits['answer_bound'] = max(plan['task']['final']['smallest_answer_bound'],
                                     frozen['reading_final']['capacity']['answer_bound'] // 2)
@@ -1792,9 +1809,8 @@ def prepare_refusal_assignment(records, artifacts, value, revision, prior, froze
     versions = [version for version in parameters.get(paragraphs.PARAMETER, [])
                 if version not in paragraphs.REFUSAL_PARAGRAPH_VERSIONS.values()]
     def prepare_turn(notice):
-        characters = len(json.dumps(notice, ensure_ascii=False, sort_keys=True, allow_nan=False))
         limits = capacity.derive_turn_task_limits(records, artifacts, prior, kind=kind,
-                                                 notice_characters=characters)
+                                                 notice_characters=compute_notice_material_charge(kind, notice))
         try:
             packet = build_turn_packet(artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
                 inventory, state, plan, limits, kind, requests=state.get('pending_requests', []))
@@ -2054,8 +2070,7 @@ def _verify_turn_binding(records, artifacts, first, assignment, packet, native, 
         and binding.get('plan_digest') == digest(plan) and binding.get('inventory_digest') == digest(inventory),
         BINDING_VERIFICATION_MESSAGE, assignment_id=assignment['id'])
     refusal = assignment['context'].get('output_refusal')
-    notice_characters = len(json.dumps(packet['output_refusal'], ensure_ascii=False, sort_keys=True,
-                                      allow_nan=False)) if refusal else 0
+    notice_characters = compute_notice_material_charge(kind, packet['output_refusal'] if refusal else None)
     prior_id = (assignment.get('capacity_replacement_of') or (refusal['assignment_id'] if refusal else
                 assignment['context'].get('unread', {}).get('assignment_id') or assignment['context'].get('prior_assignment_id')))
     if prior_id is None:

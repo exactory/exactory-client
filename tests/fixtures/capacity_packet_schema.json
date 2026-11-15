@@ -15200,7 +15200,7 @@
       ]
     },
     {
-      "ast_sha256": "39cdbe3a0c06ca0a412872f0073104b095b7faf5ce50ccc6f2047f4bccda2817",
+      "ast_sha256": "cab18ceb53e61dafcfd268a5d9d42d07184044fa9d06cc065ee046fdc1fb59fb",
       "callee": "len",
       "caller": "research_harness.review_refusal_notice._retain_value",
       "classification": "standard library",
@@ -15210,40 +15210,34 @@
       ]
     },
     {
-      "ast_sha256": "69ae4428a5ad0869fdf622fcc0e7da5e2154fbf98ab0595902b64c88a4f3e972",
+      "ast_sha256": "699de5a7cca4edcf6812480f8d48d5285b327eef592bbbcd637f13c80809d5d3",
+      "callee": "measure",
+      "caller": "research_harness.review_refusal_notice._retain_value",
+      "classification": "listed module",
+      "reason": "Reviewed injected size reader: serialized JSON by default, route wire size for planned notices; returns a scalar without writing the value.",
+      "targets": [
+        "research_harness.review_refusal_notice._measure_serialized_value",
+        "research_harness.review_route_capacity.measure_capacity_value"
+      ]
+    },
+    {
+      "ast_sha256": "e6d45dbc4cd06c18b7495feeb3184f988200455b3d5c9d97ae3ba946055136cd",
+      "callee": "measure",
+      "caller": "research_harness.review_refusal_notice._retain_value",
+      "classification": "listed module",
+      "reason": "Reviewed injected size reader: serialized JSON by default, route wire size for planned notices; returns a scalar without writing the value.",
+      "targets": [
+        "research_harness.review_refusal_notice._measure_serialized_value",
+        "research_harness.review_route_capacity.measure_capacity_value"
+      ]
+    },
+    {
+      "ast_sha256": "41adf1baaecbf6b093e1ff366ea51675ce054fcd62cc5c02c62cebbecd5faea8",
       "callee": "research_harness.review_refusal_notice._serialize_value",
       "caller": "research_harness.review_refusal_notice._retain_value",
       "classification": "listed module",
       "targets": [
         "research_harness.review_refusal_notice._serialize_value"
-      ]
-    },
-    {
-      "ast_sha256": "ec9642168485c9987c52b404c942469145d5f2f8f1d1e5c4ddfb1fc1c463b914",
-      "callee": "research_harness.review_refusal_notice._retain_value",
-      "caller": "research_harness.review_refusal_notice._build_refused_entry",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_refusal_notice._retain_value"
-      ]
-    },
-    {
-      "ast_sha256": "637d23c3ba755bb4c1772c4a928d1c67ba1bf1dc7fbdf9d7ede757e6f541ccbc",
-      "callee": "research_harness.review_refusal_notice._check_entry_bound",
-      "caller": "research_harness.review_refusal_notice._build_refused_entry",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_refusal_notice._check_entry_bound"
-      ]
-    },
-    {
-      "ast_sha256": "12597d8c7ff1949b231da45019856518296f26a8385a9eebcbabb94afb494f21",
-      "callee": "len",
-      "caller": "research_harness.review_refusal_notice._build_refused_entry",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "len"
       ]
     },
     {
@@ -15257,22 +15251,25 @@
       ]
     },
     {
-      "ast_sha256": "90cd248249695bbfe1f0f0d79ca4b0695cd39ea5346767b63c1f1cbdc23d288a",
-      "callee": "len",
+      "ast_sha256": "744f95d1ddbcfd4a695bb14c6960bf626b52b10f299fa19a46f43e8c58909133",
+      "callee": "measure",
       "caller": "research_harness.review_refusal_notice._build_refused_entry",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "classification": "listed module",
+      "reason": "Reviewed injected size reader: serialized JSON by default, route wire size for planned notices; returns a scalar without writing the value.",
       "targets": [
-        "len"
+        "research_harness.review_refusal_notice._measure_serialized_value",
+        "research_harness.review_route_capacity.measure_capacity_value"
       ]
     },
     {
-      "ast_sha256": "6a76b5bd8de2e26373c031a57832827dbd453bd274282cb850e5d2132cc50348",
-      "callee": "research_harness.review_refusal_notice._serialize_value",
+      "ast_sha256": "bcb886b18bb6a761636831ab40bd68a98890919206688d906e98b146c88b89d8",
+      "callee": "measure",
       "caller": "research_harness.review_refusal_notice._build_refused_entry",
       "classification": "listed module",
+      "reason": "Reviewed injected size reader: serialized JSON by default, route wire size for planned notices; returns a scalar without writing the value.",
       "targets": [
-        "research_harness.review_refusal_notice._serialize_value"
+        "research_harness.review_refusal_notice._measure_serialized_value",
+        "research_harness.review_route_capacity.measure_capacity_value"
       ]
     },
     {
@@ -15286,12 +15283,102 @@
       ]
     },
     {
-      "ast_sha256": "60d6ed6fa3066de519ec785bfb09490e4f403f9b862e796587ecf2f63beb266a",
-      "callee": "research_harness.review_refusal_notice._serialize_value",
+      "ast_sha256": "534e41fd64cbdbf53611269b879f588005bc0098059006f7ba7f115ab2cce600",
+      "callee": "research_harness.review_refusal_notice._check_entry_bound",
       "caller": "research_harness.review_refusal_notice._build_refused_entry",
       "classification": "listed module",
       "targets": [
-        "research_harness.review_refusal_notice._serialize_value"
+        "research_harness.review_refusal_notice._check_entry_bound"
+      ]
+    },
+    {
+      "ast_sha256": "835ff0eb8ae1584796660ff734631af4197812ab082acae5e0efa1b46a0039bc",
+      "callee": "research_harness.review_refusal_notice._retain_value",
+      "caller": "research_harness.review_refusal_notice._build_refused_entry",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_refusal_notice._retain_value"
+      ]
+    },
+    {
+      "ast_sha256": "8434049770cbfbc61f72c933d2c0e77a06c2b4f9554125b802234c81f242936a",
+      "callee": "len",
+      "caller": "research_harness.review_refusal_notice.build_refusal_notice",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "len"
+      ]
+    },
+    {
+      "ast_sha256": "cab18ceb53e61dafcfd268a5d9d42d07184044fa9d06cc065ee046fdc1fb59fb",
+      "callee": "len",
+      "caller": "research_harness.review_refusal_notice.build_refusal_notice",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "len"
+      ]
+    },
+    {
+      "ast_sha256": "e045ae5a529ac05a5287aeb6cce8d891d8b48551e4f6dfe5d7155159a2b4d280",
+      "callee": "len",
+      "caller": "research_harness.review_refusal_notice.build_refusal_notice",
+      "classification": "standard library",
+      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
+      "targets": [
+        "len"
+      ]
+    },
+    {
+      "ast_sha256": "41ac62743b46787c9640952dc7e619e0b4de15671d6d4c6ea0bd58a1f7d6ccea",
+      "callee": "measure",
+      "caller": "research_harness.review_refusal_notice.build_refusal_notice",
+      "classification": "listed module",
+      "reason": "Reviewed injected size reader: serialized JSON by default, route wire size for planned notices; returns a scalar without writing the value.",
+      "targets": [
+        "research_harness.review_refusal_notice._measure_serialized_value",
+        "research_harness.review_route_capacity.measure_capacity_value"
+      ]
+    },
+    {
+      "ast_sha256": "df8806f1a3d81996738828d84d9efa87288cb6166c2fbe625b5e69795a5ed2e7",
+      "callee": "measure",
+      "caller": "research_harness.review_refusal_notice.build_refusal_notice",
+      "classification": "listed module",
+      "reason": "Reviewed injected size reader: serialized JSON by default, route wire size for planned notices; returns a scalar without writing the value.",
+      "targets": [
+        "research_harness.review_refusal_notice._measure_serialized_value",
+        "research_harness.review_route_capacity.measure_capacity_value"
+      ]
+    },
+    {
+      "ast_sha256": "e6d45dbc4cd06c18b7495feeb3184f988200455b3d5c9d97ae3ba946055136cd",
+      "callee": "measure",
+      "caller": "research_harness.review_refusal_notice.build_refusal_notice",
+      "classification": "listed module",
+      "reason": "Reviewed injected size reader: serialized JSON by default, route wire size for planned notices; returns a scalar without writing the value.",
+      "targets": [
+        "research_harness.review_refusal_notice._measure_serialized_value",
+        "research_harness.review_route_capacity.measure_capacity_value"
+      ]
+    },
+    {
+      "ast_sha256": "1fea3ff56bddc89a2fcea6d42e51630e8e318307ded20f80f37f840c7e6bcef3",
+      "callee": "research_harness.errors.ResearchError",
+      "caller": "research_harness.review_refusal_notice.build_refusal_notice",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.errors.ResearchError"
+      ]
+    },
+    {
+      "ast_sha256": "ac317d36dccb905c4c701ddde70d9c5980d38c2a76424e841c757bc9e9b53d1a",
+      "callee": "research_harness.review_refusal_notice._build_refused_entry",
+      "caller": "research_harness.review_refusal_notice.build_refusal_notice",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_refusal_notice._build_refused_entry"
       ]
     },
     {
@@ -15304,40 +15391,12 @@
       ]
     },
     {
-      "ast_sha256": "6996bb010700b4792499c70bac3893fbb6d27af3d24380eb82cfc7678cef5989",
+      "ast_sha256": "00dd45b4565e3f6a856aa9ebfed9a0b31fe8f4bdd950a05074e15f1f84fed9e6",
       "callee": "research_harness.review_refusal_notice._retain_value",
       "caller": "research_harness.review_refusal_notice.build_refusal_notice",
       "classification": "listed module",
       "targets": [
         "research_harness.review_refusal_notice._retain_value"
-      ]
-    },
-    {
-      "ast_sha256": "4dbc512d03333663955ee2b11f1861470fef11d752298226e909a2d98406c5c5",
-      "callee": "research_harness.review_refusal_notice._build_refused_entry",
-      "caller": "research_harness.review_refusal_notice.build_refusal_notice",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_refusal_notice._build_refused_entry"
-      ]
-    },
-    {
-      "ast_sha256": "e570f698b00b4523cc5781fab684e4d810ce923f99a2104b9a68db1f7cd80b3b",
-      "callee": "len",
-      "caller": "research_harness.review_refusal_notice.build_refusal_notice",
-      "classification": "standard library",
-      "reason": "Reviewed constructor, serializer, digest or numeric operation; no packet mutation beyond the certified return value.",
-      "targets": [
-        "len"
-      ]
-    },
-    {
-      "ast_sha256": "ae50684991b5b635b50d999cba4c13984de713de1c616226c437b83fdc8a3198",
-      "callee": "research_harness.review_refusal_notice._serialize_value",
-      "caller": "research_harness.review_refusal_notice.build_refusal_notice",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_refusal_notice._serialize_value"
       ]
     },
     {
@@ -15360,15 +15419,6 @@
       ]
     },
     {
-      "ast_sha256": "1651b5b5234716be0cac4f9d3ec288a4639d0c62004a960e11325461421bc67c",
-      "callee": "research_harness.review_refusal_notice.build_refusal_notice",
-      "caller": "research_harness.review_refusal_notice.select_refusal_notice",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_refusal_notice.build_refusal_notice"
-      ]
-    },
-    {
       "ast_sha256": "60c5a2aee4e1607c63804708b891d9d30d3ab80e37f2265b4a95cc78213258e3",
       "callee": "len",
       "caller": "research_harness.review_refusal_notice.select_refusal_notice",
@@ -15379,39 +15429,21 @@
       ]
     },
     {
-      "ast_sha256": "25f0f282ac6de794a0b28c22811624a18f0475ee8b0be502e750f289fadd8a2d",
-      "callee": "research_harness.review_refusal_notice.attach_refusal_notice",
+      "ast_sha256": "95fe6c27209f7e9fae2f310000977cff68f6449cc92d44ab2b6aa554dea596d9",
+      "callee": "research_harness.errors.ResearchError",
       "caller": "research_harness.review_refusal_notice.select_refusal_notice",
       "classification": "listed module",
       "targets": [
-        "research_harness.review_refusal_notice.attach_refusal_notice"
+        "research_harness.errors.ResearchError"
       ]
     },
     {
-      "ast_sha256": "6e6a5ef11931e46a9d9a2829889158e1426aa8c806aa1f53073c3aea75af4579",
-      "callee": "research_harness.review_refusal_notice._serialize_value",
+      "ast_sha256": "29161b662312d67ec0b1ae0b8a01912359904e50a16da03eb594cbf8528561c0",
+      "callee": "research_harness.review_excerpts.read_sent_packet",
       "caller": "research_harness.review_refusal_notice.select_refusal_notice",
       "classification": "listed module",
       "targets": [
-        "research_harness.review_refusal_notice._serialize_value"
-      ]
-    },
-    {
-      "ast_sha256": "55987467c8d38b4ae0b324453a4b434fab4ac2ab7e1ba9180d989fc35ad1578d",
-      "callee": "research_harness.review_transport.request_body",
-      "caller": "research_harness.review_refusal_notice.select_refusal_notice",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_transport.request_body"
-      ]
-    },
-    {
-      "ast_sha256": "5d494c5c5c152a0fb501209783e4aae9c338582f32e22e053368dc9654ea983a",
-      "callee": "research_harness.review_route_capacity.measure_request",
-      "caller": "research_harness.review_refusal_notice.select_refusal_notice",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_route_capacity.measure_request"
+        "research_harness.review_excerpts.read_sent_packet"
       ]
     },
     {
@@ -15433,12 +15465,30 @@
       ]
     },
     {
-      "ast_sha256": "29161b662312d67ec0b1ae0b8a01912359904e50a16da03eb594cbf8528561c0",
-      "callee": "research_harness.review_excerpts.read_sent_packet",
+      "ast_sha256": "6e6a5ef11931e46a9d9a2829889158e1426aa8c806aa1f53073c3aea75af4579",
+      "callee": "research_harness.review_refusal_notice._serialize_value",
       "caller": "research_harness.review_refusal_notice.select_refusal_notice",
       "classification": "listed module",
       "targets": [
-        "research_harness.review_excerpts.read_sent_packet"
+        "research_harness.review_refusal_notice._serialize_value"
+      ]
+    },
+    {
+      "ast_sha256": "bf1f96d9782a6fa9e780bb3ac93c0b50cc549687c3f1f52fb02b4b61947a22c7",
+      "callee": "research_harness.review_refusal_notice.attach_refusal_notice",
+      "caller": "research_harness.review_refusal_notice.select_refusal_notice",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_refusal_notice.attach_refusal_notice"
+      ]
+    },
+    {
+      "ast_sha256": "789a9d0cb8e87ca8b247f2c901b9759a39c6be5b3ac1b059a04bff8ef6767b7c",
+      "callee": "research_harness.review_refusal_notice.build_refusal_notice",
+      "caller": "research_harness.review_refusal_notice.select_refusal_notice",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_refusal_notice.build_refusal_notice"
       ]
     },
     {
@@ -15451,12 +15501,30 @@
       ]
     },
     {
-      "ast_sha256": "95fe6c27209f7e9fae2f310000977cff68f6449cc92d44ab2b6aa554dea596d9",
-      "callee": "research_harness.errors.ResearchError",
+      "ast_sha256": "88882b2ead5e1520489ca2f9e8e0b607b83e3397c83b380b0d2cd59e9a8279f1",
+      "callee": "research_harness.review_route_capacity.measure_capacity_value",
       "caller": "research_harness.review_refusal_notice.select_refusal_notice",
       "classification": "listed module",
       "targets": [
-        "research_harness.errors.ResearchError"
+        "research_harness.review_route_capacity.measure_capacity_value"
+      ]
+    },
+    {
+      "ast_sha256": "5d494c5c5c152a0fb501209783e4aae9c338582f32e22e053368dc9654ea983a",
+      "callee": "research_harness.review_route_capacity.measure_request",
+      "caller": "research_harness.review_refusal_notice.select_refusal_notice",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_route_capacity.measure_request"
+      ]
+    },
+    {
+      "ast_sha256": "55987467c8d38b4ae0b324453a4b434fab4ac2ab7e1ba9180d989fc35ad1578d",
+      "callee": "research_harness.review_transport.request_body",
+      "caller": "research_harness.review_refusal_notice.select_refusal_notice",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_transport.request_body"
       ]
     },
     {
@@ -16724,6 +16792,175 @@
       "reason": "Project the conservative raw view with the same already-computed posted status; independent blockers and posted action suppression remain authoritative.",
       "targets": [
         "research_harness.report_views.describe_parts_turn"
+      ]
+    },
+    {
+      "ast_sha256": "77426d748debde496c253d79bff3ab0fd9a9ad7b56c69219ee3d5ec5542831ed",
+      "callee": "research_harness.errors.ResearchError",
+      "caller": "research_harness.openness_reading_v7._check_v7_admission",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.errors.ResearchError"
+      ]
+    },
+    {
+      "ast_sha256": "92565b8fab381f1f1f3307986bb7e4bb916c6aa0515b08d48a382479854dd398",
+      "callee": "research_harness.openness_reading_v7.compute_allowance_rows_bound",
+      "caller": "research_harness.openness_reading_v7._check_v7_admission",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading_v7.compute_allowance_rows_bound"
+      ]
+    },
+    {
+      "ast_sha256": "343677f4dd84a48b7acacb50a3fba70badabe5bcbc207152890100edc2bfb453",
+      "callee": "dict",
+      "caller": "research_harness.openness_reading_v7.compute_allowance_rows_bound",
+      "classification": "standard library",
+      "reason": "Reviewed scalar size calculation and local declaration constructor; no packet mutation.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "493178f240b08592d1640d59c8d636b5831bae79b7acdd2462b255e647c8c4a3",
+      "callee": "dict",
+      "caller": "research_harness.openness_reading_v7.compute_allowance_rows_bound",
+      "classification": "standard library",
+      "reason": "Reviewed scalar size calculation and local declaration constructor; no packet mutation.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "cf008d600fd7568ff7831dacfe718cd09335dedc556493f5e33e9b67e25b8d7a",
+      "callee": "dict",
+      "caller": "research_harness.openness_reading_v7.compute_allowance_rows_bound",
+      "classification": "standard library",
+      "reason": "Reviewed scalar size calculation and local declaration constructor; no packet mutation.",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "341bab71d8e412a2bf95b4411b96e29a84c2b5e233376c9d0c51a5f136ac4366",
+      "callee": "min",
+      "caller": "research_harness.openness_reading_v7.compute_allowance_rows_bound",
+      "classification": "standard library",
+      "reason": "Reviewed scalar size calculation and local declaration constructor; no packet mutation.",
+      "targets": [
+        "min"
+      ]
+    },
+    {
+      "ast_sha256": "95cc31fe2da896da1ae9932bacc03fd2573794243a32ab45b25c0a0b2cd63158",
+      "callee": "research_harness.review_route_capacity.measure_capacity_value",
+      "caller": "research_harness.openness_reading_v7.compute_allowance_rows_bound",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_route_capacity.measure_capacity_value"
+      ]
+    },
+    {
+      "ast_sha256": "a6c49106396e83c1d2ee89094285ee2a815ad7c792c060338380f144a66cd4b6",
+      "callee": "research_harness.openness_reading_v7.compute_allowance_rows_bound",
+      "caller": "research_harness.openness_reading_v7.measure_turn_frames",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading_v7.compute_allowance_rows_bound"
+      ]
+    },
+    {
+      "ast_sha256": "47e5dbf53133192e226a77cedb74d5723140746db5756acd6de7df3e1b8497d9",
+      "callee": "research_harness.review_route_capacity.measure_capacity_value",
+      "caller": "research_harness.openness_reading_v7.measure_turn_frames",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_route_capacity.measure_capacity_value"
+      ]
+    },
+    {
+      "ast_sha256": "69eac2f473ce4fc781e3fad1bfb448ccab2a158b0d67d2562afa46347e375847",
+      "callee": "research_harness.review_route_capacity.measure_capacity_value",
+      "caller": "research_harness.openness_reading_v7.measure_turn_frames",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_route_capacity.measure_capacity_value"
+      ]
+    },
+    {
+      "ast_sha256": "7b4b39ecdf51bd665dc4361868cf5a9d5402a7cc4b8a3f314986a18f788c7367",
+      "callee": "research_harness.review_route_capacity.measure_capacity_value",
+      "caller": "research_harness.openness_reading_v7.measure_turn_frames",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_route_capacity.measure_capacity_value"
+      ]
+    },
+    {
+      "ast_sha256": "88882b2ead5e1520489ca2f9e8e0b607b83e3397c83b380b0d2cd59e9a8279f1",
+      "callee": "research_harness.review_route_capacity.measure_capacity_value",
+      "caller": "research_harness.openness_reading_v7.measure_turn_frames",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_route_capacity.measure_capacity_value"
+      ]
+    },
+    {
+      "ast_sha256": "a339fb124e19e2d75727cf9c6091916251abd599872137afb387007f3300d260",
+      "callee": "research_harness.review_route_capacity.measure_capacity_value",
+      "caller": "research_harness.openness_reading_v7.measure_turn_frames",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_route_capacity.measure_capacity_value"
+      ]
+    },
+    {
+      "ast_sha256": "cc5fa27c9c340fba5554fe3038b4764f1b8a65e13bdc9d9bf37f1c3549a66ab2",
+      "callee": "research_harness.review_route_capacity.measure_capacity_value",
+      "caller": "research_harness.openness_reading_v7.measure_turn_frames",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_route_capacity.measure_capacity_value"
+      ]
+    },
+    {
+      "ast_sha256": "744f95d1ddbcfd4a695bb14c6960bf626b52b10f299fa19a46f43e8c58909133",
+      "callee": "measure",
+      "caller": "research_harness.review_refusal_notice._check_entry_bound",
+      "classification": "listed module",
+      "reason": "Reviewed injected size reader: serialized JSON by default, route wire size for planned notices; returns a scalar without writing the value.",
+      "targets": [
+        "research_harness.review_refusal_notice._measure_serialized_value",
+        "research_harness.review_route_capacity.measure_capacity_value"
+      ]
+    },
+    {
+      "ast_sha256": "00246e9e62650b93f39f074de607f7a7592017854ef39853d1b39cb86d69822f",
+      "callee": "research_harness.errors.ResearchError",
+      "caller": "research_harness.review_refusal_notice._check_entry_bound",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.errors.ResearchError"
+      ]
+    },
+    {
+      "ast_sha256": "8effe4c13122f1dca22f4ae7fa4518530facf73023ceca271f7ec70895946a0c",
+      "callee": "len",
+      "caller": "research_harness.review_refusal_notice._measure_serialized_value",
+      "classification": "standard library",
+      "reason": "Reviewed scalar size calculation and local declaration constructor; no packet mutation.",
+      "targets": [
+        "len"
+      ]
+    },
+    {
+      "ast_sha256": "41adf1baaecbf6b093e1ff366ea51675ce054fcd62cc5c02c62cebbecd5faea8",
+      "callee": "research_harness.review_refusal_notice._serialize_value",
+      "caller": "research_harness.review_refusal_notice._measure_serialized_value",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_refusal_notice._serialize_value"
       ]
     }
   ],
@@ -18071,18 +18308,21 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "418035e82cfa9d831ad410fe8b457be143467d7eab5e7dc0dd53b86573ca4ead",
+      "ast_sha256": "fd75be9497d9025c3e8134f60742b847684f784b6ee05565ad835266af329111",
       "functions": {
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
         "_append_unit": "f6cb4ac11ffc0db1bbc01ecf87ec1ca4e26a2ccc64a24c9aebe0b2c8d2ce16a7",
         "_bind_body": "2987a8c5ea3492523f72bf960edfd02af8b55595d336b5dceb7f2c1e22a7f8a5",
+        "_check_v7_admission": "c22a376361774b814af461647defd6f5fc2e200a5cc357bc640faae1956048b9",
         "_describe_checked_entries": "801983d7a44989fff7031afb726c8865c654c64be1bbbe6a43a4103672a0430a",
         "_describe_identity": "9bb7503add880d286c1090f5e1c17b70f16c710c36367bf548a1fb11dd75b8cb",
         "_describe_json": "7c6004e53039a80228d53341ea102c68af46e1cc51855d15c96893ebef98c919",
         "_require_selected": "1756d3596364595c60b215e7b5399de39b723df692cf0f0fc491826408282dbb",
         "build_chain_state": "1ad5728da1cef9433124d25c51598ce80e77c9b76ba59ec74a4f15cd48569330",
         "build_inventory": "543bab306bae3a905a1169963dd36f45157da878818d28597eb1ec34f091f24f",
+        "compute_allowance_rows_bound": "43cedd0b96e55219fc11fc700beb8044053e677919c8c6088032814fc1e4703e",
         "describe_carried_pool": "b8c0046b42a8d1d5d4d96483e43f2c49afbc294acad7e86f5b965bc922646932",
+        "measure_turn_frames": "3b75567ff83a724bca5c4521ac46fceec2fb51f1c693659b30f5059ba97c9a43",
         "observe_carried_chain": "7830acc80f56e928029aec9390682f3131b0401efcfae5710bc27f826ef9fe5c",
         "plan_inventory": "427d865ada5c730d6601f112e91becc1da90deba9d364145001dcbdee033d0d0",
         "project_carried_turn": "0c984a434694f523c26e101401f7d285b7d189fdf69c5cab89491985e5cbb682"
@@ -18100,27 +18340,39 @@
         "268faa48100b6787893a237f79a3801a886ce23a975ab977ee4fccda0b23bed0",
         "2a59e57fcc2181ef30296be0310d14c49c619037374dad1714a1c6250a1c058c",
         "2eae43a1f85c96c618fe6d91b609e0e10e8bcfcc907d9bc2cb97ffe2aa436732",
+        "341bab71d8e412a2bf95b4411b96e29a84c2b5e233376c9d0c51a5f136ac4366",
+        "343677f4dd84a48b7acacb50a3fba70badabe5bcbc207152890100edc2bfb453",
         "3b4a134677263966d427ecb1de8c6e56c55a52fca86efb662fdacd037d05bf71",
         "3c4a51a84689c0136bd58a32c2283fd2ffd9cc3587d37c4f57c29939db66f7b8",
         "42f4a0a547b91e2be8190ee882d23f3aaa99fd6441ec4e884eda1518bc524f75",
         "46bb700f62f915c785f40dd4f3d22af6b77e6723bab95faf59f76e8f14dee54d",
+        "47e5dbf53133192e226a77cedb74d5723140746db5756acd6de7df3e1b8497d9",
         "48d350f555d487a5406aa1c54e740ec3e901d1b7e782585785c2d6ce83a2dc0c",
+        "493178f240b08592d1640d59c8d636b5831bae79b7acdd2462b255e647c8c4a3",
         "4b7b83720c2a132605c941aa9257a99c7d320fea5731d854e6cd4027e08a7a55",
         "513d641fd9f4f4eb6b5566a3d2f3e52830e4b2bb89260b66ccad0bacfdbf752f",
         "608abdf0107d15bb2c77c03b04e8ddb441f3aeca4af0b6f2f1ea25055756c184",
         "695fcb0d791dc8dc65a8377f161808877a4adb2bf25ddeccc9b51912deff7971",
+        "69eac2f473ce4fc781e3fad1bfb448ccab2a158b0d67d2562afa46347e375847",
         "6b923d36d8445b193519a90767fdf2ed790cd644f70188e25f9b0a3bc583faec",
         "6e6a0e67de4cebb4de82e3b7e8736b6f50d15400194deb77a71ebcfc2e3e3a52",
         "7120daebcb3571cd7a0bca91c1dedb2b42b3da4624354883b342b802ea34425d",
         "7457c18206f33d442264aca1d1264338e24414cf6b2e3c4305d25cd95020bd6d",
+        "77426d748debde496c253d79bff3ab0fd9a9ad7b56c69219ee3d5ec5542831ed",
         "7a0193ff63f145f2aa6572494f3d68a96d19ad8c50b9799c2f7ef6a0642c6963",
+        "7b4b39ecdf51bd665dc4361868cf5a9d5402a7cc4b8a3f314986a18f788c7367",
         "7c4267e09bb3baf0ca2db88b2f7c8f33ad210011414ea1b4d7949910b81bbd00",
         "8548d7c57096ebab0d479d0833ad1554658e1c076ac93d3e126fa803735dc503",
+        "88882b2ead5e1520489ca2f9e8e0b607b83e3397c83b380b0d2cd59e9a8279f1",
         "8c88405b56b7637a5ebe67138c7556961838925e6094fb1158c02838f2faf535",
+        "92565b8fab381f1f1f3307986bb7e4bb916c6aa0515b08d48a382479854dd398",
+        "95cc31fe2da896da1ae9932bacc03fd2573794243a32ab45b25c0a0b2cd63158",
         "9757be8b8693c0bd71e13f590383ea66730072bc3a191d162ad4f93086f5f40a",
         "97bf071a33b2cf3306b03ff6f7986d0490d3f9f407d23e9f6c26483e41668c9b",
         "9c58fa76137e27bf1059f12f680a3740b9589155457682aefb2a631d981f0801",
         "a2d7ffc4cdbc97055901394268f25abcc493c3ce0c542527a8368d7f826ff51e",
+        "a339fb124e19e2d75727cf9c6091916251abd599872137afb387007f3300d260",
+        "a6c49106396e83c1d2ee89094285ee2a815ad7c792c060338380f144a66cd4b6",
         "a7a1f2a721611126b9282f0588d4b351fd0307ddf0c9fdf6abaaf3dcc6e9e824",
         "aa38555f9cae6dcd4b6df210413d0947e5bedc46691db5430248331275ebc7a5",
         "aaba9d4b97543de12156f885847eb16556c6ff701e53aa21020bb9b8474ee9dc",
@@ -18131,6 +18383,8 @@
         "c1b36624e1df46e9fa16c2a816f3463b8ec32c3d44185f2819ed1da347566f31",
         "c4c572dc5d671dd79a401d89cba72e55dcf4f7123ce4a9d513ff19f83bd19f0d",
         "cab18ceb53e61dafcfd268a5d9d42d07184044fa9d06cc065ee046fdc1fb59fb",
+        "cc5fa27c9c340fba5554fe3038b4764f1b8a65e13bdc9d9bf37f1c3549a66ab2",
+        "cf008d600fd7568ff7831dacfe718cd09335dedc556493f5e33e9b67e25b8d7a",
         "d0082c569d25ead8155397710b43d18c2f26752ddbfad98ca109c44ad2832565",
         "d24a9870ac0618bb149280599d6d309965eaedc93b93868b394a617c981b3a6d",
         "d593359e03583baa071627a1bfc2db11540afe68a7ad4b9d6b1b424bbd3e3aae",
@@ -21184,49 +21438,56 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.review_refusal_notice": {
-      "ast_sha256": "b97efd02740c614a9d9190d4f580324066b8e5940a859d9c26601e74d1a81ebe",
+      "ast_sha256": "c900182b477975dc0ec4645b3a317c5be4584b9c2d47d6586206f52b2e4d671b",
       "functions": {
-        "_build_refused_entry": "cffc1f0d59f0d09737f60c1b5b5a49ff5ebae76751215cd8a51bf8ab8daebcea",
-        "_check_entry_bound": "c0e833ddd0483ec8061cf371aa30c069f0e70f33bf23a73074d16d733a1fe923",
+        "_build_refused_entry": "3f83c63a139e506a9700f94259ce4353c10392f97c11b2367a92835af7acdfed",
+        "_check_entry_bound": "a4fbb9550c41a60dbf422b328efaed2067f9cc9a3fa25dd6f1b10b82dbcecaee",
+        "_measure_serialized_value": "170d5d23ec2bbb3daff900e271f25da5d35d16861738bf8dd7f416276b9d4539",
         "_read_refused_part": "14151251fd0fc6d663601cdff3e25e47b4249bcf8cfbde4a7e57a056cc85582d",
-        "_retain_value": "403ca8f4c54002458f6ae0dba0e01fe93fa43a29d19e090ac3ad32a8c1048fa8",
+        "_retain_value": "75cfad9afa482a158393e739e5e20e8289e2553bf967919bf0fa415a223aa297",
         "_serialize_value": "bf81ec558c4e462f8e1a915b1468cd47edc3b2bbd5e10e5282fb731599e15689",
         "attach_refusal_notice": "189c81cb5a42f2f2b28dc28714140dd1420294baaea574a6817bcdb85aa035ca",
-        "build_refusal_notice": "236d10430d960f6da64e410fecc500aaa98e75ad22d4c4fadfe77fa8c60fe53d",
-        "select_refusal_notice": "8104514f9ab53d26e4a86c6f674aeabd5686140f58d6650612c7a69020110039"
+        "build_refusal_notice": "a4bcafdee8c18bb930994e58919da9a5e5cf0b4223a811cf513e72418f76f9b6",
+        "select_refusal_notice": "3d95de78d14839c4b09cc3326c2dd12e93e17d9f6942fb64507f29a4b7fd57e7"
       },
       "packet_call_digests": [
-        "12597d8c7ff1949b231da45019856518296f26a8385a9eebcbabb94afb494f21",
-        "1651b5b5234716be0cac4f9d3ec288a4639d0c62004a960e11325461421bc67c",
+        "00246e9e62650b93f39f074de607f7a7592017854ef39853d1b39cb86d69822f",
+        "00dd45b4565e3f6a856aa9ebfed9a0b31fe8f4bdd950a05074e15f1f84fed9e6",
+        "1fea3ff56bddc89a2fcea6d42e51630e8e318307ded20f80f37f840c7e6bcef3",
         "2170f06e9a871b20cb6e3fb431df88679e458502b22b21e9d722d92db30d4be4",
-        "25f0f282ac6de794a0b28c22811624a18f0475ee8b0be502e750f289fadd8a2d",
         "29161b662312d67ec0b1ae0b8a01912359904e50a16da03eb594cbf8528561c0",
         "397fd510baf128df019cdd01823916d39289da84f8db33891e5c6cae06b23798",
-        "39cdbe3a0c06ca0a412872f0073104b095b7faf5ce50ccc6f2047f4bccda2817",
         "3e4b8bd9929943f0aa014bceb81812668f9e9f5d178c664e57f5b2c0efc169a8",
-        "4dbc512d03333663955ee2b11f1861470fef11d752298226e909a2d98406c5c5",
+        "41ac62743b46787c9640952dc7e619e0b4de15671d6d4c6ea0bd58a1f7d6ccea",
+        "41adf1baaecbf6b093e1ff366ea51675ce054fcd62cc5c02c62cebbecd5faea8",
+        "534e41fd64cbdbf53611269b879f588005bc0098059006f7ba7f115ab2cce600",
         "55987467c8d38b4ae0b324453a4b434fab4ac2ab7e1ba9180d989fc35ad1578d",
         "5d494c5c5c152a0fb501209783e4aae9c338582f32e22e053368dc9654ea983a",
         "5db05b61c2ebc10d0beffca81a59627c23738cef064db15ed25d26ee298f6e25",
         "5dfa70f0407118348dc6f59b3421b3b2d59b9121c3e876a5b904e829ad024c8f",
         "60c5a2aee4e1607c63804708b891d9d30d3ab80e37f2265b4a95cc78213258e3",
-        "60d6ed6fa3066de519ec785bfb09490e4f403f9b862e796587ecf2f63beb266a",
-        "637d23c3ba755bb4c1772c4a928d1c67ba1bf1dc7fbdf9d7ede757e6f541ccbc",
-        "6996bb010700b4792499c70bac3893fbb6d27af3d24380eb82cfc7678cef5989",
-        "69ae4428a5ad0869fdf622fcc0e7da5e2154fbf98ab0595902b64c88a4f3e972",
-        "6a76b5bd8de2e26373c031a57832827dbd453bd274282cb850e5d2132cc50348",
+        "699de5a7cca4edcf6812480f8d48d5285b327eef592bbbcd637f13c80809d5d3",
         "6c679d3654d798d64b7bf8efe2f9af9f875eed2243c546f569289118d68dd167",
         "6e6a5ef11931e46a9d9a2829889158e1426aa8c806aa1f53073c3aea75af4579",
+        "744f95d1ddbcfd4a695bb14c6960bf626b52b10f299fa19a46f43e8c58909133",
+        "789a9d0cb8e87ca8b247f2c901b9759a39c6be5b3ac1b059a04bff8ef6767b7c",
         "81d99ef281f60fc27979b87589c0c01f9fd33868445bf2a4f5dac457069328ec",
-        "90cd248249695bbfe1f0f0d79ca4b0695cd39ea5346767b63c1f1cbdc23d288a",
+        "835ff0eb8ae1584796660ff734631af4197812ab082acae5e0efa1b46a0039bc",
+        "8434049770cbfbc61f72c933d2c0e77a06c2b4f9554125b802234c81f242936a",
+        "88882b2ead5e1520489ca2f9e8e0b607b83e3397c83b380b0d2cd59e9a8279f1",
+        "8effe4c13122f1dca22f4ae7fa4518530facf73023ceca271f7ec70895946a0c",
         "92dcdfd4afb760a94fa7665351fa29ae2f84c76e9bbac257be33ad42451245cf",
         "95fe6c27209f7e9fae2f310000977cff68f6449cc92d44ab2b6aa554dea596d9",
         "aaf8e3ecdbbe1347cca93b247a618cc91ca6fe03f66ff929c94bf3180da5f345",
-        "ae50684991b5b635b50d999cba4c13984de713de1c616226c437b83fdc8a3198",
+        "ac317d36dccb905c4c701ddde70d9c5980d38c2a76424e841c757bc9e9b53d1a",
+        "bcb886b18bb6a761636831ab40bd68a98890919206688d906e98b146c88b89d8",
+        "bf1f96d9782a6fa9e780bb3ac93c0b50cc549687c3f1f52fb02b4b61947a22c7",
+        "cab18ceb53e61dafcfd268a5d9d42d07184044fa9d06cc065ee046fdc1fb59fb",
         "cc46637bf1c0a9b4e0e13ae432d74f4cb405cf244c30a526b73b6195032ed602",
-        "e570f698b00b4523cc5781fab684e4d810ce923f99a2104b9a68db1f7cd80b3b",
+        "df8806f1a3d81996738828d84d9efa87288cb6166c2fbe625b5e69795a5ed2e7",
+        "e045ae5a529ac05a5287aeb6cce8d891d8b48551e4f6dfe5d7155159a2b4d280",
+        "e6d45dbc4cd06c18b7495feeb3184f988200455b3d5c9d97ae3ba946055136cd",
         "ea18e1401c27cd107d272f8c18a1a6611a64432f83c68a2ae55119830a471976",
-        "ec9642168485c9987c52b404c942469145d5f2f8f1d1e5c4ddfb1fc1c463b914",
         "fc7119fff4ca416fd850b718e9eb16eaceb0e68a07e9dd0061446b69bd0c922d",
         "fe3a38d31f166377de67b03eb4b20df6de1a56da8e3f3d83aa450c572a7685c2"
       ],
@@ -23447,6 +23708,13 @@
     "research_harness.openness_reading_v7._require_selected": [
       "research_harness.openness_reading_v7._append_carried_reading",
       "research_harness.openness_reading_v7.project_carried_turn"
+    ],
+    "research_harness.openness_reading_v7.compute_allowance_rows_bound": [
+      "research_harness.openness_reading_v7._check_v7_admission",
+      "research_harness.openness_reading_v7.measure_turn_frames"
+    ],
+    "research_harness.openness_reading_v7.measure_turn_frames": [
+      "research_harness.openness_reading_v7._check_v7_admission"
     ],
     "research_harness.openness_reading_v7.plan_inventory": [
       "research_harness.openness_reading_v7.build_inventory"

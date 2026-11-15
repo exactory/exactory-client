@@ -438,6 +438,52 @@ class V7RefusalTests(OpennessReadingCase):
                         self.read_packet(replacement['id'])['reading_turn']['capacity']['material_allowance'])
         self.finish_from(native, reduced['id'])
 
+    def test_a7_refused_final_capacity_replacement_keeps_notice_in_the_reserve(self):
+        from codex_route_fixtures import build_codex_response, bind_codex_response
+        from test_review_output_profile import build_row
+        priors = [build_row(level=None, thinking=1000, count=8),
+                  build_row(kind='final', level=None, thinking=1000, count=8)]
+        with patch.object(capacity, 'read_profile_priors', return_value=priors):
+            native = self.export()
+            head = self.finish_reading(native)
+        self.invoke(head, dict(stage='material', title='A reviewer argument', part=1, text='Part one.', more=True))
+        self.assign('material-next', native, prior=head)
+        head = 'material-next'
+        self.invoke(head, dict(decision='revise', objections=[], reason='Wrong contract.'))
+        replacement = self.replace_head(head)
+        notice = self.read_packet(replacement['id'])['output_refusal']
+        def fail(route, request, credential):
+            response = build_codex_response(route, request, {})
+            response['status'] = 'incomplete'
+            response['usage']['output_tokens'] = 128001
+            return bind_codex_response(route, request, response)
+        with patch.object(protocol.transport, 'send_request', side_effect=fail):
+            self.mutate(protocol.invoke_assignment, dict(id='final-over-cap',
+                assignment_id=replacement['id']), credential='fixture')
+        before = copy.deepcopy(self.store.snapshot()['records'])
+        frozen = self.read_packet(replacement['id'])
+        reduced = self.replace_head(replacement['id'])
+        packet = self.read_packet(reduced['id'])
+        self.assertEqual(packet['output_refusal'], notice)
+        for key in v7.FINAL_MATERIAL_FIELDS:
+            self.assertEqual(packet['reading_final'][key], frozen['reading_final'][key], key)
+        self.assertEqual(packet['reading_final']['capacity']['material_allowance'], 480000)
+        self.assertNotIn('level_material_allowance', packet['reading_final']['capacity'])
+        self.assertLess(packet['reading_final']['capacity']['answer_bound'],
+                        self.read_packet(replacement['id'])['reading_final']['capacity']['answer_bound'])
+        self.invoke(reduced['id'], dict(stage='material', title='A reviewer argument', part=2, text='Part two.', more=False))
+        self.assign('corrected-final', native, prior=reduced['id'])
+        self.finish_from(native, 'corrected-final')
+        attempt = self.store.snapshot()['records']['review_attempt']['attempt-' + reduced['id']]
+        self.assertEqual(attempt['task']['material_allowance'], 480000)
+        self.assertEqual(attempt['task']['level_material_allowance'], 480000)
+        self.assertEqual(attempt['task']['notice_characters'], len(json.dumps(
+            notice, ensure_ascii=False, sort_keys=True, allow_nan=False)))
+        after = self.store.snapshot()['records']
+        for kind, rows in before.items():
+            for key, row in rows.items():
+                self.assertEqual(digest(after[kind][key]), digest(row), (kind, key))
+
     def test_a7_third_replacement_refused_and_export_carries_verified_readings(self):
         native = self.export()
         head = self.finish_reading(native)
@@ -462,6 +508,202 @@ class V7RefusalTests(OpennessReadingCase):
         selection = json.loads(self.artifacts.read(receipt['carried_selection']['artifact']))
         self.assertTrue(selection['turns'])
         self.finish_from(following, 'successor')
+
+
+class FullGrantFinalRefusalTests(OpennessReadingCase):
+    """F14/R59: the final's notice uses the stored reserve, preserving its grants."""
+    capacity_probe_tokens = 487900
+    reading_protocol = None
+    route_model = 'gpt-6-astra'
+    route_output_tokens = 128000
+    text_sizes = (1500000,)
+    replace_head = V7RefusalTests.replace_head
+    build_v7_answer = V7RefusalTests.build_v7_answer
+    build_v7_finding = V7RefusalTests.build_v7_finding
+
+    def setUp(self):
+        super().setUp()
+        enabled = patch.object(reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (v7.PROTOCOL, reading.PROTOCOL_V6))
+        enabled.start()
+        self.addCleanup(enabled.stop)
+
+    def prepare_full_final(self):
+        from test_review_output_profile import build_row
+        from test_research_problem_openness_minimum import ProblemOpennessMinimumTests
+        from research_harness.problem_openness import export_openness
+        self.selected = self.select_statement(identifier='eight-targets', candidate_id='candidate-1',
+            neighbours=['Neighbour %d.' % number for number in range(1, 8)])
+        searches = [dict(formulation=self.selected['statement'], search_id=self.search['id'])]
+        for formulation in self.selected['neighbours']:
+            row = ProblemOpennessMinimumTests.search(self, self.versions, formulation=formulation)
+            searches.append(dict(formulation=formulation, search_id=row['id']))
+        priors = [build_row(level=None, thinking=1000, count=8),
+                  build_row(kind='final', level=None, thinking=1000, count=8)]
+        with patch.object(capacity, 'read_profile_priors', return_value=priors):
+            native = export_openness(self.store, dict(assignment_id='turn-1', reviewer_id='openness-reviewer',
+                minimum=dict(searches=searches, settling_work_id=None, duplicate_resolutions=[])),
+                self.root / 'eight-target-packet')['native_packet']
+            self.assign('turn-1', native)
+        current = 'turn-1'
+        route = self.store.snapshot()['records']['review_route']['route']
+        for number in range(1, 40):
+            packet = self.read_packet(current)
+            if 'reading_final' in packet:
+                assignment = self.store.snapshot()['records']['review_assignment'][current]
+                plan, _, state = v7.read_bound_state(self.artifacts, assignment, packet)
+                self.assertEqual(plan['task']['final']['material_allowance'], 480000)
+                self.assertEqual(len(state['allowances']['targets']), 8)
+                self.assertEqual(len(state['latest_notes']), state['allowances']['notes'])
+                self.assertTrue(all(row['used'] == row['characters'] for row in state['allowances']['targets']))
+                # Conservative serialized handles leave a little space, but less than either notice.
+                material = {key: packet['reading_final'][key] for key in v7.FINAL_MATERIAL_FIELDS}
+                self.assertGreater(v7._measure_final_material(route, material), 476000)
+                return current
+            binding = packet['reading_turn']
+            answer = self.build_v7_answer(packet)
+            answer['notes'] = 'n' * binding['allowances']['notes']
+            room = binding['allowances']['excerpts']
+            for target in binding['allowances']['targets']:
+                remaining = target['remaining']
+                for row, body in zip(binding['plan']['now'], packet['evidence']):
+                    if row['kind'] != 'fulltext' or min(room, remaining) <= 1000:
+                        continue
+                    def measure_width(width):
+                        entry = dict(kind='excerpt', handle='e999999999', unit=row['handle'],
+                            text=body['content'][:width], purpose='Retained detail.', targets=[target['handle']],
+                            start=row['start'], end=row['start'] + width, sha256='x' * 64, status='verified')
+                        return capacity.measure_capacity_value(route, entry) + capacity.measure_capacity_value(
+                            route, {key: row[key] for key in ('handle', 'kind', 'label')})
+                    low, high = 1, min(len(body['content']), room, remaining)
+                    while low < high:
+                        middle = (low + high + 1) // 2
+                        if measure_width(middle) <= min(room, remaining):
+                            low = middle
+                        else:
+                            high = middle - 1
+                    charge = measure_width(low)
+                    answer['excerpts'].append(dict(unit=row['handle'], text=body['content'][:low],
+                        purpose='Retained detail.', targets=[target['handle']]))
+                    room -= charge
+                    remaining -= charge
+            self.invoke(current, answer)
+            following = 'turn-%d' % (number + 1)
+            self.assign(following, native, prior=current)
+            current = following
+        self.fail('The full-grant fixture must reach its final with every target filled.')
+
+    def refuse_final(self, head, characters=4000, *, characters_per_token=None):
+        output = dict(decision='revise', objections=[], reason='')
+        if characters == 100000:
+            pattern = '{"finding": ["quoted", "\\\\", null]}\n'
+            output['reason'] = pattern * ((characters - len(json.dumps(output))) // (len(json.dumps(pattern)) - 2))
+        output['reason'] += 'r' * (characters - len(json.dumps(output)))
+        self.assertEqual(len(json.dumps(output)), characters)
+        if characters_per_token is None:
+            response = self.invoke(head, output)
+        else:
+            from codex_route_fixtures import build_codex_response, bind_codex_response
+            def respond(route, request, credential):
+                response = build_codex_response(route, request, output)
+                response['usage']['input_tokens'] = int(capacity.measure_request(route, request)['text_characters']
+                                                       / characters_per_token)
+                return bind_codex_response(route, request, response)
+            with patch.object(protocol.transport, 'send_request', side_effect=respond):
+                response = self.mutate(protocol.invoke_assignment, dict(id='attempt-' + head,
+                    assignment_id=head), credential='fixture')
+        self.assertEqual(response['output_refusal']['check'], 'openness.finding')
+
+    def check_full_final_replacement(self, characters, form):
+        from research_harness import review_preflight
+        head = self.prepare_full_final()
+        original = self.read_packet(head)['reading_final']
+        self.refuse_final(head, characters)
+        before = copy.deepcopy(self.store.snapshot()['records'])
+        prior = before['review_assignment'][head]
+        stored_plan = self.artifacts.read(prior['capacity_plan']['artifact'])
+        replacement = self.replace_head(head)
+        packet = self.read_packet(replacement['id'])
+        self.assertEqual(replacement['reading_chain'], prior['reading_chain'])
+        self.assertEqual(packet['output_refusal']['form'], form)
+        if form == 'bounded':
+            route = before['review_route']['route']
+            self.assertLessEqual(capacity.measure_capacity_value(route, packet['output_refusal']), 45000)
+            self.assertLessEqual(capacity.measure_capacity_value(route, packet['output_refusal']['refused_part']), 20000)
+            self.assertTrue(all(capacity.measure_capacity_value(route, row) <= 6000
+                                for row in packet['output_refusal']['refused']))
+        self.assertEqual(packet['reading_final']['capacity']['material_allowance'], 480000)
+        self.assertNotIn('level_material_allowance', packet['reading_final']['capacity'])
+        for key in v7.FINAL_MATERIAL_FIELDS:
+            self.assertEqual(packet['reading_final'][key], original[key], key)
+        self.assertEqual(replacement['prompt']['template_id'], prior['prompt']['template_id'])
+        route = before['review_route']['route']
+        request = protocol.transport.request_body(route, replacement['prompt']['text'], packet)
+        report = review_preflight.build_assignment_report(before, self.artifacts, replacement, request)
+        self.assertTrue(report['plan_comparison']['fits'], report)
+        plan = capacity.read_chain_capacity_plan(self.artifacts, replacement)
+        self.assertEqual(plan['task']['final']['request_bound']['text_characters'],
+                         plan['frame']['final']['bound'] + 45000 + 480000)
+        self.invoke(replacement['id'], self.build_v7_finding(packet, packet['reading_final']['notes_handle']))
+        records = self.store.snapshot()['records']
+        reading.verify_chain(records, self.artifacts, records['review_assignment'][replacement['id']])
+        finding = self.mutate(self.load_problem_module().record_openness,
+                              dict(assignment_id=replacement['id']))['result']
+        self.assertEqual(finding['outcome'], 'unresolved')
+        after = self.store.snapshot()['records']
+        attempt = after['review_attempt']['attempt-' + replacement['id']]
+        self.assertEqual(attempt['task']['material_allowance'], 480000)
+        self.assertEqual(attempt['task']['level_material_allowance'], 480000)
+        self.assertEqual(attempt['task']['notice_characters'], len(json.dumps(
+            packet['output_refusal'], ensure_ascii=False, sort_keys=True, allow_nan=False)))
+        self.assertGreater(attempt['task']['characters'], 480000)
+        profile = capacity.read_output_profile(after, route, priors=[])
+        row = next(row for row in profile['rows'] if row['kind'] == 'final' and row['task_level'] is None)
+        self.assertEqual(row['attempts'], 2)
+        self.assertEqual(self.artifacts.read(prior['capacity_plan']['artifact']), stored_plan)
+        for kind in ('review_assignment', 'review_attempt', 'review_output_refusal'):
+            for key, value in before.get(kind, {}).items():
+                self.assertEqual(digest(after[kind][key]), digest(value))
+
+    def test_t1_short_refused_full_final_replaces_with_whole_notice_and_records(self):
+        self.check_full_final_replacement(4000, 'whole')
+
+    def test_t1_large_refused_full_final_replaces_with_bounded_notice_and_records(self):
+        self.check_full_final_replacement(100000, 'bounded')
+
+    def test_t3_refused_full_final_exports_after_a_denser_ratio_lowers_its_level(self):
+        from codex_route_fixtures import build_codex_response, bind_codex_response
+        head = self.prepare_full_final()
+        self.refuse_final(head, characters_per_token=4)
+        records = self.store.snapshot()['records']
+        prior = records['review_assignment'][head]
+        plan = capacity.read_chain_capacity_plan(self.artifacts, prior)
+        self.assertGreater(capacity.measure_attempt_ratio(records['review_attempt']['attempt-' + head],
+            margin=plan['measure']['ratio_margin']), plan['measure']['characters_per_token'])
+        self.assertEqual(capacity.derive_turn_task_limits(records, self.artifacts, prior, kind='final')['material_allowance'], 480000)
+        action = plan_next(records, self.artifacts, head)
+        self.assertEqual((action['state'], action.get('command')), ('replace', 'review-assignment'), action)
+        replacement = self.replace_head(head)
+        original = self.read_packet(replacement['id'])
+        def respond(route, request, credential):
+            response = build_codex_response(route, request, dict(decision='revise', objections=[], reason='r' * 100000))
+            response['usage']['input_tokens'] = capacity.measure_request(route, request)['text_characters'] * 2
+            return bind_codex_response(route, request, response)
+        with patch.object(protocol.transport, 'send_request', side_effect=respond):
+            response = self.mutate(protocol.invoke_assignment,
+                dict(id='dense-refused-final', assignment_id=replacement['id']), credential='fixture')
+        self.assertEqual(response['output_refusal']['check'], 'openness.finding')
+        records = self.store.snapshot()['records']
+        route = records['review_route']['route']
+        limits = capacity.derive_turn_task_limits(records, self.artifacts, replacement, kind='final')
+        material = {key: original['reading_final'][key] for key in v7.FINAL_MATERIAL_FIELDS}
+        self.assertLess(limits['material_allowance'], v7._measure_final_material(route, material))
+        action = plan_next(records, self.artifacts, replacement['id'])
+        self.assertEqual((action['state'], action.get('command')), ('handoff', 'export'), action)
+        successor = action['details']['successor']
+        self.assertEqual(successor['protocol'], v7.PROTOCOL)
+        self.assertEqual(successor['measure']['characters_per_token'], .47)
+        self.assertEqual(successor['measure']['source'], dict(chain='turn-1', attempt='dense-refused-final'))
+        self.assertTrue(successor['carried_readings']['chains'])
 
 
 class LegacySuccessorTests(OpennessReadingCase):
@@ -717,7 +959,160 @@ class LegacySuccessorTests(OpennessReadingCase):
 
 
 class NoticeRoomTests(unittest.TestCase):
-    def test_no_notice_reading_and_final_packet_and_prompt_digests_stay_frozen(self):
+    def build_label_native(self, route, count, label_set):
+        native = turn_fixtures.build_native(count)
+        labels = ['s'] + ['n'] * (count - 1)
+        if label_set in ('just_under', 'above'):
+            native['scientific_context']['openness_minimum'].update(statement=labels[0], neighbours=labels[1:])
+            base = capacity.measure_capacity_value(route, v7.list_target_labels(native))
+            width = 1 + (100000 - base) // count + (2 if label_set == 'above' else 0)
+            labels = ['x' * width] * count
+        elif label_set == 'mixed':
+            labels = ['s'] + ['n' if number <= 16 else 'n' * 1000 for number in range(1, count)]
+        native['scientific_context']['openness_minimum'].update(statement=labels[0], neighbours=labels[1:])
+        size = capacity.measure_capacity_value(route, v7.list_target_labels(native))
+        if label_set == 'just_under':
+            self.assertLessEqual(size, 100000)
+            self.assertGreater(size, 100000 - count)
+        elif label_set == 'above':
+            self.assertGreater(size, 100000)
+        return native
+
+    def check_final_wire_case(self, fixture, records, native, admission, *, pending=False, carried=False):
+        from research_harness import review_prompt_paragraphs as paragraphs
+        plan = copy.deepcopy(admission['capacity_plan'])
+        inventory = admission['inventory']['inventory']
+        logical = dict(fixture.packet, native=native)
+        if carried:
+            origin = dict(chain='origin', protocol=reading.PROTOCOL_V6, assignment_id='old', attempt_id='old-attempt')
+            projection = dict(turn=dict(origin=origin, assignment_id='old', attempt_id='old-attempt', kind='reading'),
+                deliveries=[], entries=[], searches=[], gaps=[], arguments=[], allowance_use=dict(targets={}, passages=0),
+                notes=dict(classification='affected', units=[], text='An earlier retained note.'))
+            _, chain = v7.prepare_first_assignment(records, fixture.artifacts, fixture.value, fixture.route,
+                logical, [projection], admission=copy.deepcopy(admission))
+            plan = capacity.read_chain_capacity_plan(fixture.artifacts, chain)
+            inventory = json.loads(fixture.artifacts.read(chain['inventory']))
+            state = json.loads(fixture.artifacts.read(chain['state']))
+            self.assertTrue(state['turns'][0]['origin'])
+            self.assertTrue(state['carried_readings'])
+        else:
+            state = v7.build_chain_state(inventory, [], route=fixture.route, plan=plan)['state']
+        level = plan['task']['final']['material_allowance']
+        state['latest_notes'] = 'n' * level
+        # All three target counters have their largest serialized width, consistently.
+        for row in state['allowances']['targets']:
+            row.update(characters=999999999, used=499999999)
+        state['allowances']['notes'] = 20000
+        state['allowances']['passages'].update(characters=100000, used=100000)
+        if pending:
+            state['material_state'] = dict(arguments={}, pending=dict(ref='m999999999', part=999999999))
+            state['material_request'] = dict(stage='material', title='t' * 120, ref='m999999999', part=999999999)
+        limits = capacity.derive_plan_task_limits(plan, 'final')
+        packet = v7.build_turn_packet(fixture.artifacts, fixture.route, logical, 'x' * reading.RESERVED_IDENTIFIER_CHARACTERS,
+            999999999, inventory, state, plan, limits, 'final')
+        packet['reading_final']['allowances']['excerpts'] = 40000
+        packet['digest'] = digest({key: value for key, value in packet.items() if key != 'digest'})
+        self.assertEqual(v7._measure_final_material(fixture.route,
+            {key: packet['reading_final'][key] for key in v7.FINAL_MATERIAL_FIELDS}), level)
+        prompt = protocol.canonical_prompt('native_math', reading_stage='final', reading_protocol=v7.PROTOCOL)
+        request = protocol.transport.request_body(fixture.route, prompt['text'], packet)
+        before = capacity.measure_request(fixture.route, request)['text_characters']
+        bound = plan['frame']['final']['bound'] + 45000 + level
+        self.assertEqual(plan['task']['final']['request_bound']['text_characters'], bound)
+        self.assertLessEqual(before, bound - 47000)
+        notice = self.build_bounded_notice(fixture.artifacts, route=fixture.route)
+        self.assertEqual(capacity.measure_capacity_value(fixture.route, notice), 45000)
+        packet = notices.attach_refusal_notice(packet, notice)
+        prompt = paragraphs.append_prompt_paragraphs(prompt, 'native_math',
+            versions=[paragraphs.REFUSAL_PARAGRAPH_VERSIONS['bounded']])
+        request = protocol.transport.request_body(fixture.route, prompt['text'], packet)
+        after = capacity.measure_request(fixture.route, request)['text_characters']
+        self.assertLessEqual(after, bound)
+        comparison = capacity.describe_plan_preflight(records, fixture.route, request, plan, 'final')['plan_comparison']
+        self.assertTrue(comparison['fits'], comparison)
+        return dict(level=level, without_notice_margin=bound - 47000 - before, margin=bound - after)
+
+    def test_t2_every_admitted_count_at_floor_and_highest_level_has_reserved_wire_room(self):
+        from test_review_capacity_closure import build_capacity_records
+        from test_review_output_profile import build_row
+        fixture = turn_fixtures.TurnPacketTests()
+        fixture.setUp()
+        records = build_capacity_records(fixture.route, tokens=487900, capacity_probe=True)
+        summaries = []
+        for level in (60000, 480000):
+            priors = [] if level == 60000 else [build_row(level=None, thinking=1000, count=8),
+                build_row(kind='final', level=None, thinking=1000, count=8)]
+            for label_set in ('short', 'just_under', 'above', 'mixed'):
+                margins, endpoints = [], []
+                with patch.object(v7, 'build_inventory', return_value=fixture.built), patch.object(
+                        capacity, 'read_profile_priors', return_value=priors):
+                    for count in range(1, 77):
+                        native = self.build_label_native(fixture.route, count, label_set)
+                        admission = v7.check_v7_admission(records, fixture.artifacts, fixture.route, native)
+                        if admission['state'] != 'record':
+                            self.assertEqual(admission['largest_one_request_targets'], count - 1)
+                            break
+                        self.assertEqual(admission['capacity_plan']['task']['final']['material_allowance'], level)
+                        if level == 60000 and label_set == 'short' and count == 2:
+                            parts = admission['capacity_plan']['allocation']['carried']['parts']
+                            self.assertEqual([row['minimum'] for row in parts], [6000, 6700, 6700])
+                            with self.assertRaises(ResearchError) as caught:
+                                capacity.divide_room(15000, parts)
+                            self.assertEqual(caught.exception.code, 'review_route_capacity_below_floor')
+                        endpoints = [endpoints[0], (count, native, admission)] if endpoints else [(count, native, admission)]
+                        with self.subTest(level=level, labels=label_set, targets=count):
+                            result = self.check_final_wire_case(fixture, records, native, admission)
+                            margins.append(result)
+                    else:
+                        self.fail('The fixture must reach its first unadmitted target count.')
+                    self.assertEqual(count - 1, 8 if level == 60000 else 70)
+                    for targets, native, admission in endpoints:
+                        for pending, carried in ((True, False), (False, True), (True, True)):
+                            with self.subTest(level=level, labels=label_set, targets=targets, pending=pending, carried=carried):
+                                margins.append(self.check_final_wire_case(fixture, records, native, admission,
+                                    pending=pending, carried=carried))
+                if margins:
+                    summaries.append(dict(level=level, labels=label_set, maximum=count - 1, cases=len(margins),
+                        minimum_margin=min(row['margin'] for row in margins),
+                        minimum_without_notice_margin=min(row['without_notice_margin'] for row in margins)))
+        print(json.dumps(dict(f14_wire_matrix=summaries), sort_keys=True))
+
+    def test_t2_review_regression_17_mixed_targets_at_level_240000_has_reserved_wire_room(self):
+        from test_review_output_profile import build_row
+        fixture = turn_fixtures.TurnPacketTests()
+        fixture.setUp()
+        native = self.build_label_native(fixture.route, 17, 'mixed')
+        with patch.object(v7, 'build_inventory', return_value=fixture.built), patch.object(capacity,
+                'read_profile_priors', return_value=[build_row(level=None, thinking=1000, count=8),
+                    build_row(kind='final', level=None, thinking=1000, count=8)]):
+            admission = v7.check_v7_admission({}, fixture.artifacts, fixture.route, native)
+        self.assertEqual(admission['state'], 'record')
+        self.assertEqual(admission['capacity_plan']['task']['final']['material_allowance'], 240000)
+        result = self.check_final_wire_case(fixture, {}, native, admission)
+        print(json.dumps(dict(f14_review_17_targets=result), sort_keys=True))
+
+    def build_bounded_notice(self, artifacts, *, route=None):
+        def measure(value):
+            return (capacity.measure_capacity_value(route, value) if route else
+                    len(json.dumps(value, ensure_ascii=False, sort_keys=True)))
+        # Exercise the complete reserved wire cost, including JSON escaping, at the bound.
+        entries = []
+        for number in range(4):
+            entry = dict(assignment_id='old-%d' % number, attempt_id='attempt-%d' % number,
+                output_digest='a' * 64, refusal_digest='b' * 64, status='refused',
+                code='openness_finding_invalid', check='openness.finding', path=[], message='', details={})
+            entry['message'] = 'x' * (6000 - measure(entry))
+            entries.append(entry)
+        part = dict(path=[], value='', complete=False)
+        part['value'] = 'x' * (20000 - measure(part))
+        notice = dict(protocol=notices.PROTOCOL, form='bounded', refused=entries,
+                      output_ref=dict(artifact=artifacts.put(b'{}'), characters=2), refused_part=part)
+        # Fill fixed descriptor metadata; request sizing does not dereference its synthetic path.
+        notice['output_ref']['artifact']['path'] += 'x' * (45000 - measure(notice))
+        return notice
+
+    def test_t7_no_notice_packets_change_only_plan_digest_and_keep_prompt_hashes(self):
+        import hashlib
         fixture = turn_fixtures.TurnPacketTests()
         fixture.setUp()
         packet, chain = fixture.prepare()
@@ -730,14 +1125,20 @@ class NoticeRoomTests(unittest.TestCase):
                                      initial_state=before)['state']
         final = v7.build_turn_packet(fixture.artifacts, fixture.route, fixture.packet, 'chain', 2,
             inventory, state, plan, capacity.derive_plan_task_limits(plan, 'final'), 'final')
-        for kind, value, expected_packet, expected_prompt in (
-            ('reading', packet, '6c993fba2a14b639dae4dc5b87f20ff25f47910019744660bd5e1877a345a8d9',
-             '1ee257be7dc40a135dce006f8d2911744a22f925488252d31992c788a4dce50c'),
-            ('final', final, '2c0de138ceeaa91adcacc32d8f4c1d162c9f0768c33f36498be0920a75ca8184',
-             'aa25b66defa740bc21346b3a8c6dabe2d7a305b1468f39a70707a149fbecc675')):
+        for kind, value, expected_packet, expected_prompt, expected_without_plan in (
+            ('reading', packet, '832db303dac69642d8d1b8334d822a1146e281e0786dbbb80019f109cee1c24d',
+             '1ee257be7dc40a135dce006f8d2911744a22f925488252d31992c788a4dce50c',
+             '73dbac96ae90f5726bf1fbaf9e8d5194e27a61e624c698243478cddb3accda7e'),
+            ('final', final, '9cb07f0c03d18608e3f2b564cc9bce4028ca895ce433e33b064b8e0e7d1f7063',
+             'aa25b66defa740bc21346b3a8c6dabe2d7a305b1468f39a70707a149fbecc675',
+             '44874553d13b5c6d4ae31c7c9fc671fddc7f3b2504b4db88c61637757068600b')):
             with self.subTest(kind=kind):
                 self.assertNotIn('output_refusal', value)
                 self.assertEqual(value['digest'], expected_packet)
+                normalized = copy.deepcopy(value)
+                normalized.pop('digest')
+                normalized.get('reading_turn', normalized.get('reading_final')).pop('plan_digest')
+                self.assertEqual(hashlib.sha256(v7.serialize_record(normalized)).hexdigest(), expected_without_plan)
                 prompt = protocol.canonical_prompt('native_math', reading_stage=kind, reading_protocol=v7.PROTOCOL)
                 self.assertEqual(prompt['rendered_prompt_hash'], expected_prompt)
 
@@ -753,23 +1154,10 @@ class NoticeRoomTests(unittest.TestCase):
         self.assertEqual(limits['material_allowance'], 15000)
         supplied = v7.build_turn_packet(fixture.artifacts, fixture.route, fixture.packet, 'chain', 1,
                                         inventory, state, plan, limits, 'reading')
-        # Exercise the complete reserved wire cost, including JSON escaping, at the bound.
-        entries = []
-        for number in range(4):
-            entry = dict(assignment_id='old-%d' % number, attempt_id='attempt-%d' % number,
-                output_digest='a' * 64, refusal_digest='b' * 64, status='refused',
-                code='openness_finding_invalid', check='openness.finding', path=[], message='', details={})
-            entry['message'] = 'x' * (6000 - len(json.dumps(entry, ensure_ascii=False, sort_keys=True)))
-            entries.append(entry)
-        part = dict(path=[], value='', complete=False)
-        part['value'] = 'x' * (20000 - len(json.dumps(part, ensure_ascii=False, sort_keys=True)))
-        notice = dict(protocol=notices.PROTOCOL, form='bounded', refused=entries,
-                      output_ref=dict(artifact=fixture.artifacts.put(b'{}'), characters=2), refused_part=part)
-        # Fill the remaining fixed-descriptor metadata reserve; its body is not read by request sizing.
-        notice['output_ref']['artifact']['path'] += 'x' * (45000 - len(json.dumps(notice, ensure_ascii=False, sort_keys=True)))
+        notice = self.build_bounded_notice(fixture.artifacts)
         self.assertEqual(len(json.dumps(notice, ensure_ascii=False, sort_keys=True)), 45000)
-        self.assertTrue(all(len(json.dumps(entry, sort_keys=True)) <= 6000 for entry in entries))
-        self.assertLessEqual(len(json.dumps(part, sort_keys=True)), 20000)
+        self.assertTrue(all(len(json.dumps(entry, sort_keys=True)) <= 6000 for entry in notice['refused']))
+        self.assertLessEqual(len(json.dumps(notice['refused_part'], sort_keys=True)), 20000)
         self.assertEqual(supplied['reading_turn']['capacity']['level_material_allowance'], 15000)
         supplied = notices.attach_refusal_notice(supplied, notice)
         from research_harness import review_prompt_paragraphs as paragraphs, review_preflight
