@@ -528,7 +528,7 @@ class AffectedNotesIntegrationTests(CarriedIntegrationSupport, OpennessReadingCa
             optional = groups['on_request'][0]
             packet = self.read_packet('new')
             self.assertEqual(packet['reading_turn']['affected_notes']['notes'], 1)
-            self.assertEqual(packet['reading_turn']['affected_notes']['index']['rows'][0]['first'], optional['handle'])
+            self.assertEqual(packet['reading_turn']['affected_notes']['index']['rows'][0]['handle'], optional['handle'])
             # Lower current levels have no input to the pure partition function.
             lower = capacity.derive_plan_task_limits(plan, 'reading', [dict(outcome='output_over_cap', material_allowance=15000)])
             self.assertEqual(v7.list_required_affected_notes(plan, selection), groups)
@@ -601,7 +601,7 @@ class ManyNotesIntegrationTests(CarriedIntegrationSupport, OpennessReadingCase):
             page = next((json.loads(body['content']) for row, body in zip(packet['reading_turn']['plan']['now'], packet['evidence'])
                          if row['kind'] == 'list_page'), None)
             if page is not None:
-                seen.extend(row['id'] for row in page['rows'])
+                seen.extend(row['chain'] for row in page['rows'])
                 if page['next'] is None:
                     ended = True
                 else:
@@ -811,6 +811,9 @@ class FullPoolCapacityTests(unittest.TestCase):
                     source_sha256=row['artifact']['sha256'], start=index * 170, end=(index + 1) * 170,
                     sha256=hashlib.sha256(text.encode('utf-8')).hexdigest(), text=text, purpose='p' * 125, status='verified'))
             observations.append(observed)
+        gaps = artifacts.put_json([])
+        rows.append(dict(kind='record', record_kind='minimum_gaps', record_id='minimum_gaps', artifact=gaps))
+        bodies[gaps['sha256']] = b'[]'
         built = v7.plan_inventory(rows, bodies)
         priors = [build_row(level=None, thinking=1000, count=8), build_row(kind='final', level=None, thinking=1000, count=8)]
         with patch.object(v7, 'build_inventory', return_value=built), patch.object(capacity, 'read_profile_priors', return_value=priors):

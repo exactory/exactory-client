@@ -44,7 +44,9 @@ def build_inventory(artifacts, characters=40000, unicode=False):
     content = (('abc日本' if unicode else 'abcde') * (characters // 5)).encode('utf-8')
     reference = artifacts.put(content, 'text/plain; charset=utf-8')
     row = dict(kind='fulltext', version_id='fixture-work', text_sha256=reference['sha256'], artifact=reference)
-    return v7.plan_inventory([row], {reference['sha256']: content})
+    gaps = artifacts.put_json([])
+    return v7.plan_inventory([row, dict(kind='record', record_kind='minimum_gaps',
+        record_id='minimum_gaps', artifact=gaps)], {reference['sha256']: content, gaps['sha256']: b'[]'})
 
 
 class RatioAndAdmissionTests(unittest.TestCase):
@@ -476,7 +478,7 @@ class TurnPacketTests(unittest.TestCase):
                                              'try-%d' % number, state=state))
             state = v7.build_chain_state(inventory, turns, route=self.route, plan=plan)['state']
         self.assertTrue(any(row['status'] == 'over_allowance' for row in state['gaps']))
-        self.assertTrue(all('text' not in row for row in packet['reading_final']['gaps']))
+        self.assertTrue(all(row['text'] == 'g' * 600 for row in packet['reading_final']['gaps']))
 
     def test_q8_ten_requested_passages_finish_over_multiple_turns_without_losing_ranges(self):
         with patch.object(capacity, 'read_profile_priors', return_value=[]):
@@ -550,6 +552,9 @@ class TurnPacketTests(unittest.TestCase):
             reference = self.artifacts.put(content, 'text/plain')
             rows.append(dict(kind='fulltext', version_id='work-%d' % index, text_sha256=reference['sha256'], artifact=reference))
             bodies[reference['sha256']] = content
+        gaps = self.artifacts.put_json([])
+        rows.append(dict(kind='record', record_kind='minimum_gaps', record_id='minimum_gaps', artifact=gaps))
+        bodies[gaps['sha256']] = b'[]'
         self.built = v7.plan_inventory(rows, bodies)
         with patch.object(capacity, 'read_profile_priors', return_value=[build_row(level=None, thinking=1000)]):
             packet, chain = self.prepare()

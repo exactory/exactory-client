@@ -6965,6 +6965,76 @@
         "test_command_evaluation_costs.HistoryAuthenticationTests.test_status_elapsed_time_includes_authentication_with_malformed_context",
         "test_unbound_packet_captures.UnboundPacketCaptureTests.test_stored_0870_findings_replay_with_their_delivered_capture_and_unchanged_bytes"
       ]
+    },
+    {
+      "id": "v7-final-delivers-decisive-work-ids",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "v7 reading packet and capacity contract",
+      "summary": "Final frames hid the decisive ids required by source_settles.",
+      "expected": "The final carries the measured list up to 10000 wire characters; larger lists become requestable fixed fields.",
+      "fixed_in": "0.91.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_gaps.GapCommandTests.test_decisive_ids_are_visible_and_source_settles_checks_the_list",
+        "test_openness_reading_v7_gaps.GapCommandTests.test_oversized_decisive_ids_are_delivered_and_requested_from_final",
+        "test_openness_reading_v7_gaps.GapBudgetTests.test_decisive_frame_measures_list_and_compact_forms_and_exact_bound_fits"
+      ]
+    },
+    {
+      "id": "v7-logical-unit-passage-requests",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "v7 reading packet and capacity contract",
+      "summary": "Passage requests rejected logical handles shown by carried entries and final sources.",
+      "expected": "Logical handles resolve deterministically to the first delivery part holding the anchor, including through replacements and verification.",
+      "fixed_in": "0.91.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_gaps.AffectedNoteGapTests.test_carried_entry_logical_source_can_be_requested_from_final",
+        "test_openness_reading_v7_gaps.GapCommandTests.test_logical_source_request_and_null_anchor_survive_capacity_replacement",
+        "test_openness_reading_v7_gaps.GapBudgetTests.test_factored_search_logical_handles_resolve_shared_and_residual_fields",
+        "test_openness_reading_v7_gaps.GapBudgetTests.test_invalid_anchors_and_unknown_handles_keep_the_reading_refusal"
+      ]
+    },
+    {
+      "id": "v7-final-states-each-gap",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "v7 reading packet and capacity contract",
+      "summary": "Final gap rows hid their meaning behind artifact references.",
+      "expected": "Forecast rows state condition, blocked outcomes and target; reviewer text is charged to its target grant and only retained gaps reach the final.",
+      "fixed_in": "0.91.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_gaps.GapCommandTests.test_minimum_gap_rows_name_targets_and_the_record_is_requestable",
+        "test_openness_reading_v7_gaps.GapBudgetTests.test_own_gap_text_charges_wire_cost_and_excess_is_not_shown",
+        "test_openness_reading_v7_gaps.GapBudgetTests.test_forecast_vocabulary_rows_fit_both_routes"
+      ]
+    },
+    {
+      "id": "v7-affected-notes-have-requestable-handles",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "v7 reading packet and capacity contract",
+      "summary": "Grouping affected notes by origin hid interior handles and an unseen note required a known phrase.",
+      "expected": "Every note has its own bounded index and list row; a null anchor requests its start and charges the passage allowance.",
+      "fixed_in": "0.91.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_gaps.AffectedNoteGapTests.test_four_notes_index_middle_null_request_charges_and_verifies",
+        "test_openness_reading_v7_gaps.GapBudgetTests.test_four_hundred_notes_of_one_chain_have_individual_rows_and_complete_pages",
+        "test_openness_reading_v7_gaps.GapCommandTests.test_logical_source_request_and_null_anchor_survive_capacity_replacement"
+      ]
+    },
+    {
+      "id": "v7-reading-turn-refuses-argument-parts",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "v7 reading packet and capacity contract",
+      "summary": "A material response credited reading units while dropping their notes, excerpts and gaps.",
+      "expected": "The reading output refuses material with invalid_review_material at /stage and a notice-bearing replacement reads the uncredited units. Arguments continue only between finals; earlier protocols keep their bytes.",
+      "fixed_in": "0.91.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_gaps.GapCommandTests.test_reading_material_refuses_without_credit_and_replacement_reads",
+        "test_openness_reading_v7_gaps.GapBudgetTests.test_pending_material_is_final_only_and_legacy_material_keeps_its_bytes"
+      ]
     }
   ]
 }

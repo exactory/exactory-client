@@ -40,6 +40,10 @@ INVALID_REFERENCE_HANDLE_MESSAGE = (
     'that this packet delivers for that handle or part, with 0 <= start < end <= the length of that text, and '
     'only a handle of a source takes a span. Correct the citation.'
 )
+MATERIAL_READING_TURN_MESSAGE = (
+    'A part of an argument is accepted only as the answer of a final turn, and this is a reading turn. Return '
+    'the reading response of this turn, and put the outline of the argument into your notes. The final turn '
+    'takes the argument.')
 INVALID_MATERIAL_MESSAGE = (
     'The answer is not the part of an argument that this turn expects. Return {stage:"material",title,part,text,more}. '
     'part is the next part number, which starts at 1, and a later part keeps the title of the first part. text has '
@@ -216,6 +220,8 @@ def validate_material(packet, output, *, artifacts=None, assignment=None):
     """Check a material part once at the output-contract boundary."""
     packet = _resolve_packet(packet, artifacts, assignment) if HANDLE_TABLE not in packet else packet
     with contract_check('review.shape'):
+        if packet.get('reading_turn', {}).get('protocol') == 'exactory-openness-reading-v7':
+            raise ResearchError('invalid_review_material', MATERIAL_READING_TURN_MESSAGE, dict(path='/stage'))
         fields(output, ('stage', 'title', 'part', 'text', 'more'), code='invalid_review_material', path='')
         for name in ('title', 'text'):
             text(output[name], 'Material ' + name, code='invalid_review_material')

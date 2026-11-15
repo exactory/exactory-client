@@ -1034,6 +1034,8 @@ class NoticeRoomTests(unittest.TestCase):
         reserve_values(binding, ('page',), fields['page'])
         reserve_values(skeleton['native'], tuple(v7._describe_native_fields(native)) + ('context_unit',), fields['native_frame'])
         reserve_values(skeleton['native'], ('subject',), fields['statement'])
+        reserve_values(skeleton['native']['scientific_context'], ('decisive_work_ids',), fields['decisive_work_ids'])
+        reserve_values(binding['minimum'], ('gaps_unit',), fields['minimum.gaps_unit'])
         reserve_values(skeleton['native'], ('scientific_context',), fields['minimum'])
         return cost + excess
 
@@ -1082,7 +1084,8 @@ class NoticeRoomTests(unittest.TestCase):
         packet['reading_final']['allowances']['excerpts'] = 40000
         context = packet['native']['scientific_context']
         context['audit_forecast'].update(gaps=999999999, notices=999999999)
-        context['decisive_work_ids']['count'] = 999999999
+        if isinstance(context['decisive_work_ids'], dict):
+            context['decisive_work_ids']['count'] = 999999999
         for key in ('evidence', 'execution_provenance', 'unmaterialized_digests'):
             packet['native'][key] = dict(count=999999999)
         packet['digest'] = digest({key: value for key, value in packet.items() if key != 'digest'})

@@ -5630,17 +5630,22 @@ protocol v6" above without a change.
   not reach the final. A gap is `{formulation, text}` with a target handle
   and at most 600 characters. At most ten passage requests are `{id, unit,
   anchor, characters}` (an anchor of 1 to 600 characters that occurs in the
-  unit, 1 to 100,000 characters, within the passage allowance of 100,000
+  unit, or null for the start of the unit; 1 to 100,000 characters, within
+  the passage allowance of 100,000
   characters for the chain) or `{id, kind: "list_page", list, after}` for
   the next page of the list `allowances`, `affected_notes`, `unread` or
   `unread_attempts`. A malformed answer is the output refusal
-  `invalid_reading_response`.
+  `invalid_reading_response`. A part of an argument is refused here with
+  `invalid_review_material`; arguments belong to final turns.
 - The final turn. The final is one request without source text. The packet
   holds `native`, the frame of the native packet with counts in place of its
-  lists, and `reading_final`: the bindings, `notes`, `fill` (earlier notes
+  lists, except `decisive_work_ids` (the list, or `{count, unit}` above 10,000
+  characters), and `reading_final`: the bindings, `notes`, `fill` (earlier notes
   that fit), `entries` (the retained excerpts and passage answers),
-  `sources`, `gaps` (handles `g` of the forecast and `h` of the reviewer,
-  with references), `material` (completed arguments), `page`, `minimum`,
+  `sources`, `gaps` (forecast rows `{handle, condition, outcomes, target}`
+  and reviewer rows `{handle, formulation, text}`), `material` (completed
+  arguments), `page`, `minimum` (including `gaps_unit`, the handle of the
+  record `minimum_gaps`, whose details a passage request returns),
   `allowances` and `capacity`. The answer is the finding of v6 with two
   changes. A ground is `{kind, text, work_id?, refs?}`: `refs` holds
   citations `{ref: <handle>}` of a gap, of notes or of an argument, which
@@ -5673,7 +5678,8 @@ protocol v6" above without a change.
   on unchanged units open the chain. Notes that rest on a changed or removed
   unit are affected notes: the newest ones, as many as one reading turn at
   the start level holds and at least one, are delivered first, and the
-  others on request. Carried entries beyond the pool are delivered as a
+  others on request, by the handle of each note with a null anchor. Carried
+  entries beyond the pool are delivered as a
   unit, and the reviewer keeps one with `{keep, targets}` in `excerpts`. The
   earlier turns stay authenticated under their own protocols and keep their
   bytes. When v6 starts the chain, the receipt carries `carried_readings`

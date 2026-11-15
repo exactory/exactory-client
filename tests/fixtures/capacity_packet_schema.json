@@ -17863,7 +17863,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.native_review": {
-      "ast_sha256": "36def28c41e5d0dd5697798b516122cac65aec76bc63942dfed9d17938cefff2",
+      "ast_sha256": "78675ae505771786eda42b1776b6573090123af94118443686bb5a7266ec57c1",
       "functions": {
         "_closed": "42e89b4afe40f000d59d6f9b80dc1335795381afadd36f76fc48f62e7f944cb3",
         "_nonempty": "9a6abcbc7e7271ccb4bb730efbeb22ba18339942e47553315e7c90ecd98da2bb",
@@ -17896,7 +17896,7 @@
         "edde9f7779736bc2d05a672eae4b409cda3096b36296ea180c2fc366d5c0292b",
         "fecc5e5ad3f4216ae7afd54011d18fc02220252228da22a95dac824118248417"
       ],
-      "reason": "prompt text lookup keyed by the grounds selectors of FINDING_RULES; read only by render_finding_rule"
+      "reason": "prompt text lookup keyed by the grounds selectors of FINDING_RULES; read only by render_finding_rule Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
     },
     "research_harness.native_writes": {
       "ast_sha256": "fbbed9384941aabe8d671f17f3082a503272800c8b31e17fc1ece1d12467f4db",
@@ -17987,7 +17987,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.openness_reading": {
-      "ast_sha256": "2979409a140d4fd7c04fdba78e872e600a0775b23297840e11059e111d29d3e0",
+      "ast_sha256": "c0be966c0d54ccee66885260775607b4a2ea8595628019120e957d36a4b70707",
       "functions": {
         "_add_source": "bf750a7009979c804b515fe2fa49795c9649ea87dcafa53f80cef1045aeb2340",
         "_assemble_reading_turn": "9c44a6537d6d1fae1af0dc44b726cd7059da1ee593c0d2f800617c0c1655160a",
@@ -18314,15 +18314,15 @@
         "fea13f3f3eb313dbba88920c4e985bc6072537317e9c171926f9799667bda45f",
         "ff922eec603ceb40b5f28cbaba83b776ac8ef3a6e101849ac7c4fd5a774ff9cb"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "03462412414bf42fe250e17b33c1a5742fc3eb4c4f91be6eb171bc362d236d23",
+      "ast_sha256": "b58800f0978220d0b59f0c95a0473df982906b846869cac54a3d7900040ab50d",
       "functions": {
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
         "_append_unit": "f6cb4ac11ffc0db1bbc01ecf87ec1ca4e26a2ccc64a24c9aebe0b2c8d2ce16a7",
         "_bind_body": "2987a8c5ea3492523f72bf960edfd02af8b55595d336b5dceb7f2c1e22a7f8a5",
-        "_check_v7_admission": "c22a376361774b814af461647defd6f5fc2e200a5cc357bc640faae1956048b9",
+        "_check_v7_admission": "99d9c3ff59b7c6728def3e6a947fd0c1160243db9f8a8710e45f70c3bd64a1ee",
         "_describe_checked_entries": "801983d7a44989fff7031afb726c8865c654c64be1bbbe6a43a4103672a0430a",
         "_describe_identity": "9bb7503add880d286c1090f5e1c17b70f16c710c36367bf548a1fb11dd75b8cb",
         "_describe_json": "7c6004e53039a80228d53341ea102c68af46e1cc51855d15c96893ebef98c919",
@@ -18331,7 +18331,7 @@
         "build_inventory": "543bab306bae3a905a1169963dd36f45157da878818d28597eb1ec34f091f24f",
         "compute_allowance_rows_bound": "43cedd0b96e55219fc11fc700beb8044053e677919c8c6088032814fc1e4703e",
         "describe_carried_pool": "b8c0046b42a8d1d5d4d96483e43f2c49afbc294acad7e86f5b965bc922646932",
-        "measure_turn_frames": "978b0db4ae227ddd1f3871bcde87ff42a799adfd09ace5e7035dd54bea9dfefe",
+        "measure_turn_frames": "ec89831789d8b1abeee86896ea5b6df38d787b7758fac76f930ec46b7c0b5f98",
         "observe_carried_chain": "7830acc80f56e928029aec9390682f3131b0401efcfae5710bc27f826ef9fe5c",
         "plan_inventory": "427d865ada5c730d6601f112e91becc1da90deba9d364145001dcbdee033d0d0",
         "project_carried_turn": "0c984a434694f523c26e101401f7d285b7d189fdf69c5cab89491985e5cbb682"
@@ -18406,7 +18406,7 @@
         "e9998aa48e9485ab2b20bec6cc0034e330b920b589625aac2c32361fe1447e03",
         "ee40fa0154dd550b5e1956b30fd0089c7e28eceb5a623ab0241aba4b4f0fd5c8"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
     },
     "research_harness.operations": {
       "ast_sha256": "7a7259d4608d2d8309156acf6ea55d3779a24ba3d2abb9468f34a62a9f977408",
@@ -20242,7 +20242,7 @@
       "reason": "Reviewed explicit capacity replacement command context and frozen refusal notice forwarding into both real parts fitters, with exact candidate preflight and strict smaller-request checks. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_handles": {
-      "ast_sha256": "62caa83444e693065ef92b7bc5300edd0fd48f37fff0b2c004e8027d5f758d64",
+      "ast_sha256": "7257d93f0eccad48edf5fef1587f80cad93ebfba8e1b1c5fe5e51b2c7481d91e",
       "functions": {
         "_expand_value": "3d9624a1411cd821bd3fdcbe417072a07a432c8099b2d7dfa53c46fae504cfaa",
         "_refuse_handle": "915d5b47f24ddee7a7a3492784adfdd8386f9db2b8bfb1470e2770bc84c650ab",
@@ -20254,7 +20254,7 @@
         "expand_handles": "9fac95ac7876a6df00fa2f4de4fa53282c35c117771a55b147bfc64162bb0729",
         "is_material_output": "8ab06ac48e4a0683f6f62ce067cd2952f4d14341b89c5c69fe9d9203dd99ed39",
         "record_handle_output": "8b81b25a6e5885db6d40dcbed842f0a3526f9e343f28d0f261e9a5a222733551",
-        "validate_material": "58bf93c95a5a7c70a8ae7620b8de2295a61949a7b8a405afbfccc8327477a42b"
+        "validate_material": "c1abeb7ad05adfb3867df880b0904272fe894074d25cedf194937aae7f603b4d"
       },
       "packet_call_digests": [
         "08a3801a5dc278a4fa3ec3959db6d5254e5c484656c412791dbd2ee5f4e0babc",
@@ -20285,7 +20285,7 @@
         "e6073a699e918e9e62f101144415463a598070ca270e8c69118b271085873789",
         "f71df93e3effb278f474cea48473ab543f2e3e9f35807725d57775c354ddc1d9"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
     },
     "research_harness.review_input_projection": {
       "ast_sha256": "d80dcb0e2f1b7985130cf94a1b023a143725fe366dd627a6ee8091236bd355f2",
@@ -20987,11 +20987,11 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_plan_steps": {
-      "ast_sha256": "d41490f8632ce63c9c88f6ee7d548aecb2077a1b29ddaf904fd8d9b5202b51c9",
+      "ast_sha256": "b18ac2cf35fb950ad1772efba01f54bb598e9e2bc5fb586ce456e5319dbe1312",
       "functions": {
         "_build_identity_payload": "8c41d637f54ac4de2e9d293d13134f6a1383c0f7c5aa4b5a49def65900292e6e",
         "_describe_session_route_steps": "01fa8f8c3ca1320a76e96825d7dbde99f8a691b141450938e35ba8faa1df2244",
-        "complete_plan": "20e552b72de7f056b544031d918662b420ba33a7510723836564330512be9be3",
+        "complete_plan": "3d1dbe964954208141b70a1bb0296041e0f8799b1c2875b237336e40c953e777",
         "describe_capacity_steps": "442d2c73dfadb15ff6bb92ede22da18610582beb03970aa5b8e17049ba6bb735",
         "describe_role_handoff": "d65f685aa227cdcc7b1b2afa6a57b59d717acb8108d7a53febd4949d11744429",
         "describe_step": "b58ff7a5887eb4e40bc93fb01c56eca87957f6ec9f2bb489bd3cbfb0b04eb991",
@@ -21007,7 +21007,7 @@
         "78548c36c7cc5bb377d14d1244f711e05dfa5277795ce8cd541d00119f739603",
         "b8b5c33a4bfba3471cd01e8011931d6115a8c93dc2fecce646b5fe3839895214"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
     },
     "research_harness.review_preflight": {
       "ast_sha256": "03aa53408f6d59eb23b4a59ace59184c42d7ab52d834c98cad8e0331538e2a44",
@@ -21168,7 +21168,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_prompt_paragraphs": {
-      "ast_sha256": "89a36a2af352e7604c285eaa8eea054837488ca1bd213cc3d6237896a173b09c",
+      "ast_sha256": "af1763c664b2c28ca40fde1da8aa05dfb5f4bc4535cf328cb3c480c9eb1054d4",
       "functions": {
         "_append_selected_paragraphs": "b463ad8836dd7f7e2c0961c4c64ade4a0ed5bfbbce62519f3b113f910050ffd6",
         "_describe_template_suffix": "c3800a380dad412ec2eabb656c368209f4434960ad3366bc2706d64ad49d51b1",
@@ -21210,10 +21210,10 @@
         "bd01b36e067355a8f0c1e765513e33161679a741f0cc47e75c8ba682741d2e43",
         "c028215c5274d690c4dbc9e561a96faefb9da20033afaeee3184646b0134c60e"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "08628d53cda0e816b90b54411d4c6644e4f3dd48e3f48f7403d87fc83c93c3c2",
+      "ast_sha256": "446d994ab89a205c937cffb1bfe734a145f0f0489a7159ab1f8c639e1f91c08a",
       "functions": {
         "_assignment_state": "805eca7b4483852dbee0f8e05928cde22acbc7c7be8ec46ba127c3e71a0ddcbc",
         "_bars": "fd41a7b94078e8e0761696db4a7cc67b063cbb5787f76d6d3dae65fcc7fe5f9f",
@@ -21390,7 +21390,7 @@
         "f71df93e3effb278f474cea48473ab543f2e3e9f35807725d57775c354ddc1d9",
         "f9de906674de2fc03fd882f06649fc77f3536e68a95d398f173553e2a01ce4df"
       ],
-      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged."
+      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
     },
     "research_harness.review_provider_usage": {
       "ast_sha256": "2007b2994c6a401bf46b4f9341daf0442821c2c6a6cdb85abb14f7329a23dd4f",
@@ -21505,7 +21505,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_refusal_replacement": {
-      "ast_sha256": "4db67a0ba02ffa8b80f9c7c820e1c632855029c4c7286eaf59a5eba940eee8a0",
+      "ast_sha256": "c17dcdeffc2f15202cbec9c5e4f43bc39c931111cc6ea6dc1fa44819c25e9af4",
       "functions": {
         "find_output_successor": "f9aa987eea6760e2a7fd3e29888f5e43903e4365d1e50938ea4b17c429b79967",
         "prepare_replacement": "a7ddbaa90806583c3dde8eb3d95f2ab761970823c1a4b66aca47a5dae2efe6fc",
@@ -21534,7 +21534,7 @@
         "f39814fa03694fc06afd107a8e76d88a1044a005183edc72cd8ea55b0d57508f",
         "f94bff00439cfb92fe19efa32bf359ad60d305548b0148aaad4243cb4d2ea818"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless successor ordering; packet construction is unchanged."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless successor ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
     },
     "research_harness.review_request_evaluation": {
       "ast_sha256": "0907cb21fc2c40c98f294d1c49ce2f9712aee0ecaa3f8401ad9d201a9c81179b",
@@ -37081,6 +37081,51 @@
           "items": {
             "$ref": "stage3_unread_row"
           }
+        }
+      }
+    },
+    "v7_affected_note_list_row": {
+      "bound": {
+        "serialized_characters": 512
+      },
+      "class": "fixed",
+      "ground": "LIST_PAGE_SUPPLIERS.affected_notes: one note per row in pinned newest-first order.",
+      "members": {
+        "chain": {
+          "class": "fixed"
+        },
+        "characters": {
+          "class": "fixed"
+        },
+        "handle": {
+          "class": "fixed"
+        },
+        "id": {
+          "class": "fixed"
+        }
+      }
+    },
+    "v7_passage_request": {
+      "class": "fixed",
+      "members": {
+        "anchor": {
+          "bound": {
+            "characters": 600
+          },
+          "class": "fixed",
+          "ground": "A nonempty phrase or null, selecting the beginning of the resolved delivery part."
+        },
+        "characters": {
+          "bound": {
+            "characters": 100000
+          },
+          "class": "fixed"
+        },
+        "id": {
+          "class": "fixed"
+        },
+        "unit": {
+          "class": "fixed"
         }
       }
     }
@@ -92258,33 +92303,21 @@
                     },
                     "decisive_work_ids": {
                       "bound": {
-                        "serialized_characters": "selected_request_input_limit"
+                        "serialized_characters": 10000
                       },
                       "class": "fixed",
-                      "entry": "Q2",
-                      "fixture": "canonical:stage2_native_records",
-                      "ground": "Frozen v2 input metadata: the complete exact selected request must pass keyed route capacity and the reading projection admission before dispatch; nested metadata shares that finite envelope.",
-                      "grows": true,
+                      "ground": "V7 final: the list is measured in decisive_work_ids of the final frame up to DECISIVE_WORK_IDS_CHARACTERS. Larger lists or a moved field are delivered as fixed_field material and represented by count and unit.",
                       "items": {
                         "class": "fixed"
                       },
-                      "quantity": "sources",
-                      "quantity_contract": {
-                        "canonical": {
-                          "dimension": "entries",
-                          "entry": "Q2",
-                          "factory": "stage2_native_records",
-                          "fixture": "canonical:stage2_native_records",
-                          "path": [
-                            "native",
-                            "scientific_context",
-                            "decisive_work_ids"
-                          ],
-                          "property_kind": "native_v2_records",
-                          "quantity": "sources"
+                      "members": {
+                        "count": {
+                          "class": "fixed"
+                        },
+                        "unit": {
+                          "class": "fixed"
                         }
-                      },
-                      "sample": "x"
+                      }
                     },
                     "family_reading_plan_version": {
                       "bound": {
@@ -92904,6 +92937,76 @@
             "reading_final": {
               "class": "fixed",
               "members": {
+                "gaps": {
+                  "bound": {
+                    "serialized_characters": "gap_rows plus target allowances"
+                  },
+                  "class": "material",
+                  "ground": "Forecast rows cost at most GAP_ROW_CHARACTERS (400) per gap_rows; reviewer rows include text of at most 600 characters and charge their exact wire size to the target grant.",
+                  "items": {
+                    "class": "material",
+                    "members": {
+                      "condition": {
+                        "class": "fixed"
+                      },
+                      "formulation": {
+                        "class": "fixed"
+                      },
+                      "handle": {
+                        "class": "fixed"
+                      },
+                      "outcomes": {
+                        "class": "fixed",
+                        "items": {
+                          "class": "fixed"
+                        }
+                      },
+                      "target": {
+                        "class": "fixed"
+                      },
+                      "text": {
+                        "bound": {
+                          "characters": 600
+                        },
+                        "class": "material",
+                        "ground": "project_own_turn charges the serialized row including text to the target allowance."
+                      }
+                    }
+                  }
+                },
+                "material_request": {
+                  "bound": {
+                    "parts": 8,
+                    "title_characters": 120
+                  },
+                  "class": "fixed",
+                  "members": {
+                    "part": {
+                      "class": "fixed"
+                    },
+                    "ref": {
+                      "class": "fixed"
+                    },
+                    "stage": {
+                      "class": "fixed"
+                    },
+                    "title": {
+                      "class": "fixed"
+                    }
+                  }
+                },
+                "minimum": {
+                  "class": "fixed",
+                  "members": {
+                    "gaps_unit": {
+                      "bound": {
+                        "serialized_characters": 31
+                      },
+                      "class": "fixed",
+                      "ground": "Measured in the v7 final frame; physical handle of minimum_gaps."
+                    }
+                  }
+                },
                 "unread": {
                   "$ref": "stage3_unread_final"
                 }
@@ -94982,6 +95085,46 @@
             "reading_turn": {
               "class": "fixed",
               "members": {
+                "affected_notes": {
+                  "class": "fixed",
+                  "members": {
+                    "characters": {
+                      "class": "fixed"
+                    },
+                    "index": {
+                      "bound": {
+                        "serialized_characters": 10000
+                      },
+                      "class": "fixed",
+                      "ground": "Newest-first index fixed at assignment one, within AFFECTED_INDEX_CHARACTERS; the frame reserves 20000 wire characters.",
+                      "members": {
+                        "omitted": {
+                          "class": "fixed"
+                        },
+                        "rows": {
+                          "class": "fixed",
+                          "items": {
+                            "class": "fixed",
+                            "members": {
+                              "chain": {
+                                "class": "fixed"
+                              },
+                              "characters": {
+                                "class": "fixed"
+                              },
+                              "handle": {
+                                "class": "fixed"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "notes": {
+                      "class": "fixed"
+                    }
+                  }
+                },
                 "claim_digest": {
                   "$ref": "field_65efb83bb3ee"
                 },
@@ -108624,6 +108767,7 @@
     "fulltext_urls",
     "fulltexts",
     "gaps",
+    "gaps_unit",
     "gate",
     "gate-auto-pass",
     "gate-override",
@@ -109062,6 +109206,7 @@
     "metric_output",
     "milestone",
     "minimum",
+    "minimum.gaps_unit",
     "minimum_characters",
     "minimum_gaps",
     "minimum_items",
