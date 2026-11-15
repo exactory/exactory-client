@@ -6697,7 +6697,7 @@
       "fixed_in": "0.89.3",
       "test_kind": "real_shape",
       "tests": [
-        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_observed_stopped_plans_keep_pending_capture_and_delivery_credit",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_archived_stopped_plans_keep_pending_capture_and_delivery_credit",
         "test_session_rules_v3.SessionRulesTests.test_result_support_source_citations_require_v3_delivery_without_changing_v2"
       ]
     },
@@ -6713,6 +6713,46 @@
         "test_slate_forming_descriptors.SlateFormingTests.test_imported_history_keeps_origin_citations_and_delivers_requested_text",
         "test_publication_streaming.ManagedStreamingTests.test_large_streamed_files_keep_two_ready_manuscript_reviews",
         "test_publication_streaming.ManagedStreamingTests.test_validate_deposit_compares_large_bundle_files_with_bounded_reads"
+      ]
+    },
+    {
+      "id": "release-0900-ci-failures-a",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "release merge compatibility and synthetic fixture drift",
+      "summary": "PR 143 exposed revisionless legacy assignment selection, omitted capacity parameters in staged estimates, stale synthetic review inputs, and an admission race that hid a missing assignment binding. Nested staged fixture setup could also leak an observation backend after an exception.",
+      "expected": "Legacy revisionless assignments retain their admission and later replacements remain selected. Staged estimates retain frame capacity parameters without rewriting packets. Synthetic reviews bind stored attempts and prompts, preserve historical protocol journeys, exhaust permitted refusal replacements before a new repair, and restore nested fixture patches even after setup fails.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_posted_closure_compatibility.LegacyUnpostedAdmissionTests.test_unposted_native_review_without_revision_plans_and_invokes",
+        "test_problem_result_reassessment_binding.ResultReassessmentBindingTests.test_current_and_earlier_problem_result_prompts_bind_records_without_a_digest",
+        "test_research_claude_result_text.ClaudeResultTextTests.test_recursive_candidate_returns_response_and_records_failed_attempt",
+        "test_research_problem_second_post.ProblemSecondPostTests.test_a_second_selected_candidate_is_posted_from_the_same_workspace",
+        "test_research_route_retirement.ExhaustedRepairTests.test_a_new_repair_continues_the_slot_after_two_refused_outputs",
+        "test_review_budget_concurrency.ReviewBudgetConcurrencyTests.test_ordinary_and_staged_processes_compete_for_the_last_admission",
+        "test_review_staged_adjudication.IncompleteAdjudicationTests.test_incomplete_outcome_cannot_be_recorded_as_a_scientific_finding",
+        "test_review_staged_adjudication.IncompleteAdjudicationTests.test_incomplete_result_cannot_be_recorded_as_a_value_review",
+        "test_review_staged_adjudication.StagedAdjudicationTests.test_changed_selection_invalidates_recorded_effective_finding",
+        "test_review_staged_adjudication.StagedAdjudicationTests.test_current_source_gap_blocks_recording_and_historical_readiness",
+        "test_review_staged_adjudication.StagedAdjudicationTests.test_paged_finding_records_effective_disposition_and_raw_binding",
+        "test_review_staged_adjudication.StagedAdjudicationTests.test_repaired_adjudicator_records_and_revalidates_exact_reassessment",
+        "test_review_staged_adjudication.StagedAdjudicationTests.test_repaired_ordinary_adjudicator_records_exact_reassessment",
+        "test_review_staged_adjudication.StagedAdjudicationTests.test_unavailable_selected_graph_returns_a_historical_obligation",
+        "test_review_staged_binary.StagedBinaryTests.test_prepare_task_plan_with_artifact_store_freezes_exact_native_request",
+        "test_review_staged_integration_partitions.IntegrationPartitionTests.test_actual_renderer_partitions_hierarchy_fanout",
+        "test_review_staged_integration_partitions.IntegrationPartitionTests.test_actual_renderer_splits_large_integration_to_complete_card_leaves",
+        "test_review_staged_output_evidence.StagedComputationOutputTests.test_render_with_search_computation_formal_check_and_native_result_matches_full_store",
+        "test_review_staged_output_evidence.StagedOutputEvidenceTests.test_render_with_retained_problem_evidence_matches_full_store_state",
+        "test_review_staged_output_evidence.StagedOutputEvidenceTests.test_staged_context_events_refuse_record_reference_dependencies",
+        "test_review_staged_scale.StagedScaleTests.test_passing_entry_empty_state_and_view_have_bounded_exact_work",
+        "test_review_staged_scale.StagedScaleTests.test_protocol_planning_does_not_rehash_the_epoch_when_remapping_tasks",
+        "test_review_staged_scale.StagedScaleTests.test_upgrade_refuses_output_overflow_without_changing_the_existing_slot",
+        "test_review_staged_scale_entry.StagedScaleEntryTests.test_automatic_large_entry_skips_scale_checks_and_records_byte_exact_06918_part",
+        "test_review_staged_sizing.RenderedSizingTests.test_card_only_integration_partitions_against_output_and_duration",
+        "test_review_budget_concurrency.ReviewBudgetConcurrencyTests.test_ordinary_process_can_spend_the_last_admission",
+        "test_fixture_isolation.FixtureIsolationTests.test_failed_staged_integration_setup_restores_observation_backend",
+        "test_review_staged_output_evidence.StagedProfileTests.test_profile_estimates_include_the_frozen_frame_capacity_parameters",
+        "test_incident_ledger.IncidentLedgerTests.test_every_listed_test_resolves_without_running_the_method"
       ]
     }
   ]

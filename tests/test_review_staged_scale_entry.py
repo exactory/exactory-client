@@ -84,9 +84,11 @@ class StagedScaleEntryTests(ResultPartsCase):
             dict(id=assignment['id'], role='result', context={}), records['review_route']['route'], packets[-1],
             protocol.canonical_prompt('result', orchestration='problem_creation'), read_history(self.case.artifacts, assignment))
         self.assertEqual(_canonical(recorded[KEY]), _canonical(expected[KEY]))
+        expected = protocol.prepare_capacity_notice(records, records['review_route']['route'], 'result', expected)
         self.assertEqual(assignment['packet'], protocol._put_json(self.case.artifacts, expected))
         self.assertEqual(assignment['prompt'], protocol.canonical_prompt(
-            'result', orchestration='problem_creation', excerpts=True, evidence_parts='part'))
+            'result', orchestration='problem_creation', excerpts=True, evidence_parts='part',
+            **protocol.prompt_paragraphs.select_prompt_parameters('result', expected)))
         self.assertTrue(read_history(self.case.artifacts, assignment))
 
     def test_explicit_under_bound_entry_preflights_and_freezes_manifest_once(self):

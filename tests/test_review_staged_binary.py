@@ -180,6 +180,7 @@ class StagedBinaryTests(unittest.TestCase):
                      configuration=dict(max_output_tokens=1000, timeout_seconds=600))
         records = dict(self.records, review_route={route['id']:route})
         controller = dict(id=self.epoch['controller_assignment_id'], route_id=route['id'],
+                          prompt=ordinary.canonical_prompt('result', orchestration='problem_creation'),
                           packet=ordinary._put_json(self.artifacts, self.source_packet))
         planned = protocol.prepare_task_plan(records, self.artifacts, controller, self.epoch, self.task)
         request = ordinary._read_json(self.artifacts, planned['request'])

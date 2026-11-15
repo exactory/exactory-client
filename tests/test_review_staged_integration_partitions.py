@@ -28,6 +28,7 @@ class IntegrationPartitionTests(unittest.TestCase):
         self.route = dict(id='route', adapter='codex_cli_v1', model='fixture', endpoint='codex://local',
                           configuration=dict(max_output_tokens=10000, timeout_seconds=600))
         self.controller = dict(id=self.epoch['controller_assignment_id'], route_id='route',
+            prompt=protocol.canonical_prompt('result', orchestration='problem_creation'),
             role='result', reviewer_id='reviewer-A', author_id='author', dossier_id=None,
             staged_review=dict(kind='controller', epoch_id=self.epoch['id']),
             packet=protocol._put_json(self.artifacts, {}))

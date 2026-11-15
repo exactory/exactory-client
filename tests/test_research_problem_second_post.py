@@ -10,10 +10,11 @@ from research_harness.evidence import digest
 from research_harness.gates import gate_state
 from research_harness.literature import record_search
 from research_harness.problem_delivery import export_problem
-from research_harness.problem_openness import export_openness
 from test_research_problem_assessment import build_assessment
 from test_research_problem_attempt import build_attempt
 from test_research_problem_delivery import ProblemDeliveryCase
+from test_research_problem_reviews import record_historical_openness_assignment
+from openness_legacy_fixtures import export_as_0_85_3
 
 
 class ProblemSecondPostTests(ProblemDeliveryCase):
@@ -71,13 +72,13 @@ class ProblemSecondPostTests(ProblemDeliveryCase):
         search = self.capture_search()
         search.update(id="direct-second", question=second_text)
         self.mutate(record_search, search)
-        exported = export_openness(self.store, {
+        exported = export_as_0_85_3(self.store, {
             "assignment_id": "openness-second", "reviewer_id": "native-reviewer",
             "minimum": {"searches": [{"formulation": second_text, "search_id": "direct-second"}],
                         "settling_work_id": None, "duplicate_resolutions": []}},
             self.root / "openness-second-packet")
         native = json.loads(self.artifacts.read(exported["native_packet"]))
-        self.mutate(review_protocol.record_assignment, {
+        record_historical_openness_assignment(self, {
             "id": "openness-second", "route_id": "route", "dossier_id": None,
             "role": "native_math", "reviewer_id": "native-reviewer", "author_id": "problem-author",
             "context": {"native_packet": exported["native_packet"]}})

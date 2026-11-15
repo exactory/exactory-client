@@ -91,7 +91,7 @@ class RetiredRouteTests(RouteRetirementCase):
 
 
 class ExhaustedRepairTests(RouteRetirementCase):
-    """A repair whose two outputs were both refused gives way to a new repair of the same slot."""
+    """An exhausted repair position gives way to a new repair of the same slot."""
 
     def setUp(self):
         super().setUp()
@@ -102,11 +102,11 @@ class ExhaustedRepairTests(RouteRetirementCase):
         self.retire()
         self.second_route()
 
-    def refuse_twice(self, assignment):
-        """Two outputs that label the inherited bar confirmed while changing its status; recording each is refused."""
+    def refuse_outputs(self, assignment, attempts=("first", "second")):
+        """Refuse outputs that change the inherited bar while labeling it confirmed."""
         output = dict(self.review_response("bar"), reassessment={"assignment_id": "assignment-bar-a", "findings": [
             {"review_id": "bar-a", "disposition": "confirmed", "reason": "The standard stands.", "evidence": [self.evidence]}]})
-        for attempt in ("first", "second"):
+        for attempt in attempts:
             with patch("research_harness.review_transport.send_request", return_value=self.provider_response(output)):
                 review_protocol.invoke_assignment(self.store, {"id": assignment + "-" + attempt, "assignment_id": assignment},
                     expected_revision=self.store.revision, request_id="invoke-" + assignment + "-" + attempt, credential="fixture-only")
@@ -117,9 +117,20 @@ class ExhaustedRepairTests(RouteRetirementCase):
 
     def test_a_new_repair_continues_the_slot_after_two_refused_outputs(self):
         self.mutate(review_protocol.record_assignment, self.repair_payload())
-        self.refuse_twice("repair-a")
-        saved = self.mutate(review_protocol.record_assignment,
-                            dict(self.repair_payload(), id="repair-b", reviewer_id="repair-reviewer-2"))["result"]
+        self.refuse_outputs("repair-a")
+        payload = dict(self.repair_payload(), id="repair-b", reviewer_id="repair-reviewer-2")
+        with self.assertRaises(ResearchError) as refused:
+            self.mutate(review_protocol.record_assignment, payload)
+        self.assertEqual(refused.exception.code, "review_resampling_forbidden")
+        from research_harness.review_continuation import plan_next
+        head = "repair-a"
+        for _ in range(2):
+            plan = plan_next(self.store.snapshot()["records"], self.artifacts, head)
+            self.assertEqual(plan["state"], "replace", plan)
+            replacement = self.mutate(review_protocol.record_assignment, plan["payload"])["result"]
+            head = replacement["id"]
+            self.refuse_outputs(head, attempts=("first",))
+        saved = self.mutate(review_protocol.record_assignment, payload)["result"]
         self.assertEqual(review_context_repair.slot_id(self.store.snapshot()["records"], saved), "assignment-bar-a")
 
     def test_a_repair_with_a_recordable_output_still_holds_the_slot(self):

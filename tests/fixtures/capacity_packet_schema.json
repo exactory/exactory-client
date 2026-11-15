@@ -20949,7 +20949,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "d9f07b7063f396e7b388482dfdd888215c5ec01e0b8c5c494f1e141d2274b1a5",
+      "ast_sha256": "933c8fb90da3d178896b72786c038bd528eeef81f3b565fe627d23da95bb4a32",
       "functions": {
         "_assignment_state": "805eca7b4483852dbee0f8e05928cde22acbc7c7be8ec46ba127c3e71a0ddcbc",
         "_bars": "fd41a7b94078e8e0761696db4a7cc67b063cbb5787f76d6d3dae65fcc7fe5f9f",
@@ -21033,7 +21033,7 @@
         "find_common_prompt_version": "6703a50571e3b46cfad68c28e864395900405707189ba798c45360fd4725e44f",
         "find_current_problem_bar_ids": "a036fa4d45d9540f193b9d85cb1bd8421bd1a6c9ff7aa6d25b15289ca9b99e48",
         "find_historical_bar_reviews": "c8bb404a069fd9c0016aa0dad013a15778a4e697bdd76ae0c2a19de67c2ef3c5",
-        "find_replacement": "ae2c26fabb04b0d6b1ea0a1d4b1dec2d82d5851989e4b3dea0e53ac974cd7ff2",
+        "find_replacement": "523755cd9ab15f13846ee3935343911c16c5988f0d6de23f4e8e50d8baf25d95",
         "has_ended_without_output": "f21d60ceabff57cdfa464f0a0b05ddd53ba4358dc46fd5b541060fceeec9d057",
         "has_exhausted_position": "a6a36d007af0c26245e0fdb1edb9a4e261a1fb5c301586ba7ea56d2f4665e141",
         "has_pending_invocation": "1100f816ca4769d642bcb040f697439bfd738a2a00c832bbbf9b153965e9ac76",
@@ -21126,7 +21126,7 @@
         "f71df93e3effb278f474cea48473ab543f2e3e9f35807725d57775c354ddc1d9",
         "f9de906674de2fc03fd882f06649fc77f3536e68a95d398f173553e2a01ce4df"
       ],
-      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged."
     },
     "research_harness.review_provider_usage": {
       "ast_sha256": "2007b2994c6a401bf46b4f9341daf0442821c2c6a6cdb85abb14f7329a23dd4f",
@@ -21234,9 +21234,9 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_refusal_replacement": {
-      "ast_sha256": "0a2d3146dc44a4e0d31aafeb234a7953f94b526a661ad88564231840ed38294b",
+      "ast_sha256": "bb6e1763af9fd5887c95d93da20e221a4ce53d3970b934d9539308a9bd92c05f",
       "functions": {
-        "find_output_successor": "a35ca231185f8ef46cc1489faa070bf70ba93f228750f106c1e7940d001beb85",
+        "find_output_successor": "f9aa987eea6760e2a7fd3e29888f5e43903e4365d1e50938ea4b17c429b79967",
         "prepare_replacement": "50d42adb784361e6c31ea9741cb990c2b48fed4e72d9e355050a828b94d8b7e6",
         "read_position_context": "cdede8c28f9431efad8671676884d4e166ee1d9ad3e3728ac4414cc53cf87d32",
         "read_replacement_link": "c532b998f7ab3e173deea48b4d2b41ab8df7bcba6534694b9be6e35a17e27160",
@@ -21263,7 +21263,7 @@
         "f39814fa03694fc06afd107a8e76d88a1044a005183edc72cd8ea55b0d57508f",
         "f94bff00439cfb92fe19efa32bf359ad60d305548b0148aaad4243cb4d2ea818"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless successor ordering; packet construction is unchanged."
     },
     "research_harness.review_request_evaluation": {
       "ast_sha256": "0907cb21fc2c40c98f294d1c49ce2f9712aee0ecaa3f8401ad9d201a9c81179b",
@@ -21974,7 +21974,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_staged_protocol": {
-      "ast_sha256": "7baf2c88fbf76dc46583a41091479c56ce24b60a7c94f2c85d46a10911844668",
+      "ast_sha256": "7649c49a7f1aecff230080137e8e615bfd42c1f5cd1dfe8ba8184276bf1518c0",
       "functions": {
         "_collect_successor_ancestry": "adaba0e3062a55abcff00aa835b6634c57342a5b0a5ba4a6f3b0b8c418a9a6d5",
         "_collect_successor_findings": "e295526cf1f0cfcdc760b01f3008a7f3e8b9465975d29647e4bd89c286b494b4",
@@ -21991,7 +21991,7 @@
         "build_incomplete_outcome": "fd032327ed0232d651f4dbd2d556bada73379cd2c66fb70059deba25d94abadf",
         "build_manifest": "61193ae248086af0fa2ace3757ab28f5eeb171e7611a04e6a3fd98d7b0181421",
         "build_packet": "90b3257e5b4fb19db7515ffcdb297193cfab57772fadb882bb2ea16eaa318324",
-        "build_profiles": "f3f61316ccbdc11085a02f8beb464134be50e9f1d6fd40966699062883ab8b93",
+        "build_profiles": "d4da30834eab4aca7a0697d25a4273947a4ba096ed0844fac775213dc6b6f749",
         "build_prompt": "2a43f773ed2c13d3f425a945558ba7909269f1428501fa2df10f057709e407cd",
         "build_request": "eee8de954398c8de1ec9ae54d4b28c84790eeed96e2fcb3cc74176d3ec2daedc",
         "build_selection": "c79ae2cd8fbf02b8359d3591e93ee7e403054200c4bf9d85fa68329ca502e00b",
@@ -22144,7 +22144,7 @@
         "f4c3ef51b8f0e65211e7b558f0a57e04aa43e0c83c2a9066fcc9e79c9907fdff",
         "f6d243d594e08bd80942e0a306c538cad678aacd0b5964d838ccb8a29bea004e"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed PR 143 profile estimation forwarding the selected capacity parameters; packet construction is unchanged."
     },
     "research_harness.review_state_evaluation": {
       "ast_sha256": "02df3d94a0b5e8d1e70c52927c0863e1696d5431d92e7388a3ecad4a46feba64",

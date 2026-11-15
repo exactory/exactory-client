@@ -561,6 +561,9 @@ class ClaudeResultTextTests(unittest.TestCase):
         self.assertNotIn('self_corrected', response['execution'])
         protocol.record_route(self.store, ROUTE, expected_revision=self.store.revision, request_id='deep-route')
         payload = {'id': 'deep-attempt', 'assignment_id': self.assignment['id']}
+        prepared_mutation(self.store, 'fixture.assignment', self.assignment,
+            lambda records, value: ([immutable_record(records, 'review_assignment', value['id'], value)], value),
+            expected_revision=self.store.revision, request_id='deep-assignment')
 
         def build_invocation(records, value):
             invocation = dict(value, route_id=self.route['id'],

@@ -12,8 +12,8 @@ import test_review_staged_integration_partitions as fixtures
 class RenderedSizingTests(unittest.TestCase):
     def test_packet_output_tokens_exclude_the_reserved_margin(self):
         case = fixtures.IntegrationPartitionTests()
-        case.setUp()
         self.addCleanup(case.doCleanups)
+        case.setUp()
         task = case.make_leaf(case.cards[:1])
         measurement = task['measurement']
         self.assertGreater(measurement['output_margin_tokens'], 0)
@@ -25,8 +25,8 @@ class RenderedSizingTests(unittest.TestCase):
         for dimension in ('output', 'duration'):
             with self.subTest(dimension=dimension):
                 case = fixtures.IntegrationPartitionTests()
-                case.setUp()
                 self.addCleanup(case.doCleanups)
+                case.setUp()
                 one = case.make_leaf(case.cards[:1])
                 all_cards = case.make_leaf(case.cards)
                 # Rebuild the envelopes with no originals: all scientific work
