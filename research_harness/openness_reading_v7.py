@@ -38,22 +38,90 @@ PURPOSE_CHARACTERS = 200
 GAP_CHARACTERS = 600
 PASSAGE_REQUESTS = 10
 AFFECTED_INDEX_CHARACTERS = 10000
-CARRIED_READINGS_TEXT = 'Carried turns are your own authenticated earlier readings. '
-CARRIED_KEEP_TEXT = 'For an entry in a delivered carried_reading unit, return {keep:entry_handle,targets} to retain it within each named target allowance. '
-AFFECTED_NOTES_TEXT = ('Affected notes are earlier notes whose sources changed or left; read required carried_reading units first and renew your notes. '
-    'affected_notes gives the count and characters on request; its first-turn index is bounded, with omitted rows available through list_page affected_notes. Request a note by its handle. ')
-KEEP_REVIEWER_TEXT = 'Keep the same reviewer_id when starting another chain for the same statement and route.'
-PASSED_OVER_TEXT = 'Earlier chain {chain} was passed over because its reviewer_id differs.'
+# The texts below are parts of the v7 reading prompt (review_protocol.V7_READING_PROMPT), which a chain keeps from its
+# first assignment to its end. A later change of one of them needs a new protocol or a registered paragraph version.
+CARRIED_READINGS_TEXT = (
+    '\n\nCarried readings. A chain can start with verified reading turns of earlier chains that the same reviewer ran '
+    'over the same statement, the same formulations and the same route. The harness authenticated those turns under '
+    'their own protocols. They are your own earlier readings: this chain delivers no range again that they read in '
+    'a unit that is unchanged, and plan.delivered counts their ranges. In the first turn, reading_turn.notes holds '
+    'the latest carried notes that rest only on unchanged units. The carried excerpts and passage answers reach the '
+    'final turn as entries, as far as the pool holds them: the part of the room of the final that the plan sets '
+    'aside for carried entries.')
+CARRIED_KEEP_TEXT = (
+    ' The entries that the pool cannot hold arrive in a unit of kind carried_reading whose content is the JSON text '
+    '{entries,origin}. Each of its entries is {handle,kind,unit,start,end,sha256,text,purpose,status,targets}, with '
+    'an e handle and no targets. Such an entry reaches the final turn only when you keep it: once the whole unit has '
+    'been delivered, add {keep:<its e handle>,targets:[<target handles>]} to excerpts. The harness then charges the '
+    'entry to the allowance of every named target, as it charges an excerpt. An entry that the remaining allowance '
+    'of a named target cannot hold is not retained and cannot be kept again.')
+AFFECTED_NOTES_TEXT = (
+    '\n\nAffected notes. Carried notes are affected when a unit that they rest on has changed or has left the '
+    'packet. They are not in reading_turn.notes. They arrive in a unit of kind carried_reading whose content is the '
+    'JSON text {notes:{classification,text,units},origin}: text holds the notes, and units lists each unit that they '
+    'rest on as {identity,sha256,current_sha256}, where current_sha256 differs from sha256 for a changed unit and is '
+    'null for a unit that left the packet. The chain delivers the required affected notes before every other unit: '
+    'the newest ones, as many as fit the material allowance with which the chain starts, and at least one. Read '
+    'them against the '
+    'present units, and carry what still holds into your notes. reading_turn.affected_notes gives the number and '
+    'the characters of the affected notes that the chain delivers only on request. In the first turn its index '
+    'lists them by the chain that they come from, as rows {chain,first,last,notes,characters}: first and last are '
+    'the handles of the newest and the oldest of these units, and omitted counts the rows that the index leaves out '
+    'and that the list affected_notes holds. To read such a unit, send a passage request with its handle as unit, '
+    'the anchor {"notes": and the characters of its row.')
+# For the author of a new export; the math-conjecturer skill states the same rule. No code reads this constant.
+KEEP_REVIEWER_TEXT = ('A new chain carries the verified reading turns of an earlier chain only under the same '
+                      'reviewer_id, author, statement, formulations and route. Keep the reviewer_id of the earlier '
+                      'chain when you export again for the same statement.')
+PASSED_OVER_TEXT = ('The earlier chain {chain} read the same statement on the same route under another reviewer_id, '
+                    'so this chain carries none of its turns.')
 FINAL_MATERIAL_FIELDS = ('notes', 'entries', 'gaps', 'material', 'sources', 'fill')
-TARGET_PAGE_SENTENCE = 'Read target_page units first; each row binds a target handle to its formulation.'
-LIST_PAGE_SENTENCE = 'A list page follows the fixed row order; request its stated next cursor to continue, and stop at null.'
-FINAL_PAGES_STATEMENT = 'This release does not serve a v7 final in pages for this number of targets.'
-INVALID_READING_MESSAGE = 'Return the v7 reading response with the supplied bindings, bounded notes, delivered excerpts, gaps and at most ten valid passage requests.'
-NOTES_COST_TEXT = 'The notes bound counts their serialized cost, including escaped quotes and backslashes.'
-ADMISSION_STOP_MESSAGE = 'Choose a packet with fewer neighbours or another serving route. Neither installed protocol admits this packet on this route.'
-ADMISSION_SMALLER_ANSWER = 'Review a packet with fewer neighbours'
-ADMISSION_ROUTE_ANSWER = 'Review on another route'
-ADMISSION_QUESTION = 'Should this review bind fewer neighbours, or run on another route?'
+TARGET_PAGE_SENTENCE = (
+    ' When the list of formulations, the statement record or the other fields of the native packet are too long '
+    'for the fixed part of a request, they arrive as units, before the full texts and the records. '
+    'reading_turn.formulations is then {first,last,count}, and units of kind target_page deliver the list of '
+    '{handle,formulation}; every target handle from first to last is valid in an answer. reading_turn.statement is '
+    'then {unit:"statement"}, and a unit of kind fixed_field with the label statement delivers the record. A unit '
+    'of kind fixed_field with the label native_frame delivers the other fields. Read these units first.')
+LIST_PAGE_SENTENCE = (
+    ' A request {id,kind:"list_page",list,after} asks for the next page of a list that a packet shows only in part. '
+    'list is allowances, affected_notes, unread or unread_attempts, and an answer holds at most one request for '
+    'each list. after is null for the first page of a list, and for a later page it is the next of the latest page '
+    'of that list. The page arrives in a later turn as a row of kind list_page with '
+    'page: {list,after,next,remaining}, and its content is the JSON text {list,after,rows,next,remaining}. The rows '
+    'of a list keep one fixed order. next null means that the list has ended. The harness refuses a request for a '
+    'list that has ended or holds no row, and a request with another value of after. A page uses room of its turn '
+    'and no allowance.')
+# What neither a smaller task nor a registered route serves. plan_capacity_recovery gives it for a v7 turn without a
+# smaller task, and describe_admission_stop for a packet that no registered route holds.
+FINAL_PAGES_STATEMENT = (
+    'A chain of exactory-openness-reading-v7 takes its final in one request, and a reading turn delivers at least '
+    'the lowest material level of the stored plan. This release holds no smaller task than these: a final in '
+    'several pages is not part of it.')
+INVALID_READING_MESSAGE = (
+    'This answer is not the reading response of exactory-openness-reading-v7. Return exactly '
+    '{schema_version:2,stage:"reading",subject_digest,claim_digest,reviewer,notes,excerpts,gaps,passage_requests}, '
+    'with the three bindings of the packet. notes is a nonempty string within allowances.notes, also as the request '
+    'carries it. An excerpt is {unit,text,purpose,targets}, with text copied exactly from the content that this turn '
+    'delivers for that unit, or {keep,targets} for a carried entry whose unit was delivered whole. A gap is '
+    '{formulation,text}, with a target handle and at most 600 characters. passage_requests holds at most ten '
+    'requests, each {id,unit,anchor,characters} or {id,kind:"list_page",list,after}, within the passage allowance '
+    'and with the cursor of its list; in a final turn it holds at least one. details names the value that failed '
+    'where the rule has one.')
+NOTES_COST_TEXT = (
+    ' The same bound holds for the size of the notes as the next request carries them, where a quote, a backslash '
+    'or a line break takes two characters.')
+ADMISSION_STOP_MESSAGE = (
+    'No reading protocol of this release admits this packet on this route, so the harness records no assignment. '
+    'details.admissions gives the refusal of each protocol in its order. details.targets is the number of '
+    'formulations of the packet. details.largest_one_request_targets, when it is above 0, is the largest number of '
+    'formulations whose final fits one request of exactory-openness-reading-v7 on this route. '
+    'details.serving_routes lists the verified registered routes that hold this review; when it is empty, '
+    'details.unserved_range states what no registered route serves. details.decision states what the owner decides '
+    'and the steps of each answer.')
+ADMISSION_SMALLER_ANSWER = 'Record a statement with fewer neighbours'
+ADMISSION_ROUTE_ANSWER = 'Run the review on another route'
+ADMISSION_QUESTION = 'Whether this review runs over a statement with fewer neighbours, or on another route.'
 
 
 class _PlanningArtifacts:
@@ -130,7 +198,13 @@ def list_target_labels(native):
 
 UNREAD_PACKET_CHARACTERS = 30000
 UNREAD_CORE_CHARACTERS = 1500
-UNREAD_FINAL_MESSAGE = 'Assign the final over the unread ranges after the last provider-refused sequence at the reading floor.'
+# One text for the planned step (details.message) and for the refusal of any other payload with context.unread.
+UNREAD_FINAL_MESSAGE = (
+    'The provider refused a reading turn of this chain in every permitted sequence, the last one at the lowest '
+    'reading level, so the chain takes its final over the ranges that it did not read. The step that '
+    'review-series plans for that turn is a review-assignment whose context.unread.assignment_id names the refused '
+    'turn and which keeps its role, route, dossier, reviewer and author. The harness admits that payload alone: '
+    'run review-series on the head and take the step.')
 
 
 def plan_unread_final(records, artifacts, assignment, position):
@@ -1638,7 +1712,10 @@ def read_bound_state(artifacts, assignment, packet):
     state = json.loads(artifacts.read(chain['state']))
     if (digest(plan) != binding['plan_digest'] or digest(inventory) != binding['inventory_digest']
             or digest(state) != binding['state_digest']):
-        raise ResearchError('review_invocation_unverified', 'The v7 packet must bind its stored plan, inventory and state.')
+        raise ResearchError('review_invocation_unverified',
+            'The packet of this turn does not bind the stored capacity plan, inventory and state of its chain: a '
+            'digest in the packet differs from the stored artifact. The harness uses no output of the turn. Check '
+            'the record with record-check.')
     return plan, inventory, state
 
 
@@ -1706,11 +1783,15 @@ def _rebuild_own_state(records, artifacts, prior, inventory, plan, route):
         observed = assignment_state(records, artifacts, member['id'])
         if not observed['ready']:
             raise ResearchError('review_source_continuation_unverified',
-                                'Every continued v7 turn needs an authenticated checked output.',
+                                'The turn that details.assignment_id names has no observed, authenticated '
+                                'output that passed its checks, so the chain cannot continue from it. Run '
+                                'review-series on the chain and take the step that it plans.',
                                 dict(assignment_id=member['id'], obligations=observed['obligations']))
         output = observed['output']
         if output.get('stage') not in ('reading', 'material'):
-            raise ResearchError('review_resampling_forbidden', 'A final finding ends the v7 chain.')
+            raise ResearchError('review_resampling_forbidden',
+                'A final turn of this chain returned its finding, which ends the chain. Record the finding with '
+                'problem-openness, or export a new packet for a new chain.')
         _, _, before = read_bound_state(artifacts, member, frozen)
         projection = _project_observed_turn(records, artifacts, member, frozen, output,
                                             observed['attempt_id'], inventory, route, before)
@@ -1738,21 +1819,30 @@ def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_
     if (prior['route_id'] != value['route_id']
             or any(normalized_text(prior[key]) != normalized_text(value[key]) for key in ('reviewer_id', 'author_id'))
             or prior['context']['native_packet'] != value['context']['native_packet']):
-        raise ResearchError('review_source_continuation_mismatch', 'A v7 continuation keeps its packet, reviewer and route.')
+        raise ResearchError('review_source_continuation_mismatch',
+            'The next turn of a reading chain keeps the native packet, the route, the reviewer and the author of '
+            'the turn that it continues. Repeat these values of that turn.')
     if find_replacement(records, prior) is not None:
-        raise ResearchError('review_assignment_replaced', 'Continue the recorded replacement of this v7 turn.')
+        raise ResearchError('review_assignment_replaced',
+            'A later assignment replaced the named turn. Continue from that replacement; review-series resolves '
+            'the head of the chain from any of its assignments.')
     successors = [row for row in records.get('review_assignment', {}).values()
                   if row.get('context', {}).get('prior_assignment_id') == prior_id
                   and not ((has_ended_without_output(records, row['id']) or is_dead_assignment(records, row))
                            and find_replacement(records, row) is not None)]
     if successors:
-        raise ResearchError('review_source_continuation_fork', 'Continue the latest v7 turn, without a second branch.')
+        raise ResearchError('review_source_continuation_fork',
+            'Another turn already continues the named turn, and a reading chain has one line of turns. Continue '
+            'from the latest turn of the chain, which review-series resolves from any of its assignments.')
     if replacement and prove_replacement:
         from .review_failure_class import plan_after_failure
         recovery = plan_after_failure(records, artifacts, prior_id)
         expected = recovery.get('details', {}).get('recovery', {}).get('payload', {})
         if recovery['state'] != 'replace' or expected.get('context') != value['context']:
-            raise ResearchError('invalid_review_context', 'A v7 capacity replacement needs the proved smaller pending task.')
+            raise ResearchError('invalid_review_context',
+                'This payload is not the replacement that the plan of the failed turn gives. A replacement with '
+                'context.reading_replacement is admitted only as the step that review-series plans for that turn, '
+                'with the context of that step. Run review-series on the head.')
     frozen = json.loads(artifacts.read(prior['packet']))
     handoff = describe_ratio_handoff(records, artifacts, prior)
     if handoff is not None:
@@ -1766,7 +1856,9 @@ def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_
     else:
         observed = assignment_state(records, artifacts, prior_id)
         if not observed['ready']:
-            raise ResearchError('review_source_continuation_unverified', 'Continue only an authenticated checked v7 turn.')
+            raise ResearchError('review_source_continuation_unverified',
+                'The named turn has no observed, authenticated output that passed its checks, so the chain cannot '
+                'continue from it. Run review-series on the chain and take the step that it plans.')
         rebuilt = _rebuild_own_state(records, artifacts, prior, inventory, plan, route)
         state = rebuilt['state']
         requests = state.get('pending_requests', [])
@@ -1880,7 +1972,14 @@ def prepare_notice_capacity_assignment(records, artifacts, value, revision, prio
     return [immutable_record(records, 'review_assignment', value['id'], record)], record
 
 
-RATIO_EXPORT_MESSAGE = 'The chain measured a denser token ratio than its plan and its granted final no longer fits one request. Export a new packet; its admission inherits this measurement and keeps the verified turns available.'
+RATIO_EXPORT_MESSAGE = (
+    'An attempt of this chain measured fewer characters for each token than its capacity plan assumes, and at the '
+    'measured ratio its final, with the allowances that the chain has granted, no longer fits one request. The '
+    'harness sends no further request of this chain. details.ratio gives the measurement and its attempt, and '
+    'details.required_characters and details.available_characters the size of the final and the room for it. '
+    'details.successor holds the admission of a new chain over a new export, which plans at the measured ratio. '
+    'When details.step is present, take it; details.message states what the new chain does. When it is absent, no '
+    'protocol admits a new chain on this route, and details.decision states what the owner decides.')
 
 
 def describe_ratio_handoff(records, artifacts, assignment):
@@ -2024,12 +2123,35 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
                 details=dict(material_allowance=bounds['material_allowance'], answer_bound=bounds['answer_bound']))
 
 
-# Writer placeholders: each condition has one refusal message.
-ORIGIN_VERIFICATION_MESSAGE = 'A carried origin prefix must verify under its own protocol.'
-STATE_VERIFICATION_MESSAGE = 'The stored selection and every v7 state must equal their authenticated reconstruction.'
-BINDING_VERIFICATION_MESSAGE = 'Every v7 turn must keep its first binding, prompt, allowances and undelivered ranges.'
-COVERAGE_VERIFICATION_MESSAGE = 'Deliver every required range and affected note, and reconstruct every bound search.'
-FINAL_VERIFICATION_MESSAGE = 'End the v7 chain with one authenticated final finding.'
+# The verification of a v7 chain has five conditions, and each has one refusal message. A chain that fails one gives
+# no finding.
+ORIGIN_VERIFICATION_MESSAGE = (
+    'The stored carried selection of this chain does not match its reference on the first assignment: the reference '
+    'does not name exactory-openness-carried-selection-v1, or its digest differs from the stored selection. The '
+    'harness cannot verify the turns that the chain carries, so the chain gives no finding. Check the record with '
+    'record-check.')
+STATE_VERIFICATION_MESSAGE = (
+    'A stored artifact of this chain differs from what the harness rebuilds from the native packet, the carried '
+    'selection and the authenticated turns: the inventory of the first assignment, or the state of the turn that '
+    'details.assignment_id names. The chain gives no finding. Check the record with record-check.')
+BINDING_VERIFICATION_MESSAGE = (
+    'The turn that details.assignment_id names is not the turn that this chain gives at its position. Every turn '
+    'keeps the role, the native packet, the route, the reviewer, the author, the inventory and the capacity plan of '
+    'the first assignment, and its packet and its prompt equal those that the harness rebuilds from the state '
+    'before the turn, at the task limits that held when the turn was recorded. The chain gives no finding. Check '
+    'the record with record-check.')
+COVERAGE_VERIFICATION_MESSAGE = (
+    'This chain does not hold everything that its finding needs. A required range or a required affected note is '
+    'not delivered (details.ranges), a bound search does not rebuild from the delivered text (details.searches), a '
+    'required body of native evidence is not delivered whole (details.digests), or, for a final over unread ranges, '
+    'the stored records do not show the refused turn at the end of its last permitted sequence, or the unread set, '
+    'its citation in the finding or the recorded finding differs from what the harness rebuilds. Run review-series '
+    'on the chain and take the step that it plans.')
+FINAL_VERIFICATION_MESSAGE = (
+    'The turn that details.assignment_id names has no observed, authenticated output in a verified context, or its '
+    'output stands at the wrong place. A chain of exactory-openness-reading-v7 ends with one final turn that '
+    'returns the finding, and every turn before it returns a reading response or a part of an argument. The chain '
+    'gives no finding. Run review-series on the chain and take the step that it plans.')
 
 
 def _require_verification(condition, message, **details):

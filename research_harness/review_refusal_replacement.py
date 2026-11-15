@@ -10,11 +10,12 @@ from . import review_refusal_notice as notices
 KEY = 'output_refusal'
 INELIGIBLE_REPLACEMENT_MSG = (
     'This assignment does not admit a replacement that carries a refusal. Such a replacement needs the head of a '
-    'v7 reading turn or final, an unstaged turn in the role bar, slate, result or adjudicator, or a turn in a '
-    'series in parts, with a verified context, no pending call, and no pending or accepted correction. The head '
-    'needs at least one completed output with an observed context, and each such output must authenticate and '
-    'still be refused. The position holds at most four refusal records. Run review-series on the head and take '
-    'the step that it plans.')
+    'turn that is not staged and has a verified context: a reading turn or a final turn of a chain of '
+    'exactory-openness-reading-v7, a turn in the role bar, slate, result or adjudicator, or a turn of a series in '
+    'parts. A reading chain of an earlier protocol admits none. The head has no pending call and no pending or '
+    'accepted correction. It needs at least one completed output with an observed context, and each such output '
+    'must authenticate and still be refused. The position holds at most four refusal records. Run review-series on '
+    'the head and take the step that it plans.')
 REPLACEMENT_IDENTITY_MSG = (
     'The replacement does not keep the role, dossier, subject, route, reviewer, author and context of the refused '
     'assignment. Repeat these values of the refused assignment, and add only context.output_refusal.')

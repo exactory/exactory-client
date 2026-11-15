@@ -221,9 +221,18 @@ def _require_finding(condition, rule, path, forecast):
                             dict(rule=rule, path=path, forecast=forecast))
 
 
-UNREAD_OUTCOME_MESSAGE = 'Unread ranges permit only an unresolved finding.'
-UNREAD_SET_REFERENCE_MESSAGE = 'Give a reviewer_gap ground that references the complete unread set x1.'
-UNREAD_UNIT_REFERENCE_MESSAGE = 'A cited unread unit must belong to the complete unread set.'
+# The three rules of a final over unread ranges (reading_final.unread). Each refusal reaches the reviewer in the
+# refusal notice of the replacement, so each text states the rule and the correction.
+UNREAD_OUTCOME_MESSAGE = (
+    'This final turn holds unread ranges under reading_final.unread, so the harness records no outcome other than '
+    'unresolved. Return the finding with the outcome unresolved.')
+UNREAD_SET_REFERENCE_MESSAGE = (
+    'A finding over unread ranges needs a ground of the kind reviewer_gap whose refs holds {ref:"x1"}, the citation '
+    'of the complete set of unread ranges. Add that ground.')
+UNREAD_UNIT_REFERENCE_MESSAGE = (
+    'A ground of this finding cites a unit by a u handle that is not the unit of a row of the unread set. In a '
+    'finding over unread ranges a u handle cites an unread unit: take it from the member unit of a row of '
+    'reading_final.unread or of a page of the list unread, or remove the citation.')
 
 
 def validate_finding(packet, output, *, artifacts=None):

@@ -42,10 +42,13 @@ PROTOCOL_V5 = 'exactory-openness-reading-v5'
 PROTOCOL_V6 = 'exactory-openness-reading-v6'
 PROTOCOL_V7 = 'exactory-openness-reading-v7'
 NEW_PROBLEM_CHAIN_PROTOCOLS = (PROTOCOL_V6,)
-PROTOCOL_SELECTION_TEXT = 'The chain uses {protocol}; earlier admission refusals: {refusals}.'
-NEW_PROBLEM_CHAIN_TEXT = 'New problem chains try {protocols} in order, using the first protocol that admits the packet.'
 # Version the added plan metadata at export so stored v6 packets keep their plans and requests.
 FAMILY_READING_PLAN_VERSION = 1
+# refusals lists each protocol that stands earlier in the order and refused the packet, with its reason, or is "none".
+PROTOCOL_SELECTION_TEXT = ('This chain runs under {protocol}, the first reading protocol of the order whose admission '
+                           'accepts the packet on this route. Refused before it, each with its reason: {refusals}.')
+NEW_PROBLEM_CHAIN_TEXT = ('A new problem openness chain starts under the first of these reading protocols whose '
+                          'admission accepts its packet on its route: {protocols}.')
 # The protocol of a math-solver result review's chain: the units of v3 in the math order, no statement record, and a
 # final passage request that must deliver characters.
 MATH_PROTOCOL = 'exactory-openness-reading-math-v1'

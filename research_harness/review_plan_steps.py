@@ -423,7 +423,8 @@ def complete_plan(records, artifacts, assignment, plan):
                         step = successor['details'].get('step')
                         if step is not None:
                             details['row'] = 4
-                            answers.append(dict(answer='Export on the same route', steps=[step]))
+                            answers.append(dict(
+                                answer='Export a new packet and start a new chain on this route', steps=[step]))
             details['decision'] = dict(owner_decides=question, then=answers)
             if code == 'review_response_too_large':
                 from .review_route_capacity import find_serving_routes

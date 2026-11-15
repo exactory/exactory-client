@@ -73,7 +73,18 @@ REFUSAL_PARAGRAPH_VERSIONS = {'whole': 'exactory-review-output-refusal-whole-v1'
 
 
 UNREAD_FINAL_PARAGRAPH_VERSION = 'exactory-openness-unread-final-v1'
-UNREAD_FINAL_PROMPT = ('\n\nreading_final.unread names the complete unread set x1; return unresolved with a reviewer_gap reference to x1 and request further rows with list_page unread or unread_attempts.')
+# The frame of a v7 final holds 1,500 characters for this paragraph together with the member without its rows
+# (UNREAD_CORE_CHARACTERS, ruling 39; the member measures up to 663), so the text stays under 800 characters. A later
+# change of the text needs a new registered version.
+UNREAD_FINAL_PROMPT = (
+    '\n\nUnread ranges. The provider refused one reading turn of this chain in every permitted sequence, so the '
+    'chain ends without the text of that turn and of what follows it. reading_final.unread describes the complete '
+    'set of unread ranges, whose handle is x1: count, the number of its rows; causes, with rows and characters for '
+    'provider_refused (the ranges of the refused turn) and not_delivered (the ranges that no turn reached); rows, '
+    'the first rows; and omitted, the number of rows not shown. The list unread holds every row, and the list '
+    'unread_attempts every attempt of the refused turn. The harness records no outcome other than unresolved. '
+    'grounds must hold a reviewer_gap whose refs holds {ref:"x1"}. A ground about one unread unit can add '
+    '{ref:<unit>}, with the unit of its row.')
 
 
 def _has_unread_final(role, packet):

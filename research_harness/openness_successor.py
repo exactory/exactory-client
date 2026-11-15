@@ -8,10 +8,22 @@ from .evidence import digest
 from .native_review import load_packet
 from .errors import ResearchError
 
-V7_SUCCESSOR_MESSAGE = 'Export a new packet on this route with the same reviewer. Its v7 chain takes over the listed verified readings and reads the remaining ranges.'
-V6_SUCCESSOR_MESSAGE = 'Export a new packet on this route. Its v6 chain reads every unit again in the planned reading turns.'
-RATIO_SUCCESSOR_MESSAGE = 'The new chain inherits the measured ratio and its source; its admission decides whether this route can continue.'
-OUTPUT_CAP_EXPORT_MESSAGE = 'Export a new packet for the admitted successor on this route.'
+# The messages of the handoff export that a stopped problem chain gets when a new chain is admitted. details.successor
+# holds that admission.
+V7_SUCCESSOR_MESSAGE = (
+    'Export a new packet and assign it on this route with the same reviewer_id, as details.step states. The '
+    'admission accepts it as a chain of exactory-openness-reading-v7. That chain carries the verified reading turns '
+    'that details.successor.carried_readings lists, and it reads only the ranges that remain.')
+V6_SUCCESSOR_MESSAGE = (
+    'Export a new packet and assign it on this route with the same reviewer_id, as details.step states. The '
+    'admission accepts it as a chain of exactory-openness-reading-v6. That chain carries no earlier turn: it reads '
+    'every unit again, in the number of reading turns that details.successor.planned_reading_turns gives.')
+RATIO_SUCCESSOR_MESSAGE = (
+    'The admission of the new chain was computed at the ratio of details.ratio, which this chain measured, or at a '
+    'denser one that an earlier chain of the same statement and route shows. The plan of the new chain keeps that '
+    'ratio.')
+# An answer of the decision after an output over the limit, and details.export_message of the same stop.
+OUTPUT_CAP_EXPORT_MESSAGE = 'Export a new packet and start a new chain on this route'
 
 
 def describe_input_handoff(records, artifacts, assignment, *, continuation=None):
