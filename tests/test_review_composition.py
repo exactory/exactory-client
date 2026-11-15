@@ -878,6 +878,8 @@ class FinalCompositionRuleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             artifacts = ArtifactStore(temporary)
             for rule, packet, original in self.iter_cases():
+                if rule['id'].endswith('/math-openness'):
+                    continue
                 reference = artifacts.put(json.dumps(original).encode(), 'application/json')
                 output = json.loads(artifacts.read(reference))
                 before = digest(dict(packet=packet, output=output, rule=rule))
@@ -940,12 +942,14 @@ class FinalCompositionRuleTests(unittest.TestCase):
 
     def test_valid_pages_and_closings_pass_their_role_checks(self):
         for rule, packet, output in self.iter_cases():
+            if rule['id'].endswith('/math-openness'):
+                continue
             targets = composition.list_targets(rule, packet)
             partition = [[target] for target in targets]
             pages, closing = composition.split_output(rule, packet, output, partition)
             for assigned, page in zip(partition, pages):
                 with self.subTest(rule=rule['id'], target=assigned):
-                    composition.validate_page_output(rule, packet, assigned, page)
+                    composition.validate_page_output(rule, packet, assigned, page['output'])
             rows = composition.build_decision_rows(rule, packet, pages)
             with self.subTest(rule=rule['id'], closing=True):
                 composition.validate_closing_output(rule, packet, rows, closing)
@@ -955,17 +959,19 @@ class FinalCompositionRuleTests(unittest.TestCase):
         # page-owned field requires a refusal witness here.
         checked = set()
         for rule, packet, output in self.iter_cases():
+            if rule['id'].endswith('/math-openness'):
+                continue
             targets = composition.list_targets(rule, packet)
             pages, closing = composition.split_output(rule, packet, output, [[target] for target in targets])
             for target, page in zip(targets, pages):
-                row = page['targets'][0]
+                row = page['output']['targets'][0]
                 if 'fields' not in row:
                     continue
                 for path, value in row['fields'].items():
                     if isinstance(value, (dict, list)) and not value:
                         continue
                     bad = copy.deepcopy(page)
-                    bad['targets'][0]['fields'][path] = 'invalid' if path == '/correction_admissible' else None
+                    bad['output']['targets'][0]['fields'][path] = 'invalid' if path == '/correction_admissible' else None
                     expected = ('review.reassessment' if path.startswith('/reassessment/') else
                                 'review.support' if path.startswith('/support/') else
                                 'evidence.shape' if path.endswith('/evidence') and rule['role'] != 'native_math' else rule['checks'][0])
@@ -976,10 +982,10 @@ class FinalCompositionRuleTests(unittest.TestCase):
                     if rule.get('base_adapter', rule['adapter']) == 'study_verification':
                         expected = 'review.shape'
                     with self.subTest(rule=rule['id'], path=path), self.assertRaises(ResearchError) as caught:
-                        composition.validate_page_output(rule, packet, [target], bad)
+                        composition.validate_page_output(rule, packet, [target], bad['output'])
                     self.assertEqual(caught.exception.contract_check, expected, (rule['id'], path))
                     checked.add(rule['id'])
-        self.assertEqual(checked, {rule['id'] for rule, _, _ in self.iter_cases()} - {composition.FINAL_RULE_PREFIX + 'bar', composition.FINAL_RULE_PREFIX + 'problem-openness'})
+        self.assertEqual(checked, {rule['id'] for rule, _, _ in self.iter_cases()} - {composition.FINAL_RULE_PREFIX + 'bar', composition.FINAL_RULE_PREFIX + 'problem-openness', composition.FINAL_RULE_PREFIX + 'math-openness'})
 
     def test_page_identity_sentence_bound_and_ownership_are_checked(self):
         rule, packet, output = next(self.iter_cases())
@@ -988,25 +994,27 @@ class FinalCompositionRuleTests(unittest.TestCase):
         for change in ('sentence', 'target', 'target-object', 'closing-field', 'extra'):
             bad = copy.deepcopy(pages[0])
             if change == 'sentence':
-                bad['targets'][0]['sentence'] = 's' * 301
+                bad['output']['targets'][0]['sentence'] = 's' * 301
             elif change == 'target':
-                bad['targets'][0]['target'] = 'unknown'
+                bad['output']['targets'][0]['target'] = 'unknown'
             elif change == 'target-object':
-                bad['targets'][0]['target'] = {}
+                bad['output']['targets'][0]['target'] = {}
             elif change == 'closing-field':
-                bad['targets'][0]['fields']['/value/status'] = 'sufficient'
+                bad['output']['targets'][0]['fields']['/value/status'] = 'sufficient'
             else:
-                bad['extra'] = True
+                bad['output']['extra'] = True
             with self.subTest(change=change), self.assertRaises(ResearchError):
-                composition.validate_page_output(rule, packet, targets, bad)
+                composition.validate_page_output(rule, packet, targets, bad['output'])
 
     def test_each_rule_page_field_limits_fit_all_final_bounds_below_eighty_thousand(self):
         from research_harness.review_route_capacity import _describe_answer_bounds
         for rule, packet, output in self.iter_cases():
-            for count in range(1, 40):
+            for count in range(1, 41):
                 bound = _describe_answer_bounds('final', count, 4000)[0]
-                self.assertLess(bound, 80000)
+                self.assertLessEqual(bound, 80000)
                 self.assertLessEqual(composition.describe_page_answer_bound(rule, count), bound)
+                self.assertLessEqual(rule['closing_schema']['max_serialized_characters'], bound)
+            self.assertEqual(_describe_answer_bounds('final', 40, 4000)[0], 80000)
             self.assertLessEqual(composition.describe_page_answer_bound(rule, 42), 80000)
             self.assertGreater(composition.describe_page_answer_bound(rule, 43), 80000)
 
@@ -1022,8 +1030,8 @@ class FindingFinalCompositionTests(unittest.TestCase):
 
     def test_resolved_outcome_with_one_page_ground_is_refused_by_validate_finding(self):
         from research_harness.native_review import validate_finding
-        self.pages[0]['targets'][0]['grounds'] = [dict(kind='reviewer_gap', text='A decisive source is missing.')]
-        composition.validate_page_output(self.rule, self.packet, [self.targets[0]], self.pages[0])
+        self.pages[0]['output']['targets'][0]['grounds'] = [dict(kind='reviewer_gap', text='A decisive source is missing.')]
+        composition.validate_page_output(self.rule, self.packet, [self.targets[0]], self.pages[0]['output'])
         composed = composition.compose_output(self.rule, self.packet, self.pages, self.closing)
         with self.assertRaises(ResearchError) as caught:
             validate_finding(self.packet, composed)
@@ -1036,11 +1044,11 @@ class FindingFinalCompositionTests(unittest.TestCase):
         grounds = [dict(kind='reviewer_gap', text='The first formulation lacks a full reading.'),
                    dict(kind='own_argument', text='The next formulation has an independent argument.', refs=[reference]),
                    dict(kind='packet_defect', text='The overall packet has a distinct defect.')]
-        self.pages[0]['targets'][0]['grounds'] = [grounds[0]]
-        self.pages[1]['targets'][0]['grounds'] = [grounds[1]]
+        self.pages[0]['output']['targets'][0]['grounds'] = [grounds[0]]
+        self.pages[1]['output']['targets'][0]['grounds'] = [grounds[1]]
         self.closing.update(outcome='unresolved', grounds=[grounds[2]])
         for target, page in zip(self.targets, self.pages):
-            composition.validate_page_output(self.rule, self.packet, [target], page)
+            composition.validate_page_output(self.rule, self.packet, [target], page['output'])
         composition.validate_closing_output(self.rule, self.packet, [], self.closing)
         composed = composition.compose_output(self.rule, self.packet, self.pages, self.closing)
         validate_finding(self.packet, composed)
@@ -1054,9 +1062,9 @@ class FindingFinalCompositionTests(unittest.TestCase):
                              ('grounds', [dict(kind='source_settles', text='A source settles it.', work_id='absent')]),
                              ('grounds', [dict(kind='own_argument', text='s' * 601)])):
             page = copy.deepcopy(self.pages[0])
-            page['targets'][0][field] = value
+            page['output']['targets'][0][field] = value
             with self.subTest(field=field, value=value), self.assertRaises(ResearchError) as caught:
-                composition.validate_page_output(self.rule, self.packet, [self.targets[0]], page)
+                composition.validate_page_output(self.rule, self.packet, [self.targets[0]], page['output'])
             self.assertEqual(caught.exception.contract_check, 'openness.finding')
 
     def test_closing_findings_outcome_reason_and_grounds_use_native_checks(self):
@@ -1091,13 +1099,13 @@ class FindingFinalCompositionTests(unittest.TestCase):
         packet['handle_table'] = {'e' + str(index): dict(reference=reference) for index, reference in enumerate(references)}
         grounds = [dict(kind='reviewer_gap', text='The search needs a full reading.',
                         refs=references)]
-        pages = [dict(targets=[dict(formulation='t' + str(index), coverage='The exact formulation was checked.',
-                                    grounds=grounds, sentence='s' * composition.SENTENCE_CHARACTERS)])
+        pages = [dict(targets=['t' + str(index)], output=dict(targets=[dict(formulation='t' + str(index), coverage='The exact formulation was checked.',
+                                    grounds=grounds, sentence='s' * composition.SENTENCE_CHARACTERS)]))
                  for index in range(5000)]
         rows = composition.build_decision_rows(self.rule, packet, pages)
         targets = composition.list_targets(self.rule, packet)
         for index in (0, 4999):
-            composition.validate_page_output(self.rule, packet, [targets[index]], pages[index])
+            composition.validate_page_output(self.rule, packet, [targets[index]], pages[index]['output'])
         self.assertEqual(len(rows), 5000)
         for row in rows:
             self.assertEqual(len(row[2]), 300)
@@ -1109,7 +1117,7 @@ class FindingFinalCompositionTests(unittest.TestCase):
     def test_decision_rows_count_escaping_and_all_ground_kinds(self):
         from research_harness.native_review import GROUND_RULES
         from research_harness.review_route_capacity import DECISION_ROW_CHARACTERS
-        row = self.pages[0]['targets'][0]
+        row = self.pages[0]['output']['targets'][0]
         row['sentence'] = '\\"\n' * 100
         row['grounds'] = [dict(kind=kind, text='An independent scientific ground.') for kind in GROUND_RULES]
         rows = composition.build_decision_rows(self.rule, self.packet, self.pages)
@@ -1125,10 +1133,12 @@ class OriginalValidatorParityTests(unittest.TestCase):
         witnessed = set()
         for role, packet, output in build_final_rule_cases():
             rule = composition.find_rule(role, packet)
+            if rule['id'].endswith('/math-openness'):
+                continue
             targets = composition.list_targets(rule, packet)
             pages, closing = composition.split_output(rule, packet, output, [[target] for target in targets])
             for target, page in zip(targets, pages):
-                for path, value in page['targets'][0].get('fields', {}).items():
+                for path, value in page['output']['targets'][0].get('fields', {}).items():
                     if not (path.startswith('/value/') and not isinstance(value, (list, dict))
                             or role == 'native_math'):
                         continue
@@ -1152,13 +1162,13 @@ class OriginalValidatorParityTests(unittest.TestCase):
                         with self.assertRaises(ResearchError) as original:
                             validate()
                         bad_page = copy.deepcopy(page)
-                        bad_page['targets'][0]['fields'][path] = []
+                        bad_page['output']['targets'][0]['fields'][path] = []
                         with self.assertRaises(ResearchError) as paged:
-                            composition.validate_page_output(rule, packet, [target], bad_page)
+                            composition.validate_page_output(rule, packet, [target], bad_page['output'])
                         self.assertEqual((paged.exception.code, paged.exception.contract_check),
                                          (original.exception.code, original.exception.contract_check))
                         witnessed.add(rule['id'])
-        self.assertIn(composition.FINAL_RULE_PREFIX + 'math-openness', witnessed)
+        self.assertIn(composition.FINAL_RULE_PREFIX + 'native-result', witnessed)
         self.assertIn(composition.FINAL_RULE_PREFIX + 'slate', witnessed)
 
     def test_numeric_and_escaped_candidate_ids_keep_dictionary_shapes(self):
@@ -1175,7 +1185,7 @@ class OriginalValidatorParityTests(unittest.TestCase):
     def test_native_assessments_without_approval_bindings_round_trip(self):
         from research_harness.native_review import validate_output
         for role, packet, original in build_final_rule_cases():
-            if role != 'native_math' or packet['native']['kind'] == 'proposal':
+            if role != 'native_math' or packet['native']['kind'] == 'proposal' or composition.find_rule(role, packet)['id'].endswith('/math-openness'):
                 continue
             for decision in ('revise', 'reject'):
                 output = dict(decision=decision, reason='The exact subject needs further work.', objections=[])
@@ -1261,16 +1271,16 @@ class FinalPageBoundaryTests(unittest.TestCase):
         targets = composition.list_targets(rule, packet)
         pages, closing = composition.split_output(rule, packet, output, [[target] for target in targets])
         page = pages[0]
-        row = page['targets'][0]
+        row = page['output']['targets'][0]
         path = next(iter(row['fields']))
         row['fields'][path] = ''
         allowance = composition.PAGE_FIELDS_CHARACTERS - composition._measure_final_value(dict(fields=row['fields']))
         row['fields'][path] = 'x' * allowance
         row['sentence'] = 's' * composition.SENTENCE_CHARACTERS
-        composition.validate_page_output(rule, packet, [targets[0]], page)
+        composition.validate_page_output(rule, packet, [targets[0]], page['output'])
         row['fields'][path] += 'x'
         with self.assertRaises(ResearchError) as caught:
-            composition.validate_page_output(rule, packet, [targets[0]], page)
+            composition.validate_page_output(rule, packet, [targets[0]], page['output'])
         self.assertEqual(caught.exception.code, 'review_composition_conflict')
         self.assertEqual(caught.exception.contract_check, 'review.shape')
 
@@ -1316,9 +1326,9 @@ class FinalPageBoundaryTests(unittest.TestCase):
         rule = composition.find_rule(role, packet)
         targets = composition.list_targets(rule, packet)
         pages, closing = composition.split_output(rule, packet, output, [targets])
-        pages[0]['targets'][0]['grounds'] = None
+        pages[0]['output']['targets'][0]['grounds'] = None
         with self.assertRaises(ResearchError) as caught:
-            composition.validate_page_output(rule, packet, targets, pages[0])
+            composition.validate_page_output(rule, packet, targets, pages[0]['output'])
         self.assertEqual(caught.exception.contract_check, 'openness.finding')
         self.assertEqual(caught.exception.details['rule'], 'grounds_list')
 
@@ -1328,7 +1338,7 @@ class FinalPageBoundaryTests(unittest.TestCase):
 class MissingPageFieldTests(unittest.TestCase):
     def test_required_target_fields_cannot_be_filled_by_neutral_validation_siblings(self):
         selected = {composition.FINAL_RULE_PREFIX + name for name in
-                    ('result', 'slate', 'native-proposal', 'native-result', 'native-recovery', 'math-openness',
+                    ('result', 'slate', 'native-proposal', 'native-result', 'native-recovery',
                      'study-verification', 'study-readiness')}
         seen = set()
         for role, packet, output in build_final_rule_cases():
@@ -1338,13 +1348,13 @@ class MissingPageFieldTests(unittest.TestCase):
             targets = composition.list_targets(rule, packet)
             pages, closing = composition.split_output(rule, packet, output, [[target] for target in targets])
             for target, page in zip(targets, pages):
-                fields = page['targets'][0]['fields']
+                fields = page['output']['targets'][0]['fields']
                 if not fields or all(isinstance(value, (list, dict)) and not value for value in fields.values()):
                     continue
                 bad = copy.deepcopy(page)
-                bad['targets'][0]['fields'] = {}
+                bad['output']['targets'][0]['fields'] = {}
                 with self.subTest(rule=rule['id'], target=target), self.assertRaises(ResearchError):
-                    composition.validate_page_output(rule, packet, [target], bad)
+                    composition.validate_page_output(rule, packet, [target], bad['output'])
                 seen.add(rule['id'])
         self.assertEqual(seen, selected)
 
@@ -1352,21 +1362,6 @@ class MissingPageFieldTests(unittest.TestCase):
 
 
 class CoverageCompatibilityTests(unittest.TestCase):
-    def test_short_collective_math_coverage_replays_as_complete_text_on_every_page(self):
-        role, packet, output = copy.deepcopy(build_final_rule_cases()[10])
-        output['findings']['openness']['coverage'] = 'Checked.'
-        rule = composition.find_rule(role, packet)
-        targets = composition.list_targets(rule, packet)
-        pages, closing = composition.split_output(rule, packet, output, [[target] for target in targets])
-        for target, page in zip(targets, pages):
-            self.assertEqual(page['targets'][0]['fields']['/findings/openness/coverage'], 'Checked.')
-            composition.validate_page_output(rule, packet, [target], page)
-        self.assertEqual(composition.compose_output(rule, packet, pages, closing), output)
-        pages[1]['targets'][0]['fields']['/findings/openness/coverage'] = 'A distinct neighbour assessment.'
-        composed = composition.compose_output(rule, packet, pages, closing)
-        self.assertEqual(composed['findings']['openness']['coverage'],
-                         'Checked.\nA distinct neighbour assessment.\nChecked.')
-
     def test_legacy_problem_native_result_keeps_structured_coverage_and_minimum(self):
         from research_harness.native_review import validate_output
         role, packet, output = copy.deepcopy(build_final_rule_cases()[10])
@@ -1380,7 +1375,7 @@ class CoverageCompatibilityTests(unittest.TestCase):
         targets = composition.list_targets(rule, packet)
         pages, closing = composition.split_output(rule, packet, output, [[target] for target in targets])
         for target, page in zip(targets, pages):
-            composition.validate_page_output(rule, packet, [target], page)
+            composition.validate_page_output(rule, packet, [target], page['output'])
         composition.validate_closing_output(rule, packet, [], closing)
         self.assertEqual(digest(composition.compose_output(rule, packet, pages, closing)), digest(output))
         self.assertEqual(output['findings']['openness']['minimum'], packet['native']['scientific_context']['openness_minimum'])
@@ -1425,6 +1420,438 @@ class AdjudicatorClosingTests(unittest.TestCase):
                 composition.validate_closing_output(rule, restricted, [], bad)
             self.assertEqual(caught.exception.contract_check, 'adjudication.shape')
         self.assertEqual(composition.compose_output(rule, packet, pages, closing), output)
+
+
+
+
+def build_math_page_case():
+    role, packet, stored = copy.deepcopy(build_final_rule_cases()[10])
+    minimum = packet['native']['scientific_context']['openness_minimum']
+    minimum['neighbours'].append('Neighbour three')
+    packet.pop('reading_final', None)
+    rule = composition.find_rule(role, packet)
+    targets = composition.list_targets(rule, packet)
+    rows = [dict(formulation='t' + str(index), coverage='Searched formulation ' + str(index) + '.',
+                 sentence='The delivered evidence was assessed.') for index in range(4)]
+    pages = [dict(targets=targets[:2], output=dict(targets=rows[:2])),
+             dict(targets=targets[2:], output=dict(targets=rows[2:]))]
+    closing = dict(decision='approve', findings=copy.deepcopy(stored['findings']))
+    for key in ('statement_digest', 'minimum', 'coverage'):
+        closing['findings']['openness'].pop(key)
+    return rule, packet, pages, closing
+
+
+class RevisedCompositionInterfaceTests(unittest.TestCase):
+    def test_finding11_uses_recorded_page_outputs_and_mapping_rule(self):
+        from research_harness import native_review, review_handles
+        role, packet, original = copy.deepcopy(build_final_rule_cases()[9])
+        rule = composition.find_rule(role, packet)
+        self.assertIsInstance(rule, dict)
+        self.assertTrue(rule['id'].startswith(composition.FINAL_RULE_PREFIX))
+        targets = composition.list_targets(rule, packet)
+        pages, closing = composition.split_output(rule, packet, original, [targets[:1], targets[1:]])
+        reference = dict(path='research/sources/objects/' + 'd' * 64, sha256='d' * 64, size=1, media_type='text/plain')
+        packet['handle_table'] = dict(m1=dict(reference=reference))
+        raw = copy.deepcopy(pages[0]['output'])
+        raw['targets'][0]['grounds'] = [dict(kind='own_argument', text='An argument is recorded.', refs=[dict(ref='m1')])]
+        pages[0]['output'] = review_handles.expand_handles(packet, raw)
+        closing['outcome'] = 'unresolved'
+        before = digest(dict(packet=packet, pages=pages, closing=closing))
+        composed = composition.compose_output(rule, packet, pages, closing)
+        native_review.validate_finding(packet, composed)
+        self.assertEqual(composed['findings']['openness']['grounds'][0]['refs'], [reference])
+        self.assertEqual(before, digest(dict(packet=packet, pages=pages, closing=closing)))
+        self.assertTrue(all(set(page) == {'targets', 'output'} for page in pages))
+
+
+class RevisedMathCompositionTests(unittest.TestCase):
+    def test_finding1_two_pages_compose_labeled_approval_accepted_by_native_validator(self):
+        from research_harness import native_review
+        rule, packet, pages, closing = build_math_page_case()
+        for page in pages:
+            composition.validate_page_output(rule, packet, page['targets'], page['output'])
+        rows = composition.build_decision_rows(rule, packet, pages)
+        composition.validate_closing_output(rule, packet, rows, closing)
+        output = composition.compose_output(rule, packet, pages, closing)
+        native_review.validate_output(packet['native'], output)
+        minimum = packet['native']['scientific_context']['openness_minimum']
+        labels = [minimum['statement']] + minimum['neighbours']
+        expected = '\n'.join(label + ': Searched formulation ' + str(index) + '.' for index, label in enumerate(labels))
+        self.assertEqual(output['findings']['openness']['coverage'], expected)
+        self.assertEqual(output['findings']['openness']['minimum'], minimum)
+        self.assertEqual(output['findings']['openness']['statement_digest'], packet['native']['claim_digest'])
+        self.assertEqual(composition.describe_owners(rule)['/schema_version'], 'harness')
+        composition.validate_output_owners(rule, output)
+        self.assertNotIn('sentence', str(output))
+
+    def test_finding1_revise_and_reject_use_closing_alone(self):
+        from research_harness import native_review
+        rule, packet, pages, closing = build_math_page_case()
+        for decision in ('revise', 'reject'):
+            closing = dict(decision=decision, reason='The proposed result needs further work.', objections=[])
+            composition.validate_closing_output(rule, packet, composition.build_decision_rows(rule, packet, pages), closing)
+            output = composition.compose_output(rule, packet, pages, closing)
+            self.assertEqual(output, closing)
+            self.assertNotIn('findings', output)
+            native_review.validate_output(packet['native'], output)
+        self.assertEqual(len(composition.build_decision_rows(rule, packet, pages)), 4)
+
+    def test_finding1_only_composed_coverage_has_an_inverse(self):
+        rule, packet, pages, closing = build_math_page_case()
+        output = composition.compose_output(rule, packet, pages, closing)
+        targets = composition.list_targets(rule, packet)
+        for partition in ([targets], [[target] for target in targets], [targets[:1], targets[1:3], targets[3:]]):
+            split, finish = composition.split_output(rule, packet, output, partition)
+            self.assertEqual(digest(composition.compose_output(rule, packet, split, finish)), digest(output))
+        changed = copy.deepcopy(output)
+        changed['findings']['openness']['coverage'] = 'An unstructured stored v1 assessment.'
+        with self.assertRaises(ResearchError):
+            composition.split_output(rule, packet, changed, [targets])
+
+    def test_finding1_page_coverage_is_bounded_nonempty_and_single_line(self):
+        rule, packet, pages, closing = build_math_page_case()
+        for invalid in ('', 'x' * 801, 'First\nsecond', 'First\rsecond', 'First\u2028second', []):
+            page = copy.deepcopy(pages[0])
+            page['output']['targets'][0]['coverage'] = invalid
+            with self.subTest(value=invalid), self.assertRaises(ResearchError) as caught:
+                composition.validate_page_output(rule, packet, page['targets'], page['output'])
+            self.assertEqual(caught.exception.contract_check, 'native.output')
+        pages[0]['output']['targets'][0]['coverage'] = 'x' * 800
+        composition.validate_page_output(rule, packet, pages[0]['targets'], pages[0]['output'])
+
+    def test_finding1_malformed_closing_fields_use_the_native_output_check(self):
+        rule, packet, pages, closing = build_math_page_case()
+        missing_openness = copy.deepcopy(closing)
+        missing_openness['findings'].pop('openness')
+        invalid_openness = copy.deepcopy(closing)
+        invalid_openness['findings']['openness'] = None
+        for output in (None, dict(decision='approve'), dict(decision='approve', findings=[]),
+                       missing_openness, invalid_openness):
+            with self.subTest(output=output), self.assertRaises(ResearchError) as caught:
+                composition.validate_closing_output(rule, packet, [], output)
+            self.assertEqual(caught.exception.contract_check, 'native.output')
+
+    def test_finding1_stored_v1_math_output_validates_without_rewriting_or_splitting(self):
+        import json
+        import tarfile
+        from pathlib import Path
+        from research_harness import native_review
+        root = Path(__file__).parent / 'fixtures/openness_0870_choice'
+        stores = json.loads((root / 'manifest.json').read_text())['stores']
+        for name in ('math-stopped-chosen-observed', 'math-stopped-chosen-uncalled'):
+            stored = stores[name]
+            # This is the tag's saved authored final response; the stopped
+            # store has no historical final observation to fabricate.
+            output = stored['review']
+            with tarfile.open(root / (name + '.tar.xz')) as archive:
+                packet_bytes = archive.extractfile(stored['native']['path']).read()
+            packet = json.loads(packet_bytes)
+            before = digest(dict(packet=packet, output=output))
+            native_review.validate_output(packet, output)
+            rule = composition.find_rule('native_math', packet)
+            self.assertEqual(rule['id'], composition.FINAL_RULE_PREFIX + 'math-openness')
+            self.assertIn('page_schema', rule)
+            composition.describe_owners(rule)
+            self.assertEqual(before, digest(dict(packet=packet, output=output)))
+            self.assertEqual(digest(json.loads(packet_bytes)), digest(packet))
+
+    def test_finding1_labels_with_colons_unicode_and_line_breaks_round_trip(self):
+        rule, packet, pages, closing = build_math_page_case()
+        packet['native']['scientific_context']['openness_minimum']['statement'] = 'A λ: claim\nwith two lines'
+        packet['native']['scientific_context']['openness_minimum']['neighbours'][0] = 'A "quoted" \\lambda: formulation'
+        targets = composition.list_targets(rule, packet)
+        for page, assigned in zip(pages, (targets[:2], targets[2:])):
+            page['targets'] = assigned
+        output = composition.compose_output(rule, packet, pages, closing)
+        lines = output['findings']['openness']['coverage'].split('\n')
+        self.assertEqual(len(lines), 4)
+        self.assertTrue(lines[0].startswith('A λ: claim\\u000awith two lines: '))
+        self.assertTrue(lines[1].startswith('A "quoted" \\lambda: formulation: '))
+        split, finish = composition.split_output(rule, packet, output, [targets])
+        self.assertEqual(composition.compose_output(rule, packet, split, finish), output)
+
+
+class CompleteSchemaOwnershipTests(unittest.TestCase):
+    def read_sources(self, rule):
+        import importlib
+        import inspect
+        sources = {}
+        for contract in rule['validator_contracts']:
+            module, name = contract['validator'].split('.')
+            sources[contract['validator']] = inspect.getsource(getattr(importlib.import_module('research_harness.' + module), name))
+        return sources
+
+    def test_finding9_every_validator_declaration_has_an_owner_without_fixture_witnesses(self):
+        for role, packet, output in build_final_rule_cases():
+            rule = composition.find_rule(role, packet)
+            with self.subTest(rule=rule['id']):
+                composition.validate_validator_ownership(rule, self.read_sources(rule))
+                self.assertEqual(rule['page_schema']['id'], rule['id'] + '/page')
+                self.assertEqual(rule['closing_schema']['id'], rule['id'] + '/closing')
+                self.assertTrue(rule['output_variants'])
+
+    def test_finding9_added_optional_validator_field_absent_from_fixtures_fails_ownership(self):
+        import ast
+        optional = 'optional_review_note'
+        for role, packet, output in build_final_rule_cases():
+            rule = composition.find_rule(role, packet)
+            sources = self.read_sources(rule)
+            contract = rule['validator_contracts'][0]
+            tree = ast.parse(sources[contract['validator']])
+            for node in ast.walk(tree):
+                if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                        and node.func.id in ('fields', '_fields', '_closed')
+                        and composition._read_validator_subject(node.args[0]) == contract['subject']):
+                    extra = ast.Tuple(elts=[ast.Constant(value=optional)], ctx=ast.Load())
+                    if node.func.id == '_closed':
+                        extra = ast.IfExp(test=ast.Compare(left=ast.Constant(value=optional), ops=[ast.In()],
+                            comparators=[ast.Name(id='output', ctx=ast.Load())]), body=extra,
+                            orelse=ast.Tuple(elts=[], ctx=ast.Load()))
+                        node.args[1] = ast.BinOp(left=node.args[1], op=ast.Add(), right=extra)
+                    elif len(node.args) > 2:
+                        node.args[2] = ast.BinOp(left=node.args[2], op=ast.Add(), right=extra)
+                    else:
+                        node.args.append(extra)
+                if isinstance(node, ast.Compare):
+                    candidate = node.left
+                    if (isinstance(candidate, ast.Call) and isinstance(candidate.func, ast.Name)
+                            and candidate.func.id == 'set' and candidate.args
+                            and composition._read_validator_subject(candidate.args[0]) == contract['subject']):
+                        node.left = ast.BinOp(left=candidate, op=ast.Sub(), right=ast.Set(elts=[ast.Constant(value=optional)]))
+            sources[contract['validator']] = ast.unparse(ast.fix_missing_locations(tree))
+            self.assertNotIn(optional, str(output))
+            if contract['validator'].startswith('native_review.'):
+                from research_harness import native_review
+                namespace = dict(vars(native_review))
+                exec(compile(sources[contract['validator']], '<optional-validator-field>', 'exec'), namespace)
+                copied = namespace[contract['validator'].split('.')[1]]
+                copied(packet if contract['validator'].endswith('validate_finding') else packet['native'],
+                       dict(output, **{optional: 'The copied validator accepts this optional field.'}))
+            with self.subTest(rule=rule['id']), self.assertRaises(ResearchError):
+                composition.validate_validator_ownership(rule, sources)
+
+    def test_finding6_only_roles_without_a_chain_are_exempt(self):
+        self.assertEqual(set(composition.ROLES_WITHOUT_RULES), {'manuscript', 'standalone'})
+        for metadata in composition.ROLES_WITHOUT_RULES.values():
+            self.assertEqual(metadata['unit'], 'paper-series')
+            self.assertEqual(metadata['release'], '0.94.0')
+            self.assertIn('No parts adapter or chain family', metadata['reason'])
+        for role, packet, output in build_final_rule_cases():
+            self.assertIsNotNone(composition.find_rule(role, packet))
+        self.assertIsNotNone(composition.find_rule('verification', dict(role='verification')))
+
+
+
+
+def build_serialized_sentence(cost):
+    for controls in range(min(300, cost // 6), -1, -1):
+        rest = cost - controls * 6
+        quotes, plain = divmod(rest, 2)
+        if controls + quotes + plain <= 300:
+            return '\x00' * controls + '"' * quotes + 'x' * plain
+    raise AssertionError('The requested serialized sentence cost is not representable')
+
+
+class CompleteSchemaBoundaryTests(unittest.TestCase):
+    def test_finding9_page_maxima_and_exact_eighty_thousand_boundary(self):
+        rule, packet, pages, closing = build_math_page_case()
+        minimum = packet['native']['scientific_context']['openness_minimum']
+        minimum['neighbours'] = ['Formulation ' + str(index) for index in range(1, 43)]
+        targets = composition.list_targets(rule, packet)
+        entries = []
+        for index in range(43):
+            row = dict(formulation='t' + str(index), coverage='c' * 800, sentence='')
+            row['sentence'] = build_serialized_sentence(composition.PAGE_ROW_CHARACTERS - composition._measure_final_value(row))
+            self.assertEqual(composition._measure_final_value(row), composition.PAGE_ROW_CHARACTERS)
+            entries.append(row)
+        page = dict(targets=entries)
+        excess = composition._measure_final_value(page) - 80000
+        self.assertGreater(excess, 0)
+        for row in reversed(entries):
+            cost = composition._measure_final_value(row['sentence']) - 2
+            reduction = min(excess, cost - 1)
+            row['sentence'] = build_serialized_sentence(cost - reduction)
+            excess -= reduction
+            if not excess:
+                break
+        self.assertEqual(composition._measure_final_value(page), 80000)
+        composition.validate_page_output(rule, packet, targets, page)
+        entries[-1]['sentence'] += 'x'
+        self.assertEqual(composition._measure_final_value(page), 80001)
+        with self.assertRaises(ResearchError) as caught:
+            composition.validate_page_output(rule, packet, targets, page)
+        self.assertEqual(caught.exception.contract_check, 'review.shape')
+
+    def test_finding9_closing_maximum_is_sixteen_thousand_serialized_characters(self):
+        rule, packet, pages, closing = build_math_page_case()
+        for name in ('statement', 'assumptions', 'scope', 'dependencies', 'policy'):
+            closing['findings'][name] = 'f' * 2000
+        openness = closing['findings']['openness']
+        openness['reason'] = 'r' * 4000
+        openness['evidence'] = [format(index, '064x') for index in range(32)]
+        openness['reason'] = openness['reason'][:4000 - (composition._measure_final_value(closing) - 16000)]
+        self.assertEqual(composition._measure_final_value(closing), 16000)
+        composition.validate_closing_output(rule, packet, [], closing)
+        openness['reason'] += 'r'
+        with self.assertRaises(ResearchError):
+            composition.validate_closing_output(rule, packet, [], closing)
+
+    def test_finding9_every_schema_descendant_has_a_finite_serialized_bound(self):
+        for role, packet, output in build_final_rule_cases():
+            rule = composition.find_rule(role, packet)
+            pending = [rule['page_schema'], rule['closing_schema']] + [field['schema'] for field in rule['fields']]
+            while pending:
+                schema = pending.pop()
+                self.assertIs(type(schema['max_serialized_characters']), int)
+                self.assertGreater(schema['max_serialized_characters'], 0)
+                kind = schema['type']
+                if kind == 'object':
+                    self.assertFalse(schema['additional_properties'])
+                    pending.extend(schema['properties'].values())
+                elif kind == 'array':
+                    self.assertIs(type(schema['max_items']), int)
+                    pending.append(schema['items'])
+                elif kind == 'json':
+                    self.assertIs(type(schema['max_properties']), int)
+                    self.assertIs(type(schema['max_items']), int)
+                    self.assertIs(type(schema['max_depth']), int)
+                elif kind in ('native_closing', 'native_math_closing'):
+                    pending.extend((schema['approval'], schema['assessment']))
+
+    def test_finding9_ground_counts_references_and_closing_text_have_bounds(self):
+        role, packet, original = build_final_rule_cases()[9]
+        rule = composition.find_rule(role, packet)
+        targets = composition.list_targets(rule, packet)
+        pages, closing = composition.split_output(rule, packet, original, [targets])
+        closing['outcome'] = 'unresolved'
+        for grounds in ([dict(kind='reviewer_gap', text='A gap.')] * 9,
+                       [dict(kind='own_argument', text='See the argument.', refs=[dict(path='research/sources/objects/' + 'f' * 64,
+                            sha256='f' * 64, size=1, media_type='text/plain')] * 9)]):
+            closing['grounds'] = grounds
+            with self.subTest(grounds=grounds), self.assertRaises(ResearchError):
+                composition.validate_closing_output(rule, packet, [], closing)
+        closing['grounds'] = [dict(kind='packet_defect', text='The packet has a defect.')]
+        closing['statement'] = 's' * 2001
+        with self.assertRaises(ResearchError):
+            composition.validate_closing_output(rule, packet, [], closing)
+
+
+class LegalOutputVariantTests(unittest.TestCase):
+    def assert_round_trip(self, role, packet, output):
+        rule = composition.find_rule(role, packet)
+        composition.validate_output_owners(rule, output)
+        self.assertEqual(rule['page_schema']['id'], rule['id'] + '/page')
+        self.assertEqual(rule['closing_schema']['id'], rule['id'] + '/closing')
+        targets = composition.list_targets(rule, packet)
+        for partition in ([targets], [[target] for target in targets],
+                          [targets[index:index + 2] for index in range(0, len(targets), 2)]):
+            pages, closing = composition.split_output(rule, packet, output, partition)
+            self.assertEqual(composition.compose_output(rule, packet, pages, closing), output)
+            for page in pages:
+                composition._validate_answer_schema(rule, rule['page_schema'], page['output'])
+            composition.validate_closing_output(rule, packet, [], closing)
+
+    def test_finding9_native_alternative_branches_and_unrestricted_assessment_members(self):
+        from research_harness import native_review
+        for role, packet, original in build_final_rule_cases()[6:9]:
+            kind = packet['native']['kind']
+            if kind == 'proposal':
+                for decision in ('approve', 'revise', 'reject'):
+                    output = copy.deepcopy(original)
+                    output.update(decision=decision, unresolved_objections=[dict(blocking=True, description='A retained objection.')])
+                    output['findings']['renewal_basis'] = ''
+                    native_review.validate_output(packet['native'], output)
+                    self.assert_round_trip(role, packet, output)
+            else:
+                for decision in ('revise', 'reject'):
+                    for extras in ({}, dict(objections=[], optional_assessment=dict(**{'10': [True, None, 1]}),
+                                            findings=['An operational assessment.'], reviewer='An extra value retained verbatim.')):
+                        output = dict(decision=decision, reason='The proposed transition cannot be approved.', **extras)
+                        native_review.validate_output(packet['native'], output)
+                        self.assert_round_trip(role, packet, output)
+        role, packet, original = build_final_rule_cases()[7]
+        for version in (None, 1, 2):
+            output = copy.deepcopy(original)
+            if version is not None:
+                output['schema_version'] = version
+            if version == 2:
+                output['findings']['openness'] = dict(outcome='unresolved', statement_digest=packet['native']['claim_digest'],
+                    coverage='The exact statement was searched.', reason='The question remains unresolved.',
+                    searched_at='2026-11-14', evidence=['d' * 64])
+            native_review.validate_output(packet['native'], output)
+            self.assert_round_trip(role, packet, output)
+
+    def test_finding9_value_optional_fields_previous_rubrics_and_potential_readiness(self):
+        from research_harness import bar_sources, problem_rubric, research_decisions
+        for role, packet, original in build_final_rule_cases()[:3]:
+            for option in ('source_requests', 'settled_requests', 'excerpts'):
+                output = copy.deepcopy(original)
+                output[option] = []
+                if option == 'settled_requests':
+                    packet = dict(packet, source_rules=bar_sources.PROTOCOL_V3)
+                    bar_sources.validate_settled_requests(packet, output)
+                self.assert_round_trip(role, packet, output)
+        role, packet, output = copy.deepcopy(build_final_rule_cases()[2])
+        output['value']['rubric']['admission'].pop('A7')
+        output['value']['rubric_evidence'].pop('A7')
+        problem_rubric.validate_grades(output['value']['rubric'], allow_previous=True)
+        self.assert_round_trip(role, packet, output)
+        role, packet, output = copy.deepcopy(build_final_rule_cases()[1])
+        for value in output['value']['rubric_potential'].values():
+            value['readiness'] = 'pass'
+            problem_rubric.validate_grades(value, potential=True)
+        self.assert_round_trip(role, packet, output)
+
+    def test_finding9_verification_optional_fields_and_readiness_assessor_option(self):
+        from research_harness.verification import validate_verdict_body
+        role, packet, output = copy.deepcopy(build_final_rule_cases()[11])
+        output['verdict'].update(rationaleSections=[], wouldChange='A decisive contrary source.', suggestions=[],
+                                 findings=[], supersedesVerdictId='previous-verdict')
+        validate_verdict_body(output['verdict'])
+        self.assert_round_trip(role, packet, output)
+        role, packet, output = copy.deepcopy(build_final_rule_cases()[12])
+        packet['assessor']['author_memory_notes_present'] = False
+        output['support']['assessor']['author_memory_notes_present'] = False
+        self.assert_round_trip(role, packet, output)
+class RemainingLegalVariantTests(unittest.TestCase):
+    assert_round_trip = LegalOutputVariantTests.assert_round_trip
+
+    def test_finding9_structured_native_coverage_and_optional_minimum(self):
+        from research_harness import native_review
+        role, packet, original = copy.deepcopy(build_final_rule_cases()[10])
+        packet['native']['contract']['orchestration'] = 'problem_creation'
+        for coverage in ('The exact formulation was searched.', ['The supplied coverage.'], dict(statement='A dated search.')):
+            for supplied in (False, True):
+                output = copy.deepcopy(original)
+                output['findings']['openness']['coverage'] = coverage
+                if not supplied:
+                    output['findings']['openness'].pop('minimum')
+                native_review.validate_output(packet['native'], output)
+                self.assert_round_trip(role, packet, output)
+
+    def test_finding9_all_adjudicator_scalar_branches(self):
+        role, packet, original = copy.deepcopy(build_final_rule_cases()[5])
+        for disposition in ('upheld', 'not_upheld', 'unresolved', 'not_binding'):
+            for correction in (None, True, False):
+                output = dict(original, disposition=disposition, correction_admissible=correction)
+                self.assert_round_trip(role, packet, output)
+
+    def test_finding9_finding_outcomes_legacy_grounds_and_coverage_forms(self):
+        from research_harness import native_review
+        role, packet, original = copy.deepcopy(build_final_rule_cases()[9])
+        for outcome in ('supported_open', 'already_solved', 'unresolved'):
+            current = copy.deepcopy(packet)
+            current['native']['scientific_context']['audit_forecast']['outcomes'] = {
+                name: 'possible' if name == outcome else 'blocked' for name in ('supported_open', 'already_solved')}
+            output = copy.deepcopy(original)
+            output['findings']['openness']['outcome'] = outcome
+            native_review.validate_finding(current, output)
+            self.assert_round_trip(role, current, output)
+        packet.pop('reading_final')
+        original['findings']['openness'].update(outcome='unresolved', coverage='The earlier collective coverage.',
+            grounds=[dict(kind='own_argument', text='An earlier argument is retained.', turns=['reading-1'])])
+        native_review.validate_finding(packet, original)
+        self.assert_round_trip(role, packet, original)
 
 
 if __name__ == '__main__':

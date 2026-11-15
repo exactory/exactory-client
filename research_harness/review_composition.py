@@ -784,8 +784,10 @@ def effective_review_output(controller_id, frozen_selection=None):
 
 
 # Final-page rules are separate from the frozen staged-observation protocol above.
+# Recorded pages wrap {targets, output}; output is the page answer described here.
 # Page answers are {targets: [{target, fields: {JSON-pointer: value}, sentence}]}.
 # Finding pages instead use {targets: [{formulation, coverage, grounds, sentence}]}.
+# Math pages use {targets: [{formulation, coverage, sentence}]}.
 # Ordinary closing answers are {fields: {JSON-pointer: value}, bindings: [path]}.
 # bindings selects optional harness fields, never their values. Finding closings
 # have the five result findings, outcome, reason and grounds directly.
@@ -797,10 +799,12 @@ PAGE_ENVELOPE_CHARACTERS = 32
 CLOSING_FIELDS_CHARACTERS = 16000
 GROUND_TEXT_CHARACTERS = 600
 COVERAGE_CHARACTERS = 800
+COVERAGE_LINE_BREAKS = '\r\n\v\f\x1c\x1d\x1e\x85\u2028\u2029'
 FINDING_REASON_CHARACTERS = 4000
 ROLES_WITHOUT_RULES = {
-    'manuscript': dict(unit='paper-series', release='0.94.0'),
-    'standalone': dict(unit='paper-series', release='0.94.0'),
+    role: dict(unit='paper-series', release='0.94.0',
+               reason='No parts adapter or chain family applies in this release.')
+    for role in ('manuscript', 'standalone')
 }
 # These validators expose a complete object, not an individual-field checker.
 # Use the original object checker with neutral siblings wherever possible.
@@ -820,6 +824,14 @@ FINAL_OWNER_INVALID_MESSAGE = 'Every output field must have exactly one owner in
 FINAL_CLOSING_INVALID_MESSAGE = 'Return only the closing fields and the optional harness field paths of this composition rule.'
 PACKET_ARTIFACT_MISSING_MESSAGE = 'The packet does not carry the bytes of this reference.'
 TARGET_WITHOUT_ASSESSMENT_SENTENCE = 'The output supplies no separate assessment for this target.'
+MATH_COVERAGE_INVALID_MESSAGE = 'Split only a math coverage string composed by this rule, with one labeled line for each formulation.'
+ANSWER_SCHEMA_INVALID_MESSAGE = 'This answer exceeds its versioned field schema. Cite longer supporting material by a recorded handle.'
+VALIDATOR_FIELDS_UNOWNED_MESSAGE = 'A validator accepts fields absent from this composition schema. Declare their owners and bounds.'
+JSON_FIELD_CHARACTERS = 8000
+JSON_STRING_CHARACTERS = 4000
+JSON_COLLECTION_ITEMS = 64
+GROUND_ITEMS = 8
+GROUND_REFERENCES = 8
 
 
 def _make_field(path, owner, target=None):
@@ -869,8 +881,7 @@ def find_rule(role, packet):
         rule['fields'].extend(_make_field('/reassessment/findings/*/' + key + ('/**' if key == 'evidence' else ''),
                                         'page', 'historical') for key in ('review_id', 'disposition', 'reason', 'evidence'))
         rule['checks'].append('review.reassessment')
-        rule['field_paths'] = [field['path'] for field in rule['fields']]
-        return rule
+        return _attach_answer_schemas(rule)
     native = packet.get('native', packet)
     adapter = review_parts_roles.find_adapter(dict(role=role), packet)
     problem = packet.get('subject', {}).get('kind') == 'problem'
@@ -887,7 +898,7 @@ def find_rule(role, packet):
                   for key in ('subject_digest', 'reviewer')]
         if kind != 'recovery':
             fields.append(_make_field('/claim_digest', 'harness'))
-        fields.append(_make_field('/schema_version', 'harness' if finding or kind != 'result' else 'closing'))
+        fields.append(_make_field('/schema_version', 'harness' if finding or math or kind != 'result' else 'closing'))
         if finding or math:
             fields.extend(_make_field('/findings/' + key, 'closing') for key in native_review.RESULT_FINDINGS)
             fields.extend(_make_field('/findings/openness/' + key + ('/**' if key in ('coverage', 'grounds', 'evidence') else ''),
@@ -915,7 +926,8 @@ def find_rule(role, packet):
             fields.extend(_make_field('/' + key + '/**', 'closing')
                           for key in ('decision', 'reason', 'objections', 'unresolved_objections'))
         check = 'openness.finding' if finding else 'native.output'
-    elif role == 'verification' and adapter == 'study_verification':
+    elif role == 'verification':
+        adapter = adapter or 'study_verification'
         name, check = 'study-verification', 'review.shape'
         fields = [_make_field('/verdict/**', 'closing')]
         fields.extend(_make_field('/checks/*/' + key + ('/**' if key == 'evidence' else ''), 'page', 'dimension')
@@ -946,13 +958,18 @@ def find_rule(role, packet):
                                           'page', 'readiness'))
     else:
         return None
-    return dict(id=FINAL_RULE_PREFIX + name, role=role, adapter=adapter, fields=fields,
+    native_kind = native.get('kind') if role == 'native_math' else None
+    if native_kind in ('result', 'recovery') and not finding:
+        fields.append(dict(path='/**', owner='closing', target=None, when='not_approved'))
+    rule = dict(id=FINAL_RULE_PREFIX + name, role=role, adapter=adapter, fields=fields,
+                native_kind=native_kind,
                 field_paths=[field['path'] for field in fields],
                 checks=[check],
                 limits=dict(sentence=SENTENCE_CHARACTERS, fields=PAGE_FIELDS_CHARACTERS,
                             row=PAGE_ROW_CHARACTERS, envelope=PAGE_ENVELOPE_CHARACTERS,
                             closing=CLOSING_FIELDS_CHARACTERS, coverage=COVERAGE_CHARACTERS,
                             ground_text=GROUND_TEXT_CHARACTERS, reason=FINDING_REASON_CHARACTERS))
+    return _attach_answer_schemas(rule)
 
 
 def list_targets(rule, packet):
@@ -1033,7 +1050,7 @@ def _list_output_fields(value, path=''):
 
 def _list_rule_values(rule, value, path=''):
     for field in rule['fields']:
-        if field['path'].endswith('/**') and _matches_field(field['path'][:-3], path):
+        if not field.get('when') and field['path'].endswith('/**') and _matches_field(field['path'][:-3], path):
             yield path, value
             return
     if isinstance(value, (dict, list)) and value:
@@ -1053,11 +1070,18 @@ def _matches_field(pattern, path):
     return len(keys) == len(parts) and all(p == '*' or p == k for p, k in zip(parts, keys))
 
 
-def _find_field_owners(rule, path, value):
-    found = [field for field in rule['fields'] if _matches_field(field['path'], path)]
+def _uses_native_assessment(rule, output):
+    return (rule.get('native_kind') in ('result', 'recovery')
+            and output.get('decision') in ('revise', 'reject'))
+
+
+def _find_field_owners(rule, path, value, output=None):
+    fields = [field for field in rule['fields'] if bool(field.get('when')) ==
+              bool(output is not None and _uses_native_assessment(rule, output))]
+    found = [field for field in fields if _matches_field(field['path'], path)]
     if not found and isinstance(value, (dict, list)) and not value:
         prefix = path + '/'
-        found = [field for field in rule['fields'] if field['path'].startswith(prefix)]
+        found = [field for field in fields if field['path'].startswith(prefix)]
         # An empty collection is the shared container of disjoint member paths.
         if found and len({field['owner'] for field in found}) == 1:
             found = found[:1]
@@ -1068,9 +1092,10 @@ def describe_owners(rule):
     """Describe disjoint paths. Grounds are a concatenation, never overwrites."""
     owners = {}
     for field in rule['fields']:
-        if field['path'] in owners or field['owner'] not in ('page', 'closing', 'harness'):
+        path = field['path'] + ('@' + field['when'] if field.get('when') else '')
+        if path in owners or field['owner'] not in ('page', 'closing', 'harness'):
             raise ResearchError('review_composition_conflict', FINAL_OWNER_INVALID_MESSAGE, dict(path=field['path']))
-        owners[field['path']] = field['owner']
+        owners[path] = field['owner']
     if set(owners) != set(rule['field_paths']):
         raise ResearchError('review_composition_conflict', FINAL_OWNER_INVALID_MESSAGE)
     return owners
@@ -1080,7 +1105,7 @@ def validate_output_owners(rule, output):
     """Guard part 2: check complete actual outputs, including empty containers."""
     describe_owners(rule)
     for path, value in _list_output_fields(output):
-        if len(_find_field_owners(rule, path, value)) != 1:
+        if len(_find_field_owners(rule, path, value, output)) != 1:
             raise ResearchError('review_composition_conflict', FINAL_OWNER_INVALID_MESSAGE, dict(path=path))
 
 
@@ -1130,8 +1155,12 @@ def _build_harness_fields(rule, packet):
 
 def split_output(rule, packet, output, pages):
     """Project stored output without normalizing, validating or altering its bytes."""
+    if rule['id'].endswith('/math-openness'):
+        return _split_math_output(rule, packet, output, pages)
     if rule['id'].endswith('/problem-openness'):
         return _split_finding(rule, packet, output, pages)
+    if _uses_native_assessment(rule, output):
+        return _split_native_assessment(rule, packet, output, pages)
     targets = list_targets(rule, packet)
     ids = [row['id'] for row in targets]
     rows = {key: dict(target='t' + str(index), fields={}, sentence='') for index, key in enumerate(ids)}
@@ -1150,10 +1179,6 @@ def split_output(rule, packet, output, pages):
                     break
         elif field['owner'] == 'closing':
             closing['fields'][path] = copy.deepcopy(value)
-        elif rule['id'].endswith('/math-openness') and field['target'] == 'formulation':
-            coverage = output['findings']['openness']['coverage']
-            for index, key in enumerate(ids):
-                rows[key]['fields']['/findings/openness/coverage'] = coverage
         else:
             target = (ids[0] if isinstance(value, (dict, list)) and not value else
                       _find_target_id(rule, packet, output, field, path))
@@ -1162,7 +1187,8 @@ def split_output(rule, packet, output, pages):
             rows[target]['fields'][path] = copy.deepcopy(value)
     for row in rows.values():
         row['sentence'] = _describe_target_sentence(row['fields'])
-    return [dict(targets=[copy.deepcopy(rows[_resolve_target_id(targets, key)]) for key in page]) for page in pages], closing
+    return [_wrap_page_output(page, [copy.deepcopy(rows[_resolve_target_id(targets, key)]) for key in page])
+            for page in pages], closing
 
 
 def _resolve_target_id(targets, value):
@@ -1175,26 +1201,78 @@ def _resolve_target_id(targets, value):
     raise ResearchError('review_composition_conflict', FINAL_PAGE_INVALID_MESSAGE, dict(target=key))
 
 
+def _wrap_page_output(targets, rows):
+    return dict(targets=copy.deepcopy(targets), output=dict(targets=rows))
+
+
+def _render_formulation_label(target):
+    # Preserve mathematical notation; escape only breaks in a multiline label.
+    return ''.join('\\u%04x' % ord(character) if character in COVERAGE_LINE_BREAKS else character
+                   for character in target['label'])
+
+
+def _compose_math_output(rule, packet, pages, closing):
+    if closing['decision'] != 'approve':
+        return copy.deepcopy(closing)
+    native = packet.get('native', packet)
+    output = copy.deepcopy(closing)
+    output.update(schema_version=2, **{key: copy.deepcopy(native[key])
+                  for key in ('subject_digest', 'claim_digest', 'reviewer')})
+    targets = list_targets(rule, packet)
+    entries = [row for page in pages for row in page['output']['targets']]
+    lines = []
+    for row in entries:
+        identity = _resolve_target_id(targets, row['formulation'])
+        target = next(target for target in targets if target['id'] == identity)
+        lines.append(_render_formulation_label(target) + ': ' + row['coverage'])
+    output['findings']['openness'].update(
+        statement_digest=native['claim_digest'],
+        minimum=copy.deepcopy(native['scientific_context']['openness_minimum']),
+        coverage='\n'.join(lines))
+    return output
+
+
+def _split_math_output(rule, packet, output, pages):
+    if output['decision'] != 'approve':
+        return [], copy.deepcopy(output)
+    targets = list_targets(rule, packet)
+    coverage = output['findings']['openness']['coverage']
+    lines = coverage.split('\n')
+    rows = {}
+    if len(lines) != len(targets):
+        raise ResearchError('review_composition_conflict', MATH_COVERAGE_INVALID_MESSAGE)
+    for index, (target, line) in enumerate(zip(targets, lines)):
+        prefix = _render_formulation_label(target) + ': '
+        if not line.startswith(prefix):
+            raise ResearchError('review_composition_conflict', MATH_COVERAGE_INVALID_MESSAGE)
+        text = line[len(prefix):]
+        rows[target['id']] = dict(formulation='t' + str(index), coverage=text,
+                                  sentence=_describe_target_sentence({'coverage': text}))
+    closing = dict(decision='approve', findings=copy.deepcopy(output['findings']))
+    for key in ('statement_digest', 'minimum', 'coverage'):
+        closing['findings']['openness'].pop(key)
+    return [_wrap_page_output(page, [copy.deepcopy(rows[_resolve_target_id(targets, key)]) for key in page])
+            for page in pages], closing
+
+
 def compose_output(rule, packet, page_outputs, closing_output):
     """Assemble only owned fields. Authentication and edge validation are callers' work."""
+    if rule['id'].endswith('/math-openness'):
+        return _compose_math_output(rule, packet, page_outputs, closing_output)
     if rule['id'].endswith('/problem-openness'):
         return _compose_finding(rule, packet, page_outputs, closing_output)
+    if 'assessment' in closing_output:
+        return copy.deepcopy(closing_output['assessment'])
     output = {}
     for path, value in closing_output['fields'].items():
         _write_path(output, path, value)
     harness = _build_harness_fields(rule, packet)
     for path in closing_output['bindings']:
         _write_path(output, path, harness[path])
-    coverage = []
     for page in page_outputs:
-        for row in page['targets']:
+        for row in page['output']['targets']:
             for path, value in row['fields'].items():
-                if rule['id'].endswith('/math-openness') and path == '/findings/openness/coverage':
-                    coverage.append(value)
-                else:
-                    _write_path(output, path, value)
-    if coverage:
-        output['findings']['openness']['coverage'] = _compose_coverage_text(coverage)
+                _write_path(output, path, value)
     return output
 
 
@@ -1211,7 +1289,8 @@ def _split_finding(rule, packet, output, pages):
     # Legacy findings allow one unstructured string; keep this inverse exact.
     if isinstance(coverage, str):
         closing['coverage_format'] = 'text'
-    return [dict(targets=[copy.deepcopy(rows[_resolve_target_id(targets, key)]) for key in page]) for page in pages], closing
+    return [_wrap_page_output(page, [copy.deepcopy(rows[_resolve_target_id(targets, key)]) for key in page])
+            for page in pages], closing
 
 
 def _compose_finding(rule, packet, page_outputs, closing):
@@ -1220,7 +1299,7 @@ def _compose_finding(rule, packet, page_outputs, closing):
     for path, value in _build_harness_fields(rule, packet).items():
         _write_path(output, path, value)
     output['findings'] = {key: copy.deepcopy(closing[key]) for key in RESULT_FINDINGS}
-    entries = [row for page in page_outputs for row in page['targets']]
+    entries = [row for page in page_outputs for row in page['output']['targets']]
     coverage = [copy.deepcopy(row['coverage']) for row in entries]
     if closing.get('coverage_format') == 'text':
         coverage = _compose_coverage_text(coverage)
@@ -1390,7 +1469,11 @@ def _validate_finding_fields(packet, rows=None, closing=None):
                     '/findings/openness/grounds', native['scientific_context']['audit_forecast'])
     native['scientific_context']['audit_forecast']['outcomes'] = dict(supported_open='blocked', already_solved='blocked')
     count = len(rows) if rows is not None else 1
-    neutral['reading_final'] = dict(protocol='exactory-openness-reading-v7', page=dict(targets=list(range(count))))
+    if packet.get('reading_final', {}).get('protocol') == 'exactory-openness-reading-v7':
+        neutral['reading_final'] = dict(protocol='exactory-openness-reading-v7', page=dict(targets=list(range(count))))
+    else:
+        native['scientific_context']['openness_minimum']['neighbours'] = list(
+            native['scientific_context']['openness_minimum']['neighbours'][:max(0, count - 1)])
     findings = {key: 'Shape check.' for key in native_review.RESULT_FINDINGS}
     openness = dict(outcome='unresolved', coverage=[row['coverage'] for row in rows] if rows is not None else ['Checked.'],
                     reason='Shape check.', grounds=[ground for row in rows for ground in row['grounds']] if rows is not None else [])
@@ -1508,14 +1591,16 @@ def validate_page_output(rule, packet, targets, output):
     definitions = list_targets(rule, packet)
     expected = [_resolve_target_id(definitions, key) for key in targets]
     finding = rule['id'].endswith('/problem-openness')
-    key = 'formulation' if finding else 'target'
+    math = rule['id'].endswith('/math-openness')
+    key = 'formulation' if finding or math else 'target'
     with contract_check('review.shape'):
         check_fields(output, ('targets',), code='review_composition_conflict')
         if not isinstance(output['targets'], list):
             raise ResearchError('review_composition_conflict', FINAL_PAGE_INVALID_MESSAGE)
         actual = []
         for row in output['targets']:
-            check_fields(row, (key, 'coverage', 'grounds', 'sentence') if finding else ('target', 'fields', 'sentence'),
+            check_fields(row, (key, 'coverage', 'grounds', 'sentence') if finding else
+                         (key, 'coverage', 'sentence') if math else ('target', 'fields', 'sentence'),
                          code='review_composition_conflict')
             actual.append(_resolve_target_id(definitions, row[key]))
             if not isinstance(row['sentence'], str) or not row['sentence'].strip() or len(row['sentence']) > SENTENCE_CHARACTERS:
@@ -1524,6 +1609,15 @@ def validate_page_output(rule, packet, targets, output):
             raise ResearchError('review_composition_conflict', FINAL_PAGE_INVALID_MESSAGE)
     if finding:
         _validate_finding_fields(packet, output['targets'])
+    elif math:
+        from . import native_review
+        with contract_check('native.output'):
+            for row in output['targets']:
+                coverage = row['coverage']
+                native_review._require(native_review._nonempty(coverage) and len(coverage) <= COVERAGE_CHARACTERS
+                    and not any(character in COVERAGE_LINE_BREAKS for character in coverage),
+                    'Formulation coverage is nonempty text of at most 800 characters on one line',
+                    path='/findings/openness/coverage')
     else:
         for target, row in zip(actual, output['targets']):
             if not isinstance(row['fields'], dict):
@@ -1537,13 +1631,7 @@ def validate_page_output(rule, packet, targets, output):
             if rule['role'] in ('bar', 'slate', 'result'):
                 _validate_value_fields(rule, packet, row['fields'], required=target)
             if rule['role'] == 'native_math':
-                if rule['id'].endswith('/math-openness'):
-                    native = packet.get('native', packet)
-                    _validate_native_fields(packet, {'/findings/openness': dict(
-                        outcome='unresolved', statement_digest=native['claim_digest'], evidence=['0' * 64],
-                        searched_at='2000-01-01', reason='Shape check.', coverage=row['fields'].get('/findings/openness/coverage'))})
-                else:
-                    _validate_native_fields(packet, row['fields'], required=target if target != 'openness' else None)
+                _validate_native_fields(packet, row['fields'], required=target if target != 'openness' else None)
             adapter = rule.get('base_adapter', rule['adapter'])
             if adapter == 'study_verification':
                 _validate_verification_fields(packet, _compact_page_lists(projected), required=target)
@@ -1565,6 +1653,7 @@ def validate_page_output(rule, packet, targets, output):
             values = {k: v for k, v in row.items() if k not in ('sentence', key)}
             if _measure_final_value(values) > PAGE_FIELDS_CHARACTERS or _measure_final_value(row) > PAGE_ROW_CHARACTERS:
                 raise ResearchError('review_composition_conflict', FINAL_PAGE_BOUND_MESSAGE)
+        _validate_answer_schema(rule, rule['page_schema'], output)
 
 
 def describe_page_answer_bound(rule, targets):
@@ -1603,11 +1692,13 @@ def build_decision_rows(rule, packet, page_outputs):
     handles = {target['id']: 't' + str(index) for index, target in enumerate(definitions)}
     result = []
     for page in page_outputs:
-        for item in page['targets']:
-            finding = 'formulation' in item
-            target = _resolve_target_id(definitions, item['formulation'] if finding else item['target'])
-            if finding:
+        for item in page['output']['targets']:
+            formulation = 'formulation' in item
+            target = _resolve_target_id(definitions, item['formulation'] if formulation else item['target'])
+            if formulation and 'grounds' in item:
                 status = sorted({ground['kind'] for ground in item['grounds']})
+            elif formulation:
+                status = 'assessed'
             else:
                 grades = [value for path, value in item['fields'].items()
                           if path.endswith(('/status', '/disposition', '/classification')) or '/rubric/' in path]
@@ -1631,12 +1722,23 @@ def validate_closing_output(rule, packet, rows, output):
     from . import native_review
     from .operations import strings
     from .review_refusal import contract_check
+    if rule['id'].endswith('/math-openness'):
+        _validate_math_closing(rule, packet, output)
+        return
     if rule['id'].endswith('/problem-openness'):
         check_fields(output, native_review.RESULT_FINDINGS + ('outcome', 'reason', 'grounds'), ('coverage_format',),
                      code='review_composition_conflict')
         _validate_finding_fields(packet, closing=output)
         if _measure_final_value(output) > CLOSING_FIELDS_CHARACTERS:
             raise ResearchError('review_composition_conflict', FINAL_PAGE_BOUND_MESSAGE)
+        with contract_check('review.shape'):
+            _validate_answer_schema(rule, rule['closing_schema'], output)
+        return
+    if rule.get('native_kind') in ('result', 'recovery') and 'assessment' in output:
+        with contract_check('native.output'):
+            native_review.validate_output(packet.get('native', packet), output['assessment'])
+        with contract_check('review.shape'):
+            _validate_answer_schema(rule, rule['closing_schema'], output)
         return
     with contract_check('review.shape'):
         check_fields(output, ('fields', 'bindings'), code='review_composition_conflict')
@@ -1653,17 +1755,7 @@ def validate_closing_output(rule, packet, rows, output):
                 raise ResearchError('review_composition_conflict', FINAL_OWNER_INVALID_MESSAGE, dict(path=path))
     fields = output['fields']
     if rule['role'] == 'native_math':
-        if rule['id'].endswith('/math-openness'):
-            neutral = _build_neutral_native(packet)
-            neutral['schema_version'] = 2
-            neutral['findings']['openness'] = dict(outcome='unresolved', statement_digest=packet.get('native', packet)['claim_digest'],
-                evidence=['0' * 64], searched_at='2000-01-01', coverage='Shape check.', reason='Shape check.')
-            for path, value in fields.items():
-                _write_path(neutral, path, value)
-            with contract_check('native.output'):
-                native_review.validate_output(packet.get('native', packet), neutral)
-        else:
-            _validate_native_fields(packet, fields)
+        _validate_native_fields(packet, fields)
     elif rule['role'] in ('bar', 'slate', 'result'):
         _validate_value_fields(rule, packet, fields)
         with contract_check('review.value'):
@@ -1705,3 +1797,402 @@ def validate_closing_output(rule, packet, rows, output):
         _validate_adjudicator_fields(packet, projected)
     if _measure_final_value(output) > CLOSING_FIELDS_CHARACTERS:
         raise ResearchError('review_composition_conflict', FINAL_PAGE_BOUND_MESSAGE)
+    with contract_check('review.shape'):
+        _validate_answer_schema(rule, rule['closing_schema'], output)
+
+
+def _make_json_schema(characters):
+    return dict(type='json', max_serialized_characters=characters,
+                max_string_serialized_characters=min(characters, JSON_STRING_CHARACTERS),
+                max_items=JSON_COLLECTION_ITEMS, max_properties=JSON_COLLECTION_ITEMS,
+                max_key_serialized_characters=512, max_depth=16, overflow='recorded_handle')
+
+
+def _make_text_schema(characters, serialized=None):
+    return dict(type='string', max_characters=characters,
+                max_serialized_characters=serialized if serialized is not None else 6 * characters + 2,
+                overflow='recorded_handle')
+
+
+def _make_object_schema(properties, required=None, bound=16000):
+    return dict(type='object', properties=properties,
+                required=list(properties) if required is None else list(required),
+                additional_properties=False, max_serialized_characters=bound)
+
+
+def _attach_answer_schemas(rule):
+    """Version both answer grammars, including open native assessment branches.
+
+    A json field has a bound at every descendant, including list lengths, key
+    lengths and nesting. The joint budgets remain separate constraints: fields
+    cannot all consume their independent maxima in the same answer.
+    """
+    rule['field_paths'] = [field['path'] + ('@' + field['when'] if field.get('when') else '')
+                           for field in rule['fields']]
+    for field in rule['fields']:
+        field['schema'] = _make_json_schema(PAGE_FIELDS_CHARACTERS if field['owner'] == 'page' else JSON_FIELD_CHARACTERS)
+    sentence = _make_text_schema(SENTENCE_CHARACTERS)
+    identity = _make_text_schema(120, 722)
+    math = rule['id'].endswith('/math-openness')
+    finding = rule['id'].endswith('/problem-openness')
+    fields = dict(type='field_map', owner='page', max_properties=64,
+                  max_serialized_characters=PAGE_FIELDS_CHARACTERS)
+    if math:
+        properties = dict(formulation=identity, coverage=_make_text_schema(COVERAGE_CHARACTERS), sentence=sentence)
+    elif finding:
+        from .native_review import GROUND_RULES
+        ground = _make_object_schema(dict(kind=dict(type='enum', values=list(GROUND_RULES), max_serialized_characters=32),
+            text=_make_text_schema(GROUND_TEXT_CHARACTERS), work_id=_make_text_schema(256),
+            refs=dict(type='array', items=_make_json_schema(1024), max_items=GROUND_REFERENCES,
+                      max_serialized_characters=6000),
+            # Stored v6 findings keep the reference spelling of their protocol.
+            turns=dict(type='array', items=_make_text_schema(256), max_items=GROUND_REFERENCES,
+                       max_serialized_characters=6000)), required=('kind', 'text'), bound=8000)
+        grounds = dict(type='array', items=ground, max_items=GROUND_ITEMS, max_serialized_characters=8000)
+        properties = dict(formulation=identity, coverage=_make_json_schema(COVERAGE_CHARACTERS),
+                          grounds=grounds, sentence=sentence)
+    else:
+        properties = dict(target=identity, fields=fields, sentence=sentence)
+    row = _make_object_schema(properties, bound=PAGE_ROW_CHARACTERS)
+    page = _make_object_schema(dict(targets=dict(type='array', items=row, max_items=5000,
+                                                max_serialized_characters=79988)), bound=80000)
+    page.update(id=rule['id'] + '/page', target_payload_bound=PAGE_FIELDS_CHARACTERS)
+    closing_fields = dict(type='field_map', owner='closing', max_properties=256,
+                          max_serialized_characters=CLOSING_FIELDS_CHARACTERS)
+    ordinary = _make_object_schema(dict(fields=closing_fields,
+        bindings=dict(type='array', items=_make_text_schema(256), max_items=64, max_serialized_characters=16000)))
+    if math:
+        from .native_review import RESULT_FINDINGS
+        findings = {key: _make_text_schema(2000) for key in RESULT_FINDINGS}
+        findings['openness'] = _make_object_schema(dict(outcome=_make_text_schema(32),
+            reason=_make_text_schema(FINDING_REASON_CHARACTERS), searched_at=_make_text_schema(10),
+            evidence=dict(type='array', items=_make_text_schema(64, 66), max_items=32, max_serialized_characters=2200)))
+        approval = _make_object_schema(dict(decision=dict(type='enum', values=['approve'], max_serialized_characters=9),
+                                           findings=_make_object_schema(findings)))
+        closing = dict(type='native_math_closing', approval=approval,
+                       assessment=_make_json_schema(CLOSING_FIELDS_CHARACTERS),
+                       max_serialized_characters=CLOSING_FIELDS_CHARACTERS)
+    elif finding:
+        from .native_review import RESULT_FINDINGS
+        closing_properties = {key: _make_text_schema(2000) for key in RESULT_FINDINGS}
+        closing_properties.update(outcome=_make_text_schema(32), reason=_make_text_schema(FINDING_REASON_CHARACTERS),
+                                  grounds=grounds, coverage_format=dict(type='enum', values=['text'], max_serialized_characters=6))
+        closing = _make_object_schema(closing_properties,
+            required=RESULT_FINDINGS + ('outcome', 'reason', 'grounds'))
+    elif rule.get('native_kind') in ('result', 'recovery'):
+        closing = dict(type='native_closing', approval=ordinary,
+            assessment=_make_object_schema(dict(assessment=_make_json_schema(CLOSING_FIELDS_CHARACTERS))),
+            max_serialized_characters=CLOSING_FIELDS_CHARACTERS)
+    else:
+        closing = ordinary
+    closing['id'] = rule['id'] + '/closing'
+    rule.update(page_schema=page, closing_schema=closing,
+                output_variants=_describe_output_variants(rule),
+                validator_contracts=_describe_validator_contracts(rule))
+    return rule
+
+
+def _describe_output_variants(rule):
+    kind = rule.get('native_kind')
+    if rule['id'].endswith('/problem-openness'):
+        return ['finding-structured-coverage', 'finding-legacy-text-coverage']
+    if kind == 'proposal':
+        return ['proposal-approve', 'proposal-revise', 'proposal-reject']
+    if kind in ('result', 'recovery'):
+        approvals = ['approval-v1-implicit', 'approval-v1-explicit', 'approval-v2'] if kind == 'result' else ['approval-v1']
+        return approvals + ['revise-with-optional-extra-fields', 'reject-with-optional-extra-fields']
+    if rule['role'] in ('bar', 'slate', 'result'):
+        return ['assessment', 'source-requests', 'settled-requests', 'excerpts', 'reassessment',
+                'support-null', 'support-object', 'current-rubric', 'previous-rubric', 'potential-readiness']
+    if rule['role'] == 'verification':
+        return ['verdict-with-required-fields', 'verdict-with-optional-fields']
+    return ['focused-adjudication', 'focused-reassessment']
+
+
+def _raise_schema_error(path):
+    raise ResearchError('review_composition_conflict', ANSWER_SCHEMA_INVALID_MESSAGE, dict(path=path))
+
+
+def _validate_json_limits(schema, value, path, depth=0):
+    if depth > schema['max_depth']:
+        _raise_schema_error(path)
+    if isinstance(value, str) and _measure_final_value(value) > schema['max_string_serialized_characters']:
+        _raise_schema_error(path)
+    if isinstance(value, list):
+        if len(value) > schema['max_items']:
+            _raise_schema_error(path)
+        for index, item in enumerate(value):
+            _validate_json_limits(schema, item, path + '/' + str(index), depth + 1)
+    elif isinstance(value, dict):
+        if len(value) > schema['max_properties']:
+            _raise_schema_error(path)
+        for key, item in value.items():
+            if _measure_final_value(key) > schema['max_key_serialized_characters']:
+                _raise_schema_error(path)
+            _validate_json_limits(schema, item, path + '/' + _escape_field(key), depth + 1)
+    elif value is not None and type(value) not in (str, int, float, bool):
+        _raise_schema_error(path)
+
+
+def _validate_answer_schema(rule, schema, value, path=''):
+    if _measure_final_value(value) > schema['max_serialized_characters']:
+        _raise_schema_error(path)
+    kind = schema['type']
+    if kind == 'json':
+        _validate_json_limits(schema, value, path)
+    elif kind == 'string':
+        if not isinstance(value, str) or len(value) > schema['max_characters']:
+            _raise_schema_error(path)
+    elif kind == 'enum':
+        if value not in schema['values']:
+            _raise_schema_error(path)
+    elif kind == 'array':
+        if not isinstance(value, list) or len(value) > schema['max_items']:
+            _raise_schema_error(path)
+        for index, item in enumerate(value):
+            _validate_answer_schema(rule, schema['items'], item, path + '/' + str(index))
+    elif kind == 'object':
+        if (not isinstance(value, dict) or not set(schema['required']) <= set(value)
+                or not set(value) <= set(schema['properties'])):
+            _raise_schema_error(path)
+        for key, item in value.items():
+            _validate_answer_schema(rule, schema['properties'][key], item, path + '/' + key)
+    elif kind == 'field_map':
+        if not isinstance(value, dict) or len(value) > schema['max_properties']:
+            _raise_schema_error(path)
+        for field_path, item in value.items():
+            owners = _find_field_owners(rule, field_path, item)
+            if len(owners) != 1 or owners[0]['owner'] != schema['owner']:
+                _raise_schema_error(path + '/' + _escape_field(field_path))
+            _validate_answer_schema(rule, owners[0]['schema'], item, field_path)
+    elif kind in ('native_closing', 'native_math_closing'):
+        assessment = 'assessment' in value if kind == 'native_closing' else value.get('decision') != 'approve'
+        _validate_answer_schema(rule, schema['assessment' if assessment else 'approval'], value, path)
+
+
+def _split_native_assessment(rule, packet, output, pages):
+    targets = list_targets(rule, packet)
+    rows = {}
+    for index, target in enumerate(targets):
+        fields = {} if target['id'] == 'openness' else {'/findings/' + target['id']: output['reason']}
+        rows[target['id']] = dict(target='t' + str(index), fields=fields, sentence=output['reason'][:SENTENCE_CHARACTERS])
+    return [_wrap_page_output(page, [copy.deepcopy(rows[_resolve_target_id(targets, key)]) for key in page])
+            for page in pages], dict(assessment=copy.deepcopy(output))
+
+
+def _validate_math_closing(rule, packet, output):
+    from . import native_review
+    from .review_refusal import contract_check
+    with contract_check('native.output'):
+        if isinstance(output, dict) and output.get('decision') == 'approve':
+            native = packet.get('native', packet)
+            scaffold = copy.deepcopy(output)
+            scaffold.update(schema_version=2, **{key: native[key] for key in ('subject_digest', 'claim_digest', 'reviewer')})
+            findings = scaffold.get('findings')
+            if isinstance(findings, dict) and isinstance(findings.get('openness'), dict):
+                findings['openness'].update(statement_digest=native['claim_digest'],
+                    minimum=native['scientific_context']['openness_minimum'], coverage='Shape check.')
+            native_review.validate_output(native, scaffold)
+        else:
+            native_review.validate_output(packet.get('native', packet), output)
+    with contract_check('review.shape'):
+        _validate_answer_schema(rule, rule['closing_schema'], output)
+
+
+def _describe_validator_contracts(rule):
+    """Independent closed-object declarations, including optional/legacy branches.
+
+    The guard compares these with supplied validator source, not fixture values
+    or a manifest regenerated from the ownership table. No source is read here.
+    """
+    from . import native_review, research_decisions
+    def declare(validator, subject, path, fields, omit=(), bindings=None, call=None):
+        return dict(validator=validator, subject=subject, path=path, fields=list(fields),
+                    omit=list(omit), bindings=bindings or {}, call=call)
+    contracts = []
+    repair = 'base_adapter' in rule
+    kind = rule.get('native_kind')
+    if rule['id'].endswith('/problem-openness'):
+        for subject, path, names in (
+                ('output', '', ('schema_version', 'subject_digest', 'claim_digest', 'reviewer', 'findings')),
+                ('findings', '/findings', native_review.RESULT_FINDINGS + ('openness',)),
+                ('openness', '/findings/openness', ('outcome', 'coverage', 'reason', 'grounds')),
+                ('ground', '/findings/openness/grounds/*', ('kind', 'text', 'work_id', 'refs', 'turns'))):
+            contracts.append(declare('native_review.validate_finding', subject, path, names))
+    elif kind:
+        root = ('schema_version', 'subject_digest', 'reviewer', 'decision', 'findings')
+        if kind != 'recovery':
+            root += ('claim_digest',)
+        if kind != 'result':
+            root += ('unresolved_objections',)
+        names = {'proposal': native_review.PROPOSAL_FINDINGS, 'result': native_review.RESULT_FINDINGS + ('openness',),
+                 'recovery': native_review.RECOVERY_FINDINGS}[kind]
+        contracts.extend((declare('native_review.validate_output', 'output', '', root, bindings=dict(kind=kind)),
+                          declare('native_review.validate_output', 'output/findings', '/findings', names,
+                                  bindings=dict(kind=kind))))
+        if kind == 'result':
+            contracts.append(declare('native_review._validate_openness', 'openness', '/findings/openness',
+                ('outcome', 'statement_digest', 'evidence', 'searched_at', 'coverage', 'reason', 'minimum')))
+    elif rule['role'] == 'verification':
+        contracts.extend((declare('review_parts_study.validate_verification_final', 'output', '', ('verdict', 'checks')),
+            declare('review_parts_study.validate_verification_final', 'check', '/checks/*', ('dimension', 'reason', 'evidence')),
+            declare('verification.validate_verdict_body', 'body', '/verdict',
+                ('stance', 'summary', 'prediction', 'rationaleSections', 'wouldChange', 'suggestions', 'findings', 'supersedesVerdictId'))))
+    elif rule['role'] == 'adjudicator':
+        contracts.append(declare('review_protocol.validate_adjudication_contract', 'output', '',
+            ('objection_id', 'disposition', 'reason', 'evidence', 'correction_admissible', 'reassessment'),
+            omit=() if repair else ('reassessment',)))
+    else:
+        contracts.extend((declare('research_decisions.validate_review_contract', 'output', '',
+            ('stage', 'support', 'value', 'objections', 'limitations', 'source_requests', 'settled_requests', 'reassessment', 'excerpts'),
+            omit=() if repair else ('reassessment',)),
+            declare('research_decisions._validate_value', 'value', '/value',
+                ('status', 'consequence', 'bar_ids', 'objective_adequacy', 'method_adequacy', 'reason', 'evidence',
+                 'work_items', 'assurances', 'objection_findings', 'rubric', 'rubric_evidence', 'rubric_potential'),
+                omit=tuple(name for name in ('rubric', 'rubric_evidence', 'rubric_potential')
+                           if not any(field['path'].startswith('/value/' + name + '/') for field in rule['fields']))),
+            declare('research_decisions._validate_checks', 'check', '/value/assurances/*', ('kind', 'status', 'reason', 'evidence')),
+            declare('research_decisions._validate_value', 'finding', '/value/work_items/*',
+                ('id', 'classification', 'status', 'reason', 'evidence'), call=0),
+            declare('research_decisions._validate_value', 'finding', '/value/objection_findings/*',
+                ('id', 'status', 'reason', 'evidence'), call=1)))
+        if rule.get('base_adapter', rule['adapter']) == 'study_readiness':
+            contracts.extend((declare('development._review', 'value', '/support',
+                ('id', 'candidate_digest', 'assessor', 'verdict', 'checks', 'limitations')),
+                declare('development._review', 'assessor', '/support/assessor',
+                    ('id', 'kind', 'provenance', 'relationship', 'independence_basis', 'author_memory_notes_present')),
+                declare('development._review', 'check', '/support/checks/*', ('kind', 'status', 'reason', 'evidence'))))
+    if repair:
+        contracts.extend((declare('review_context_repair.validate_reassessment', 'reassessment', '/reassessment',
+            ('assignment_id', 'findings')), declare('review_context_repair.validate_reassessment', 'finding',
+            '/reassessment/findings/*', ('review_id', 'disposition', 'reason', 'evidence'))))
+    return contracts
+
+
+def _read_validator_subject(node):
+    import ast
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Subscript):
+        key = node.slice
+        if isinstance(key, ast.Index):
+            key = key.value
+        if isinstance(key, ast.Constant) and isinstance(key.value, str):
+            return _read_validator_subject(node.value) + '/' + key.value
+    return ''
+
+
+def _read_schema_condition(node, bindings):
+    import ast
+    def read_value(item):
+        if isinstance(item, ast.Constant):
+            return item.value
+        if isinstance(item, ast.Name) and not isinstance(bindings.get(item.id), ast.AST):
+            return bindings.get(item.id)
+        return None
+    if isinstance(node, ast.Constant) and type(node.value) is bool:
+        return node.value
+    if isinstance(node, ast.Name) and type(bindings.get(node.id)) is bool:
+        return bindings[node.id]
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        value = _read_schema_condition(node.operand, bindings)
+        return None if value is None else not value
+    if isinstance(node, ast.Compare) and len(node.ops) == 1:
+        left, right = read_value(node.left), read_value(node.comparators[0])
+        if left is not None and right is not None:
+            if isinstance(node.ops[0], ast.Eq):
+                return left == right
+            if isinstance(node.ops[0], ast.NotEq):
+                return left != right
+    return None
+
+
+def _read_schema_names(node, bindings, seen=()):
+    import ast
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return {node.value}
+    if isinstance(node, ast.Name) and node.id not in seen:
+        value = bindings.get(node.id)
+        if isinstance(value, ast.AST):
+            return _read_schema_names(value, bindings, seen + (node.id,))
+        if isinstance(value, (tuple, list, set)):
+            return set(value)
+    if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
+        return set().union(*(_read_schema_names(item, bindings, seen) for item in node.elts))
+    if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.BitOr, ast.Sub)):
+        left = _read_schema_names(node.left, bindings, seen)
+        right = _read_schema_names(node.right, bindings, seen)
+        return left - right if isinstance(node.op, ast.Sub) else left | right
+    if isinstance(node, ast.IfExp):
+        condition = _read_schema_condition(node.test, bindings)
+        return (_read_schema_names(node.body, bindings, seen) if condition is True else
+                _read_schema_names(node.orelse, bindings, seen) if condition is False else
+                _read_schema_names(node.body, bindings, seen) | _read_schema_names(node.orelse, bindings, seen))
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in ('set', 'tuple', 'list') and node.args:
+        return _read_schema_names(node.args[0], bindings, seen)
+    return set()
+
+
+def _collect_validator_declarations(source, contract):
+    import ast
+    from . import native_review
+    tree = ast.parse(source)
+    bindings = dict(PROPOSAL_FINDINGS=native_review.PROPOSAL_FINDINGS, RESULT_FINDINGS=native_review.RESULT_FINDINGS,
+                    RECOVERY_FINDINGS=native_review.RECOVERY_FINDINGS, items=ITEMS, **contract['bindings'])
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    bindings.setdefault(target.id, node.value)
+    declarations = []
+    def visit(node):
+        if isinstance(node, ast.If):
+            condition = _read_schema_condition(node.test, bindings)
+            for child in (node.body if condition is True else node.orelse if condition is False else node.body + node.orelse):
+                visit(child)
+            return
+        if isinstance(node, ast.Call) and isinstance(node.func, (ast.Name, ast.Attribute)) and node.args:
+            name = node.func.id if isinstance(node.func, ast.Name) else node.func.attr
+            if name in ('fields', '_fields', '_closed') and _read_validator_subject(node.args[0]) == contract['subject']:
+                names = _read_schema_names(node.args[1], bindings)
+                if name != '_closed' and len(node.args) > 2:
+                    names |= _read_schema_names(node.args[2], bindings)
+                declarations.append(names)
+        if isinstance(node, ast.Compare):
+            values = [node.left] + node.comparators
+            for left, right in zip(values, values[1:]):
+                for candidate, fields in ((left, right), (right, left)):
+                    removed = set()
+                    if isinstance(candidate, ast.BinOp) and isinstance(candidate.op, ast.Sub):
+                        removed = _read_schema_names(candidate.right, bindings)
+                        candidate = candidate.left
+                    if (isinstance(candidate, ast.Call) and isinstance(candidate.func, ast.Name)
+                            and candidate.func.id == 'set' and candidate.args
+                            and _read_validator_subject(candidate.args[0]) == contract['subject']):
+                        declarations.append(_read_schema_names(fields, bindings) | removed)
+        for child in ast.iter_child_nodes(node):
+            visit(child)
+    visit(tree)
+    if contract['call'] is not None:
+        return declarations[contract['call']] if len(declarations) > contract['call'] else set()
+    return set().union(*declarations)
+
+
+def validate_validator_ownership(rule, validator_sources):
+    """Guard complete declarations from validators, even without fixture witnesses.
+
+    The caller supplies source strings so this module remains independent of
+    files, inspect.getsource, the record store and process-local mutation.
+    """
+    describe_owners(rule)
+    for contract in rule['validator_contracts']:
+        accepted = _collect_validator_declarations(validator_sources[contract['validator']], contract)
+        if accepted != set(contract['fields']):
+            raise ResearchError('review_composition_conflict', VALIDATOR_FIELDS_UNOWNED_MESSAGE,
+                                dict(validator=contract['validator'], subject=contract['subject'],
+                                     declared=contract['fields'], accepted=sorted(accepted)))
+        for name in accepted - set(contract['omit']):
+            path = contract['path'] + '/' + _escape_field(name)
+            if (not _find_field_owners(rule, path, None)
+                    and not any(field['path'].startswith(path + '/') for field in rule['fields'] if not field.get('when'))):
+                raise ResearchError('review_composition_conflict', VALIDATOR_FIELDS_UNOWNED_MESSAGE, dict(path=path))
