@@ -1,0 +1,745 @@
+{
+  "named_cause": {
+    "members": {
+      "cohort_selection_conflict": {
+        "research_harness/cohort_evidence.py:current_selection#1": [
+          "record"
+        ]
+      },
+      "cohort_selection_stale": {
+        "research_harness/cohort_evidence.py:current_selection#1": [
+          "record"
+        ]
+      },
+      "component_requirement_missing": {
+        "research_harness/components.py:validate_spec#1": [
+          "record"
+        ]
+      },
+      "execution_observation_required": {
+        "research_harness/execution_evidence.py:validate_observed_execution#1": [
+          "record"
+        ]
+      },
+      "fulltext_resume_unsupported": {
+        "research_harness/fulltext_transfer.py:FulltextTransfer.run#1": [
+          "form",
+          "record"
+        ],
+        "research_harness/fulltext_transfer.py:FulltextTransfer.run#2": [
+          "environment"
+        ],
+        "research_harness/fulltext_transfer.py:FulltextTransfer.run.validate_response#1": [
+          "environment"
+        ],
+        "research_harness/fulltext_transfer.py:FulltextTransfer.run.validate_response#2": [
+          "environment"
+        ]
+      },
+      "gate_override_invalid": {
+        "research_harness/overrides.py:read_instruction_words#1": [
+          "form"
+        ],
+        "research_harness/overrides.py:validate_override_bindings#1": [
+          "form"
+        ],
+        "research_harness/overrides.py:validate_override_bindings#2": [
+          "form"
+        ],
+        "research_harness/overrides.py:validate_override_bindings#3": [
+          "record"
+        ],
+        "research_harness/overrides.py:validate_override_bindings#4": [
+          "form"
+        ],
+        "research_harness/overrides.py:validate_override_payload#1": [
+          "form"
+        ],
+        "research_harness/overrides.py:validate_override_payload#10": [
+          "form"
+        ],
+        "research_harness/overrides.py:validate_override_payload#11": [
+          "form"
+        ],
+        "research_harness/overrides.py:validate_override_payload#12": [
+          "form"
+        ],
+        "research_harness/overrides.py:validate_override_payload#2": [
+          "form"
+        ],
+        "research_harness/overrides.py:validate_override_payload#3": [
+          "form"
+        ],
+        "research_harness/overrides.py:validate_override_payload#4": [
+          "form"
+        ],
+        "research_harness/overrides.py:validate_override_payload#5": [
+          "form"
+        ],
+        "research_harness/overrides.py:validate_override_payload#6": [
+          "form"
+        ],
+        "research_harness/overrides.py:validate_override_payload#7": [
+          "form"
+        ],
+        "research_harness/overrides.py:validate_override_payload#8": [
+          "form"
+        ],
+        "research_harness/overrides.py:validate_override_payload#9": [
+          "form"
+        ]
+      },
+      "invalid_cohort_selection": {
+        "research_harness/cohort_evidence.py:_selection_values#1": [
+          "form"
+        ],
+        "research_harness/cohort_evidence.py:_selection_values#2": [
+          "form"
+        ],
+        "research_harness/cohort_evidence.py:_selection_values#3": [
+          "form"
+        ],
+        "research_harness/cohort_evidence.py:_selection_values#4": [
+          "record"
+        ],
+        "research_harness/cohort_evidence.py:_selection_values#5": [
+          "form",
+          "record"
+        ],
+        "research_harness/cohort_evidence.py:_selection_values#6": [
+          "record"
+        ],
+        "research_harness/cohort_evidence.py:_selection_values#7": [
+          "form",
+          "record"
+        ],
+        "research_harness/cohort_evidence.py:_selection_values#8": [
+          "form"
+        ],
+        "research_harness/cohort_evidence.py:_selection_values#9": [
+          "record"
+        ]
+      },
+      "invalid_development": {
+        "research_harness/development.py:_Evidence.one#1": [
+          "content",
+          "form"
+        ],
+        "research_harness/development.py:_assess#1": [
+          "content",
+          "form"
+        ],
+        "research_harness/development.py:_assessed_checks#1": [
+          "content",
+          "form"
+        ],
+        "research_harness/development.py:_assessed_checks#2": [
+          "content",
+          "form"
+        ],
+        "research_harness/development.py:_choice#1": [
+          "content",
+          "form"
+        ],
+        "research_harness/development.py:_command#1": [
+          "content",
+          "form"
+        ],
+        "research_harness/development.py:_command#2": [
+          "content",
+          "form"
+        ],
+        "research_harness/development.py:_development#1": [
+          "content",
+          "form"
+        ],
+        "research_harness/development.py:_development#2": [
+          "content",
+          "form"
+        ],
+        "research_harness/development.py:_fields#1": [
+          "content",
+          "form"
+        ],
+        "research_harness/development.py:_items#1": [
+          "content",
+          "form"
+        ],
+        "research_harness/development.py:_review#1": [
+          "content",
+          "form"
+        ],
+        "research_harness/development.py:_review#2": [
+          "content",
+          "form"
+        ],
+        "research_harness/development.py:_review#3": [
+          "content",
+          "form"
+        ],
+        "research_harness/development.py:_strings#1": [
+          "content",
+          "form"
+        ],
+        "research_harness/development.py:_text#1": [
+          "content",
+          "form"
+        ]
+      },
+      "invalid_import": {
+        "research_harness/imports.py:_pointer#1": [
+          "form"
+        ],
+        "research_harness/imports.py:_pointer#2": [
+          "form"
+        ]
+      },
+      "invalid_reading": {
+        "research_harness/reading.py:_assess#1": [
+          "content",
+          "form"
+        ],
+        "research_harness/reading.py:_assess#10": [
+          "content",
+          "form"
+        ],
+        "research_harness/reading.py:_assess#11": [
+          "content",
+          "form"
+        ],
+        "research_harness/reading.py:_assess#12": [
+          "content",
+          "form"
+        ],
+        "research_harness/reading.py:_assess#13": [
+          "form",
+          "record"
+        ],
+        "research_harness/reading.py:_assess#14": [
+          "content",
+          "form"
+        ],
+        "research_harness/reading.py:_assess#2": [
+          "content",
+          "form"
+        ],
+        "research_harness/reading.py:_assess#3": [
+          "content",
+          "form"
+        ],
+        "research_harness/reading.py:_assess#4": [
+          "content",
+          "form"
+        ],
+        "research_harness/reading.py:_assess#5": [
+          "content",
+          "form"
+        ],
+        "research_harness/reading.py:_assess#6": [
+          "content",
+          "form"
+        ],
+        "research_harness/reading.py:_assess#7": [
+          "content",
+          "form"
+        ],
+        "research_harness/reading.py:_assess#8": [
+          "content",
+          "form"
+        ],
+        "research_harness/reading.py:_assess#9": [
+          "content",
+          "form"
+        ],
+        "research_harness/reading.py:validate_read_evidence#1": [
+          "form"
+        ]
+      },
+      "invalid_reference_handle": {
+        "research_harness/review_handles.py:_refuse_handle#1": [
+          "form"
+        ]
+      },
+      "invalid_search": {
+        "research_harness/literature.py:_search_response#1": [
+          "form"
+        ],
+        "research_harness/literature.py:_search_response#10": [
+          "content",
+          "record"
+        ],
+        "research_harness/literature.py:_search_response#2": [
+          "form"
+        ],
+        "research_harness/literature.py:_search_response#3": [
+          "content",
+          "form"
+        ],
+        "research_harness/literature.py:_search_response#4": [
+          "content",
+          "form"
+        ],
+        "research_harness/literature.py:_search_response#5": [
+          "form"
+        ],
+        "research_harness/literature.py:_search_response#6": [
+          "form"
+        ],
+        "research_harness/literature.py:_search_response#7": [
+          "record"
+        ],
+        "research_harness/literature.py:_search_response#8": [
+          "record"
+        ],
+        "research_harness/literature.py:_search_response#9": [
+          "form"
+        ],
+        "research_harness/search_pages.py:_number#1": [
+          "form"
+        ],
+        "research_harness/search_pages.py:_number#2": [
+          "limit"
+        ],
+        "research_harness/search_pages.py:native_page#1": [
+          "form"
+        ],
+        "research_harness/search_pages.py:native_page#2": [
+          "content",
+          "form"
+        ],
+        "research_harness/search_pages.py:native_page#3": [
+          "form"
+        ]
+      },
+      "malformed_visual_asset": {
+        "research_harness/html_visuals.py:validate_visual#1": [
+          "form"
+        ],
+        "research_harness/html_visuals.py:validate_visual#2": [
+          "form"
+        ],
+        "research_harness/jpeg.py:_malformed#1": [
+          "form"
+        ],
+        "research_harness/raster_containers.py:_malformed#1": [
+          "form"
+        ]
+      },
+      "openness_reading_incomplete": {
+        "research_harness/openness_reading.py:_extend_record#1": [
+          "content"
+        ],
+        "research_harness/openness_reading.py:_list_chain#1": [
+          "content"
+        ],
+        "research_harness/openness_reading.py:_require_initial_captures#1": [
+          "record"
+        ],
+        "research_harness/openness_reading.py:_require_math_continuity#1": [
+          "record"
+        ],
+        "research_harness/openness_reading.py:_require_math_continuity#2": [
+          "content"
+        ],
+        "research_harness/openness_reading.py:_require_math_continuity#3": [
+          "content"
+        ],
+        "research_harness/openness_reading.py:_require_observed_turns#1": [
+          "content"
+        ],
+        "research_harness/openness_reading.py:_require_problem_continuity#1": [
+          "content"
+        ],
+        "research_harness/openness_reading.py:_require_problem_continuity#2": [
+          "content"
+        ],
+        "research_harness/openness_reading.py:_require_problem_continuity#3": [
+          "content"
+        ],
+        "research_harness/openness_reading.py:_require_problem_continuity#4": [
+          "content"
+        ],
+        "research_harness/openness_reading.py:_require_problem_continuity#5": [
+          "content"
+        ],
+        "research_harness/openness_reading.py:_require_problem_plan#1": [
+          "content"
+        ],
+        "research_harness/openness_reading.py:_require_withheld_bodies#1": [
+          "content"
+        ],
+        "research_harness/openness_reading.py:_verify_legacy_chain#1": [
+          "content"
+        ],
+        "research_harness/openness_reading.py:_verify_legacy_chain#2": [
+          "content"
+        ],
+        "research_harness/openness_reading.py:list_math_response_rows#1": [
+          "record"
+        ],
+        "research_harness/openness_reading.py:list_math_response_rows#2": [
+          "record"
+        ],
+        "research_harness/openness_reading.py:list_math_text_rows#1": [
+          "record"
+        ],
+        "research_harness/openness_reading.py:list_record_rows#1": [
+          "record"
+        ],
+        "research_harness/openness_reading.py:verify_chain#1": [
+          "content"
+        ],
+        "research_harness/openness_reading.py:verify_problem_coverage#1": [
+          "content"
+        ],
+        "research_harness/problem_openness.py:assess_openness#1": [
+          "record"
+        ],
+        "research_harness/problem_openness.py:prepare_openness#1": [
+          "content"
+        ],
+        "research_harness/review_search_delivery.py:rebuild_search_record#1": [
+          "content"
+        ],
+        "research_harness/review_search_delivery.py:rebuild_search_record#2": [
+          "content"
+        ],
+        "research_harness/review_search_delivery.py:verify_search_deliveries#1": [
+          "content"
+        ]
+      },
+      "problem_author_unknown": {
+        "research_harness/research_decisions.py:record_value_review.prepare#1": [
+          "content"
+        ],
+        "research_harness/review_protocol.py:record_assignment.prepare#1": [
+          "form"
+        ]
+      },
+      "query_ceiling": {
+        "research_harness/providers.py:Arxiv.collection_request#1": [
+          "limit"
+        ]
+      },
+      "readiness_review_stale": {
+        "research_harness/development.py:_review#1": [
+          "record"
+        ]
+      },
+      "request_budget": {
+        "research_harness/http.py:RequestBudget.check#1": [
+          "limit"
+        ]
+      },
+      "review_assignment_replaced": {
+        "research_harness/openness_reading.py:_read_prior#1": [
+          "record"
+        ],
+        "research_harness/review_parts_native.py:read_prior_assignment#1": [
+          "record"
+        ],
+        "research_harness/review_protocol.py:_source_parent#1": [
+          "record"
+        ],
+        "research_harness/review_protocol.py:invoke_assignment.start#1": [
+          "record"
+        ]
+      },
+      "review_assignment_superseded": {
+        "research_harness/review_context_repair.py:require_current_slot#1": [
+          "record"
+        ]
+      },
+      "review_bar_continuity": {
+        "research_harness/review_protocol.py:add_problem_bars#1": [
+          "record"
+        ],
+        "research_harness/review_protocol.py:build_packet#1": [
+          "record"
+        ]
+      },
+      "review_epoch_stale": {
+        "research_harness/review_staged_protocol.py:invoke_task#1": [
+          "record"
+        ],
+        "research_harness/review_staged_protocol.py:invoke_task#2": [
+          "record"
+        ],
+        "research_harness/review_staged_protocol.py:plan_frontier.prepare#1": [
+          "record"
+        ],
+        "research_harness/review_staged_protocol.py:prepare_child#1": [
+          "record"
+        ],
+        "research_harness/review_staged_protocol.py:prepare_child#2": [
+          "record"
+        ]
+      },
+      "review_evidence_undelivered": {
+        "research_harness/research_decisions.py:validate_review_contract#1": [
+          "form"
+        ],
+        "research_harness/review_context_repair.py:validate_reassessment#1": [
+          "form"
+        ],
+        "research_harness/review_parts_study.py:validate_study_references#1": [
+          "form"
+        ],
+        "research_harness/review_parts_study.py:validate_verification_final#1": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:validate_adjudication_contract#1": [
+          "form"
+        ]
+      },
+      "review_not_independent": {
+        "research_harness/development.py:_review#1": [
+          "form"
+        ],
+        "research_harness/publication.py:validate_assessor#1": [
+          "form"
+        ],
+        "research_harness/publication.py:validate_assessor#2": [
+          "form"
+        ],
+        "research_harness/research_decisions.py:record_value_review.prepare#1": [
+          "form"
+        ],
+        "research_harness/review_context_repair.py:prepare_repair#1": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:add_focused_adjudication#1": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:add_focused_adjudication#2": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:record_assignment.prepare#1": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:record_assignment.prepare#2": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:record_assignment.prepare#3": [
+          "form"
+        ]
+      },
+      "review_parts_final_too_large": {
+        "research_harness/review_parts.py:_partition_cards#1": [
+          "limit"
+        ],
+        "research_harness/review_parts.py:plan_combine#1": [
+          "limit"
+        ],
+        "research_harness/review_parts.py:plan_final#1": [
+          "limit"
+        ],
+        "research_harness/review_parts.py:plan_final#2": [
+          "limit"
+        ],
+        "research_harness/review_parts.py:prepare_plan#1": [
+          "limit"
+        ]
+      },
+      "review_parts_frame_too_large": {
+        "research_harness/review_parts.py:prepare_plan#1": [
+          "limit"
+        ]
+      },
+      "review_parts_inventory_too_large": {
+        "research_harness/review_parts.py:plan_check#1": [
+          "limit"
+        ],
+        "research_harness/review_parts.py:plan_check#2": [
+          "limit"
+        ],
+        "research_harness/review_parts.py:plan_read#1": [
+          "limit"
+        ],
+        "research_harness/review_parts.py:prepare_plan#1": [
+          "limit"
+        ],
+        "research_harness/review_parts.py:prepare_plan#2": [
+          "form",
+          "limit"
+        ]
+      },
+      "review_parts_no_progress": {
+        "research_harness/review_parts.py:plan_read#1": [
+          "limit"
+        ]
+      },
+      "review_series_superseded": {
+        "research_harness/research_decisions.py:record_value_review.prepare#1": [
+          "record"
+        ]
+      },
+      "review_source_continuation_mismatch": {
+        "research_harness/openness_reading.py:_read_prior#1": [
+          "form"
+        ],
+        "research_harness/review_parts_native.py:read_prior_assignment#1": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:_source_parent#1": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:_source_parent#2": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:_source_parent#3": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:_source_parent#4": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:record_assignment.prepare#1": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:record_assignment.prepare#2": [
+          "form"
+        ]
+      },
+      "review_source_continuation_unverified": {
+        "research_harness/openness_reading.py:_read_prior#1": [
+          "record"
+        ],
+        "research_harness/review_parts_native.py:read_prior_assignment#1": [
+          "record"
+        ],
+        "research_harness/review_protocol.py:_source_parent#1": [
+          "record"
+        ],
+        "research_harness/review_protocol.py:invoke_assignment.start#1": [
+          "content",
+          "record"
+        ]
+      },
+      "review_task_pending": {
+        "research_harness/bar_sources.py:continuation#1": [
+          "record"
+        ],
+        "research_harness/cli.py:_review_run#1": [
+          "record"
+        ],
+        "research_harness/research_decisions.py:validate_review_contract#1": [
+          "record"
+        ],
+        "research_harness/review_protocol.py:_validate_staged_adjudication_scope#1": [
+          "record"
+        ],
+        "research_harness/review_staged.py:validate_measurement#1": [
+          "limit"
+        ],
+        "research_harness/review_staged_protocol.py:accept_capture#1": [
+          "record"
+        ],
+        "research_harness/review_staged_protocol.py:build_assigned_request#1": [
+          "record"
+        ],
+        "research_harness/review_staged_protocol.py:build_request#1": [
+          "limit"
+        ],
+        "research_harness/review_staged_protocol.py:collect_dependency_observations#1": [
+          "record"
+        ],
+        "research_harness/review_staged_protocol.py:invoke_task#1": [
+          "record"
+        ],
+        "research_harness/review_staged_protocol.py:prepare_child#1": [
+          "record"
+        ],
+        "research_harness/review_staged_protocol.py:prepare_task_plan#1": [
+          "limit"
+        ],
+        "research_harness/review_staged_protocol.py:prepare_task_plan#2": [
+          "content",
+          "payload"
+        ],
+        "research_harness/review_staged_protocol.py:prepare_task_plan#3": [
+          "record"
+        ],
+        "research_harness/review_staged_protocol.py:prepare_task_plan#4": [
+          "record"
+        ],
+        "research_harness/review_staged_protocol.py:project_terminal_material#1": [
+          "record"
+        ],
+        "research_harness/review_staged_protocol.py:read_task_acceptance#1": [
+          "record"
+        ]
+      },
+      "sample_missing": {
+        "research_harness/sampling.py:prediction#1": [
+          "record"
+        ]
+      },
+      "source_deferred": {
+        "research_harness/development.py:_Evidence.one#1": [
+          "record"
+        ]
+      },
+      "source_pending": {
+        "research_harness/fulltext_jobs.py:validate_assembly#1": [
+          "content"
+        ],
+        "research_harness/fulltext_jobs.py:validate_assembly#2": [
+          "content"
+        ],
+        "research_harness/fulltext_jobs.py:validate_assembly.require#1": [
+          "content"
+        ],
+        "research_harness/problem_citation_metadata.py:_resolve_span#1": [
+          "record"
+        ],
+        "research_harness/problem_citation_metadata.py:_resolve_span#2": [
+          "record"
+        ],
+        "research_harness/source_links.py:captured_source#1": [
+          "record"
+        ],
+        "research_harness/source_links.py:original_identity#1": [
+          "record"
+        ],
+        "research_harness/source_links.py:validate_link#1": [
+          "record"
+        ]
+      },
+      "unsupported_visual_asset": {
+        "research_harness/html_visuals.py:validate_visual#1": [
+          "form"
+        ],
+        "research_harness/jpeg.py:_unsupported#1": [
+          "form"
+        ],
+        "research_harness/raster_containers.py:_unsupported#1": [
+          "form"
+        ]
+      },
+      "validity_evidence_missing": {
+        "research_harness/development.py:_assess#1": [
+          "record"
+        ]
+      },
+      "verification_task_required": {
+        "research_harness/verification.py:review_packet#1": [
+          "record"
+        ]
+      },
+      "xml_timeout": {
+        "research_harness/fulltext.py:_JatsArticle.require_time#1": [
+          "environment"
+        ]
+      }
+    }
+  },
+  "stored_state": {
+    "members": {
+      "review_route_changed": {
+        "research_harness/review_protocol.py:invoke_assignment.start#1": [
+          "content"
+        ]
+      }
+    }
+  }
+}

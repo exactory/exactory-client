@@ -144,7 +144,7 @@ class StudyRowTests(unittest.TestCase):
         with self.assertRaises(ResearchError) as caught:
             development._review(development._Context(records, case.artifacts), payload, case.candidate())
         self.assertEqual(caught.exception.code, 'invalid_development')
-        self.assertNotIn('invalid_development', stop_classes.STOP_REGISTRY)
+        self.assertEqual(stop_classes.STOP_REGISTRY['invalid_development']['group'], 'named_cause')
         self.assertNotIn('invalid_development', stop_classes._STORED_STATE_CODES_STUDY)
 
     def assert_new_support_execution_reference_is_a_prerequisite(self):

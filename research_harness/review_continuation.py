@@ -359,7 +359,7 @@ def _plan_staged(records, artifacts, assignment, state):
     epoch = protocol._get(records, 'review_epoch', assignment['staged_review']['epoch_id'])
     effective = state.get('effective') or {}
     if effective.get('incomplete_outcome') is not None:
-        return dict(state='handoff', code='assessment_incomplete', command='review-assignment',
+        return dict(state='stop', code='assessment_incomplete',
                     details=effective['incomplete_outcome'])
     if state.get('output') is not None:
         return _plan_recording(records, artifacts, assignment, state)

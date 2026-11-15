@@ -129,11 +129,15 @@ for _code, _command in (
         ('verification_verdict_body_required', 'bind-verdict'),
         ('review_recording_required', 'review'),
         ('review_worker_reconciliation_required', 'review-attempt'),
-        ('assessment_incomplete', 'review-assignment'),
         ('review_parts_pending', 'review-series'),
         ('problem_evidence_part_pending', 'review-series')):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
                                 next=dict(kind='handoff', command=_command))
+STOP_REGISTRY['assessment_incomplete'] = dict(code='assessment_incomplete',
+    **{'class': 'decision'}, owner='D2',
+    next=dict(kind='decision', owner_decides='How should the incomplete assessment be answered?',
+        then=[dict(answer='Check the retained record', steps=[dict(command='record-check')]),
+              dict(answer='List what the workspace owes', steps=[dict(command='status')])]))
 _STORED_STATE_CODES_FIRST = ('review_input_unreadable',)
 
 
@@ -584,7 +588,47 @@ _NAMED_CAUSE_CODES_CONDITIONS = (
     'verification_target_pending',
     'visual_asset_dependencies_unsupported',
 )
-_NAMED_CAUSE_CODES_RECOVERY = ()
+_NAMED_CAUSE_CODES_RECOVERY = (
+    'cohort_selection_conflict',
+    'cohort_selection_stale',
+    'component_requirement_missing',
+    'execution_observation_required',
+    'fulltext_resume_unsupported',
+    'gate_override_invalid',
+    'invalid_cohort_selection',
+    'invalid_development',
+    'invalid_import',
+    'invalid_reading',
+    'invalid_reference_handle',
+    'invalid_search',
+    'malformed_visual_asset',
+    'openness_reading_incomplete',
+    'problem_author_unknown',
+    'query_ceiling',
+    'readiness_review_stale',
+    'request_budget',
+    'review_assignment_replaced',
+    'review_assignment_superseded',
+    'review_bar_continuity',
+    'review_epoch_stale',
+    'review_evidence_undelivered',
+    'review_not_independent',
+    'review_parts_final_too_large',
+    'review_parts_frame_too_large',
+    'review_parts_inventory_too_large',
+    'review_parts_no_progress',
+    'review_series_superseded',
+    'review_source_continuation_mismatch',
+    'review_source_continuation_unverified',
+    'review_task_pending',
+    'sample_missing',
+    'source_deferred',
+    'source_pending',
+    'unsupported_visual_asset',
+    'validity_evidence_missing',
+    'verification_task_required',
+    'xml_timeout',
+)
 _NAMED_CAUSE_CODES_CLOSING = ()
 _STORED_STATE_CODES_RECORD = (
     'store_missing',
@@ -594,7 +638,9 @@ _STORED_STATE_CODES_CONDITIONS = (
     'request_id_conflict',
     'review_output_mismatch',
 )
-_STORED_STATE_CODES_RECOVERY = ()
+_STORED_STATE_CODES_RECOVERY = (
+    'review_route_changed',
+)
 _STORED_STATE_CODES_CLOSING = ()
 
 

@@ -5763,6 +5763,35 @@
         "test_series_rows_close_record.RecordGroupTests.test_printed_named_cause_answers_execute_record_check_and_status",
         "test_series_rows_close_record.RecordGroupGuardTests.test_member_places_and_conditions_pass_rr5_and_determine_the_group"
       ]
+    },
+    {
+      "id": "series-recovery-candidates-require-executed-steps",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "class": "review continuity recovery admission",
+      "summary": "Candidate recoveries lacked executed payload rules and could promise one repair for unrelated causes.",
+      "expected": "Every recovery candidate has a condition-derived inspection row. A recovered result-route or output cause alone does not admit an entire shared code.",
+      "tests": [
+        "test_series_rows_close_recovery.RecoveryRowTests.test_frame_overflow_inspects_before_a_partial_result_route_recovery",
+        "test_series_rows_close_recovery.RecoveryRowTests.test_a_recoverable_output_cause_does_not_admit_the_whole_mixed_code",
+        "test_series_rows_close_recovery.RecoveryRowTests.test_all_candidates_have_exactly_one_reviewed_row"
+      ]
+    },
+    {
+      "id": "staged-obligations-keep-reviewed-inspection-decisions",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "class": "review continuity staged obligation planning",
+      "summary": "Staged obligation handoffs ignored group decisions and incomplete outcomes printed an unsupported assignment_id payload.",
+      "expected": "Unverified captures and stale epochs carry their reviewed inspection decisions, executable tasks pass completion diagnostics, and an actual incomplete outcome prints inspections.",
+      "tests": [
+        "test_series_rows_close_recovery.RecoveryRowTests.test_staged_unverified_capture_uses_the_stored_state_decision",
+        "test_series_rows_close_recovery.RecoveryRowTests.test_both_stale_epoch_states_keep_inspection_until_each_cause_has_a_recovery",
+        "test_series_rows_close_recovery.RecoveryRowTests.test_actual_incomplete_outcome_prints_an_inspection_instead_of_an_invalid_assignment",
+        "test_series_rows_close_recovery.RecoveryRowTests.test_staged_completion_findings_remain_diagnostics_until_the_result_is_recorded"
+      ]
     }
   ]
 }

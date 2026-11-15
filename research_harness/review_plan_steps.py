@@ -3,7 +3,7 @@
 import copy
 
 from . import review_protocol as protocol
-from .stop_classes import describe_terminal
+from .stop_classes import STOP_REGISTRY, describe_terminal
 
 
 PLAN_STEPS = {
@@ -180,6 +180,15 @@ def complete_plan(records, artifacts, assignment, plan):
     plan = copy.deepcopy(plan)
     details = plan.setdefault('details', {})
     code = plan.get('code')
+    if STOP_REGISTRY.get(code, {}).get('group'):
+        terminal = describe_terminal(code)
+        details.update(terminal['details'])
+        details.pop('step', None)
+        details.pop('steps', None)
+        plan.update(state='stop', stop_class=terminal['stop_class'])
+        plan.pop('command', None)
+        plan.pop('payload', None)
+        return plan
     if code == 'reading_missing':
         from .review_reading import collect_missing_readings, READING_HANDOFF_MESSAGE
         if 'readings' not in details:
