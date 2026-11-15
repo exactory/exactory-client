@@ -2,6 +2,25 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "exhaustion-position-capacity-link-precedence",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "D2 exhausted position membership and R13 replacement count",
+      "summary": "A capacity member made an exhausted position fail its origin check, and its copied refusal context could spend the refusal replacement allowance. New refusal members also inherited the preceding capacity marker.",
+      "expected": "Ruling 38 keeps all members in recorded order and gives a capacity link precedence over copied refusal context. Mixed positions admit and authenticate repair with unchanged prior digests, raw refused observations and correct R13 counts. Missing or non-adjacent links refuse origin and admission without writes. Capacity copies retain the original frozen notice boundary. Every inherited notice and child identity is verified at the frozen boundary, including legacy refusal rows with copied capacity metadata.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_exhaustion_capacity_position.MixedCapacityPositionTests.test_mixed_capacity_and_refusal_position_repairs_without_rewriting_history",
+        "test_review_exhaustion_capacity_position.MixedCapacityPositionTests.test_capacity_replacement_of_a_refusal_keeps_the_second_refusal_replacement",
+        "test_review_exhaustion_capacity_position.MixedCapacityPositionTests.test_copied_refusal_context_counts_as_capacity",
+        "test_review_exhaustion_capacity_position.MixedCapacityPositionTests.test_capacity_copy_keeps_the_notice_origin_before_its_own_refused_output",
+        "test_review_exhaustion_capacity_position.MixedCapacityPositionTests.test_missing_capacity_link_is_unverified_at_origin_and_admission_without_writes",
+        "test_review_exhaustion_capacity_position.MixedCapacityPositionTests.test_refusal_link_to_another_member_is_unverified_without_writes",
+        "test_review_exhaustion_capacity_position.MixedCapacityPositionTests.test_capacity_copy_still_authenticates_its_notice_and_child_identity",
+        "test_review_exhaustion_capacity_position.MixedCapacityPositionTests.test_legacy_refusal_with_copied_capacity_marker_keeps_its_origin_checks"
+      ]
+    },
+    {
       "id": "visual-bridge-origin-precedes-later-slot-repair",
       "record": "20261113110022-every-open-record-and-review-capacity",
       "class": "stored visual route origin and current slot selection",

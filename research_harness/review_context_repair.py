@@ -152,6 +152,7 @@ def build_exhaustion_binding(records, artifacts, assignment, *, before_revision=
 def _validate_exhaustion_records(records, artifacts, predecessor, exhaustion, *, before_revision=None):
     """Authenticate immutable exhaustion evidence, with no present-day output validator."""
     from .review_protocol import _read_json
+    from .review_refusal_replacement import read_replacement_link
 
     def require(condition):
         if not condition:
@@ -165,8 +166,7 @@ def _validate_exhaustion_records(records, artifacts, predecessor, exhaustion, *,
         member = records['review_assignment'][identifier]
         require(member['recorded_revision'] < boundary)
         if index:
-            require(member.get('context', {}).get('output_refusal', {}).get('assignment_id')
-                    == expected['position'][index - 1])
+            require(read_replacement_link(member)[1] == expected['position'][index - 1])
     for entry in expected['refusals']:
         certificate = records.get('review_output_refusal', {}).get(entry['attempt_id'])
         attempt = records.get('review_attempt', {}).get(entry['attempt_id'])
@@ -382,17 +382,16 @@ def prepare_repair(records, artifacts, assignment_payload):
     if exhaustion is not None:
         if (assignment_payload['role'] not in ('slate', 'result')
                 or exhaustion != build_exhaustion_binding(records, artifacts, predecessor)
+                or (exhaustion['correction'] is not None
+                    and exhaustion['correction']['status'] in ('pending', 'accepted'))
                 or any(later.get('context', {}).get('prior_assignment_id') == predecessor['id']
                        for later in records.get('review_assignment', {}).values())):
             raise ResearchError('review_context_repair_mismatch', EXHAUSTION_MISMATCH_MSG)
+        _validate_exhaustion_records(records, artifacts, predecessor, exhaustion)
         from .review_protocol import has_exhausted_position
         recorded_exhaustion = _has_recorded_exhaustion_repair(records, artifacts, predecessor, exhaustion)
         if not recorded_exhaustion and not has_exhausted_position(records, artifacts, predecessor):
             raise ResearchError('review_context_repair_mismatch', EXHAUSTION_MISMATCH_MSG)
-        try:
-            _validate_exhaustion_records(records, artifacts, predecessor, exhaustion)
-        except ResearchError as error:
-            raise ResearchError('review_context_repair_mismatch', EXHAUSTION_MISMATCH_MSG) from error
     roles = ROLES + (('adjudicator',) if predecessor.get('staged_review') is not None
                      or predecessor.get('review_parts') is not None else ())
     if (assignment_payload['role'] not in roles or predecessor['role'] != assignment_payload['role']

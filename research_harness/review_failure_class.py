@@ -560,6 +560,7 @@ def has_smaller_task(artifacts, previous, assignment):
 
 def count_position(records, artifacts, assignment):
     """Count sequences from retained attempts, replacements, stops and owner events."""
+    from .review_refusal_replacement import read_replacement_link
     identifiers = set(list_turn_assignments(records, assignment))
     attempts = [row for row in records.get('review_attempt', {}).values()
                 if row['assignment_id'] in identifiers]
@@ -578,7 +579,7 @@ def count_position(records, artifacts, assignment):
     for member in members:
         if member['id'] == min(members, key=lambda row: row.get('recorded_revision', 0))['id']:
             continue
-        reason = 'output_refused' if member.get('context', {}).get('output_refusal') else 'capacity'
+        reason, _ = read_replacement_link(member)
         replacements[reason] += 1
     counts, provider_count, eligible = {}, 0, False
     sequence_ends = {}
@@ -654,6 +655,7 @@ def plan_refusal_recovery(records, artifacts, assignment):
     """Measure the current refusal through admission without publishing its candidate."""
     from . import review_output_correction as correction, review_refusal, review_refusal_replacement
     from .review_staged_protocol import ControllerArtifacts
+    from .review_refusal_replacement import read_replacement_link
 
     completed = sorted((attempt for attempt in records.get('review_attempt', {}).values()
                         if attempt['assignment_id'] == assignment['id'] and attempt['status'] == 'completed'
@@ -688,7 +690,7 @@ def plan_refusal_recovery(records, artifacts, assignment):
         else:
             details['preflight'] = measured['preflight']
             return dict(result, state='handoff', command='review-output-correction')
-    if sum('output_refusal' in member.get('context', {}) for member in members) >= 2:
+    if sum(read_replacement_link(member)[0] == 'output_refused' for member in members) >= 2:
         return result
     payload = {key: copy.deepcopy(assignment[key]) for key in
                ('role', 'route_id', 'dossier_id', 'reviewer_id', 'author_id', 'context')}

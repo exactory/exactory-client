@@ -60,7 +60,8 @@ def measure_parts_request(records, route, request, characters):
 def is_first_output_read(assignment, packet):
     """Identify the first read of a frozen single-output replacement series."""
     return (parts.find_kind(packet) == 'read' and packet[parts.KEY].get('entry') == 'output'
-            and bool(assignment.get('capacity_replacement_of'))
+            and bool(assignment.get('capacity_replacement_of')
+                     or assignment.get('context', {}).get('output_refusal'))
             and not assignment.get('context', {}).get('prior_assignment_id'))
 
 

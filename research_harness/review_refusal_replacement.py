@@ -21,6 +21,14 @@ def read_position_context(assignment):
     return {key: value for key, value in assignment.get('context', {}).items() if key != KEY}
 
 
+def read_replacement_link(assignment):
+    """A capacity link takes precedence over the refusal context it copied."""
+    if 'capacity_replacement_of' in assignment:
+        return 'capacity', assignment['capacity_replacement_of']
+    refusal = assignment.get('context', {}).get(KEY)
+    return ('output_refused', refusal.get('assignment_id')) if refusal else ('capacity', None)
+
+
 def find_output_successor(records, assignment):
     """Retain a later replacement, repair or new reviewer as the sole candidate."""
     from . import review_protocol as protocol
@@ -77,7 +85,7 @@ def prepare_replacement(records, artifacts, value, revision):
             or any(normalized_text(prior[key]) != normalized_text(value[key]) for key in ('reviewer_id', 'author_id'))
             or read_position_context(prior) != read_position_context(value)):
         raise ResearchError('review_refusal_replacement_mismatch', REPLACEMENT_IDENTITY_MSG)
-    if sum(KEY in member.get('context', {}) for member in members) >= 2:
+    if sum(read_replacement_link(member)[0] == 'output_refused' for member in members) >= 2:
         raise ResearchError('review_slot_exhausted', REPLACEMENT_LIMIT_MSG)
     identifiers = {member['id'] for member in members}
     attempts = sorted((attempt for attempt in records.get('review_attempt', {}).values()
@@ -145,6 +153,7 @@ def prepare_replacement(records, artifacts, value, revision):
     packet['digest'] = digest(packet)
     prompt = selection['prompt']
     record = copy.deepcopy(prior)
+    record.pop('capacity_replacement_of', None)
     for key in ('history_ref', 'history', 'review_parts_restart'):
         record.pop(key, None)
     record.update(value, packet=protocol._put_json(artifacts, packet), packet_digest=packet['digest'],
@@ -170,19 +179,29 @@ def validate_replacement_origin(records, artifacts, assignment, packet=None):
         if not condition:
             raise ResearchError('review_refusal_replacement_origin_invalid', REPLACEMENT_ORIGIN_MSG)
     packet = protocol._read_json(artifacts, assignment['packet']) if packet is None else packet
+    notice = packet.get(KEY, {})
+    origin = assignment
+    while 'capacity_replacement_of' in origin:
+        parent = records.get('review_assignment', {}).get(origin['capacity_replacement_of'])
+        require(parent is not None and parent['recorded_revision'] < origin['recorded_revision'])
+        # Legacy refusals can carry a copied capacity marker. Only an identical
+        # inherited notice keeps its parent's earlier boundary.
+        if (parent.get('context', {}).get(KEY) is None
+                or protocol._read_json(artifacts, parent['packet']).get(KEY) != notice):
+            break
+        origin = parent
     prior = records.get('review_assignment', {}).get(binding['assignment_id'])
     require(prior is not None and prior['recorded_revision'] < assignment['recorded_revision'])
     require(read_position_context(prior) == read_position_context(assignment))
     require(all(prior.get(key) == assignment.get(key) for key in ('role', 'dossier_id', 'subject', 'route_id')))
     require(protocol.context_repair.slot_id(records, prior) == protocol.context_repair.slot_id(records, assignment))
     require(all(normalized_text(prior[key]) == normalized_text(assignment[key]) for key in ('reviewer_id', 'author_id')))
-    notice = packet.get(KEY, {})
     entries = notice.get('refused', [])
     require(notice.get('protocol') == notices.PROTOCOL and notice.get('form') in ('whole', 'bounded')
             and isinstance(entries, list) and 1 <= len(entries) <= notices.REFUSED_ATTEMPT_LIMIT)
     position = set(list_turn_assignments(records, prior))
     certificates = sorted((certificate for certificate in records.get('review_output_refusal', {}).values()
-        if certificate['assignment_id'] in position and certificate['recorded_revision'] < assignment['recorded_revision']),
+        if certificate['assignment_id'] in position and certificate['recorded_revision'] < origin['recorded_revision']),
         key=lambda row: row['recorded_revision'])
     require([entry.get('attempt_id') for entry in entries] == [row['attempt_id'] for row in certificates])
     for entry, certificate in zip(entries, certificates):
