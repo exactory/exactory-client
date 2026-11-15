@@ -618,7 +618,8 @@ def describe_posted_calls(records, artifacts):
             continue
         for call in describe_closed_calls(records, artifacts, assignment):
             reason = ('The post closed this reviewer call.' if call['closed'] else
-                      'Close the recorded call without starting another reviewer call.')
+                      'The post closed the review chain of this call, and the call is not settled. '
+                      'Run the step of this row; it makes no reviewer call.')
             result.append(dict(call, code='review_call_closed' if call['closed'] else 'review_invocation_pending',
                                explanation=reason, reason=reason))
     return result

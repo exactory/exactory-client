@@ -35,7 +35,8 @@ def admit_review_call(transaction, operation, invocation_id, route_id, *, invoca
         before = active + [row for row in waits if own is None or row['requested_revision'] < own['requested_revision']]
         wait_seconds = sum(routes.get(row['route_id'], {}).get('configuration', {}).get('timeout_seconds', 600) + 60
                            for row in before)
-        raise ResearchError('review_capacity_wait', 'Wait for the earlier eligible calls to release reviewer capacity.',
+        raise ResearchError('review_capacity_wait', 'Earlier reviewer calls hold the capacity or wait before this call. '
+                            'Run the command again after they end, and reconcile a call whose process has ended.',
                             dict(reservations=[row['id'] for row in active], scope='store',
                                  calls_before=len(before), call=call, wait_seconds=wait_seconds))
     # Successful admission commits abandonment and the exact wait's completion
@@ -178,7 +179,8 @@ def wait_for_admission(store, attempt):
                 require_unstopped(records, current['scope'])
                 if current['state'] == 'withdrawn':
                     from .stop_classes import classify_stop
-                    raise ResearchError('review_chain_stopped', 'The waiting call was withdrawn by a review stop.',
+                    raise ResearchError('review_chain_stopped', 'A review stop withdrew this waiting call, and the call does not resume. '
+                                        'Start the command again; settle and release a stop that still stands first.',
                                         dict(stop_id=current.get('stop_id'), stop_class=classify_stop('review_chain_stopped')))
                 if time.monotonic() >= deadline:
                     withdraw_wait(store, wait['id'], 'timeout')

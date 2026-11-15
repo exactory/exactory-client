@@ -20,24 +20,48 @@ QUANTITIES = ('units', 'texts', 'turns', 'attempts', 'identifiers', 'searches', 
               'excerpts', 'passages', 'notes', 'targets', 'gaps', 'notices', 'refusals',
               'reviews', 'requests', 'carried_turns', 'binary_inputs', 'tasks', 'calls',
               'occurrences', 'citations', 'aliases')
-UNDECLARED_MEMBER = 'Packet member has no declaration: {path}'
-INVALID_DECLARATION = 'Growing packet member lacks its quantity, bound, matrix entry or variant fixture: {path}'
-UNKNOWN_ROLE = 'Packet role has no closed schema: {role}'
-UNKNOWN_VARIANT = 'Packet protocol has no closed schema: {role}/{protocol}'
-UNDECLARED_WRITE = 'Packet source writes an undeclared member: {site}/{name}'
-COMPUTED_WRITE = 'Packet source has an undeclared or unverifiable computed write: {site}'
-UNCLASSIFIED_CALL = 'Packet source passes a packet to an unclassified callee: {site}/{callee}'
-PACKET_ESCAPE = 'Packet source stores a packet outside inspected local state: {site}'
-READER_WRITE = 'Registered packet reader writes into its parameter: {site}'
-CERTIFICATE_CHANGED = 'Reviewed packet source certificate changed or is missing: {site}'
-SOURCE_MISSING = 'Declared packet source is missing: {module}'
-FIXTURE_MISSING = 'Packet quantity fixture does not exercise its declared variant: {path}'
-OPEN_MEMBERS_CHANGED = 'Open packet members differ from their reviewed baseline'
-QUANTITY_COVERAGE_MISSING = 'Growing packet property has no executed canonical factory or applicable staged gap: {path}'
-QUANTITY_FACTORY_MISSING = 'Canonical quantity factory is missing or did not invoke its declared builder: {factory}'
-QUANTITY_ROUTE_MISSING = 'The canonical quantity fixture has no route allowance'
-QUANTITY_ROUTE_CHANGED = 'The canonical quantity fixture route allowance changed'
-QUANTITY_NOT_SCALED = 'Canonical quantity factory did not reach the growing member at its declared scale: {path}'
+UNDECLARED_MEMBER = 'Packet member {path} has no declaration. Declare it in tests/fixtures/capacity_packet_schema.json.'
+INVALID_DECLARATION = ('The declaration of packet member {path} is not valid. Give a growing member a supported quantity, '
+                       'its bound, its matrix entry and a fixture that the registry holds, and point each $ref at an '
+                       'existing definition without a cycle.')
+UNKNOWN_ROLE = 'Packet role {role} has no closed schema. Declare the role in tests/fixtures/capacity_packet_schema.json.'
+UNKNOWN_VARIANT = ('No closed schema of {role} matches the protocol {protocol} and the wire-variant marker of this packet. '
+                   'Correct those values, or review and declare the intended protocol or variant.')
+UNDECLARED_WRITE = ('Packet source {site} writes the undeclared member {name}. Declare a packet member in the packet schema. '
+                    'List a name under non_packet_names only when you verified that it belongs to non-packet data alone.')
+COMPUTED_WRITE = ('Packet source {site} has a computed or bulk write that the guard cannot verify. '
+                  'Make its keys derivable, and give the matching declaration under computed_sites.')
+UNCLASSIFIED_CALL = ('Packet source {site} passes a packet to {callee}, and that call has no valid classification, '
+                     'or its function or a declared target is missing. Restore or correct a missing function or target. '
+                     'Otherwise declare the call and its targets in tests/fixtures/capacity_packet_schema.json.')
+PACKET_ESCAPE = ('Packet source {site} stores a packet in an attribute or a global. '
+                 'Keep the packet in local variables, or return it.')
+READER_WRITE = ('Registered packet reader {site} writes into the packet that it receives. Remove the write from the reader. '
+                'When the write is intended, move it into a registered builder, and update the reader registration '
+                'and the call declarations.')
+CERTIFICATE_CHANGED = ('The source or the declared call inventory of {site} differs from its reviewed certificate, '
+                       'or certificate data is missing. Review the difference, then correct the declaration or the certificate in tests/fixtures/capacity_packet_schema.json.')
+SOURCE_MISSING = ('Packet source {module} is not among the source files, or is not in the declared module list. '
+                  'Restore the module, or add it under modules.')
+FIXTURE_MISSING = ('The quantity fixture of packet member {path} is missing or names no builder. '
+                   'Declare the fixture with its builder under fixtures.')
+OPEN_MEMBERS_CHANGED = ('The open packet members differ from their reviewed baseline. '
+                        'Keep open_members unchanged, and give each new growing member a bound other than open.')
+QUANTITY_COVERAGE_MISSING = ('The quantity coverage of a growing packet property ({path}) is not valid: the shipped baseline '
+                             'changed, the property names no closure entry, or it has no canonical factory and no permitted gap. '
+                             'Restore the baseline, or name an existing entry. Give a new or a shipped property a canonical '
+                             'factory. A gap is permitted only for an original open property, with its matching entry, '
+                             'closing unit, guard, property and property kind, and only while the closing unit is not installed. '
+                             'After that unit is installed, give the property a canonical factory.')
+QUANTITY_FACTORY_MISSING = ('Canonical quantity factory {factory} is missing, differs from its declaration, has no valid route '
+                            'allowance, or returned a value that its declared builder did not produce. Correct the declaration '
+                            'or the route of its fixture first. Then make the factory return the output of that builder.')
+QUANTITY_ROUTE_MISSING = ('The canonical quantity fixture names a route that quantity_routes does not hold. '
+                          'Declare the route there.')
+QUANTITY_ROUTE_CHANGED = ('The route allowance of the canonical quantity fixture is zero or differs from its declared route_limit. '
+                          'Give the route a positive allowance, then set route_limit to that allowance.')
+QUANTITY_NOT_SCALED = ('The canonical factory did not grow packet property {path} to its declared scale. '
+                       'Scale the input of the factory until the property reaches that size.')
 
 
 def read_packet_registry(path=None):

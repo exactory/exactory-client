@@ -17,17 +17,34 @@ from ci.source_inventory import describe_source_ast
 ROOT = Path(__file__).resolve().parents[1]
 MATRIX_PATH = ROOT / 'tests/fixtures/capacity_closure.json'
 TRANSPORT_INVENTORY_PATH = ROOT / 'tests/fixtures/capacity_transport_inventory.json'
-NO_CONSTRUCTION_MESSAGE = 'An entry without a planned construction cannot claim constructed coverage.'
-EVIDENCE_MESSAGE = 'Every coverage and stop test must exist and pass in this guard run.'
-STOP_EVIDENCE_MESSAGE = 'Every required stop keeps its executed evidence, whatever the coverage.'
-MATRIX_MESSAGE = 'Every matrix entry needs its units, coverage, quantity, kinds, release and tests.'
-CALL_SITE_MESSAGE = 'Every reviewer call must use a declared budgeted operation and call path.'
-LIMIT_READER_MESSAGE = 'A route limit has a reader outside its reviewed homes.'
-TRANSPORT_MESSAGE = 'Every adapter limit, transport signal and runtime member needs a classified row.'
-PRIOR_KEY_MESSAGE = 'Every observed capacity prior needs its complete execution key, including runtime and configuration.'
-JOIN_GROUND_MESSAGE = 'Capacity evidence joining keys needs a documented ground and its URL.'
-MERGE_MESSAGE = 'An installed unit must add the matrix rows, stops and executed tests of its merge obligation.'
-PACKET_KIND_MESSAGE = 'A packet with undeclared members has no capacity task kind.'
+NO_CONSTRUCTION_MESSAGE = ('This entry claims the coverage "constructed" and names no construction unit. '
+                           'Name the unit under units.construction, or change the coverage.')
+EVIDENCE_MESSAGE = ('A test or a verification report of this entry is missing, or a test did not pass in this guard run. '
+                    'Name the evidence tests and reports of the entry, and make each named test pass.')
+STOP_EVIDENCE_MESSAGE = ('A required stop of this entry is missing, has no code, or lacks a required test. '
+                         'Under required_stops, list each stop of the stop contract, and each pending stop that an installed '
+                         'trigger unit or the coverage "constructed" activates, with its code and all its tests. '
+                         'The trigger units of a pending stop are its trigger_units, or its unit when it has none.')
+MATRIX_MESSAGE = ('A matrix entry is incomplete or repeats an id. Give each entry of tests/fixtures/capacity_closure.json '
+                  'a unique id, its units, coverage, quantity, kinds, release and tests, and a no_construction_ruling '
+                  'when it names no construction.')
+CALL_SITE_MESSAGE = ('The reviewer call sites, call operations, native packet producers or admission functions '
+                     'differ from their declaration. Review the change, then update tests/fixtures/capacity_transport_inventory.json.')
+LIMIT_READER_MESSAGE = ('The modules that read a route limit differ from the declared list. '
+                        'Review the change, then update limit_readers in tests/fixtures/capacity_transport_inventory.json.')
+TRANSPORT_MESSAGE = ('The limits, signals, runtime members, configuration members, binary rules or source of an adapter, '
+                     'or the task rules, differ from their declaration. Review the change, then update '
+                     'tests/fixtures/capacity_transport_inventory.json, with a class and a reason for each member.')
+PRIOR_KEY_MESSAGE = ('A capacity prior has no complete execution key, or its constant differs from its declaration. '
+                     'Give each prior its adapter, endpoint, model, runtime and configuration, '
+                     'and keep one literal constant for each declared name.')
+JOIN_GROUND_MESSAGE = ('A capacity prior joins other keys without a documented ground. '
+                       'Give it documented_ground with a statement and an https URL, or remove joined_keys.')
+MERGE_MESSAGE = ('An installed unit did not add the tests or the stops of its merge obligation to this entry. '
+                 'Add the tests and the stop codes that the obligation lists for the entry.')
+PACKET_KIND_MESSAGE = ('This packet, or the registry declaration that it is checked against, failed validation, '
+                       'so the packet gets no task kind. Correct the registry declarations and the open-member baseline, '
+                       'and declare the role, protocol and members of the packet in tests/fixtures/capacity_packet_schema.json.')
 
 
 def read_matrix():
@@ -423,7 +440,7 @@ def collect_configuration_members(source):
 
 
 def describe_packet_task(role, packet, *, route, request, registry, operation='review.invoke'):
-    """K2 assigns no kind before both logical and emitted packets have closed schemas."""
+    """Validate the logical packet, and the emitted packet when it can be read, before describing the task."""
     from ci.capacity_packet_inventory import validate_packet
     from research_harness.review_excerpts import read_sent_packet
     from research_harness.review_route_capacity import describe_task
@@ -433,7 +450,8 @@ def describe_packet_task(role, packet, *, route, request, registry, operation='r
         raise ValueError(PACKET_KIND_MESSAGE)
     return describe_task(role, packet, route=route, request=request, operation=operation)
 
-DECLARATION_ENTRY_MESSAGE = 'Every task, limit and growing packet declaration must name an existing closure entry.'
+DECLARATION_ENTRY_MESSAGE = ('A limit, a task rule or a growing packet member names a closure entry that does not exist. '
+                             'Name an entry of tests/fixtures/capacity_closure.json, or add the entry.')
 
 
 def inspect_declaration_entries(matrix, transport_inventory, packet_registry):

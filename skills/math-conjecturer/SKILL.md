@@ -42,7 +42,13 @@ the record, not an order of tools: every tool is available at every milestone, a
 `exactory-research gate post` requires every condition at once.
 When a step stops and only the user can pass it, report it and go on only as
 [Stops and overrides](../../docs/research-workflow.md#stops-and-overrides) describes; the post
-then uses `export --kind problem-override` and `problem-post-external`.
+then uses `export --kind problem-override` and `problem-post-external`. Before such a post, run
+`exactory-research review-stop` with `scope: "store"` and `mode: "now"` (`exactory-research example
+review-stop` prints the payload), send it again with a new request ID, or take the steps of its
+result, until every call that is not `historical` is `settled`, confirm by your own check that
+the old processes of each `historical` call have ended, and leave the stop standing through the
+post, so that no reviewer call of the record runs when the post closes its review chains
+([Review chains and `review-series`](../../docs/research-cli.md#review-chains-and-review-series)).
 
 Every `exactory-research` mutation below takes `--file FILE --expected-revision REVISION
 --request-id ID`. Read `exactory-research status` before each mutation and use its revision.

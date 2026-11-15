@@ -193,7 +193,7 @@ def build_capacity_probe_request(route, prompt, packet, tokens):
     """Fill only evidence, keeping both controls in the unchanged three-member packet."""
     from .errors import ResearchError
     if route['adapter'] == 'codex_cli_visual_v1':
-        raise ResearchError('invalid_review_capacity_probe', 'A capacity probe requires a text adapter.')
+        raise ResearchError('invalid_review_capacity_probe', 'A capacity probe cannot run on the visual route. Probe a route with a text adapter.')
     pattern = 'capacity!probe:0123;'
     def build(size, use_utf8=False):
         # Four-byte code points and a one-code-point tail represent each byte size exactly.
@@ -223,7 +223,7 @@ def build_capacity_probe_request(route, prompt, packet, tokens):
                 low = middle + 1
             else:
                 high = middle - 1
-    raise ResearchError('invalid_review_capacity_probe', 'The requested probe size could not be constructed within this transport.',
+    raise ResearchError('invalid_review_capacity_probe', 'The transport of this route cannot build a probe request of this input size. Request another size.',
                         dict(input_tokens=tokens, character_limit=limit))
 
 
@@ -380,13 +380,15 @@ def measure_request(route, request, profile=None, *, records=None, artifacts=Non
     return result
 
 
-CAPACITY_STOP_MESSAGE = 'This review has no bounded delivery on the selected route. Use a listed next step when one is available.'
-UNSERVED_REVIEW_MESSAGE = 'No registered verified route serves this review; it is outside the solved part on the routes currently available.'
+CAPACITY_STOP_MESSAGE = ('The selected route cannot deliver this review; the details give the reason. '
+                         'Take a listed next step when the owner authorizes it.')
+UNSERVED_REVIEW_MESSAGE = ('No verified route of this record serves this review. '
+                          'It is outside the solved part of the harness on these routes.')
 CAPACITY_OWNER_DECISION = 'Whether to authorize a listed recovery step or leave this review outside the solved part.'
 UNSOLVED_REVIEW_ITEMS = (
     ('https_parts', 'https-series', 'Delivery in parts on the HTTPS route.'),
-    ('binary_inputs', 'visual-series', 'Binary inputs without a documented or counted token bound, or above one request.'),
-    ('body_without_text_form', 'visual-series', 'A body without a text form above one read turn.'),
+    ('binary_inputs', 'visual-series', 'Binary inputs whose tokens have no documented bound, or that exceed the limits of one request.'),
+    ('body_without_text_form', 'visual-series', 'An evidence body without a text form that is larger than one read turn.'),
     ('staged_scale', None, 'A staged review above its supported scale; the slot retains its ordinary delivery.'),
 )
 
@@ -399,7 +401,7 @@ def describe_unsolved_reviews():
         result[role].append(dict(reason='no_parts_delivery', unit='paper-series',
                                  message='This role has no delivery in parts.'))
     result['native_math'].append(dict(reason='math_reading_v1', unit='reading-math-v2',
-                                      message='Math reading protocol v1 has no finite final projection.'))
+                                      message='The math reading protocol v1 can outgrow the input limit of the route on its final turn.'))
     return result
 
 

@@ -13,7 +13,8 @@ from .review_task_execution import (_get, _mutate_current, _TransactionRecords, 
                                     read_call_kinds, build_historical_attempt_step, find_reservation_dispatch)
 
 
-STOP_MESSAGE = 'The review scope is stopped; settle its calls and release its stop before continuing.'
+STOP_MESSAGE = ('A review stop stands for this chain or for the store. '
+                'Settle the calls of the stop and release it with review-stop before you start a call.')
 STOP_GRACE_SECONDS = 10
 OWNER_SETTLE_SECONDS = 120
 CALL_COMMANDS = dict(zip(CALL_OPERATIONS, ('review-run', 'review-probe', 'review-output-correction')))
@@ -242,7 +243,8 @@ def request_stop(store, payload, *, request_id, expected_revision=None, origin='
     if (payload['action'] != 'stop' or payload['mode'] not in ('now', 'after_turn')
             or ('assignment_id' in payload) == ('scope' in payload)
             or 'scope' in payload and payload['scope'] != 'store'):
-        raise ResearchError('invalid_input', 'Stop one assignment chain or the store, in mode now or after_turn.')
+        raise ResearchError('invalid_input', 'The stop payload is not valid. Give action "stop", mode "now" or "after_turn", '
+                            'and exactly one of assignment_id and scope "store".')
     if 'assignment_id' in payload:
         text(payload['assignment_id'], 'Assignment ID')
     def apply(tx, value, revision):
@@ -380,7 +382,7 @@ def release_stop(store, payload, *, request_id, expected_revision=None):
     for key in ('id', 'stop_id', 'reason'):
         text(payload[key], key)
     if payload['action'] != 'release':
-        raise ResearchError('invalid_input', 'Release names a recorded review stop.')
+        raise ResearchError('invalid_input', 'The release payload is not valid. Give action "release" and the stop_id of a recorded review stop.')
     def apply(tx, value, revision):
         records = _TransactionRecords(tx)
         stop = _get(records, 'review_stop', value['stop_id'])
@@ -391,7 +393,10 @@ def release_stop(store, payload, *, request_id, expected_revision=None):
                  if row['state'] == 'waiting' and contains_scope(stop['scope'], row['scope'])]
         drivers = [row for row in list_live_drivers(records, stop['scope']) if row['id'] in stop['drivers']]
         if waits or drivers or any(call['state'] not in ('settled', 'historical') for call in calls):
-            raise ResearchError('review_invocation_pending', 'Settle the stopped calls and end the earlier drivers before release.',
+            raise ResearchError('review_invocation_pending', 'The stop cannot be released yet: a call is not settled, a call waits, or an earlier driver runs. '
+                                'A settled call needs nothing. Let a running call end, or send the stop again with mode "now", '
+                                'which also withdraws the waiting calls. Run the step of each other listed call, '
+                                'wait until the listed drivers end, and release again.',
                                 dict(stop_id=stop['id'], calls=calls, waits=waits, drivers=[row['id'] for row in drivers]))
         result = dict(stop, release=dict(id=value['id'], reason=value['reason'], revision=revision))
         tx.put('review_stop', stop['id'], result)

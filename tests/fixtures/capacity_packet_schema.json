@@ -13797,7 +13797,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.problem_delivery": {
-      "ast_sha256": "191f1e65f353b27fbf00bb9fc685c33324b072911fbd451957a2db53c23618a0",
+      "ast_sha256": "fe98d0eb164331240518ae04412114a6dca42961f5d29679ade7478f1c7fc719",
       "functions": {
         "_assess_minimum": "2f8f17ce41106e43b23502a1b2347dabc0551d266280cf8b579673169200c3c9",
         "_find_scoped_review_closure_root": "20dce9ae1fcfc14981aa8dd62d6eacdac1b4283c83173afed367ad0396cd688a",
@@ -13813,7 +13813,7 @@
         "compute_export_digest": "7b50d908aa9e0956e47e31d9fd54a98bfe00aee96d7d3cefdb99963a214e3193",
         "describe_after_post_obligations": "dc1fb0415191d48c8147eb299f6f5e19032b7dd9ba3b12f50478cfc99ffe9c2b",
         "describe_incomplete_work": "4733153c063bae61900c95aeab3081b99b047a34d5b51ff034d68c001a334b80",
-        "describe_posted_calls": "4a1b463881f798c85ee725e75ccd86e885deeb4be7f2f740b7611d5e404134a7",
+        "describe_posted_calls": "4537d778fc69debc79e9ae8dd5aa156ff737e057f212a74bc36a29f71dfc6e27",
         "describe_problem_work": "ce2418b70ae84e811371e0327f2b0833a04e83307c0abd2c4515836de1580410",
         "describe_review_tasks": "25554925f90ab9548fad35888b4c75ae75169e54da5e7db09888359e9f818601",
         "export_problem": "e1e3030e5878d44416c40888ed44c370b6ad8744fa80a46938aa827cc30ba550",
@@ -14607,17 +14607,17 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_call_admission": {
-      "ast_sha256": "abc762ce945fe8c9adc32817f333467eb3d46fa072e64793689218d547ab31c5",
+      "ast_sha256": "fdf0505de5cfdc0bf77692b8edf9bf90f2a21fb4731aa178cf4b718667d38777",
       "functions": {
         "abandon_dead_waits": "1ec94dc4bec7a362f371fb19adca00f2a3aac28625006f26be2b10b5645fc12d",
-        "admit_review_call": "5889f6ebfad9566b508eada5931fb239b1109ef75500c2239a9eb26c3471ac41",
+        "admit_review_call": "91bbea98b04dd72715df943eebf3cf1f498a614109b0ba4df2130ba4900177c2",
         "can_admit_route": "749e303a316a36f95a1d9978b188c0aa8b0d695adfcb391886760962f821c03e",
         "check_launch": "b2c87774770758a268a326a4105b3bd4ef9be18f57504c72eb5f149cc66ffaea",
         "describe_capacity_wait": "d259ac340c0c74ef29328ee8fe016348e7d894480cafbf8523e4ada96e382425",
         "list_active_calls": "5c03541dcc3d286b96acf596dc3303ab2ddb4eae33f2e34c059ce79a509be777",
         "list_waiting_calls": "6649001da59f9864a783c6b6c5dd1d553c9dfab1dcf1a46cbd82664d5e02e28c",
         "record_wait": "ac9eaef0ea280dc6d5b0d8f396dc4d7d4cd7d3d8d95778d12d42441692f75319",
-        "wait_for_admission": "3ee98a31bab1df6fe433079a7bcb218cd5b2dbd1c58d1d9bf511a47c397d4102",
+        "wait_for_admission": "b6ff32c6846ce4ac22e9fdd0fede0301938306d151c91da207d3f3ddc9ddd302",
         "withdraw_wait": "42658e05c619d76241942fed973328ffbd9302ffb0b591b1cf1a97b560c46280"
       },
       "packet_call_digests": [],
@@ -15767,12 +15767,12 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_plan_steps": {
-      "ast_sha256": "ba5f35d818a5fefa66ae5837893d5260ea3821d939283b25a836df5bc27063fa",
+      "ast_sha256": "b05cce500030ea9998ecf981e990a47dd596b734dd4549553621fd5d6467ae64",
       "functions": {
         "_build_identity_payload": "8c41d637f54ac4de2e9d293d13134f6a1383c0f7c5aa4b5a49def65900292e6e",
         "_describe_session_route_steps": "01fa8f8c3ca1320a76e96825d7dbde99f8a691b141450938e35ba8faa1df2244",
         "complete_plan": "a5f2fe0e4a2f48b02dccb0bf213f5a80e2f376e39afdebcda9add2a67be9b4d8",
-        "describe_capacity_steps": "7a97ef340a6d2ec0265dd940c8a15a2ec692cc7c93380fbd129864cec456fa02",
+        "describe_capacity_steps": "442d2c73dfadb15ff6bb92ede22da18610582beb03970aa5b8e17049ba6bb735",
         "describe_role_handoff": "21dc34b91ab701f4083a8d7bbc3c4332ae1e73a4d475ea84ce2348054742b206",
         "describe_step": "b4bbb2d4e426de66b3e1ae6324b6f4b55a2e9381867c3f56958795b3103d07a4",
         "find_capacity_parent": "81f464a91db0f4b74228ad06378561ab42216c905446374c3d1ede58660b73ed",
@@ -15984,7 +15984,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "3b113c26968459bbf2af120b119d9a8aeecc4f1ad2529d2a46d6ff3634fd8af7",
+      "ast_sha256": "fec84db057600cd324e73c526c283e364d9da211402b1d97e6ece01d4bc5f518",
       "functions": {
         "_assignment_state": "94243ac87c4e95cac23ed19fb4f136a7906541fea313b62033fa98f481dcda2b",
         "_bars": "fd41a7b94078e8e0761696db4a7cc67b063cbb5787f76d6d3dae65fcc7fe5f9f",
@@ -16076,7 +16076,7 @@
         "is_previous_prompt": "ab6b5cc1b62822dcf4c317310205a9fa4e58a7c60a7a770da785372a0028c8bf",
         "is_version_2_problem_result": "e97c1e2aa4f8418ee7cfbcd277bd3804ba8ed6b9f88ac10eb41763ca30d6b4ed",
         "previous_problem_result_prompt": "949b2f4a70472ac4ab16f554d88f070cddee79d2d8005e93ad1d08c287e8cc90",
-        "probe_route": "c158a782453ec6d258d387a702ee08a0a2c87ea4bbdfa02b426463022444f4c4",
+        "probe_route": "169895c3847eb296c6a8ca68deb44fe4cd94373105266e4c019d8fade661dd68",
         "read_assignment_output": "11a6d3cf0cf63b32e9a776db3cfb3e41b0d2a85e191e7c5e2d610ca33307c9da",
         "read_codex_diagnostic": "9fb58c3ffeaf8c0c4359805d7baa51f5f1cd5352ae73b42c0bf560bfa93329a7",
         "read_raw_observation": "14e6b6c7ca97a4e3992d908f1d94f3add3a92bee7561ace63d220fb8cbf06834",
@@ -16275,7 +16275,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_route_capacity": {
-      "ast_sha256": "ec525be5b71a38a6a9a9dd4ae2078cde7781ded463a64447542eb65c694bad36",
+      "ast_sha256": "a9da21470d12613675a1a1336af9edb17747632214c33a32810e3f8d59831ef4",
       "functions": {
         "_build_serving_parts": "8f2f7be1d7e1d4cc20fa124af779a48e77d41ab31cb6c7aed1fe3ed6a3de3afe",
         "_build_serving_repair": "c50aaef3ccfcccf6064f9a4cdaa0a0f52111886dd9b185936b6d1e5a38ab47ca",
@@ -16297,7 +16297,7 @@
         "_read_encoded_sources": "491d364083be0982de87d538032ee21bc711d9d916cc3613acd6bdfcb801c456",
         "_read_text_parts": "ecee21b54688006bfaccadbf1f8d3c62719b085178d0cd58f62fa1e4f29f8a86",
         "_sort_profile_row": "65664711f6a3dcff4563a79f29420042ef25561e6d906ee25b514fc48faa8388",
-        "build_capacity_probe_request": "04b76a02a1e2a71eb0412d986f0bbd7d3531e2671fdead83a5f3ce321e295ffd",
+        "build_capacity_probe_request": "8c0f9f71af443599d46c7df6045c4d8bfb87feae19f3d95372ed2e3eda67d619",
         "build_profile_rows": "c13bc9fb5b0d397640ab6240a162da9c94657f578c48d6e07c72c4b69b759fa8",
         "derive_material_allowance": "75731028db3042a3152e644117cc546d780ceed4683de58c8f51f9642587b9e1",
         "describe_assignment_kind": "7feb00e09fe70fa10c53592a1178eeee0c4b5eee590258ff59bcd3dbdc1f7602",
@@ -16323,7 +16323,7 @@
         "describe_task": "57b483eab62f60b1d7a458f1a5894c1daef42d1531612d0597df8811fa08b1e1",
         "describe_task_kind": "78c494b0f9f50e59f9e3e80a4ecbeb85b6b1b9c52eab213dc30da762b0c9d0c9",
         "describe_text_room": "32432cfaa36ebb629ce9cbb6ce7441821d37da4b4284dd5fd2d769748a113169",
-        "describe_unsolved_reviews": "3a510aaf97db1b271b1b1a8fccb58f39b141a7e13051e3efa5d2abfce3c337cf",
+        "describe_unsolved_reviews": "b10c5662b5a0d27327b1b6e1a3145ad94acfab170899c5fe0fc1a0b0cdd12fd1",
         "describe_work_units": "1d9ffda98c8df71cf6b4840090aea9756134591a9a31f711398a75643795d78e",
         "find_serving_routes": "18ca735abee774034b5023e33a7181caba87437212369e5ed2b131726f85f776",
         "measure_request": "1615879024ec19d63e6243105beb627438f6d407aa9cc8fb5f7dcad5ce6b6abb",
@@ -16969,7 +16969,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_stop": {
-      "ast_sha256": "2fc5966583e18199502d298b452ee5b994750b6be3d47d8dea516bcb054e53a2",
+      "ast_sha256": "0a6ae2078e8665f56dd5bfd21964f04e7d493936903fed6e6c41d6c8f06681cd",
       "functions": {
         "_complete_closed_call_step": "457d0c40a80c9c9732292a4d0a838d58c18da08cfc057ade64cdd8261027d310",
         "_describe_call_step": "9291bb019948563868d2f12ab650ad9437f0b16d5738de3e3ca3ccb7ca7b8b36",
@@ -16994,8 +16994,8 @@
         "read_driver_boundary": "36adf161809b5eef5ebb1febd4e2798525072baf2dc117cba7ae85c4ba08eca1",
         "read_reservation_attempt": "78532543842623f4334690ce9e6366a46f151d011d66c532c9ac2f1061ebd175",
         "record_signal_boundary": "58a130a8b49842b0a7be4eb1a64271bfe63e01c3602e43eac2580597470569e1",
-        "release_stop": "929e28b2e7a488f28e650aa08371133621b3ba9a118cc521270baa5e90f2515d",
-        "request_stop": "d15abd163fc5106faff15ed8273d434bbcae63c653f7a9505ce81cded151fb0e",
+        "release_stop": "7bb2bf3ad69e550dd75be4328d5375fa7ce88737ac768483ed95f20df116837c",
+        "request_stop": "ed5e10236788453c977ca792141536e621f04ae8e8ddac904a61946d17f70e0d",
         "require_unstopped": "d4a24b0077064affde49ae54cc99819c6e54455f4b81eee0fae1a6f776828769",
         "requires_capture_finish": "e50c53e0797bb2f621075ee9a86ba075ca892200c85fd57986374eff6e730eac",
         "settle_stop": "f992cb70fc5ae09f029df0f7451d8e2575647e77052856458b02b44510aa3d52",

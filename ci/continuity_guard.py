@@ -1,8 +1,13 @@
 """Finite continuity matrix and the completion contract for executed stop answers."""
 
-STOP_END_MESSAGE = 'Every answer must reach an eligible assignment of the same review, its recorded action, or an explicit unserved boundary.'
-STOP_ANSWER_MESSAGE = 'Every declared stop answer needs an executed journey and a registry row.'
-SIZE_MATRIX_MESSAGE = 'Every task kind and size outcome needs an executed continuity row.'
+STOP_END_MESSAGE = ('A stop answer did not end at an eligible assignment that follows the stopped head, at a recorded action, '
+                    'or at a stated boundary without a serving route. Make the journey of the answer reach one of these ends.')
+STOP_ANSWER_MESSAGE = ('The executed journeys do not match the answers of the stop, a journey did not run the commands of its '
+                       'answer in order, or the stop code has no registry row. Execute exactly one journey for each answer, '
+                       'remove a journey for an answer that the stop does not declare, and register the code in stop_classes.py.')
+SIZE_MATRIX_MESSAGE = ('The continuity rows do not match the required task kinds and size outcomes, or a row lacks its retained '
+                       'call or its executed boundary. Execute one complete row for each required case, and remove or correct '
+                       'a row for a case that is not required.')
 SIZE_OUTCOMES = (
     ('output_over_cap', None), ('output_over_cap', 'reduced_by_context'),
     ('input_over_limit', None), ('input_over_limit', 'compacted'),

@@ -25329,12 +25329,12 @@
         "unit": "https-series"
       },
       {
-        "message": "Binary inputs without a documented or counted token bound, or above one request.",
+        "message": "Binary inputs whose tokens have no documented bound, or that exceed the limits of one request.",
         "reason": "binary_inputs",
         "unit": "visual-series"
       },
       {
-        "message": "A body without a text form above one read turn.",
+        "message": "An evidence body without a text form that is larger than one read turn.",
         "reason": "body_without_text_form",
         "unit": "visual-series"
       },
@@ -25351,12 +25351,12 @@
         "unit": "https-series"
       },
       {
-        "message": "Binary inputs without a documented or counted token bound, or above one request.",
+        "message": "Binary inputs whose tokens have no documented bound, or that exceed the limits of one request.",
         "reason": "binary_inputs",
         "unit": "visual-series"
       },
       {
-        "message": "A body without a text form above one read turn.",
+        "message": "An evidence body without a text form that is larger than one read turn.",
         "reason": "body_without_text_form",
         "unit": "visual-series"
       },
@@ -25373,12 +25373,12 @@
         "unit": "https-series"
       },
       {
-        "message": "Binary inputs without a documented or counted token bound, or above one request.",
+        "message": "Binary inputs whose tokens have no documented bound, or that exceed the limits of one request.",
         "reason": "binary_inputs",
         "unit": "visual-series"
       },
       {
-        "message": "A body without a text form above one read turn.",
+        "message": "An evidence body without a text form that is larger than one read turn.",
         "reason": "body_without_text_form",
         "unit": "visual-series"
       },
@@ -25400,12 +25400,12 @@
         "unit": "https-series"
       },
       {
-        "message": "Binary inputs without a documented or counted token bound, or above one request.",
+        "message": "Binary inputs whose tokens have no documented bound, or that exceed the limits of one request.",
         "reason": "binary_inputs",
         "unit": "visual-series"
       },
       {
-        "message": "A body without a text form above one read turn.",
+        "message": "An evidence body without a text form that is larger than one read turn.",
         "reason": "body_without_text_form",
         "unit": "visual-series"
       },
@@ -25415,7 +25415,7 @@
         "unit": null
       },
       {
-        "message": "Math reading protocol v1 has no finite final projection.",
+        "message": "The math reading protocol v1 can outgrow the input limit of the route on its final turn.",
         "reason": "math_reading_v1",
         "unit": "reading-math-v2"
       }
@@ -25427,12 +25427,12 @@
         "unit": "https-series"
       },
       {
-        "message": "Binary inputs without a documented or counted token bound, or above one request.",
+        "message": "Binary inputs whose tokens have no documented bound, or that exceed the limits of one request.",
         "reason": "binary_inputs",
         "unit": "visual-series"
       },
       {
-        "message": "A body without a text form above one read turn.",
+        "message": "An evidence body without a text form that is larger than one read turn.",
         "reason": "body_without_text_form",
         "unit": "visual-series"
       },
@@ -25449,12 +25449,12 @@
         "unit": "https-series"
       },
       {
-        "message": "Binary inputs without a documented or counted token bound, or above one request.",
+        "message": "Binary inputs whose tokens have no documented bound, or that exceed the limits of one request.",
         "reason": "binary_inputs",
         "unit": "visual-series"
       },
       {
-        "message": "A body without a text form above one read turn.",
+        "message": "An evidence body without a text form that is larger than one read turn.",
         "reason": "body_without_text_form",
         "unit": "visual-series"
       },
@@ -25471,12 +25471,12 @@
         "unit": "https-series"
       },
       {
-        "message": "Binary inputs without a documented or counted token bound, or above one request.",
+        "message": "Binary inputs whose tokens have no documented bound, or that exceed the limits of one request.",
         "reason": "binary_inputs",
         "unit": "visual-series"
       },
       {
-        "message": "A body without a text form above one read turn.",
+        "message": "An evidence body without a text form that is larger than one read turn.",
         "reason": "body_without_text_form",
         "unit": "visual-series"
       },
@@ -25498,12 +25498,12 @@
         "unit": "https-series"
       },
       {
-        "message": "Binary inputs without a documented or counted token bound, or above one request.",
+        "message": "Binary inputs whose tokens have no documented bound, or that exceed the limits of one request.",
         "reason": "binary_inputs",
         "unit": "visual-series"
       },
       {
-        "message": "A body without a text form above one read turn.",
+        "message": "An evidence body without a text form that is larger than one read turn.",
         "reason": "body_without_text_form",
         "unit": "visual-series"
       },

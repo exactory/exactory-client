@@ -2430,7 +2430,8 @@ def probe_route(store, payload, *, expected_revision, request_id, credential=Non
             fields(value['capacity'], ('input_tokens',), code='invalid_review_capacity_probe')
             size = value['capacity']['input_tokens']
             if type(size) is not int or size <= 0:
-                raise ResearchError('invalid_review_capacity_probe', 'A capacity probe needs a positive integer input token size.')
+                raise ResearchError('invalid_review_capacity_probe', 'capacity.input_tokens is not a positive integer. '
+                                    'Give the input size of the probe in tokens as a positive integer.')
         route = _get(records, 'review_route', value['route_id'])
         _require_route_runtime(route)
         controls = {source: uuid.uuid4().hex for source in transport.EXCLUDED_SOURCES}

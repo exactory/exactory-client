@@ -43,10 +43,10 @@ PLAN_STEPS = {
              chooses=('id', 'inspections', 'notes'),
              prerequisites=('Acquire a complete full-text capture.', 'Declare its required-unit bundle.')),
     16: dict(command='review-probe', roles=protocol.ROLES, chooses=('id',),
-             prerequisites=('Authorize the paid capacity probe.',)),
+             prerequisites=("Obtain the owner's authorization for the paid capacity probe.",)),
     14: dict(command='review-assignment', roles=protocol.ROLES, chooses=(), prerequisites=()),
     15: dict(command='artifact', roles=protocol.ROLES, chooses=('id', 'path'),
-             prerequisites=('Create a faithful text form of the named original body in the workspace.',)),
+             prerequisites=('Write the complete text of the named body to a file in the workspace.',)),
 }
 
 
@@ -147,7 +147,7 @@ def describe_step(records, artifacts, assignment, number, *, stop_id=None, readi
     return result
 
 
-CAPACITY_ROUTE_RETIRE_REASON = 'Retire this route to continue the preserved review on the serving route.'
+CAPACITY_ROUTE_RETIRE_REASON = 'This route cannot deliver the review within its limits. The preserved review continues on a route that can.'
 
 
 def find_capacity_parent(records, assignment, packet):
@@ -166,7 +166,7 @@ def describe_capacity_steps(records, artifacts, assignment, serving_routes, prob
         capture['body'] = copy.deepcopy(body)
         resume = describe_step(records, artifacts, assignment, 14)
         resume['chooses'] = ['context']
-        resume['prerequisites'].append(dict(condition='Bind the captured text form in the review inputs.'))
+        resume['prerequisites'].append(dict(condition='Replace the body in the inputs of the review with its stored text form.'))
         answers.append(dict(answer='Capture a text form', steps=[capture, resume]))
     if probe_tokens is not None:
         probe = describe_step(records, artifacts, assignment, 16)
