@@ -493,6 +493,15 @@ def describe_imports(records, artifacts):
     return [row for _, row in sorted(collect_import_projections(records, artifacts).items())]
 
 
+def describe_import_size(records, artifacts, imported):
+    """Report the proposed import without modifying its manifest or stored receipt."""
+    from .review_route_capacity import describe_material_size, SIZE_REPORT_IMPORT_LABEL
+    proposed = dict(problem_forming_import={imported['id']: imported})
+    material = [row for _, row in sorted(collect_import_projections(proposed, artifacts).items())]
+    return describe_material_size(records, artifacts, material, label=SIZE_REPORT_IMPORT_LABEL,
+                                  records_field='import_records_characters')
+
+
 def deliver_slate_imports(records, artifacts, packet):
     if packet.get('subject', {}).get('kind') != 'problem' or packet.get('role') != 'slate':
         return

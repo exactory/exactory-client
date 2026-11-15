@@ -227,6 +227,15 @@ def describe_role_handoff(records, artifacts, assignment, code, details=None):
     return dict(state='handoff', code=code, command=steps[0]['command'], details=details)
 
 
+def _describe_session_route_steps(records, artifacts, assignment):
+    steps = [describe_step(records, artifacts, assignment, number)
+             for number in select_route_steps(records, artifacts, assignment)]
+    # Retirement is recorded by an earlier step, so its event and evidence
+    # are choices filled from that command's receipt rather than stale bindings.
+    steps[-1]['chooses'].extend(('context.context_repair.event_ids', 'context.context_repair.evidence'))
+    return steps
+
+
 def complete_plan(records, artifacts, assignment, plan):
     """Add executable payload rules to external boundaries without changing call payloads."""
     if plan['state'] not in ('stop', 'handoff'):
@@ -255,7 +264,36 @@ def complete_plan(records, artifacts, assignment, plan):
     context_status = assignment.get('context_state', {}).get('context_status')
     head_ran = any(row['assignment_id'] == assignment['id']
                    for row in records.get('review_attempt', {}).values())
-    if code in ('native_review_attestation_required', 'openness_review_not_approved'):
+    if code == 'review_pending_delivery_over_plan':
+        from .review_route_capacity import (SESSION_FORECAST_DECISION, SESSION_CAPTURE_ANSWER,
+                                           SESSION_CAPTURE_REPAIR_ANSWER, SESSION_ROUTE_ANSWER)
+        captures = []
+        for source in details['pending_sources']:
+            if not source.get('pending_parts'):
+                continue
+            step = describe_step(records, artifacts, assignment, 12)
+            step['payload'] = dict(version_id=source['version_id'])
+            step['chooses'].remove('version_id')
+            captures.append(step)
+        forecast = details['capacity_forecast']
+        packet = protocol._read_json(artifacts, assignment['packet'])
+        keeps_source_delivery = any(row.get('request', {}).get('kind') == 'source'
+            and row['request'].get('depth') == 'fulltext' for row in packet.get('source_deliveries', []))
+        if not head_ran or keeps_source_delivery or not forecast['request']['fits']:
+            # A selected capture cannot replace bytes frozen in this head or its history.
+            captures.extend(_describe_session_route_steps(records, artifacts, assignment))
+            capture_answer = SESSION_CAPTURE_REPAIR_ANSWER
+        else:
+            captures.append(dict(command='review-series', assignment_id=assignment['id']))
+            capture_answer = SESSION_CAPTURE_ANSWER
+        answers = [dict(answer=capture_answer, steps=captures)]
+        if details['capacity_forecast']['reason'] == 'projected_input':
+            answers.append(dict(answer=SESSION_ROUTE_ANSWER,
+                                steps=_describe_session_route_steps(records, artifacts, assignment)))
+        details['decision'] = dict(owner_decides=SESSION_FORECAST_DECISION, then=answers)
+        details['step'] = captures[0]
+        plan.update(state='stop', command='select-main-capture')
+    elif code in ('native_review_attestation_required', 'openness_review_not_approved'):
         number = select_route_steps(records, artifacts, assignment)[-1]
         details['step'] = describe_step(records, artifacts, assignment, number)
         plan.update(state='handoff', command=details['step']['command'])

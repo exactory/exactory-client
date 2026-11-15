@@ -223,6 +223,7 @@ class SeriesTests(unittest.TestCase):
             head_id='bar-first', progress=initial['progress'], command='review-route',
             code='review_route_runtime_stale',
             provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=1),
+            capacity_forecast=initial['capacity_forecast'],
             details=dict(assignment_id='bar-first', route_id='route'))])
 
     def test_planner_refusal_is_replanned_from_fresh_snapshot(self):

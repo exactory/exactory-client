@@ -183,8 +183,10 @@ def assess_assessment(records, artifacts):
 
 def record_value(store, payload, *, expected_revision, request_id):
     artifacts = store.build_artifact_store()
+    size_report = None
 
     def prepare(records, value):
+        nonlocal size_report
         require_problem(records)
         fields(value, ("id", "statement_id", "motivation", "current_state"), ("accounts",))
         if "accounts" not in value:
@@ -199,10 +201,23 @@ def record_value(store, payload, *, expected_revision, request_id):
         from .problem_evidence import validate_value
         validated = validate_value(records, artifacts, value)
         record = dict(validated, recorded_revision=expected_revision + 1)
-        return [immutable_record(records, "problem_value", value["id"], record)], record
+        changes = [immutable_record(records, "problem_value", value["id"], record)]
+        size_report = describe_value_size(records, artifacts, record)
+        return changes, record
 
-    return prepared_mutation(store, "problem.value", payload, prepare,
-                             expected_revision=expected_revision, request_id=request_id)
+    receipt = prepared_mutation(store, "problem.value", payload, prepare,
+                                expected_revision=expected_revision, request_id=request_id)
+    return dict(receipt, size_report=size_report) if size_report is not None else receipt
+
+
+def describe_value_size(records, artifacts, value):
+    """Report account material independently of the immutable value record."""
+    from .problem_accounts import describe_account_records
+    from .problem_account_derivations import describe_account_derivations
+    from .review_route_capacity import describe_material_size, SIZE_REPORT_VALUE_LABEL
+    material = describe_account_records(records, value['accounts'], describe_account_derivations(records, value))
+    return describe_material_size(records, artifacts, material, label=SIZE_REPORT_VALUE_LABEL,
+                                  records_field='account_records_characters')
 
 
 def record_formal_check(store, payload, *, expected_revision, request_id):

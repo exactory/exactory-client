@@ -1558,6 +1558,20 @@ def describe_open_route_reports(records, artifacts=None):
             if kind not in selected or limits['state'] == 'over_limit_expected' or (selected[kind]['state'] == 'fits' and limits['state'] == 'unmeasured'):
                 selected[kind] = limits
         report['task_limits'].update(selected)
+        if artifacts is not None:
+            forecasts = []
+            for head in heads:
+                if head['route_id'] != route_id:
+                    continue
+                try:
+                    forecast = describe_session_forecast(records, artifacts, head)
+                except (ResearchError, json.JSONDecodeError):
+                    # An advisory forecast preserves the report's existing diagnostic.
+                    continue
+                if forecast is not None:
+                    forecasts.append(forecast)
+            if forecasts:
+                report['capacity_forecasts'] = forecasts
         warning = describe_output_warning(selected)
         if warning is not None:
             report['capacity_warning'] = warning
@@ -1606,3 +1620,220 @@ def describe_work_units(role, packet):
     if kind == 'ordinary' and role == 'native_math':
         kind = 'native_' + str(packet.get('native', {}).get('kind', 'unknown'))
     return {'type': kind, 'unit': 'response', 'count': 1}
+
+
+# Allow the recorded 22-part capture and the seven-turn healthy delivery;
+# the four padded texts require about 216 parts and need a decision.
+SESSION_PENDING_TURN_LIMIT = 32
+SESSION_FORECAST_SOURCES = (
+    '20261111223126-layout-extraction-inflates-fulltext-delivery',
+    '20261111235418-bar-final-refused-for-text-delivered-in-reduced-history',
+)
+SESSION_FORECAST_PROTOCOL = 'exactory-session-capacity-forecast-v1'
+SESSION_FORECAST_STOP_MESSAGE = ('The pending source delivery exceeds this session plan. Inspect the listed captures '
+    'and select compact captures.')
+SESSION_PROJECTION_STOP_MESSAGE = ('The projected final input exceeds the route capacity. Select compact captures, '
+    'or retire the route and repair the preserved slot on a serving route.')
+SESSION_FORECAST_DECISION = 'How should the pending source delivery be brought within this session plan?'
+SESSION_CAPTURE_ANSWER = 'Select compact captures and continue this session'
+SESSION_CAPTURE_REPAIR_ANSWER = 'Select compact captures and repair the preserved slot'
+SESSION_ROUTE_ANSWER = 'Move the preserved slot to another route'
+SESSION_PROJECTION_NOTE = ('The final input is an estimate that adds the pending text to the fitted request. '
+    'Later answers, exact-text sharing and history reductions can change it.')
+SESSION_USAGE_UNAVAILABLE = 'No matching completed attempt supplies this measurement.'
+
+
+def _measure_added_text(route, request, content, profile, *, records=None, artifacts=None):
+    if content:
+        from .review_excerpts import read_sent_packet
+        packet = read_sent_packet(request)
+        packet.setdefault('evidence', []).append(dict(content=content, encoding='utf-8'))
+        request = _project_request(request, packet)
+    return measure_request(route, request, profile=profile, records=records, artifacts=artifacts)
+
+
+def _describe_session_usage(records, profile, characters):
+    from statistics import median
+    level = _find_task_level(characters)
+    row = next((row for row in profile['rows'] if row['kind'] == 'request' and row['task_level'] == level), None)
+    share = row['at_or_over_limit'] / row['attempts'] if row and row['attempts'] else None
+    assignments = records.get('review_assignment', {})
+    samples = []
+    for attempt in records.get('review_attempt', {}).values():
+        task = attempt.get('task', {})
+        candidate = assignments.get(attempt['assignment_id'], {})
+        candidate_route = records.get('review_route', {}).get(candidate.get('route_id'))
+        if (candidate_route is not None and describe_route_class(candidate_route) == profile['route_class']
+                and task.get('kind') == 'request' and _find_task_level(task.get('characters')) == level
+                and attempt.get('completed_generation')):
+            samples.append(attempt)
+    samples = sorted(samples, key=lambda attempt: attempt['recorded_revision'])[-PROFILE_ATTEMPT_LIMIT:]
+    outputs = [row['usage']['output_tokens'] for row in samples
+               if type(row.get('usage', {}).get('output_tokens')) is int]
+    durations = [row['usage']['wall_seconds'] for row in samples
+                 if isinstance(row.get('usage', {}).get('wall_seconds'), (int, float))]
+    return dict(at_or_over_limit_share=share, attempts=row['attempts'] if row else 0,
+                expected_output_tokens=median(outputs) if outputs else None,
+                expected_duration_seconds=median(durations) if durations else None,
+                unavailable_reason=SESSION_USAGE_UNAVAILABLE if not outputs or not durations else None)
+
+
+def describe_session_forecast(records, artifacts, assignment, *, request=None, output=None):
+    """Report existing session delivery without changing its packet or giving reading credit."""
+    from . import bar_sources, review_excerpts, review_protocol as protocol
+    from .evaluation import Evaluation
+    if (assignment['role'] not in bar_sources.ROLES or assignment.get('review_parts')
+            or assignment.get('staged_review') or not assignment.get('packet')):
+        return None
+    artifacts = Evaluation.of(records, artifacts)
+    packet = protocol._read_json(artifacts, assignment['packet'])
+    if 'source_inventory' not in packet:
+        return None
+    route = records['review_route'][assignment['route_id']]
+    profile = read_output_profile(records, route)
+    request = request if request is not None else protocol.build_assignment_request(records, artifacts, assignment)
+    sent = review_excerpts.read_sent_packet(request) or packet
+    if output is None:
+        _, output = protocol.read_assignment_output(records, artifacts, assignment['id'])
+    pending = bar_sources.pending(sent, output) if output is not None else list(sent.get('pending_source_requests', []))
+    if output is None:
+        pending.extend(delivery['request'] for delivery in sent.get('source_deliveries', [])
+                       if delivery.get('status') in ('delivered', 'partial', 'deferred_reading_budget', 'deferred_capacity'))
+    delivered = protocol._find_session_bodies(records, artifacts, assignment, evaluate_states=False)
+    held = review_excerpts.find_complete_bodies(sent)
+    sources, additions, seen = [], [], set()
+    original_rows = None
+    turns, used = 0, 0
+    for item in pending:
+        version = item.get('version_id')
+        if item.get('kind') != 'source' or item.get('depth') != 'fulltext' or version in seen:
+            continue
+        seen.add(version)
+        capture = review_excerpts.find_fulltext_capture(records, version)
+        if capture is None:
+            sources.append(dict(version_id=version, parts=None, pending_parts=None, pending_characters=None,
+                                whitespace_fraction=None, expansion_ratio=None))
+            continue
+        content = artifacts.read(capture['text']).decode('utf-8')
+        spans = review_excerpts.compute_part_spans(content)
+        hashes = review_excerpts.compute_part_digests(content)
+        earlier = delivered.get(hashes[0]) if len(spans) == 1 else None
+        redeliver = False
+        deliver_whole = False
+        delivery_characters = len(content)
+        if len(spans) == 1:
+            if original_rows is None:
+                inventory = bar_sources.validate_inventory(artifacts, sent['source_inventory'])
+                original_rows = {row['id']: row for row in inventory}
+            delivery = bar_sources._source(records, artifacts, item, original_rows)
+            if earlier is not None and not earlier['is_complete_delivery']:
+                redeliver = delivery['status'] == 'delivered'
+            whole_characters = bar_sources._count_text_characters(artifacts, delivery.get('evidence', []))
+            # Whole HTML deliveries also carry their original text. When that
+            # exceeds a turn the existing delivery code sends the extracted part alone.
+            if whole_characters <= review_excerpts.TURN_FULLTEXT_CHARACTERS:
+                delivery_characters = whole_characters
+                deliver_whole = True
+        remaining = [(span, sha) for span, sha in zip(spans, hashes) if sha not in delivered or redeliver]
+        if capture['text']['sha256'] in delivered and not redeliver:
+            remaining = []
+        for (start, end), part_hash in remaining:
+            size = delivery_characters if len(spans) == 1 else end - start
+            if used == 0 or used + size > review_excerpts.TURN_FULLTEXT_CHARACTERS:
+                turns += 1
+                used = 0
+            used += size
+            if deliver_whole:
+                for reference in delivery.get('evidence', []):
+                    data = artifacts.read(reference)
+                    if reference['sha256'] not in held and not transport.is_binary_evidence(data, reference['media_type']):
+                        additions.append(data.decode('utf-8'))
+                        held.add(reference['sha256'])
+            elif part_hash not in held and capture['text']['sha256'] not in held:
+                additions.append(content[start:end])
+                held.add(part_hash)
+        extraction = capture.get('extraction', {})
+        sources.append(dict(version_id=version, source_id=capture['source_id'],
+            parts=len(spans), pending_parts=len(remaining), pending_characters=sum(end - start for (start, end), _ in remaining),
+            whitespace_fraction=extraction.get('whitespace_fraction'), expansion_ratio=extraction.get('expansion_ratio')))
+    measured = measure_request(route, request, profile=profile, records=records, artifacts=artifacts)
+    projected = _measure_added_text(route, request, '\n'.join(additions), profile,
+                                    records=records, artifacts=artifacts)
+    task = describe_task(assignment['role'], sent, route=route, request=request)
+    usage = _describe_session_usage(records, profile, task['characters'])
+    reason = ('pending_turns' if turns > SESSION_PENDING_TURN_LIMIT else
+              'projected_input' if turns and not projected['fits'] else None)
+    return dict(protocol=SESSION_FORECAST_PROTOCOL, assignment_id=assignment['id'], request=measured,
+        pending_sources=sources, pending_parts=sum(row['pending_parts'] or 0 for row in sources),
+        pending_characters=sum(row['pending_characters'] or 0 for row in sources), pending_turns=turns,
+        turns=[dict(kind='request', count=turns)],
+        units=[dict(kind='fulltext_part', count=sum(row['pending_parts'] or 0 for row in sources),
+                    characters=sum(row['pending_characters'] or 0 for row in sources))],
+        pending_turn_limit=SESSION_PENDING_TURN_LIMIT, threshold_sources=list(SESSION_FORECAST_SOURCES),
+        projected_final=dict(projected, estimated=True, note=SESSION_PROJECTION_NOTE),
+        expected_calls=(turns / (1 - usage['at_or_over_limit_share'])
+                        if usage['at_or_over_limit_share'] is not None and usage['at_or_over_limit_share'] < 1 else None),
+        capacity_warning=dict(input=dict(reason=reason, characters=projected['characters'],
+            character_limit=projected['character_limit'], tokens_upper=projected['tokens_upper'],
+            token_limit=projected['token_limit']), output=usage), reason=reason, **usage)
+
+
+def describe_session_stop(forecast):
+    """Use the shared stop vocabulary for a forecast which exceeds the session plan."""
+    if forecast is None or forecast['reason'] is None:
+        return None
+    message = SESSION_FORECAST_STOP_MESSAGE if forecast['reason'] == 'pending_turns' else SESSION_PROJECTION_STOP_MESSAGE
+    return dict(state='stop', code='review_pending_delivery_over_plan', capacity_forecast=forecast,
+                details=dict(message=message, capacity_forecast=forecast,
+                             pending_sources=forecast['pending_sources']))
+
+
+SIZE_REPORT_PROTOCOL = 'exactory-review-material-size-v1'
+SIZE_REPORT_WARNING_MESSAGE = ('This material needs more than one delivery turn or exceeds a registered route input '
+    'limit. Inspect the body counts and route measures before starting the review.')
+SIZE_REPORT_IMPORT_LABEL = 'Imported forming records and their artifact bodies.'
+SIZE_REPORT_VALUE_LABEL = 'Records cited by the value accounts and their artifact bodies.'
+
+
+def describe_size_report(records, material, *, bodies=0, body_characters=0, artifacts=None):
+    """Measure advisory material through the same route measure used for dispatch."""
+    from .review_excerpts import TURN_FULLTEXT_CHARACTERS
+    content = json.dumps(material, sort_keys=True, ensure_ascii=False)
+    request = dict(instructions='', input=[dict(role='user', content=content)])
+    # With no registered route the report still gives the conservative UTF-8 bound.
+    neutral = dict(adapter=transport.ADAPTER, model='unlisted-size-report', endpoint='https://example.invalid/responses',
+                   configuration=dict(max_output_tokens=1, timeout_seconds=1))
+    measured = measure_request(neutral, request)
+    rows = []
+    for identifier, route in sorted(records.get('review_route', {}).items()):
+        profile = read_output_profile(records, route)
+        capacity = describe_route_capacity(route, profile, records=records, artifacts=artifacts)
+        measure = measure_request(route, request, profile=profile, records=records, artifacts=artifacts)
+        room = min(TURN_FULLTEXT_CHARACTERS, capacity['input_text_characters']['value'])
+        if measure['tokens_upper']:
+            room = min(room, len(content) * measure['token_limit'] // measure['tokens_upper'])
+        character_limit = capacity['input_characters']['value']
+        if character_limit is not None:
+            room = min(room, character_limit)
+        rows.append(dict(route_id=identifier, capacity=capacity, measure=measure,
+                         turns=math.ceil(len(content) / room) if room > 0 else None, estimated=True))
+    turns = math.ceil(len(content) / TURN_FULLTEXT_CHARACTERS)
+    result = dict(protocol=SIZE_REPORT_PROTOCOL, characters=len(content), tokens_upper=measured['tokens_upper'],
+                  bodies=bodies, body_characters=body_characters, routes=rows, turns=turns)
+    if turns > 1 or any(not row['measure']['fits'] for row in rows):
+        result['warning'] = SIZE_REPORT_WARNING_MESSAGE
+    return result
+
+
+def describe_material_size(records, artifacts, material, *, label, records_field):
+    """Count the projected records and the transitive evidence that delivery actually owns."""
+    from .review_protocol import _evidence
+    evidence = _evidence(artifacts, material, transitive=True, records=records, text_only=True)
+    text_bodies = [row for row in evidence if row['encoding'] == 'utf-8']
+    report = describe_size_report(records, dict(records=material, evidence=evidence),
+        bodies=len(evidence), body_characters=sum(len(row['content']) for row in text_bodies), artifacts=artifacts)
+    report.update(description=label, text_bodies=len(text_bodies), binary_bodies=len(evidence) - len(text_bodies),
+                  evidence_characters=len(json.dumps(evidence, sort_keys=True, ensure_ascii=False)),
+                  representation='text_delivery')
+    report[records_field] = len(json.dumps(material, sort_keys=True, ensure_ascii=False))
+    return report

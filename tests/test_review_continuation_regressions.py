@@ -183,11 +183,16 @@ class ContinuationRegressionTests(unittest.TestCase):
         self.assertEqual({key: warning['output'][key] for key in (
             'state', 'sample_size', 'at_or_over_limit_share', 'kinds')},
             dict(state='unmeasured', sample_size=0, at_or_over_limit_share=None, kinds=['single']))
+        forecast = lines[0]['capacity_forecast']
+        self.assertEqual(forecast['assignment_id'], plan['head_id'])
+        self.assertEqual((forecast['pending_parts'], forecast['pending_turns']), (0, 0))
+        self.assertGreater(forecast['request']['characters'], 0)
+        self.assertGreater(forecast['request']['token_limit'], 0)
         self.assertEqual(lines,
                          [dict(plan, stop_id=stop['id'], revision_after_stop=stop['recorded_revision'],
                                revision_after_driver=after['revision'],
                                provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0),
-                               stop_class='decision', capacity_warning=warning)])
+                               stop_class='decision', capacity_warning=warning, capacity_forecast=forecast)])
         receipt = case.store.committed_request(stop['request_id'])
         self.assertEqual(receipt['operation'], 'review.series_stop')
         self.assertEqual(receipt['payload'], {'stop': stop})

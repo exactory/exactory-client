@@ -19,6 +19,7 @@ from .stop_classes import REPLAN_CODES, describe_terminal
 MAX_WAIT_SECONDS = 30 * 60
 MAX_CONSECUTIVE_REFUSALS = 8
 EXECUTABLE_STATES = frozenset(('run', 'resume', 'continue', 'replace', 'plan', 'record'))
+SESSION_FORECAST_FIELD = 'capacity_forecast'
 
 
 def _emit_json(row):
@@ -78,6 +79,8 @@ def _run_series(store, assignment_id, driver, *, emit=_emit_json):
                 pass
         if 'provider_usage' not in row:
             row = dict(row, provider_usage=last_plan.get('provider_usage', dict(windows=[], warnings=[])))
+        if SESSION_FORECAST_FIELD not in row and SESSION_FORECAST_FIELD in last_plan:
+            row = dict(row, **{SESSION_FORECAST_FIELD: last_plan[SESSION_FORECAST_FIELD]})
         if terminal and row.get('state') == 'stop' and row.get('code') and row.get('head_id') and row['code'] != 'review_chain_stopped':
             from .automatic_overrides import record_series_stop
             try:
@@ -109,6 +112,17 @@ def _run_series(store, assignment_id, driver, *, emit=_emit_json):
             from .stop_classes import classify_stop
             row = dict(row, stop_class=classify_stop(row['code']))
         head = row.get('head_id')
+        if (SESSION_FORECAST_FIELD not in row and row.get('state') != 'done' and head is not None
+                and head in capacity_records.get('review_assignment', {})):
+            from .review_route_capacity import describe_session_forecast
+            try:
+                forecast = describe_session_forecast(capacity_records, store.build_artifact_store(),
+                                                       capacity_records['review_assignment'][head])
+            except (ResearchError, json.JSONDecodeError):
+                # Advisory output preserves the driver's existing terminal or waiting diagnostic.
+                forecast = None
+            if forecast is not None:
+                row = dict(row, **{SESSION_FORECAST_FIELD: forecast})
         if (row.get('state') not in ('done', 'handoff') and head is not None
                 and head in capacity_records.get('review_assignment', {})):
             from .review_route_capacity import describe_assignment_warning
@@ -157,6 +171,8 @@ def _run_series(store, assignment_id, driver, *, emit=_emit_json):
             emit(row)
             continue
         capacity_records = snapshot['records']
+        if plan['state'] == 'done' and SESSION_FORECAST_FIELD in last_plan:
+            plan = dict(plan, **{SESSION_FORECAST_FIELD: last_plan[SESSION_FORECAST_FIELD]})
         last_plan = plan
         if plan.get('code') == 'review_chain_stopped':
             emit(dict(plan, state='stop', stop_id=plan['details']['stop_id']), terminal=True)

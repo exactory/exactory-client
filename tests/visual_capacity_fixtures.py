@@ -28,7 +28,7 @@ def install_bounded_visual_backend(case, routes):
         case.addCleanup(active.stop)
 
 
-def install_bounded_binary_backend(case, routes):
+def install_bounded_binary_backend(case, routes, *, tokens_upper=50000):
     """Declare a fixed input budget for this synthetic byte-reading provider, including its PDF converter."""
     keys = [capacity.describe_capacity_key(route) for route in routes]
     original = capacity.describe_binary_rules
@@ -37,7 +37,7 @@ def install_bounded_binary_backend(case, routes):
         result = original(route)
         if route['adapter'] == capacity.transport.ADAPTER and capacity.describe_capacity_key(route) in keys:
             for rule in result.values():
-                rule['token_rule'] = dict(source='documented', rule='fixed_budget', tokens_upper=50000,
+                rule['token_rule'] = dict(source='documented', rule='fixed_budget', tokens_upper=tokens_upper,
                     url='https://provider.example/fixture-binary-rule')
         return result
 

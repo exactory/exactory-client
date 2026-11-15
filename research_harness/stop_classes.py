@@ -76,6 +76,9 @@ for _code in ('review_turn_failures_exhausted', 'review_parts_budget_exhausted',
                   then=[dict(answer='Check the retained record', steps=[dict(command='record-check')])]))
 STOP_REGISTRY['problem_already_posted'] = dict(code='problem_already_posted', **{'class': 'decision'},
                                              owner='D2', next=dict(kind='done'))
+STOP_REGISTRY['review_pending_delivery_over_plan'] = dict(
+    code='review_pending_delivery_over_plan', **{'class': 'decision'}, owner='D1',
+    next=dict(kind='handoff', step=12, command='select-main-capture'))
 for _code in ('stale_revision', 'review_task_dependency_changed'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2', next=dict(kind='continue'))
 

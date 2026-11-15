@@ -524,11 +524,13 @@ def describe_review_receipt(store, command, payload, receipt):
         assignment = records.get('review_assignment', {}).get(payload['id'])
         if assignment is None:
             return receipt
-        warning = describe_assignment_warning(records, payload['id'], artifacts=store.build_artifact_store())
+        from .evaluation import Evaluation
+        artifacts = Evaluation(records, store.build_artifact_store())
+        warning = describe_assignment_warning(records, payload['id'], artifacts=artifacts)
         from .review_single_request import describe_assignment_delivery
         try:
-            delivery = describe_assignment_delivery(records, store.build_artifact_store(), assignment)
-        except ResearchError:
+            delivery = describe_assignment_delivery(records, artifacts, assignment)
+        except (ResearchError, json.JSONDecodeError):
             # Advisory delivery details do not prevent replay of a recorded receipt.
             return dict(receipt, capacity_warning=warning) if warning is not None else receipt
         if 'capacity_warning' in delivery:
@@ -536,7 +538,14 @@ def describe_review_receipt(store, command, payload, receipt):
             output = dict(extra, **(warning or {}).get('output', {}))
             output.update(above_start=True, message=extra['message'])
             warning = dict(warning or {}, output=output)
-        return dict(receipt, capacity_warning=warning) if warning is not None else receipt
+        result = dict(receipt, capacity_warning=warning) if warning is not None else receipt
+        from .review_route_capacity import describe_session_forecast
+        try:
+            forecast = describe_session_forecast(records, artifacts, assignment)
+        except (ResearchError, json.JSONDecodeError):
+            # Replaying a receipt does not require reopening its old delivery inputs.
+            return result
+        return dict(result, capacity_forecast=forecast) if forecast is not None else result
     routes = records.get('review_route', {})
     route = routes.get(payload['id'], payload) if command == 'review-route' else routes[payload['route_id']]
     return dict(receipt, **describe_route_report(records, route, store.build_artifact_store()))

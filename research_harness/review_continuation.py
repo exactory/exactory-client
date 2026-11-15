@@ -532,6 +532,17 @@ def plan_next(records, artifacts, head_id):
                           details=dict(stop_id=stop['id'], **describe_stop(records, stop)))
         else:
             result.update(_plan_head(records, artifacts, assignment))
+        if assignment['role'] in bar_sources.ROLES and result['state'] in ('run', 'continue', 'record'):
+            from .review_route_capacity import describe_session_forecast, describe_session_stop
+            state = protocol.assignment_state(records, artifacts, assignment['id'])
+            forecast = describe_session_forecast(records, artifacts, assignment, output=state.get('output'))
+            if forecast is not None:
+                result['capacity_forecast'] = forecast
+                stopped = describe_session_stop(forecast)
+                if stopped is not None and result['state'] in ('run', 'continue'):
+                    for key in ('command', 'payload', 'not_before', 'request_id'):
+                        result.pop(key, None)
+                    result.update(stopped)
         from .review_plan_steps import complete_plan
         result = complete_plan(records, artifacts, assignment, result)
     except (ResearchError, json.JSONDecodeError) as error:

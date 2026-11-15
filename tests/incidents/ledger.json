@@ -5629,6 +5629,91 @@
         "test_review_queue_triage.QueueTriageTests.test_queue_counts_only_verified_participants_and_keeps_stored_waits_unchanged",
         "test_review_queue_triage.QueueTriageTests.test_three_series_drivers_finish_in_request_order_without_external_commands"
       ]
+    },
+    {
+      "id": "capacity-advisory-keeps-malformed-packet-terminal",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "review capacity advisory diagnostics",
+      "summary": "The route-capacity snapshot let JSON decoding in its advisory task report replace the existing malformed-packet terminal stop with CLI input_io.",
+      "expected": "An unavailable advisory task measure preserves the scientific terminal refusal, series exit code and retained diagnostic.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_automatic_gate_override.RecordedSeriesStopTests.test_malformed_packet_keeps_the_cli_terminal_stop_and_exit_code",
+        "test_session_forecast.SessionForecastTests.test_malformed_packet_does_not_replace_status_or_receipt_diagnostics"
+      ]
+    },
+    {
+      "id": "session-pending-layout-delivery-forecast",
+      "record": "20261111223126-layout-extraction-inflates-fulltext-delivery",
+      "class": "review capacity forecasts",
+      "summary": "A source request could require hundreds of padded full-text delivery turns without a cost stop.",
+      "expected": "The session reports pending captures and parts, stops before dispatch above its turn plan or projected input capacity, and names executable compact-capture and preserved-slot repair steps.",
+      "tests": [
+        "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
+        "test_session_forecast.SessionForecastTests.test_capture_steps_execute_to_a_recorded_review_without_an_extra_decision",
+        "test_session_forecast.SessionForecastTests.test_versions_with_a_shared_body_fit_and_continue_to_a_recorded_review",
+        "test_session_forecast.SessionForecastTests.test_forecast_uses_keyed_input_evidence_instead_of_output_profile"
+      ],
+      "fixed_in": "open",
+      "test_kind": "real_shape"
+    },
+    {
+      "id": "session-forecast-output-profile",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "review capacity forecasts",
+      "summary": "A session paid for each continuation without reporting the measured output profile or expected calls.",
+      "expected": "Session forecasts report the matching request-kind over-limit share, output and duration medians where observed, and expected calls without changing effort or reviewer inputs.",
+      "tests": [
+        "test_session_forecast.SessionForecastTests.test_forecast_uses_matching_request_profile_and_observed_usage_medians"
+      ],
+      "fixed_in": "open",
+      "test_kind": "real_shape"
+    },
+    {
+      "id": "forming-import-size-before-recording",
+      "record": "20261112012956-slate-review-cannot-carry-a-forming-import",
+      "class": "review capacity forecasts",
+      "summary": "A forming import could add many large artifact bodies without a size report before recording.",
+      "expected": "A check measures projected imported records and transitive bodies, tokens, registered limits and turns; recording and replay retain the original import receipt.",
+      "tests": [
+        "test_size_reports.SizeReportTests.test_import_check_counts_delivered_bodies_without_changing_the_import_receipt",
+        "test_size_reports.SizeReportTests.test_size_diagnostics_do_not_change_the_process_delivery_mode",
+        "test_size_reports.SizeReportTests.test_size_report_uses_only_its_keyed_capacity_witness"
+      ],
+      "fixed_in": "open",
+      "test_kind": "real_shape"
+    },
+    {
+      "id": "session-fitted-request-size-report",
+      "record": "20261111235418-bar-final-refused-for-text-delivered-in-reduced-history",
+      "class": "review capacity forecasts",
+      "summary": "A session continuation did not report its fitted input beside the route limit before another call.",
+      "expected": "The continuation and its assignment/status reports expose the fitted request measure, pending parts and projection outside stored packet and request bytes.",
+      "tests": [
+        "test_session_forecast.SessionForecastTests.test_short_session_continues_and_forecast_does_not_change_stored_bytes",
+        "test_session_forecast.SessionForecastTests.test_native_exact_envelope_projection_keeps_the_request_unchanged",
+        "test_session_forecast.SessionForecastTests.test_assignment_receipt_and_route_report_keep_forecasts_outside_stored_receipts",
+        "test_session_forecast.SessionForecastTests.test_waiting_series_line_reports_pending_delivery_without_sending_a_request",
+        "test_session_forecast.SessionForecastTests.test_advisory_selection_keeps_a_stored_metadata_correction",
+        "test_review_continuation_regressions.ContinuationRegressionTests.test_series_ends_with_the_exhausted_fixed_slot_stop",
+        "test_review_series.SeriesTests.test_stale_runtime_refusal_hands_off_recording_a_new_route"
+      ],
+      "fixed_in": "open",
+      "test_kind": "real_shape"
+    },
+    {
+      "id": "value-cited-records-and-bodies-size-report",
+      "record": "20261112150500-result-review-frame-holds-cited-search-records",
+      "class": "review capacity forecasts",
+      "summary": "A value account could cite large searches and their captured responses without a size diagnostic.",
+      "expected": "A fresh value receipt reports account-record and body characters with shared route measures outside the stored value and receipt; historical replays need no evidence reads.",
+      "tests": [
+        "test_size_reports.SizeReportTests.test_value_receipt_reports_cited_records_and_transitive_bodies_outside_storage",
+        "test_size_reports.SizeReportTests.test_missing_report_body_refuses_before_recording_a_value"
+      ],
+      "fixed_in": "open",
+      "test_kind": "real_shape"
     }
   ]
 }

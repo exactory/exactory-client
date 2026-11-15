@@ -704,7 +704,7 @@ def collect_result_artifacts(value):
             yield from collect_result_artifacts(item)
 
 
-def _evidence(artifacts, value, *, transitive=False, records=None):
+def _evidence(artifacts, value, *, transitive=False, records=None, text_only=None):
     contents, pending = {}, list(collect_references(value))
     result_hashes = {reference['sha256'] for reference in collect_result_artifacts(value)}
     if records is not None:
@@ -738,7 +738,7 @@ def _evidence(artifacts, value, *, transitive=False, records=None):
                                         'This artifact is not UTF-8 text, a PDF, an image or a recorded result '
                                         'output; a reviewer packet delivers no other bytes') from error
                 binary, opaque = True, True
-        if binary and transport.text_only_enabled():
+        if binary and (transport.text_only_enabled() if text_only is None else text_only):
             # A text-only reviewer route receives no original bytes; the omission is explicit in the packet.
             included.append({'artifact': reference, 'content': '', 'encoding': 'omitted',
                 'delivery': 'bytes-omitted-on-text-route',
@@ -1752,15 +1752,18 @@ def source_delivery_packet(records, artifacts, assignment):
     return evaluation.reuse_value(key, project, namespace=evaluation._byte_namespace)
 
 
-def _find_session_bodies(records, artifacts, prior):
+def _find_session_bodies(records, artifacts, prior, *, evaluate_states=True):
     """The full-text bodies that turns of this session under the excerpt rules delivered complete in their actual
     recorded requests: each SHA-256 and original-artifact span with the latest such turn, its order and whether a
     delivery of status delivered carried it. The session runs back from prior through the history of each turn."""
     delivered, current, order = {}, prior, 0
     while current is not None:
         if review_excerpts.KEY in _read_json(artifacts, current['packet']):
-            state = assignment_state(records, artifacts, current['id'])
-            attempt = records.get('review_attempt', {}).get(state['attempt_id'])
+            if evaluate_states:
+                state = assignment_state(records, artifacts, current['id'])
+                attempt = records.get('review_attempt', {}).get(state['attempt_id'])
+            else:
+                attempt, _ = read_assignment_output(records, artifacts, current['id'])
             if attempt is not None and attempt.get('request'):
                 sent = review_excerpts.read_sent_packet(_read_json(artifacts, attempt['request'])) or {}
                 complete = review_excerpts.find_complete_bodies(sent)
@@ -3660,6 +3663,12 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         preflight = review_preflight.check_request(
             review_preflight.build_assignment_report(records, artifacts, assignment, request), request,
             packet=packet, artifacts=artifacts)
+        from .review_route_capacity import describe_session_forecast, describe_session_stop
+        stop = describe_session_stop(describe_session_forecast(records, artifacts, assignment, request=request))
+        if stop is not None:
+            from .review_plan_steps import complete_plan
+            stop = complete_plan(records, artifacts, assignment, stop)
+            raise ResearchError(stop['code'], stop['details']['message'], stop['details'])
         invocation = dict(value, request=_put_json(artifacts, request), route_id=assignment['route_id'],
                           preflight=preflight,
                           route_digest=digest(route), packet_digest=assignment['packet_digest'],
@@ -3806,6 +3815,29 @@ def _selected_attempt(records, artifacts, assignment_id):
     return binding, refused, completed
 
 
+def _read_output_correction(records, artifacts, assignment):
+    from .review_output_correction import selected_correction
+    correction_records = select_record_groups(_read_context_records(records, assignment), {
+        'review_output_correction_invocation': [dict(assignment_id=assignment['id'])]})
+    return selected_correction(correction_records, artifacts, assignment['id'])
+
+
+def read_assignment_output(records, artifacts, assignment_id):
+    """Read the same selected output for advisory reports without evaluating readiness."""
+    attempt, _, completed = _selected_attempt(records, artifacts, assignment_id)
+    if attempt is not None:
+        try:
+            output = _read_json(artifacts, attempt['output'])
+        except (ResearchError, ValueError, TypeError, KeyError):
+            output = None
+        return attempt, output
+    if completed:
+        correction = _read_output_correction(records, artifacts, records['review_assignment'][assignment_id])
+        if correction is not None:
+            return records['review_attempt'][correction['attempt_id']], correction['output']
+    return None, None
+
+
 def assignment_state(records, artifacts, assignment_id):
     if records.get('review_assignment', {}).get(assignment_id) is None:
         return _assignment_state(records, artifacts, assignment_id)
@@ -3889,10 +3921,7 @@ def _assignment_state(records, artifacts, assignment_id):
         except (ResearchError, ValueError, TypeError, KeyError):
             state['obligations'].append(obligation('review_output_unavailable', 'Verify the exact packet, request, and output artifact bytes.'))
     elif completed:
-        from .review_output_correction import selected_correction
-        correction_records = select_record_groups(_read_context_records(records, assignment), {
-            'review_output_correction_invocation': [dict(assignment_id=assignment_id)]})
-        correction = selected_correction(correction_records, artifacts, assignment_id)
+        correction = _read_output_correction(records, artifacts, assignment)
         if correction is None:
             state['obligations'].append(obligation('review_output_refused', 'Every observed output of this assignment failed its output contract; invoke the assignment again.',
                                                    refused_attempts=state['refused_attempts']))
