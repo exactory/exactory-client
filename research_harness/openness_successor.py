@@ -19,7 +19,7 @@ def describe_input_handoff(records, artifacts, assignment, *, continuation=None)
     if not assignment.get('reading_chain'):
         return None
     packet = protocol._read_json(artifacts, assignment['packet'])
-    if reading.find_protocol(packet) not in (reading.PROTOCOL_V5, reading.PROTOCOL_V6, v7.PROTOCOL):
+    if reading.find_protocol(packet) not in (reading.PROTOCOL_V5, reading.PROTOCOL_V6):
         return None
     native = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
     if not reading.is_openness_packet(native):
@@ -103,6 +103,10 @@ def admit_successor_chain(records, artifacts, assignment):
 def describe_successor_handoff(records, artifacts, assignment, code, details=None):
     """Offer export only for an admitted successor; otherwise give executable owner answers."""
     details = copy.deepcopy(details or {})
+    if code in ('review_input_too_large', reading.PROJECTION_STOP) and not details.get('ratio'):
+        packet = protocol._read_json(artifacts, assignment['packet'])
+        if reading.find_protocol(packet) == v7.PROTOCOL:
+            return None
     successor = details.get('successor') or admit_successor_chain(records, artifacts, assignment)
     if successor is None:
         return None

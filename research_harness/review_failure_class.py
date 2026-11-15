@@ -604,7 +604,7 @@ def count_position(records, artifacts, assignment):
             if previous_member is not None and has_smaller_task(artifacts, previous_member, row):
                 level += 1
                 if ended and len(failures) < TURN_FAILURE_LIMIT and failures[-1][1]['outcome'] in (
-                        'provider_refused', 'output_over_cap', 'input_over_limit', 'timeout'):
+                        'provider_refused', 'output_over_cap', 'input_over_limit', 'response_over_limit', 'timeout'):
                     ended = False
                     sequence_ends.pop(sequence, None)
             levels[row['id']] = level
@@ -785,7 +785,8 @@ def plan_after_failure(records, artifacts, assignment_id):
     if (assignment.get('recorded_revision', 0) > last.get('recorded_revision', 0)
             and not position['sequence_ended']):
         return result
-    if outcome in ('output_over_cap', 'input_over_limit', 'timeout', 'provider_refused'):
+    if (outcome in ('output_over_cap', 'input_over_limit', 'response_over_limit', 'timeout', 'provider_refused')
+            and (outcome != 'response_over_limit' or assignment.get('capacity_plan'))):
         recovery = plan_capacity_recovery(records, artifacts, assignment, outcome)
         details.update(recovery['details'])
         if outcome == 'output_over_cap':
@@ -817,7 +818,7 @@ def plan_after_failure(records, artifacts, assignment_id):
             result['state'] = 'replace'
             details['context'] = copy.deepcopy(assignment['context'])
             return result
-        if outcome in ('output_over_cap', 'input_over_limit', 'timeout'):
+        if outcome in ('output_over_cap', 'input_over_limit', 'response_over_limit', 'timeout'):
             # A parts floor retains its existing terminal code. Otherwise at most
             # one identical retry is allowed, independent of a profile's c.
             floor = recovery['kind'] == 'decision' and recovery['code'] == 'review_parts_budget_exhausted'

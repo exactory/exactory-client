@@ -286,8 +286,10 @@ def complete_plan(records, artifacts, assignment, plan):
             plan.pop('command', None)
             plan.pop('payload', None)
             return dict(plan, **successor)
-        from .openness_reading import describe_projection_decision, find_protocol
+        from .openness_reading import describe_projection_decision, find_protocol, PROTOCOL_V7
         packet = protocol._read_json(artifacts, assignment['packet'])
+        if find_protocol(packet) == PROTOCOL_V7:
+            return plan
         details['decision'] = describe_projection_decision(find_protocol(packet), records=records,
                                                            artifacts=artifacts, assignment=assignment)
         plan['state'] = 'stop'

@@ -63,6 +63,142 @@ class V7RefusalTests(OpennessReadingCase):
             head = following
         self.fail('The replacement chain must reach its recorded finding.')
 
+    def check_size_recovery(self, stage, outcome, detail=None):
+        from codex_route_fixtures import build_codex_response
+        from test_review_output_profile import build_row
+        from research_harness import review_failure_class as failures
+        from research_harness.check_mode import check_mutation
+        with patch.object(capacity, 'read_profile_priors', return_value=[
+                build_row(level=None, thinking=1000, count=8, over=1),
+                build_row(kind='final', level=None, thinking=1000, count=8, over=1)]):
+            native = self.export()
+            if stage == 'final':
+                head = self.finish_reading(native)
+            else:
+                self.assign('turn-1', native)
+                self.invoke('turn-1', self.build_v7_answer(self.read_packet('turn-1')))
+                head = self.assign('size-position', native, prior='turn-1')['id']
+            before = copy.deepcopy(self.store.snapshot()['records'])
+            verified = {key: v7.observe_v7_chain(before, self.artifacts, member)
+                for key, member in before['review_assignment'].items()
+                if any(row['assignment_id'] == key and row['status'] == 'completed'
+                       for row in before.get('review_attempt', {}).values())}
+            self.assertTrue(verified)
+            first = before['review_assignment'][head]
+            levels = []
+            def respond(route, request, credential):
+                if outcome == 'response_over_limit':
+                    raise ResearchError('review_response_too_large', 'Synthetic retained response body limit.')
+                if detail is None:
+                    raise ResearchError('review_input_too_large', 'Synthetic retained input limit.')
+                response = build_codex_response(route, request, {})
+                response['status'] = 'incomplete'
+                response['context_evidence'] = dict(issues=['uninspected_compaction'])
+                return response
+            for number in range(8):
+                records = self.store.snapshot()['records']
+                assignment = records['review_assignment'][head]
+                packet = self.read_packet(head)
+                member = 'reading_turn' if stage == 'reading' else 'reading_final'
+                level = packet[member]['capacity']['material_allowance']
+                if not levels or level != levels[-1]:
+                    levels.append(level)
+                with patch.object(protocol.transport, 'send_request', side_effect=respond):
+                    attempt = self.mutate(protocol.invoke_assignment,
+                        dict(id='size-%d' % number, assignment_id=head), credential='fixture')['result']
+                records = self.store.snapshot()['records']
+                classified = failures.classify_attempt(records, self.artifacts, attempt)
+                self.assertEqual((classified['outcome'], classified['signal'].get('detail')), (outcome, detail))
+                action = plan_next(records, self.artifacts, head)
+                position = failures.count_position(records, self.artifacts, assignment)
+                self.assertEqual(position['failed_attempts'], number + 1)
+                self.assertEqual(position['sequence'], 1)
+                if action['state'] == 'run':
+                    continue
+                if action['state'] == 'replace':
+                    payload = action['payload']
+                    check_mutation(self.store, protocol.record_assignment, payload,
+                        expected_revision=self.store.revision, request_id='size-check-%d' % number,
+                        bounded_payload=payload)
+                    replacement = self.mutate(protocol.record_assignment, payload)['result']
+                    self.assertEqual(replacement['reading_chain']['turn'], first['reading_chain']['turn'])
+                    self.assertEqual(replacement['capacity_plan'], first['capacity_plan'])
+                    self.assertEqual(replacement['route_digest'], first['route_digest'])
+                    self.assertEqual(replacement['reviewer_id'], first['reviewer_id'])
+                    self.assertLess(self.read_packet(replacement['id'])[member]['capacity']['material_allowance'], level)
+                    head = replacement['id']
+                    continue
+                self.assertEqual(levels, [120000, 60000, 30000, 15000] if stage == 'reading' else [240000])
+                self.assertEqual((action['state'], action['code']), ('stop',
+                    'review_response_too_large' if outcome == 'response_over_limit' else 'review_input_too_large'))
+                from research_harness.stop_classes import classify_stop
+                self.assertEqual(classify_stop(action['code']), 'decision')
+                recovery = action['details']['recovery']
+                self.assertEqual(recovery['kind'], 'decision')
+                self.assertEqual(action['details']['decision'],
+                                 {key: recovery[key] for key in ('owner_decides', 'then')})
+                self.assertTrue(action['details']['decision']['then'])
+                self.assertNotIn('successor', action['details'])
+                self.assertEqual(plan_next(records, self.artifacts, head), action)
+                after = self.store.snapshot()['records']
+                for kind in ('review_assignment', 'review_attempt', 'review_invocation'):
+                    for key, row in before.get(kind, {}).items():
+                        self.assertEqual(after[kind][key], row)
+                for key, observed in verified.items():
+                    self.assertEqual(v7.observe_v7_chain(records, self.artifacts,
+                        records['review_assignment'][key]), observed)
+                return
+            self.fail('The size row must reach its floor decision.')
+
+    def test_v7_input_floor_keeps_size_decision_and_verified_turns(self):
+        for stage in ('reading', 'final'):
+            for detail in (None, 'compacted'):
+                with self.subTest(stage=stage, detail=detail):
+                    fixture = V7RefusalTests()
+                    try:
+                        fixture.setUp()
+                        fixture.check_size_recovery(stage, 'input_over_limit', detail)
+                    finally:
+                        fixture.doCleanups()
+
+    def check_response_refusal_history(self, *, capacity_replacement):
+        from contextlib import nullcontext
+        from test_review_output_profile import build_row
+        derive_limits = capacity.derive_plan_task_limits
+        def derive_legacy_limits(plan, kind, observations=(), **kwargs):
+            return derive_limits(plan, kind, [row for row in observations
+                if row.get('outcome') != 'response_over_limit'], **kwargs)
+        with patch.object(capacity, 'read_profile_priors', return_value=[
+                build_row(level=None, thinking=1000, count=8)]):
+            native = self.export()
+            head = self.assign('turn-1', native)['id']
+            with patch.object(protocol.transport, 'send_request', side_effect=ResearchError(
+                    'review_response_too_large', 'Synthetic retained response body limit.')):
+                self.mutate(protocol.invoke_assignment, dict(id='response-limit', assignment_id=head),
+                            credential='fixture')
+            if capacity_replacement:
+                head = self.replace_head(head)['id']
+            self.invoke(head, dict(stage='reading', notes=42))
+            # Freeze the old identical-retry history using its original adaptation rule.
+            legacy = (nullcontext() if capacity_replacement else
+                      patch.object(capacity, 'derive_plan_task_limits', side_effect=derive_legacy_limits))
+            with legacy:
+                replacement = self.replace_head(head)
+                packet = self.read_packet(replacement['id'])
+                self.assertEqual(packet['reading_turn']['capacity']['level_material_allowance'],
+                                 60000 if capacity_replacement else 120000)
+                turns = self.finish_from(native, replacement['id'])
+            records = self.store.snapshot()['records']
+            before = copy.deepcopy(records)
+            finding = next(iter(records['problem_openness'].values()))
+            final = records['review_assignment'][finding['assignment_id']]
+            self.assertEqual(reading.verify_chain(records, self.artifacts, final), turns)
+            for assignment in records['review_assignment'].values():
+                for attempt in records['review_attempt'].values():
+                    if attempt['assignment_id'] == assignment['id'] and attempt['status'] == 'completed':
+                        self.assertTrue(protocol.authenticate_attempt(records, self.artifacts, assignment, attempt))
+            self.assertEqual(records, before)
+
     def test_a7_refused_old_contract_final_replaces_authenticates_and_records(self):
         native = self.export()
         build = self.build_v7_answer

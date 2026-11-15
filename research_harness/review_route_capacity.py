@@ -2070,7 +2070,8 @@ def derive_plan_task_limits(plan, kind, observations=(), *, notice_characters=0)
     output_limit = plan['limits']['output_tokens']['value']
     for observation in observations:
         outcome = observation.get('outcome')
-        if outcome is not None and outcome not in ('output_over_cap', 'input_over_limit', 'timeout', 'provider_refused'):
+        if outcome is not None and outcome not in (
+                'output_over_cap', 'input_over_limit', 'response_over_limit', 'timeout', 'provider_refused'):
             continue
         value = observation.get('material_allowance', observation.get('material_characters', allowance))
         index = next((index for index in range(len(levels) - 1, -1, -1) if levels[index] >= value), 0)
@@ -2095,7 +2096,8 @@ def derive_plan_task_limits(plan, kind, observations=(), *, notice_characters=0)
     return task
 
 
-def derive_turn_task_limits(records, artifacts, assignment, *, kind=None, notice_characters=0):
+def derive_turn_task_limits(records, artifacts, assignment, *, kind=None, notice_characters=0,
+                            response_replacement=None):
     """Read the chain's attempts against its stored plan; later profiles cannot change an allowance."""
     from . import openness_reading, review_failure_class as failures
 
@@ -2104,6 +2106,14 @@ def derive_turn_task_limits(records, artifacts, assignment, *, kind=None, notice
     identifiers = set()
     for member in openness_reading._list_chain(records, assignment):
         identifiers.update(failures.list_turn_assignments(records, member))
+    # Older identical retries and refusal replacements did not consume response
+    # limits. Only explicit capacity replacements apply the new reduction.
+    response_origins = {response_replacement}
+    for identifier in identifiers:
+        member = records['review_assignment'][identifier]
+        if (member.get('capacity_replacement_of')
+                and member.get('recorded_revision', 0) <= assignment.get('recorded_revision', 0)):
+            response_origins.add(member['capacity_replacement_of'])
     observations = []
     for attempt in sorted(records.get('review_attempt', {}).values(),
                           key=lambda row: (row.get('recorded_revision', 0), row['id'])):
@@ -2114,6 +2124,9 @@ def derive_turn_task_limits(records, artifacts, assignment, *, kind=None, notice
         if member.get('capacity_plan_kind', task['kind']) != kind or member['route_id'] != assignment['route_id']:
             continue
         classification = failures.classify_attempt(records, artifacts, attempt)
+        if (classification and classification['outcome'] == 'response_over_limit'
+                and member['id'] not in response_origins):
+            continue
         observation = dict(output_tokens=(attempt.get('usage') or {}).get('output_tokens'),
                            outcome=classification['outcome'] if classification else None)
         if kind == 'final' and plan['measure'].get('margin_applied'):

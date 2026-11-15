@@ -6753,6 +6753,19 @@
         "test_continuity_selection.StoredCaptureJourneyTests.test_g8_c8_chosen_and_stopped_capture_new_export_records_and_verifies",
         "test_openness_carried_integration.Incident57IntegrationTests.test_q12_incident_57_v5_turns_carry_without_fulltext_redelivery"
       ]
+    },
+    {
+      "id": "v7-size-rows-follow-the-recovery-table",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "v7 size recovery",
+      "summary": "A v7 reading response body limit retried the same task and stopped before smaller levels, while plain and compacted input limits at reading and final floors restarted the same route through a new export.",
+      "expected": "Response limits visit the next smaller pinned reading level on the same route and effort before the floor decision. Input limits retain that size decision and its executable answers at the floor, preserving verified turns; legacy input and v7 denser-ratio successor admissions remain available.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.V7SizeRecoveryTests.test_response_limit_visits_each_smaller_reading_level_before_stopping",
+        "test_openness_reading_v7_refusal.V7RefusalTests.test_v7_input_floor_keeps_size_decision_and_verified_turns"
+      ]
     }
   ]
 }

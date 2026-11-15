@@ -18071,7 +18071,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "158c74dce430d5a3fe8e6bc1527b2e90885d3d2b3fa6318253b513b9ba8c9d84",
+      "ast_sha256": "418035e82cfa9d831ad410fe8b457be143467d7eab5e7dc0dd53b86573ca4ead",
       "functions": {
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
         "_append_unit": "f6cb4ac11ffc0db1bbc01ecf87ec1ca4e26a2ccc64a24c9aebe0b2c8d2ce16a7",
@@ -19948,14 +19948,14 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_failure_class": {
-      "ast_sha256": "21cfd698d1fa791983bd2df20de1190f099c5f5236d31f0ef6ac4d1fbb5ff9cc",
+      "ast_sha256": "8f42b79d7346977aeca4ef15b3c291d4760a00d341ccc6beeab9117105e9ec40",
       "functions": {
         "_describe_sequence_counts": "1903571802ceebaa2e6413b445ccec82fa398d7cf4b738a57b18c5747957e01c",
         "_is_scheduled_unknown": "18dbfaffb3993eab30b42d6bf376556828c162d79bcca21ce050df0f51cd2f2e",
         "_plan_sequence_end": "690d7f1e80cf09b469e922af21fb3a7afca0a8494124ebe9e0ccb3b4af93dce5",
         "calculate_over_cap_allowance": "02725e6e72fa52388488302235060fb06e5074f0d913e6347df335cd64865f9b",
         "classify_attempt": "588c8e2032c7356d9cc7a28539b4ec3d12a7a4e10844f907161af865e7836661",
-        "count_position": "b0434473c1801aae88476154875c06f937c9b08aadcf74dadd7b3ef3dfa75a21",
+        "count_position": "b1c5f1595c1ff766295215fe649b2262bd942f0c5981e7ed43c5af846d887d49",
         "find_capacity_signal": "b870ffda8a65d0565029aa5348be128646a06aec6702e64c3bf30de5888cf037",
         "find_output_cap_signal": "6f59f04a865cce942c17d9c6d81c771009d0ea962b72c3e6b92116e43dafca5b",
         "find_safeguard_notice": "f7009c2ad7f4d22a276386c1374d2309091fc5e5d2bcc2cd081f1c31bd3b9e13",
@@ -19963,7 +19963,7 @@
         "list_turn_assignments": "c459557d60564eb8ea2566a13ec5f25f000a927b439c8cbb7bc928347f7d7413",
         "parse_observation_time": "a45e9741d77a027bf18518e09c8b1a262125934f0d6cecd3ac63c3c30df7f367",
         "parse_reset_time": "329cd60d6bb86719c819441543f5e9aae44305bd754318af2996e51f1dc23488",
-        "plan_after_failure": "3cd94b6be10c13acb93116323b29d0ef67f9def8eaa4449629f043f68f3b54c2",
+        "plan_after_failure": "58f1d9f9773696dda66cd205268c3e3ed310a50239c8d7ccb046b1131a93ac37",
         "plan_output_replacement": "4ffcc61f5bc883f9f888739c941db2e21b0b85ce1933c124f6fd10d304fc5fbf",
         "plan_refusal_recovery": "fc11b4b1d6915e3ac237cebd8ad53507dee9206e32ba650d2208191ce5c83f7e",
         "plan_scheduled_retry": "d9de465ba74c6d4fc57df8aa62eee4c4073cad20d97b2a126860705d1ff0748e",
@@ -20722,11 +20722,11 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_plan_steps": {
-      "ast_sha256": "1cd06d9dae19e8b1ff0bc52ae4162cd65688c7a058f26796a2f75a5d03323efe",
+      "ast_sha256": "d41490f8632ce63c9c88f6ee7d548aecb2077a1b29ddaf904fd8d9b5202b51c9",
       "functions": {
         "_build_identity_payload": "8c41d637f54ac4de2e9d293d13134f6a1383c0f7c5aa4b5a49def65900292e6e",
         "_describe_session_route_steps": "01fa8f8c3ca1320a76e96825d7dbde99f8a691b141450938e35ba8faa1df2244",
-        "complete_plan": "a0376b0e519a3d6d5d7c665fe1f2af5b0a620e99eb70c4812ad03908e4d33010",
+        "complete_plan": "20e552b72de7f056b544031d918662b420ba33a7510723836564330512be9be3",
         "describe_capacity_steps": "442d2c73dfadb15ff6bb92ede22da18610582beb03970aa5b8e17049ba6bb735",
         "describe_role_handoff": "d65f685aa227cdcc7b1b2afa6a57b59d717acb8108d7a53febd4949d11744429",
         "describe_step": "b58ff7a5887eb4e40bc93fb01c56eca87957f6ec9f2bb489bd3cbfb0b04eb991",
@@ -21348,7 +21348,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_route_capacity": {
-      "ast_sha256": "7859278e29f503e6e7dbba1c419c2b1f8fd3234132889a81280091d47752200f",
+      "ast_sha256": "81ca16006b426cd62dbbca6b1f2aef93e123addfc076f3b91a99bf531256464e",
       "functions": {
         "_build_serving_parts": "8f2f7be1d7e1d4cc20fa124af779a48e77d41ab31cb6c7aed1fe3ed6a3de3afe",
         "_build_serving_repair": "c50aaef3ccfcccf6064f9a4cdaa0a0f52111886dd9b185936b6d1e5a38ab47ca",
@@ -21375,8 +21375,8 @@
         "build_capacity_probe_request": "8c0f9f71af443599d46c7df6045c4d8bfb87feae19f3d95372ed2e3eda67d619",
         "build_profile_rows": "c13bc9fb5b0d397640ab6240a162da9c94657f578c48d6e07c72c4b69b759fa8",
         "derive_material_allowance": "75731028db3042a3152e644117cc546d780ceed4683de58c8f51f9642587b9e1",
-        "derive_plan_task_limits": "7378a90d7e98d1f3cf1a34f14359dc84b8e35fa194d96eaf95fbc1a5ef1df458",
-        "derive_turn_task_limits": "12ebf84f42bb75e7c67b5b80b96f4d9f05b966f978aa72755b85e7db0f1a4a63",
+        "derive_plan_task_limits": "0acf843326aadd0c9c146f587ae50629ae7f65217869cb9a51b47a6326d2a6c2",
+        "derive_turn_task_limits": "dc3641c6ae1b8474f3c824220ab18a8268959be724cb6e9354bd2121a301f3e6",
         "describe_assignment_capacity": "eb2c92c7ff7184e20c1df0ca440768bc8b0e54f1753f39bcd20de5d232e7f669",
         "describe_assignment_kind": "7feb00e09fe70fa10c53592a1178eeee0c4b5eee590258ff59bcd3dbdc1f7602",
         "describe_assignment_limits": "7d463bd8c8479f7a8f0b3874cb734df1acd143601602ed3a83c90530145c2443",

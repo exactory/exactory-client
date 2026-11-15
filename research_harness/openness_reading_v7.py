@@ -1750,7 +1750,7 @@ def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_
     notice = frozen.get('output_refusal') if replacement else None
     notice_characters = len(json.dumps(notice, ensure_ascii=False, sort_keys=True, allow_nan=False)) if notice else 0
     limits = capacity.derive_turn_task_limits(records, artifacts, prior, kind=kind,
-                                             notice_characters=notice_characters)
+        notice_characters=notice_characters, response_replacement=prior_id if replacement else None)
     if replacement and kind == 'final' and state.get('material_state', {}).get('pending'):
         limits['answer_bound'] = max(plan['task']['final']['smallest_answer_bound'],
                                     frozen['reading_final']['capacity']['answer_bound'] // 2)
@@ -1965,7 +1965,8 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
         floor = plan['task']['final']['smallest_answer_bound']
         if binding['capacity']['answer_bound'] <= floor:
             return None
-    limits = capacity.derive_turn_task_limits(records, artifacts, assignment, kind=kind)
+    limits = capacity.derive_turn_task_limits(records, artifacts, assignment, kind=kind,
+        response_replacement=assignment['id'] if outcome == 'response_over_limit' else None)
     if kind == 'reading' and limits['material_allowance'] >= binding['capacity']['material_allowance']:
         return None
     value = {key: copy.deepcopy(assignment[key]) for key in
@@ -2065,7 +2066,8 @@ def _verify_turn_binding(records, artifacts, first, assignment, packet, native, 
             if row['recorded_revision'] < assignment['recorded_revision']})
         prior = records['review_assignment'][prior_id]
         limits = capacity.derive_turn_task_limits(historical, artifacts, prior, kind=kind,
-                                                 notice_characters=notice_characters)
+            notice_characters=notice_characters,
+            response_replacement=prior_id if assignment.get('capacity_replacement_of') else None)
         if (assignment.get('capacity_replacement_of') and kind == 'final'
                 and state.get('material_state', {}).get('pending')):
             frozen = json.loads(artifacts.read(prior['packet']))
