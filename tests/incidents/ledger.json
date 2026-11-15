@@ -7251,6 +7251,37 @@
       "tests": [
         "test_problem_accounts.ReadingDateTests.test_c7_command_written_incident_derives_date_without_invented_members"
       ]
+    },
+    {
+      "id": "phenomenon-review-run-pending-views",
+      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
+      "class": "review start visibility and bounded render takeover",
+      "summary": "A running reviewer call had a committed invocation while series.json still showed no run. Concurrent renders and failed claimed passes also need durable catch-up and accurate failure advisories.",
+      "expected": "A new call requests a zero-wait render before transport, with at most two lock attempts and two passes including failure recording. Busy or failed renders preserve the call, retain work and failure details, and the next successful lock-holding render consumes the retained marker.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_pending_views.PendingViewTests.test_transport_reads_pending_run_from_series_before_answering",
+        "test_review_pending_views.PendingViewTests.test_two_turn_series_publishes_each_pending_run_before_transport",
+        "test_review_pending_views.PendingViewTests.test_resumed_committed_start_does_not_call_after_start",
+        "test_review_pending_views.PendingViewTests.test_direct_invocation_without_callback_preserves_views_and_stored_request",
+        "test_review_pending_views.PendingViewTests.test_probe_transport_reads_committed_invocation_from_views",
+        "test_review_pending_views.PendingViewTests.test_busy_builder_allows_transport_then_added_pass_publishes_pending",
+        "test_review_pending_views.PendingViewTests.test_call_finishes_before_added_pass_and_never_publishes_pending",
+        "test_review_pending_views.PendingViewTests.test_markers_in_both_passes_bound_work_before_transport",
+        "test_review_pending_views.PendingViewTests.test_marker_after_other_renderers_added_snapshot_survives_both_commands",
+        "test_review_pending_views.PendingViewTests.test_second_acquisition_builder_failure_enters_transport_with_two_zero_wait_attempts",
+        "test_review_pending_views.PendingViewTests.test_failure_recording_without_a_held_lock_never_waits",
+        "test_review_pending_views.PendingViewTests.test_series_write_failure_preserves_call_and_repairs",
+        "test_review_pending_views.PendingViewTests.test_other_view_write_failure_preserves_pending_series_and_repairs",
+        "test_review_pending_views.PendingViewTests.test_builder_failure_preserves_published_files_and_repairs",
+        "test_review_pending_views.PendingViewTests.test_claimed_marker_series_failure_reports_file_errors_until_repair",
+        "test_review_pending_views.PendingViewTests.test_claimed_marker_other_view_failure_reports_file_errors_until_repair",
+        "test_review_pending_views.PendingViewTests.test_claimed_marker_builder_failure_reports_render_failed_until_repair",
+        "test_review_output_correction.CorrectionTests.test_correction_transport_reads_pending_correction_from_series",
+        "test_review_pending_views.PendingViewTests.test_lock_acquisition_failure_keeps_stale_advisory_until_successful_repair",
+        "test_review_pending_views.PendingViewTests.test_failure_before_lock_marks_new_work_beside_another_renderers_claimed_marker"
+      ]
     }
   ]
 }

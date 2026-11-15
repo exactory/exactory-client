@@ -217,7 +217,7 @@ def _authenticate_observation(records, artifacts, invocation, observation):
     return assignment, packet, output
 
 
-def invoke_correction(store, payload, *, expected_revision, request_id, credential=None):
+def invoke_correction(store, payload, *, expected_revision, request_id, credential=None, after_start=None):
     from . import review_protocol as protocol
     artifacts = store.build_artifact_store()
 
@@ -272,7 +272,8 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
         return [immutable_record(records, 'review_output_correction', value['id'], result)], result
 
     return protocol._invoke_once(store, payload, 'review.output_correction', start, finish,
-                                expected_revision=expected_revision, request_id=request_id, credential=credential)
+                                expected_revision=expected_revision, request_id=request_id, credential=credential,
+                                after_start=after_start)
 
 
 def selected_correction(records, artifacts, assignment_id):
