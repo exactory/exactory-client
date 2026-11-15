@@ -130,6 +130,14 @@ def build_refusal_notice(records, artifacts, attempt_ids, *, form='whole', diagn
     return notice
 
 
+def attach_refusal_notice(packet, notice):
+    """Attach the frozen notice and refresh only the delivered packet's digest."""
+    supplied = dict(packet, output_refusal=copy.deepcopy(notice))
+    if 'digest' in supplied:
+        supplied['digest'] = digest({key: value for key, value in supplied.items() if key != 'digest'})
+    return supplied
+
+
 def select_refusal_notice(records, artifacts, attempt_ids, *, route, role, prompt, packet,
                           task_characters=0, task_limit_characters=None, diagnoses=None):
     """Try whole then bounded as fresh requests, reporting the notice charged to each task.
@@ -155,9 +163,7 @@ def select_refusal_notice(records, artifacts, attempt_ids, *, route, role, promp
         characters = len(_serialize_value(notice))
         task = {'notice_characters': characters, 'characters': (base_task_characters or 0) + characters,
                 'limit_characters': task_limit_characters}
-        supplied = dict(packet, output_refusal=notice)
-        if 'digest' in supplied:
-            supplied['digest'] = digest({key: value for key, value in supplied.items() if key != 'digest'})
+        supplied = attach_refusal_notice(packet, notice)
         trial = {'form': form, 'task': task, 'fits': False}
         trials.append(trial)
         try:

@@ -1882,7 +1882,7 @@ def validate_turn_output(records, artifacts, assignment, packet, output, *, atte
 
 def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
                    base_prompt_parameters=None, slot_id=None, legacy_refusal=None,
-                   entry=None, read_allowance=None, replaces_assignment_id=None):
+                   entry=None, read_allowance=None, replaces_assignment_id=None, refusal_notice=None):
     """Enter or continue parts with the same base prompt and adapter-owned series key."""
     from . import review_problem_parts as legacy, review_transport as transport
     from .review_parts_roles import find_adapter, get_adapter
@@ -1961,7 +1961,14 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
     replacement = find_failed_replacement(records, artifacts, value, adapter, series_key, slot_id,
                                     prior_id, route['configuration']['max_output_tokens'], logical_packet=packet)
 
+    def attach_notice(candidate):
+        if refusal_notice is None:
+            return candidate
+        from .review_refusal_notice import attach_refusal_notice
+        return attach_refusal_notice(candidate, refusal_notice)
+
     def measure(candidate):
+        candidate = attach_notice(candidate)
         turn_prompt = build_turn_prompt(value['role'], base_prompt_parameters, candidate[KEY])
         if candidate.get('source_deliveries'):
             from .review_source_batches import plan_packet
@@ -2008,6 +2015,7 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
             packet.pop('digest', None)
             packet['digest'] = digest(packet)
             logical_reference = artifacts.put(render_json(packet).encode('utf-8'), 'application/json')
+    planned = attach_notice(planned)
     for entry in planned.get('evidence', []):
         if entry.get('segment'):
             reference = artifacts.put(entry['content'].encode('utf-8'), entry['artifact']['media_type'])

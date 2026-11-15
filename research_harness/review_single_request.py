@@ -73,6 +73,7 @@ def build_output_replacement(records, artifacts, assignment, *, identifier=None)
     route = records['review_route'][assignment['route_id']]
     retry_read = is_first_output_read(assignment, packet)
     header = packet[parts.KEY] if retry_read else {}
+    frozen_notice = packet.get('output_refusal') if retry_read else None
     if retry_read:
         packet = parts.read_logical_packet(artifacts, header)
     if (not retry_read and capacity.describe_task_kind(assignment['role'], packet) != 'single'
@@ -102,7 +103,8 @@ def build_output_replacement(records, artifacts, assignment, *, identifier=None)
     planned = parts.prepare_packet(records, artifacts, value, route, packet, assignment['prompt'],
         protocol.read_history(artifacts, assignment), base_prompt_parameters=parameters,
         slot_id=protocol.context_repair.slot_id(records, assignment), entry='output', read_allowance=allowance,
-        replaces_assignment_id=header['replaces_assignment_id'] if retry_read else assignment['id'])
+        replaces_assignment_id=header['replaces_assignment_id'] if retry_read else assignment['id'],
+        refusal_notice=frozen_notice)
     if parts.find_kind(planned) != 'read':
         return None
     prompt = parts.build_turn_prompt(assignment['role'], parameters, planned[parts.KEY])
