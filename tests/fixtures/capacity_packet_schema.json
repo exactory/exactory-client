@@ -22225,7 +22225,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "052932dd1a50d9281687898c27ee1fa834bf24f01e14ae9627883874e7418252",
+      "ast_sha256": "5de8f9c216cd7a2036ecaf86d613692895aa93adf45174fbe7bdbffce5e19463",
       "functions": {
         "_assignment_state": "805eca7b4483852dbee0f8e05928cde22acbc7c7be8ec46ba127c3e71a0ddcbc",
         "_bars": "fd41a7b94078e8e0761696db4a7cc67b063cbb5787f76d6d3dae65fcc7fe5f9f",
@@ -22309,7 +22309,7 @@
         "find_common_prompt_version": "6703a50571e3b46cfad68c28e864395900405707189ba798c45360fd4725e44f",
         "find_current_problem_bar_ids": "a036fa4d45d9540f193b9d85cb1bd8421bd1a6c9ff7aa6d25b15289ca9b99e48",
         "find_historical_bar_reviews": "c8bb404a069fd9c0016aa0dad013a15778a4e697bdd76ae0c2a19de67c2ef3c5",
-        "find_replacement": "5a631844c1f654dd3ee9dcc1df593eabc7909538ac7bb70f78efbe74209d01c3",
+        "find_replacement": "60c05ea5e6ebaa8f226d8928dba503d608ff22a57cea4c0d86a10a9182eb37a5",
         "has_ended_without_output": "f21d60ceabff57cdfa464f0a0b05ddd53ba4358dc46fd5b541060fceeec9d057",
         "has_exhausted_position": "a6a36d007af0c26245e0fdb1edb9a4e261a1fb5c301586ba7ea56d2f4665e141",
         "has_pending_invocation": "1100f816ca4769d642bcb040f697439bfd738a2a00c832bbbf9b153965e9ac76",
@@ -24037,7 +24037,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.storage": {
-      "ast_sha256": "65b752c5e4c022f554bb4e0aec704bd121c5b0d2081632a43a68b2d2f5faf7ab",
+      "ast_sha256": "30db400eaa0c772679ced1fc51ffd8c77c4139c59983fd330c3d5d799fec5b6f",
       "functions": {
         "_canonical": "83dab9f8520cc85f11ca786c64dc5f6901d8372d19972e7da48ed5fe3965f32a",
         "_check_bounds": "9b36c395983b709198dd33488615f500f7546ca88ac1c46a1f956e9e1bf13eac",
@@ -42211,6 +42211,7 @@
   ],
   "non_packet_names": {
     "context.output_refusal.assignment_id": "An allowlisted scoped-storage equality selector over an existing assignment context. It is query metadata, not a reviewer packet field.",
+    "context.unread.assignment_id": "Nested storage membership predicate used by find_replacement to select unread successors of one origin; read_filtered_records consumes the dotted name, which is not a serialized packet member.",
     "exactory-openness-reading-v5": "Key of the source-owned CHAIN_OBSERVERS dispatch table in openness_carried; a protocol value selects an observer, never a packet member. The complete table AST and its two observer call sites are pinned.",
     "exactory-openness-reading-v6": "Key of the source-owned CHAIN_OBSERVERS dispatch table in openness_carried; a protocol value selects an observer, never a packet member. The complete table AST and its two observer call sites are pinned.",
     "exactory-openness-reading-v7": "Key of the source-owned CHAIN_OBSERVERS dispatch table in openness_carried; a protocol value selects an observer, never a packet member. The complete table AST and its two observer call sites are pinned.",

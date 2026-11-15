@@ -3249,7 +3249,8 @@ def find_replacement(records, assignment):
         and other.get('recorded_revision', 0) > assignment.get('recorded_revision', 0)), None)
     if successor is not None:
         return successor
-    unread = next((other for other in records.get('review_assignment', {}).values()
+    unread = next((other for other in read_filtered_records(records, 'review_assignment',
+        **{'context.unread.assignment_id': assignment['id']}).values()
         if other.get('context', {}).get('unread') == dict(assignment_id=assignment['id'])
         and other.get('recorded_revision', 0) > assignment.get('recorded_revision', 0)), None)
     if unread is not None:

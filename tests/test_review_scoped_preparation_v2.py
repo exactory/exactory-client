@@ -160,6 +160,29 @@ class ScopedPreparationTests(LiteratureCase):
                                                    request_id='capacity-scope')
         self.assertEqual(result['result']['input_tokens'], 999000)
 
+    def test_unread_successors_revalidate_only_the_selected_origin_group(self):
+        self.dossier()
+        self.run_probe()
+        self.assign(role='bar')
+        for identifier, origin in (('foreign-unread', 'another-origin'),
+                                   ('own-unread', 'assignment')):
+            with self.subTest(origin=origin):
+                def prepare(records, value):
+                    assignment = records['review_assignment']['assignment']
+                    self.assertIsNone(protocol.find_replacement(records, assignment))
+                    self.seed('review_assignment', identifier, dict(id=identifier,
+                        role='native_math', route_id='route', dossier_id=None,
+                        context=dict(unread=dict(assignment_id=origin)),
+                        recorded_revision=self.store.revision + 1))
+                    return [], dict(ok=True)
+
+                action = lambda: operations.prepared_task_mutation(self.store,
+                    'unread-origin-scope', {}, prepare, request_id=identifier)
+                if origin == 'assignment':
+                    self.refuse('review_task_dependency_changed', action)
+                else:
+                    self.assertTrue(action()['result']['ok'])
+
     def test_legacy_capacity_probe_content_change_still_invalidates_preparation(self):
         from research_harness.review_capacity_evidence import read_capacity_evidence
         self.run_probe()
@@ -212,6 +235,7 @@ class ScopedPreparationTests(LiteratureCase):
                 ('review_assignment', dict(route_id='own')),
                 ('review_assignment', dict(context={'artifact_refs': []})),
                 ('review_assignment', {'context.output_refusal.assignment_id': 'own'}),
+                ('review_assignment', {'context.unread.assignment_id': 'own'}),
                 ('review_assignment', {'staged_review.controller_assignment_id': 'own'}),
                 ('review_context_event', dict(assignment_id='own')),
                 ('review_output_correction', dict(assignment_id='own')),

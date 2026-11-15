@@ -7112,6 +7112,19 @@
       ]
     },
     {
+      "id": "unread-replacement-scoped-assignment-membership",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "scoped-review-preparation",
+      "summary": "The unread-final replacement lookup read all assignment membership and invalidated an ordinary bar preparation after an unrelated assignment was added.",
+      "expected": "Bind only assignments whose context.unread.assignment_id names the origin; unrelated assignments preserve preparation and a newly inserted successor for that origin invalidates it.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_scoped_preparation_v2.ScopedPreparationTests.test_bar_assignment_and_invocation_ignore_other_assignment_groups",
+        "test_review_scoped_preparation_v2.ScopedPreparationTests.test_unread_successors_revalidate_only_the_selected_origin_group"
+      ]
+    },
+    {
       "id": "release-0910-merged-capacity-inventory",
       "record": "20261113110022-every-open-record-and-review-capacity",
       "class": "closed-packet-inventory",
