@@ -176,8 +176,20 @@ class CallCaptureRecoveryTests(LiteratureCase):
 
 
 class CallCapturePreparationTests(TaskExecutionFixture):
+    def setUp(self):
+        super().setUp()
+        packet = dict(protocol=protocol.PROTOCOL, role='standalone', dossier_id=None,
+                      reviewer_id='independent-reviewer', evidence=[])
+        packet['digest'] = digest(packet)
+        prompt = protocol.canonical_prompt('standalone')
+        self.put('review_assignment', 'assignment', dict(id='assignment', role='standalone',
+            route_id='route', dossier_id=None, reviewer_id='independent-reviewer', author_id='author',
+            context={}, slot_id='assignment', packet=protocol._put_json(self.store.build_artifact_store(), packet),
+            packet_digest=packet['digest'], prompt=prompt, prompt_hash=prompt['rendered_prompt_hash'],
+            context_state=dict(context_status='verified_for_route'), recorded_revision=self.store.revision + 1))
+
     def invoke(self, finish, request_id='ordinary', observe=None):
-        payload = dict(id='ordinary', route_id='route')
+        payload = dict(id='ordinary', route_id='route', assignment_id='assignment')
         def start(records, value):
             row = dict(value, request=self.request)
             return [immutable_record(records, 'review_invocation', 'ordinary', row)], row
@@ -229,7 +241,6 @@ class CallCapturePreparationTests(TaskExecutionFixture):
                                           request_id='reconcile-captured')
         self.assertTrue(result['result']['released'])
         self.assertNotIn('ordinary', self.store.snapshot()['records'].get('review_attempt', {}))
-        self.put('review_assignment', 'assignment', dict(id='assignment'))
         self.refuse('review_invocation_pending', lambda: protocol.record_attempt(self.store,
             dict(id='ordinary', assignment_id='assignment', status='failed', output=None,
                  reason='Manual interruption placeholder', usage={}), expected_revision=self.store.revision,
@@ -285,12 +296,13 @@ class CallCapturePreparationTests(TaskExecutionFixture):
                 changed = copy.deepcopy(original)
                 changed['review_pool_membership'][identifier][field] = 'substituted'
                 self.refuse('review_invocation_unverified', lambda: read_call_observation(changed,
-                    self.store.build_artifact_store(), 'review.invoke', dict(id='ordinary', route_id='route'), 'ordinary'))
+                    self.store.build_artifact_store(), 'review.invoke',
+                    dict(id='ordinary', route_id='route', assignment_id='assignment'), 'ordinary'))
 
     def test_capture_requires_original_live_authority(self):
         from research_harness.review_call_capture import capture_call
         from research_harness.review_worker import own_call
-        payload = dict(id='ordinary', route_id='route')
+        payload = dict(id='ordinary', route_id='route', assignment_id='assignment')
         invocation = dict(payload, request=self.request)
         route = self.store.snapshot()['records']['review_route']['route']
         observation = dict(status='failed', request=self.request, response=None, output=None)

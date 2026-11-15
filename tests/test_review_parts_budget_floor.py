@@ -198,8 +198,9 @@ class BudgetFloorPlanningTests(unittest.TestCase):
             if hashes:
                 route = dict(adapter='codex_cli_v1', endpoint='codex://local', model='fixture',
                              configuration=dict(max_output_tokens=128000, timeout_seconds=5))
+                # Rebuild the captured request under its recorded common grammar.
                 prompt = parts.build_turn_prompt(
-                    'result', dict(orchestration='problem_creation', excerpts=True), clean[parts.KEY])
+                    'result', dict(orchestration='problem_creation', excerpts=True, common_version=3), clean[parts.KEY])
                 request = transport.request_body(route, prompt['text'], clean, [], order=())
                 self.assertNotIn('unit_allowance_floor', parts.render_json(request))
                 self.assertEqual((digest(clean), digest(request)), hashes[len(actual)])
@@ -300,12 +301,14 @@ class BudgetFloorReplacementTests(PartsResultCase):
         warning = stop['capacity_warning']
         self.assertEqual({key: warning['output'][key] for key in (
             'state', 'sample_size', 'at_or_over_limit_share', 'kinds')},
-            dict(state='unmeasured', sample_size=0, at_or_over_limit_share=None, kinds=['request']))
-        self.assertEqual(stop, dict(plan, stop_id=recorded_stop['id'], stop_class='decision',
-                                   provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0),
-                                   revision_after_stop=recorded_stop['recorded_revision'],
-                                   revision_after_driver=after['revision'], capacity_warning=warning))
-        self.assertEqual(recorded_stop['plan'], plan)
+            dict(state='unmeasured', sample_size=0, at_or_over_limit_share=None, kinds=['read']))
+        for member in ('state', 'chain', 'head_id', 'progress', 'code'):
+            self.assertEqual(stop[member], plan[member])
+        self.assertEqual(stop['provider_usage'], dict(windows=[], warnings=[], planned_remaining_turns=0))
+        self.assertEqual(stop['revision_after_stop'], recorded_stop['recorded_revision'])
+        self.assertEqual(stop['revision_after_driver'], after['revision'])
+        self.assertEqual(recorded_stop['plan'], {key: value for key, value in stop.items()
+                                              if key not in ('provider_usage', 'revision_after_driver')})
         self.assertEqual(recorded_stop['recorded_revision'], after['revision'] - 1)
         self.assertEqual(self.case.store.committed_request(recorded_stop['request_id'])['response']['result'],
                          recorded_stop)

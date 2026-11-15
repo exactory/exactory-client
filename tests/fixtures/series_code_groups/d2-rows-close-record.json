@@ -1,0 +1,668 @@
+{
+  "named_cause": {
+    "members": {
+      "ambiguous_alias": {
+        "research_harness/identities.py:resolve_family#1": [
+          "record"
+        ]
+      },
+      "candidate_checkpoint_missing": {
+        "research_harness/development.py:prepare_combined_support#1": [
+          "record"
+        ]
+      },
+      "claim_reassessment_required": {
+        "research_harness/claim_dependencies.py:verify_record_dependency#1": [
+          "record"
+        ],
+        "research_harness/development.py:_Context.require_reassessment#1": [
+          "record"
+        ],
+        "research_harness/evaluation.py:Evaluation.read_snapshot#1": [
+          "harness",
+          "record"
+        ],
+        "research_harness/publication_scope.py:find_required_corrections#1": [
+          "record"
+        ],
+        "research_harness/storage.py:_HistoricalSnapshot.read_snapshot#1": [
+          "record"
+        ],
+        "research_harness/storage.py:_HistoricalSnapshot.read_snapshot#2": [
+          "harness"
+        ]
+      },
+      "component_evidence_uninspected": {
+        "research_harness/components.py:_check_parent_link#1": [
+          "record"
+        ]
+      },
+      "component_pending": {
+        "research_harness/components.py:_read_assessment#1": [
+          "record"
+        ],
+        "research_harness/components.py:validate_binding#1": [
+          "form",
+          "record"
+        ],
+        "research_harness/components.py:validate_binding#2": [
+          "record"
+        ],
+        "research_harness/components.py:validate_spec#1": [
+          "record"
+        ]
+      },
+      "configuration_not_ready": {
+        "research_harness/development.py:_Context.require_objective#1": [
+          "record"
+        ]
+      },
+      "execution_output_seal_required": {
+        "research_harness/execution_outputs.py:_inventory#1": [
+          "form",
+          "record"
+        ],
+        "research_harness/execution_outputs.py:validate_observed_outputs#1": [
+          "record"
+        ]
+      },
+      "exploratory_evidence": {
+        "research_harness/problem_evidence.py:validate_computation#1": [
+          "record"
+        ]
+      },
+      "inheritance_refresh_stale": {
+        "research_harness/development.py:_build_assessment_plan#1": [
+          "record"
+        ],
+        "research_harness/development.py:_build_assessment_plan#2": [
+          "record"
+        ]
+      },
+      "inherited_result_stale": {
+        "research_harness/development.py:_build_assessment_plan#1": [
+          "record"
+        ],
+        "research_harness/development.py:_inheritance#1": [
+          "record"
+        ],
+        "research_harness/development.py:_inheritance#2": [
+          "record"
+        ],
+        "research_harness/development.py:_inheritance#3": [
+          "record"
+        ]
+      },
+      "missing_version": {
+        "research_harness/graph.py:citation_graph#1": [
+          "record"
+        ],
+        "research_harness/source_links.py:exact_work#1": [
+          "form"
+        ]
+      },
+      "openness_evidence_mismatch": {
+        "research_harness/openness_minimum.py:audit_minimum#1": [
+          "record"
+        ],
+        "research_harness/openness_minimum.py:audit_minimum#2": [
+          "record"
+        ],
+        "research_harness/openness_minimum.py:audit_minimum#3": [
+          "record"
+        ],
+        "research_harness/openness_minimum.py:validate_minimum_bindings#1": [
+          "record"
+        ],
+        "research_harness/problem_openness.py:prepare_openness#1": [
+          "form",
+          "record"
+        ],
+        "research_harness/problem_openness.py:prepare_openness#2": [
+          "record"
+        ],
+        "research_harness/problem_openness.py:prepare_openness#3": [
+          "record"
+        ]
+      },
+      "openness_native_evidence_missing": {
+        "research_harness/problem_openness_reviews.py:actual_delivery#1": [
+          "record"
+        ],
+        "research_harness/problem_openness_reviews.py:describe_result_material#1": [
+          "content"
+        ],
+        "research_harness/problem_openness_reviews.py:describe_result_material.describe_part#1": [
+          "content"
+        ],
+        "research_harness/problem_openness_reviews.py:read_result_artifact#1": [
+          "content"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence#1": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.include#1": [
+          "record"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.include#2": [
+          "limit"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.visit#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.visit#10": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.visit#11": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.visit#12": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.visit#13": [
+          "record"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.visit#14": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.visit#2": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.visit#3": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.visit#4": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.visit#5": [
+          "content"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.visit#6": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.visit#7": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.visit#8": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.visit#9": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:resolve_result_review#1": [
+          "record"
+        ],
+        "research_harness/problem_openness_reviews.py:resolve_result_review#2": [
+          "content"
+        ],
+        "research_harness/problem_openness_reviews.py:validate_bound_results#1": [
+          "content"
+        ],
+        "research_harness/problem_openness_reviews.py:validate_bound_results#2": [
+          "content"
+        ],
+        "research_harness/problem_openness_reviews.py:validate_bound_results#3": [
+          "content"
+        ],
+        "research_harness/problem_openness_reviews.py:validate_bound_results#4": [
+          "content"
+        ]
+      },
+      "openness_native_review_mismatch": {
+        "research_harness/problem_openness.py:assess_openness#1": [
+          "record"
+        ],
+        "research_harness/problem_openness_reviews.py:require#1": [
+          "form",
+          "record"
+        ],
+        "research_harness/problem_openness_reviews.py:required_evidence.visit#1": [
+          "content"
+        ],
+        "research_harness/problem_openness_reviews.py:resolve_native_reviews#1": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:resolve_native_reviews#2": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:resolve_native_reviews#3": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:validate_approval#1": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:validate_approval#2": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:validate_approval#3": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:validate_approval#4": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:validate_approval#5": [
+          "form"
+        ],
+        "research_harness/problem_openness_reviews.py:validate_approval#6": [
+          "form"
+        ],
+        "research_harness/problem_openness_sources.py:required_proof#1": [
+          "content"
+        ],
+        "research_harness/problem_openness_sources.py:required_proof#2": [
+          "content"
+        ]
+      },
+      "openness_native_review_unverified": {
+        "research_harness/problem_openness_reviews.py:observed_review#1": [
+          "record"
+        ]
+      },
+      "openness_screening_evidence_mismatch": {
+        "research_harness/problem_openness.py:assess_openness#1": [
+          "record"
+        ],
+        "research_harness/problem_openness_screening.py:require#1": [
+          "form",
+          "record"
+        ],
+        "research_harness/problem_openness_screening.py:resolve_source_evidence#1": [
+          "form"
+        ],
+        "research_harness/problem_openness_screening.py:resolve_source_evidence#2": [
+          "form"
+        ],
+        "research_harness/problem_openness_screening.py:resolve_source_evidence#3": [
+          "form"
+        ]
+      },
+      "openness_search_missing": {
+        "research_harness/openness_minimum.py:validate_minimum_bindings#1": [
+          "record"
+        ],
+        "research_harness/openness_minimum.py:validate_minimum_bindings#2": [
+          "form"
+        ],
+        "research_harness/openness_minimum.py:validate_minimum_bindings#3": [
+          "record"
+        ]
+      },
+      "openness_source_delivery_mismatch": {
+        "research_harness/problem_openness.py:assess_openness#1": [
+          "record"
+        ],
+        "research_harness/problem_openness_sources.py:_projection#1": [
+          "content"
+        ],
+        "research_harness/problem_openness_sources.py:_projection#2": [
+          "content"
+        ],
+        "research_harness/problem_openness_sources.py:require#1": [
+          "content",
+          "form",
+          "limit",
+          "record"
+        ]
+      },
+      "openness_statement_mismatch": {
+        "research_harness/openness_minimum.py:validate_minimum_bindings#1": [
+          "record"
+        ],
+        "research_harness/openness_minimum.py:validate_minimum_bindings#2": [
+          "record"
+        ],
+        "research_harness/problem_openness.py:assess_packet_freshness#1": [
+          "record"
+        ],
+        "research_harness/problem_openness.py:prepare_openness#1": [
+          "record"
+        ],
+        "research_harness/problem_openness.py:prepare_openness#2": [
+          "record"
+        ]
+      },
+      "orchestration_conflict": {
+        "research_harness/problem_claims.py:require_problem#1": [
+          "form",
+          "record"
+        ]
+      },
+      "problem_assessment_evidence_missing": {
+        "research_harness/problem_evidence.py:resolve_assessment_evidence#1": [
+          "record"
+        ],
+        "research_harness/problem_evidence.py:resolve_assessment_record#1": [
+          "record"
+        ]
+      },
+      "problem_candidate_missing": {
+        "research_harness/problem_forming_import.py:describe_source#1": [
+          "form",
+          "record"
+        ]
+      },
+      "problem_forming_reference_missing": {
+        "research_harness/problem_forming_import.py:open_imported_record#1": [
+          "record"
+        ]
+      },
+      "problem_statement_missing": {
+        "research_harness/problem_attempt.py:validate_attempt#1": [
+          "record"
+        ],
+        "research_harness/problem_delivery.py:find_review_post#1": [
+          "content",
+          "record"
+        ]
+      },
+      "problem_value_computation_missing": {
+        "research_harness/problem_evidence.py:validate_computation#1": [
+          "record"
+        ],
+        "research_harness/problem_evidence.py:validate_computation.raise_missing_computation#1": [
+          "record"
+        ]
+      },
+      "problem_value_result_missing": {
+        "research_harness/problem_evidence.py:validate_result#1": [
+          "record"
+        ]
+      },
+      "publication_scope_correction_required": {
+        "research_harness/publication_scope.py:_validate_correction#1": [
+          "record"
+        ]
+      },
+      "publication_scope_debt_mismatch": {
+        "research_harness/publication_scope.py:_validate_debt#1": [
+          "form"
+        ],
+        "research_harness/publication_scope.py:_validate_debt#2": [
+          "form"
+        ],
+        "research_harness/publication_scope.py:_validate_debt#3": [
+          "form"
+        ],
+        "research_harness/publication_scope.py:_validate_debt#4": [
+          "form",
+          "record"
+        ],
+        "research_harness/publication_scope.py:_validate_debt#5": [
+          "record"
+        ]
+      },
+      "publication_scope_missing": {
+        "research_harness/publication_scope.py:_load_scope_snapshot#1": [
+          "record"
+        ],
+        "research_harness/publication_scope.py:find_publication_scope#1": [
+          "content"
+        ]
+      },
+      "publication_scope_stale": {
+        "research_harness/publication_scope.py:_load_scope_snapshot#1": [
+          "record"
+        ],
+        "research_harness/publication_scope.py:_validate_payload#1": [
+          "record"
+        ],
+        "research_harness/publication_scope.py:_validate_payload#2": [
+          "record"
+        ],
+        "research_harness/review_protocol.py:_project_scoped_result#1": [
+          "record"
+        ]
+      },
+      "readiness_required": {
+        "research_harness/verification.py:_preparation#1": [
+          "record"
+        ],
+        "research_harness/verification.py:_preparation#2": [
+          "record"
+        ]
+      },
+      "research_not_ready": {
+        "research_harness/development.py:_Context.require_ready#1": [
+          "record"
+        ]
+      },
+      "research_review_binding_stale": {
+        "research_harness/direction_reviews.py:_collect_task_graph#1": [
+          "record"
+        ],
+        "research_harness/direction_reviews.py:_collect_task_graph#2": [
+          "record"
+        ]
+      },
+      "research_review_pair_required": {
+        "research_harness/research_decisions.py:_pair#1": [
+          "form"
+        ],
+        "research_harness/research_decisions.py:_pair#2": [
+          "form",
+          "limit"
+        ],
+        "research_harness/research_decisions.py:_pair#3": [
+          "record"
+        ],
+        "research_harness/research_decisions.py:_pair#4": [
+          "record"
+        ]
+      },
+      "research_review_phase_mismatch": {
+        "research_harness/research_decisions.py:_pair#1": [
+          "record"
+        ]
+      },
+      "research_review_stale": {
+        "research_harness/research_decisions.py:_pair#1": [
+          "record"
+        ],
+        "research_harness/research_decisions.py:_pair#2": [
+          "record"
+        ]
+      },
+      "research_review_unverified": {
+        "research_harness/review_protocol.py:_read_adjudication_review#1": [
+          "content",
+          "record"
+        ],
+        "research_harness/review_protocol.py:add_focused_adjudication#1": [
+          "content",
+          "record"
+        ]
+      },
+      "research_support_scope_mismatch": {
+        "research_harness/research_decisions.py:record_value_review.prepare#1": [
+          "form",
+          "record"
+        ]
+      },
+      "result_evidence_mismatch": {
+        "research_harness/development.py:_assess#1": [
+          "record"
+        ],
+        "research_harness/execution_evidence.py:validate_result_reference#1": [
+          "record"
+        ],
+        "research_harness/scientific_delivery.py:ScientificDelivery.map_reference#1": [
+          "record"
+        ]
+      },
+      "review_adjudication_unverified": {
+        "research_harness/review_protocol.py:record_adjudication.prepare#1": [
+          "record"
+        ]
+      },
+      "review_bundle_mismatch": {
+        "research_harness/review_protocol.py:build_packet#1": [
+          "record"
+        ]
+      },
+      "review_complete_source_mismatch": {
+        "research_harness/review_source_complete.py:_require#1": [
+          "content",
+          "form",
+          "limit",
+          "record"
+        ]
+      },
+      "review_current_source_incomplete": {
+        "research_harness/review_adjudicator_sources.py:_incomplete#1": [
+          "content",
+          "form",
+          "limit",
+          "record"
+        ]
+      },
+      "review_objection_missing": {
+        "research_harness/review_protocol.py:add_focused_adjudication#1": [
+          "record"
+        ],
+        "research_harness/review_protocol.py:build_rubric_objection#1": [
+          "record"
+        ],
+        "research_harness/review_protocol.py:build_rubric_objection#2": [
+          "record"
+        ]
+      },
+      "review_packet_incomplete": {
+        "research_harness/review_protocol.py:add_focused_adjudication#1": [
+          "limit",
+          "payload"
+        ],
+        "research_harness/review_protocol.py:build_packet#1": [
+          "record"
+        ],
+        "research_harness/review_protocol.py:build_packet#2": [
+          "record"
+        ],
+        "research_harness/review_protocol.py:build_packet#3": [
+          "record"
+        ],
+        "research_harness/review_protocol.py:build_rubric_objection#1": [
+          "content"
+        ]
+      },
+      "review_record_missing": {
+        "research_harness/openness_reading.py:_read_prior#1": [
+          "record"
+        ],
+        "research_harness/review_parts_native.py:read_prior_assignment#1": [
+          "record"
+        ],
+        "research_harness/review_protocol.py:_get#1": [
+          "record"
+        ],
+        "research_harness/review_supplied_evidence.py:visit_lineage#1": [
+          "content"
+        ]
+      },
+      "review_source_binding_mismatch": {
+        "research_harness/bar_sources.py:_fulltext_source#1": [
+          "content",
+          "form",
+          "record"
+        ],
+        "research_harness/bar_sources.py:_fulltext_source#2": [
+          "record"
+        ],
+        "research_harness/bar_sources.py:_fulltext_source#3": [
+          "content"
+        ]
+      },
+      "review_task_failed": {
+        "research_harness/review_task_execution.py:accept_observation.prepare#1": [
+          "record"
+        ]
+      },
+      "review_task_index_required": {
+        "research_harness/review_task_execution.py:accept_observation.prepare#1": [
+          "record"
+        ]
+      },
+      "round_evidence_mismatch": {
+        "research_harness/rounds.py:_RoundEvidence._find_native_reference#1": [
+          "record"
+        ],
+        "research_harness/rounds.py:_RoundEvidence.many#1": [
+          "record"
+        ]
+      },
+      "scoped_review_stale": {
+        "research_harness/publication_scope.py:_validate_scoped_review#1": [
+          "record"
+        ]
+      },
+      "strategy_evidence_stale": {
+        "research_harness/problem_forming_import.py:open_imported_record#1": [
+          "content",
+          "record"
+        ],
+        "research_harness/strategy.py:evidence#1": [
+          "record"
+        ]
+      },
+      "strategy_reference_missing": {
+        "research_harness/problem_evidence.py:resolve_assessment_record#1": [
+          "form"
+        ],
+        "research_harness/strategy.py:get_record#1": [
+          "form",
+          "record"
+        ]
+      },
+      "unknown_execution": {
+        "research_harness/development.py:_assess#1": [
+          "record"
+        ],
+        "research_harness/execution_evidence.py:validate_result_reference#1": [
+          "record"
+        ]
+      },
+      "unknown_source": {
+        "research_harness/problem_citation_metadata.py:_resolve_span#1": [
+          "record"
+        ],
+        "research_harness/source_links.py:captured_source#1": [
+          "record"
+        ]
+      },
+      "unknown_work": {
+        "research_harness/identities.py:resolve_family#1": [
+          "record"
+        ],
+        "research_harness/source_links.py:exact_work#1": [
+          "record"
+        ]
+      },
+      "value_review_assignment_mismatch": {
+        "research_harness/research_decisions.py:record_value_review.prepare#1": [
+          "payload"
+        ],
+        "research_harness/research_decisions.py:record_value_review.prepare#2": [
+          "content",
+          "record"
+        ]
+      },
+      "value_review_phase_mismatch": {
+        "research_harness/research_decisions.py:record_value_review.prepare#1": [
+          "record"
+        ]
+      }
+    }
+  },
+  "stored_state": {
+    "members": {
+      "store_missing": {
+        "research_harness/storage.py:Store._check_files#1": [
+          "store"
+        ],
+        "research_harness/storage.py:Store._connection#1": [
+          "store"
+        ]
+      }
+    }
+  }
+}

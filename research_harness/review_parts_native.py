@@ -91,7 +91,7 @@ def read_prior_assignment(records, artifacts, value):
     """Bind a pending native parts continuation to its observed predecessor."""
     from .operations import normalized_text
     from .review_parts import KEY, PROTOCOL
-    from .review_protocol import assignment_state, find_replacement, has_ended_without_output
+    from .review_protocol import assignment_state, find_replacement, has_ended_without_output, is_dead_assignment
 
     prior_id = value['context']['prior_assignment_id']
     prior = records.get('review_assignment', {}).get(prior_id)
@@ -110,6 +110,8 @@ def read_prior_assignment(records, artifacts, value):
                             'The native series changed its packet, reviewer, route or author')
     if any(saved['role'] == 'native_math' and saved['context'].get('prior_assignment_id') == prior_id
            and saved['id'] != value['id'] and not has_ended_without_output(records, saved['id'])
+           and not is_dead_assignment(records, saved)
+           and not is_dead_assignment(records, saved)
            for saved in records.get('review_assignment', {}).values()):
         raise ResearchError('review_source_continuation_fork', 'Continue the latest native parts turn')
     state = assignment_state(records, artifacts, prior_id)
@@ -123,7 +125,7 @@ def read_prior_assignment(records, artifacts, value):
 def find_final_assignment(records, artifacts, identifier):
     """Follow live continuations of one attested series, retaining failed-turn replacements."""
     from .review_parts import KEY, find_kind
-    from .review_protocol import assignment_state, find_replacement, has_ended_without_output
+    from .review_protocol import assignment_state, find_replacement, has_ended_without_output, is_dead_assignment
     from .workspace import strict_json
 
     assignments = records.get('review_assignment', {})
@@ -131,10 +133,15 @@ def find_final_assignment(records, artifacts, identifier):
     seen = set()
     while current['id'] not in seen:
         seen.add(current['id'])
+        replacement = find_replacement(records, current)
+        if replacement is not None:
+            current = replacement
+            continue
         live = [saved for saved in assignments.values()
                 if saved['role'] == 'native_math'
                 and (saved.get('capacity_replacement_of') or saved['context'].get('prior_assignment_id')) == current['id']
-                and not (has_ended_without_output(records, saved['id']) and find_replacement(records, saved))]
+                and not ((has_ended_without_output(records, saved['id']) or is_dead_assignment(records, saved))
+                         and find_replacement(records, saved))]
         if len(live) > 1:
             raise ResearchError('review_source_continuation_fork', 'The native series has multiple live continuations',
                                 dict(assignment_ids=sorted(saved['id'] for saved in live)))

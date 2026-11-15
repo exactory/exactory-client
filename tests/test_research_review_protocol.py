@@ -218,7 +218,15 @@ class ReviewProtocolTests(LiteratureCase):
                 'context_status':'verified_for_route'})
 
     def test_allowed_positive_controls_are_required_even_when_canary_absent(self):
-        p = self.protocol(); self.route(model='gpt-6-astra'); self.run_probe(False); self.assign(); self.invoke({'verdict':'sound'})
+        p = self.protocol(); self.route(); self.run_probe(False)
+        from research_harness import review_capacity_evidence
+        from capacity_evidence_fixtures import build_capacity_prior
+        route = self.records()['review_route']['route']
+        priors = tuple(review_capacity_evidence.read_capacity_priors()) + (build_capacity_prior(route, 2000000),)
+        with patch.object(review_capacity_evidence, 'CAPACITY_PRIORS', priors):
+            self.assign()
+        self.assert_error('review_context_unverified', lambda: self.invoke({'verdict':'sound'}))
+        self.assertEqual(self.records().get('review_attempt', {}), {})
         state = p.assignment_state(self.records(),self.artifacts,'assignment')
         self.assertFalse(state['ready']); self.assertEqual(state['context_status'],'unverified')
 
@@ -563,7 +571,16 @@ class ReviewProtocolTests(LiteratureCase):
                 self.assertEqual(self.store.snapshot(), before)
 
     def test_assignment_created_before_route_probe_never_becomes_independent_retroactively(self):
-        p = self.protocol(); self.route(model='gpt-6-astra'); self.assign(); self.run_probe(); self.invoke({'verdict':'sound'})
+        p = self.protocol(); self.route()
+        from research_harness import review_capacity_evidence
+        from capacity_evidence_fixtures import build_capacity_prior
+        route = self.records()['review_route']['route']
+        priors = tuple(review_capacity_evidence.read_capacity_priors()) + (build_capacity_prior(route, 2000000),)
+        with patch.object(review_capacity_evidence, 'CAPACITY_PRIORS', priors):
+            self.assign()
+        self.run_probe()
+        self.assert_error('review_context_unverified', lambda: self.invoke({'verdict':'sound'}))
+        self.assertEqual(self.records().get('review_attempt', {}), {})
         self.assertFalse(p.assignment_state(self.records(),self.artifacts,'assignment')['ready'])
 
     def test_case_and_spacing_cannot_disguise_the_author_identity(self):

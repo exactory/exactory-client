@@ -1,6 +1,7 @@
 """Stop and queue interleavings share the transactional admission boundary."""
 
 import copy
+import json
 import unittest
 from unittest.mock import patch
 
@@ -9,6 +10,52 @@ from research_harness import review_task_execution as execution, review_worker a
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 import test_review_task_execution as fixtures
+
+
+def assert_requested_ending(test, records, line, requested_id):
+    """Keep release identity distinct from the retained series receipt."""
+    test.assertEqual((line['state'], line['code'], line['stop_class']),
+                     ('stop', 'review_chain_stopped', 'requested'))
+    test.assertEqual(line['stop_id'], requested_id)
+    test.assertEqual(line['details']['stop_id'], requested_id)
+    test.assertIn(requested_id, records['review_stop'])
+    reference = line['details']['receipt']
+    test.assertIn(reference['place'], ('store', 'workspace'))
+    if reference['place'] == 'store':
+        identifier = line['series_stop_id']
+        test.assertNotEqual(identifier, requested_id)
+        test.assertEqual(reference['id'], identifier)
+        receipt = records['review_series_stop'][identifier]
+        test.assertEqual((receipt['id'], receipt['code'], receipt['assignment_id']),
+                         (identifier, 'review_chain_stopped', line['head_id']))
+        retained = receipt['plan']
+        test.assertEqual(retained['series_stop_id'], identifier)
+        test.assertEqual(line['revision_after_stop'], receipt['recorded_revision'])
+    else:
+        path = test.root / reference['path']
+        test.assertTrue(path.is_file(), reference)
+        retained = json.loads(path.read_text())
+        test.assertIn('stop_record_error', line)
+        test.assertEqual(retained['stop_record_error'], line['stop_record_error'])
+        test.assertEqual(retained.get('series_stop_id'), line.get('series_stop_id'))
+    test.assertEqual((retained['state'], retained['code'], retained['stop_class'], retained['head_id']),
+                     ('stop', 'review_chain_stopped', 'requested', line['head_id']))
+    test.assertEqual(retained['stop_id'], requested_id)
+    test.assertEqual(retained['details']['stop_id'], requested_id)
+    test.assertEqual(retained['details']['receipt'], reference)
+    drivers = [row for row in records['review_series_run'].values()
+               if (row.get('ended') or {}).get('details', {}).get('receipt') == reference]
+    test.assertEqual(len(drivers), 1)
+    driver = drivers[0]
+    test.assertEqual(driver['assignment_id'], line['head_id'])
+    test.assertEqual(driver['ended']['stop_id'], requested_id)
+    test.assertEqual(driver['ended'].get('series_stop_id'), line.get('series_stop_id'))
+    test.assertEqual(driver['ended']['details']['receipt'], reference)
+    if reference['place'] == 'store':
+        test.assertEqual(line['revision_after_driver'], driver['ended']['revision'])
+    else:
+        test.assertGreater(driver['ended']['revision'], 0)
+    return reference
 
 
 class StopQueueFixture(fixtures.TaskExecutionFixture):
@@ -302,7 +349,7 @@ class DriverStopTests(StopQueueFixture):
         self.assertEqual(rows[-1]['code'], 'review_chain_stopped')
         self.assertEqual(rows[-1]['details']['step']['id'], 10)
         records = self.store.snapshot()['records']
-        self.assertNotIn('review_series_stop', records)
+        assert_requested_ending(self, records, rows[-1], 'stop')
         driver = next(iter(records['review_series_run'].values()))
         self.assertEqual(driver['ended']['stop_id'], 'stop')
         self.release()
@@ -318,7 +365,9 @@ class DriverStopTests(StopQueueFixture):
                 patch.dict(cli.OPERATIONS, {'review-run':lambda *args, **kwargs: self.start(identifier='new')}):
             self.assertEqual(series.run_series(self.store, 'first', emit=rows.append), 3)
         self.assertEqual(rows[-1]['code'], 'review_chain_stopped')
-        self.assertNotIn('new', self.store.snapshot()['records'].get('review_invocation', {}))
+        records = self.store.snapshot()['records']
+        assert_requested_ending(self, records, rows[-1], 'stop')
+        self.assertNotIn('new', records.get('review_invocation', {}))
 
     def test_stopped_plan_acknowledges_even_when_the_additional_boundary_read_is_busy(self):
         from research_harness import review_series as series, review_stop, review_continuation
@@ -334,7 +383,7 @@ class DriverStopTests(StopQueueFixture):
         records = self.store.snapshot()['records']
         ended = next(iter(records['review_series_run'].values()))['ended']
         self.assertEqual((ended['state'], ended['stop_id']), ('stop', 'stop'))
-        self.assertNotIn('review_series_stop', records)
+        assert_requested_ending(self, records, rows[-1], 'stop')
 
     def test_driver_refusal_stays_requested_when_release_wins_its_final_read(self):
         from research_harness import review_series as series, review_stop
@@ -351,6 +400,7 @@ class DriverStopTests(StopQueueFixture):
             self.assertEqual(series.run_series(self.store, 'first', emit=rows.append), 3)
         self.assertEqual(rows[-1]['stop_id'], 'stop')
         self.assertEqual(rows[-1]['stop_class'], 'requested')
+        assert_requested_ending(self, self.store.snapshot()['records'], rows[-1], 'stop')
 
     def test_driver_keeps_a_met_boundary_when_release_wins_the_settlement_read(self):
         from research_harness import review_series as series, review_stop
@@ -368,7 +418,9 @@ class DriverStopTests(StopQueueFixture):
                 patch.dict(cli.OPERATIONS, {'review-run':refuse_run}):
             self.assertEqual(series.run_series(self.store, 'first', emit=rows.append), 3)
         self.assertEqual(rows[-1]['stop_id'], 'stop')
-        self.assertNotIn('new', self.store.snapshot()['records'].get('review_invocation', {}))
+        records = self.store.snapshot()['records']
+        assert_requested_ending(self, records, rows[-1], 'stop')
+        self.assertNotIn('new', records.get('review_invocation', {}))
 
     def test_stop_between_plan_and_action_acknowledges_without_dispatch(self):
         from research_harness import review_series as series
@@ -381,6 +433,7 @@ class DriverStopTests(StopQueueFixture):
                 patch.dict(cli.OPERATIONS, {'review-run': lambda *a, **kw: self.fail('No stopped dispatch')}):
             self.assertEqual(series.run_series(self.store, 'first', emit=rows.append), 3)
         self.assertEqual(rows[-1]['stop_id'], 'stop')
+        assert_requested_ending(self, self.store.snapshot()['records'], rows[-1], 'stop')
 
 
 class QueueTests(StopQueueFixture):

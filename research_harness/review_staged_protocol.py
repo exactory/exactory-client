@@ -776,7 +776,9 @@ def build_epoch(records, record, packet, manifest, *, route, artifacts, scale_ch
         for name in ('objective_adequacy', 'method_adequacy'):
             spec['completion_requirements']['permissible_decisions']['/value/' + name] = ['not_assessed']
     previous_epochs = [row for row in records.get('review_epoch', {}).values()
-                       if row['slot_id'] == spec['slot_id'] and row['evidence_currency'] == spec['evidence_currency']]
+                       if row['slot_id'] == spec['slot_id'] and row['evidence_currency'] == spec['evidence_currency']
+                       and not protocol.is_dead_assignment(records,
+                           protocol._get(records, 'review_assignment', row['controller_assignment_id']))]
     if len(previous_epochs) >= spec['budgets']['max_epochs']:
         raise ResearchError('assessment_incomplete', 'The unchanged scientific scope exhausted its epoch recovery budget',
                             dict(slot_id=spec['slot_id'], epoch_ids=[row['id'] for row in previous_epochs],
@@ -1051,6 +1053,7 @@ def prepare_task_plan(records, artifacts, controller, epoch, task, composition_p
     repair = protocol._read_json(artifacts, controller['packet']).get('context_repair')
     claim_range = set(task['claim_ids']) != set(current_contexts)
     prompt = protocol.canonical_prompt(epoch['role'], orchestration='problem_creation', staged_task=task,
+            common_version=protocol.find_common_prompt_version(controller['prompt']),
                               repair=repair is not None, claim_range=claim_range,
                               composed=composition_plan is not None and task['type'] == 'final')
     config = route['configuration']
@@ -1087,6 +1090,7 @@ def prepare_task_plan(records, artifacts, controller, epoch, task, composition_p
     packet['digest'] = digest(packet)
     if prompt_paragraphs.select_prompt_parameters(epoch['role'], packet):
         prompt = protocol.canonical_prompt(epoch['role'], orchestration='problem_creation', staged_task=task,
+            common_version=protocol.find_common_prompt_version(controller['prompt']),
             repair=repair is not None, claim_range=claim_range,
             composed=composition_plan is not None and task['type'] == 'final',
             **prompt_paragraphs.select_prompt_parameters(epoch['role'], packet))
@@ -1382,6 +1386,7 @@ def invoke_task(store, payload, *, expected_revision, request_id):
                          or retained and retained.get('attempt_id') != payload['id'])
     if requires_unposted:
         require_unposted_review(records, assignment, store.build_artifact_store())
+        protocol.require_verified_assignment(records, store.build_artifact_store(), assignment)
     try:
         route = protocol._get(records, 'review_route', assignment['route_id'])
         controller_id = binding['controller_assignment_id']
@@ -1963,9 +1968,11 @@ def build_profiles(records, artifacts, route, epoch=None):
                 claim_ids=[], occurrence_ids=[], group_ids=[]))
         frame = {} if epoch is None else epoch.get('manifest', {}).get('frame')
         if epoch is not None and isinstance(frame, dict):
+            parameters = prompt_paragraphs.select_prompt_parameters(epoch['role'], frame)
             prompt = prompt_paragraphs.append_prompt_paragraphs(prompt, epoch['role'],
                 frame.get(prompt_paragraphs.CARRY_PARAMETER),
-                prompt_paragraphs.select_prompt_parameters(epoch['role'], frame).get(prompt_paragraphs.PARAMETER))
+                parameters.get(prompt_paragraphs.PARAMETER),
+                parameters.get(prompt_paragraphs.CAPACITY_PARAMETER))
         profiles[kind] = dict(context_characters=len(prompt['text']), envelope_characters=4000,
             output_base_tokens=128, output_tokens_per_claim=100, output_tokens_per_character=0.5 if kind == 'frame' else 0.01,
             seconds_per_character=0.0001, seconds_per_claim=0.1, duration_base_seconds=1,

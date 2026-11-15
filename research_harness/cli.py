@@ -239,7 +239,7 @@ from .publication_files import find_bundle_drift, restore_bundle
 from .verification import bind_verdict
 OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": record_manuscript_review, "bind-verdict": bind_verdict})
 
-ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "fulltext-start", "fulltext-resume", "import-response", "import-oai-cohort", "visual")
+ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "import-fulltext", "fulltext-start", "fulltext-resume", "import-response", "import-oai-cohort", "visual")
 GATES = ("cohort", "foundation", "preparation", "direction", "readiness", "manuscript-readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round", "post")
 RECORD_CHECK_HELP_MSG = "Qualify a copy of a research record offline; print a JSON report and exit 0 when ready is true, 1 otherwise."
 
@@ -491,6 +491,9 @@ def acquisition_command(store, command, payload, identity, *, preview=False, res
     if command == "fulltext":
         fields(payload, ("identifier", "url"), ("max_requests", "extraction_options", "component"))
         return acquisition.acquire_fulltext(store, **payload, **identity)
+    if command == "import-fulltext":
+        fields(payload, ("identifier", "file", "origin"), ("extraction_options",))
+        return acquisition.import_fulltext(store, **payload, **identity)
     if command == "fulltext-start":
         fields(payload, ("identifier",), ("url", "source_id", "extraction_options", "allowances", "use_ranges"))
         return fulltext_jobs.start_job(store, **payload, **identity)
@@ -526,6 +529,9 @@ def describe_review_receipt(store, command, payload, receipt):
             return receipt
         from .evaluation import Evaluation
         artifacts = Evaluation(records, store.build_artifact_store())
+        if 'capacity_plan_kind' in assignment:
+            from .review_route_capacity import describe_assignment_capacity
+            receipt = dict(receipt, **describe_assignment_capacity(records, artifacts, assignment))
         warning = describe_assignment_warning(records, payload['id'], artifacts=artifacts)
         from .review_single_request import describe_assignment_delivery
         try:
@@ -564,6 +570,12 @@ def _review_status(records, artifacts):
     result = {"assignments": {identifier: {"refused_attempts": review_refusal.refused_attempts(
                                 records, artifacts, by_assignment.get(identifier, []))}
                             for identifier in records.get("review_assignment", {})}}
+    from .review_refusal_replacement import find_output_successor, NOT_SELECTED_MSG
+    for identifier in by_assignment:
+        successor = find_output_successor(records, records['review_assignment'][identifier])
+        if successor is not None:
+            result['assignments'][identifier]['not_selected'] = dict(
+                assignment_id=successor['id'], message=NOT_SELECTED_MSG)
     from .review_call_admission import list_waiting_calls, list_active_calls, describe_capacity_wait
     queue = list_waiting_calls(records)
     if queue:
@@ -604,12 +616,22 @@ def _review_status(records, artifacts):
         except (ResearchError, json.JSONDecodeError):
             state = dict(ready=False)
         series = series_results[assignment[review_parts.KEY]['series_assignment_id']]
+        is_posted = find_review_post(records, assignment, artifacts) is not None
         result['assignments'][identifier]['review_parts'] = describe_parts_turn(
             assignment, state, series,
-            is_posted=find_review_post(records, assignment, artifacts) is not None,
+            is_posted=is_posted,
             ended_without_output=review_protocol.has_ended_without_output(records, identifier))
         progress = result['assignments'][identifier]['review_parts']
-        if progress['next']:
+        if (not is_posted and not progress['complete']
+                and progress.get('blocked') == 'review_output_refused'):
+            progress['next'] = describe_next_actions(records, artifacts, identifier)
+            selected = progress['next'][0]
+            progress.pop('blocked')
+            if selected['state'] in ('stop', 'handoff'):
+                progress['blocked'] = selected.get('code', 'review_output_refused')
+            if selected['state'] == 'stop' and 'command' not in selected:
+                progress['next'] = []
+        elif progress['next']:
             progress['next'] = describe_next_actions(records, artifacts, identifier, progress['next'])
     from .review_route_capacity import describe_open_route_reports, describe_unsolved_reviews
     if records.get('review_route'):
@@ -655,10 +677,70 @@ def _review_status(records, artifacts):
 
 
 def status_report(store, *, counters=False):
+    started = time.monotonic()
+    from .review_continuation import (annotate_review_obligations, describe_context_failure,
+                                      list_chain_heads, validate_context_bindings)
+    failures = []
+    snapshot = store.snapshot()
+    records = snapshot['records']
+    examined_id = None
+    try:
+        # Read bindings at this inspection's edge, before legacy gate readers
+        # dereference retained containers as mappings.
+        for examined_id, assignment in records.get('review_assignment', {}).items():
+            validate_context_bindings(records, store.build_artifact_store(), assignment)
+        examined_id = None
+        return _build_status_report(store, counters=counters, context_failures=failures,
+                                    snapshot=snapshot, started=started)
+    except (ResearchError, json.JSONDecodeError) as error:
+        # Gate readers can encounter a damaged context before annotation starts.
+        # The inspection still names every failed context and the healthy heads'
+        # obligations; it does not claim that the interrupted gate is ready.
+        evaluation = Evaluation(records, store.build_artifact_store())
+        config = records.get('configuration', {}).get('research', {})
+        report = dict(ready=False, revision=snapshot['revision'], profile=config.get('profile', 'research'),
+                      runtime=store.describe_runtime(), review=dict(assignments={}), obligations=[], next=None)
+        initial_failure = describe_context_failure(error, examined_id)
+        if examined_id is not None and initial_failure not in failures:
+            failures.append(initial_failure)
+        list_chain_heads(records, evaluation, context_failures=failures)
+        excluded = {row['assignment_id'] for row in failures if 'assignment_id' in row}
+        inspection_records = dict(records, review_assignment={identifier: row
+            for identifier, row in records.get('review_assignment', {}).items() if identifier not in excluded})
+        evaluation = Evaluation(inspection_records, store.build_artifact_store())
+        report = annotate_review_obligations(inspection_records, evaluation, report, context_failures=failures)
+        if not any(row['code'] == initial_failure['code'] for row in failures):
+            failures.append(initial_failure)
+        excluded = {row['assignment_id'] for row in failures if 'assignment_id' in row}
+        if excluded:
+            # This view cannot grant readiness or workflow credit. It lets the
+            # ordinary readers report the remaining workspace obligations while
+            # retaining each excluded context's refusal in the inspection.
+            projected = {kind: {identifier: row for identifier, row in rows.items()
+                               if not (kind == 'review_assignment' and identifier in excluded)
+                               and all(row.get(field) != excluded_id for excluded_id in excluded
+                                       for field in ('assignment_id', 'controller_assignment_id'))}
+                         for kind, rows in records.items()}
+            try:
+                report = _build_status_report(store, counters=counters, context_failures=failures,
+                                              snapshot=dict(snapshot, records=projected), started=started)
+            except (ResearchError, json.JSONDecodeError) as projection_error:
+                failure = describe_context_failure(projection_error)
+                if failure not in failures:
+                    failures.append(failure)
+            report['ready'] = False
+        report['review_context_failures'] = list(failures)
+        if counters and 'evaluation' not in report:
+            report['evaluation'] = dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3),
+                                        retention=evaluation.retention_report())
+        return report
+
+
+def _build_status_report(store, *, counters=False, context_failures=None, snapshot=None, started=None):
     from .review_state_evaluation import runtime_scope
     from .review_continuation import annotate_review_obligations, describe_next_actions
-    started = time.monotonic()
-    snapshot = store.snapshot()
+    started = time.monotonic() if started is None else started
+    snapshot = store.snapshot() if snapshot is None else snapshot
     evaluation = Evaluation(snapshot['records'], store.build_artifact_store())
     runtime = store.describe_runtime()
     with runtime_scope(snapshot['records'], evaluation) as scoped_evaluation, ExitStack() as status_scope:
@@ -670,6 +752,9 @@ def status_report(store, *, counters=False):
         scope['review_closure_roots'] = {}
         records = snapshot["records"]
         override_status = overrides.describe_overrides(records, store.root, artifacts=evaluation)
+        supplied_texts = acquisition.describe_supplied_texts(records)
+        if supplied_texts:
+            override_status = dict(override_status, supplied_texts=supplied_texts)
         # The views of the outputs are advisory: they never change readiness, the obligations or the next action.
         advisories = find_view_advisories(store, snapshot["revision"])
         if "problem" in records.get("workspace", {}):
@@ -717,7 +802,7 @@ def status_report(store, *, counters=False):
             if counters:
                 result['evaluation'] = dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3),
                                             retention=evaluation.retention_report())
-            result = annotate_review_obligations(records, evaluation, result)
+            result = annotate_review_obligations(records, evaluation, result, context_failures=context_failures)
             if result['next'] is None:
                 result['next'] = export_required
             upcoming = result['next']
@@ -834,7 +919,8 @@ def status_report(store, *, counters=False):
                 if study and study["stage"] == "evaluate" and wait is not None:
                     result["managed_wait"] = dict(wait, workflow="manuscript-review")
                     result["next"] = wait
-        return dict(annotate_review_obligations(records, evaluation, result), **override_status)
+        return dict(annotate_review_obligations(
+            records, evaluation, result, context_failures=context_failures), **override_status)
 
 
 def build_gate_report(records, artifacts, action, revision):

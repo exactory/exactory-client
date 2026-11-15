@@ -206,9 +206,10 @@ class StopProcessTests(unittest.TestCase):
         last = json.loads(out.splitlines()[-1])
         self.assertEqual((last['state'], last['code'], last['stop_class']), ('stop','review_chain_stopped','requested'))
         records = self.store.snapshot()['records']
-        self.assertEqual(next(iter(records['review_stop'].values()))['origin'], 'signal')
+        requested = next(iter(records['review_stop'].values()))
+        self.assertEqual(requested['origin'], 'signal')
         self.assertIn('call', records['review_attempt'])
-        self.assertNotIn('review_series_stop', records)
+        stops.assert_requested_ending(self, records, last, requested['id'])
         driver = next(iter(records['review_series_run'].values()))
         self.assertEqual(driver['ended']['stop_id'], last['stop_id'])
 
@@ -258,15 +259,25 @@ class StopProcessTests(unittest.TestCase):
         self.await_file('one-started', processes[0])
         self.await_file('two-started', processes[1])
         stopped = self.case.stop(scope='store')
+        receipts = []
         for process in processes:
             out, err = process.communicate(timeout=20)
             self.assertEqual(process.returncode, 3, out + err)
-            self.assertEqual(json.loads(out.splitlines()[-1])['stop_id'], stopped['id'])
+            last = json.loads(out.splitlines()[-1])
+            self.assertEqual(last['stop_id'], stopped['id'])
+            receipts.append(stops.assert_requested_ending(
+                self, self.store.snapshot()['records'], last, stopped['id']))
             self.assertTrue(any(json.loads(line).get('error', {}).get('code') == 'stale_revision'
                                 for line in out.splitlines()), out)
         self.assertEqual(len(stopped['call_states']), 2)
         self.assertTrue(all(row['state'] == 'settled' for row in stopped['call_states']))
-        self.assertNotIn('review_series_stop', self.store.snapshot()['records'])
+        stored = {receipt['id'] for receipt in receipts if receipt['place'] == 'store'}
+        workspace = {receipt['path'] for receipt in receipts if receipt['place'] == 'workspace'}
+        self.assertEqual(set(self.store.snapshot()['records'].get('review_series_stop', {})), stored)
+        retained_files = {path.relative_to(self.root).as_posix()
+                          for path in (self.root / '.exactory/series-endings').glob('*.json')}
+        self.assertEqual(retained_files, workspace)
+        self.assertEqual(len(stored) + len(workspace), len(processes))
 
     def test_twenty_minute_waiting_driver_acknowledges_within_ten_seconds(self):
         process = self.launch('series-wait')
@@ -276,7 +287,9 @@ class StopProcessTests(unittest.TestCase):
         out, err = process.communicate(timeout=10)
         self.assertEqual(process.returncode, 3, out + err)
         self.assertLess(time.monotonic() - started, 10)
-        self.assertEqual(json.loads(out.splitlines()[-1])['stop_id'], stopped['id'])
+        last = json.loads(out.splitlines()[-1])
+        self.assertEqual(last['stop_id'], stopped['id'])
+        stops.assert_requested_ending(self, self.store.snapshot()['records'], last, stopped['id'])
         self.case.release()
 
     def test_signal_during_start_transaction_records_boundary_after_rollback(self):
@@ -285,8 +298,11 @@ class StopProcessTests(unittest.TestCase):
         self.assertEqual(process.returncode, 3, out + err)
         records = self.store.snapshot()['records']
         self.assertNotIn('call', records.get('review_invocation', {}))
-        self.assertEqual(next(iter(records['review_stop'].values()))['origin'], 'signal')
-        self.assertEqual(json.loads(out.splitlines()[-1])['code'], 'review_chain_stopped')
+        requested = next(iter(records['review_stop'].values()))
+        self.assertEqual(requested['origin'], 'signal')
+        last = json.loads(out.splitlines()[-1])
+        self.assertEqual(last['code'], 'review_chain_stopped')
+        stops.assert_requested_ending(self, records, last, requested['id'])
 
     def test_signal_after_capture_finishes_the_attempt_before_acknowledgement(self):
         process = self.launch('signal-after-capture')
@@ -295,7 +311,8 @@ class StopProcessTests(unittest.TestCase):
         records = self.store.snapshot()['records']
         self.assertEqual(records['review_attempt']['call']['status'], 'completed')
         self.assertTrue(records['review_pool_membership'][execution.identify_call('review.invoke','call')]['released'])
-        self.assertNotIn('review_series_stop', records)
+        requested = next(iter(records['review_stop'].values()))
+        stops.assert_requested_ending(self, records, json.loads(out.splitlines()[-1]), requested['id'])
 
     def test_single_waits_then_starts_before_a_chains_next_call(self):
         first = self.launch('series-queue')

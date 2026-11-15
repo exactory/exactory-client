@@ -63,7 +63,16 @@ _PUBMED_ESUMMARY_API_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esumma
 _DEFAULT_BIB_PATH = "draft/references.bib"
 _DEFAULT_REPORT_PATH = ".exactory/citation-check.json"
 _CACHE_FILE_NAME = "citation-cache.json"
-_CACHE_SCHEMA_VERSION = 2
+_CACHE_SCHEMA_VERSION = 3
+
+_CITATION_METADATA_REPAIR = (
+    ". Repair by the kind of the entry. For a work of a problem record that has a DOI or an arXiv id, capture its"
+    " registry record with acquire and export again; the export then takes the title and the names from the"
+    " registry. For a work with a url: identifier, record problem-citation-metadata from the retained evidence."
+    " For an entry of a bibliography, give the title and the names, in their order, that the registry holds for"
+    " its identifier, or cite the preprint by its arXiv identifier")
+_TITLE_MISMATCH_DETAIL = (
+    "the id resolves to a work titled '{registry_title}' but the entry gives the title '{title}'")
 
 _TIMEOUT_SECONDS = 30
 _MIN_REQUEST_INTERVAL_SECONDS = 0.6
@@ -256,8 +265,6 @@ def _extract_doi(entry: dict) -> str:
                 doi = match.group(0)
                 break
     doi = re.sub(r"^https?://(dx\.)?doi\.org/", "", doi, flags=re.IGNORECASE).strip().rstrip(".")
-    if doi.lower().startswith("10.48550/arxiv"):
-        return ""  # a pure arXiv DOI is better checked against the arXiv API
     return doi
 
 
@@ -265,7 +272,7 @@ def _extract_arxiv_id(entry: dict) -> str:
     prefix = (entry.get("archiveprefix") or "").lower()
     eprint = (entry.get("eprint") or "").strip()
     if "arxiv" in prefix and eprint:
-        return re.sub(r"v\d+$", "", eprint)
+        return eprint
     haystack = " ".join(
         entry.get(field_name, "")
         for field_name in ("eprint", "url", "doi", "journal", "note", "howpublished")
@@ -273,11 +280,11 @@ def _extract_arxiv_id(entry: dict) -> str:
     if "arxiv" in haystack.lower() or "arxiv" in prefix:
         match = _NEW_ARXIV_ID_RE.search(haystack) or _OLD_ARXIV_ID_RE.search(haystack)
         if match:
-            return match.group(1)
+            return match.group(0)
     if eprint:
         match = _NEW_ARXIV_ID_RE.fullmatch(eprint) or _OLD_ARXIV_ID_RE.fullmatch(eprint)
         if match:
-            return match.group(1)
+            return match.group(0)
     return ""
 
 
@@ -493,16 +500,17 @@ def _names_match(name_a: str, name_b: str) -> bool:
     return ratio >= _NAME_SIMILARITY_FLOOR
 
 
-def _compare_author_lists(bib_author_field: str,
+def _compare_author_lists(bib_author_field,
                           registry_authors: list[str]) -> tuple[bool, str]:
-    """Positional comparison of the bib author list against the registry's. A
+    """Compare ordered JSON names or a BibTeX author field with the registry. A
     trailing 'and others' truncation is tolerated; every listed name must match."""
     if not registry_authors:
         return True, "the registry lists no authors"
-    bib_authors = _split_bib_authors(bib_author_field)
+    structured = isinstance(bib_author_field, list)
+    bib_authors = list(bib_author_field) if structured else _split_bib_authors(bib_author_field)
     if not bib_authors:
         return False, "the entry lists no authors"
-    truncated = bib_authors[-1] == "others"
+    truncated = bib_authors[-1].strip().strip(",").strip().lower() in ("others", "et al")
     if truncated:
         bib_authors = bib_authors[:-1]
     if not truncated and len(bib_authors) != len(registry_authors):
@@ -510,8 +518,13 @@ def _compare_author_lists(bib_author_field: str,
                        f" the registry lists {len(registry_authors)}")
     if len(bib_authors) > len(registry_authors):
         return False, "the entry lists more authors than the registry record"
+    literal = not structured and bib_author_field == " and ".join(registry_authors)
     for position, (bib_name, registry_name) in enumerate(zip(bib_authors, registry_authors)):
-        if not _names_match(bib_name, registry_name):
+        matches = literal or bib_name.strip() == registry_name.strip() or _names_match(bib_name, registry_name)
+        if structured and not matches:
+            normalized = _split_bib_authors(bib_name)
+            matches = len(normalized) == 1 and _names_match(normalized[0], registry_name)
+        if not matches:
             return False, (f"author {position + 1} differs: the entry says '{bib_name}',"
                            f" the registry says '{registry_name}'")
     return True, "the authors match"
@@ -525,27 +538,22 @@ def _compare_author_lists(bib_author_field: str,
 
 
 def _normalize_crossref_work(work: dict) -> dict:
-    title = _convert_markup_to_latex((work.get("title") or [""])[0])
+    citation = providers.read_registry_citation("crossref", work)
+    title = _convert_markup_to_latex(citation["title"])
     subtitle = _convert_markup_to_latex((work.get("subtitle") or [""])[0])
     # Handbook chapters often embed "Chapter NN" in the Crossref title; papers
     # legitimately cite them without it.
     chapterless = re.sub(r"^\{?chapter\}?\s+\{?\d+\}?[:.\s]\s*", "", title, flags=re.IGNORECASE)
     titles = [t for t in (title, f"{title}: {subtitle}" if subtitle else "",
                           chapterless if chapterless != title else "") if t]
-    authors = []
-    for author in work.get("author") or []:
-        full_name = " ".join(
-            part for part in (author.get("given"), author.get("family")) if part
-        ) or author.get("name", "")
-        if full_name:
-            authors.append(full_name)
+    authors = citation["authors"]
     year = None
     for date_field in ("issued", "published-print", "published-online", "created"):
         date_parts = ((work.get(date_field) or {}).get("date-parts") or [[None]])[0]
         if date_parts and date_parts[0]:
             year = int(date_parts[0])
             break
-    return {"source": "crossref", "title": title, "registry_title": (work.get("title") or [""])[0],
+    return {"source": "crossref", "title": title, "registry_title": citation["title"],
             "titles": titles, "authors": authors,
             "year": year, "doi": work.get("DOI", ""),
             "container": _clean_field_value((work.get("container-title") or [""])[0]),
@@ -570,23 +578,12 @@ def _resolve_doi_via_crossref(doi: str) -> dict:
 
 
 def _normalize_datacite_record(attributes: dict) -> dict:
+    citation = providers.read_registry_citation("datacite", attributes)
     titles = [_convert_markup_to_latex(t["title"]) for t in attributes.get("titles") or [] if t.get("title")]
-    authors = []
-    for creator in attributes.get("creators") or []:
-        full_name = " ".join(
-            part for part in (creator.get("givenName"), creator.get("familyName")) if part
-        )
-        if not full_name:
-            full_name = creator.get("name", "")
-            if "," in full_name:
-                family, _, given = full_name.partition(",")
-                full_name = (given.strip() + " " + family.strip()).strip()
-        if full_name:
-            authors.append(full_name)
-    return {"source": "datacite", "title": titles[0] if titles else "",
-            "registry_title": next((t["title"] for t in attributes.get("titles") or [] if t.get("title")), ""),
+    return {"source": "datacite", "title": _convert_markup_to_latex(citation["title"]),
+            "registry_title": citation["title"],
             "titles": titles,
-            "authors": authors, "year": attributes.get("publicationYear"),
+            "authors": citation["authors"], "year": attributes.get("publicationYear"),
             "doi": attributes.get("doi", ""), "container": "", "type": ""}
 
 
@@ -621,9 +618,8 @@ _ARXIV_TAG_PREFIX = "{http://arxiv.org/schemas/atom}"
 
 
 def _normalize_arxiv_entry(entry_element) -> dict:
-    title = entry_element.findtext(f"{_ATOM_TAG_PREFIX}title") or ""
-    authors = [_clean_field_value(author.findtext(f"{_ATOM_TAG_PREFIX}name") or "")
-               for author in entry_element.findall(f"{_ATOM_TAG_PREFIX}author")]
+    citation = providers.read_registry_citation("arxiv", entry_element)
+    title, authors = citation["title"], citation["authors"]
     published = entry_element.findtext(f"{_ATOM_TAG_PREFIX}published") or ""
     entry_id = entry_element.findtext(f"{_ATOM_TAG_PREFIX}id") or ""
     id_match = re.search(r"abs/(\S+?)(v\d+)?$", entry_id)
@@ -780,12 +776,11 @@ def _compare_entry_with_meta(entry: dict, meta: dict) -> dict:
     title = entry.get("title", "")
     if title and not _titles_match(title, meta.get("titles") or [meta.get("title", "")]):
         return {"status": "title_mismatch",
-                "detail": f"the id resolves to a work titled '{meta.get('registry_title', meta.get('title'))}'"
-                          f" but the entry gives the title '{title}'. Find out which work the citation"
-                          " means, correct its id or its title, and run the check again."}
-    authors_ok, why = _compare_author_lists(entry.get("author", ""), meta.get("authors") or [])
+                "detail": _TITLE_MISMATCH_DETAIL.format(
+                    registry_title=meta.get("registry_title", meta.get("title")), title=title) + _CITATION_METADATA_REPAIR}
+    authors_ok, why = _compare_author_lists(entry.get("_authors", entry.get("author", "")), meta.get("authors") or [])
     if not authors_ok:
-        return {"status": "author_mismatch", "detail": why}
+        return {"status": "author_mismatch", "detail": why + _CITATION_METADATA_REPAIR}
     year_match = re.search(r"\d{4}", entry.get("year", "") or "")
     if year_match and meta.get("year") and int(year_match.group(0)) != int(meta["year"]):
         return {"status": "year_mismatch",
@@ -1077,6 +1072,8 @@ def _read_refs_json_entries(path: Path, text: str) -> list[dict]:
             "doi": (bibliography.get("doi") or "").strip(),
             "pmid": str(bibliography.get("pmid") or "").strip(),
         }
+        if isinstance(bibliography.get("authors"), list):
+            entry["_authors"] = bibliography["authors"]
         arxiv_id = (bibliography.get("arxivId") or "").strip()
         if arxiv_id:
             entry["eprint"] = arxiv_id

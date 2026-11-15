@@ -162,18 +162,22 @@ the stale route and continue the slot through a context repair. Then run
 `review-series` with the new assignment. Exit status 3 with a
 `stop` on the last line: a typed limit or refusal with its `code` and
 `details`; the harness cannot continue the chain. `review_slot_exhausted`
-(two outputs of the head were refused; the assignment is exhausted) is such a
-stop for the readiness review, with no command: a `result` slot keeps its bar
-continuity, and `review-assignment` of a new reviewer is refused
-(`review_slots_fixed`); the CLI reference states the roles whose plan is a
-handoff with a command. A refused action of the
+(the turn position is exhausted: no correction and no replacement that carries
+a refusal is admissible) ends the command as a handoff, not as a stop. For the
+readiness review, a `result` slot, `details.step` is `review-assignment` of a
+context repair with the member `exhaustion`. Probe the new route after the
+last refusal, then take the step; the CLI reference states the step of each
+role ([Review chains and `review-series`](../../docs/research-cli.md#review-chains-and-review-series)).
+A refused action of the
 chain ends the command this way with the refusal's code (for example a
 `review_parts_*` code); when the refusal recorded an output refusal, or its
 code is `review_invocation_pending`, the command plans again instead.
 Read `code`, `details` and `stop_class`. When `stop_class` is
 `harness_defect` and the last line carries `stop_id`, request the automatic
 pass with that `stop_id`, as [The automatic pass](../../docs/research-workflow.md#the-automatic-pass)
-describes. A last line with `stop_record_error` carries no `stop_id`. The stop
+describes. When the step of the last line names `record-check` and not
+`gate-auto-pass`, run `record-check` and then `review-series` again before any
+automatic pass. A last line with `stop_record_error` carries no `stop_id`. The stop
 keeps its class, and [The class of a stop](../../docs/research-workflow.md#the-class-of-a-stop)
 names its next action. When the CLI reference names a step for that code,
 take it. Otherwise report the stop with its code and details in your summary

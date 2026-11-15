@@ -2,7 +2,7 @@
 
 import copy
 import json
-from unittest import mock
+from unittest import TestCase, mock
 
 from codex_route_fixtures import record_codex_route
 from research_harness import output_views, review_protocol, review_staged_protocol
@@ -140,3 +140,21 @@ class StagedComputationOutputTests(StagedOutputCase, ProblemToolsCase, ProblemDe
         for key in ('openness_searches', 'readings', 'computations', 'formal_checks', 'attempt', 'results'):
             self.assertTrue(packet['problem_evidence'][key], key)
         self.assert_render_matches_full_state(controller)
+
+
+class StagedProfileTests(TestCase):
+    def test_profile_estimates_include_the_frozen_frame_capacity_parameters(self):
+        route = dict(configuration=dict(timeout_seconds=600, max_output_tokens=128000))
+        frame = dict(subject=dict(kind='problem'),
+            route_capacity=dict(protocol='exactory-route-capacity-notice-v1',
+            kind='request', output_tokens=128000, answer_bound=15000))
+        frozen = copy.deepcopy(frame)
+        plain = review_staged_protocol.build_profiles({}, None, route,
+            dict(role='result', manifest=dict(frame={})))
+        profiled = review_staged_protocol.build_profiles({}, None, route,
+            dict(role='result', manifest=dict(frame=frame)))
+        self.assertEqual(set(profiled), set(plain))
+        for kind, profile in profiled.items():
+            with self.subTest(kind=kind):
+                self.assertGreater(profile['context_characters'], plain[kind]['context_characters'])
+        self.assertEqual(frame, frozen)

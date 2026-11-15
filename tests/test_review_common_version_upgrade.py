@@ -110,7 +110,7 @@ class ProblemSessionUpgradeTests(unittest.TestCase):
         assert_verified(self, case, previous)
         assert_verified(self, case, continued)
         assert_prompt_version(self, previous, 2)
-        assert_prompt_version(self, continued, protocol.COMMON_VERSION)
+        assert_prompt_version(self, continued, 2)
         self.assertGreater(protocol.COMMON_VERSION, 2)
         records = case.read_records()
         self.assertEqual(records['review_assignment'][previous['id']],
@@ -192,9 +192,7 @@ class PartsSessionUpgradeTests(parts_fixtures.ResultPartsCase):
         self.record_final(final)
         for assignment in [first] + remaining + [final]:
             assert_verified(self, self.case, assignment)
-            assert_prompt_version(self, assignment,
-                                  2 if assignment['id'] == first['id']
-                                  else protocol.COMMON_VERSION)
+            assert_prompt_version(self, assignment, 2)
         self.assertEqual(self.request(first), request)
         self.assertEqual(
             self.case.read_records()['review_assignment'][first['id']], frozen)
@@ -229,10 +227,10 @@ class OpennessSessionUpgradeTests(unittest.TestCase):
             records, case.artifacts, turns[-1])
         self.assertEqual([receipt['assignment_id'] for receipt in receipts],
                          [assignment['id'] for assignment in turns])
-        for index, assignment in enumerate(turns):
+        for assignment in turns:
             assert_verified(self, case, assignment)
             assert_prompt_version(
-                self, assignment, 2 if index == 0 else protocol.COMMON_VERSION)
+                self, assignment, 2)
         for kind in ('review_assignment', 'review_attempt'):
             for identifier, saved in frozen[kind].items():
                 self.assertEqual(records[kind][identifier], saved)
@@ -292,7 +290,7 @@ class StagedEpochUpgradeTests(parts_fixtures.ResultPartsCase):
             self.assertEqual(digest(self.request(child)),
                              child['planned_request_digest'])
         assert_prompt_version(self, old_child, 2)
-        assert_prompt_version(self, new_child, protocol.COMMON_VERSION)
+        assert_prompt_version(self, new_child, 2)
         self.assertEqual(self.case.read_records()['review_task'][task_id],
                          planned)
         self.assertEqual(self.case.artifacts.read(planned['request']),

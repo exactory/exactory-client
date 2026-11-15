@@ -20,6 +20,11 @@ from .errors import ResearchError
 from .http import safe_url
 
 
+ARXIV_VERSION_LINK_KIND = "arxiv_version"
+DATACITE_DOI_LINK_KIND = "datacite_doi"
+SHARED_DOI_LINK_KIND = "shared_doi"
+
+
 _ARXIV = re.compile(r"(?P<base>(?:[0-9]{2}(?:0[1-9]|1[0-2])\.[0-9]{4,5}|(?P<archive>[a-z-]+)(?:\.[A-Z]{2})?/[0-9]{2}(?:0[1-9]|1[0-2])[0-9]{3}))(?P<version>v[1-9][0-9]*)?\Z")
 # The hyphenated archives that arXiv's taxonomy definitions list as begun before
 # the identifier scheme changed in April 2007, keyed by the name without hyphen.
@@ -141,7 +146,7 @@ def find_work_family_link(records, work_id, version_id):
            for identifier in (work_id, version_id)):
         return None
     if work_id.startswith("arxiv:") and work_id == target_family:
-        return {"kind": "arxiv_version", "identifier": work_id}
+        return {"kind": ARXIV_VERSION_LINK_KIND, "identifier": work_id}
 
     author_lists = []
     for record in (work, version):
@@ -157,11 +162,11 @@ def find_work_family_link(records, work_id, version_id):
     for identifier in dois:
         if (version_id.startswith("arxiv:") and resolve_arxiv_family(identifier) == target_family
                 and find_family_candidates(records, target_family).issubset(linked_families)):
-            return {"kind": "datacite_doi", "identifier": identifier}
+            return {"kind": DATACITE_DOI_LINK_KIND, "identifier": identifier}
     version_dois = {version_id, *version.get("aliases", [])}
     for identifier in dois:
         if identifier in version_dois:
-            return {"kind": "shared_doi", "identifier": identifier}
+            return {"kind": SHARED_DOI_LINK_KIND, "identifier": identifier}
     return None
 
 

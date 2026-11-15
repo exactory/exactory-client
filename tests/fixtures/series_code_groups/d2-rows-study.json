@@ -1,0 +1,134 @@
+{
+  "stored_state": {
+    "members": {
+      "development_question_repeated": {
+        "research_harness/development.py:_inheritance#1": [
+          "content"
+        ]
+      },
+      "execution_output_mismatch": {
+        "research_harness/execution_outputs.py:_inventory#1": [
+          "content"
+        ],
+        "research_harness/execution_outputs.py:_inventory#2": [
+          "content"
+        ],
+        "research_harness/execution_outputs.py:validate_observed_outputs#1": [
+          "content"
+        ],
+        "research_harness/execution_outputs.py:validate_observed_outputs#2": [
+          "content"
+        ],
+        "research_harness/execution_outputs.py:validate_observed_outputs#3": [
+          "content"
+        ],
+        "research_harness/execution_outputs.py:validate_observed_outputs#4": [
+          "content"
+        ],
+        "research_harness/execution_outputs.py:validate_observed_outputs#5": [
+          "content"
+        ]
+      },
+      "failure_scope_mismatch": {
+        "research_harness/development.py:_assessed_checks#1": [
+          "content"
+        ]
+      },
+      "inheritance_assumptions_missing": {
+        "research_harness/development.py:_build_assessment_plan#1": [
+          "content"
+        ],
+        "research_harness/development.py:_inheritance#1": [
+          "content"
+        ],
+        "research_harness/development.py:_unresolved_plan_sources#1": [
+          "content"
+        ]
+      },
+      "inheritance_mismatch": {
+        "research_harness/development.py:_inheritance#1": [
+          "content"
+        ],
+        "research_harness/development.py:_inheritance#2": [
+          "content"
+        ]
+      },
+      "inheritance_missing": {
+        "research_harness/development.py:_assess#1": [
+          "content"
+        ],
+        "research_harness/development.py:_inheritance#1": [
+          "content"
+        ]
+      },
+      "inheritance_refresh_evidence_changed": {
+        "research_harness/development.py:_build_assessment_plan#1": [
+          "content"
+        ]
+      },
+      "inheritance_refresh_mismatch": {
+        "research_harness/development.py:_build_assessment_plan#1": [
+          "content"
+        ],
+        "research_harness/development.py:_build_assessment_plan#2": [
+          "content"
+        ],
+        "research_harness/development.py:_build_assessment_plan#3": [
+          "content"
+        ]
+      },
+      "inheritance_result_mismatch": {
+        "research_harness/development.py:_build_assessment_plan#1": [
+          "content"
+        ],
+        "research_harness/development.py:_inheritance#1": [
+          "content"
+        ]
+      },
+      "invalid_source_deferral": {
+        "research_harness/source_deferrals.py:_check_artifact#1": [
+          "content"
+        ]
+      },
+      "lineage_cycle": {
+        "research_harness/development.py:_Context.assess_record#1": [
+          "content"
+        ]
+      },
+      "objective_scope_mismatch": {
+        "research_harness/development.py:_scope#1": [
+          "content"
+        ],
+        "research_harness/development.py:_scope#2": [
+          "content"
+        ]
+      },
+      "outside_reading_unit": {
+        "research_harness/reading.py:_assess#1": [
+          "content"
+        ]
+      },
+      "unknown_cycle": {
+        "research_harness/development.py:_Evidence.one#1": [
+          "content"
+        ],
+        "research_harness/development.py:_assess#1": [
+          "content"
+        ],
+        "research_harness/development.py:_development#1": [
+          "content"
+        ]
+      },
+      "unknown_review": {
+        "research_harness/development.py:assess_readiness#1": [
+          "content"
+        ]
+      },
+      "unknown_review_assignment": {
+        "research_harness/development.py:_Context.verify_assignment_candidate#1": [
+          "content"
+        ]
+      }
+    }
+  }
+}

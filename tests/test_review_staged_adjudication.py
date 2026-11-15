@@ -45,6 +45,10 @@ class StagedAdjudicationTests(unittest.TestCase):
         self.state = dict(ready=True, role='adjudicator', reviewer_id=self.assignment['reviewer_id'], dossier_id=None,
             obligations=[], output={'terminal': 'raw authorization'}, output_digest=digest('raw'),
             effective=self.effective, attempt_id='terminal')
+        self.case.put('review_attempt', 'terminal', dict(id='terminal', assignment_id=self.assignment['id'],
+            status='completed', origin='instrumented',
+            output=protocol._put_json(self.artifacts, self.state['output']),
+            recorded_revision=self.case.store.revision + 1))
         self.assignment = dict(self.assignment, staged_review=dict(kind='controller', epoch_id='focused-epoch'))
         self.case.put('review_assignment', self.assignment['id'], self.assignment)
         self.records = self.case.read_records()

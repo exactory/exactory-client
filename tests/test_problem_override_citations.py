@@ -156,7 +156,7 @@ class OverrideCitationTests(OverrideCommandMixin, ProblemCase):
         render_all(self.store)
         self.assertTrue(promoted_dir.is_dir())
         self.assertTrue(directory.is_dir())
-        self.assertEqual(promoted["schema"], "exactory-problem-export-v3")
+        self.assertEqual(promoted["schema"], "exactory-problem-export-v4")
 
     def test_search_order_uses_disposition_formulation_time_then_work_id(self):
         for number in range(1, 8):
@@ -453,7 +453,7 @@ class OverrideCitationTests(OverrideCommandMixin, ProblemCase):
         self.add_reading(1)
         self.record_value()
         manifest, directory, _ = self.export_citations()
-        self.assertEqual(manifest["schema"], "exactory-problem-export-v3")
+        self.assertEqual(manifest["schema"], "exactory-problem-export-v4")
         original = {path.name: path.read_bytes() for path in directory.iterdir()}
         for name, spec in [("null-spec", None), ("array-spec", []), ("extra-field", {"extra": []})]:
             with self.subTest(name=name):
@@ -486,7 +486,7 @@ class OverrideCitationTests(OverrideCommandMixin, ProblemCase):
         old_digest = problem_delivery.compute_export_digest(files)
         result, directory, citations = self.export_citations()
         self.assertEqual(len(citations), 2)
-        self.assertEqual(result["schema"], "exactory-problem-export-v3")
+        self.assertEqual(result["schema"], "exactory-problem-export-v4")
         render_all(self.store)
         self.assertEqual({path.name: path.read_bytes() for path in stored.iterdir()}, files)
         self.assertEqual(problem_delivery.compute_export_digest(files), old_digest)

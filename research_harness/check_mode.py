@@ -87,6 +87,9 @@ class _CheckingStore:
         response = {"check": "accepted", "revision": self.revision, "recorded": False,
                               "operation": operation, "payload_digest": _digest(encoded_payload),
                               "snapshot_digest": snapshot_digest, "artifact_digests": self._artifacts.read_digests()}
+        if operation == 'review.assignment' and 'capacity_plan' in result:
+            from .review_route_capacity import describe_assignment_capacity
+            response.update(describe_assignment_capacity(self._records, self._artifacts, result))
         if operation == "literature.search":
             response.update(result)
         if operation == "research.gate_override":
@@ -95,6 +98,9 @@ class _CheckingStore:
                 read_unrecorded_overrides(self.root) or [], result, self._artifacts)
             if authorities:
                 response["write_authorities"] = authorities
+        if operation == 'review.assignment' and 'reading_chain_admission' in result:
+            response.update({key: result[key] for key in
+                ('reading_chain_admission', 'capacity_forecast', 'capacity_warning', 'diagnostics')})
         if operation == 'review.assignment' and result.get('packet') is not None:
             from .review_single_request import describe_assignment_delivery
             response['review_delivery'] = describe_assignment_delivery(self._records, self._artifacts, result)

@@ -146,7 +146,8 @@ class NativeDiagnosticTests(unittest.TestCase):
                 self.assertEqual(refusal['details']['path'], path)
                 if kind == 'openness':
                     with self.assertRaises(ResearchError) as final:
-                        openness_reading.validate_turn_output(dict(packet, reading_record={}), output)
+                        openness_reading.validate_turn_output(
+                            dict(packet, reading_record={'protocol': openness_reading.PROTOCOL_V5}), output)
                     self.assertEqual(final.exception.details['path'], path)
         for kind in ('result', 'recovery'):
             native_review.validate_output({'kind': kind}, {'decision': 'reject', 'reason': 'Cannot approve.'})

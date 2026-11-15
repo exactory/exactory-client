@@ -15,10 +15,46 @@ SOURCE_LINK_ACCEPTED_FORMS_NOTICE = (
     'Cite the delivered bytes by their artifact descriptor, or use a source link into a full text that this chain delivered.'
 )
 
+# Only output values, frozen packet values, and measurements computed from them belong here.
+# In particular, an existing review's scientific text is never a notice detail.
+_SHAPE_NOTICE_FIELDS = ('expected_type', 'received_type', 'missing_fields', 'unexpected_fields')
+_TEXT_NOTICE_FIELDS = ('characters', 'minimum_characters', 'maximum_characters', 'normalized_characters')
+_DELIVERY_NOTICE_FIELDS = ('record_kind', 'id', 'digest', 'sha256', 'locator')
+CONTRACT_CHECKS = {
+    'evidence.shape': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'evidence.fulltext': {'notice_fields': ('version_id', 'source_id', 'artifact', 'delivered_depth', 'notice')},
+    'evidence.locator': {'notice_fields': _SHAPE_NOTICE_FIELDS + ('part_relative_span',)},
+    'review.shape': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'review.value': {'notice_fields': _SHAPE_NOTICE_FIELDS + _TEXT_NOTICE_FIELDS +
+                     ('required', 'bar_ids', 'candidate_id', 'candidate_ids', 'items', 'minimum_items')},
+    'review.objections': {'notice_fields': _SHAPE_NOTICE_FIELDS + ('objection_id', 'candidate_ids')},
+    'review.reassessment': {'notice_fields': _SHAPE_NOTICE_FIELDS + _DELIVERY_NOTICE_FIELDS},
+    'review.support': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'review.source_requests': {'notice_fields': _SHAPE_NOTICE_FIELDS + _TEXT_NOTICE_FIELDS +
+                              ('request_id', 'page', 'minimum_page', 'maximum_page', 'page_size', 'total')},
+    'review.evidence_delivery': {'notice_fields': _DELIVERY_NOTICE_FIELDS},
+    'review.staged_final': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'review.staged_page': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'review.staged_task': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'adjudication.shape': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'adjudication.reassessment': {'notice_fields': _SHAPE_NOTICE_FIELDS + _DELIVERY_NOTICE_FIELDS},
+    'adjudication.evidence_delivery': {'notice_fields': _DELIVERY_NOTICE_FIELDS},
+    'verification.parts': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'native.output': {'notice_fields': _SHAPE_NOTICE_FIELDS + _TEXT_NOTICE_FIELDS + ('request_id',)},
+    'openness.finding': {'notice_fields': _SHAPE_NOTICE_FIELDS + ('rule', 'forecast')},
+}
+
+
+def require_contract_check(name):
+    """Reject an unregistered attribution before it can produce a deliverable refusal."""
+    CONTRACT_CHECKS[name]
+    return name
+
 
 @contextmanager
 def contract_check(name):
     """Identify the pure validator, rather than treating a shared error code as eligibility."""
+    require_contract_check(name)
     try:
         yield
     except ResearchError as error:
@@ -102,7 +138,7 @@ def validate_evidence_contract(records, artifacts, values, *, required=True, pac
             read_locator(artifacts, link['artifact'], link['locator'], capture=capture, part=part)
         except ResearchError as error:
             if error.code == 'invalid_locator':
-                error.contract_check = 'evidence.locator'
+                error.contract_check = require_contract_check('evidence.locator')
             else:
                 error.contract_external = True
             raise
@@ -131,13 +167,14 @@ def validate_source_links_contract(records, output, packets):
     participate in this output refusal. Delivery depth comes from the frozen chain.
     """
     from .reading import validate_fulltext_link
+    from .review_delivered_evidence import resolve_part_source_link
     for path, values in evidence_arrays(output, with_paths=True):
         for index, reference in enumerate(values):
             if reference.get('kind') != 'source':
                 continue
             link = reference['link']
             try:
-                validate_fulltext_link(records, link)
+                validate_fulltext_link(records, resolve_part_source_link(link, packets))
             except ResearchError as error:
                 if error.code in ('unknown_work', 'missing_version'):
                     # Catalog prerequisites cannot hide another pure contract
@@ -158,7 +195,7 @@ def validate_source_links_contract(records, output, packets):
                               == link['artifact']['sha256']]
                 error.details.update(path=path + '/' + str(index),
                     delivered_depth=depths[0] if depths else None, notice=SOURCE_LINK_ACCEPTED_FORMS_NOTICE)
-                error.contract_check = 'evidence.fulltext'
+                error.contract_check = require_contract_check('evidence.fulltext')
                 raise
 
 
@@ -267,6 +304,11 @@ def classify_observed_output(records, artifacts, attempt_id):
     try:
         output = protocol.read_raw_observation(records, artifacts, attempt_id)['raw_output']
         packet = json.loads(artifacts.read(assignment['packet']))
+        from .review_handles import expand_handles, is_material_output, validate_material
+        output = expand_handles(packet, output)
+        if is_material_output(packet, output):
+            validate_material(packet, output)
+            return None
         staged = packet.get('staged_review')
         if staged is not None:
             from .review_staged import validate_task_output
@@ -296,17 +338,20 @@ def classify_observed_output(records, artifacts, attempt_id):
             with contract_check('verification.parts'):
                 validate_verification_final(records, artifacts, assignment, output, attempt=attempt)
         elif assignment['role'] == 'native_math':
-            from .native_review import validate_output
+            from .native_review import uses_finding_contract, validate_finding, validate_output
             from .openness_reading import (INVALID_RESPONSE, PASSAGE_PROGRESS_ERR_MSG, find_stage,
                                            has_deliverable_passage, validate_turn_output)
             with contract_check('native.output'):
                 packet = json.loads(artifacts.read(assignment['packet']))
                 if find_stage(packet) is None:
-                    validate_output(packet['native'], output)
+                    if uses_finding_contract(assignment):
+                        validate_finding(packet, output)
+                    else:
+                        validate_output(packet['native'], output)
                 else:
                     validate_turn_output(packet, output)
             # Reading the bound bodies stays outside the contract check: an unavailable body is not an output failure.
-            if not has_deliverable_passage(records, artifacts, packet, output):
+            if not has_deliverable_passage(records, artifacts, packet, output, assignment=assignment, attempt=attempt):
                 with contract_check('native.output'):
                     raise ResearchError(INVALID_RESPONSE, PASSAGE_PROGRESS_ERR_MSG, {'path': '/passage_requests'})
     except ResearchError as error:

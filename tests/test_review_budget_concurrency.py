@@ -30,7 +30,7 @@ while not (root / 'gate').exists(): time.sleep(.005)
 for retry in range(20):
     try:
         if mode == 'ordinary':
-            protocol._invoke_once(store, dict(id=mode), 'review.invoke', start, finish,
+            protocol._invoke_once(store, dict(id=mode, assignment_id='assignment'), 'review.invoke', start, finish,
                 expected_revision=store.revision, request_id=mode, credential=None)
         else:
             execution.reserve_task(store, payload, request_id=mode)
@@ -73,6 +73,12 @@ else: raise RuntimeError('Admission did not settle')
         self.assertEqual(sum(row.get('admitted', False) for row in results), 1, results)
         self.assertEqual([row['error'] for row in results if 'error' in row], ['review_budget_exhausted'])
         self.assertEqual(self.read_budget()['charged_calls'], 2)
+
+    def test_ordinary_process_can_spend_the_last_admission(self):
+        self.set_budget(1)
+        results = self.race((('ordinary', 'a'),))
+        self.assertEqual(results, [{'admitted': True}])
+        self.assertEqual(self.read_budget()['charged_calls'], 1)
 
     def test_two_processes_compete_for_the_last_staged_admission(self):
         self.check_last_call((('staged-a', 'a'), ('staged-b', 'b')))

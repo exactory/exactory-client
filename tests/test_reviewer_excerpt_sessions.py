@@ -400,10 +400,12 @@ class EarlierProblemBarSessionTests(unittest.TestCase):
         records = case.read_records()
         earlier, current = (records['review_assignment'][identifier] for identifier in ('bar-first-2', 'bar-second-2'))
         bar_prompt = protocol.canonical_prompt('bar', orchestration='problem_creation')
-        self.assertEqual(earlier['prompt'], bar_prompt)
-        self.assertEqual(current['prompt'],
+        earlier_base = protocol.prompt_paragraphs.strip_prompt_paragraphs(earlier['prompt'], 'bar')
+        current_base = protocol.prompt_paragraphs.strip_prompt_paragraphs(current['prompt'], 'bar')
+        self.assertEqual(earlier_base, bar_prompt)
+        self.assertEqual(current_base,
                          protocol.canonical_prompt('bar', orchestration='problem_creation', excerpts=True))
-        self.assertEqual(current['prompt']['template_id'], bar_prompt['template_id'])
+        self.assertEqual(current_base['template_id'], bar_prompt['template_id'])
         for assignment in (earlier, current):
             state = protocol.assignment_state(records, case.artifacts, assignment['id'])
             self.assertTrue(state['ready'], state['obligations'])

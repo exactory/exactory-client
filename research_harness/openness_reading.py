@@ -24,6 +24,7 @@ has its own protocol. Both math and v5 problem chains rebuild each turn's record
 import copy
 import hashlib
 import json
+import math
 
 from . import review_excerpts
 from . import review_transport as transport
@@ -38,11 +39,14 @@ PROTOCOL_V2 = 'exactory-openness-reading-v2'
 PROTOCOL = 'exactory-openness-reading-v3'
 PROTOCOL_V4 = 'exactory-openness-reading-v4'
 PROTOCOL_V5 = 'exactory-openness-reading-v5'
+PROTOCOL_V6 = 'exactory-openness-reading-v6'
+# Version the added plan metadata at export so stored v6 packets keep their plans and requests.
+FAMILY_READING_PLAN_VERSION = 1
 # The protocol of a math-solver result review's chain: the units of v3 in the math order, no statement record, and a
 # final passage request that must deliver characters.
 MATH_PROTOCOL = 'exactory-openness-reading-math-v1'
 # The protocols whose units carry the identities of review_excerpts.IDENTITY_FIELDS.
-GENERIC_UNIT_PROTOCOLS = (PROTOCOL, PROTOCOL_V4, PROTOCOL_V5, MATH_PROTOCOL)
+GENERIC_UNIT_PROTOCOLS = (PROTOCOL, PROTOCOL_V4, PROTOCOL_V5, PROTOCOL_V6, MATH_PROTOCOL)
 TURN_KEY = 'reading_turn'
 RECORD_KEY = 'reading_record'
 STAGES = ('reading', 'final')
@@ -63,10 +67,68 @@ SEARCH_DELIVERY_NOTE = ('Exact original search rebuilt from authenticated readin
 # After the full texts that text_delivery_priority lists, the final turn withholds the complete bodies of these kinds
 # in this order: the other full texts, captured search responses, reading records and search records.
 WITHHOLDING_ORDER = ('fulltext', 'search_response', 'reading', 'literature_search')
+V6_WITHHOLDING_ORDER = ('fulltext', 'result_text', 'search_response', 'reading', 'accepted_result', 'literature_search')
 # The fields that the compact reading record leaves out of a checked excerpt or a passage answer: the source
 # descriptor moves to the record's sources, the locator gives start, end and sha256, and the request gives its
 # identity and id.
 VERBOSE_ENTRY_KEYS = ('artifact_descriptor', 'locator', 'request', 'note', 'checked', 'reading_credit')
+
+# Admission policy for the v6 builder. These constants do not change released protocols.
+RECORD_ALLOWANCE_FLOOR = 300000
+RESERVED_IDENTIFIER_CHARACTERS = 120
+PROJECTION_STOP = 'review_chain_projection_over_limit'
+IDENTIFIER_LIMIT_MESSAGE = ('This identifier is longer than 120 characters. A chain of exactory-openness-reading-v6 '
+                            'reserves 120 characters for each assignment id and each attempt id. Give an id of at '
+                            'most 120 characters.')
+PACKET_OUTDATED_MESSAGE = ('A new problem openness review needs a packet whose minimum has schema_version 2 and whose '
+                           'scientific_context holds minimum_gaps and audit_forecast. This packet lacks them. Export a '
+                           'new packet with export --kind problem-openness, then record the first assignment over it.')
+PROJECTION_STOP_MESSAGE = ('The harness stopped this reading chain before its next reviewer call, for the size of '
+                           'its input. details.reason is below_floor when a finite projection of the chain fails '
+                           'its admission, and no_enforceable_bound for every other stop of this kind. details '
+                           'holds the measurements of the request and of the projection. When details.estimate is '
+                           'true, the stop rests on an estimate of the final input. details.unbounded_kinds names '
+                           'the kinds of record entry without a bound, and details.decision states what the owner '
+                           'decides and the steps of each answer.')
+PROBLEM_PROJECTION_DECISION = ('Whether this review waits for a reading protocol that bounds the record of its chain, '
+                               'or runs over a packet that binds less material.')
+MATH_PROJECTION_DECISION = ('Whether this chain continues to its final turn, waits for the protocol reading-math-v2, '
+                            'or runs over a packet that binds less material.')
+WAIT_PROBLEM_ANSWER = 'Wait for a reading protocol that bounds the record'
+WAIT_MATH_ANSWER = 'Wait for reading-math-v2'
+SMALLER_PACKET_ANSWER = 'Run over a smaller packet'
+CONTINUE_MATH_ANSWER = 'Continue this chain to its final turn'
+# Stable review-context reason marker; the owner's actual instruction remains in its evidence artifact.
+MATH_CONTINUATION_REASON = 'reading_chain_continue_to_final'
+FORECAST_NO_BOUND_MESSAGE = ('The sizes of later requests in this forecast are estimates. For a math-solver chain '
+                             'with two recorded turns or more, an estimate above the character limit of the route '
+                             'stops the next call, unless a recorded instruction of the owner continues the chain. '
+                             'The limit of each request applies in every case.')
+FINITE_PROJECTION_MESSAGE = ('The record allowance of this chain bounds every later request at '
+                             'projected_input_characters. The token count of that input is an estimate.')
+CONTINUE_TO_V7_MESSAGE = ('Read the remaining units in this chain. When its final turn does not fit, a chain of '
+                          'exactory-openness-reading-v7, in a release that holds that protocol, carries the verified '
+                          'turns of this chain.')
+EXPORT_TO_V7_MESSAGE = ('Export a new packet in a release that holds exactory-openness-reading-v7. Its chain carries '
+                        'the verified turns of this chain and reads only what remains.')
+
+# AR18.2: None means that validation and retention impose no bound. A symbolic bound is fixed by the first packet.
+LEGACY_ENTRY_BOUNDS = {
+    'verified_excerpt': dict(count=10000, serialized_characters='bound_unit_and_checked_excerpt'),
+    'unmatched_excerpt': dict(count=None, serialized_characters=None),
+    'over_allowance_excerpt': dict(count=None, serialized_characters='bound_unit_and_purpose'),
+    'delivered_passage': dict(count=100000, serialized_characters=None),
+    'undelivered_passage': dict(count=None, serialized_characters=None),
+    'turn': dict(count='planned_reading_turns_plus_100000', serialized_characters='reserved_identifiers_and_delivery_rows'),
+    'source': dict(count='plan_artifacts', serialized_characters='descriptor_and_bound_identities'),
+}
+READING_ENTRY_BOUNDS = {protocol: LEGACY_ENTRY_BOUNDS for protocol in
+                        (PROTOCOL_V1, PROTOCOL_V2, PROTOCOL, PROTOCOL_V4, PROTOCOL_V5, MATH_PROTOCOL)}
+READING_ENTRY_BOUNDS[PROTOCOL_V6] = {
+    kind: dict(count='record_total', serialized_characters='record_total')
+    if kind not in ('turn', 'source') else dict(bounds)
+    for kind, bounds in LEGACY_ENTRY_BOUNDS.items()}
+READING_ENTRY_BOUNDS[PROTOCOL_V6]['turn']['count'] = 'planned_reading_turns_plus_record_total'
 # The prompts of 0.64.2 to 0.65.1, kept for the assignments recorded with them.
 READING_PROMPT_V1 = (
     'This is one reading turn of an openness review of the exact problem statement in reading_turn.statement. The '
@@ -357,6 +419,245 @@ PROMPTS = {PROTOCOL_V1: {'reading': READING_PROMPT_V1, 'final': FINAL_PROMPT_V1}
            MATH_PROTOCOL: {'reading': MATH_READING_PROMPT, 'final': MATH_FINAL_PROMPT}}
 
 
+# The texts that exactory-openness-reading-v6 adds to the v5 prompts. A reading turn holds reading_turn with its plan
+# and no native packet; a final turn and a review of one turn hold the native packet. Each text below names the place
+# where its reader finds a fact, so that the same sentence is right in every prompt that carries it.
+V6_READING_PARAGRAPH = (
+    '\n\nThis chain runs under exactory-openness-reading-v6. The paragraphs below add to the rules above.\n\n'
+    'A full text can stand for another record of the same work. A bound search can judge a work relevant or '
+    'contradictory under an identifier whose own record has no complete full reading, for example an arXiv '
+    'identifier without a version number, or the DOI record of a paper whose arXiv version was read. When the store '
+    'holds a complete full reading of a linked version of that work, the packet can bind that reading, and this '
+    'chain then delivers the text of that version under its own version_id. Without such a reading the minimum '
+    'keeps a gap with the condition reading_missing. The harness links the two records in one of three ways: the found record is the arXiv '
+    'identifier of the read version without its version number; a DOI of the found record is the DOI that arXiv '
+    'registered for the read paper; or both records carry the same DOI. For the two DOI links it compares the author '
+    'lists when both records hold authors. It compares no title and no text, and the texts of two versions of one '
+    'work can differ. The final turn carries the list of these pairs in '
+    'native.scientific_context.openness_minimum.family_readings, as {search_digest,work_id,version_id}. When a '
+    'judgment rests on such a text, name in your notes the version that you read.')
+V6_FINAL_PARAGRAPH = (
+    '\n\nThe packet binds more than the search records and the full readings of the works that they judge '
+    'decisive. The paragraphs below state what each further member is.\n\n'
+    'A full text can stand for another record of the same work. '
+    'native.scientific_context.openness_minimum.family_readings lists {search_digest,work_id,version_id}: the search '
+    'with that digest judges work_id relevant or contradictory, the record of work_id has no complete full reading '
+    'of its own, and the complete full reading of version_id, another record of the same work, stands for it. The '
+    'harness links the two records in one of three ways: work_id is the arXiv identifier of version_id without its '
+    'version number; a DOI of work_id is the DOI that arXiv registered for the paper of version_id; or both records '
+    'carry the same DOI. For the two DOI links it compares the author lists when both records hold authors. It '
+    'compares no title and no text, and the texts of two versions of one work can differ. When the judgment rests '
+    'on such a text, name in reason the version that was read.')
+# What a bound row disposition is. The guide below carries this line, so both v6 prompts hold it once.
+ROW_DISPOSITION_GUIDE_LINE = (
+    "Coverage. The author's statement about a row that a response returned and that the harness could not import. "
+    'Each entry holds what the provider returned for that row (row_excerpt, the first 20,000 characters of the row, '
+    'with row_digest and row_byte_length of the whole row) beside reason. The row is evidence of the capture; '
+    "reason is the author's and the harness did not check it. A reading that reason names by its id is bound "
+    'as a supporting reading, unless it is already a decisive reading.')
+# One line for each key that `search` records, with the class of the key. Test G5 compares the keys.
+SEARCH_FIELD_GUIDE = {
+    'id': {'class': 'identity', 'line': 'Identity. The id of the search record.'},
+    'profile': {'class': 'identity', 'line': 'Identity. The literature profile that the search belongs to.'},
+    'purpose': {'class': 'identity', 'line': 'Identity. The purpose for which the author recorded the search.'},
+    'question': {'class': 'scope_binding', 'line': 'Scope. The question that the search addresses.'},
+    'scope': {'class': 'scope_binding', 'line':
+              'Scope. The bounds of the search as the author stated them; without a stated scope, the question.'},
+    'queries': {'class': 'capture', 'line':
+                'Capture. The query texts. Each of them is bound to at least one captured response.'},
+    'responses': {'class': 'capture', 'line':
+                  'Capture. One entry for each captured response: the source record that holds the response, and '
+                  'the query that it answers.'},
+    'captured_at': {'class': 'capture', 'line':
+                    'Capture. The time that the author states for the search. No response of the search was '
+                    'captured later.'},
+    'found_work_ids': {'class': 'capture', 'line':
+                       'Capture. The works that the harness imported from the rows of the responses.'},
+    'cited_work_ids': {'class': 'author_judgment', 'line':
+                       "Author's judgment. The found works that the author cites for the verdict."},
+    'verdict': {'class': 'author_judgment', 'line':
+                "Author's judgment. The author's novelty verdict. It is no finding about coverage."},
+    'impact': {'class': 'author_judgment', 'line':
+               "Author's judgment. The author's account of what the search means for the question. It is no "
+               'finding about coverage.'},
+    'dispositions': {'class': 'coverage', 'line':
+                     "Coverage. The author's judgment of each found work, with a reason: relevant, contradictory, "
+                     'potentially_relevant, out_of_scope, duplicate or unresolved. A relevant or contradictory '
+                     'work needs a complete full reading. A potentially_relevant or unresolved work is a gap '
+                     'until a later bound search resolves it.'},
+    'row_dispositions': {'class': 'coverage', 'line': ROW_DISPOSITION_GUIDE_LINE},
+    'resolved': {'class': 'coverage', 'line':
+                 "Coverage. The author's explanations of changes to earlier judgments of works, as "
+                 '{work_id,reason}. An entry resolves an earlier judgment only where the reassessment or the '
+                 'completion checks of the harness pass.'},
+    'gaps': {'class': 'coverage', 'line':
+             'Coverage. What the author states that the search did not cover. A nonempty list is a gap of this '
+             'review, unless a later bound search reassesses this search.'},
+    'coverage': {'class': 'coverage', 'line':
+                 'Coverage. For each query, what the harness derived from the captures: kind complete (the whole '
+                 'enumeration of the query was captured), top_k (an intact ordered leading part of at least '
+                 'requested_k results) or bounded_unordered (any other bounded capture), with returned_count and '
+                 'inspected_count. A bounded kind states how far the search went and blocks no outcome. A query '
+                 'without a row of one of these kinds, or without an integer inspected_count, is a gap, unless '
+                 'a later bound search reassesses this search.'},
+    'pending': {'class': 'coverage', 'line':
+                'Coverage. What the harness could not use or could not join in the captured responses: a row '
+                'that it could not import, pages whose counts or contents do not agree, an identifier of an '
+                'id_list request that no returned row answers, or a response that holds fewer results than the '
+                'registry reports (search_response_incomplete).'},
+    'integrity_errors': {'class': 'coverage', 'line':
+                         'Coverage. The entries of pending other than search_response_incomplete. Each one is an '
+                         'error in the captured evidence and a gap of this review, unless a later bound search '
+                         'reassesses this search.'},
+    'page_groups': {'class': 'capture', 'line':
+                    'Capture. For each registry query, its captured pages read as one enumeration: the pages, '
+                    'the counts, whether the enumeration is complete, and the rows that a recorded import rule '
+                    'leaves out.'},
+    'hits_per_query': {'class': 'author_bound', 'line':
+                       "Author's bound. The number of hits for each query that the search was recorded under. "
+                       'It is no finding about coverage.'},
+    'depth': {'class': 'author_bound', 'line':
+              "Author's bound. The depth amounts that the author set for this search in place of the defaults."},
+    'binding': {'class': 'scope_binding', 'line':
+                'Scope. Present when the author bound the unchanged queries and responses of a provisional '
+                'search to a literature scope; it names that search and gives the reason.'},
+    'scope_digest': {'class': 'scope_binding', 'line':
+                     'Scope. The digest of the literature scope of the record when the search was recorded; null '
+                     'when the record had no literature scope. It is no finding about coverage.'},
+    'provisional': {'class': 'scope_binding', 'line':
+                    'Scope. true means that the record had no literature scope, so the search was recorded by '
+                    'its question. This says nothing about coverage or outstanding readings and is not itself a '
+                    'ground against the search.'},
+    'evidence_digest': {'class': 'scope_binding', 'line':
+                        'Scope. For a search recorded under a literature scope, the digest of the evidence that '
+                        'its judgment rested on at that time.'},
+    'frontier_digest': {'class': 'scope_binding', 'line':
+                        'Scope. For a search recorded under a literature scope, the digest of the citation '
+                        'frontier of its profile at that time.'},
+    'native_parse_version': {'class': 'capture', 'line':
+                             'Capture. The version of the harness parser that read the registry responses.'},
+}
+SEARCH_FIELD_GUIDE_TEXT = (
+    '\n\nGuide to the fields of a bound search record. Each line names a field, then its class, then what the field '
+    'states. The fields of the class Coverage hold the recorded coverage findings. Assess whether the queries, '
+    'the scope and the captured responses address each formulation adequately. The provisional mark, a null '
+    'scope_digest, the verdict, the impact and hits_per_query alone establish no gap of coverage.\n'
+    + '\n'.join(key + ': ' + row['line'] for key, row in SEARCH_FIELD_GUIDE.items()) + '\n\n')
+SUPPORTING_READING_SENTENCE = (
+    '\n\nA reading record of the packet is decisive or supporting. A decisive reading is a full reading of a work that '
+    'a bound search judges relevant or contradictory, or of the declared settling work, and the text that it read '
+    'is delivered. A supporting reading is another reading record of the store that a text of a bound search names '
+    'by its id (the reason of a disposition, of a resolved entry or of a row disposition, impact, scope, or a text '
+    'of gaps), or that the author bound by its id. A reading that is already decisive stays decisive. Binding a '
+    'supporting reading adds its reading record and not the text that it read. That text is part of this review '
+    'only when another binding delivers it as a unit. In a reading turn the plan entry of a reading record states role, and for '
+    'a supporting reading cited_by, the {search_id,search_digest,fields} of each search that names it. '
+    'native.scientific_context.openness_minimum lists the digests of the decisive readings under reading_digests '
+    'and those of the supporting readings under supporting_reading_digests. A supporting reading shows what the '
+    'author recorded about a work; it does not show that this review read the work. When the judgment needs a '
+    'full text that no unit delivers, say so. The author then judges the work relevant in a search record, which makes '
+    'its full reading decisive and its text a part of the review.')
+SEARCH_COMPLETION_SENTENCE = (
+    'A search that completes earlier searches. A search record can hold completes, one entry for each earlier '
+    'search that it completes. A minimum can leave out a completed search when it binds the search that completes it, '
+    'and a search that is left out adds no gap to this review. A completed search that the minimum still binds is '
+    'in the packet and is assessed as every bound search is. Before it recorded the completing search, the harness checked nine conditions from the two records '
+    'and their stored responses. The two searches have the same profile, and their question values are equal or both absent. The completing '
+    'search was not captured earlier. Its captures ask every query of the earlier search as the same request. It '
+    'has a stated coverage for each of its queries, no integrity error and no gaps of its own, and its coverage '
+    'of each earlier query is not weaker, in the order complete, top_k, bounded_unordered. Where the pages of the earlier search form no verified whole or leading part, its '
+    'coverage of that query is complete or top_k. Every row that the earlier captures returned is accounted for: '
+    'the completing search imported it, left it out under a recorded rule, or gave a row disposition to a row of '
+    'the same provider and the same captured request with the same identifier (for a row without an identifier, '
+    'the same row digest), or its coverage of the query is complete and its captures of that request do not '
+    'return the row. An earlier row without an identifier is accepted under a complete coverage without such a '
+    'comparison. Every work that the earlier search found is '
+    'found again. Each relevant, contradictory, potentially_relevant or unresolved judgment that it changes has a '
+    'reason under resolved. Every text of the earlier gaps has an entry in closed_gaps. An entry of completes '
+    'holds search_id and search_digest of the completed search, not_returned and closed_gaps. not_returned lists, '
+    'by query and row_id, the earlier rows that the harness accepted under a complete coverage; the harness '
+    'computed it. An entry with row_id null is an earlier row without an identifier, and it does not show that '
+    'the row disappeared. '
+    "closed_gaps: [{text,how}] is the author's statement of how each earlier gap was closed; the harness checked "
+    'that every earlier gap has an entry and did not check what the entry says.')
+SUPPLIED_ORIGIN_SENTENCE = (
+    '\n\nA text that a person supplied. A full text can be a file that a person saved and gave to the harness. In a '
+    'reading turn the plan entry of such a text carries origin: {saved_by,obtained_from,obtained_at,statement,'
+    'evidence,note}. For a decisive reading, native.scientific_context.audit_forecast.notices holds an entry of '
+    'kind supplied_text with the same object under supplied. saved_by, obtained_from, obtained_at and statement '
+    'hold what the author reported. The harness sets evidence and note, and neither verifies that report. The '
+    'harness kept the bytes of the file. It did not fetch the text and did not verify where it came from. A complete full '
+    'reading of such a text counts as a full reading. When a decisive judgment rests on it, say so in your notes '
+    'and in the reason of the finding.')
+RESULT_READING_RULE = (
+    '\n\nAn accepted result of this record. The packet binds each result of a solver objective of this record that '
+    'the author selected for it, for example a theorem that a bound search cites. cited_as is the label that the '
+    'author gave the result; check in the search records whether and how they cite it. This chain delivers a '
+    'bound result in two kinds of unit. A unit of kind result_text, named by '
+    '{native_attempt_digest,acceptance_id,text_sha256}, holds one text of the evidence of the result: a manifest, an '
+    'artifact that is UTF-8 text, or the text that the harness extracted from a PDF artifact. These units arrive '
+    'after the full texts. A record unit with record_kind accepted_result and record_id '
+    '<native_attempt_digest>:<acceptance_id> arrives with the other records. It holds the exact JSON text of '
+    '{cited_as,native_attempt_digest,objective_id,objective_claim,acceptance,checkpoint,review,manifests,artifacts,'
+    'note}: the claim of the accepted checkpoint, the review that the acceptance rests on, and one row for each '
+    'part of the evidence. Either kind of unit can arrive in consecutive parts. A manifest of kind certificate or '
+    'lean holds the record of its verification. Each row of artifacts states delivery. text and pdf_text mean that '
+    'a result_text unit delivers the part; for pdf_text the row gives sha256, the digest of the PDF, and '
+    'text_sha256, the digest of the extracted text. described means that the row gives path, role, media type, size '
+    'and digest, and that the bytes are not delivered. A described artifact of role proof or theorem is a gap of '
+    'the review, with the condition result_undelivered. A described executable, toolchain or other binary part is '
+    'no scientific text and is no gap. An excerpt from a result_text has the form '
+    '{native_attempt_digest,acceptance_id,text_sha256,text,purpose}, and an excerpt from the record has the form '
+    '{record_kind:"accepted_result",record_id,text,purpose}. A passage request uses the same identity fields. The '
+    'acceptance is a fact about the solver objective. It is no finding about the openness of the statement under '
+    'review: read the result and note what it proves.')
+RESULT_FINAL_RULE = (
+    '\n\nAn accepted result of this record. native.scientific_context.openness_minimum.results lists each result of '
+    'a solver objective of this record that the packet binds, as '
+    '{native_attempt_digest,acceptance_id,cited_as,link_digest,result_digest}. The author selected these results. '
+    'cited_as is the label that the author gave the result; check in the search records whether and how they '
+    'cite it. Its accepted_result record, whose digest is result_digest, holds the claim of '
+    'the accepted checkpoint, the review that the acceptance rests on, and one row for each part of the evidence. '
+    'The texts of the result are its manifests, its artifacts that are UTF-8 text and are no PDF, executable or '
+    'toolchain, and the text that the harness extracted from its PDF artifacts. A reading chain delivered the record as a record unit with record_kind '
+    'accepted_result and the texts as units of kind result_text, named by '
+    '{native_attempt_digest,acceptance_id,text_sha256}; a review of one turn holds them in evidence. Judge what the '
+    'result proves from these texts, and in a chain from your notes, excerpts and passages of them. An artifact '
+    'whose row has delivery described is represented by that row, and its bytes are not delivered. For the role '
+    'proof or theorem it is a gap of the review, with the condition result_undelivered. Every other described '
+    'artifact gives a notice. The acceptance is a fact about the solver objective. It is no finding about the openness of the '
+    'statement under review.')
+RECORD_ALLOWANCE_SENTENCE = (
+    '\n\nThe reading record of this chain has a third allowance beside the two above: allowances.record, in '
+    'serialized characters. It counts what the record keeps of your answers and carries into every later input: '
+    'each excerpt and each passage answer as the record serializes it, whatever its status, with its fields and '
+    'its JSON escapes, and one row for each final turn that returns a reading response. characters is the total, '
+    'and used is what the record holds now.')
+RECORD_PASSAGE_LIMIT_MESSAGE = ('The record allowance of this chain cannot hold the row of another final turn '
+                                'together with a delivered passage, so this reading response delivers nothing. '
+                                'Return the finding.')
+RECORD_NOT_RETAINED_SENTENCE = (
+    ' An excerpt or a passage answer that the rest of this total cannot hold is not kept. '
+    'allowances.record.not_retained counts it under its kind (verified_excerpt, unmatched_excerpt, '
+    'over_allowance_excerpt, delivered_passage or undelivered_passage), no later input holds it, and it uses '
+    'nothing of the excerpt allowance or the passage allowance. In a final turn the harness refuses a reading '
+    'response when the total cannot hold the row of that turn together with at least one delivered passage. '
+    'Return the finding in that case.')
+# What a final turn and a review of one turn are told about the bound material. review_protocol appends it to the
+# answer contract of prompt version 7.
+V6_FINAL_EVIDENCE_TEXT = (V6_FINAL_PARAGRAPH + SUPPORTING_READING_SENTENCE + SEARCH_FIELD_GUIDE_TEXT
+                          + SEARCH_COMPLETION_SENTENCE + SUPPLIED_ORIGIN_SENTENCE + RESULT_FINAL_RULE)
+PROMPTS[PROTOCOL_V6] = {
+    'reading': READING_PROMPT + SEARCH_READING_RULE + V6_READING_PARAGRAPH + SUPPORTING_READING_SENTENCE
+               + SEARCH_FIELD_GUIDE_TEXT + SEARCH_COMPLETION_SENTENCE + SUPPLIED_ORIGIN_SENTENCE + RESULT_READING_RULE
+               + RECORD_ALLOWANCE_SENTENCE + RECORD_NOT_RETAINED_SENTENCE,
+    'final': (FINAL_PROMPT + FINAL_PROGRESS_RULE + SEARCH_FINAL_RULE).replace(
+        'native result review described above', 'finding described above').replace(
+        'native result review', 'finding described above') + V6_FINAL_EVIDENCE_TEXT
+        + RECORD_ALLOWANCE_SENTENCE + RECORD_NOT_RETAINED_SENTENCE,
+}
+
+
 def is_openness_packet(native):
     """Whether a native packet is a problem openness packet exported by `export --kind problem-openness`."""
     return (native['contract'].get('orchestration') == 'problem_creation'
@@ -375,8 +676,15 @@ def find_chain_protocol(native, prior_protocol=None):
     if is_math_openness_packet(native):
         return MATH_PROTOCOL
     if prior_protocol is not None:
-        return PROTOCOL_V5 if prior_protocol == PROTOCOL_V5 else PROTOCOL_V4
-    return PROTOCOL_V5
+        return prior_protocol if prior_protocol in (PROTOCOL_V5, PROTOCOL_V6) else PROTOCOL_V4
+    return PROTOCOL_V6 if native['scientific_context']['openness_minimum'].get('schema_version') == 2 else PROTOCOL_V5
+
+
+def require_reserved_identifier(identifier, protocol):
+    """Refuse an identifier that exceeds the length reserved by a finite v6 projection."""
+    if protocol == PROTOCOL_V6 and len(identifier) > RESERVED_IDENTIFIER_CHARACTERS:
+        raise ResearchError('invalid_input', IDENTIFIER_LIMIT_MESSAGE,
+                            {'characters': len(identifier), 'maximum_characters': RESERVED_IDENTIFIER_CHARACTERS})
 
 
 def find_stage(packet):
@@ -413,7 +721,8 @@ def list_reading_texts(records, native, *, artifacts=None, review=None):
     its bound main captures carried as evidence, so that a capture recorded after the export does not enlarge the
     chain. An alternate main body that the packet's openness_delivery contract omits is not read; the
     selected representation of its version is. A row is {kind, version_id, text_sha256, artifact}; the rows follow
-    the packet's text_delivery_priority, then the version id and the text digest."""
+    the packet's text_delivery_priority, then the version id and the text digest. Versioned family plans add
+    family_of, the sorted distinct ids of the found records that the text covers."""
     from .graph import main_captures
     from .capture_selection import bind_packet_selections
     records = bind_packet_selections(records, native['scientific_context'], artifacts=artifacts, review=review)
@@ -422,6 +731,10 @@ def list_reading_texts(records, native, *, artifacts=None, review=None):
     carried = {entry['artifact']['sha256'] for entry in native['evidence']} - omitted
     priority = {sha256: index for index, sha256 in
                 enumerate(native['scientific_context'].get('text_delivery_priority', []))}
+    family_of = {}
+    if native['scientific_context'].get('family_reading_plan_version') == FAMILY_READING_PLAN_VERSION:
+        for binding in native['scientific_context']['openness_minimum'].get('family_readings', []):
+            family_of.setdefault(binding['version_id'], set()).add(binding['work_id'])
     ranks, rows = {}, {}
     for version in {reading['version_id'] for reading in records.get('reading', {}).values()
                     if digest(reading) in bound}:
@@ -437,6 +750,11 @@ def list_reading_texts(records, native, *, artifacts=None, review=None):
                     and reference['sha256'] in carried):
                 rows[version, reference['sha256']] = {'kind': 'fulltext', 'version_id': version,
                                                       'text_sha256': reference['sha256'], 'artifact': reference}
+                if version in family_of:
+                    rows[version, reference['sha256']]['family_of'] = sorted(family_of[version])
+                source = records['source'][capture['source_id']]
+                if 'supplied' in source:
+                    rows[version, reference['sha256']]['origin'] = source['supplied']
     return sorted(rows.values(), key=lambda row: (ranks[row['version_id']], row['version_id'], row['text_sha256']))
 
 
@@ -488,6 +806,9 @@ def list_math_text_rows(records, native, *, artifacts=None, review=None):
                                 {'reading_id': reading['id'], 'version_id': reading['version_id']})
         rows[reading['version_id'], texts[0]['sha256']] = {'kind': 'fulltext', 'version_id': reading['version_id'],
                                                            'text_sha256': texts[0]['sha256'], 'artifact': texts[0]}
+        source = records['source'][bundle['source_id']]
+        if 'supplied' in source:
+            rows[reading['version_id'], texts[0]['sha256']]['origin'] = source['supplied']
     return [rows[key] for key in sorted(rows)]
 
 
@@ -500,21 +821,51 @@ def list_record_rows(artifacts, native):
     carried = {entry['artifact']['sha256']: entry['artifact'] for entry in native['evidence']}
     bound = ([('literature_search', row['search_digest']) for row in minimum['searches']]
              + [('reading', sha256) for sha256 in minimum['reading_digests']])
+    if minimum['schema_version'] == 2:
+        bound += [('reading', sha256) for sha256 in minimum['supporting_reading_digests']]
+        bound += [('accepted_result', row['result_digest']) for row in minimum['results']]
+    result_ids = {row['result_digest']: row['native_attempt_digest'] + ':' + row['acceptance_id']
+                  for row in minimum.get('results', [])}
     if is_openness_packet(native):
         bound.append(('problem_statement', native['subject_digest']))
+    searches = []
     rows = {}
     for record_kind, sha256 in bound:
         reference = carried.get(sha256)
         if reference is None:
             raise ResearchError('openness_reading_incomplete', 'The openness packet does not carry a record that it '
                                 'binds', {'record_kind': record_kind, 'sha256': sha256})
-        record_id = json.loads(artifacts.read(reference))['id']
-        rows.setdefault((record_kind, record_id), {'kind': 'record', 'record_kind': record_kind,
-                                                   'record_id': record_id, 'artifact': reference})
+        record = None if record_kind == 'accepted_result' else json.loads(artifacts.read(reference))
+        record_id = result_ids[sha256] if record is None else record['id']
+        if record_kind == 'literature_search' and minimum.get('supporting_reading_digests'):
+            searches.append(record)
+        row = {'kind': 'record', 'record_kind': record_kind, 'record_id': record_id, 'artifact': reference}
+        if minimum['schema_version'] == 2 and record_kind == 'reading':
+            row['role'] = 'decisive' if sha256 in minimum['reading_digests'] else 'supporting'
+            if row['role'] == 'supporting':
+                from .problem_openness import list_reading_citations
+                row['cited_by'] = list_reading_citations(record_id, searches)
+        rows.setdefault((record_kind, record_id), row)
     rows = list(rows.values())
     return ([row for row in rows if row['record_kind'] == 'literature_search']
             + sorted((row for row in rows if row['record_kind'] == 'reading'), key=lambda row: row['record_id'])
+            + [row for row in rows if row['record_kind'] == 'accepted_result']
             + [row for row in rows if row['record_kind'] == 'problem_statement'])
+
+
+def list_result_texts(artifacts, native):
+    """Plan the text parts of accepted-result descriptors bound by the v2 minimum."""
+    carried = {entry['digest']: entry['artifact'] for entry in native['evidence']}
+    rows = []
+    for result in native['scientific_context']['openness_minimum'].get('results', []):
+        body = json.loads(artifacts.read(carried[result['result_digest']]))
+        texts = [row['sha256'] for row in body.get('manifests', [])]
+        texts += [row.get('text_sha256', row['sha256']) for row in body['artifacts']
+                  if row['delivery'] in ('text', 'pdf_text')]
+        for sha256 in dict.fromkeys(texts):
+            rows.append(dict(kind='result_text', native_attempt_digest=result['native_attempt_digest'],
+                acceptance_id=result['acceptance_id'], text_sha256=sha256, artifact=carried[sha256]))
+    return rows
 
 
 def list_reading_rows(records, artifacts, native, *, review=None):
@@ -524,7 +875,8 @@ def list_reading_rows(records, artifacts, native, *, review=None):
         return (list_math_response_rows(records, artifacts, native) + list_math_text_rows(
                     records, native, artifacts=artifacts, review=review)
                 + list_record_rows(artifacts, native))
-    return list_reading_texts(records, native, artifacts=artifacts, review=review) + list_record_rows(artifacts, native)
+    return (list_reading_texts(records, native, artifacts=artifacts, review=review)
+            + list_result_texts(artifacts, native) + list_record_rows(artifacts, native))
 
 
 def _plan_search_delivery(artifacts, native):
@@ -545,8 +897,11 @@ def list_delivery_rows(rows, manifest):
                  'record_id': entry['record_id'], 'search_digest': entry['search_digest'],
                  'artifact': entry['residual'] or entry['artifact']}
                 for entry in manifest['searches']]
-    return ([row for row in rows if row['kind'] == 'fulltext'] + shared + searches
-            + [row for row in rows if row['kind'] != 'fulltext' and row.get('record_kind') != 'literature_search'])
+    return ([row for row in rows if row['kind'] == 'fulltext']
+            + [row for row in rows if row['kind'] == 'result_text'] + shared + searches
+            + [row for row in rows if row['kind'] not in ('fulltext', 'result_text')
+               and row.get('record_kind') not in ('literature_search', 'problem_statement')]
+            + [row for row in rows if row.get('record_kind') == 'problem_statement'])
 
 
 def list_reading_units(artifacts, rows):
@@ -591,7 +946,531 @@ def _collect_unit_sources(rows):
 
 def _measure(route, request):
     """The number of input characters of a request as the route's adapter measures them."""
-    return len(transport._local_adapter(route).packet_text(request))
+    from .review_route_capacity import measure_request
+    return measure_request(route, request)['characters']
+
+
+def _measure_serialized_entries(route, entries):
+    from .review_route_capacity import measure_request
+    filled = measure_request(route, _render(route, '', {'entries': entries}))
+    empty = measure_request(route, _render(route, '', {'entries': []}))
+    return {key: filled[key] - empty[key] for key in ('characters', 'utf8_bytes')}
+
+
+def measure_record_entries(route, entries):
+    """Characters added by a list in the actual request representation, including separators and escapes.
+
+    V6 retention must charge this delta, rather than len(text) or len(json.dumps(entry)). Local transports serialize
+    the packet inside a message, so even a JSON quote has a second escape in their native input.
+    """
+    return _measure_serialized_entries(route, entries)['characters']
+
+
+def classify_retained_entry(entry, *, passage=False):
+    if passage:
+        return 'delivered_passage' if entry.get('status') == 'delivered' else 'undelivered_passage'
+    return {'verified': 'verified_excerpt', 'over_allowance': 'over_allowance_excerpt'}.get(
+        entry.get('status'), 'unmatched_excerpt')
+
+
+def describe_reading_entry_bounds(record):
+    """Keep the older retention protocols' uncapped purposes distinct from the AR18.2 table of excerpts v3."""
+    bounds = copy.deepcopy(READING_ENTRY_BOUNDS[record['protocol']])
+    if (record['protocol'] != PROTOCOL_V6
+            and record.get('excerpt_protocol', review_excerpts.PROTOCOL) != review_excerpts.SESSION_PROTOCOL):
+        for kind in ('verified_excerpt', 'over_allowance_excerpt'):
+            bounds[kind]['serialized_characters'] = None
+    if record['protocol'] in (PROTOCOL_V1, PROTOCOL_V2, PROTOCOL):
+        bounds['turn']['count'] = None
+    return bounds
+
+
+def measure_retained_entries(route, record):
+    """Inventory every retained status, including the diagnostics that the text allowances do not charge."""
+    groups = {kind: [] for kind in LEGACY_ENTRY_BOUNDS}
+    for entry in record['excerpts']:
+        groups[classify_retained_entry(entry)].append(entry)
+    for entry in record['passages']:
+        groups[classify_retained_entry(entry, passage=True)].append(entry)
+    groups['turn'] = record['turns']
+    groups['source'] = record.get('sources', [])
+    result = {kind: dict(count=len(entries), characters=measure_record_entries(route, entries))
+              for kind, entries in groups.items()}
+    # Grouping statuses loses the separator between groups. Assign it to the later group's first entry.
+    for entries, kinds, passage in ((record['excerpts'], ('verified_excerpt', 'unmatched_excerpt', 'over_allowance_excerpt'), False),
+                                    (record['passages'], ('delivered_passage', 'undelivered_passage'), True)):
+        if not entries:
+            continue
+        first_kind = classify_retained_entry(entries[0], passage=passage)
+        for kind in kinds:
+            if result[kind]['count'] and kind != first_kind:
+                result[kind]['characters'] += 2
+    return result
+
+
+def describe_reading_units(artifacts, rows):
+    """Group physical plan bodies by kind and body characters, largest first, as the reading budget counts them."""
+    groups = {}
+    for row in rows:
+        kind = row.get('record_kind', row['kind'])
+        if kind == 'search_shared_field':
+            kind = 'shared_search_body'
+        group = groups.setdefault(kind, dict(kind=kind, count=0, characters=0))
+        group['count'] += 1
+        group['characters'] += len(artifacts.read(row['artifact']).decode('utf-8'))
+    return sorted(groups.values(), key=lambda group: (-group['characters'], group['kind']))
+
+
+def _build_projection_record(artifacts, rows, record, units, record_total, *, source_rows):
+    """Measure a maximal fixed record: one planned turn per unit, reserved ids, all sources and search receipts.
+
+    Grouping units can only remove turn envelopes. Additional final passage turns belong to the record allowance.
+    A control character reserves the largest JSON escape permitted by a later identifier's character limit.
+    """
+    identifier = '\x00' * RESERVED_IDENTIFIER_CHARACTERS
+    projected = copy.deepcopy(record)
+    projected.update(turns=[], sources=[], excerpts=[], passages=[])
+    if record['protocol'] == PROTOCOL_V6:
+        from .storage import _MAX_STORED_INTEGER
+        projected['projection_characters'] = _MAX_STORED_INTEGER
+    for allowance in projected['allowances'].values():
+        allowance['used'] = allowance['characters']
+    from .storage import _MAX_STORED_INTEGER
+    projected['allowances']['record'] = dict(characters=record_total, used=record_total,
+        not_retained={kind: _MAX_STORED_INTEGER for kind in LEGACY_ENTRY_BOUNDS if kind != 'source'})
+    deliveries = {}
+    for row in source_rows:
+        identity = _describe_identity(row)
+        _add_source(projected['sources'], descriptor(row['artifact']), identity)
+        if 'text_sha256' in identity:
+            _add_source(projected['sources'], descriptor(row['artifact']),
+                        {key: value for key, value in identity.items() if key != 'text_sha256'})
+    rows_by_identity = {}
+    for row in rows:
+        rows_by_identity.setdefault(review_excerpts.find_identity(row), []).append(row)
+    for unit in units:
+        reference = unit['artifact_descriptor']
+        whole = [_describe_identity(unit)] if unit['parts'] == 1 else []
+        turn = dict(assignment_id=identifier, attempt_id=identifier, delivered_units=whole,
+                    notes_withheld=NOTES_WITHHELD_NOTE.format(identifier))
+        if record['protocol'] == PROTOCOL_V6:
+            turn['stage'] = 'reading'
+        if unit['parts'] > 1:
+            turn['delivered_parts'] = [dict(_describe_identity(unit), **{key: unit[key] for key in
+                ('part', 'parts', 'start', 'end', 'characters')})]
+        projected['turns'].append(turn)
+        for row in rows_by_identity.get(review_excerpts.find_identity(unit), []):
+            body = deliveries.setdefault(row['artifact']['sha256'], dict(
+                content=artifacts.read(row['artifact']), deliveries=[]))
+            body['deliveries'].append(dict(assignment_id=identifier, attempt_id=identifier,
+                part=unit['part'], parts=unit['parts'], start=unit['start'], end=unit['end'],
+                sha256=reference['sha256']))
+    if 'search_delivery' in record:
+        from .review_search_delivery import verify_search_deliveries
+        manifest = record['search_delivery']
+        receipts = verify_search_deliveries(manifest, deliveries, {
+            entry['search_digest']: artifacts.read(entry['artifact']) for entry in manifest['searches']})
+        projected['search_receipts'] = receipts
+        # Reserve one envelope per completed search. Grouped completions remove envelopes.
+        for turn, receipt in zip(projected['turns'], receipts):
+            turn['completed_searches'] = [copy.deepcopy(receipt)]
+        if len(receipts) > len(projected['turns']) and projected['turns']:
+            projected['turns'][-1]['completed_searches'].extend(copy.deepcopy(receipts[len(projected['turns']):]))
+    return projected
+
+
+def _measure_largest_reading_request(route, packet, record, units, artifacts, prompt, *, records=None):
+    """Bound every prefix with the largest plan frame plus the largest distinct delivered evidence window.
+
+    A delivered_now reference is shorter than the descriptor used before or after it. Keeping every descriptor in
+    remaining therefore bounds every partition of the plan. Evidence deduplicates artifact references, so a longer
+    prefix can have the same bodies and a smaller plan than a shorter prefix; measuring just that prefix is unsafe.
+    """
+    from .review_protocol import _evidence
+    from .review_route_capacity import measure_request
+    frame = _assemble_reading_turn(artifacts, packet, record, [], [], units, len(units) + 1)
+    entries, costs, keys = {}, {}, []
+    for unit in units:
+        reference = _reference(unit['artifact_descriptor'])
+        key = (reference['sha256'], digest(reference))
+        keys.append(key)
+        if key not in entries:
+            entries[key] = _evidence(artifacts, [reference])[0]
+            costs[key] = _measure_serialized_entries(route, [entries[key]])
+    # Nonnegative singleton costs let the largest raw-character window dominate all of its shorter prefixes.
+    start, raw_characters, counts = 0, 0, {}
+    totals = dict(characters=0, utf8_bytes=0)
+    largest, windows = dict(characters=-1, utf8_bytes=-1), {}
+    for end, unit in enumerate(units):
+        raw_characters += unit['characters']
+        key = keys[end]
+        counts[key] = counts.get(key, 0) + 1
+        if counts[key] == 1:
+            for measure in totals:
+                totals[measure] += costs[key][measure]
+        while start < end and raw_characters > review_excerpts.TURN_FULLTEXT_CHARACTERS:
+            raw_characters -= units[start]['characters']
+            old = keys[start]
+            counts[old] -= 1
+            if not counts[old]:
+                del counts[old]
+                for measure in totals:
+                    totals[measure] -= costs[old][measure]
+            start += 1
+        for measure in totals:
+            size = totals[measure] + 2 * max(0, len(counts) - 1)
+            if size > largest[measure]:
+                largest[measure], windows[measure] = size, (start, end + 1)
+    measures = []
+    for start, end in sorted(set(windows.values())):
+        frame['evidence'] = [entries[key] for key in sorted(set(keys[start:end]))]
+        measures.append(measure_request(route, _render(route, prompt, frame), records=records, artifacts=artifacts))
+    return measures
+
+
+def project_reading_chain(route, packet, rows, record, *, artifacts, records=None, record_total=None, prompts=None,
+                          eligible_texts=(), final_input=None):
+    """Bound every mandatory request of a chain, using the v6 serialized-record allowance.
+
+    The caller supplies the frozen packet, including v6's minimum_gaps and audit_forecast, and its actual prompts.
+    Until UB6 registers those prompts, v6 measurements use the v5 renderings. The v6 builder must fit optional bodies
+    and notes within the returned projection; they earn no extra allowance. No released packet is rewritten here.
+    With no record_total, allocate the largest total the route admits; later calls pass the frozen total explicitly.
+    """
+    protocol = record['protocol']
+    delivery_rows = list_delivery_rows(rows, record['search_delivery']) if 'search_delivery' in record else rows
+    bounds = describe_reading_entry_bounds(record)
+    unbounded = [kind for kind, bound in bounds.items()
+                 if bound['count'] is None or bound['serialized_characters'] is None]
+    result = dict(protocol=protocol, finite=not unbounded, entry_bounds=bounds, unbounded_kinds=unbounded,
+                  units=describe_reading_units(artifacts, delivery_rows), characters=None, fixed_parts={},
+                  record_total=record_total, record_floor=RECORD_ALLOWANCE_FLOOR,
+                  reserved_identifier_characters=RESERVED_IDENTIFIER_CHARACTERS)
+    if unbounded:
+        measured = final_input if final_input is not None else measure_final_input(
+            route, packet, rows, record, eligible_texts=eligible_texts, records=records, artifacts=artifacts)
+        result['fixed_parts'] = dict(measured['parts'])
+        delivery_rows = list_delivery_rows(rows, record['search_delivery']) if 'search_delivery' in record else rows
+        result['planned_reading_turns'] = sum(len(value) for value in _compute_spans(artifacts, delivery_rows).values())
+        return result
+    choose_total = record_total is None
+    if choose_total:
+        record_total = RECORD_ALLOWANCE_FLOOR
+    from .review_protocol import canonical_prompt
+    prompt_protocol = protocol if protocol in PROMPTS else PROTOCOL_V5
+    prompts = prompts or {stage: canonical_prompt('native_math', reading_stage=stage,
+        reading_protocol=prompt_protocol)['text'] for stage in STAGES}
+    delivery_rows = list_delivery_rows(rows, record['search_delivery']) if 'search_delivery' in record else rows
+    units = list_reading_units(artifacts, delivery_rows)
+    projected = _build_projection_record(artifacts, delivery_rows, record, units,
+        max(record_total, transport.local_input_limit(route) or record_total), source_rows=rows)
+    final = copy.deepcopy(packet)
+    final[RECORD_KEY] = projected
+    factored = set()
+    if 'search_delivery' in record:
+        factored = _project_search_delivery(final, projected)
+    optional = {row['artifact']['sha256'] for row in _list_withholding_candidates(
+        final, rows, eligible_texts)} - factored
+    identifier = '\x00' * RESERVED_IDENTIFIER_CHARACTERS
+    identity_parts = {}
+    for unit in units:
+        identity = review_excerpts.find_identity(unit)
+        identity_parts[identity] = identity_parts.get(identity, 0) + 1
+    body_parts = {row['artifact']['sha256']: identity_parts.get(review_excerpts.find_identity(row), 0)
+                  for row in rows}
+    for entry in final['evidence']:
+        if entry['artifact']['sha256'] in optional:
+            entry.update(content='', delivery=BODY_WITHHELD_DELIVERY,
+                note=BODY_WITHHELD_NOTE.format(', '.join([identifier] * max(
+                    1, body_parts[entry['artifact']['sha256']]))))
+    fixed_final = _measure(route, _render(route, prompts['final'], final))
+    from .review_route_capacity import measure_request
+    measurements = dict(final=measure_request(route, _render(route, prompts['final'], final),
+                                             records=records, artifacts=artifacts))
+    reading_measures = _measure_largest_reading_request(route, packet, projected, units, artifacts,
+                                                       prompts['reading'], records=records)
+    fixed = dict(final=fixed_final, reading=max((measure['characters'] for measure in reading_measures), default=0))
+    from .review_route_capacity import describe_route_capacity
+    capacity = describe_route_capacity(route, records=records, artifacts=artifacts)
+    ratio = capacity['input_text_characters']['characters_per_token'] or 1
+    token_parts = dict(final=measurements['final']['tokens_upper'],
+                       reading=max((measure['tokens_upper'] for measure in reading_measures), default=0))
+    if any(measure['measure'] == 'bytes' for measure in [measurements['final']] + reading_measures):
+        ratio = 1
+    if choose_total:
+        character_room = (capacity['input_characters']['value'] or max(fixed.values())) - max(fixed.values())
+        token_room = math.floor((capacity['input_tokens']['value'] - max(token_parts.values())) * ratio)
+        record_total = max(0, min(character_room, token_room))
+    result.update(record_total=record_total, fixed_parts=fixed, fixed_tokens=token_parts,
+                  fixed_record_parts={key: measure_record_entries(route, projected.get(key, []))
+                                      for key in ('sources', 'turns', 'search_receipts')},
+                  characters=None if unbounded else max(fixed.values()) + record_total,
+                  tokens_upper=None if unbounded else max(token_parts.values()) + math.ceil(record_total / ratio),
+                  token_estimate=True,
+                  planned_reading_turns=len(units), prompt_protocol=prompt_protocol)
+    return result
+
+
+def describe_projection_decision(protocol, *, records=None, artifacts=None, assignment=None):
+    """The owner's answers use D2's payload rules; an admission need not have a stored head yet."""
+    from .review_plan_steps import PLAN_STEPS, describe_step, _build_identity_payload
+    math_chain = protocol == MATH_PROTOCOL
+    number = 5 if math_chain else 4
+    if assignment is not None and records is not None and (number == 4 or assignment.get('packet')):
+        export = describe_step(records, artifacts, assignment, number)
+    else:
+        row = PLAN_STEPS[number]
+        export = dict(id=number, command=row['command'], payload={} if math_chain else dict(kind='problem-openness'),
+                      chooses=list(row['chooses']),
+                      prerequisites=[dict(condition=value) for value in row['prerequisites']])
+        payload = _build_identity_payload(assignment) if assignment is not None else dict(role='native_math', dossier_id=None)
+        chooses = ['id', 'route_id', 'reviewer_id', 'context.native_packet']
+        if assignment is None:
+            chooses.append('author_id')
+        export['then'] = [dict(command='review-assignment', payload=payload, chooses=chooses)]
+    wait = copy.deepcopy(export)
+    wait['prerequisites'].insert(0, dict(condition='The installed release holds ' + (
+        'reading-math-v2 for this packet.' if math_chain else
+        'exactory-openness-reading-v6 or exactory-openness-reading-v7 for this packet.')))
+    smaller = copy.deepcopy(export)
+    smaller['prerequisites'].insert(0, dict(condition='Bind less material in a new packet.'))
+    assignment_step = smaller['then'][0]
+    smaller['then'] = [dict(assignment_step, check=True), assignment_step]
+    answers = [dict(answer=WAIT_MATH_ANSWER if math_chain else WAIT_PROBLEM_ANSWER, steps=[wait]),
+               dict(answer=SMALLER_PACKET_ANSWER, steps=[smaller])]
+    if math_chain and assignment is not None and assignment.get('packet'):
+        step = describe_step(records, artifacts, assignment, 9)
+        step['payload']['reason'] = MATH_CONTINUATION_REASON
+        step['chooses'] = [key for key in step['chooses'] if key != 'reason']
+        answers.insert(0, dict(answer=CONTINUE_MATH_ANSWER, steps=[step]))
+    return dict(owner_decides=MATH_PROJECTION_DECISION if math_chain else PROBLEM_PROJECTION_DECISION, then=answers)
+
+
+def admit_reading_chain(route, projection, *, records=None, artifacts=None, assignment=None):
+    """The first-assignment admission, deliberately separate from the v5 first-assignment call site."""
+    from .review_route_capacity import describe_route_capacity
+    capacity = describe_route_capacity(route, records=records, artifacts=artifacts)
+    limit = dict(characters=capacity['input_characters']['value'], tokens=capacity['input_tokens']['value'])
+    reason = 'no_enforceable_bound' if not projection['finite'] else 'below_floor'
+    if (projection['finite'] and projection['record_total'] >= RECORD_ALLOWANCE_FLOOR
+            and (limit['characters'] is None or projection['characters'] <= limit['characters'])
+            and projection['tokens_upper'] <= limit['tokens']):
+        return dict(state='record', projection=projection, limit=limit)
+    return dict(state='stop', code=PROJECTION_STOP, message=PROJECTION_STOP_MESSAGE, stop_class='decision',
+        projection=projection, details=dict(reason=reason, projection=projection, limit=limit,
+            unbounded_kinds=projection['unbounded_kinds'], units=projection['units'],
+            decision=describe_projection_decision(projection['protocol'], records=records,
+                                                  artifacts=artifacts, assignment=assignment)))
+
+
+def _raise_projection_stop(record, details, *, records=None, artifacts=None, assignment=None):
+    """Keep the exact refusal evidence and D2's chain-specific owner answers together."""
+    details = dict(details)
+    protocol = record['protocol']
+    details.setdefault('reason', 'no_enforceable_bound')
+    details.setdefault('projection', dict(finite=False, parts=details.get('parts', {}), characters=None))
+    details.setdefault('limit', details.get('input_limit_characters'))
+    details['unbounded_kinds'] = [kind for kind, bound in describe_reading_entry_bounds(record).items()
+                                if bound['count'] is None or bound['serialized_characters'] is None]
+    details['decision'] = describe_projection_decision(protocol, records=records, artifacts=artifacts,
+                                                      assignment=assignment)
+    raise ResearchError(PROJECTION_STOP, PROJECTION_STOP_MESSAGE, details)
+
+
+def _find_delivery_turns(unit, turns):
+    """Find prospective delivery metadata, including the version-only rows of the earliest stored protocols."""
+    identity = dict(review_excerpts.find_identity(unit)[1:])
+    result = []
+    for index, turn in enumerate(turns):
+        whole = any(all(identity.get(key) == value for key, value in review_excerpts.find_identity(row)[1:])
+                    for row in turn.get('delivered_units', []))
+        legacy = unit['kind'] == 'fulltext' and unit['version_id'] in turn.get('delivered', [])
+        part = any(('part' not in unit or row['part'] == unit['part']) and all(identity.get(key) == value
+                   for key, value in review_excerpts.find_identity(row)[1:])
+                   for row in turn.get('delivered_parts', []))
+        if whole or legacy or part:
+            result.append(index)
+    return result
+
+
+def measure_final_input(route, packet, rows, record, *, eligible_texts=(), reading_turn_ids=None,
+                        records=None, artifacts=None):
+    """Build the prospective final as the final builder does, retaining every record member.
+
+    All plan bodies may eventually have delivery credit. This diagnostic grants none: it only measures their
+    future withholding. When even maximal withholding cannot fit, _fit_turn returns that exact request here.
+    """
+    from .review_protocol import canonical_prompt
+    candidate = copy.deepcopy(packet)
+    candidate[RECORD_KEY] = copy.deepcopy(record)
+    factored = set()
+    if record['protocol'] in (PROTOCOL_V5, PROTOCOL_V6):
+        factored = _project_search_delivery(candidate, record)
+    priority = packet['native']['scientific_context'].get('text_delivery_priority', [])
+    lengths = {entry['artifact']['sha256']: len(entry['content']) for entry in packet['evidence']
+               if entry.get('encoding') == 'utf-8'}
+    ranked = []
+    for row in _list_withholding_candidates(candidate, rows, eligible_texts):
+        sha256 = row['artifact']['sha256']
+        if sha256 in factored:
+            continue
+        identifiers = [record['turns'][index]['assignment_id'] for index in _find_delivery_turns(row, record['turns'])
+                       if reading_turn_ids is None or record['turns'][index]['assignment_id'] in reading_turn_ids]
+        rank = ((0, -priority.index(sha256)) if row['kind'] == 'fulltext' and sha256 in priority else
+                (1 + (V6_WITHHOLDING_ORDER if record['protocol'] == PROTOCOL_V6 else WITHHOLDING_ORDER).index(
+                     row.get('record_kind', row['kind'])),
+                 -lengths.get(sha256, row['artifact']['size'])))
+        ranked.append((rank, review_excerpts.find_identity(row), sha256, identifiers or ['']))
+    bodies = [(sha256, identifiers) for _, _, sha256, identifiers in sorted(ranked)]
+    prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'])['text']
+    candidate, request = _fit_turn(route, prompt, candidate, bodies, refuse=False)
+    report = _measure_parts(route, prompt, candidate)
+    from .review_route_capacity import measure_request
+    report.update(measurement_kind='built_final_request', status='measured', phase='final_forecast',
+                  request=measure_request(route, request, records=records, artifacts=artifacts))
+    report['headroom_upper_bound_characters'] = report['input_limit_characters'] - report['input_characters']
+    supplied = review_excerpts.read_sent_packet(request)
+    text_value = transport._local_adapter(route).packet_text(request)
+    turn_ids = {turn['assignment_id'] for turn in record['turns']}
+    attempt_ids = {turn['attempt_id'] for turn in record['turns']}
+    def count_identifiers(values):
+        nonlocal text_value
+        characters = 0
+        for value in sorted(values, key=lambda value: (-len(value), value)):
+            if not value:
+                continue
+            escaped = json.dumps(json.dumps(value, ensure_ascii=False)[1:-1], ensure_ascii=False)[1:-1]
+            characters += text_value.count(escaped) * len(escaped)
+            text_value = text_value.replace(escaped, '')
+        return characters
+    # Attempt ids often contain the assignment id. Count the longest identities first, once per occurrence.
+    attempt_characters = count_identifiers(attempt_ids)
+    report['identifier_characters'] = dict(assignment_ids=count_identifiers(turn_ids),
+                                           attempt_ids=attempt_characters)
+    from .review_protocol import collect_references
+    hashes = {reference['sha256'] for reference in collect_references(supplied)}
+    report['identifier_characters']['digests'] = sum(text_value.count(value) * len(value) for value in hashes)
+    return report
+
+
+def _measure_chain_request(records, artifacts, route, request, assignments):
+    """AR17's estimate with the chain's largest observed last-send token cost, when available."""
+    from .review_route_capacity import measure_request
+    measure = measure_request(route, request, records=records, artifacts=artifacts)
+    largest = None
+    for attempt in records.get('review_attempt', {}).values():
+        if attempt['assignment_id'] not in assignments:
+            continue
+        tokens = (attempt.get('usage') or {}).get('input_tokens')
+        if not tokens or not attempt.get('request') or (attempt.get('usage') or {}).get('sends', 1) != 1:
+            continue
+        earlier = measure_request(route, json.loads(artifacts.read(attempt['request'])),
+                                  records=records, artifacts=artifacts)
+        ratio = tokens / max(1, earlier['text_characters'])
+        largest = max(largest or 0, ratio)
+    measure['chain_tokens_per_character'] = largest
+    if largest is not None:
+        measure['tokens_upper'] = max(measure['tokens_upper'], math.ceil(measure['text_characters'] * largest))
+    measure['fits'] = ((measure['character_limit'] is None or measure['characters'] <= measure['character_limit'])
+                       and measure['tokens_upper'] <= measure['token_limit'])
+    return measure
+
+
+def forecast_reading_chain(records, artifacts, route, packet, rows, record, *, request=None,
+                            eligible_texts=(), assignments=(), projection=None, final_input=None):
+    """Advisory legacy growth, serialized retained entries and remaining text allowances, outside packet digests."""
+    if final_input is None:
+        reading_turn_ids = {identifier for identifier in assignments if records['review_assignment'][identifier].get(
+            'prompt', {}).get('parameters', {}).get('reading_stage') == 'reading'}
+        final = measure_final_input(route, packet, rows, record, eligible_texts=eligible_texts,
+                                    reading_turn_ids=reading_turn_ids or None, records=records, artifacts=artifacts)
+    else:
+        final = copy.deepcopy(final_input)
+    entries = measure_retained_entries(route, record)
+    allowances = {kind: value['characters'] - value['used'] for kind, value in record['allowances'].items()}
+    plan_rows = list_delivery_rows(rows, record['search_delivery']) if 'search_delivery' in record else rows
+    # No writes: compute spans, rather than materializing parts for a receipt.
+    planned = sum(len(value) for value in _compute_spans(artifacts, plan_rows).values())
+    observed = len(record['turns'])
+    retained = sum(value['characters'] for kind, value in entries.items() if kind not in ('turn', 'source'))
+    charged = sum(value['used'] for kind, value in record['allowances'].items() if kind in ('excerpts', 'passages'))
+    ratio = max(3.24, retained / max(1, charged))
+    if record['protocol'] == MATH_PROTOCOL:
+        # Two recorded turns establish the first measured mean. Uncharged diagnostics are in retained.
+        estimate = (final['input_characters'] + math.ceil(sum(value['characters'] for value in entries.values())
+                     / observed * max(0, planned - observed))) if observed >= 2 else None
+    else:
+        estimate = final['input_characters'] + math.ceil(sum(allowances.values()) * ratio)
+        estimate += max(0, planned - observed) * math.ceil(entries['turn']['characters'] / max(1, observed))
+    finite = projection is not None and projection['finite']
+    if finite:
+        estimate = projection['characters']
+    limit = transport.local_input_limit(route)
+    forecast = dict(protocol=record['protocol'], finite=finite, is_bound=finite,
+        measured_final=final, retained_entries=entries, remaining_allowances=allowances,
+        planned_reading_turns=planned, planned_reading_turns_upper_bound=True, recorded_turns=observed,
+        units=describe_reading_units(artifacts, plan_rows),
+        final_estimate=dict(status='available' if estimate is not None else 'unavailable', estimate=not finite,
+                            input_characters=estimate, input_limit_characters=limit))
+    if not finite:
+        forecast['message'] = FORECAST_NO_BOUND_MESSAGE
+    warning = dict(warning=estimate is not None and estimate > limit, estimate=True,
+                   projected_input_characters=estimate, input_limit_characters=limit,
+                   message=FINITE_PROJECTION_MESSAGE if finite else FORECAST_NO_BOUND_MESSAGE,
+                   ways=[CONTINUE_TO_V7_MESSAGE, EXPORT_TO_V7_MESSAGE])
+    final.update(remaining_allowances=allowances, capacity_warning=warning['warning'])
+    if request is not None:
+        warning.update(request=_measure_chain_request(records, artifacts, route, request, set(assignments)))
+        warning['warning'] = warning['warning'] or not warning['request']['fits']
+    if record['protocol'] == MATH_PROTOCOL:
+        warning['ways'] = [CONTINUE_MATH_ANSWER, WAIT_MATH_ANSWER, SMALLER_PACKET_ANSWER]
+    return forecast, warning
+
+
+def describe_reading_receipt(records, artifacts, assignment, route, logical, packet, request, *, admit_turn=True):
+    """Attach forecasts to receipts only; the saved assignment, prompt and request keep their bytes."""
+    record = _find_record(packet)
+    rows = list_reading_rows(records, artifacts, logical['native'])
+    selected = _classify_final_texts(records, artifacts, logical['native'], rows, record['protocol'])
+    prior = records.get('review_assignment', {}).get(assignment['context'].get('prior_assignment_id'))
+    stored = records.get('review_assignment', {}).get(assignment['id'])
+    head = stored or prior
+    lineage = _list_chain(records, head) if head is not None else []
+    identifiers = {row['id'] for row in lineage}
+    reading_turn_ids = {row['id'] for row in lineage if row.get('prompt', {}).get('parameters', {}).get(
+        'reading_stage') == 'reading'}
+    final = measure_final_input(route, logical, rows, record, eligible_texts=selected,
+                                reading_turn_ids=reading_turn_ids or None, records=records, artifacts=artifacts)
+    total = record['allowances'].get('record', {}).get('characters')
+    projection = project_reading_chain(route, logical, rows, record, artifacts=artifacts, records=records,
+                                       eligible_texts=selected,
+                                       record_total=total, final_input=final)
+    forecast, warning = forecast_reading_chain(records, artifacts, route, logical, rows, record,
+        request=request, eligible_texts=selected, assignments=identifiers, projection=projection, final_input=final)
+    admission = admit_reading_chain(route, projection, records=records, artifacts=artifacts,
+                                    assignment=head or assignment)
+    exact = warning['request']
+    details = dict(request=exact, capacity_forecast=forecast, limit=exact['character_limit'],
+                   projection=projection, units=projection['units'])
+    if admit_turn and exact['character_limit'] is not None and exact['characters'] > exact['character_limit']:
+        _raise_projection_stop(record, details, records=records, artifacts=artifacts,
+                               assignment=head or assignment)
+    if admit_turn and record['protocol'] == MATH_PROTOCOL and warning['projected_input_characters'] is not None:
+        estimate = forecast['final_estimate']
+        # Row 9's authenticated owner observation on this head authorizes the rest of this chain.
+        continued = any(event['assignment_id'] in identifiers and event['kind'] == 'observation'
+                        and event['source'] == 'owner' and event['reason'] == MATH_CONTINUATION_REASON
+                        for event in records.get('review_context_event', {}).values())
+        if estimate['input_characters'] > estimate['input_limit_characters'] and not continued:
+            _raise_projection_stop(record, dict(details, estimate=True), records=records,
+                                   artifacts=artifacts, assignment=head or assignment)
+    warnings = dict(input=warning)
+    if record['protocol'] == PROTOCOL_V6:
+        from .review_route_capacity import describe_assignment_limits, describe_assignment_kind, read_output_profile, describe_output_warning
+        limits = describe_assignment_limits(route, read_output_profile(records, route), assignment)
+        warnings.update(describe_output_warning({describe_assignment_kind(assignment): limits}) or {})
+    return dict(diagnostics=dict(final_input=forecast['measured_final']), capacity_forecast=forecast,
+                capacity_warning=warnings, reading_chain_admission=admission)
 
 
 def _fits(route, prompt, packet, artifacts_now):
@@ -631,14 +1510,16 @@ def _measure_parts(route, prompt, packet):
                       'passages': sizes[2] - sizes[3]}}
 
 
-def _fit_turn(route, prompt, packet, bodies=()):
+def _fit_turn(route, prompt, packet, bodies=(), *, refuse=True):
     """A copy of a turn's packet whose request fits the route's input limit, with that request. While the request does
     not fit, it withholds one item at a time: the listed bodies in order, each given as its SHA-256 and the reading
     turns that delivered it, then the notes of the earlier turns, oldest first. It never withholds an excerpt or a
-    passage. When nothing more can be withheld, review_input_too_large names the characters of the base packet, the
-    notes, the excerpts and the passages."""
+    passage. When nothing more can be withheld, the chain capacity stop names the characters of the base packet,
+    the notes, the excerpts and the passages."""
     candidate = copy.deepcopy(packet)
     limit = transport.local_input_limit(route)
+    if _find_record(candidate)['protocol'] == PROTOCOL_V6:
+        limit = min(limit, _find_record(candidate)['projection_characters'])
     bodies, turns = iter(bodies), iter(_find_record(candidate)['turns'])
     while True:
         request = _render(route, prompt, candidate)
@@ -654,16 +1535,12 @@ def _fit_turn(route, prompt, packet, bodies=()):
             continue
         turn = next(turns, None)
         if turn is None:
+            if not refuse:
+                return candidate, request
             details = _measure_parts(route, prompt, candidate)
-            parts = details['parts']
-            raise ResearchError('review_input_too_large',
-                                'The ' + find_stage(candidate) + ' turn of the reading chain has '
-                                + str(details['input_characters']) + ' input characters after it withholds every body '
-                                'and note that it may withhold, above the route input limit of ' + str(limit)
-                                + ': base packet ' + str(parts['base_packet']) + ', notes ' + str(parts['notes'])
-                                + ', excerpts ' + str(parts['excerpts']) + ', passages ' + str(parts['passages']) + '.',
-                                details)
-        del turn['notes']
+            details['retained_entries'] = measure_retained_entries(route, _find_record(candidate))
+            _raise_projection_stop(_find_record(candidate), details)
+        turn.pop('notes', None)
         turn['notes_withheld'] = NOTES_WITHHELD_NOTE.format(turn['assignment_id'])
 
 
@@ -692,6 +1569,10 @@ def _build_reading_turn(artifacts, route, packet, record, delivered, candidates,
     each of them complete."""
     from .review_protocol import canonical_prompt
     prompt = canonical_prompt('native_math', reading_stage='reading', reading_protocol=record['protocol'])['text']
+    if not candidates:
+        final = dict(packet, **{RECORD_KEY: record})
+        final_prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'])['text']
+        _raise_projection_stop(record, _measure_parts(route, final_prompt, final))
     chosen, characters = None, 0
     for count, unit in enumerate(candidates, 1):
         characters += unit['characters']
@@ -710,9 +1591,8 @@ def _build_reading_turn(artifacts, route, packet, record, delivered, candidates,
             break
         chosen = trial
     if chosen is None:
-        raise ResearchError('review_input_too_large', 'The reading turn does not deliver its first unit complete',
-                            {'unit': {key: item for key, item in candidates[0].items()
-                                      if key != 'artifact_descriptor'}})
+        _raise_projection_stop(record, {'unit': {key: item for key, item in candidates[0].items()
+                                                            if key != 'artifact_descriptor'}})
     return chosen
 
 
@@ -720,14 +1600,14 @@ def _list_withholding_candidates(packet, rows, eligible_texts=()):
     """The carried rows structurally eligible for final-body withholding, without delivery credit."""
     from .problem_openness_sources import protected_evidence, required_proof
     protected = set(protected_evidence(packet)) | required_proof(packet['native'])
-    if find_protocol(packet) == PROTOCOL_V5:
+    if find_protocol(packet) in (PROTOCOL_V5, PROTOCOL_V6):
         protected.difference_update(eligible_texts)
     carried = {entry['artifact']['sha256'] for entry in packet['evidence']}
     return [row for row in rows if row.get('record_kind') != 'problem_statement'
             and row['artifact']['sha256'] not in protected and row['artifact']['sha256'] in carried]
 
 
-def preflight_final_input(route, input_limit, packet, rows, record, *, eligible_texts=(), delivered=None):
+def preflight_final_input(route, input_limit, packet, rows, record, *, eligible_texts=(), delivered=None, refuse=True):
     """Measure a diagnostic mandatory-final-input floor, or return unknown for unsupported representations.
 
     No artifacts, observations or deliverable packets are produced. The projection keeps the immutable native
@@ -740,7 +1620,7 @@ def preflight_final_input(route, input_limit, packet, rows, record, *, eligible_
     report = {'phase': 'final_preflight', 'measurement_kind': 'mandatory_input_lower_bound',
               'status': 'unknown', 'input_characters': None, 'input_limit_characters': input_limit,
               'mandatory_components': []}
-    v5 = record['protocol'] == PROTOCOL_V5
+    v5 = record['protocol'] in (PROTOCOL_V5, PROTOCOL_V6)
     if v5:
         report.update(headroom_upper_bound_characters=None, planned_removable_texts=[
             dict(_describe_identity(row), artifact=row['artifact'],
@@ -755,7 +1635,7 @@ def preflight_final_input(route, input_limit, packet, rows, record, *, eligible_
             and 'review_text_encoding' in packet['native']['scientific_context']):
         return dict(report, reason='No sound mandatory-input lower bound is established for this representation.')
     candidate = copy.deepcopy(packet)
-    if record['protocol'] == PROTOCOL_V5:
+    if record['protocol'] in (PROTOCOL_V5, PROTOCOL_V6):
         _project_search_delivery(candidate, record)
     candidate[RECORD_KEY] = record
     optional = {row['artifact']['sha256'] for row in _list_withholding_candidates(candidate, rows, eligible_texts)}
@@ -763,7 +1643,7 @@ def preflight_final_input(route, input_limit, packet, rows, record, *, eligible_
         if entry['artifact']['sha256'] in optional - set(eligible_texts):
             entry['content'] = ''
     candidate[RECORD_KEY] = {key: copy.deepcopy(record[key]) for key in ('protocol', 'excerpts', 'passages')}
-    if record['protocol'] == PROTOCOL_V5:
+    if record['protocol'] in (PROTOCOL_V5, PROTOCOL_V6):
         candidate[RECORD_KEY]['search_delivery'] = copy.deepcopy(record['search_delivery'])
     prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'])['text']
     request = _render(route, prompt, candidate)
@@ -798,9 +1678,15 @@ def preflight_final_input(route, input_limit, packet, rows, record, *, eligible_
         headroom = input_limit - report['input_characters']
         report.update(headroom_upper_bound_characters=headroom,
                       capacity_warning=headroom < sum(report['remaining_allowances'].values()))
-    if report['input_characters'] > input_limit:
-        raise ResearchError('review_input_too_large',
-                            'The mandatory final input of the reading chain exceeds the route input limit.', report)
+    if refuse and report['input_characters'] > input_limit:
+        final = measure_final_input(route, packet, rows, record, eligible_texts=eligible_texts)
+        _raise_projection_stop(record, dict(report,
+            projection=dict(finite=False, characters=None, parts=final['parts']),
+            capacity_forecast=dict(protocol=record['protocol'], finite=False, is_bound=False,
+                message=FORECAST_NO_BOUND_MESSAGE, measured_final=final,
+                retained_entries=measure_retained_entries(route, record),
+                remaining_allowances={kind: value['characters'] - value['used']
+                                      for kind, value in record['allowances'].items()})))
     return report
 
 
@@ -815,7 +1701,7 @@ def _list_withholdable_bodies(packet, rows, spans, observations, eligible_texts=
     priority = native['scientific_context'].get('text_delivery_priority', [])
     whole, parts = _collect_coverage(observations)
     receipts = (select_delivered_bodies(_collect_delivered_bodies(rows, spans, observations).values())
-                if packet.get(RECORD_KEY, {}).get('protocol') == PROTOCOL_V5 else None)
+                if packet.get(RECORD_KEY, {}).get('protocol') in (PROTOCOL_V5, PROTOCOL_V6) else None)
     ranked = []
     for row in _list_withholding_candidates(packet, rows, eligible_texts):
         key, sha256 = review_excerpts.find_identity(row), row['artifact']['sha256']
@@ -824,7 +1710,8 @@ def _list_withholdable_bodies(packet, rows, spans, observations, eligible_texts=
         if row['kind'] == 'fulltext' and sha256 in priority:
             rank = (0, -priority.index(sha256))
         else:
-            rank = (1 + WITHHOLDING_ORDER.index(row.get('record_kind', row['kind'])), -spans[key][-1][1])
+            rank = (1 + (V6_WITHHOLDING_ORDER if find_protocol(packet) == PROTOCOL_V6 else WITHHOLDING_ORDER).index(
+                     row.get('record_kind', row['kind'])), -spans[key][-1][1])
         delivering = [observation['assignment_id'] for observation in observations if observation['reading']
                       and (key in observation['whole'] or any(item[0] == key for item in observation['parts']))]
         if receipts is not None:
@@ -843,7 +1730,7 @@ def _build_final_turn(route, packet, record, rows, spans, observations, eligible
     from .review_protocol import canonical_prompt
     value = {key: item for key, item in packet.items() if key != 'digest'}
     value[RECORD_KEY] = record
-    if record['protocol'] == PROTOCOL_V5:
+    if record['protocol'] in (PROTOCOL_V5, PROTOCOL_V6):
         value = copy.deepcopy(value)
         _project_search_delivery(value, record)
     bodies = _list_withholdable_bodies(value, rows, spans, observations, eligible_texts)
@@ -865,7 +1752,7 @@ def _project_search_delivery(packet, record):
 
 def _read_prior(records, artifacts, value, prior_id):
     """The earlier turn that a chain turn continues, with its packet and its observed reading response."""
-    from .review_protocol import assignment_state, find_replacement, has_ended_without_output
+    from .review_protocol import assignment_state, find_replacement, has_ended_without_output, is_dead_assignment
     prior = records.get('review_assignment', {}).get(prior_id)
     if prior is None:
         raise ResearchError('review_record_missing', 'Missing review_assignment: ' + str(prior_id))
@@ -883,6 +1770,7 @@ def _read_prior(records, artifacts, value, prior_id):
     # A turn whose attempts all ended without output does not hold the chain: this assignment replaces it.
     if any(saved['role'] == 'native_math' and saved['context'].get('prior_assignment_id') == prior_id
            and not has_ended_without_output(records, saved['id'])
+           and not is_dead_assignment(records, saved)
            for saved in records.get('review_assignment', {}).values()):
         raise ResearchError('review_source_continuation_fork', 'Continue the latest turn of the reading chain')
     state = assignment_state(records, artifacts, prior_id)
@@ -892,7 +1780,8 @@ def _read_prior(records, artifacts, value, prior_id):
                             {'obligations': state['obligations']})
     prior_packet = json.loads(artifacts.read(prior['packet']))
     validate_turn_output(prior_packet, state['output'])
-    _require(has_deliverable_passage(records, artifacts, prior_packet, state['output']), PASSAGE_PROGRESS_ERR_MSG,
+    _require(has_deliverable_passage(records, artifacts, prior_packet, state['output'],
+                                      assignment=prior, attempt=records['review_attempt'][state['attempt_id']]), PASSAGE_PROGRESS_ERR_MSG,
              path='/passage_requests')
     if state['output'].get('stage') != 'reading':
         raise ResearchError('review_resampling_forbidden',
@@ -913,6 +1802,32 @@ def _list_chain(records, assignment):
     return chain
 
 
+def _describe_delivered_turn(assignment_id, attempt_id, sent, rows, spans, *, reading, manifest=None):
+    """Describe the actual request's complete unit/part receipts without observing its output again."""
+    complete = review_excerpts.find_complete_bodies(sent)
+    planned = ({(review_excerpts.find_identity(row), row['part'])
+                for row in sent.get(TURN_KEY, {}).get('reading_plan', {}).get('delivered_now', [])}
+               if manifest is not None else set())
+    whole, parts, delivered_parts = set(), set(), []
+    for row in rows:
+        key = review_excerpts.find_identity(row)
+        if (row['artifact']['sha256'] in complete
+                and (manifest is None or not reading or (key, 1) in planned and len(spans[key]) == 1)):
+            whole.add(key)
+        for part, (start, end, sha256) in enumerate(spans[key], 1):
+            if (len(spans[key]) > 1 and sha256 in complete
+                    and (manifest is None or (key, part) in planned)):
+                parts.add((key, part))
+                delivered_parts.append(dict(_describe_identity(row), part=part, parts=len(spans[key]),
+                                            start=start, end=end, characters=end - start))
+    turn = {'assignment_id': assignment_id, 'attempt_id': attempt_id,
+            'delivered_units': [_describe_identity(row) for row in rows
+                                if review_excerpts.find_identity(row) in whole]}
+    if delivered_parts:
+        turn['delivered_parts'] = delivered_parts
+    return turn, whole, parts
+
+
 def _observe_turns(records, artifacts, assignments, rows, spans, manifest=None):
     """For each turn, its authenticated observation: the units whose whole body and the parts whose exact slice its
     actual recorded request delivered complete, its observed output, and whether it is a reading turn. Every turn must
@@ -927,33 +1842,15 @@ def _observe_turns(records, artifacts, assignments, rows, spans, manifest=None):
                                 'context', {'assignment_id': assignment['id'], 'obligations': state['obligations']})
         attempt = records['review_attempt'][state['attempt_id']]
         sent = review_excerpts.read_sent_packet(json.loads(artifacts.read(attempt['request']))) or {}
-        complete = review_excerpts.find_complete_bodies(sent)
         packet = json.loads(artifacts.read(assignment['packet']))
         reading = find_stage(packet) == 'reading'
-        planned = ({(review_excerpts.find_identity(row), row['part'])
-                    for row in sent.get(TURN_KEY, {}).get('reading_plan', {}).get('delivered_now', [])}
-                   if manifest is not None else set())
-        whole, parts, delivered_parts = set(), set(), []
-        for row in rows:
-            key = review_excerpts.find_identity(row)
-            if (row['artifact']['sha256'] in complete
-                    and (manifest is None or not reading or (key, 1) in planned and len(spans[key]) == 1)):
-                whole.add(key)
-            for part, (start, end, sha256) in enumerate(spans[key], 1):
-                if (len(spans[key]) > 1 and sha256 in complete
-                        and (manifest is None or (key, part) in planned)):
-                    parts.add((key, part))
-                    delivered_parts.append(dict(_describe_identity(row), part=part, parts=len(spans[key]),
-                                                start=start, end=end, characters=end - start))
-        turn = {'assignment_id': assignment['id'], 'attempt_id': attempt['id'],
-                'delivered_units': [_describe_identity(row) for row in rows
-                                    if review_excerpts.find_identity(row) in whole]}
-        if delivered_parts:
-            turn['delivered_parts'] = delivered_parts
+        turn, whole, parts = _describe_delivered_turn(assignment['id'], attempt['id'], sent, rows, spans,
+                                                     reading=reading, manifest=manifest)
         observations.append({'assignment_id': assignment['id'], 'output': state['output'], 'reading': reading,
                              'delivered_now': packet[TURN_KEY]['reading_plan']['delivered_now'] if reading else [],
                              'whole': whole, 'parts': parts, 'turn': turn})
         if manifest is not None:
+            complete = review_excerpts.find_complete_bodies(sent)
             observations[-1]['bodies'] = {entry['artifact']['sha256']: entry['content'].encode('utf-8')
                                          for entry in sent.get('evidence', [])
                                          if entry['artifact']['sha256'] in complete}
@@ -1072,11 +1969,85 @@ def _compact_entry(entry, sources):
     return compact
 
 
+def measure_record_charge(route, record):
+    """The exact serialized characters charged by v6, including list separators for extra turns."""
+    extra = [turn for turn in record['turns'] if turn['stage'] == 'final']
+    reading = any(turn['stage'] == 'reading' for turn in record['turns'])
+    return (sum(measure_record_entries(route, record[key]) for key in ('excerpts', 'passages'))
+            + measure_record_entries(route, extra) + (2 if extra and reading else 0))
+
+
+def _retain_v6_entry(route, record, key, entry, sources, allowances, kind):
+    """Retain an entry only when the third total holds it; rejected entries charge no text allowance."""
+    allowance = record['allowances']['record']
+    used = allowance['used'] + measure_record_entries(route, [entry]) + (2 if record[key] else 0)
+    if used > allowance['characters']:
+        counts = allowance['not_retained']
+        counts[kind] = counts.get(kind, 0) + 1
+        return False
+    record[key].append(entry)
+    record['sources'] = sources
+    record['allowances'] = allowances
+    record['allowances']['record']['used'] = used
+    return True
+
+
+def _retain_v6_output(records, artifacts, earlier, output, rows, route, turns):
+    """Retain a whole output in order after charging its actual final-turn receipt."""
+    record = copy.deepcopy(earlier)
+    record['turns'] = turns
+    used = measure_record_charge(route, record)
+    if used > record['allowances']['record']['characters']:
+        return None
+    record['allowances']['record']['used'] = used
+    unit_sources = _collect_unit_sources(rows)
+    excerpt_protocol = earlier['excerpt_protocol']
+    def retain_excerpt(entry, allowances):
+        sources = copy.deepcopy(record['sources'])
+        compact = _compact_entry(entry, sources)
+        return _retain_v6_entry(route, record, 'excerpts', compact, sources, allowances,
+                                classify_retained_entry(compact))
+
+    def retain_passage(entry, allowances):
+        sources = copy.deepcopy(record['sources'])
+        compact = _compact_entry(entry, sources)
+        compact['assignment_id'] = turns[-1]['assignment_id']
+        return _retain_v6_entry(route, record, 'passages', compact, sources, allowances,
+                                classify_retained_entry(compact, passage=True))
+
+    review_excerpts.check_excerpts(records, artifacts, output['excerpts'], record['allowances'],
+        unit_sources=unit_sources, protocol=excerpt_protocol, retained=record['excerpts'], retain_entry=retain_excerpt)
+    review_excerpts.answer_passages(records, artifacts, output['passage_requests'], record['allowances'],
+        unit_sources=unit_sources, protocol=excerpt_protocol, retain_entry=retain_passage)
+    return record
+
+
+def _extend_v6_record(records, artifacts, prior_packet, state, rows, observations):
+    """Rebuild bounded retained state in output order, charging every final row before its entries."""
+    earlier = _find_record(prior_packet)
+    _require_observed_turns(earlier, observations[:-1])
+    route = records['review_route'][records['review_assignment'][observations[-1]['assignment_id']]['route_id']]
+    turns = [dict(observation['turn'], stage='reading' if observation['reading'] else 'final',
+                  **(dict(notes=observation['output']['notes']) if observation['reading'] else
+                     dict(notes_withheld=NOTES_WITHHELD_NOTE.format(observation['assignment_id']))))
+             for observation in observations]
+    record = _retain_v6_output(records, artifacts, earlier, state['output'], rows, route, turns)
+    if record is None:
+        raise ResearchError(INVALID_RESPONSE, RECORD_PASSAGE_LIMIT_MESSAGE, {'path': '/passage_requests'})
+    manifest = earlier['search_delivery']
+    delivery_rows = list_delivery_rows(rows, manifest)
+    record['search_receipts'] = _verify_search_coverage(
+        artifacts, manifest, delivery_rows, _compute_spans(artifacts, delivery_rows), observations)
+    return record
+
+
 def _extend_record(records, artifacts, prior_packet, state, rows, observations, protocol):
     """The compact reading record of the given protocol after the prior turn. It lists every observed turn of the chain
     with the units that its actual request delivered and with its notes from its observed output, keeps the earlier
     excerpts and passage answers, and adds the prior output's excerpts and the answers to its passage requests, checked
     under the prior's own protocol. A verbose record of 0.64.2 to 0.66.2 keeps its checked texts and allowance use."""
+    if protocol == PROTOCOL_V6:
+        return _extend_v6_record(records, artifacts, prior_packet, state, rows, observations)
     earlier = _find_record(prior_packet)
     _require_observed_turns(earlier, observations[:-1])
     unit_sources = _collect_unit_sources(rows) if find_protocol(prior_packet) in GENERIC_UNIT_PROTOCOLS else None
@@ -1102,7 +2073,7 @@ def _extend_record(records, artifacts, prior_packet, state, rows, observations, 
               'allowances': allowances}
     if 'excerpt_protocol' in earlier:
         record['excerpt_protocol'] = excerpt_protocol
-    if protocol == PROTOCOL_V5:
+    if protocol in (PROTOCOL_V5, PROTOCOL_V6):
         manifest = earlier['search_delivery']
         delivery_rows = list_delivery_rows(rows, manifest)
         record.update(search_delivery=copy.deepcopy(manifest), search_receipts=_verify_search_coverage(
@@ -1116,7 +2087,10 @@ def _create_record(protocol, manifest=None, *, excerpt_protocol=None):
               'allowances': review_excerpts.create_allowances()}
     if excerpt_protocol is not None:
         record['excerpt_protocol'] = excerpt_protocol
-    if protocol == PROTOCOL_V5:
+    if protocol == PROTOCOL_V6:
+        from .storage import _MAX_STORED_INTEGER
+        record.update(planned_reading_turns=0, projection_characters=_MAX_STORED_INTEGER)
+    if protocol in (PROTOCOL_V5, PROTOCOL_V6):
         record.update(search_delivery=manifest, search_receipts=[])
     return record
 
@@ -1129,9 +2103,14 @@ def prepare_packet(records, artifacts, value, route, packet):
     turn. V5 planning diagnostics accompany the returned chain metadata; record_assignment removes them before
     saving the chain and returns them separately from the scientific packet."""
     native = packet['native']
+    prior_id = value['context'].get('prior_assignment_id')
+    if prior_id is None and is_openness_packet(native):
+        context = native['scientific_context']
+        if (context['openness_minimum'].get('schema_version') != 2
+                or 'minimum_gaps' not in context or 'audit_forecast' not in context):
+            raise ResearchError('openness_packet_outdated', PACKET_OUTDATED_MESSAGE, {'handoff': 'export'})
     from .capture_selection import bind_packet_selections
     records = bind_packet_selections(records, native['scientific_context'], artifacts=artifacts, review=value)
-    prior_id = value['context'].get('prior_assignment_id')
     if prior_id is None:
         _require_initial_captures(records, native)
         if (not (is_openness_packet(native) or is_math_openness_packet(native))
@@ -1141,17 +2120,32 @@ def prepare_packet(records, artifacts, value, route, packet):
         rows = list_reading_rows(records, artifacts, native, review=value)
         characters = sum(len(artifacts.read(row['artifact']).decode('utf-8')) for row in rows)
         if (characters <= review_excerpts.TURN_FULLTEXT_CHARACTERS
-                and _fits(route, canonical_prompt('native_math')['text'], packet, [row['artifact'] for row in rows])):
+                and _fits(route, canonical_prompt('native_math', version=7 if is_openness_packet(native) else 6)['text'],
+                          packet, [row['artifact'] for row in rows])):
             return packet, None
         protocol = find_chain_protocol(native)
-        plan = _plan_search_delivery(artifacts, native) if protocol == PROTOCOL_V5 else None
+        require_reserved_identifier(value['id'], protocol)
+        plan = _plan_search_delivery(artifacts, native) if protocol in (PROTOCOL_V5, PROTOCOL_V6) else None
+        if plan is not None:
+            for content in plan['bodies'].values():
+                artifacts.put(content, 'application/json')
         record = _create_record(protocol, plan['manifest'] if plan is not None else None,
                                 excerpt_protocol=review_excerpts.SESSION_PROTOCOL)
         chain = {'first_assignment_id': value['id'], 'turn': 1}
+        if protocol == PROTOCOL_V6:
+            record['planned_reading_turns'] = sum(len(parts) for parts in
+                _compute_spans(artifacts, list_delivery_rows(rows, record['search_delivery'])).values())
+            projection = project_reading_chain(route, packet, rows, record, artifacts=artifacts, records=records,
+                eligible_texts=_classify_final_texts(records, artifacts, native, rows, protocol))
+            admission = admit_reading_chain(route, projection, records=records, artifacts=artifacts, assignment=value)
+            if admission['state'] != 'record':
+                raise ResearchError(PROJECTION_STOP, PROJECTION_STOP_MESSAGE, admission['details'])
+            record['allowances']['record'] = dict(characters=projection['record_total'], used=0, not_retained={})
+            record['projection_characters'] = projection['characters']
         selected = _classify_final_texts(records, artifacts, native, rows, protocol)
         report = preflight_final_input(route, transport.local_input_limit(route), packet, rows, record,
-                                       eligible_texts=selected)
-        if protocol == PROTOCOL_V5:
+                                       eligible_texts=selected, refuse=protocol != MATH_PROTOCOL)
+        if protocol in (PROTOCOL_V5, PROTOCOL_V6):
             chain['diagnostics'] = {'final_input': report}
         if plan is not None:
             for content in plan['bodies'].values():
@@ -1161,12 +2155,13 @@ def prepare_packet(records, artifacts, value, route, packet):
     prior, prior_packet, state = _read_prior(records, artifacts, value, prior_id)
     rows = list_reading_rows(records, artifacts, native, review=value)
     protocol = find_chain_protocol(native, find_protocol(prior_packet))
-    manifest = _find_record(prior_packet)['search_delivery'] if protocol == PROTOCOL_V5 else None
+    require_reserved_identifier(value['id'], protocol)
+    manifest = _find_record(prior_packet)['search_delivery'] if protocol in (PROTOCOL_V5, PROTOCOL_V6) else None
     delivery_rows = list_delivery_rows(rows, manifest) if manifest is not None else rows
     spans = _compute_spans(artifacts, delivery_rows)
     prior_chain = _list_chain(records, prior)
     observations = _observe_turns(records, artifacts, prior_chain, delivery_rows, spans, manifest)
-    if protocol == PROTOCOL_V5:
+    if protocol in (PROTOCOL_V5, PROTOCOL_V6):
         try:
             _require_problem_continuity(records, artifacts, native, prior_chain, rows, observations, manifest)
         except ResearchError as error:
@@ -1180,10 +2175,10 @@ def prepare_packet(records, artifacts, value, route, packet):
     chain = dict(prior['reading_chain'], turn=prior['reading_chain']['turn'] + 1)
     selected = _classify_final_texts(records, artifacts, native, rows, protocol)
     delivered_bodies = (select_delivered_bodies(_collect_delivered_bodies(delivery_rows, spans, observations).values())
-                        if protocol == PROTOCOL_V5 else None)
+                        if protocol in (PROTOCOL_V5, PROTOCOL_V6) else None)
     report = preflight_final_input(route, transport.local_input_limit(route), packet, rows, record,
-                                   eligible_texts=selected, delivered=delivered_bodies)
-    if protocol == PROTOCOL_V5:
+                                   eligible_texts=selected, delivered=delivered_bodies, refuse=protocol != MATH_PROTOCOL)
+    if protocol in (PROTOCOL_V5, PROTOCOL_V6):
         chain['diagnostics'] = {'final_input': report}
     remaining = _list_remaining_units(artifacts, delivery_rows, spans, observations)
     if remaining:
@@ -1216,7 +2211,7 @@ def _require_initial_captures(records, native):
 
 def _classify_final_texts(records, artifacts, native, rows, protocol):
     """Selected full texts without any independent protection role, only for the v5 final planner."""
-    if protocol != PROTOCOL_V5:
+    if protocol not in (PROTOCOL_V5, PROTOCOL_V6):
         return set()
     from .problem_openness_sources import classify_selected_texts
     contained = {span['sha256'] for span in native['scientific_context'].get(
@@ -1246,7 +2241,8 @@ def _validate_reading_response(binding, output, protocol):
                  'notes is a nonempty string of at most 20,000 characters', characters=len(output['notes']),
                  minimum_characters=1, maximum_characters=NOTES_CHARACTERS)
     # The responses of 0.64.2 to 0.66.2 name versions only.
-    kinds = review_excerpts.UNIT_KINDS if protocol in GENERIC_UNIT_PROTOCOLS else None
+    kinds = (review_excerpts.UNIT_KINDS_V6 if protocol == PROTOCOL_V6 else
+             review_excerpts.UNIT_KINDS if protocol in GENERIC_UNIT_PROTOCOLS else None)
     review_excerpts.validate_excerpts(output['excerpts'], INVALID_RESPONSE, kinds)
     _require(isinstance(output['passage_requests'], list), 'passage_requests is a list', path='/passage_requests')
     seen = set()
@@ -1273,7 +2269,11 @@ def validate_turn_output(packet, output):
     from .native_review import validate_output
     final = find_stage(packet) == 'final'
     if final and not (isinstance(output, dict) and output.get('stage') == 'reading'):
-        validate_output(packet['native'], output)
+        if find_protocol(packet) == PROTOCOL_V6:
+            from .native_review import validate_finding
+            validate_finding(packet, output)
+        else:
+            validate_output(packet['native'], output)
         return
     _validate_reading_response(find_binding(packet), output, find_protocol(packet))
     if final:
@@ -1285,19 +2285,36 @@ def validate_turn_output(packet, output):
                  used_characters=allowance['used'], maximum_characters=allowance['characters'])
 
 
-def has_deliverable_passage(records, artifacts, packet, output):
-    """Whether a valid turn output may continue under the passage-progress rule of v4, v5 and the math protocol: a
-    reading response in a final turn must request at least one passage that the harness delivers from a bound body
-    within the remaining passage allowance. Every other output, including those under v1, v2 and v3, may."""
-    if (find_stage(packet) != 'final' or packet[RECORD_KEY]['protocol'] not in (PROTOCOL_V4, PROTOCOL_V5, MATH_PROTOCOL)
-            or output.get('stage') != 'reading'):
+def has_deliverable_passage(records, artifacts, packet, output, *, assignment=None, attempt=None, turn=None):
+    """A final reading response must retain a delivered passage after all preceding output entries and its receipt."""
+    if (find_stage(packet) != 'final' or packet[RECORD_KEY]['protocol'] not in
+            (PROTOCOL_V4, PROTOCOL_V5, PROTOCOL_V6, MATH_PROTOCOL) or output.get('stage') != 'reading'):
         return True
-    allowances = packet[RECORD_KEY]['allowances']
-    turns = packet[RECORD_KEY]['turns']
-    review = records.get('review_assignment', {}).get(turns[-1]['assignment_id']) if turns else None
-    unit_sources = _collect_unit_sources(list_reading_rows(records, artifacts, packet['native'], review=review))
+    earlier = packet[RECORD_KEY]
+    allowances = earlier['allowances']
+    turns = earlier['turns']
+    review = assignment or (records.get('review_assignment', {}).get(turns[-1]['assignment_id']) if turns else None)
+    rows = list_reading_rows(records, artifacts, packet['native'], review=review)
+    if find_protocol(packet) == PROTOCOL_V6:
+        route = records['review_route'][review['route_id']]
+        if turn is None:
+            delivery_rows = list_delivery_rows(rows, earlier['search_delivery'])
+            if assignment is not None and attempt is not None:
+                sent = review_excerpts.read_sent_packet(json.loads(artifacts.read(attempt['request']))) or {}
+                turn, _, _ = _describe_delivered_turn(assignment['id'], attempt['id'], sent, delivery_rows,
+                    _compute_spans(artifacts, delivery_rows), reading=False, manifest=earlier['search_delivery'])
+            else:
+                # Direct callers without an observed request reserve every possible complete-unit receipt.
+                identifier = '\x00' * RESERVED_IDENTIFIER_CHARACTERS
+                turn = dict(assignment_id=identifier, attempt_id=identifier,
+                            delivered_units=[_describe_identity(row) for row in delivery_rows])
+        current = dict(turn, stage='final', notes_withheld=NOTES_WITHHELD_NOTE.format(turn['assignment_id']))
+        record = _retain_v6_output(records, artifacts, earlier, output, rows, route,
+                                   copy.deepcopy(turns) + [current])
+        return record is not None and any(entry['status'] == 'delivered'
+            and entry['assignment_id'] == turn['assignment_id'] for entry in record['passages'][len(earlier['passages']):])
     _, after = review_excerpts.answer_passages(records, artifacts, output['passage_requests'], allowances,
-                                               unit_sources=unit_sources)
+                                               unit_sources=_collect_unit_sources(rows))
     return after['passages']['used'] > allowances['passages']['used']
 
 
@@ -1305,13 +2322,14 @@ def find_final_assignment(records, artifacts, identifier):
     """The effective terminal turn of the reading chain whose first turn is the given assignment. A continuation that
     ended without output and that a later continuation of the same turn replaced is history, not a branch; any other
     second continuation is a fork. The terminal turn is a final turn whose observed output is the native result."""
-    from .review_protocol import assignment_state, find_replacement, has_ended_without_output
+    from .review_protocol import assignment_state, find_replacement, has_ended_without_output, is_dead_assignment
     assignments = records.get('review_assignment', {})
     current = assignments[identifier]
     while True:
         live = [saved for saved in assignments.values()
                 if saved['role'] == 'native_math' and saved['context'].get('prior_assignment_id') == current['id']
-                and not (has_ended_without_output(records, saved['id']) and find_replacement(records, saved))]
+                and not ((has_ended_without_output(records, saved['id']) or is_dead_assignment(records, saved))
+                         and find_replacement(records, saved))]
         if len(live) > 1:
             raise ResearchError('review_source_continuation_fork', 'The reading chain has more than one live '
                                 'continuation', {'assignment_ids': sorted(saved['id'] for saved in live)})
@@ -1465,7 +2483,8 @@ def _require_math_continuity(records, artifacts, native, chain, rows, spans, obs
             raise ResearchError('openness_reading_incomplete', 'A math reading chain ends at its first final turn that '
                                 'returns the native result', {'assignment_id': assignment['id']})
         if not last:
-            _require(has_deliverable_passage(records, artifacts, packet, output), PASSAGE_PROGRESS_ERR_MSG,
+            _require(has_deliverable_passage(records, artifacts, packet, output,
+                                              assignment=assignment, turn=observation['turn']), PASSAGE_PROGRESS_ERR_MSG,
                      path='/passage_requests')
             record = _extend_record(records, artifacts, packet, {'output': output}, rows, observations[:index + 1],
                                     MATH_PROTOCOL)
@@ -1509,11 +2528,19 @@ def _require_problem_continuity(records, artifacts, native, chain, rows, observa
         raise ResearchError('openness_reading_incomplete', 'The frozen search manifest differs from the bound originals')
     first = chain[0]
     first_packet = json.loads(artifacts.read(first['packet']))
-    record = _create_record(PROTOCOL_V5, manifest,
+    protocol = find_protocol(first_packet)
+    record = _create_record(protocol, manifest,
                             excerpt_protocol=_find_record(first_packet).get('excerpt_protocol'))
+    if protocol == PROTOCOL_V6:
+        record['allowances']['record'] = dict(
+            characters=_find_record(first_packet)['allowances']['record']['characters'], used=0, not_retained={})
+        record['planned_reading_turns'] = _find_record(first_packet)['planned_reading_turns']
+        record['projection_characters'] = _find_record(first_packet)['projection_characters']
     delivery_rows = list_delivery_rows(rows, manifest)
     spans = _compute_spans(artifacts, rows)
     delivery_spans = _compute_spans(artifacts, delivery_rows)
+    if protocol == PROTOCOL_V6 and record['planned_reading_turns'] != sum(len(parts) for parts in delivery_spans.values()):
+        raise ResearchError('openness_reading_incomplete', 'The first reading plan must reserve every physical unit part')
     for index, (assignment, observation) in enumerate(zip(chain, observations)):
         packet, output = json.loads(artifacts.read(assignment['packet'])), observation['output']
         stage = find_stage(packet)
@@ -1525,14 +2552,14 @@ def _require_problem_continuity(records, artifacts, native, chain, rows, observa
             bound = (turn['statement'] == native['subject'] and all(
                 turn[key] == native[key] for key in ('subject_digest', 'claim_digest', 'reviewer'))
                 and turn['formulations'] == {'statement': minimum['statement'], 'neighbours': minimum['neighbours']})
-        if (not bound or find_protocol(packet) != PROTOCOL_V5 or assignment['role'] != 'native_math'
+        if (not bound or find_protocol(packet) != protocol or assignment['role'] != 'native_math'
                 or assignment['context']['native_packet'] != first['context']['native_packet']
                 or assignment['route_id'] != first['route_id']
                 or normalized_text(assignment['reviewer_id']) != normalized_text(first['reviewer_id'])
                 or normalized_text(assignment['author_id']) != normalized_text(first['author_id'])
                 or assignment.get('reading_chain') != {'first_assignment_id': first['id'], 'turn': index + 1}
                 or assignment['prompt'] != canonical_prompt(
-                    'native_math', reading_stage=stage, reading_protocol=PROTOCOL_V5,
+                    'native_math', reading_stage=stage, reading_protocol=protocol,
                     common_version=find_common_prompt_version(assignment['prompt']))):
             raise ResearchError('openness_reading_incomplete', 'Every turn of a v5 problem chain keeps the binding, '
                                 'protocol and prompt of its first turn', {'assignment_id': assignment['id']})
@@ -1553,17 +2580,18 @@ def _require_problem_continuity(records, artifacts, native, chain, rows, observa
                         if entry.get('delivery') == SEARCH_DELIVERY} != omitted):
                 raise ResearchError('openness_reading_incomplete', 'The v5 final search omissions must match the '
                                     'frozen manifest exactly')
-            selected = _classify_final_texts(records, artifacts, native, rows, PROTOCOL_V5)
+            selected = _classify_final_texts(records, artifacts, native, rows, protocol)
             _require_withheld_bodies(packet, rows, spans, observations[:index], selected)
         validate_turn_output(packet, output)
         terminal = stage == 'final' and output.get('stage') != 'reading'
         if terminal != (final and index + 1 == len(chain)):
             raise ResearchError('openness_reading_incomplete', 'A v5 problem chain ends at its first native final result')
         if not terminal:
-            _require(has_deliverable_passage(records, artifacts, packet, output), PASSAGE_PROGRESS_ERR_MSG,
+            _require(has_deliverable_passage(records, artifacts, packet, output,
+                                              assignment=assignment, turn=observation['turn']), PASSAGE_PROGRESS_ERR_MSG,
                      path='/passage_requests')
             record = _extend_record(records, artifacts, packet, {'output': output}, rows, observations[:index + 1],
-                                    PROTOCOL_V5)
+                                    protocol)
 
 
 def verify_problem_coverage(records, artifacts, assignment, *, final=False):
@@ -1612,7 +2640,7 @@ def verify_chain(records, artifacts, assignment):
     _require_math_continuity states. A final turn that 0.64.2 to 0.66.2 built is verified by the rules of those
     releases."""
     packet = json.loads(artifacts.read(assignment['packet']))
-    if packet[RECORD_KEY]['protocol'] == PROTOCOL_V5:
+    if packet[RECORD_KEY]['protocol'] in (PROTOCOL_V5, PROTOCOL_V6):
         return verify_problem_coverage(records, artifacts, assignment, final=True)['turns']
     if packet[RECORD_KEY]['protocol'] not in GENERIC_UNIT_PROTOCOLS:
         return _verify_legacy_chain(records, artifacts, assignment)

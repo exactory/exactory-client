@@ -53,6 +53,7 @@ class StagedScaleTests(unittest.TestCase):
         self.route = dict(id='route', adapter='claude_cli_v1', model='synthetic', endpoint='claude://local',
                           configuration=dict(effort='max', max_output_tokens=128000, timeout_seconds=3600))
         self.controller = dict(id='controller', role='result', context={}, slot_id='slot',
+            prompt=protocol.canonical_prompt('result', orchestration='problem_creation'),
             reviewer_id='reviewer', route_id='route', author_id='author', dossier_id=None,
             subject=dict(kind='problem', id='synthetic'), recorded_revision=1,
             prompt_hash='synthetic', packet_digest='synthetic')

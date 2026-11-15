@@ -439,14 +439,20 @@ def collect_configuration_members(source):
     return sorted(members)
 
 
-def describe_packet_task(role, packet, *, route, request, registry, operation='review.invoke'):
+def describe_packet_task(role, packet, *, route, request, registry, operation='review.invoke',
+                         records=None, artifacts=None):
     """Validate the logical packet, and the emitted packet when it can be read, before describing the task."""
     from ci.capacity_packet_inventory import validate_packet
     from research_harness.review_excerpts import read_sent_packet
-    from research_harness.review_route_capacity import describe_task
+    from research_harness.review_route_capacity import describe_route_capacity, describe_task, measure_request
     actual = read_sent_packet(request)
-    if (validate_packet(role, packet, registry) or
-            actual is not None and validate_packet(role, actual, registry)):
+    capacity = describe_route_capacity(route, records=records, artifacts=artifacts)
+    measure = measure_request(route, request, records=records, artifacts=artifacts)
+    limits = [capacity['input_text_characters']['value'], capacity['input_characters']['value']]
+    allowance = min(value for value in limits if value is not None) if measure['fits'] else 0
+    if (validate_packet(role, packet, registry, request_limit_characters=allowance) or
+            actual is not None and validate_packet(role, actual, registry,
+                                                   request_limit_characters=allowance)):
         raise ValueError(PACKET_KIND_MESSAGE)
     return describe_task(role, packet, route=route, request=request, operation=operation)
 

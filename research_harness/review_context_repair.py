@@ -15,6 +15,22 @@ from .review_supplied_evidence import find_scientific_predecessor as _parent
 from . import strategy
 
 ROLES = ('bar', 'slate', 'result')
+EXHAUSTION_PROTOCOL = 'exactory-review-context-repair-exhaustion-v1'
+EXHAUSTION_MISMATCH_MSG = (
+    'The member exhaustion of this context repair does not match the store. It must equal the binding that the plan '
+    'of review-series gives for the exhausted head of a slate or result slot: the position, every refusal record '
+    'of its completed outputs, and its correction. A first repair needs a position that is exhausted now. A repair '
+    'that repeats the member of an earlier admitted repair of the same predecessor keeps that evidence. In both '
+    'cases the position has no pending or accepted correction and no continuation. Take context.context_repair '
+    'from the step of that plan.')
+EXHAUSTION_ORIGIN_MSG = (
+    'The stored records do not verify the exhaustion binding of this repair. The position, its completed outputs, '
+    'its refusal records and its correction must be those that the store held before the repair. Take the step '
+    'that review-series plans for the head.')
+EXHAUSTION_PROBE_MSG = (
+    'The named probe is missing, is not the current verified probe of the new route, or was not recorded after '
+    'every bound refusal, correction and cause event. Run review-probe on the route, and name that probe in '
+    'context.context_repair.probe_id.')
 # The recorded events that end a reviewer context: a contamination of the context, or the retirement of its route.
 CAUSE_KINDS = ('contamination', 'route_retired')
 # The suffix of 0.56.0 and earlier, kept so that assignments recorded with it stay verified: it said "Return an
@@ -97,6 +113,106 @@ PROMPT = (
     'Explain any revised or unresolved finding with exact supplied evidence. A changed judgment alone '
     'does not dispose of a historical material objection; the ordinary objection procedure still applies.'
 )
+# The suffix of a repair with an exhaustion binding. It is recorded apart from the contamination suffixes, so
+# every earlier prompt stays replayable. It states the cause of this repair and keeps the output rules of PROMPT.
+EXHAUSTION_PROMPT_V1 = (
+    ' This is an explicit reassessment, not a new blind review. Its cause is recorded in context_repair.exhaustion: '
+    'when this reassessment was first admitted, the earlier position of this review slot held no usable answer, and '
+    'the harness could admit no further replacement that carries a refusal, because the replacements were spent or '
+    'no refusal notice fit. The binding names the assignments of that position and its recorded refusals, each the '
+    'refusal of one answer by a mechanical check of the harness. It asserts no contamination of a reviewer context '
+    'and no retirement of a route, and its cause events can be an empty list. '
+    'The historical scientific inputs, the answers of that position and the unresolved objections remain '
+    'evidence. The scientific history delivers those answers as raw observations. A refused answer is not a '
+    'recorded review, and its refusal says nothing about the scientific judgment in it. '
+    'Do not treat the former independence of these materials as currently qualified. Your output is still the one '
+    'top-level JSON object of this role, with the top-level members stage, support, value, objections and '
+    'limitations; add one more top-level member beside them, "reassessment": {assignment_id,findings:[{review_id,'
+    'disposition:confirmed|revised|unresolved,reason,evidence}]}, at the same level as "value" (not inside "value", '
+    'and not after the closing brace of the object). '
+    'Use the exact predecessor assignment_id from context_repair and cover every inherited final review of this '
+    'phase; when historical_reviews is empty, findings is an empty list. A source-request turn may defer '
+    'reassessment; the final phase output must include it. '
+    'Label an inherited review confirmed only when your output repeats its support, value, objections and limitations '
+    'exactly; when your output changes any of them, including their wording, label it revised. '
+    'A prior material objection receives its finding in objection_findings and is not restated in objections; '
+    'objections lists only the material objections that you raise yourself, each under a new id. '
+    'Explain any revised or unresolved finding with exact supplied evidence. A changed judgment alone '
+    'does not dispose of a historical material objection; the ordinary objection procedure still applies.'
+)
+
+
+def build_exhaustion_binding(records, artifacts, assignment, *, before_revision=None):
+    """Freeze the stored position without rechecking its scientific outputs."""
+    from .review_failure_class import list_turn_assignments
+
+    boundary = float('inf') if before_revision is None else before_revision
+    position = sorted((records['review_assignment'][identifier]
+                       for identifier in list_turn_assignments(records, assignment)
+                       if records['review_assignment'][identifier]['recorded_revision'] < boundary),
+                      key=lambda row: (row['recorded_revision'], row['id']))
+    identifiers = {row['id'] for row in position}
+    refusals = sorted((row for row in records.get('review_output_refusal', {}).values()
+                       if row['assignment_id'] in identifiers and row['recorded_revision'] < boundary),
+                      key=lambda row: (row['recorded_revision'], row['attempt_id']))
+    corrections = sorted((row for row in records.get('review_output_correction_invocation', {}).values()
+                          if row['assignment_id'] in identifiers and row['recorded_revision'] < boundary),
+                         key=lambda row: (row['recorded_revision'], row['id']))
+    correction = None
+    if corrections:
+        invocation = corrections[-1]
+        observed = records.get('review_output_correction', {}).get(invocation['id'])
+        status = (observed['correction_status'] if observed is not None
+                  and observed['recorded_revision'] < boundary else 'pending')
+        correction = dict(invocation_id=invocation['id'], status=status)
+    return dict(protocol=EXHAUSTION_PROTOCOL, head_assignment_id=assignment['id'],
+        position=[row['id'] for row in position],
+        refusals=[dict(assignment_id=row['assignment_id'], attempt_id=row['attempt_id'],
+            output_digest=row['output_digest'], refusal_digest=digest(row),
+            recorded_revision=row['recorded_revision']) for row in refusals], correction=correction)
+
+
+def _validate_exhaustion_records(records, artifacts, predecessor, exhaustion, *, before_revision=None):
+    """Authenticate immutable exhaustion evidence, with no present-day output validator."""
+    from .review_protocol import _read_json
+    from .review_refusal_replacement import read_replacement_link
+
+    def require(condition):
+        if not condition:
+            raise ResearchError('review_context_repair_unverified', EXHAUSTION_ORIGIN_MSG)
+
+    expected = build_exhaustion_binding(records, artifacts, predecessor, before_revision=before_revision)
+    require(exhaustion == expected and bool(expected['position']) and bool(expected['refusals']))
+    require(expected['position'][-1] == predecessor['id'])
+    boundary = float('inf') if before_revision is None else before_revision
+    for index, identifier in enumerate(expected['position']):
+        member = records['review_assignment'][identifier]
+        require(member['recorded_revision'] < boundary)
+        if index:
+            require(read_replacement_link(member)[1] == expected['position'][index - 1])
+    for entry in expected['refusals']:
+        certificate = records.get('review_output_refusal', {}).get(entry['attempt_id'])
+        attempt = records.get('review_attempt', {}).get(entry['attempt_id'])
+        require(certificate is not None and attempt is not None and attempt['status'] == 'completed')
+        require(attempt['assignment_id'] == entry['assignment_id']
+                and attempt['recorded_revision'] < certificate['recorded_revision'] < boundary
+                and attempt['request_digest'] == certificate['request_digest']
+                and digest(_read_json(artifacts, attempt['output'])) == entry['output_digest'])
+    correction = expected['correction']
+    require(correction is None or correction['status'] not in ('pending', 'accepted'))
+    return expected
+
+
+def _find_exhaustion_boundary(records, exhaustion, events):
+    revisions = [entry['recorded_revision'] for entry in exhaustion['refusals']]
+    revisions.extend(event['recorded_revision'] for event in events)
+    if exhaustion['correction'] is not None:
+        identifier = exhaustion['correction']['invocation_id']
+        revisions.append(records['review_output_correction_invocation'][identifier]['recorded_revision'])
+        observed = records.get('review_output_correction', {}).get(identifier)
+        if observed is not None:
+            revisions.append(observed['recorded_revision'])
+    return max(revisions)
 
 
 def _assignment(records, identifier):
@@ -160,7 +276,8 @@ def _exposure_lineage(records, assignment):
         if identifier in visited:
             return
         active.add(identifier)
-        parents = [find_scientific_predecessor(current), current.get('history_assignment_id')]
+        parents = [find_scientific_predecessor(current), current.get('history_assignment_id'),
+                   current.get('context', {}).get('output_refusal', {}).get('assignment_id')]
         for parent in dict.fromkeys(value for value in parents if value is not None):
             visit(_assignment(records, parent))
         active.remove(identifier)
@@ -218,6 +335,12 @@ def _raise_binding_mismatch(repair, events):
     expected_ids = [event['id'] for event in events]
     missing_ids = [identifier for identifier in expected_ids if identifier not in repair['event_ids']]
     expected_evidence = [item for event in events for item in event['evidence']]
+    empty_events_message = (
+        'When the lineage records no such event, a repair with the member exhaustion sets event_ids and evidence to '
+        'empty lists.'
+        if 'exhaustion' in repair else
+        'If the list of events is empty, the lineage records no contamination and no route retirement, and a '
+        'context repair needs one.')
     raise ResearchError('review_context_repair_mismatch',
         'The context repair does not name exactly the events and the evidence that the lineage of its predecessor '
         'records. A context repair binds every contamination and route retirement event of that lineage, with the '
@@ -226,9 +349,39 @@ def _raise_binding_mismatch(repair, events):
         f'Of these, event_ids does not name: {json.dumps(missing_ids)}. '
         f'The evidence of these events, in the same order, is: {json.dumps(expected_evidence, sort_keys=True)}. '
         'Set event_ids to exactly these events and evidence to exactly this evidence. '
-        'If the list of events is empty, the lineage records no contamination and no route retirement, and a '
-        'context repair needs one.',
+        + empty_events_message,
         {'expected_event_ids': expected_ids, 'missing_event_ids': missing_ids, 'expected_evidence': expected_evidence})
+
+
+def find_chain_head(records, assignment):
+    """Follow the actual later continuation and replacement of a repair."""
+    descendants = {assignment['id']}
+    head = assignment
+    for later in sorted(records.get('review_assignment', {}).values(),
+                        key=lambda row: (row['recorded_revision'], row['id'])):
+        context = later.get('context', {})
+        if (_parent(later) in descendants
+                or context.get('output_refusal', {}).get('assignment_id') in descendants):
+            descendants.add(later['id'])
+            head = later
+    return head
+
+
+def _has_recorded_exhaustion_repair(records, artifacts, predecessor, exhaustion):
+    """A repair or its replacement retains the admitted proof without rechecking outputs."""
+    for prior in records.get('review_assignment', {}).values():
+        binding = prior.get('context', {}).get('context_repair', {})
+        if (binding.get('assignment_id') != predecessor['id']
+                or binding.get('exhaustion') != exhaustion):
+            continue
+        try:
+            validate_repair_binding(records, artifacts, prior)
+        except ResearchError as error:
+            if error.code == 'review_context_repair_stale':
+                return True
+        else:
+            return True
+    return False
 
 
 def prepare_repair(records, artifacts, assignment_payload):
@@ -241,11 +394,28 @@ def prepare_repair(records, artifacts, assignment_payload):
         return None
     fields(context, ('context_repair',), code='invalid_review_context')
     repair = context['context_repair']
-    fields(repair, ('assignment_id', 'event_ids', 'probe_id', 'reason', 'evidence'), code='invalid_review_context')
+    fields(repair, ('assignment_id', 'event_ids', 'probe_id', 'reason', 'evidence'),
+           ('exhaustion',), code='invalid_review_context')
     text(repair['reason'], 'Context repair reason', code='invalid_review_context')
     strings(repair['event_ids'], 'Exact contamination event IDs')
     text(repair['probe_id'], 'Current context probe', code='invalid_review_context')
     predecessor = _assignment(records, repair['assignment_id'])
+    exhaustion = repair.get('exhaustion')
+    if 'exhaustion' in repair and not isinstance(exhaustion, dict):
+        raise ResearchError('review_context_repair_mismatch', EXHAUSTION_MISMATCH_MSG)
+    if exhaustion is not None:
+        if (assignment_payload['role'] not in ('slate', 'result')
+                or exhaustion != build_exhaustion_binding(records, artifacts, predecessor)
+                or (exhaustion['correction'] is not None
+                    and exhaustion['correction']['status'] in ('pending', 'accepted'))
+                or any(later.get('context', {}).get('prior_assignment_id') == predecessor['id']
+                       for later in records.get('review_assignment', {}).values())):
+            raise ResearchError('review_context_repair_mismatch', EXHAUSTION_MISMATCH_MSG)
+        _validate_exhaustion_records(records, artifacts, predecessor, exhaustion)
+        from .review_protocol import has_exhausted_position
+        recorded_exhaustion = _has_recorded_exhaustion_repair(records, artifacts, predecessor, exhaustion)
+        if not recorded_exhaustion and not has_exhausted_position(records, artifacts, predecessor):
+            raise ResearchError('review_context_repair_mismatch', EXHAUSTION_MISMATCH_MSG)
     roles = ROLES + (('adjudicator',) if predecessor.get('staged_review') is not None
                      or predecessor.get('review_parts') is not None else ())
     if (assignment_payload['role'] not in roles or predecessor['role'] != assignment_payload['role']
@@ -264,59 +434,76 @@ def prepare_repair(records, artifacts, assignment_payload):
                    and not item.get('released') for item in records.get('review_reservation', {}).values())):
         raise ResearchError('review_context_repair_pending', 'Reconcile pending reviewer workers and invocations before repairing their context.')
     events = cause_events(records, identifiers)
-    if not events or set(repair['event_ids']) != {event['id'] for event in events}:
+    if ((not events and exhaustion is None)
+            or set(repair['event_ids']) != {event['id'] for event in events}):
         _raise_binding_mismatch(repair, events)
-    strategy.evidence(records, artifacts, repair['evidence'])
+    strategy.evidence(records, artifacts, repair['evidence'], required=exhaustion is None or bool(events))
+    if exhaustion is not None and (repair['event_ids'] != [event['id'] for event in events]
+            or repair['evidence'] != [item for event in events for item in event['evidence']]):
+        _raise_binding_mismatch(repair, events)
     if {digest(item) for item in repair['evidence']} != {digest(item) for event in events for item in event['evidence']}:
         _raise_binding_mismatch(repair, events)
-    from .review_protocol import retired_routes
-    from .review_refusal import refused_attempts
+    from .review_protocol import is_dead_assignment, retired_routes
     retired = retired_routes(records)
     state = assignment_state(records, artifacts, predecessor['id'])
     dependency_codes = {'review_source_parent_unverified', 'review_context_repair_stale'}
     dependency_lost = any(item['code'] in dependency_codes for item in state['obligations'])
-    if (state['context_status'] != 'contaminated' and not any(event['kind'] == 'contamination' for event in events) and not dependency_lost
+    if (exhaustion is None and state['context_status'] != 'contaminated' and not any(event['kind'] == 'contamination' for event in events) and not dependency_lost
             and predecessor['route_id'] not in retired):
         raise ResearchError('review_context_repair_mismatch', 'Repair an actual contaminated or retired reviewer context')
     proof = route_state(records, artifacts, assignment_payload['route_id'])
     probe = records.get('review_route_probe', {}).get(repair['probe_id'])
+    last_bound_revision = (_find_exhaustion_boundary(records, exhaustion, events) if exhaustion is not None
+                           else max(event['recorded_revision'] for event in events))
     if (proof['context_status'] != 'verified_for_route' or proof['probe_id'] != repair['probe_id']
-            or probe is None or probe['recorded_revision'] <= max(event['recorded_revision'] for event in events)):
-        raise ResearchError('review_context_repair_unverified', 'A current observed route probe after contamination must precede reassessment')
+            or probe is None or probe['recorded_revision'] <= last_bound_revision):
+        raise ResearchError('review_context_repair_unverified', EXHAUSTION_PROBE_MSG if exhaustion is not None
+                            else 'A current observed route probe after contamination must precede reassessment')
     original_slot = slot_id(records, predecessor)
     reviewer = normalized_text(assignment_payload['reviewer_id'])
     for prior in records.get('review_assignment', {}).values():
         if (prior['dossier_id'] != predecessor['dossier_id'] or prior['role'] != predecessor['role']
                 or not is_same_subject(prior, predecessor)):
             continue
-        if slot_id(records, prior) != original_slot and normalized_text(prior['reviewer_id']) == reviewer:
+        if (slot_id(records, prior) != original_slot and normalized_text(prior['reviewer_id']) == reviewer
+                and not is_dead_assignment(records, prior)):
             raise ResearchError('review_not_independent', 'The other fixed slot cannot reassess this slot')
         if prior['id'] not in identifiers and predecessor['id'] in {item['id'] for item in _lineage(records, prior)}:
-            attempts = [item for item in records.get('review_attempt', {}).values() if item['assignment_id'] == prior['id']]
-            pending = any(item['assignment_id'] == prior['id'] and item['id'] not in records.get('review_attempt', {})
+            head = find_chain_head(records, prior)
+            attempts = [item for item in records.get('review_attempt', {}).values() if item['assignment_id'] == head['id']]
+            pending = any(item['assignment_id'] == head['id'] and item['id'] not in records.get('review_attempt', {})
                           for item in records.get('review_invocation', {}).values())
-            dead = not attempts and not pending and prior['route_id'] in retired
-            # Two refused outputs exhaust an assignment, so an exhausted repair gives way to a new one, as an exhausted
-            # initial bar slot takes a new reviewer.
-            completed = [item for item in attempts if item['status'] == 'completed']
+            dead = is_dead_assignment(records, head)
             from .review_parts_repair import has_exhausted_over_cap_repair
-            exhausted = (has_exhausted_over_cap_repair(records, artifacts, prior)
-                         or len(completed) >= 2
-                         and len(refused_attempts(records, artifacts, completed)) == len(completed))
+            from .review_protocol import has_exhausted_position
+            exhausted = (has_exhausted_over_cap_repair(records, artifacts, head)
+                         or has_exhausted_position(records, artifacts, head))
+            stale_exhaustion = False
+            prior_binding = prior.get('context', {}).get('context_repair', {})
+            if exhaustion is not None and prior_binding.get('exhaustion') == exhaustion:
+                try:
+                    validate_repair_binding(records, artifacts, head)
+                except ResearchError as error:
+                    stale_exhaustion = error.code == 'review_context_repair_stale'
             if (pending or (not attempts or any(item['status'] not in ('failed', 'incomplete') for item in attempts))
-                    and not dead and not exhausted):
+                    and not dead and not exhausted and not stale_exhaustion):
                 raise ResearchError('review_resampling_forbidden', 'Retain the existing repair or source continuation without forking')
-    history = collect_scientific_history(records, artifacts, chain, roles)
+    history = collect_scientific_history(records, artifacts, chain, roles,
+        exhausted_position=exhaustion['position'] if exhaustion is not None else ())
     predecessor_history = next(item for item in history if item['assignment_id'] == predecessor['id'])
-    return {'predecessor': predecessor, 'slot_id': original_slot, 'packet': predecessor_history['packet'],
+    result = {'predecessor': predecessor, 'slot_id': original_slot, 'packet': predecessor_history['packet'],
             'predecessor_binding': bind_predecessor(records, predecessor, state, history),
             'historical_reviews': _reviews(records, {item['id'] for item in chain if item['role'] == predecessor['role']}),
             'scientific_history': history,
-            'event_ids': sorted(repair['event_ids']), 'probe_id': repair['probe_id'],
+            'event_ids': ([event['id'] for event in events] if exhaustion is not None
+                          else sorted(repair['event_ids'])), 'probe_id': repair['probe_id'],
             'cause': [{key: event[key] for key in ('id', 'kind', 'source', 'reason')} for event in events]}
+    if exhaustion is not None:
+        result['exhaustion'] = exhaustion
+    return result
 
 
-def collect_scientific_history(records, artifacts, chain, roles):
+def collect_scientific_history(records, artifacts, chain, roles, *, exhausted_position=()):
     """Read authenticated scientific observations for a repair or its source continuation."""
     from .review_protocol import assignment_state, source_delivery_packet
 
@@ -340,6 +527,10 @@ def collect_scientific_history(records, artifacts, chain, roles):
             prior_state = dict(prior_state, effective=graph['effective'], obligations=graph['obligations'])
         from .research_decisions import read_effective_result
         scientific_output, _ = read_effective_result(prior_state)
+        # A frozen exhaustion successor keeps these refusals as raw history,
+        # including when a later validator would accept one of their outputs.
+        if ancestor['id'] in exhausted_position:
+            scientific_output = None
         packet = source_delivery_packet(records, artifacts, ancestor)
         from . import review_problem_parts, review_parts
         intermediate_output = None
@@ -350,8 +541,9 @@ def collect_scientific_history(records, artifacts, chain, roles):
             intermediate_output, scientific_output = scientific_output, None
         if ancestor.get('staged_review', {}).get('kind') == 'task':
             intermediate_output, scientific_output = prior_state.get('raw_output'), None
+        # Selection of a later head does not invalidate the exact earlier scientific history.
         allowed = {'review_context_contaminated', 'review_source_parent_unverified', 'review_context_repair_stale',
-                   'review_route_retired'}
+                   'review_route_retired', 'review_assignment_replaced', 'review_assignment_superseded'}
         if scientific_output is None:
             allowed.update(('review_output_pending', 'review_output_refused', 'review_task_pending',
                             'assessment_incomplete', 'review_source_coverage_pending', 'review_composition_pending'))
@@ -486,9 +678,22 @@ def validate_repair_origin(records, artifacts, assignment):
               if event['recorded_revision'] < bound['recorded_revision']]
     if set(repair['event_ids']) != {event['id'] for event in events}:
         raise ResearchError('review_context_repair_unverified', 'The original repair must cover its complete prospective exposure history')
+    exhaustion = repair.get('exhaustion')
+    if 'exhaustion' in repair and not isinstance(exhaustion, dict):
+        raise ResearchError('review_context_repair_unverified', EXHAUSTION_ORIGIN_MSG)
+    if exhaustion is not None:
+        if (bound['role'] not in ('slate', 'result')
+                or repair['event_ids'] != [event['id'] for event in events]
+                or repair['evidence'] != [item for event in events for item in event['evidence']]):
+            raise ResearchError('review_context_repair_unverified', EXHAUSTION_ORIGIN_MSG)
+        _validate_exhaustion_records(records, artifacts, predecessor, exhaustion,
+                                     before_revision=bound['recorded_revision'])
+        last_bound_revision = _find_exhaustion_boundary(records, exhaustion, events)
+    else:
+        last_bound_revision = max((event['recorded_revision'] for event in events), default=0)
     probe = records.get('review_route_probe', {}).get(repair['probe_id'])
-    if (not events or probe is None or probe['route_id'] != bound['route_id']
-            or probe['recorded_revision'] <= max(event['recorded_revision'] for event in events)
+    if ((not events and exhaustion is None) or probe is None or probe['route_id'] != bound['route_id']
+            or probe['recorded_revision'] <= last_bound_revision
             or probe['recorded_revision'] >= bound.get('recorded_revision', float('inf'))):
         raise ResearchError('review_context_repair_unverified', 'The repair must retain its actual prospective context probe')
     exact_probe_records = dict(records, review_route_probe={probe['id']: probe})

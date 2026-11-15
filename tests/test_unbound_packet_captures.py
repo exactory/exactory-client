@@ -47,7 +47,8 @@ class UnboundPacketCaptureTests(unittest.TestCase):
             packet_bytes = case.artifacts.read(assignment['packet'])
             self.assertEqual(json.dumps(rebuilt, sort_keys=True, ensure_ascii=False).encode(), packet_bytes)
             self.assertEqual(assignment['prompt'], protocol.canonical_prompt(
-                'native_math', reading_stage=reading.find_stage(rebuilt), reading_protocol=reading.find_protocol(rebuilt)))
+                'native_math', reading_stage=reading.find_stage(rebuilt), reading_protocol=reading.find_protocol(rebuilt),
+                common_version=protocol.find_common_prompt_version(assignment['prompt'])))
             attempt = records['review_attempt']['attempt-' + identifier]
             self.assertEqual(attempt, before['review_attempt'][attempt['id']])
             self.assertTrue(protocol.authenticate_attempt(records, case.artifacts, assignment, attempt))
@@ -112,7 +113,7 @@ class UnboundPacketCaptureTests(unittest.TestCase):
                 with patch.object(transport, 'send_request') as sender:
                     with self.assertRaises(ResearchError) as caught:
                         case.assign('turn-1', native)
-                    self.assertEqual(caught.exception.code, 'openness_reading_incomplete')
+                    self.assertEqual(caught.exception.code, 'openness_packet_outdated')
                     self.assertEqual(caught.exception.details['handoff'], 'export')
                     sender.assert_not_called()
                 self.assertEqual(case.store.snapshot(), before)
@@ -247,7 +248,12 @@ class UnboundPacketCaptureTests(unittest.TestCase):
             self.choose_capture(case, compact)
             self.record_compact_reading(case, compact)
             packet = fixture.export()
-            saved = case.record_openness(packet, 'source-openness')
+            self.assertEqual(packet['scientific_context']['openness_minimum']['schema_version'], 1)
+            # The frozen exporter names the legacy scientific contract, so its
+            # synthetic response uses that contract's answer rather than v3.
+            with patch('test_openness_finding_answer.build_answer',
+                       side_effect=lambda packet: case.output(packet, 'supported_open')):
+                saved = case.record_openness(packet, 'source-openness')
         before = case.store.snapshot()
         self.assertEqual(case.assessment(), [])
         records = before['records']
@@ -314,7 +320,7 @@ class UnboundPacketCaptureTests(unittest.TestCase):
             native = case.export(priority=case.versions)
         with self.assertRaises(ResearchError) as caught:
             case.assign('turn-1', native)
-        self.assertEqual(caught.exception.code, 'openness_reading_incomplete')
+        self.assertEqual(caught.exception.code, 'openness_packet_outdated')
         self.assertEqual(caught.exception.details['handoff'], 'export')
 
     def test_normalized_author_identity_keeps_the_earlier_chosen_capture_delivery(self):

@@ -22,6 +22,7 @@ _RECORD_RESULT_NOTE = ('Record the observed complete final of the current series
                        'exact output. No further reviewer call is needed.')
 _REFERENCE_EXPORT_SCHEMA = "exactory-problem-export-v2"
 _OVERRIDE_CITATIONS_EXPORT_SCHEMA = "exactory-problem-export-v3"
+_REGISTRY_CITATIONS_EXPORT_SCHEMA = "exactory-problem-export-v4"
 
 
 def assess_minimum(records, artifacts):
@@ -52,7 +53,7 @@ def _assess_minimum(records, artifacts):
     pending.extend(assess_formal_checks(records))
     pending.extend(assess_assessment(records, artifacts))
     try:
-        project_citations(records, artifacts)
+        project_citations(records, artifacts, use_registry=False)
     except ResearchError as error:
         pending.append(obligation(error.code, error.message, **(error.details or {})))
     return pending, attempt, openness
@@ -605,23 +606,24 @@ def assess_post(records, artifacts, *, source_guards=None, check_source_freshnes
             "decision_id": None if decision is None else decision["id"]}, **slots, **posted_state)
 
 
-def describe_posted_calls(records, artifacts):
+def describe_posted_calls(records, artifacts, *, context_failures=None):
     """Project administrative closure after a post outside every scientific digest."""
-    from .review_continuation import list_chain_heads
+    from .review_continuation import list_chain_heads, _collect_context_failure
     from .review_stop import describe_closed_calls
     if not records.get('problem_post'):
         return []
     result = []
-    for identifier in list_chain_heads(records, artifacts):
-        assignment = records['review_assignment'][identifier]
-        if find_review_post(records, assignment, artifacts) is None:
-            continue
-        for call in describe_closed_calls(records, artifacts, assignment):
-            reason = ('The post closed this reviewer call.' if call['closed'] else
-                      'The post closed the review chain of this call, and the call is not settled. '
-                      'Run the step of this row; it makes no reviewer call.')
-            result.append(dict(call, code='review_call_closed' if call['closed'] else 'review_invocation_pending',
-                               explanation=reason, reason=reason))
+    for identifier in list_chain_heads(records, artifacts, context_failures=context_failures):
+        with _collect_context_failure(context_failures, identifier):
+            assignment = records['review_assignment'][identifier]
+            if find_review_post(records, assignment, artifacts) is None:
+                continue
+            for call in describe_closed_calls(records, artifacts, assignment):
+                reason = ('The post closed this reviewer call.' if call['closed'] else
+                          'The post closed the review chain of this call, and the call is not settled. '
+                          'Run the step of this row; it makes no reviewer call.')
+                result.append(dict(call, code='review_call_closed' if call['closed'] else 'review_invocation_pending',
+                                   explanation=reason, reason=reason))
     return result
 
 
@@ -676,7 +678,7 @@ def prepare_decision(records, artifacts, value, revision, *, source_guards=None)
 def build_post_files(records, artifacts, *, include_references=False, citation_projection=None):
     """Compose the statement, value paragraphs and citations without claiming any decision or review."""
     statement, value = find_current_statement(records), find_value(records)
-    citations = (project_citations(records, artifacts) if citation_projection is None
+    citations = (project_citations(records, artifacts, use_registry=False) if citation_projection is None
                  else citation_projection["citations"])
     files = {"title.txt": statement["title"], "statement.md": statement["statement"],
              "criteria.md": statement["resolution_criteria"],
@@ -684,7 +686,7 @@ def build_post_files(records, artifacts, *, include_references=False, citation_p
              "state.md": "\n\n".join(row["text"] for row in value["current_state"]),
              "citations.json": json.dumps(citations, ensure_ascii=False, sort_keys=True, indent=2)}
     if include_references:
-        references = (project_citations(records, artifacts, for_lookup=True) if citation_projection is None
+        references = (project_citations(records, artifacts, for_lookup=True, use_registry=False) if citation_projection is None
                       else citation_projection["references"])
         files["citation-refs.json"] = json.dumps(references, ensure_ascii=False, sort_keys=True, indent=2)
     formal = statement["formal_statement"]
@@ -693,10 +695,22 @@ def build_post_files(records, artifacts, *, include_references=False, citation_p
     return files
 
 
-def build_projection(records, artifacts, *, include_references=False):
+def describe_cited_supplied_texts(records):
+    """Label the supplied originals behind the ordinary public citations."""
+    from .problem_evidence import collect_readings
+    from .source_links import describe_supplied_readings
+    return describe_supplied_readings(records, collect_readings(records))
+
+
+def build_projection(records, artifacts, *, include_references=False, use_registry=False):
     statement = find_current_statement(records)
     decision = find_latest(records, "problem_decision")
-    files = build_post_files(records, artifacts, include_references=include_references)
+    projected = None
+    if use_registry:
+        from .problem_evidence import collect_readings, compose_citations, select_citation_readings
+        projected = compose_citations(records, artifacts, select_citation_readings(records, collect_readings(records)))
+        include_references = True
+    files = build_post_files(records, artifacts, include_references=include_references, citation_projection=projected)
     formal = statement["formal_statement"]
     from .review_protocol import assignment_state
     from .research_decisions import _response
@@ -729,6 +743,12 @@ def build_projection(records, artifacts, *, include_references=False):
                 "files": {name: hashlib.sha256(content).hexdigest() for name, content in sorted(files.items())}}
     if include_references:
         manifest["schema"] = _REFERENCE_EXPORT_SCHEMA
+    supplied = describe_cited_supplied_texts(records)
+    if supplied:
+        manifest['supplied_texts'] = supplied
+    if use_registry:
+        manifest.update(schema=_REGISTRY_CITATIONS_EXPORT_SCHEMA,
+                        missing_registry_citations=projected["missing_registry_citations"])
     files["problem-export.json"] = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
     return files, manifest
 
@@ -754,7 +774,7 @@ def export_problem(store, destination=None):
     records = store.snapshot()["records"]
     artifacts = Evaluation.of(records, ArtifactStore(store.root))
     require_ready(assess_post(records, artifacts), "post")
-    files, manifest = build_projection(records, artifacts, include_references=True)
+    files, manifest = build_projection(records, artifacts, use_registry=True)
     return write_problem_export(store, records, files, manifest, destination)
 
 
@@ -781,7 +801,7 @@ def export_problem_override(store, destination=None, *, spec=None):
     manifest_authority = {key: authority[key] for key in ("override_ids", "conditions")}
     manifest_authority["evaluated_at_revision"] = snapshot["revision"]
     files, manifest = build_override_projection(records, artifacts, override, include_references=True,
-                                                citation_spec=citation_spec, authority=manifest_authority)
+                                                citation_spec=citation_spec, authority=manifest_authority, use_registry=True)
     return write_problem_export(store, records, files, manifest, destination)
 
 
@@ -795,14 +815,16 @@ def find_post_override(records):
 
 
 def build_override_projection(records, artifacts, override, *, include_references=False, citation_spec=None,
-                              authority=None):
-    """Reproduce a stored format, or compose v3 with the override's expanded citation set and its authority."""
+                              authority=None, use_registry=False):
+    """Reproduce a stored format, or compose current citations from their registries."""
+    if use_registry and citation_spec is None:
+        citation_spec = {"first": [], "versions": []}
     include_references = include_references or citation_spec is not None
     statement = find_current_statement(records)
     citation_metadata, projected = {}, None
     if citation_spec is not None:
         from .problem_evidence import POST_CITATION_LIMIT, project_override_citations
-        projected = project_override_citations(records, artifacts, citation_spec)
+        projected = project_override_citations(records, artifacts, citation_spec, use_registry=use_registry)
         citation_metadata = {key: projected[key] for key in (
             "citation_counts", "uncited_relevant_works")}
         citation_metadata["citation_spec"] = citation_spec
@@ -825,6 +847,12 @@ def build_override_projection(records, artifacts, override, *, include_reference
         manifest.update(citation_metadata, schema=_OVERRIDE_CITATIONS_EXPORT_SCHEMA)
     if authority is not None:
         manifest["authority"] = authority
+    supplied = projected.get('supplied_texts', []) if projected is not None else describe_cited_supplied_texts(records)
+    if supplied:
+        manifest['supplied_texts'] = supplied
+    if use_registry:
+        manifest.update(schema=_REGISTRY_CITATIONS_EXPORT_SCHEMA,
+                        missing_registry_citations=projected["missing_registry_citations"])
     files["problem-export.json"] = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
     return files, manifest
 
@@ -882,7 +910,7 @@ def write_problem_export(store, records, files, manifest, destination):
                     write_projection(workspace_root, relative + '/' + name, content)
                 else:
                     write_projection(directory, name, content)
-            if manifest.get('schema') == _OVERRIDE_CITATIONS_EXPORT_SCHEMA:
+            if manifest.get('citation_spec') is not None:
                 from .problem_evidence import compute_override_source_digest
                 source_digest = compute_override_source_digest(records)
             else:
@@ -919,11 +947,13 @@ def prepare_posted(records, artifacts, value, recorded_revision=None, *, source_
     if not directory.is_absolute():
         directory = artifacts.root / directory
     try:
-        files, manifest = build_projection(records, artifacts, include_references=True)
-        valid = has_exported_files(directory, files)
-        if not valid:
-            # A pre-v2 export and its post retain their original bytes and digest.
-            files, manifest = build_projection(records, artifacts)
+        from .problem_export_history import read_problem_export
+        exported = read_problem_export(directory, records)
+        valid = False
+        if exported is not None:
+            stored_manifest, _ = exported
+            files, manifest = build_projection(records, artifacts, include_references="schema" in stored_manifest,
+                use_registry=stored_manifest.get("schema") == _REGISTRY_CITATIONS_EXPORT_SCHEMA)
             valid = has_exported_files(directory, files)
     except OSError as error:
         raise ResearchError("problem_export_mismatch", "Read the complete approved problem projection", {"export_directory": str(directory)}) from error
@@ -937,4 +967,6 @@ def prepare_posted(records, artifacts, value, recorded_revision=None, *, source_
     if type(recorded_revision) is not int or recorded_revision < 1:
         raise ResearchError('invalid_input', 'A new post needs its local recording revision')
     record['recorded_revision'] = recorded_revision
+    if 'supplied_texts' in manifest:
+        record['supplied_texts'] = manifest['supplied_texts']
     return [immutable_record(records, "problem_post", identifier, record)], record

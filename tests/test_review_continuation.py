@@ -260,23 +260,29 @@ class ContinuationTests(unittest.TestCase):
         self.assertEqual(plan['code'], 'native_review_attestation_required')
 
     def test_two_refused_native_outputs_need_a_new_controller_attestation(self):
-        records = self.case.read_records()
-        records['review_assignment']['bar-first'].update(role='native_math',
-            context=dict(native_packet={'fixture': 'native'}))
-        records['review_attempt'] = {str(number): dict(id=str(number), assignment_id='bar-first',
-            status='completed', recorded_revision=200 + number) for number in range(2)}
-        refused = [dict(attempt_id=str(number)) for number in range(2)]
-        with patch.object(protocol, '_context_observed', return_value=True), \
-                patch.object(protocol, 'assignment_state', return_value=dict(
-                    output=None, obligations=[], refused_attempts=refused)), \
-                patch('research_harness.native_review.load_packet',
-                      return_value=dict(contract={}, scientific_context={})), \
-                patch('research_harness.review_output_correction.prepare_packet',
-                      side_effect=ResearchError('review_output_correction_unavailable', 'Synthetic refusal')):
-            plan = self.plan(records)
+        from codex_route_fixtures import invoke_codex
+        from test_review_parts_native import NativePartsTests
+        from research_harness.review_continuation import plan_next
+        fixture = NativePartsTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        # This row exercises a single native request, below D1's task entry.
+        body = fixture.artifacts.put(b'A short exact argument.', 'text/plain')
+        fixture.native['evidence'] = [dict(kind='artifact', digest=body['sha256'], artifact=body)]
+        fixture.reference = fixture.artifacts.put(json.dumps(fixture.native).encode(), 'application/json')
+        assignment = fixture.assign()
+        self.assertNotIn('review_parts', assignment)
+        for identifier in ('native-refused-1', 'native-refused-2'):
+            result = invoke_codex(fixture, assignment['id'], dict(decision='approve'), identifier)
+            self.assertEqual(result['output_refusal']['code'], 'invalid_native_review')
+        before = fixture.store.snapshot()
+        plan = plan_next(before['records'], fixture.artifacts, assignment['id'])
         self.assertEqual((plan['state'], plan['command']), ('handoff', 'search review-packet'))
         self.assertEqual(plan['code'], 'review_slot_exhausted')
-        self.assertEqual(plan['details']['refused_attempts'], refused)
+        self.assertEqual(plan['details']['refused_attempts'], [
+            dict(attempt_id=identifier, code='invalid_native_review')
+            for identifier in ('native-refused-1', 'native-refused-2')])
+        self.assertEqual(fixture.store.snapshot(), before)
 
     def test_capacity_wait_names_existing_call_reconciliation(self):
         records = self.case.read_records()
@@ -312,10 +318,17 @@ class ContinuationTests(unittest.TestCase):
                 self.assertNotIn('payload', plan)
 
     def test_two_initial_bar_refusals_hand_off_a_new_reviewer(self):
-        for number in range(2):
+        attempts = []
+        for number in range(3):
             output = self.case.build_review_output('bar')
             output['value']['status'] = 'invented'
             plan = self.plan()
+            if number:
+                self.assertEqual(plan['state'], 'replace', plan)
+                self.execute(plan, request='replacement-' + str(number))
+                plan = self.plan()
+            self.assertEqual(plan['state'], 'run', plan)
+            attempts.append(plan['payload']['id'])
             with patch('research_harness.review_transport.send_request',
                        return_value=self.case.build_provider_response(output)):
                 self.execute(plan, request='refused-' + str(number))
@@ -326,14 +339,50 @@ class ContinuationTests(unittest.TestCase):
         self.assertEqual(plan['state'], 'handoff')
         self.assertEqual(plan['code'], 'review_slot_exhausted')
         self.assertEqual(plan['command'], 'review-assignment')
-        self.assertEqual(plan['details']['assignment_id'], 'bar-first')
+        self.assertEqual(plan['details']['assignment_id'], plan['head_id'])
         self.assertEqual([row['attempt_id'] for row in plan['details']['refused_attempts']],
-                         ['bar-first-run-1', 'bar-first-run-2'])
+                         attempts)
         self.assertNotIn('payload', plan)
         with patch('research_harness.review_output_correction.prepare_packet',
                    side_effect=RuntimeError('eligibility defect')):
-            with self.assertRaises(RuntimeError):
-                self.plan()
+            self.assertEqual(self.plan(), plan)
+        step = plan['details']['step']
+        self.assertEqual(step['id'], 3)
+        accepted = self.case.mutate(protocol.record_assignment, dict(step['payload'], id='new-bar',
+            route_id='route', reviewer_id='third'))['result']
+        self.assertEqual((accepted['slot_id'], accepted['context']), ('bar-first', {}))
+
+    def test_capacity_replacement_keeps_the_proven_payload(self):
+        records = self.case.read_records()
+        parent = records['review_assignment']['bar-first']
+        failed = dict(parent, id='failed', context=dict(prior_assignment_id='bar-first'),
+                      history_assignment_id='bar-first', recorded_revision=100)
+        records['review_assignment']['failed'] = failed
+        records['review_attempt'] = dict(failure=dict(id='failure', assignment_id='failed',
+            status='failed', recorded_revision=101))
+        payload = dict(id='proved-replacement', role='bar', route_id='route', dossier_id=None,
+                       reviewer_id='first', author_id='author', context=dict(prior_assignment_id='bar-first'))
+        recovery = dict(kind='replace', reason='capacity', payload=payload,
+                        preflight=dict(allowed=True), details={})
+        with patch('research_harness.review_failure_class.plan_after_failure', return_value=dict(
+                state='replace', code='review_output_over_cap', details=dict(recovery=recovery))):
+            plan = self.plan(records)
+        self.assertEqual(plan['payload'], payload)
+        self.assertEqual(plan['details']['recovery']['preflight'], dict(allowed=True))
+
+    def test_first_scientific_refusal_uses_the_position_counter(self):
+        output = self.case.build_review_output('bar')
+        output['value']['status'] = 'invented'
+        self.invoke(output)
+        with self.assertRaises(ResearchError):
+            self.execute(self.plan(), request='audit')
+        with patch('research_harness.review_failure_class.plan_after_failure', return_value=dict(
+                state='wait', code='review_sequence_wait', not_before='2030-01-01T00:00:00+00:00',
+                details=dict(failed_attempts=8))) as policy:
+            plan = self.plan()
+        self.assertEqual(plan['state'], 'wait')
+        self.assertEqual(plan['code'], 'review_sequence_wait')
+        policy.assert_called_once()
 
     def test_capacity_replacement_keeps_the_proven_payload(self):
         records = self.case.read_records()

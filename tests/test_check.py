@@ -841,12 +841,24 @@ _FIXTURE_DOI_TITLE_KEY = "title:predicting citation impact with cohort percentil
 class TestCacheIdentity(_CheckTestCase):
     """The cache answers an entry only under the identity it is resolved by."""
 
+    def test_previous_registry_normalization_cache_is_refetched(self) -> None:
+        cache_path = self.out_path.parent / "citation-cache.json"
+        cache_path.parent.mkdir(parents=True)
+        meta = _check._normalize_crossref_work(json.loads(_CROSSREF_WORK_TEXT)["message"])
+        cache_path.write_text(json.dumps({"version": 2, "records": {"doi:" + meta["doi"].lower(): meta}}))
+        request = mock.Mock(side_effect=_route_fixture_registry)
+        _check._open_url = request
+        doi_entry = _FIXTURE_BIB_TEXT.split("\n\n")[1]
+        report = self._lookup(["--bib", str(self._write_bib(doi_entry))], None)
+        self.assertEqual(report["entries"][0]["status"], "verified")
+        request.assert_called_once()
+
     def test_old_brace_stripped_cache_is_refreshed_before_reporting_a_mismatch(self) -> None:
         resolved = r"Synthetic counting example in $\mathrm{SL}_2(\mathbf{Z})$"
         stripped = resolved.replace("{", "").replace("}", "")
         cache_path = self.out_path.parent / "citation-cache.json"
         cache_path.parent.mkdir(parents=True)
-        cache_path.write_text(json.dumps({"version": 2, "records": {"arxiv:1601.03705": {
+        cache_path.write_text(json.dumps({"version": 3, "records": {"arxiv:1601.03705": {
             "source": "arxiv", "title": stripped, "titles": [stripped],
             "authors": ["Alice Example", "Bob Sample"]}}}))
         refs_path = self.scratch_dir / "refs.json"
@@ -867,7 +879,7 @@ class TestCacheIdentity(_CheckTestCase):
         # A replaced arXiv entry of the same paper left its record under the title key.
         cache_path = self.out_path.parent / "citation-cache.json"
         cache_path.parent.mkdir(parents=True)
-        cache_path.write_text(json.dumps({"version": 2, "records": {_FIXTURE_DOI_TITLE_KEY: {
+        cache_path.write_text(json.dumps({"version": 3, "records": {_FIXTURE_DOI_TITLE_KEY: {
             "source": "arxiv", "title": "Predicting Citation Impact with Cohort Percentiles",
             "titles": ["Predicting Citation Impact with Cohort Percentiles"],
             "authors": ["Instance Carol", "Case Dana"], "year": 2022,
@@ -881,7 +893,7 @@ class TestCacheIdentity(_CheckTestCase):
         _check._open_url = _route_fixture_registry
         self._lookup(["--bib", str(self._write_bib(_FIXTURE_BIB_TEXT))], 1)
         cache = json.loads((self.out_path.parent / "citation-cache.json").read_text())
-        self.assertEqual(cache["version"], 2)
+        self.assertEqual(cache["version"], 3)
         self.assertEqual(sorted(cache["records"]), ["arxiv:2401.01234", "doi:10.1234/exact.5678"])
 
     def test_a_cache_written_before_the_identity_rule_is_ignored(self) -> None:

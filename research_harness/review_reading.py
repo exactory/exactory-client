@@ -64,11 +64,12 @@ def describe_reading_capture(records, artifacts, capture, links):
                 prerequisites=prerequisites)
 
 
-def collect_missing_readings(records, artifacts, output):
+def collect_missing_readings(records, artifacts, output, *, packets=()):
     """Group unsatisfied full-text links by version without treating other links as reading work."""
     missing, captures = {}, {}
     for citation in list_source_citations(output):
-        link = {key: value for key, value in citation.items() if key != 'path'}
+        from .review_delivered_evidence import resolve_part_source_link
+        link = resolve_part_source_link({key: value for key, value in citation.items() if key != 'path'}, packets)
         try:
             capture = validate_fulltext_link(records, link)
         except ResearchError as error:
@@ -93,14 +94,18 @@ def collect_missing_readings(records, artifacts, output):
 
 def plan_readings(records, artifacts, assignment, output):
     """Let the recording refuse a malformed source link before asking for any reading."""
+    from .review_delivered_evidence import read_chain_delivery, resolve_part_source_link
+    from .review_context_repair import _exposure_lineage
+    packets = (read_chain_delivery(records, artifacts, assignment)['packets']
+               if any('output_refusal' in row.get('context', {}) for row in _exposure_lineage(records, assignment)) else ())
     for citation in list_source_citations(output):
         try:
-            validate_fulltext_link(records, citation)
+            validate_fulltext_link(records, resolve_part_source_link(citation, packets))
         except ResearchError as error:
             if error.code == 'source_link_not_fulltext':
                 return None
             raise
-    rows = collect_missing_readings(records, artifacts, output)
+    rows = collect_missing_readings(records, artifacts, output, packets=packets)
     if not rows:
         return None
     return dict(state='handoff', code='reading_missing', command='read',

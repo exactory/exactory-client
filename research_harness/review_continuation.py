@@ -1,6 +1,7 @@
 """Compose the recorded review protocols into one prospective next action."""
 
 import copy
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import json
 
@@ -13,23 +14,50 @@ from .operations import text
 from .review_task_execution import has_call_terminated, identify_call
 
 
+def describe_context_failure(error, assignment_id=None):
+    """Keep a retained-context refusal visible in a read-only inspection."""
+    failure = (error.as_dict() if isinstance(error, ResearchError) else
+               dict(code='review_input_unreadable',
+                    message='A retained input of this review does not parse as JSON. Check the record with '
+                            'record-check.',
+                    details=dict(kind=type(error).__name__)))
+    if assignment_id is not None:
+        failure = dict(assignment_id=assignment_id, **failure)
+    return failure
+
+
+@contextmanager
+def _collect_context_failure(failures, assignment_id):
+    try:
+        yield
+    except (ResearchError, json.JSONDecodeError) as error:
+        if failures is None:
+            raise
+        failure = describe_context_failure(error, assignment_id)
+        if failure not in failures:
+            failures.append(failure)
+
+
 def _find_parent(records, assignment):
     context = assignment.get('context', {})
     history_id = assignment.get('history_assignment_id')
-    if records.get('problem_post'):
-        if not isinstance(context, dict):
-            raise ResearchError('invalid_review_context', 'Review ancestry requires an object context')
-        if not isinstance(assignment.get('staged_review', {}), dict):
-            raise ResearchError('invalid_review_context', 'Review staging requires an object binding')
-        for key in ('context_repair', 'staged_upgrade'):
-            binding = context.get(key)
-            if binding is not None:
-                if not isinstance(binding, dict) or 'assignment_id' not in binding:
-                    raise ResearchError('invalid_review_context', 'Review ancestry requires an exact predecessor')
-                text(binding['assignment_id'], 'Review predecessor', code='invalid_review_context')
-        for identifier in (history_id, context.get('prior_assignment_id'), assignment.get('slot_id')):
-            if identifier is not None:
-                text(identifier, 'Review ancestry identity', code='invalid_review_context')
+    if not isinstance(context, dict):
+        raise ResearchError('invalid_review_context', 'Review ancestry requires an object context')
+    if not isinstance(assignment.get('staged_review', {}), dict):
+        raise ResearchError('invalid_review_context', 'Review staging requires an object binding')
+    has_posts = bool(records.get('problem_post'))
+    for key in ('context_repair', 'staged_upgrade', 'output_refusal'):
+        binding = context.get(key)
+        if binding is not None or (key == 'output_refusal' and key in context):
+            if not isinstance(binding, dict) or ((has_posts or key == 'output_refusal')
+                                                and 'assignment_id' not in binding):
+                raise ResearchError('invalid_review_context', 'Review ancestry requires an exact predecessor')
+            identifier = binding.get('assignment_id')
+            if has_posts or key == 'output_refusal' or (identifier is not None and not isinstance(identifier, str)):
+                text(identifier, 'Review predecessor', code='invalid_review_context')
+    for identifier in (history_id, context.get('prior_assignment_id'), assignment.get('slot_id')):
+        if identifier is not None and (has_posts or not isinstance(identifier, str)):
+            text(identifier, 'Review ancestry identity', code='invalid_review_context')
     history_parent = records.get('review_assignment', {}).get(history_id, {})
     # A result may inherit its bar's scientific history. That history is a
     # different phase, not another turn of the result chain.
@@ -38,6 +66,16 @@ def _find_parent(records, assignment):
     return (assignment.get('capacity_replacement_of') or context.get('prior_assignment_id') or history_id
             or (context.get('context_repair') or {}).get('assignment_id')
             or (context.get('staged_upgrade') or {}).get('assignment_id'))
+
+
+def validate_context_bindings(records, artifacts, assignment):
+    """Read retained container and controller bindings at an inspection's edge."""
+    _find_parent(records, assignment)
+    staged = assignment.get('staged_review', {})
+    controller = staged.get('controller_assignment_id')
+    if (staged.get('kind') == 'task' and
+            (not isinstance(controller, str) or controller not in records.get('review_assignment', {}))):
+        _find_head(records, artifacts, assignment['id'])
 
 
 def _list_lineage(records, assignment):
@@ -52,52 +90,54 @@ def _list_lineage(records, assignment):
     return result
 
 
-def list_chain_heads(records, artifacts):
+def list_chain_heads(records, artifacts, *, context_failures=None):
     """List current terminal assignment IDs; staged children belong to their controller."""
-    assignments = records.get('review_assignment', {})
-    parents = {_find_parent(records, row) for row in assignments.values()}
+    assignments, parents = {}, set()
+    for identifier, row in records.get('review_assignment', {}).items():
+        with _collect_context_failure(context_failures, identifier):
+            parents.add(_find_parent(records, row))
+            assignments[identifier] = row
+    checked = dict(review_assignment=assignments)
     result = []
     for row in assignments.values():
-        if row.get('staged_review', {}).get('kind') == 'task' or row['id'] in parents:
-            continue
-        if protocol.find_replacement(records, row) is not None:
-            continue
-        peers = [other for other in assignments.values()
-                 if row.get('slot_id') is not None and other.get('slot_id') == row['slot_id']
-                 and other.get('staged_review', {}).get('kind') != 'task'
-                 and other['role'] == row['role'] and other.get('dossier_id') == row.get('dossier_id')
-                 and other.get('recorded_revision', 0) > row.get('recorded_revision', 0)]
-        if not peers:
-            result.append(row['id'])
+        with _collect_context_failure(context_failures, row['id']):
+            if row.get('staged_review', {}).get('kind') == 'task' or row['id'] in parents:
+                continue
+            if protocol.find_replacement(checked, row) is not None:
+                continue
+            peers = [other for other in assignments.values()
+                     if row.get('slot_id') is not None and other.get('slot_id') == row['slot_id']
+                     and other['role'] == row['role'] and other.get('dossier_id') == row.get('dossier_id')
+                     and other.get('staged_review', {}).get('kind') != 'task'
+                     and other.get('recorded_revision', 0) > row.get('recorded_revision', 0)]
+            if not peers:
+                result.append(row['id'])
     return sorted(result)
 
 
-def _find_head(records, artifacts, identifier):
+def _find_head(records, artifacts, identifier, *, context_failures=None):
     assignments = records.get('review_assignment', {})
     assignment = protocol._get(records, 'review_assignment', identifier)
     staged = assignment.get('staged_review', {})
     has_posts = bool(records.get('problem_post'))
-    if has_posts and not isinstance(staged, dict):
+    if not isinstance(staged, dict):
         raise ResearchError('invalid_review_context', 'Review staging requires an object binding')
     if staged.get('kind') == 'task':
-        if has_posts:
-            text(staged.get('controller_assignment_id'), 'Review controller', code='invalid_review_context')
+        text(staged.get('controller_assignment_id'), 'Review controller', code='invalid_review_context')
         identifier = assignment['staged_review']['controller_assignment_id']
-        if has_posts:
-            assignment = assignments.get(identifier)
-            if not isinstance(assignment, dict):
-                raise ResearchError('invalid_review_context', 'The review controller is missing')
-        else:
-            assignment = assignments[identifier]
+        assignment = assignments.get(identifier)
+        if not isinstance(assignment, dict):
+            raise ResearchError('invalid_review_context', 'The review controller is missing')
     candidates = []
-    for head in list_chain_heads(records, artifacts):
+    for head in list_chain_heads(records, artifacts, context_failures=context_failures):
         row = assignments[head]
-        if (identifier in {entry['id'] for entry in _list_lineage(records, row)}
-                or (assignment.get('slot_id') is not None
-                    and row.get('slot_id') == assignment['slot_id']
-                    and row['role'] == assignment['role']
-                    and row.get('dossier_id') == assignment.get('dossier_id'))):
-            candidates.append(row)
+        with _collect_context_failure(context_failures, head):
+            if (identifier in {entry['id'] for entry in _list_lineage(records, row)}
+                    or (row.get('slot_id') is not None
+                        and row.get('slot_id') == assignment.get('slot_id', assignment['id'])
+                        and row['role'] == assignment['role']
+                        and row.get('dossier_id') == assignment.get('dossier_id'))):
+                candidates.append(row)
     if len(candidates) > 1:
         raise ResearchError('review_source_continuation_fork', 'The review has more than one live continuation',
                             dict(assignment_ids=sorted(row['id'] for row in candidates)))
@@ -119,12 +159,13 @@ def _describe_chain(assignment):
         'session' if assignment['role'] in bar_sources.ROLES else assignment['role'])
 
 
-def _find_unused_id(records, proposed):
+def _find_unused_id(records, proposed, *, maximum=None):
     occupied = {key for rows in records.values() for key in rows}
-    identifier = proposed
+    identifier = proposed if maximum is None else proposed[:maximum]
     suffix = 2
     while identifier in occupied:
-        identifier = proposed + '-' + str(suffix)
+        ending = '-' + str(suffix)
+        identifier = proposed + ending if maximum is None else proposed[:maximum - len(ending)] + ending
         suffix += 1
     return identifier
 
@@ -135,12 +176,16 @@ def _build_assignment_payload(records, assignment, *, replace=False):
                ('route_id', 'dossier_id', 'role', 'reviewer_id', 'author_id')}
     # Repair prerequisites identify the first repaired turn, not each later turn.
     context = copy.deepcopy(assignment.get('context', {}))
-    if not replace:
+    if replace and assignment.get('staged_review', {}).get('kind') == 'controller':
+        context = dict(staged_upgrade=dict(assignment_id=assignment['id']))
+    elif not replace:
         context = {key: value for key, value in context.items() if key in
                    ('native_packet', 'verification_task_id', 'review_ids', 'objection_id',
                     'correction', 'source_delivery')}
         context['prior_assignment_id'] = assignment['id']
-    payload.update(id=_find_unused_id(records, lineage[0]['id'] + '-t' + str(len(lineage) + 1)),
+    maximum = (openness_reading.RESERVED_IDENTIFIER_CHARACTERS if assignment['prompt']['template_id'].startswith(
+        openness_reading.PROTOCOL_V6 + '/') else None)
+    payload.update(id=_find_unused_id(records, lineage[0]['id'] + '-t' + str(len(lineage) + 1), maximum=maximum),
                    context=context)
     return payload
 
@@ -151,7 +196,9 @@ def _build_run_payload(records, assignment):
     invocations = [row for row in records.get('review_invocation', {}).values()
                    if row['assignment_id'] == assignment['id']]
     count = len({row['id'] for row in attempts + invocations}) + 1
-    return dict(id=_find_unused_id(records, assignment['id'] + '-run-' + str(count)),
+    maximum = (openness_reading.RESERVED_IDENTIFIER_CHARACTERS if assignment['prompt']['template_id'].startswith(
+        openness_reading.PROTOCOL_V6 + '/') else None)
+    return dict(id=_find_unused_id(records, assignment['id'] + '-run-' + str(count), maximum=maximum),
                 assignment_id=assignment['id'])
 
 
@@ -165,7 +212,7 @@ def _list_recorded_finals(records, identifiers):
     return sorted(result)
 
 
-def _describe_progress(records, artifacts, assignment):
+def _describe_progress(records, artifacts, assignment, *, context_failures=None):
     lineage = _list_lineage(records, assignment)
     identifiers = {row['id'] for row in lineage}
     epochs = {row.get('staged_review', {}).get('epoch_id') for row in lineage} - {None}
@@ -178,7 +225,10 @@ def _describe_progress(records, artifacts, assignment):
                         key=lambda row: (row['assignment_id'], row['request_digest'] or ''))
     parent = assignment.get('context', {}).get('prior_assignment_id')
     position = {assignment['id']}
+    failed_contexts = {row.get('assignment_id') for row in context_failures or []}
     for row in records.get('review_assignment', {}).values():
+        if row['id'] in failed_contexts:
+            continue
         if any(row.get(key) != assignment.get(key) for key in ('role', 'dossier_id')):
             continue
         if parent is not None and row.get('context', {}).get('prior_assignment_id') == parent:
@@ -210,6 +260,16 @@ def plan_route_handoff(assignment):
 
 
 def _plan_pending_call(records, assignment):
+    for invocation in records.get('review_output_correction_invocation', {}).values():
+        if invocation['assignment_id'] == assignment['id'] and invocation['id'] not in records.get('review_output_correction', {}):
+            identifier = identify_call('review.output_correction', invocation['id'])
+            captured = records.get('review_call_observation', {}).get(identifier)
+            if captured is not None:
+                return dict(state='resume', command='review-output-correction', request_id=captured['request_id'],
+                    payload={key: invocation[key] for key in ('id', 'assignment_id', 'route_id')})
+            return dict(state='wait', command='review-run',
+                payload=dict(action='reconcile', operation='review.output_correction', invocation_id=invocation['id']),
+                not_before=_describe_wait(), code='review_invocation_pending', details={})
     for invocation in records.get('review_invocation', {}).values():
         if invocation['assignment_id'] != assignment['id']:
             continue
@@ -279,7 +339,7 @@ def _plan_recording(records, artifacts, assignment, state):
         output = copy.deepcopy(effective['effective_output'])
     role = assignment['role']
     if role == 'native_math':
-        from .native_review import load_packet
+        from .native_review import load_packet, uses_finding_contract
         packet = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
         if openness_reading.is_openness_packet(packet):
             from .problem_openness import prepare_openness
@@ -287,6 +347,14 @@ def _plan_recording(records, artifacts, assignment, state):
                 prepare_openness(records, artifacts, dict(assignment_id=assignment['id']),
                                  assignment['recorded_revision'] + 1)
             except ResearchError as error:
+                if uses_finding_contract(assignment):
+                    if output['findings']['openness']['outcome'] != 'unresolved':
+                        outdated = _plan_openness_freshness(records, artifacts, assignment, packet)
+                        if outdated is not None:
+                            return outdated
+                    return dict(state='handoff', code=error.code, command='export',
+                                details=dict(error.details or {}, assignment_id=assignment['id'],
+                                             kind='problem-openness', message=error.message))
                 return dict(state='handoff', code='openness_review_not_approved', command='export',
                             details=dict(assignment_id=assignment['id'], decision=output.get('decision'),
                                          reason=output.get('reason'), kind='problem-openness',
@@ -374,7 +442,7 @@ def _plan_staged(records, artifacts, assignment, state):
     epoch = protocol._get(records, 'review_epoch', assignment['staged_review']['epoch_id'])
     effective = state.get('effective') or {}
     if effective.get('incomplete_outcome') is not None:
-        return dict(state='handoff', code='assessment_incomplete', command='review-assignment',
+        return dict(state='stop', code='assessment_incomplete',
                     details=effective['incomplete_outcome'])
     if state.get('output') is not None:
         return _plan_recording(records, artifacts, assignment, state)
@@ -386,16 +454,61 @@ def _plan_staged(records, artifacts, assignment, state):
     return dict(state='plan', command=action['command'], payload=action['payload'])
 
 
+def _plan_openness_freshness(records, artifacts, assignment, packet=None):
+    if assignment['role'] != 'native_math':
+        return None
+    if packet is None:
+        packet = protocol._read_json(artifacts, assignment['packet'])
+        if openness_reading.find_protocol(packet) != openness_reading.PROTOCOL_V6:
+            return None
+        packet = protocol._read_json(artifacts, assignment['context']['native_packet'])
+    from .problem_openness import assess_packet_freshness, OUTDATED_PACKET_MESSAGE
+    freshness = assess_packet_freshness(records, artifacts, packet)
+    if freshness['current']:
+        return None
+    return dict(state='handoff', command='export', code='openness_packet_outdated',
+                details=dict(assignment_id=assignment['id'], kind='problem-openness',
+                             message=OUTDATED_PACKET_MESSAGE,
+                             added=freshness['added'], removed=freshness['removed']))
+
+
 def _plan_head(records, artifacts, assignment):
+    pending = _plan_pending_call(records, assignment)
+    if pending is not None:
+        return pending
+    if assignment['context_state']['context_status'] != 'verified_for_route':
+        if assignment.get('staged_review', {}).get('kind') == 'controller':
+            from .problem_delivery import describe_review_tasks
+            epoch = records['review_epoch'][assignment['staged_review']['epoch_id']]
+            for task in describe_review_tasks(records, epoch, {}):
+                if task['state'] in ('reconciling', 'captured') and task.get('next'):
+                    return _plan_staged_action(records, epoch, task, task['next'][0])
+        if protocol.describe_assignment_calls(records, assignment)['ran']:
+            return dict(state='stop', code='review_context_unverified',
+                        details=dict(assignment_id=assignment['id']))
+        if protocol.is_dead_assignment(records, assignment):
+            route = protocol.route_state(records, artifacts, assignment['route_id'])
+            if route['context_status'] != 'verified_for_route':
+                return dict(state='handoff', command='review-probe', code='review_context_unverified',
+                            details=dict(assignment_id=assignment['id'], route_id=assignment['route_id']))
+            if assignment['role'] == 'native_math' and not assignment.get('context', {}).get('prior_assignment_id'):
+                # A native packet attests its first assignment ID; a new first turn needs a new packet.
+                from .native_review import load_packet
+                packet = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
+                common = openness_reading.is_openness_packet(packet)
+                return dict(state='handoff', command='export' if common else 'search review-packet',
+                            code='native_review_attestation_required',
+                            details=dict(assignment_id=assignment['id'],
+                                         **(dict(kind='problem-openness') if common else {})))
+            return dict(state='replace', command='review-assignment', code='review_context_unverified',
+                        payload=_build_assignment_payload(records, assignment, replace=True),
+                        details=dict(assignment_id=assignment['id']))
     if assignment.get('staged_review'):
         state = protocol.assignment_state(records, artifacts, assignment['id'])
         blocking = [item for item in state['obligations'] if item['code'] != 'review_task_pending']
         if blocking:
             return dict(state='handoff', command='review-assignment', code=blocking[0]['code'], details=blocking[0])
         return _plan_staged(records, artifacts, assignment, state)
-    pending = _plan_pending_call(records, assignment)
-    if pending is not None:
-        return pending
     attempts = [row for row in records.get('review_attempt', {}).values()
                 if row['assignment_id'] == assignment['id']]
     initial = (assignment['role'] in ('adjudicator', 'result')
@@ -416,18 +529,6 @@ def _plan_head(records, artifacts, assignment):
                     or protocol._context_observed(artifacts, binding))
         usable = state.get('output') is not None and observed
         refused = state.get('refused_attempts', [])
-        if not usable and len(refused) >= 2:
-            from . import review_output_correction
-            command = 'review-output-correction'
-            details = dict(assignment_id=assignment['id'], refused_attempts=refused)
-            if any(row['assignment_id'] == assignment['id'] for row in
-                   records.get('review_output_correction_invocation', {}).values()):
-                return dict(state='stop', code='review_slot_exhausted', details=details)
-            try:
-                review_output_correction.prepare_packet(records, artifacts, assignment['id'])
-            except ResearchError:
-                return dict(state='stop', code='review_slot_exhausted', details=details)
-            return dict(state='handoff', command=command, code='review_slot_exhausted', details=details)
         if attempts and not usable:
             latest = max(attempts, key=lambda row: row.get('recorded_revision', 0))
             failed = bool(refused) or latest['status'] != 'completed' or not protocol._context_observed(artifacts, latest)
@@ -443,11 +544,19 @@ def _plan_head(records, artifacts, assignment):
     if failed or unverified:
         from .review_failure_class import plan_after_failure
         result = copy.deepcopy(plan_after_failure(records, artifacts, assignment['id']))
+        # A refused answer keeps its frozen contract diagnosis and bounded retry.
+        if result.get('details', {}).get('outcome') != 'scientific_refused':
+            outdated = _plan_openness_freshness(records, artifacts, assignment)
+            if outdated is not None:
+                return outdated
         if result['state'] == 'stop' and result.get('code') == 'review_route_runtime_stale':
             return plan_route_handoff(assignment)
         if result['state'] == 'replace':
-            single_replacement = result.get('details', {}).get('recovery', {}).get('details', {}).get('handler') == 'single_request_series'
-            if (not single_replacement and assignment['role'] == 'native_math'
+            recovery = result.get('details', {}).get('recovery', {})
+            single_replacement = recovery.get('details', {}).get('handler') == 'single_request_series'
+            capacity_replacement = (recovery.get('kind') == 'replace'
+                and recovery.get('payload', {}).get('context', {}).get('capacity_replacement') == assignment['id'])
+            if (not single_replacement and not capacity_replacement and assignment['role'] == 'native_math'
                     and not assignment.get('context', {}).get('prior_assignment_id')):
                 from .native_review import load_packet
                 packet = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
@@ -456,9 +565,10 @@ def _plan_head(records, artifacts, assignment):
                             code='native_review_attestation_required',
                             details=dict(assignment_id=assignment['id'],
                                          **(dict(kind='problem-openness') if common else {})))
-            if (not single_replacement and assignment['role'] in bar_sources.ROLES
+            if (not single_replacement and not capacity_replacement and assignment['role'] in bar_sources.ROLES
                     and not assignment.get('context', {}).get('prior_assignment_id')
                     and not assignment.get('context', {}).get('context_repair')
+                    and not result.get('payload', {}).get('context', {}).get('output_refusal')
                     and not (initial and protocol._initial_size_failure(
                         records, artifacts, assignment, assignment))):
                 return dict(state='handoff', command='review-assignment',
@@ -466,14 +576,13 @@ def _plan_head(records, artifacts, assignment):
                             details=dict(assignment_id=assignment['id'],
                                          failure_code=result.get('code'),
                                          failure_details=result.get('details', {})))
-            payload = _build_assignment_payload(records, assignment, replace=True)
-            recovery = result.get('details', {}).get('recovery', {})
+            payload = result.get('payload') or _build_assignment_payload(records, assignment, replace=True)
             if recovery.get('kind') == 'replace':
                 payload = copy.deepcopy(recovery['payload'])
                 payload['id'] = _find_unused_id(records, payload['id'])
             result.update(command='review-assignment', payload=payload)
         elif result['state'] == 'handoff':
-            result['command'] = 'review-probe'
+            result.setdefault('command', 'review-probe')
         elif result['state'] in ('run', 'wait'):
             result.update(command='review-run', payload=_build_run_payload(records, assignment))
             if result['state'] == 'run':
@@ -487,6 +596,9 @@ def _plan_head(records, artifacts, assignment):
         return dict(state='handoff' if repair else 'stop', code=item['code'], details=item,
                     **(dict(command='review-assignment') if repair else {}))
     if state.get('output') is None:
+        outdated = _plan_openness_freshness(records, artifacts, assignment)
+        if outdated is not None:
+            return outdated
         return _plan_capacity(records, assignment, dict(state='run', command='review-run',
                               payload=_build_run_payload(records, assignment)), artifacts)
     packet = protocol._read_json(artifacts, assignment['packet'])
@@ -502,12 +614,15 @@ def _plan_head(records, artifacts, assignment):
                       and _list_recorded_finals(records, {assignment['id']})
                       and protocol._is_problem_refresh(records, artifacts, assignment, packet)))
     if continuing:
+        outdated = _plan_openness_freshness(records, artifacts, assignment)
+        if outdated is not None:
+            return outdated
         return dict(state='continue', command='review-assignment',
                     payload=_build_assignment_payload(records, assignment))
     return _plan_recording(records, artifacts, assignment, state)
 
 
-def plan_next(records, artifacts, head_id):
+def plan_next(records, artifacts, head_id, *, context_failures=None):
     """Describe one exact action; the named operation retains every mutation validator."""
     artifacts = Evaluation.of(records, artifacts)
     result = dict(state='stop', chain=None, head_id=head_id, progress=None)
@@ -520,9 +635,9 @@ def plan_next(records, artifacts, head_id):
             initial_assignment = records.get('review_assignment', {}).get(head_id)
             if initial_assignment is not None:
                 stop = find_stop(records, assignment_id=head_id)
-        assignment = _find_head(records, artifacts, head_id)
+        assignment = _find_head(records, artifacts, head_id, context_failures=context_failures)
         result.update(chain=_describe_chain(assignment), head_id=assignment['id'],
-                      progress=_describe_progress(records, artifacts, assignment))
+                      progress=_describe_progress(records, artifacts, assignment, context_failures=context_failures))
         from .problem_delivery import find_review_post
         if find_review_post(records, assignment, artifacts) is not None:
             from .review_stop import describe_closed_calls
@@ -557,7 +672,7 @@ def plan_next(records, artifacts, head_id):
             result.update(state='stop', code=error.code, details=error.details or {})
         else:
             result.update(state='stop', code='review_input_unreadable', details=dict(kind=type(error).__name__))
-        from .stop_classes import describe_terminal
+        from .stop_classes import describe_terminal, describe_unlisted_step
         terminal = describe_terminal(result['code'])
         details = dict(result['details'], **terminal['details'])
         for field in ('command', 'payload', 'not_before', 'request_id'):
@@ -572,18 +687,32 @@ def plan_next(records, artifacts, head_id):
                 result = complete_plan(records, artifacts, assignment, result)
             except (ResearchError, json.JSONDecodeError) as detail_error:
                 # A damaged binding cannot supply an executable repair payload.
-                decision = describe_terminal('unrecognized')['details']['decision']
+                decision = describe_unlisted_step()
+                decision.pop('kind')
                 result.update(state='stop', code=getattr(detail_error, 'code', 'review_input_unreadable'),
                               details=dict(decision=decision, reason=str(detail_error)))
                 result.pop('command', None)
         elif result['state'] not in ('done', 'stop'):
-            result.update(state='stop', details=describe_terminal('unrecognized')['details'])
+            decision = describe_unlisted_step()
+            decision.pop('kind')
+            result.update(state='stop', details=dict(unlisted=True, decision=decision))
+    if result.get('code'):
+        from .stop_classes import describe_terminal
+        action = ({key: copy.deepcopy(result[key]) for key in ('command', 'state', 'payload') if key in result}
+                  if result['state'] == 'handoff' else dict(command='plan_next', assignment_id=head_id))
+        terminal = describe_terminal(result['code'], action=action)
+        if terminal['details'].get('unlisted'):
+            result.setdefault('details', {}).update(terminal['details'])
+            if result['state'] == 'handoff':
+                result.update(state='stop')
+                result.pop('command', None)
+                result.pop('payload', None)
     return copy.deepcopy(result)
 
 
-def describe_next_actions(records, artifacts, assignment_id, actions=()):
+def describe_next_actions(records, artifacts, assignment_id, actions=(), *, context_failures=None):
     """Add executable actions while preserving existing navigation fields."""
-    plan = plan_next(records, artifacts, assignment_id)
+    plan = plan_next(records, artifacts, assignment_id, context_failures=context_failures)
     from .problem_delivery import find_review_post
     assignment = records.get('review_assignment', {}).get(assignment_id, {})
     resolved_assignment = records.get('review_assignment', {}).get(plan['head_id'], {})
@@ -615,8 +744,8 @@ def describe_next_actions(records, artifacts, assignment_id, actions=()):
     return result
 
 
-def annotate_review_obligations(records, artifacts, report):
-    """Attach the common action wherever a gate already names a review assignment."""
+def annotate_review_obligations(records, artifacts, report, *, context_failures=None):
+    """Attach review actions, optionally collecting unreadable contexts for status."""
     if 'review' in report and 'obligations' in report:
         from .problem_delivery import describe_after_post_obligations, describe_posted_calls, find_review_post
         rows = []
@@ -624,7 +753,7 @@ def annotate_review_obligations(records, artifacts, report):
         after_post = list(report.get('after_post', []))
         seen_calls = {(row.get('operation'), row.get('invocation_id'), row.get('reservation_id'))
                       for row in after_post if row.get('operation') is not None}
-        for call in describe_posted_calls(records, artifacts):
+        for call in describe_posted_calls(records, artifacts, context_failures=context_failures):
             identity = (call['operation'], call.get('invocation_id'), call.get('reservation_id'))
             if identity not in seen_calls:
                 after_post.append(call)
@@ -632,7 +761,10 @@ def annotate_review_obligations(records, artifacts, report):
         for item in report['obligations']:
             identifier = item.get('assignment_id') or item.get('controller_assignment_id')
             assignment = records.get('review_assignment', {}).get(identifier)
-            if assignment is not None and find_review_post(records, assignment, artifacts) is not None:
+            posted = False
+            with _collect_context_failure(context_failures, identifier):
+                posted = assignment is not None and find_review_post(records, assignment, artifacts) is not None
+            if posted:
                 closed_rows.append(item)
                 after_post.extend(describe_after_post_obligations([item]))
             else:
@@ -646,40 +778,45 @@ def annotate_review_obligations(records, artifacts, report):
         represented = {item.get('assignment_id') or item.get('controller_assignment_id')
                        for item in rows}
         retained_findings = {digest(item) for item in after_post}
-        for identifier in list_chain_heads(records, artifacts):
+        for identifier in list_chain_heads(records, artifacts, context_failures=context_failures):
             if identifier in represented:
                 continue
-            assignment = records['review_assignment'][identifier]
-            if assignment['role'] == 'native_math':
-                try:
-                    from .native_review import load_packet
-                    packet = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
-                except (ResearchError, json.JSONDecodeError):
-                    continue
-                if not openness_reading.is_openness_packet(packet):
-                    continue
-            state = protocol.assignment_state(records, artifacts, identifier)
-            pending = [dict(item, assignment_id=identifier) for item in state.get('obligations', [])]
-            binding = records.get('review_attempt', {}).get(state.get('attempt_id'))
-            if (not state.get('obligations') and binding is not None
-                    and not state.get('output_correction_id')
-                    and not protocol._context_observed(artifacts, binding)):
-                from .graph import obligation
-                pending.append(obligation('review_output_pending',
-                    'A complete observed reviewer response is required.', assignment_id=identifier))
-            if state.get('pending_source_requests'):
-                from .graph import obligation
-                pending.append(obligation('review_sources_pending',
-                    'Deliver the sources requested by the observed reviewer.',
-                    assignment_id=identifier, requests=state['pending_source_requests']))
-            if find_review_post(records, assignment, artifacts) is not None:
-                for item in describe_after_post_obligations(pending):
-                    identity = digest(item)
-                    if identity not in retained_findings:
-                        after_post.append(item)
-                        retained_findings.add(identity)
-            else:
-                rows.extend(pending)
+            with _collect_context_failure(context_failures, identifier):
+                assignment = records['review_assignment'][identifier]
+                if assignment['role'] == 'native_math':
+                    try:
+                        from .native_review import load_packet
+                        packet = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
+                    except (ResearchError, json.JSONDecodeError) as error:
+                        if context_failures is not None:
+                            failure = describe_context_failure(error, identifier)
+                            if failure not in context_failures:
+                                context_failures.append(failure)
+                        continue
+                    if not openness_reading.is_openness_packet(packet):
+                        continue
+                state = protocol.assignment_state(records, artifacts, identifier)
+                pending = [dict(item, assignment_id=identifier) for item in state.get('obligations', [])]
+                binding = records.get('review_attempt', {}).get(state.get('attempt_id'))
+                if (not state.get('obligations') and binding is not None
+                        and not state.get('output_correction_id')
+                        and not protocol._context_observed(artifacts, binding)):
+                    from .graph import obligation
+                    pending.append(obligation('review_output_pending',
+                        'A complete observed reviewer response is required.', assignment_id=identifier))
+                if state.get('pending_source_requests'):
+                    from .graph import obligation
+                    pending.append(obligation('review_sources_pending',
+                        'Deliver the sources requested by the observed reviewer.',
+                        assignment_id=identifier, requests=state['pending_source_requests']))
+                if find_review_post(records, assignment, artifacts) is not None:
+                    for item in describe_after_post_obligations(pending):
+                        identity = digest(item)
+                        if identity not in retained_findings:
+                            after_post.append(item)
+                            retained_findings.add(identity)
+                else:
+                    rows.extend(pending)
         if after_post != report.get('after_post', []):
             report = dict(report, after_post=after_post)
         if len(rows) != len(report['obligations']):
@@ -698,24 +835,29 @@ def annotate_review_obligations(records, artifacts, report):
         for original in report[key]:
             item = dict(original)
             identifier = item.get('assignment_id') or item.get('controller_assignment_id')
-            if identifier in records.get('review_assignment', {}):
-                item['next'] = describe_next_actions(records, artifacts, identifier, item.get('next', []))
-            elif records.get('review_epoch'):
-                # Legacy staged diagnostics have no assignment identity in the
-                # gate digest. Resolve their controllers only in the reader.
-                if staged_outcomes is None:
-                    from .problem_delivery import collect_review_outcomes
-                    staged_outcomes = [row for row in collect_review_outcomes(records, artifacts)
-                                       if row['epoch'] is not None]
-                identifiers = [row['assignment']['id'] for row in staged_outcomes
-                               if original in row['state'].get('obligations', [])]
-                if identifiers:
-                    item['next'] = [action for identifier in identifiers for action in
-                        describe_next_actions(records, artifacts, identifier, item.get('next', []))]
+            with _collect_context_failure(context_failures, identifier):
+                if identifier in records.get('review_assignment', {}):
+                    item['next'] = describe_next_actions(
+                        records, artifacts, identifier, item.get('next', []), context_failures=context_failures)
+                elif records.get('review_epoch'):
+                    # Legacy staged diagnostics have no assignment identity in the
+                    # gate digest. Resolve their controllers only in the reader.
+                    if staged_outcomes is None:
+                        from .problem_delivery import collect_review_outcomes
+                        staged_outcomes = []
+                        staged_outcomes = [row for row in collect_review_outcomes(records, artifacts)
+                                           if row['epoch'] is not None]
+                    identifiers = [row['assignment']['id'] for row in staged_outcomes
+                                   if original in row['state'].get('obligations', [])]
+                    if identifiers:
+                        item['next'] = [action for identifier in identifiers for action in
+                            describe_next_actions(records, artifacts, identifier, item.get('next', []),
+                                                  context_failures=context_failures)]
             rows.append(item)
         result[key] = rows
     if report.get('preparation'):
-        result['preparation'] = annotate_review_obligations(records, artifacts, report['preparation'])
+        result['preparation'] = annotate_review_obligations(
+            records, artifacts, report['preparation'], context_failures=context_failures)
     if report.get('next') is not None:
         upcoming = report['next']
         if 'code' in upcoming:
@@ -727,6 +869,10 @@ def annotate_review_obligations(records, artifacts, report):
             else:
                 identifier = upcoming.get('assignment_id') or upcoming.get('controller_assignment_id')
                 if identifier in records.get('review_assignment', {}):
-                    result['next'] = dict(upcoming, next=describe_next_actions(
-                        records, artifacts, identifier, upcoming.get('next', [])))
+                    with _collect_context_failure(context_failures, identifier):
+                        result['next'] = dict(upcoming, next=describe_next_actions(
+                            records, artifacts, identifier, upcoming.get('next', []),
+                            context_failures=context_failures))
+    if context_failures:
+        result['review_context_failures'] = list(context_failures)
     return result

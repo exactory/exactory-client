@@ -159,7 +159,7 @@ class FinalPreflightCase(OpennessReadingCase):
         objects = self.read_artifacts()
         with self.assertRaises(ResearchError) as caught:
             self.assign('turn-1' if prior is None else 'turn-2', native_packet, prior)
-        self.assertEqual(caught.exception.code, 'review_input_too_large')
+        self.assertEqual(caught.exception.code, 'review_chain_projection_over_limit')
         details = caught.exception.details
         self.assertEqual(details.get('phase'), 'final_preflight')
         self.assertEqual(details.get('measurement_kind'), 'mandatory_input_lower_bound')

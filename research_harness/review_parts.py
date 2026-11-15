@@ -631,7 +631,7 @@ def prepare_plan(packet, inventory, observations, *, series_id, input_limit, mea
             allowance = int(1.5 * characters)
         else:
             allowance = characters
-    if replacement and replacement.get('over_cap'):
+    if replacement and (replacement.get('over_cap') or replacement.get('input_over_limit')):
         allowance = replacement['unit_characters'] // 2
     turn = len(observations) + 1
     header = dict(protocol=PROTOCOL, adapter=inventory['adapter'], series_assignment_id=series_id,
@@ -1516,6 +1516,7 @@ def read_logical_packet(artifacts, header):
 
 def _list_series(records, artifacts, assignment_id):
     from .operations import normalized_text
+    from .review_context_repair import slot_id
     from .workspace import strict_json
 
     latest = records.get('review_assignment', {}).get(assignment_id)
@@ -1538,12 +1539,16 @@ def _list_series(records, artifacts, assignment_id):
                 or any(binding.get(key) != header.get(key) for key in
                        ('series_assignment_id', 'series_key', 'adapter'))
                 or any(current.get(key) != latest.get(key) for key in
-                       ('role', 'route_id', 'slot_id', 'session_id', 'subject'))
+                       ('role', 'route_id', 'session_id', 'subject'))
+                or slot_id(records, current) != slot_id(records, latest)
                 or any(normalized_text(current[key]) != normalized_text(latest[key])
                        for key in ('reviewer_id', 'author_id'))):
             return []
         chain.append((current, frozen))
-        if current['id'] == header['series_assignment_id']:
+        from .review_failure_class import list_turn_assignments
+        root_replacement = ('output_refusal' in current.get('context', {})
+                            and header['series_assignment_id'] in list_turn_assignments(records, current))
+        if current['id'] == header['series_assignment_id'] or root_replacement:
             return list(reversed(chain))
         parent = current.get('context', {}).get('prior_assignment_id')
         if parent != current.get('history_assignment_id'):
@@ -1785,7 +1790,7 @@ def verify_series(records, artifacts, final_assignment_id):
 
 
 def find_failed_replacement(records, artifacts, value, adapter, series_key, slot_id, prior_id, output_tokens,
-                      *, logical_packet=None):
+                      *, logical_packet=None, capacity_events=True):
     from .operations import normalized_text
     from .review_parts_roles import get_adapter
     from .workspace import strict_json
@@ -1812,6 +1817,9 @@ def find_failed_replacement(records, artifacts, value, adapter, series_key, slot
         over_cap = any(((attempt.get('usage') or {}).get('output_tokens') or 0) >= output_tokens
                        or (attempt.get('error') or {}).get('code') == 'review_incomplete'
                        for attempt in attempts)
+        if not over_cap and capacity_events:
+            from .review_failure_class import should_reduce_capacity_task
+            over_cap = should_reduce_capacity_task(records, artifacts, failed)
         if over_cap:
             if header.get('series_key') != series_key:
                 replacement_key = get_adapter(adapter).get('replacement_key')
@@ -1874,7 +1882,8 @@ def validate_turn_output(records, artifacts, assignment, packet, output, *, atte
 
 def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
                    base_prompt_parameters=None, slot_id=None, legacy_refusal=None,
-                   entry=None, read_allowance=None, replaces_assignment_id=None):
+                   entry=None, read_allowance=None, replaces_assignment_id=None, refusal_notice=None,
+                   capacity_replacement=None):
     """Enter or continue parts with the same base prompt and adapter-owned series key."""
     from . import review_problem_parts as legacy, review_transport as transport
     from .review_parts_roles import find_adapter, get_adapter
@@ -1910,7 +1919,7 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
                 raise
             continuing = False
     if not continuing:
-        if legacy_refusal is None:
+        if legacy_refusal is None and capacity_replacement is None:
             ordinary = transport.request_body(route, prompt['text'], packet, history)
             from .review_single_request import describe_task_entry
             ordinary_fits = (legacy._measure(route, ordinary) <= transport.local_input_limit(route)
@@ -1962,10 +1971,17 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
     packet.pop('digest', None)
     packet['digest'] = digest(packet)
     logical_reference = artifacts.put(render_json(packet).encode('utf-8'), 'application/json')
-    replacement = find_failed_replacement(records, artifacts, value, adapter, series_key, slot_id,
+    replacement = capacity_replacement or find_failed_replacement(records, artifacts, value, adapter, series_key, slot_id,
                                     prior_id, route['configuration']['max_output_tokens'], logical_packet=packet)
 
+    def attach_notice(candidate):
+        if refusal_notice is None:
+            return candidate
+        from .review_refusal_notice import attach_refusal_notice
+        return attach_refusal_notice(candidate, refusal_notice)
+
     def measure(candidate):
+        candidate = attach_notice(candidate)
         turn_prompt = build_turn_prompt(value['role'], base_prompt_parameters, candidate[KEY])
         if candidate.get('source_deliveries'):
             from .review_source_batches import plan_packet
@@ -2012,6 +2028,7 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
             packet.pop('digest', None)
             packet['digest'] = digest(packet)
             logical_reference = artifacts.put(render_json(packet).encode('utf-8'), 'application/json')
+    planned = attach_notice(planned)
     for entry in planned.get('evidence', []):
         if entry.get('segment'):
             reference = artifacts.put(entry['content'].encode('utf-8'), entry['artifact']['media_type'])

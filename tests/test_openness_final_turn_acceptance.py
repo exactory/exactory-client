@@ -735,7 +735,7 @@ class FinalTurnAcceptanceTests(AcceptanceCase):
         with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', self.measure(packet) - 1):
             with self.assertRaises(ResearchError) as raised:
                 self.preview_turn(native_packet, turns[-1], final)
-        self.assertEqual(raised.exception.code, 'review_input_too_large')
+        self.assertEqual(raised.exception.code, 'review_chain_projection_over_limit')
 
     def test_the_final_turn_refuses_with_parts_that_sum_to_its_input_when_nothing_more_can_be_withheld(self):
         native_packet, turns = self.read_every_unit()
@@ -760,7 +760,7 @@ class FinalTurnAcceptanceTests(AcceptanceCase):
                 openness_reading._build_final_turn(records['review_route']['route'], baseline,
                     baseline['reading_record'], rows, spans, observations)
         error = raised.exception
-        self.assertEqual(error.code, 'review_input_too_large')
+        self.assertEqual(error.code, 'review_chain_projection_over_limit')
         self.assertNotIn(final, self.store.snapshot()['records']['review_assignment'])
         details = error.details
         self.assertIn('parts', details, details)
@@ -771,9 +771,7 @@ class FinalTurnAcceptanceTests(AcceptanceCase):
         self.assertEqual(details['input_limit_characters'], limit)
         self.assertGreater(details['input_characters'], limit)
         self.assertLessEqual(lower_bound, details['input_characters'])
-        message = str(error)
-        for name, count in sorted(parts.items()):
-            self.assertTrue(str(count) in message or '{:,}'.format(count) in message, (name, count, message))
+        self.assertEqual(str(error), openness_reading.PROJECTION_STOP_MESSAGE)
         # At exactly the refused size the same assignment is recorded: the candidate that withholds every body that
         # reading turns delivered, except the statement record, and the notes of every turn.
         names = self.name_bodies(native_packet)

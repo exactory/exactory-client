@@ -1,0 +1,33 @@
+{
+  "source_record": "20261113110022-every-open-record-and-review-capacity",
+  "measured_date": "2026-11-14",
+  "roots": 28,
+  "packets": 1362,
+  "entries": {
+    "excerpt_fields": {
+      "starting": 400,
+      "observed": 669,
+      "chosen": 700
+    },
+    "cited_source": {
+      "starting": 160,
+      "observed": 566,
+      "chosen": 600
+    },
+    "gap": {
+      "starting": 400,
+      "observed": null,
+      "chosen": 400
+    },
+    "card": {
+      "starting": 300,
+      "observed": 2115,
+      "chosen": 2200
+    },
+    "decision": {
+      "starting": 360,
+      "observed": null,
+      "chosen": 360
+    }
+  }
+}

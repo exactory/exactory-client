@@ -75,8 +75,11 @@ class StagedContinuationTests(unittest.TestCase):
         row = next(row for row in enriched['obligations']
                    if row['code'] == 'review_epoch_stale' and 'task_id' not in row)
         self.assertTrue(row['next'])
-        self.assertEqual(row['next'][0]['command'], 'review-assignment')
-        self.assertEqual(row['next'][0]['state'], 'handoff')
+        self.assertEqual(row['next'][0]['state'], 'stop')
+        self.assertNotIn('unlisted', row['next'][0]['details'])
+        from research_harness.stop_classes import describe_terminal
+        self.assertEqual(row['next'][0]['details']['decision'],
+                         describe_terminal('review_epoch_stale')['details']['decision'])
         self.assertEqual(enriched['next'], row)
         self.assertEqual(original, before)
 

@@ -9,7 +9,7 @@ from tests import test_openness_reading_chain as reading_fixtures
 
 
 class MathOpennessCommonUpgradeTests(unittest.TestCase):
-    def test_a_mixed_version_chain_keeps_receipts_in_a_fresh_full_audit(self):
+    def test_a_stored_version_chain_keeps_receipts_in_a_fresh_full_audit(self):
         case = reading_fixtures.MathOpennessReadingTests()
         self.addCleanup(case.doCleanups)
         case.setUp()
@@ -50,8 +50,8 @@ class MathOpennessCommonUpgradeTests(unittest.TestCase):
         self.assertEqual(case.controller.store.read(), stored)
         self.assertEqual(case.read_receipts(turns[-1]['id']), receipts)
         records = case.store.snapshot()['records']
-        for index, assignment in enumerate(turns):
-            version = 2 if index == 0 else protocol.COMMON_VERSION
+        for assignment in turns:
+            version = 2
             prompt = assignment['prompt']
             self.assertEqual(prompt['parameters']['common_version'], version)
             self.assertTrue(prompt['text'].startswith(

@@ -16,7 +16,8 @@ from tests.test_search_reviewer import NativeReviewerTests
 from tests.test_search_evidence import EvidenceTests
 from tests.native_reviewer_support import mutate, response
 from codex_route_fixtures import record_codex_route, invoke_codex
-from research_harness import review_protocol as protocol, review_route_capacity as capacity
+from research_harness import review_parts as parts, review_protocol as protocol, review_route_capacity as capacity
+from review_parts_fixtures import make_output
 from test_review_output_profile import build_row
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
@@ -74,8 +75,18 @@ def run_journey():
             reviewer=fresh_output['reviewer'], inputs=[]), None, None)
         payload = dict(steps[0]['then'][0]['payload'], id='new', route_id='serving',
             reviewer_id=fresh_output['reviewer']['actor_id'], context=dict(native_packet=fresh['native_packet']))
-        mutate(case.store, protocol.record_assignment, payload)
-        invoke_codex(case, 'new', fresh_output)
+        assignment = mutate(case.store, protocol.record_assignment, payload)['result']
+        for number in range(40):
+            packet = protocol._read_json(case.artifacts, assignment['packet'])
+            kind = parts.find_kind(packet)
+            invoke_codex(case, assignment['id'], fresh_output if kind in (None, 'final') else make_output(packet))
+            if kind in (None, 'final'):
+                break
+            following = plan_next(case.store.snapshot()['records'], case.artifacts, assignment['id'])
+            assert following['state'] in ('assign', 'continue'), following
+            assignment = mutate(case.store, protocol.record_assignment, following['payload'])['result']
+        else:
+            raise AssertionError('The reattested native review did not finish its series')
         case.controller.command('accept', dict(obligation_id='obligation-000001', outcome='proof',
             dependency_ids=[], route_bindings=[], review=fresh_output, inputs=[]), 3, 'accept', checkpoint['id'])
         assert case.controller.status()['acceptances']['acceptance-000001']['status'] == 'accepted'

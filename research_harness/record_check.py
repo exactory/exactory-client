@@ -33,18 +33,21 @@ from .errors import ResearchError, describe_tool_timeout
 from .evaluation import Evaluation
 from .evidence import digest
 from . import review_preflight, review_protocol as protocol, review_transport as transport
-from .review_continuation import list_chain_heads, plan_next
+from .review_continuation import list_chain_heads, plan_next, validate_context_bindings
 from .review_failure_class import classify_attempt
+from .review_series import EXECUTABLE_COMMANDS
 from .storage import Store, _RecordHistory, _RecordedSnapshot, _validate
-from .stop_classes import EXPECTED_STOP_CODES, describe_terminal
+from .stop_classes import (EXPECTED_STOP_CODES as EXPECTED_STOP_CODES, STOP_REGISTRY,
+                           classify_stop, describe_terminal)
 
 
-LOCAL_OPERATIONS = frozenset(('review-assignment', 'value-review',
-                              'review-adjudication', 'problem-openness'))
+LOCAL_OPERATIONS = EXECUTABLE_COMMANDS - {'review-run'}
 DEFAULT_TIME_BUDGET_SECONDS = 10800
 # A limit of the harness inside the range that macOS accepts for an interval timer (setitimer refuses 100000001 s).
 MAXIMUM_TIME_BUDGET_SECONDS = 100_000_000
 SNAPSHOT_ATTEMPTS = 3
+STORE_ENDINGS_NOT_READ_MESSAGE = ('The snapshot step failed, so the endings that the store retains were not read. '
+                                  'This list holds only the endings of the workspace files.')
 # Arms the processor-time interval timer of a math-solver reader, then replaces itself with the reader
 # command. Arguments: the budget in seconds, then the reader command. The timer survives execv, and the
 # default action of SIGPROF ends the reader.
@@ -316,9 +319,15 @@ def rebuild_staged_request(records, artifacts, assignment, record):
 def check_authentication(store):
     snapshot = store.snapshot()
     records = snapshot['records']
+    from .literature import check_search_completion_pins
+    completions = check_search_completion_pins(records)
     artifacts = Evaluation(records, store.build_artifact_store())
+    from .literature import check_search_row_dispositions
+    row_dispositions = check_search_row_dispositions(records, artifacts)
     from .review_state_evaluation import runtime_scope
     with runtime_scope(records, artifacts):
+        for assignment in records.get('review_assignment', {}).values():
+            validate_context_bindings(records, artifacts, assignment)
         attempts = {}
         for identifier, attempt in sorted(records.get('review_attempt', {}).items()):
             assignment = records['review_assignment'][attempt['assignment_id']]
@@ -376,11 +385,41 @@ def check_authentication(store):
             assignments[identifier] = {'ready': state['ready'], 'attempt_id': state.get('attempt_id'),
                                        'refusal_codes': sorted(row['code'] for row in state['obligations'])}
         links = check_acceptance_reviews(records, artifacts)
+        findings = check_openness_findings(records, artifacts)
     result = {'attempts': attempts, 'assignments': assignments, 'probes': probes,
               'captures': captures, 'corrections': corrections}
     if links:
         result['acceptance_reviews'] = links
+    if findings:
+        result['openness_findings'] = findings
+    from .acquisition import check_supplied_sources
+    supplied_texts = check_supplied_sources(records)
+    if completions:
+        result['search_completions'] = completions
+    if row_dispositions:
+        result['search_row_dispositions'] = row_dispositions
+    if supplied_texts:
+        result['supplied_texts'] = supplied_texts
     return result
+
+
+def check_openness_findings(records, artifacts):
+    """Validate each stored minimum under its version and read that finding's obligations."""
+    from .openness_minimum import validate_minimum
+    from .problem_openness import assess_openness
+    findings = {}
+    for identifier, finding in sorted(records.get('problem_openness', {}).items()):
+        minimum = finding.get('minimum')
+        if minimum is not None:
+            validate_minimum(minimum)
+        # The ordinary reader selects the latest finding. Qualify older findings
+        # too, against today's statement and evidence, without rewriting them.
+        selected = records.copy()
+        selected['problem_openness'] = {identifier: finding}
+        findings[identifier] = dict(
+            minimum_version=None if minimum is None else minimum['schema_version'],
+            obligations=assess_openness(selected, artifacts))
+    return findings
 
 
 def check_acceptance_reviews(records, artifacts):
@@ -417,6 +456,9 @@ def check_acceptance_reviews(records, artifacts):
                                 'and acceptance_id of the details with the failed step.',
                                 {'link_id': identifier, 'acceptance_id': link['acceptance_id']})
         verified[identifier] = review
+    from .problem_openness_reviews import validate_bound_results
+    for finding in records.get('problem_openness', {}).values():
+        validate_bound_results(finding.get('minimum', {}), records, artifacts)
     return verified
 
 
@@ -470,12 +512,20 @@ def check_prospective_request(records, artifacts, plan):
 def describe_capacity_decision(error, plan):
     """Recognize material that cannot finish on the selected route."""
     if (error.code in ('review_parts_frame_too_large', 'review_parts_inventory_too_large',
-                       'review_parts_final_too_large')
+                       'review_parts_final_too_large', 'review_chain_projection_over_limit')
             or (error.code == 'review_input_too_large'
                 and (error.details or {}).get('phase') == 'final_preflight')):
         return {'head_id': plan['head_id'], 'command': plan['command'],
                 'code': error.code, 'details': error.details}
     return None
+
+
+def require_listed_stop(plan):
+    """Name the live boundary that still needs a reviewed registry row."""
+    if plan.get('code') not in STOP_REGISTRY:
+        raise ResearchError('record_unlisted_stop',
+            'The code of this stop or handoff has no row in the stop registry, so the harness names no reviewed '
+            'next step for it. Report the code and the refused action as a harness defect.', plan)
 
 
 def check_continuation(store):
@@ -494,6 +544,8 @@ def check_continuation(store):
             plan = plan_next(records, artifacts, head_id)
             actions.append(plan)
             assignment = records['review_assignment'][head_id]
+            if plan['state'] in ('handoff', 'stop'):
+                require_listed_stop(plan)
             if assignment['role'] == 'native_math':
                 from .native_review import load_packet
                 from .openness_reading import is_openness_packet
@@ -506,7 +558,7 @@ def check_continuation(store):
                 chain['boundary'] = 'done'
                 break
             if state in ('handoff', 'stop'):
-                if plan.get('code') not in EXPECTED_STOP_CODES:
+                if classify_stop(plan.get('code')) == 'harness_defect':
                     raise ResearchError(plan.get('code') or 'record_unknown_stop',
                                         'Continuation reached an unqualified stop', plan)
                 chain['boundary'] = state
@@ -524,6 +576,8 @@ def check_continuation(store):
                 except ResearchError as error:
                     decision = describe_capacity_decision(error, plan)
                     if decision is None:
+                        require_listed_stop(dict(plan, code=error.code, error=error.as_dict(),
+                            refused_action={key: plan[key] for key in ('command', 'state', 'payload') if key in plan}))
                         raise
                     decision_stops.append(decision)
                     chain['boundary'] = 'decision'
@@ -553,7 +607,9 @@ def check_continuation(store):
                 if current.get('review_output_refusal', {}) != records.get('review_output_refusal', {}):
                     plan['refusal'] = error.as_dict()
                     continue
-                if error.code in EXPECTED_STOP_CODES:
+                require_listed_stop(dict(plan, code=error.code, error=error.as_dict(),
+                    refused_action={key: plan[key] for key in ('command', 'state', 'payload') if key in plan}))
+                if classify_stop(error.code) != 'harness_defect':
                     from .review_plan_steps import complete_plan
                     terminal = describe_terminal(error.code)
                     terminal['details'].update(error.details or {})
@@ -697,8 +753,81 @@ def check_report(store, *, time_budget=DEFAULT_TIME_BUDGET_SECONDS):
             'ready': math['status'] == 'passed' and all(row['status'] == 'passed' for row in commands.values())}
 
 
+def read_ending_files(workspace):
+    """Read workspace receipts even when the database cannot be qualified."""
+    from .artifacts import _Workspace
+    from .workspace import read_file, strict_json
+    from .review_series import ENDING_RECEIPTS_DIRECTORY
+    result = []
+    try:
+        with _Workspace(workspace).directory(ENDING_RECEIPTS_DIRECTORY) as directory:
+            names = sorted(name for name in os.listdir(directory) if name.endswith('.json'))
+    except FileNotFoundError:
+        return result
+    except BaseException as error:
+        return [dict(place='workspace', path=ENDING_RECEIPTS_DIRECTORY, finding='record_json_invalid',
+                     error=error.as_dict() if isinstance(error, ResearchError) else dict(message=str(error)))]
+    for name in names:
+        path = ENDING_RECEIPTS_DIRECTORY + '/' + name
+        try:
+            line = strict_json(read_file(workspace, path))
+            if (not isinstance(line, dict) or not isinstance(line.get('code'), str) or not line['code']
+                    or not isinstance(line.get('head_id'), str) or not line['head_id']
+                    or line.get('state') not in ('done', 'stop', 'handoff', 'wait')
+                    or not isinstance(line.get('details', {}), dict)
+                    or (line.get('revision') is not None and type(line['revision']) is not int)):
+                raise ValueError('This file does not have the shape of a retained series ending. Inspect the '
+                                 'file. head_id and code are nonempty strings, and state is done, stop, handoff '
+                                 'or wait. details is an object when present, and revision is absent, null or '
+                                 'an integer.')
+            retained_at = line.get('details', {}).get('receipt', {}).get('retained_at')
+            if retained_at is None:
+                retained_at = os.stat(Path(workspace) / path, follow_symlinks=False).st_mtime_ns
+            if type(retained_at) is not int or retained_at < 0:
+                raise ValueError('The retention time of this ending is not a non-negative integer. Inspect '
+                                 'details.receipt.retained_at when it is set, and the modification time of the '
+                                 'file when it is absent or null.')
+            result.append(dict(place='workspace', path=path, id=None, assignment_id=line['head_id'],
+                state=line['state'], code=line['code'], stop_class=classify_stop(line['code']),
+                listed=line['code'] in STOP_REGISTRY, refused_action=line.get('details', {}).get('refused_action'),
+                recorded_revision=line.get('revision'),
+                _retained_at=retained_at))
+        except BaseException as error:
+            result.append(dict(place='workspace', path=path, finding='record_json_invalid',
+                error=error.as_dict() if isinstance(error, ResearchError) else dict(message=str(error))))
+    return result
+
+
+def describe_series_stops(records, files=()):
+    """List retained endings independently of whether continuation repeats them."""
+    result = []
+    for row in records.get('review_series_stop', {}).values():
+        result.append(dict(place='store', id=row['id'], path=None, assignment_id=row['assignment_id'],
+            state=row['plan']['state'], code=row['code'], stop_class=classify_stop(row['code']),
+            listed=row['code'] in STOP_REGISTRY,
+            refused_action=row['plan'].get('details', {}).get('refused_action'),
+            recorded_revision=row['recorded_revision'],
+            _retained_at=row['plan'].get('details', {}).get('receipt', {}).get('retained_at', 0)))
+    result.extend(dict(row) for row in files)
+    endings = sorted((row for row in result if 'code' in row),
+                     key=lambda row: (row.get('_retained_at', 0), row.get('recorded_revision') or -1,
+                                      row.get('path') or row.get('id')))
+    latest = {row['assignment_id']: row for row in endings}
+    retained = [row for row in endings if row is latest[row['assignment_id']] or not row['listed']]
+    retained.extend(row for row in result if 'code' not in row)
+    for row in retained:
+        row.pop('_retained_at', None)
+        if row.get('listed') is False:
+            row['finding'] = 'record_unlisted_stop'
+        elif 'code' in row:
+            row.pop('finding', None)
+    return retained
+
+
 def qualify_snapshot(clone, report):
     store = OfflineStore(clone, report['local_reads'])
+    if 'series_stops' not in report:
+        report['series_stops'] = describe_series_stops(store.read_kinds(('review_series_stop',))[2])
     with confine_local_reads(clone):
         for name, check in (('integrity', check_integrity), ('reconstruction', check_reconstruction),
                             ('authentication', check_authentication), ('continuation', check_continuation),
@@ -714,7 +843,8 @@ def qualify_snapshot(clone, report):
                 break
     report['ready'] = (len(report['steps']) == 6
                        and all(row['status'] == 'passed' for row in report['steps'])
-                       and report['steps'][-1]['result']['ready'])
+                       and report['steps'][-1]['result']['ready']
+                       and not any(row.get('finding') or row.get('status') == 'not_read' for row in report['series_stops']))
     return report
 
 
@@ -764,7 +894,9 @@ def check_record(workspace, *, keep_clone=None, isolate=True, time_budget=DEFAUL
     source = Path(workspace).resolve(strict=True)
     harness_root = Path(__file__).resolve().parents[1]
     version = json.loads((harness_root / '.claude-plugin/plugin.json').read_text(encoding='utf-8'))['version']
+    ending_files = read_ending_files(source)
     report = {'ready': False, 'workspace': str(source), 'steps': [], 'local_reads': [],
+              'series_stops': describe_series_stops({}, ending_files),
               'time_budget_seconds': time_budget,
               'isolation': 'unavailable', 'runtime': {
                   'harness_version': version, 'harness_root': str(harness_root),
@@ -830,7 +962,11 @@ def check_record(workspace, *, keep_clone=None, isolate=True, time_budget=DEFAUL
                                         'code': 'record_snapshot_inconsistent',
                                         'message': 'No consistent snapshot after three copies',
                                         'details': {'attempts': failures}}})
+            report['series_stops'].append(dict(place='store', status='not_read',
+                error=report['steps'][-1]['error'], message=STORE_ENDINGS_NOT_READ_MESSAGE))
             return report
+        report['series_stops'] = describe_series_stops(
+            OfflineStore(clone).read_kinds(('review_series_stop',))[2], ending_files)
         if isolate:
             return check_isolated_snapshot(clone, source, report, report_directory)
         report['isolation_reason'] = 'Isolation disabled by the in-process caller'

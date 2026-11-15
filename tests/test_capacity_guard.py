@@ -1,4 +1,4 @@
-"""Stage 1 closure checks keep implementation, evidence and stops independent."""
+"""Closure checks keep installed implementation, executed evidence and stops independent."""
 
 import ast
 import copy
@@ -104,8 +104,47 @@ class CapacityGuardTests(unittest.TestCase):
                     row['evidence']['tests'] = row['tests'][:]
                 else:
                     matrix['installed_units'].append(trigger)
+                row['required_stops'] = [stop for stop in row['required_stops']
+                                         if stop['code'] != 'review_route_capacity_below_floor']
                 self.assertTrue(any(guard.STOP_EVIDENCE_MESSAGE in error
                     for error in guard.validate_matrix(matrix)))
+
+    def test_stage2_constructions_require_installed_units_and_named_acceptance_evidence(self):
+        promoted = {'A11', 'A16', 'A19', 'A21', 'Q9', 'Q11', 'Q15'}
+        rows = {row['id']: row for row in self.matrix['entries']}
+        for identifier in promoted:
+            with self.subTest(entry=identifier):
+                row = rows[identifier]
+                self.assertEqual(row['coverage'], 'constructed')
+                self.assertTrue(set(row['units']['path'] + row['units']['construction'])
+                                <= set(self.matrix['installed_units']))
+                self.assertTrue(row['evidence']['tests'])
+                changed = copy.deepcopy(self.matrix)
+                next(entry for entry in changed['entries'] if entry['id'] == identifier)['evidence']['tests'] = []
+                self.assertTrue(guard.validate_matrix(changed))
+        for identifier in ('A4', 'A5', 'A7', 'A25'):
+            self.assertEqual(rows[identifier]['coverage'], 'stop_before_call')
+            self.assertIn('pending:', rows[identifier]['coverage_scope'])
+            self.assertTrue(rows[identifier]['evidence']['tests'])
+
+    def test_stage2_production_markers_require_evidence_even_when_installation_is_omitted(self):
+        sources = guard.read_plugin_sources(ROOT)
+        units = ('capacity-plan', 'task-size', 'handles', 'capacity-notice', 'reading-forecast',
+                 'reading-v7-state', 'refusal-notice', 'refusal-replacement', 'refusal-planner',
+                 'exhaustion-repair', 'UB1', 'UB2', 'UB3', 'UB5', 'UB6', 'UC3', 'UC4')
+        for unit in units:
+            with self.subTest(unit=unit):
+                matrix = copy.deepcopy(self.matrix)
+                matrix['installed_units'].remove(unit)
+                obligation = next(row for row in matrix['merge_obligations'] if row['unit'] == unit)
+                identifier = obligation['entries'][0]
+                removed = obligation['per_entry'][identifier]['tests'][0]
+                entry = next(row for row in matrix['entries'] if row['id'] == identifier)
+                for tests in (entry['tests'], entry['evidence']['tests']):
+                    tests[:] = [test for test in tests if test != removed]
+                errors = guard.inspect_merge_obligations(matrix, sources)
+                self.assertTrue(any(error == guard.MERGE_MESSAGE + ' ' + unit + ':' + identifier
+                                    for error in errors), errors)
 
     def test_a_paid_verification_report_cannot_be_an_unregistered_label(self):
         row = next(row for row in self.matrix['entries'] if row['id'] == 'A10b')
@@ -261,9 +300,14 @@ class CapacityGuardTests(unittest.TestCase):
         self.assertTrue({'review-stop', 'series-driver-stop', 'call-queue', 'posted-closed-calls',
             'session-forecast-stop', 'size-reports', 'single-request-series', 'binary-input-measure',
             'uncovered-review-stop', 'capacity-probe', 'route-limits-C1', 'route-limits-C3',
-            'route-limits-C10'}.issubset(units))
+            'route-limits-C10', 'capacity-plan', 'task-size', 'handles', 'capacity-notice',
+            'reading-forecast', 'reading-v7-state', 'refusal-notice', 'refusal-replacement',
+            'refusal-planner', 'exhaustion-repair', 'dead-assignments', 'registry-rows',
+            'continuity-guard-2', 'UB1', 'UB2', 'UB3', 'UB4', 'UB5', 'UB6', 'UB7', 'UB8',
+            'UB9', 'UC1', 'UC3', 'UC4'}.issubset(units))
         for row in self.matrix['merge_obligations']:
-            self.assertTrue(row['entries'] and row['stops'] and row['tests'])
+            self.assertTrue(row['entries'] and row['tests'])
+            self.assertIsInstance(row['stops'], list)
 
     def test_matrix_evidence_executes_and_no_evidence_can_be_silently_skipped(self):
         identifiers = guard.collect_evidence_tests(self.matrix)

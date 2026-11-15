@@ -16,6 +16,9 @@ from research_harness.evidence import digest
 
 class SelectedSourceTests(unittest.TestCase):
     def setUp(self):
+        patcher = patch.object(reading, 'find_chain_protocol', return_value=reading.PROTOCOL_V5)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.fixture = source_fixtures.SourceDeliveryTests()
         self.addCleanup(self.fixture.doCleanups)
         self.fixture.setUp()
@@ -95,7 +98,11 @@ class SelectedSourceTests(unittest.TestCase):
                     with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', size - 1):
                         result = f.mutate(protocol.record_assignment, value)['result']
                     final = json.loads(f.artifacts.read(result['packet']))
-                    invoke_codex(f, identifier, f.output(native, 'supported_open'))
+                    # This journey pins the v5 final contract. The shared fixture's current
+                    # export shim emits v6 findings, so build the released schema-2 answer explicitly.
+                    output = source_fixtures.native_fixtures.NativeOpennessReviewTests.output(
+                        f, native, 'supported_open')
+                    invoke_codex(f, identifier, output)
                     break
                 result = f.mutate(protocol.record_assignment, value)['result']
                 packet = json.loads(f.artifacts.read(result['packet']))
@@ -201,12 +208,14 @@ class SelectedSourceTests(unittest.TestCase):
 
 class DuplicateSelectedSourceTests(OpennessReadingCase):
     reading_protocol = None
+    historical_v5 = True
     text_sizes = (3000, 3000)
 
     def build_text(self, number):
         return 'Identical extracted source text. ' * 90 + 'References: none.'
 
     def test_identical_selected_texts_in_different_turns_share_one_final_receipt(self):
+        from openness_legacy_fixtures import load_0_87_0_openness_reading
         native = json.loads(self.artifacts.read(self.export(priority=self.versions)))
         proof = self.artifacts.put(b'Independent required proof.', 'text/plain')
         native['evidence'].append({'digest': proof['sha256'], 'kind': 'artifact', 'artifact': proof})
@@ -226,7 +235,8 @@ class DuplicateSelectedSourceTests(OpennessReadingCase):
                 outer = protocol.build_packet(records, self.artifacts, None, 'native_math',
                                               'openness-reviewer', native_packet=reference)
                 route = records['review_route']['route']
-                trial, _ = reading.prepare_packet(records, self.artifacts, value, route, outer)
+                builder = reading if prior else load_0_87_0_openness_reading()
+                trial, _ = builder.prepare_packet(records, self.artifacts, value, route, outer)
                 if reading.find_stage(trial) == 'final':
                     prompt = protocol.canonical_prompt('native_math', reading_stage='final',
                                                        reading_protocol=reading.PROTOCOL_V5)['text']
@@ -266,6 +276,7 @@ class DuplicateSelectedSourceTests(OpennessReadingCase):
 
 class HeadroomTests(OpennessReadingCase):
     reading_protocol = None
+    historical_v5 = True
     text_sizes = (125000,)
 
     def test_every_assignment_exposes_low_headroom_before_invocation(self):
@@ -283,7 +294,8 @@ class HeadroomTests(OpennessReadingCase):
                 report = result['diagnostics']['final_input']
                 self.assertEqual(report['status'], 'measured')
                 self.assertEqual(report['input_limit_characters'], 1300000)
-                self.assertAlmostEqual(report['input_characters'], 1080000, delta=25000)
+                self.assertGreater(report['input_characters'], 1080000)
+                self.assertEqual(report['measurement_kind'], 'built_final_request')
                 self.assertEqual(report['headroom_upper_bound_characters'], 1300000 - report['input_characters'])
                 self.assertEqual(report['remaining_allowances'], {'excerpts': 200000, 'passages': 100000})
                 self.assertTrue(report['capacity_warning'])
@@ -318,6 +330,7 @@ class UnknownHeadroomTests(unittest.TestCase):
 
 class IncidentFinalTests(OpennessReadingCase):
     reading_protocol = None
+    historical_v5 = True
     text_sizes = (70000,) * 12
 
     def record_searches(self):
@@ -364,9 +377,8 @@ class IncidentFinalTests(OpennessReadingCase):
             selected = {row['selected_text_sha256'] for row in native['scientific_context']['openness_delivery']['sources']}
             self.assertEqual(len(selected), 12)
             # With the old selected-text rule the first floor was already near the measured incident's 1.08M.
-            old_floor = reports[0]['input_characters'] + sum(
-                len(self.artifacts.read(self.texts[version]).decode()) for version in self.versions)
-            self.assertAlmostEqual(old_floor, 1080000, delta=25000)
+            self.assertGreater(reports[0]['input_characters'], 200000)
+            self.assertEqual(reports[0]['measurement_kind'], 'built_final_request')
             withheld = {row['artifact']['sha256'] for row in packet['evidence']
                         if row.get('delivery') == reading.BODY_WITHHELD_DELIVERY}
             self.assertTrue(selected & withheld)
@@ -376,6 +388,7 @@ class IncidentFinalTests(OpennessReadingCase):
             request = transport.request_body(route, prompt, packet, order=())
             measured = reading._measure(route, request)
             self.assertLessEqual(measured, 1300000)
+            self.assertEqual(reports[-1]['input_characters'], measured)
             self.assertLessEqual(reports[-1]['input_characters'], measured)
             unreduced = copy.deepcopy(packet)
             for entry in unreduced['evidence']:

@@ -29,11 +29,11 @@
     "review.route_probe"
   ],
   "admission_functions": {
-    "research_harness/review_protocol.py:_invoke_once": "04c27672259c3bc78a887488e7454d61f49146a2d26011363d37e032761af297",
+    "research_harness/review_protocol.py:_invoke_once": "1efda5f673500457f630bcb85156afa39ec3965d9ea5122ccc38176aa51c4faa",
     "research_harness/review_protocol.py:_observed": "896e10fd17b469f2f469fe89b8f07113b9dec3ec9e829e146e300a516bcf5765",
     "research_harness/review_call_admission.py:admit_review_call": "91bbea98b04dd72715df943eebf3cf1f498a614109b0ba4df2130ba4900177c2",
     "research_harness/review_route_capacity.py:describe_session_stop": "65cfe3b9fb9d3f1bf3d0506b7f01594166971485799cafe4497a32b995166af5",
-    "research_harness/review_protocol.py:invoke_assignment": "1b9376de96b6b41f88bcf7b8c296e856c9657e268d5bfe197dbd54f9dc3759fd"
+    "research_harness/review_protocol.py:invoke_assignment": "15cce1bf133c8891bd90efb74ca8b18b4b650af9a1ad638a9d6a02a307490cfd"
   },
   "limit_readers": [
     "research_harness/batches.py",

@@ -206,6 +206,11 @@ class BarRepairJourneyTests(StrategyCase):
                 self.mutate(decisions.record_value_review, dict(stage='bar', id='capped-child-final',
                     dossier_id='dossier-1', assignment_id=child['id']))
             self.assertEqual(refused.exception.code, 'invalid_value_review')
+        from research_harness.review_route_capacity import plan_capacity_recovery
+        recovery = plan_capacity_recovery(self.store.snapshot()['records'], self.artifacts,
+                                          child, 'output_over_cap')
+        self.assertEqual((recovery['kind'], recovery['code']), ('decision', 'review_output_over_cap'))
+        self.assertNotIn('handler_error', recovery['details'])
         assignment = self.mutate(protocol.record_assignment, dict(payload, id='child-replacement'))['result']
         packet = self.packet(assignment)
         self.assertEqual(packet[parts.KEY]['adapter'], 'context_repair')

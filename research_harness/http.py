@@ -70,15 +70,17 @@ def public_address(value):
     return str(address)
 
 
-def safe_url(value):
+def safe_url(value, *, allow_http=False):
     """Validate an untrusted URL without DNS or retaining credential values."""
     try:
         if (not isinstance(value, str) or not value or len(value) > 16384
                 or any(ord(c) <= 32 or ord(c) >= 127 for c in value) or "\\" in value):
             raise ValueError()
         parts = urlsplit(value)
-        if (parts.scheme != "https" or not parts.hostname or parts.username is not None
-                or parts.password is not None or parts.fragment or parts.port not in (None, 443)):
+        schemes = ('http', 'https') if allow_http else ('https',)
+        port = 80 if parts.scheme == 'http' else 443
+        if (parts.scheme not in schemes or not parts.hostname or parts.username is not None
+                or parts.password is not None or parts.fragment or parts.port not in (None, port)):
             raise ValueError()
         host = parts.hostname
         if "%" in host or host.endswith(".") or host.lower() in ("localhost", "localhost.localdomain"):
@@ -94,9 +96,11 @@ def safe_url(value):
                 raise ValueError()
         else:
             public_address(host)
-        return urlunsplit(("https", parts.netloc.lower(), parts.path or "/", parts.query, ""))
+        return urlunsplit((parts.scheme, parts.netloc.lower(), parts.path or "/", parts.query, ""))
     except (ValueError, ResearchError) as error:
-        raise ResearchError("unsafe_url", "Expected a public HTTPS URL without credentials or fragments") from error
+        message = ("Expected a public HTTP or HTTPS URL without credentials or fragments" if allow_http else
+                   "Expected a public HTTPS URL without credentials or fragments")
+        raise ResearchError("unsafe_url", message) from error
 
 
 class SystemClock:

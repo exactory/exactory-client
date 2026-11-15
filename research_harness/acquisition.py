@@ -93,21 +93,29 @@ import stat
 from contextlib import contextmanager
 import re
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 from .artifacts import ArtifactStore, describe_artifact
 from .errors import ResearchError
 from .finishing import retry_store_write
 from .evidence import derived_id, digest, media_type as response_media_type, prepare_sources, prepare_work, put_sources, put_work
 from .fulltext import GENERIC_BINARY_MEDIA_TYPES, XML_MEDIA_TYPES, parse_base_media_type, extract, extraction_measures
-from .http import HttpClient, HttpFailure, RequestBudget, safe_url
+from .http import DEFAULT_MAX_RESPONSE_BYTES, HttpClient, HttpFailure, RequestBudget, safe_url
 from .identities import family_id, find_doi_family_conflicts, normalize_identifier, version_of
 from .imports import bind_import_query, parse_mapped, parse_publisher_capture
 from .import_io import open_import_descriptor, read_import_input, validate_import_size
 from .workspace import checked_parent
-from .operations import text
-from .providers import Arxiv, Crossref, OpenAlex
+from .operations import fields, text, timestamp
+from .payload_paths import normalize_payload_path
+from .providers import Arxiv, Crossref, DataCite, OpenAlex
 from .provenance import runtime_provenance
 from . import resources
+
+
+SUPPLIED_TEXT_NOTE = (
+    "A person saved this text. The harness did not fetch it and did not verify its origin. "
+    "A finding states when a decisive judgment rests on this supplied text.")
+SUPPORTED_PROVIDERS_MESSAGE = "Expected arxiv, openalex, crossref or datacite"
 
 
 @contextmanager
@@ -607,9 +615,9 @@ def _next_eligible(records, identifier):
 
 
 def _provider(name):
-    providers = {"arxiv": Arxiv, "openalex": OpenAlex, "crossref": Crossref}
+    providers = {"arxiv": Arxiv, "openalex": OpenAlex, "crossref": Crossref, "datacite": DataCite}
     if name not in providers:
-        raise ResearchError("unsupported_provider", "Expected arxiv, openalex or crossref")
+        raise ResearchError("unsupported_provider", SUPPORTED_PROVIDERS_MESSAGE)
     return providers[name]()
 
 
@@ -634,9 +642,20 @@ def acquire_work(store, identifier, *, request_id, expected_revision, http=None,
     snapshot = store.snapshot()
     http, artifacts = http or HttpClient(), ArtifactStore(store.root)
     attempts, pending, works, observed_identifier, warnings = [], [], [], None, []
+    sources = []
     try:
-        response = http.get(request.url, headers=request.headers, accept=request.accept, budget=budget,
-                            not_before=_next_eligible(snapshot["records"], identifier))
+        try:
+            response = http.get(request.url, headers=request.headers, accept=request.accept, budget=budget,
+                                not_before=_next_eligible(snapshot["records"], identifier))
+        except HttpFailure as error:
+            if provider.name != "crossref" or not error.attempts or error.attempts[-1]["status"] != 404:
+                raise
+            sources = prepare_sources(artifacts, error.attempts, provider.name, request_id,
+                                      requested_identifier=identifier)
+            provider = DataCite()
+            request = provider.work_request(identifier)
+            response = http.get(request.url, headers=request.headers, accept=request.accept, budget=budget,
+                                not_before=_next_eligible(snapshot["records"], identifier))
         attempts = response.attempts
         page = provider.parse(response.body)
         pending.extend(page.failures)
@@ -651,7 +670,8 @@ def acquire_work(store, identifier, *, request_id, expected_revision, http=None,
         attempts, pending = error.attempts, [{"code": error.code}]
     except ResearchError as error:
         pending.append({"code": error.code})
-    sources = prepare_sources(artifacts, attempts, provider.name, request_id, requested_identifier=identifier)
+    sources.extend(prepare_sources(artifacts, attempts, provider.name, request_id, start=len(sources),
+                                   requested_identifier=identifier))
     if observed_identifier and sources:
         sources[-1].update({"exact_version": version_of(observed_identifier), "observed_identifier": observed_identifier})
     prepared = [prepare_work(artifacts, work, sources[-1]["id"]) for work in works]
@@ -680,6 +700,144 @@ def _extraction_options(value):
     if value.get("ocr") and "layout" in value:
         raise ResearchError("invalid_input", "The layout flag applies to pdftotext; OCR uses its recorded page segmentation mode")
     return dict(value)
+
+
+def validate_supplied_origin(origin):
+    """Validate the person's reported origin without claiming to verify it."""
+    fields(origin, ('saved_by', 'obtained_from', 'obtained_at', 'statement'))
+    text(origin['saved_by'], 'Who saved the full text')
+    text(origin['statement'], 'How the full text was saved')
+    timestamp(origin['obtained_at'])
+    return dict(origin, obtained_from=safe_url(origin['obtained_from'], allow_http=True))
+
+
+def read_supplied_fulltext(root, file):
+    """Read a bounded workspace PDF or UTF-8 text, excluding HTML originals."""
+    file = normalize_payload_path(root, file)
+    data = read_import_input(file, input_kind='response', limit_bytes=DEFAULT_MAX_RESPONSE_BYTES,
+                             workspace_root=root)
+    if data.startswith(b'%PDF-'):
+        return file, data, 'application/pdf'
+    try:
+        content = data.decode('utf-8')
+        if ('\x00' in content or Path(file).suffix.lower() in ('.html', '.htm', '.xhtml')
+                or re.search(r'<(?:!doctype\s+html|html|head|body|article)(?:\s|>)', content, re.IGNORECASE)):
+            raise ValueError()
+    except (UnicodeError, ValueError) as error:
+        raise ResearchError('invalid_input', 'The file is not a PDF and not a UTF-8 text file, or it is an HTML '
+                            'document. Supply the PDF or a UTF-8 text file of the source; import-fulltext takes no '
+                            'HTML.') from error
+    return file, data, 'text/plain; charset=utf-8'
+
+
+@serialize_acquisition
+def import_fulltext(store, identifier, file, origin, *, request_id, expected_revision,
+                    extraction_options=None, extractor=None):
+    """Retain a supplied original and extraction with explicitly reported provenance."""
+    identifier = normalize_identifier(identifier)
+    if not identifier.startswith(('doi:', 'openalex:', 'url:')):
+        raise ResearchError('invalid_input', 'import-fulltext takes a work whose identifier is a DOI, an OpenAlex id '
+                            'or a url: identifier. Acquire the work under such an identifier and give that identifier.')
+    origin = validate_supplied_origin(origin)
+    options = _extraction_options(extraction_options)
+    file, data, media_type = read_supplied_fulltext(store.root, file)
+    payload = {'identifier': identifier, 'file': file, 'origin': origin, 'response_sha256': digest_bytes(data)}
+    if options:
+        payload['extraction_options'] = options
+
+    def admit(transaction):
+        if transaction.get('work', identifier) is None:
+            raise ResearchError('unknown_work', 'This store holds no work with this identifier. For a DOI or an '
+                                'OpenAlex id, acquire the work with acquire. For a url: identifier, use '
+                                'import-response with a mapping that creates the work under that identifier. Then '
+                                'run import-fulltext again.')
+
+    replay = _begin(store, 'fulltext.import', payload, request_id, expected_revision,
+                    target=identifier, apply=admit, reserved_requests=0)
+    if replay is not None:
+        return replay
+    snapshot = store.snapshot()
+    artifacts = ArtifactStore(store.root)
+    captured_at = datetime.now(timezone.utc).isoformat()
+    sources = prepare_sources(artifacts, [{'url': origin['obtained_from'], 'captured_at': captured_at,
+        'status': None, 'headers': {'content-type': media_type}, 'body': data, 'complete': True, 'error': None}],
+        'fulltext', request_id, requested_identifier=identifier)
+    source = sources[0]
+    source['response'] = artifacts.put(data, media_type)
+    source.update(capture_method='supplied_file', origin_verified=False, imported=True, status='captured', error=None,
+                  supplied=dict(origin, evidence='reported_by_agent', note=SUPPLIED_TEXT_NOTE))
+    if media_type == 'application/pdf':
+        try:
+            extracted = extract(data, media_type, extractor=extractor,
+                                layout=options.get('layout'), ocr=options.get('ocr', False))
+        except ResearchError as error:
+            extracted = {'status': error.code, 'text': None, 'includes_abstract': None,
+                         'visual_inspection_required': True, 'extractor': None, 'version': None,
+                         'media_type': media_type, 'format_detection': 'reported_media_type', 'options': options}
+    else:
+        content = data.decode('utf-8')
+        extracted = {'status': 'extracted' if content.strip() else 'empty_text',
+                     'text': content if content.strip() else None, 'includes_abstract': None,
+                     'visual_inspection_required': False, 'extractor': 'utf-8', 'version': None,
+                     'media_type': media_type, 'format_detection': 'reported_media_type', 'options': {}}
+    pending = [] if extracted['status'] == 'extracted' else [{'code': extracted['status']}]
+    capture = {'source_id': source['id'], 'version': None, 'requested_version_id': identifier,
+        'url': source['url'], 'original': source['response'],
+        'text': artifacts.put(extracted['text'].encode('utf-8'), 'text/plain; charset=utf-8')
+                if extracted['text'] is not None else None,
+        'availability': 'pending' if pending else 'available', 'extraction_status': extracted['status'],
+        'includes_abstract': extracted['includes_abstract'],
+        'visual_inspection_required': extracted['visual_inspection_required'],
+        'extraction': {key: extracted[key] for key in ('extractor', 'version', 'media_type', 'format_detection', 'options')}}
+    capture['extraction'].update(extraction_measures(extracted['text'], len(data)) if extracted['text'] is not None else
+        {key: None for key in ('text_bytes', 'page_count', 'max_line_length', 'whitespace_fraction', 'expansion_ratio')})
+    if 'layout_selection' in extracted:
+        capture['extraction']['layout_selection'] = extracted['layout_selection']
+
+    def commit(transaction):
+        put_sources(transaction, sources)
+        work = transaction.get('work', identifier)
+        work['fulltexts'].append(capture)
+        transaction.put('work', identifier, work)
+
+    return _finish(store, request_id, snapshot['revision'],
+        {'status': 'pending' if pending else 'complete', 'scope': 'fulltext_acquisition', 'pending': pending,
+         'work_id': identifier, 'capture': capture, 'attempts_used': 0}, apply=commit)
+
+
+def describe_supplied_texts(records):
+    """List workspace captures with their retained reported origin and byte descriptor."""
+    rows = []
+    for identifier, work in sorted(records.get('work', {}).items()):
+        for capture in work.get('fulltexts', []):
+            source = records.get('source', {}).get(capture['source_id'], {})
+            if source.get('capture_method') == 'supplied_file':
+                rows.append({'version_id': identifier, 'source_id': source['id'],
+                             'original': capture['original'], 'availability': capture['availability'],
+                             'extraction_status': capture['extraction_status'], 'supplied': source['supplied']})
+    return rows
+
+
+def check_supplied_sources(records):
+    """Qualify stored supplied provenance without attempting to verify its origin."""
+    identifiers = []
+    for identifier, source in sorted(records.get('source', {}).items()):
+        if source.get('capture_method') != 'supplied_file' and 'supplied' not in source:
+            continue
+        try:
+            supplied = source.get('supplied')
+            fields(supplied, ('saved_by', 'obtained_from', 'obtained_at', 'statement', 'evidence', 'note'))
+            validate_supplied_origin({key: supplied[key] for key in ('saved_by', 'obtained_from', 'obtained_at', 'statement')})
+            if (supplied['note'] != SUPPLIED_TEXT_NOTE or supplied['evidence'] != 'reported_by_agent'
+                    or source.get('capture_method') != 'supplied_file' or source.get('origin_verified') is not False
+                    or source.get('imported') is not True or source.get('http_status') is not None
+                    or source.get('provider') != 'fulltext'):
+                raise ResearchError('source_mismatch', 'Supplied capture labels differ from the recorded class')
+        except ResearchError as error:
+            raise ResearchError('source_mismatch', 'A supplied full text must retain its reported origin, fixed note and '
+                                'unverified capture labels', {'source_id': identifier}) from error
+        identifiers.append(identifier)
+    return identifiers
 
 
 @serialize_acquisition

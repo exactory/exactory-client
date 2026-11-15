@@ -83,7 +83,8 @@ PARTS_COMMON = (
 # Only capacity-entry templates use this preamble; stored input-entry prompts keep PARTS_COMMON.
 PARTS_CAPACITY_COMMON = PARTS_COMMON.replace(
     'The evidence of this review does not fit one input of this route, so the review runs as a series of turns',
-    'The output profile or an attempt at the output limit requires a smaller task, so this review runs as a series of turns')
+    'One request for this whole review is larger than the starting task size that the harness selected for this '
+    'route, or an earlier attempt reached the output limit of the route, so the review runs as a series of turns')
 
 READ = (
     'This is a read turn. For every unit of review_parts.delivered_units, read all the content that this turn '

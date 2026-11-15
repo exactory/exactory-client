@@ -287,13 +287,24 @@ states. Exit status 4 with the
 plan and its `not_before` on the last line: a wait of more than 30 minutes; run
 `review-series` again at `not_before`. Exit status 0: the plan is `done`, and
 the chain's final is recorded. A refusal of
-`review-assignment` with `review_input_too_large` and `phase:
-"final_preflight"`, before a turn is planned, says that the mandatory final
-input (the required proof bytes and the protected bodies, the excerpts and
-passages so far and the final prompt) exceeds the route's limit: the chain
-cannot finish on that route with that material, nothing was written, and
-`mandatory_components` names each body; when `review-series` assigned the
-turn, it ends with a `stop` of that code. Report them in your summary, with
+`review-assignment` with `review_chain_projection_over_limit`
+(`review_input_too_large` before 0.90.0) says that a request of the chain
+does not fit the route: a unit does not fit a reading turn alone, or the
+final turn does not fit after every withholding. Nothing was written; when
+`review-series` assigned the turn, it ends with a `stop` of that code. A
+math-solver chain is not refused for the lower bound of its mandatory final
+input. Since 0.90.0, once the chain has two observed turns, the same code
+also stops it before a call when the harness estimates that its final input
+will exceed the limit (`estimate: true` in the details), unless the owner's
+instruction `reading_chain_continue_to_final` is recorded; that instruction
+leaves the limit of each request in force. Each such refusal is a decision
+stop: follow the choices and the steps that `details.decision` offers. A
+refusal of the first assignment offers only to wait for the protocol
+reading-math-v2 or to run over a packet that binds less material. Where the
+decision offers to continue this chain to its final turn, record that answer
+with `review-context` and the reason `reading_chain_continue_to_final`; it
+waives the estimate stop only. Report
+the stop and its details in your summary, with
 the route limits, and continue the work that does not depend on this chain. A
 final turn
 that cannot judge yet requests passages that deliver characters. Reading in a

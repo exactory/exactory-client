@@ -2,6 +2,7 @@
 import base64
 import copy
 import json
+from collections import ChainMap
 
 from .errors import ResearchError
 
@@ -295,7 +296,7 @@ def read_capacity_evidence(route, records, *, artifacts=None, threshold_models=(
                                                     probe_controls=record.get('positive_controls') if kind == 'review_route_probe' else None)
             if witness is not None and kind == 'review_route_probe':
                 from .review_protocol import _route_state
-                trial = dict(records, review_route_probe={record['id']: record})
+                trial = ChainMap({'review_route_probe': {record['id']: record}}, records)
                 if _route_state(trial, artifacts, saved_route['id'])['probe_id'] != record['id']:
                     witness = None
         if witness is not None:

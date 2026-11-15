@@ -1,0 +1,72 @@
+"""Exercise the named native delivery in its own tests package."""
+
+from unittest.mock import patch
+
+from tests.test_search_deliver_attempt import DeliverAttemptTests
+from research_harness import problem_attempt, problem_evidence, review_continuation, stop_classes
+from research_harness.errors import ResearchError
+from research_harness.evidence import digest
+from research_harness.storage import Store
+from search_controller.attempt_delivery import build_attempt_summary
+from search_controller.reviewer import common_root
+
+
+case = DeliverAttemptTests()
+case.setUp()
+try:
+    controller = case.unresolved_objective()
+    state = controller.status()
+    summary = build_attempt_summary(controller, state)
+    identifier = digest(summary)
+    common = Store(common_root(controller.root, state))
+    claim = summary['contract']['original_claim']
+    statement = dict(id='statement', statement=claim['statement'])
+    attempt = dict(id='attempt', statement_id='statement', kind='solver',
+        solver=dict(native_attempt_digest=identifier, applicability='The exact native claim is the statement.'),
+        literature=None, outcomes=dict(resolved=False, footholds=[], unresolved=[], obstructions=[]),
+        proportion=dict(extension_reason=None))
+    result = dict(kind='result', native_attempt_digest=identifier, acceptance_id='acceptance-000001',
+                  purpose='A reduction of the current claim.', extension_reason=None)
+    def validate(records, code):
+        if code == 'problem_attempt_unbound':
+            records = dict(records, problem_statement={'statement': statement},
+                           problem_selection={'current': {'statement_id': 'statement'}})
+            problem_attempt.validate_attempt(records, common.build_artifact_store(), attempt)
+        else:
+            problem_evidence.validate_result(records, result)
+    for code in ('problem_attempt_unbound', 'problem_result_unbound'):
+        records = common.snapshot()['records']
+        records = {kind: rows for kind, rows in records.items() if kind != 'native_attempt_current'}
+        try:
+            validate(records, code)
+        except ResearchError as error:
+            assert error.code == code, error.as_dict()
+        else:
+            raise AssertionError('The reference must start unbound.')
+        with patch.object(review_continuation, '_find_head', side_effect=ResearchError(code, 'Deliver the native objective.')):
+            before = review_continuation.plan_next(records, common.build_artifact_store(), 'head')
+        step = before['details']['decision']['then'][0]['steps'][0]
+        assert step['command'] == 'search deliver-attempt', step
+        assert step['payload'] == {}, step
+        assert set(step['chooses']) == {'attack_root', 'expected_revision', 'request_id'}, step
+        command = step['command'].split(' ', 1)[1]
+        controller.command(command, step['payload'], controller.status()['revision'], 'decision-delivery-' + code)
+        next_error = None
+        try:
+            validate(common.snapshot()['records'], code)
+        except ResearchError as error:
+            # This fixture's native root has a restricted scope. Delivery answers
+            # the missing binding; scope admission is the following boundary.
+            assert code == 'problem_attempt_unbound' and error.code == 'problem_attempt_scope_restricted', error.as_dict()
+            next_error = error
+        head = (dict(side_effect=next_error) if next_error is not None
+                else dict(return_value=dict(id='head', role='bar', context={})))
+        with patch.object(review_continuation, '_find_head', **head), patch.object(
+                review_continuation, '_describe_chain', return_value='session'), patch.object(
+                review_continuation, '_describe_progress', return_value={}), patch(
+                'research_harness.problem_delivery.find_review_post', return_value=None), patch.object(
+                review_continuation, '_plan_head', return_value=dict(state='done')):
+            after = review_continuation.plan_next(common.snapshot()['records'], common.build_artifact_store(), 'head')
+        assert after != before and after.get('code') != code, after
+finally:
+    case.doCleanups()

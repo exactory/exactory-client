@@ -82,6 +82,8 @@ def build_legacy_codex_response(route, request, output):
 @contextmanager
 def fix_external_inputs():
     """Fix external observations before storing them, rather than scrubbing requests."""
+    # Recreate pre-notice assignments for the unchanged byte oracle. Fresh
+    # profiled assignments are covered by test_review_capacity_notice.
     original_runtime = transport.runtime
     install_runtime = codex_fixtures.install_codex_runtime
 
@@ -104,11 +106,13 @@ def fix_external_inputs():
         emitted.append(dict(route_id=route["id"], request=compute_fingerprint(serialize_like_put_json(request))))
         return original_observe(route, request, credential)
 
-    # Reconstruct the old admission policy and runtime, then exercise current
-    # authentication and reports against its unchanged byte oracle.
+    # Reconstruct the old admission policy, common prompt version and runtime,
+    # then exercise current authentication and reports against unchanged bytes.
     with patch.object(review_route_capacity, "require_covered_assignment", return_value=None), \
+            patch.object(protocol, "COMMON_VERSION", 3), \
             patch.object(codex_fixtures, "install_codex_runtime", side_effect=install_historical_runtime), \
             patch.object(transport, "runtime", side_effect=describe_fixture_runtime), \
+            patch.object(protocol, "prepare_capacity_notice", side_effect=lambda records, route, role, packet: packet), \
             patch.object(codex_fixtures, "build_codex_response", new=build_legacy_codex_response), \
             patch.object(review_codex_invocation, "supports_route", return_value=False), \
             patch.object(review_request_restoration, "select_policy", return_value=None), \

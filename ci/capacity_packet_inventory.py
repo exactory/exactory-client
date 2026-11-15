@@ -62,6 +62,8 @@ QUANTITY_ROUTE_CHANGED = ('The route allowance of the canonical quantity fixture
                           'Give the route a positive allowance, then set route_limit to that allowance.')
 QUANTITY_NOT_SCALED = ('The canonical factory did not grow packet property {path} to its declared scale. '
                        'Scale the input of the factory until the property reaches that size.')
+OPAQUE_VALUE_INVALID = ('Packet member {path} must be a JSON value within its declared serialized character bound. '
+                        'A request-bound value requires the measured route allowance as validation context.')
 
 
 def read_packet_registry(path=None):
@@ -99,6 +101,18 @@ def _check_declarations(schema, registry, path, errors, seen=()):
     if not isinstance(schema, dict):
         errors.append(INVALID_DECLARATION.format(path=path))
         return
+    if 'opaque_json' in schema:
+        declaration = schema['opaque_json']
+        if (not isinstance(declaration, dict)
+                or set(declaration) != {'limit_characters', 'provenance'}
+                or not isinstance(declaration.get('provenance'), str)
+                or '.' not in declaration.get('provenance', '')
+                or not (type(declaration.get('limit_characters')) is int
+                        and declaration['limit_characters'] > 0
+                        or declaration.get('limit_characters') == 'request_limit')
+                or set(schema).intersection({'$ref', 'members', 'items', 'values', 'keyed', 'grows'})):
+            errors.append(INVALID_DECLARATION.format(path=path))
+        return
     if '$ref' in schema:
         name = schema['$ref']
         if name not in registry.get('definitions', {}) or name in seen:
@@ -118,7 +132,7 @@ def _check_declarations(schema, registry, path, errors, seen=()):
             _check_declarations(schema[key], registry, path + '.*', errors, seen)
 
 
-def validate_packet(role, packet, registry):
+def validate_packet(role, packet, registry, *, request_limit_characters=None):
     """Return deterministic failures for undeclared members at their exact depth."""
     schema = _select_schema(role, packet, registry)
     if schema is None:
@@ -129,6 +143,10 @@ def validate_packet(role, packet, registry):
     def visit(value, declaration, path):
         if '$ref' in declaration:
             declaration = registry.get('definitions', {}).get(declaration['$ref'], {})
+        if 'opaque_json' in declaration:
+            _check_opaque_value(value, declaration['opaque_json'], path, errors,
+                                request_limit_characters)
+            return
         if isinstance(value, dict):
             members = declaration.get('members', {})
             for name, item in value.items():
@@ -144,6 +162,28 @@ def validate_packet(role, packet, registry):
                 visit(item, declaration.get('items', {}), path + '[' + str(index) + ']')
     visit(packet, schema, role)
     return sorted(set(errors))
+
+
+def _check_opaque_value(value, declaration, path, errors, request_limit_characters):
+    """Validate finite frozen JSON without treating its unknown keys as packet fields."""
+    if not isinstance(declaration, dict):
+        errors.append(OPAQUE_VALUE_INVALID.format(path=path))
+        return
+    limit = declaration.get('limit_characters')
+    if limit == 'request_limit':
+        limit = request_limit_characters
+    if type(limit) is not int or limit <= 0:
+        errors.append(OPAQUE_VALUE_INVALID.format(path=path))
+        return
+    try:
+        text = json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False)
+        # Refuse Python-only containers and non-string object keys, even when
+        # JSONEncoder could coerce them into a different JSON value.
+        valid = len(text) <= limit and json.loads(text) == value
+    except (TypeError, ValueError, RecursionError):
+        valid = False
+    if not valid:
+        errors.append(OPAQUE_VALUE_INVALID.format(path=path))
 
 
 def _walk_declarations(schema, registry, path, seen=()):

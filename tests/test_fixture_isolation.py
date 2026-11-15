@@ -12,6 +12,9 @@ from test_draft import _DepositTestCase
 from openness_reading_fixtures import OpennessReadingCase
 from research_harness import openness_reading
 import test_review_preflight as preflight_fixtures
+import test_review_staged_integration_partitions as integration_fixtures
+import test_review_staged_sizing as sizing_fixtures
+from research_harness import review_staged_protocol as producer
 
 
 class FixtureIsolationTests(unittest.TestCase):
@@ -43,6 +46,23 @@ class FixtureIsolationTests(unittest.TestCase):
         self.assertIs(sys.modules['research_harness.problem_claims'], original_claims)
         self.assertIs(codex.runtime, original_runtime)
         self.assertIs(codex.NATIVE_DECLARATION_SETS, original_declarations)
+
+    def test_failed_staged_integration_setup_restores_observation_backend(self):
+        original = producer.authenticate_observation
+        setup = integration_fixtures.IntegrationPartitionTests.setUp
+
+        def fail_after_setup(fixture):
+            self.addCleanup(fixture.doCleanups)
+            setup(fixture)
+            raise RuntimeError('Synthetic failure after staged integration setup')
+
+        case = sizing_fixtures.RenderedSizingTests('test_packet_output_tokens_exclude_the_reserved_margin')
+        result = unittest.TestResult()
+        with patch.object(integration_fixtures.IntegrationPartitionTests, 'setUp', fail_after_setup):
+            case.run(result)
+        self.assertEqual(len(result.errors), 1)
+        self.assertIn('Synthetic failure after staged integration setup', result.errors[0][1])
+        self.assertIs(producer.authenticate_observation, original)
 
     def test_failed_openness_setup_restores_current_protocol(self):
         original = openness_reading.find_chain_protocol

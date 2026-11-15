@@ -180,11 +180,14 @@ class RecordCheckTests(unittest.TestCase):
         output = self.case.build_review_output('bar')
         output['value']['status'] = 'invalid'
         self.observe(output)
+        before = digest_tree(self.case.root)
         report = self.check()
         self.assertTrue(report['ready'], report)
         chain = self.step(report, 'continuation')['result']['chains'][0]
-        self.assertEqual([row['state'] for row in chain['actions']], ['record', 'run'])
+        self.assertEqual([row['state'] for row in chain['actions']], ['record', 'replace', 'run'])
+        self.assertEqual(chain['actions'][1]['command'], 'review-assignment')
         self.assertFalse(self.case.read_records().get('review_output_refusal'))
+        self.assertEqual(digest_tree(self.case.root), before)
 
     def test_mutation_runtime_handoff_is_an_enumerated_external_boundary(self):
         from research_harness import record_check
@@ -292,11 +295,13 @@ class RecordCheckTests(unittest.TestCase):
     def test_continuation_refusal_fails_at_exact_planning_step(self):
         from research_harness import record_check
         refusal = dict(state='stop', head_id=self.assignment['id'], progress={},
-                       code='review_parts_no_progress', details={'phase': 'continuation'})
+                       code='unlisted_test_boundary', details={'phase': 'continuation'})
         with patch.object(record_check, 'plan_next', return_value=refusal):
             report = self.check()
         self.assertFalse(report['ready'])
-        self.assertEqual(self.step(report, 'continuation')['error']['code'], 'review_parts_no_progress')
+        error = self.step(report, 'continuation')['error']
+        self.assertEqual(error['code'], 'record_unlisted_stop')
+        self.assertEqual(error['details'], refusal)
 
     def test_run_checks_route_limit_without_admission(self):
         from research_harness import record_check
@@ -312,7 +317,8 @@ class RecordCheckTests(unittest.TestCase):
                       head_id=self.assignment['id'], progress={})
         before = digest_tree(self.case.root)
         codes = ('review_input_too_large', 'review_parts_frame_too_large',
-                 'review_parts_inventory_too_large', 'review_parts_final_too_large')
+                 'review_parts_inventory_too_large', 'review_parts_final_too_large',
+                 'review_chain_projection_over_limit')
         for code in codes:
             details = {'input_characters': 101, 'input_limit_characters': 100}
             if code == 'review_input_too_large':
@@ -362,13 +368,18 @@ class RecordCheckTests(unittest.TestCase):
     def test_capacity_code_does_not_allow_an_external_action_or_a_planner_stop(self):
         from research_harness import record_check
         for state, command, expected in [('continue', 'review-probe', 'qualification_unavailable'),
-                                         ('stop', 'review-assignment', 'review_parts_final_too_large')]:
+                                         ('stop', 'review-assignment', 'record_unlisted_stop')]:
             action = dict(state=state, command=command, payload={}, head_id=self.assignment['id'],
-                          progress={}, code='review_parts_final_too_large', details={})
+                          progress={}, code=('unlisted_test_boundary' if state == 'stop'
+                                             else 'review_parts_final_too_large'), details={})
             with self.subTest(state=state), patch.object(record_check, 'plan_next', return_value=action):
                 report = self.check()
             self.assertFalse(report['ready'])
-            self.assertEqual(self.step(report, 'continuation')['error']['code'], expected)
+            error = self.step(report, 'continuation')['error']
+            self.assertEqual(error['code'], expected)
+            if state == 'stop':
+                self.assertEqual(error['details']['code'], action['code'])
+                self.assertEqual(error['details']['command'], command)
 
     def test_unknown_state_never_executes_an_otherwise_allowed_operation(self):
         from research_harness import record_check
@@ -649,15 +660,8 @@ class RecordCheckTests(unittest.TestCase):
         self.assertEqual(entry['sha256'], self.case.read_records()['review_probe_invocation']['probe']['request']['sha256'])
 
     def test_fingerprint_matches_0724_on_the_same_snapshot(self):
-        legacy = RecordCheckTests()
-        legacy.source_rules_protocol = bar_sources.PROTOCOL
-        self.addCleanup(legacy.doCleanups)
-        legacy.setUp()
-        legacy.observe()
-        from research_harness.record_check import copy_snapshot
         with tempfile.TemporaryDirectory() as directory:
             clone = Path(directory) / 'snapshot'
-            copy_snapshot(legacy.case.root, clone)
             previous = Path(directory) / 'previous'
             previous.mkdir()
             # Preserve the real baseline readers even in CI's shallow checkout.
@@ -670,6 +674,32 @@ class RecordCheckTests(unittest.TestCase):
                     source.extractall(previous, filter='data')
                 else:
                     source.extractall(previous)
+            # Generate the snapshot with the archived release itself. New prompts need not
+            # be understood by old readers; old records must remain authenticated by both.
+            build = """
+import json
+from pathlib import Path
+import shutil
+import sys
+sys.path[:0] = sys.argv[1:3]
+from test_research_review_protocol import ReviewProtocolTests
+case = ReviewProtocolTests()
+case.setUp()
+try:
+    # Use the archived route operation; modern test backends require later modules.
+    case.mutate(case.protocol().record_route, dict(id='route', adapter='openai_responses_v1',
+        model='fixture-model', endpoint='https://api.openai.com/v1/responses',
+        configuration=dict(max_output_tokens=1000, timeout_seconds=5)))
+    case.run_probe()
+    case.assign()
+    case.invoke(dict(decision='approve', reason='The supplied synthetic evidence is consistent.'))
+    shutil.copytree(case.root, Path(sys.argv[3]))
+finally:
+    case.doCleanups()
+"""
+            completed = subprocess.run([sys.executable, '-c', build, str(previous), str(PLUGIN / 'tests'),
+                                        str(clone)], cwd=PLUGIN, capture_output=True, text=True, timeout=60)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
             results = []
             for harness in (previous, PLUGIN):
                 completed = subprocess.run([
@@ -678,6 +708,9 @@ class RecordCheckTests(unittest.TestCase):
                 self.assertEqual(completed.returncode, 0, completed.stderr)
                 results.append(json.loads(completed.stdout))
             self.assertEqual(results[0], results[1])
+            saved = results[0]['assignments']['assignment']
+            self.assertTrue(saved['authentication']['attempt'])
+            self.assertTrue(saved['assignment_state']['ready'])
 
     def test_math_roots_ignore_registry_paths_and_keep_command_cwd_outside_clone(self):
         from research_harness.record_check import check_math_roots
@@ -874,9 +907,12 @@ else:
         output['value']['status'] = 'unresolved'
         self.observe(output)
         with patch.dict(cli.OPERATIONS, {'review-assignment': lambda *args, **kwargs: (
-                (_ for _ in ()).throw(ResearchError('review_parts_no_progress', 'Refused continuation')))}):
+                (_ for _ in ()).throw(ResearchError('unlisted_test_boundary', 'Refused continuation')))}):
             report = self.check()
-        self.assertEqual(self.step(report, 'continuation')['error']['code'], 'review_parts_no_progress')
+        error = self.step(report, 'continuation')['error']
+        self.assertEqual(error['code'], 'record_unlisted_stop')
+        self.assertEqual(error['details']['error']['code'], 'unlisted_test_boundary')
+        self.assertEqual(error['details']['refused_action']['command'], 'review-assignment')
 
     def test_run_boundary_cannot_qualify_an_unlisted_command(self):
         from research_harness import record_check
@@ -989,6 +1025,8 @@ class RecordCheckFollowupTests(unittest.TestCase):
         for version, decision in ((2, 'revise'), (None, 'revise'), (None, 'reject')):
             with self.subTest(version=version, decision=decision):
                 case = self.build_openness_case()
+                # UB6/UB7 keep decision-based final answers on stored v5 packets.
+                case.historical_v5 = True
                 reference = case.export()
                 case.assign('turn-1', reference)
                 packet = case.read_packet('turn-1')['native']

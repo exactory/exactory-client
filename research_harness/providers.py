@@ -36,6 +36,7 @@ from .identities import family_id, normalize_identifier, version_of
 
 
 _MAX_JSON_DEPTH = 128
+DATACITE_IDENTIFIER_REQUIRED = "DataCite requires a DOI"
 
 
 class _MetadataTreeBuilder(ET.TreeBuilder):
@@ -62,6 +63,32 @@ class Page:
     complete: bool = False
     excluded_items: list = field(default_factory=list)
     query_binding: object = None
+
+
+def read_registry_citation(provider, record):
+    """Read the registry's title and ordered display names for checking and export."""
+    if provider == "arxiv":
+        prefix = "{http://www.w3.org/2005/Atom}"
+        return {"title": record.findtext(prefix + "title") or "",
+                "authors": [" ".join(node.findtext(prefix + "name", "").split())
+                            for node in record.findall(prefix + "author")
+                            if node.findtext(prefix + "name", "").strip()]}
+    if provider == "crossref":
+        title = (record.get("title") or [""])[0]
+        authors = [" ".join(part for part in (row.get("given"), row.get("family")) if part)
+                   or row.get("name", "") for row in record.get("author") or []]
+    else:
+        title = next((row["title"] for row in record.get("titles") or [] if row.get("title")), "")
+        authors = []
+        for row in record.get("creators") or []:
+            name = " ".join(part for part in (row.get("givenName"), row.get("familyName")) if part)
+            if not name:
+                name = row.get("name", "")
+                if "," in name and row.get("nameType") != "Organizational":
+                    family, _, given = name.partition(",")
+                    name = (given.strip() + " " + family.strip()).strip()
+            authors.append(name)
+    return {"title": title, "authors": [name for name in authors if name]}
 
 
 def _work(identifier, title, authors, *, locator, kind="paper"):
@@ -261,7 +288,10 @@ class Arxiv:
                 title = node.findtext("a:title", None, self.ns)
                 if not title or not title.strip():
                     raise ResearchError("invalid_response", "arXiv entry is missing a title")
-                work = _work(identifier, title, [e.findtext("a:name", "", self.ns) for e in node.findall("a:author", self.ns)],
+                for author in node.findall("a:author", self.ns):
+                    _string(author.findtext("a:name", "", self.ns), "author")
+                citation = read_registry_citation("arxiv", node)
+                work = _work(identifier, citation["title"], citation["authors"],
                              locator={"type": "atom_entry", "index": index, "identifier": identifier})
                 if not work["id"].startswith("arxiv:"):
                     _invalid("id")
@@ -479,15 +509,14 @@ class Crossref:
                     _invalid("title")
                 for title in titles:
                     _string(title, "title")
-                authors = []
                 for author in _array(item.get("author", []), "author"):
                     _object(author, "author")
                     for field in ("given", "family", "name"):
                         _string(author.get(field), "author." + field, nullable=True, empty=True)
                     name = ((author.get("given") or "") + " " + (author.get("family") or "")).strip() or author.get("name")
-                    authors.append(_string(name, "author.name"))
-                work = _work(item["DOI"], item["title"][0],
-                             authors,
+                    _string(name, "author.name")
+                citation = read_registry_citation("crossref", item)
+                work = _work(item["DOI"], citation["title"], citation["authors"],
                              locator={"type": "json_pointer", "pointer": "/message/items/" + str(index) if multiple else "/message"}, kind=item.get("type", "unknown"))
                 if not work["title"]:
                     raise ValueError()
@@ -526,3 +555,40 @@ class Crossref:
                     failure["record_type"] = item["type"]
                 page.failures.append(failure)
         return page
+
+
+class DataCite:
+    name = "datacite"
+    accept = ("application/json", "application/vnd.api+json")
+
+    def work_request(self, identifier):
+        canonical = normalize_identifier(identifier)
+        if not canonical.startswith("doi:"):
+            raise ResearchError("invalid_identifier", DATACITE_IDENTIFIER_REQUIRED)
+        return Request("https://api.datacite.org/dois/" + quote(canonical[4:], safe=""), accept=self.accept)
+
+    def parse(self, data, **kwargs):
+        document = _json(data)
+        resource = _object(document.get("data"), "data")
+        attributes = _object(resource.get("attributes"), "attributes")
+        identifier = normalize_identifier(attributes.get("doi"))
+        if not identifier.startswith("doi:"):
+            _invalid("doi")
+        for row in _array(attributes.get("titles"), "titles"):
+            _string(_object(row, "title").get("title"), "title")
+        creators = _array(attributes.get("creators", []), "creators")
+        for row in creators:
+            _object(row, "creator")
+            for key in ("name", "givenName", "familyName", "nameType"):
+                _string(row.get(key), key, nullable=True, empty=True)
+        citation = read_registry_citation(self.name, attributes)
+        if len(citation["authors"]) != len(creators):
+            _invalid("creators")
+        work = _work(identifier, citation["title"], citation["authors"],
+                     locator={"type": "json_pointer", "pointer": "/data/attributes"})
+        year = attributes.get("publicationYear")
+        if year is not None:
+            if type(year) is not int or not 1 <= year <= 9999:
+                _invalid("publicationYear")
+            work["publication_date"] = "%04d" % year
+        return Page(works=[work], returned_count=1)

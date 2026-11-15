@@ -168,7 +168,9 @@ class OutcomeTests(unittest.TestCase):
         self.assertEqual(steps[-1]['state'], 'wait')
         self.assertEqual(steps[-1]['code'], 'review_capacity_wait')
         self.assertIn('not_before', steps[-1])
-        self.assertNotIn('review_series_stop', fixture.case.store.snapshot()['records'])
+        retained = fixture.case.store.snapshot()['records']['review_series_stop'][steps[-1]['stop_id']]
+        self.assertEqual(retained['plan']['state'], 'wait')
+        self.assertEqual(retained['plan']['details']['step']['command'], 'review-series')
 
     def raise_capacity(self):
         raise ResearchError('review_capacity_wait', 'A different call owns this capacity.')
@@ -183,10 +185,16 @@ class OutcomeTests(unittest.TestCase):
         turn = fixture.execute(fixture.plan())['result']
         invalid = fixture.case.build_review_output('bar')
         invalid['value']['status'] = 'invented'
-        for number in range(2):
+        for number in range(3):
+            plan = fixture.plan()
+            if number:
+                self.assertEqual(plan['state'], 'replace', plan)
+                fixture.execute(plan, request='replacement-' + str(number))
+                plan = fixture.plan()
+            self.assertEqual(plan['state'], 'run', plan)
             with patch.object(protocol.transport, 'send_request',
                               return_value=fixture.case.build_provider_response(invalid)):
-                fixture.execute(fixture.plan(), request='refused-' + str(number))
+                fixture.execute(plan, request='refused-' + str(number))
             with self.assertRaises(ResearchError):
                 fixture.execute(fixture.plan(), request='audit-' + str(number))
         steps = []
@@ -213,7 +221,7 @@ class OutcomeTests(unittest.TestCase):
                 with self.assertRaises(ResearchError) as caught:
                     fixture.case.mutate(protocol.invoke_assignment, dict(id='late-old', assignment_id=turn['id']),
                                         credential='fixture')
-            self.assertEqual(caught.exception.code, 'review_resampling_forbidden')
+            self.assertEqual(caught.exception.code, 'review_assignment_replaced')
         for kind in ('review_attempt', 'review_output_refusal'):
             self.assertEqual(fixture.case.store.snapshot()['records'][kind], before[kind])
         self.assertEqual(before['review_assignment'][turn['id']], fixture.case.store.snapshot()['records']['review_assignment'][turn['id']])
@@ -224,11 +232,16 @@ class OutcomeTests(unittest.TestCase):
         invalid = fixture.final_output()
         invalid['disposition'] = 'invented'
         from codex_route_fixtures import invoke_codex
-        for number in range(2):
-            invoke_codex(fixture.case, assignment['id'], invalid, attempt_id='refused-' + str(number))
+        head = assignment
+        for number in range(3):
+            if number:
+                replacement = plan_next(fixture.case.read_records(), fixture.case.artifacts, assignment['id'])
+                self.assertEqual(replacement['state'], 'replace', replacement)
+                head = fixture.case.mutate(protocol.record_assignment, replacement['payload'])['result']
+            invoke_codex(fixture.case, head['id'], invalid, attempt_id='refused-' + str(number))
             with self.assertRaises(ResearchError):
                 fixture.case.mutate(protocol.record_adjudication,
-                    dict(invalid, id='invalid-' + str(number), assignment_id=assignment['id']))
+                    dict(invalid, id='invalid-' + str(number), assignment_id=head['id']))
         plan = plan_next(fixture.case.store.snapshot()['records'], fixture.case.artifacts, assignment['id'])
         self.assertEqual(plan['details']['step']['id'], 3)
         with self.assertRaises(ResearchError) as caught:
@@ -245,12 +258,19 @@ class OutcomeTests(unittest.TestCase):
         records = fixture.fixture.read_records()
         first = plan_next(records, fixture.fixture.artifacts, assignment['id'])
         self.assertEqual(first['command'], 'review-output-correction')
-        records['review_output_correction_invocation'] = dict(declined=dict(id='declined', assignment_id=assignment['id']))
+        records['review_output_correction_invocation'] = dict(pending=dict(id='pending', assignment_id=assignment['id']))
         second = plan_next(records, fixture.fixture.artifacts, assignment['id'])
-        self.assertEqual(second['state'], 'stop')
-        self.assertEqual(second['code'], 'review_slot_exhausted')
-        self.assertEqual(second['details']['step']['id'], 8)
-        self.assertTrue(second['details']['decision']['then'])
+        self.assertEqual(second['state'], 'wait')
+        self.assertEqual(second['code'], 'review_invocation_pending')
+        fixture.correct(dict(correction='declined', reason='The exact metadata correction cannot be supplied.'))
+        second = plan_next(fixture.fixture.read_records(), fixture.fixture.artifacts, assignment['id'])
+        self.assertEqual((second['state'], second['command']), ('replace', 'review-assignment'))
+        replacement = fixture.fixture.mutate(protocol.record_assignment, second['payload'])['result']
+        packet = protocol._read_json(fixture.fixture.artifacts, replacement['packet'])
+        self.assertEqual(packet['output_refusal']['form'], 'bounded')
+        next_plan = plan_next(fixture.fixture.read_records(), fixture.fixture.artifacts, assignment['id'])
+        self.assertEqual((next_plan['state'], next_plan['command']), ('run', 'review-run'))
+        self.assertEqual(next_plan['payload']['assignment_id'], replacement['id'])
 
 
     def test_contaminated_openness_hands_off_to_an_accepted_new_export(self):
@@ -303,13 +323,18 @@ class OutcomeTests(unittest.TestCase):
         # Exhausting this repaired chain still frees a blind bar slot.
         invalid = fixture.final_response()
         invalid['value']['status'] = 'invented'
-        for index in range(2):
+        head = accepted
+        for index in range(3):
+            if index:
+                replacement = plan_next(fixture.store.snapshot()['records'], fixture.artifacts, accepted['id'])
+                self.assertEqual(replacement['state'], 'replace', replacement)
+                head = fixture.mutate(protocol.record_assignment, replacement['payload'])['result']
             with patch.object(protocol.transport, 'send_request', return_value=fixture.provider_response(invalid)):
                 fixture.mutate(protocol.invoke_assignment, dict(id='bad-' + str(index),
-                    assignment_id=accepted['id']), credential='fixture')
+                    assignment_id=head['id']), credential='fixture')
             with self.assertRaises(ResearchError):
                 fixture.mutate(decisions.record_value_review, dict(invalid, id='bad-review-' + str(index),
-                    dossier_id='dossier-1', assignment_id=accepted['id']))
+                    dossier_id='dossier-1', assignment_id=head['id']))
         next_plan = plan_next(fixture.store.snapshot()['records'], fixture.artifacts, accepted['id'])
         self.assertEqual(next_plan['details']['step']['id'], 3)
         first = dict(next_plan['details']['step']['payload'], id='blind-bar',
@@ -319,26 +344,27 @@ class OutcomeTests(unittest.TestCase):
         self.assertEqual(protocol.read_history(fixture.artifacts, fresh), [])
 
     def test_slate_and_result_exhaustion_keep_their_reviewer_slots(self):
-        fixture = self.prepare(continuation_fixtures.ContinuationTests)
+        from test_record_reading_handoff import ReadingHandoffTests
         for role in ('slate', 'result'):
-            records = fixture.case.read_records()
-            assignment = records['review_assignment']['bar-first']
-            assignment['role'] = role
-            from research_harness.review_plan_steps import describe_role_handoff
-            plan = describe_role_handoff(records, fixture.case.artifacts, assignment, 'review_slot_exhausted')
-            self.assertEqual(plan['state'], 'stop')
-            self.assertEqual([step['id'] for step in plan['details']['steps']], [8, 7, 1])
-            self.assertEqual(plan['details']['steps'][-1]['payload']['role'], role)
-            self.assertIn('context_repair', plan['details']['steps'][-1]['payload']['context'])
-            peer = dict(assignment, id='peer', reviewer_id='second', slot_id='peer', recorded_revision=100)
-            records['review_assignment']['peer'] = peer
-            records['review_attempt'] = {str(index): dict(id=str(index), assignment_id=identifier,
-                status='completed', recorded_revision=200 + index)
-                for index, identifier in enumerate(('bar-first', 'bar-first', 'peer', 'peer'))}
-            value = dict(assignment, id='third', reviewer_id='third', context={})
-            with self.assertRaises(ResearchError) as caught:
-                protocol._initial_slot(records, fixture.case.artifacts, value)
-            self.assertEqual(caught.exception.code, 'review_slots_fixed')
+            with self.subTest(role=role):
+                fixture = self.prepare(ReadingHandoffTests)
+                _, invalid = fixture.build_final(count=0, abstract=True, role=role)
+                fixture.case.assign(role, 'second', identifier='peer')
+                rows = []
+                with patch.object(protocol.transport, 'send_request',
+                                  return_value=fixture.case.build_provider_response(invalid)):
+                    self.assertEqual(run_series(fixture.case.store, 'initial', emit=rows.append), 3)
+                plan = rows[-1]
+                self.assertEqual((plan['state'], plan['command']), ('handoff', 'review-assignment'))
+                step = plan['details']['step']
+                self.assertEqual(step['id'], 2)
+                self.assertEqual((step['payload']['role'], step['payload']['reviewer_id']), (role, 'first'))
+                self.assertIn('exhaustion', step['payload']['context']['context_repair'])
+                repaired = fixture.repair_exhausted(plan)
+                self.assertEqual((repaired['slot_id'], repaired['reviewer_id']), ('bar-first', 'first'))
+                with self.assertRaises(ResearchError) as caught:
+                    fixture.case.assign(role, 'third', identifier='third')
+                self.assertEqual(caught.exception.code, 'review_slots_fixed')
 
 
     def test_stopped_calls_spend_no_allowance_and_captured_completion_keeps_its_meaning(self):

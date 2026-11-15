@@ -981,9 +981,20 @@
     "max_requests": 2
   },
   "expand": {
-    "identifier": "doi:10.1234/example",
-    "provider": "crossref",
+    "identifier": "doi:10.5281/zenodo.12345",
+    "provider": "datacite",
     "max_requests": 2
+  },
+  "import-fulltext": {
+    "identifier": "doi:10.1234/example",
+    "file": "inputs/survey.pdf",
+    "origin": {
+      "saved_by": "A reader",
+      "obtained_from": "https://publisher.example/survey.pdf",
+      "obtained_at": "2026-11-12T16:30:00-08:00",
+      "statement": "Saved the complete publisher PDF using a browser."
+    },
+    "extraction_options": {"layout": false}
   },
   "fulltext": {
     "identifier": "arxiv:2601.00001v1",
@@ -1183,42 +1194,49 @@
   },
   "search": {
     "id": "direct-search-1",
+    "question": "Which citing works address the same finite bound?",
     "profile": "research",
     "purpose": "direct",
     "queries": [
-      "finite bound"
+      "arXiv:1208.4714"
     ],
     "responses": [
       {
         "source_id": "SOURCE_ID",
-        "query": "finite bound",
-        "query_locator": {
-          "kind": "json",
-          "pointer": "/q",
-          "value": "finite bound"
-        },
-        "results_pointer": "/results"
+        "query": "arXiv:1208.4714",
+        "results_pointer": "/data"
       }
     ],
     "captured_at": "2026-09-07T12:00:00Z",
     "scope": "The complete objective and its exact comparison class.",
     "found_work_ids": [
-      "arxiv:2601.00001v1"
+      "url:https://example.org/citing-paper"
     ],
     "verdict": "replicate-extend",
     "cited_work_ids": [
-      "arxiv:2601.00001v1"
+      "url:https://example.org/citing-paper"
     ],
     "impact": "State what the retrieved work changes about the comparison.",
     "gaps": [],
     "dispositions": [
       {
-        "work_id": "arxiv:2601.00001v1",
+        "work_id": "url:https://example.org/citing-paper",
         "disposition": "relevant",
         "reason": "The retrieved work addresses the same bound under the same assumptions."
       }
     ],
-    "resolved": []
+    "resolved": [],
+    "completes": [
+      {
+        "search_id": "EARLIER_SEARCH_ID",
+        "closed_gaps": [
+          {
+            "text": "Exact text of a gap in the earlier search.",
+            "how": "The complete later capture includes the missing page."
+          }
+        ]
+      }
+    ]
   },
   "loop-close": {
     "id": "loop-closure-1",
@@ -4683,37 +4701,44 @@
     "reason": "Broaden the next comparison."
   },
   "probe-intent": {
-    "id": "finite-check-1",
-    "question": "Does the finite example fit?",
+    "id": "probe-residues",
+    "question": "Which square residues occur modulo four?",
     "interpreter": "python3",
     "program": {
-      "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
-      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-      "size": 0,
+      "path": "research/sources/objects/6a9c18e3d16578da3765c29cfbac26103fa1e9abbba21f869c70618eda03bbe5",
+      "sha256": "6a9c18e3d16578da3765c29cfbac26103fa1e9abbba21f869c70618eda03bbe5",
+      "size": 129,
       "media_type": "text/x-python"
     },
     "inputs": [],
-    "timeout_seconds": 30
+    "timeout_seconds": 10
   },
   "probe": {
-    "id": "finite-check-1",
-    "command": "python3 check.py",
-    "outputs": [],
+    "id": "probe-residues",
+    "command": "python3 program/produce.py",
+    "outputs": [
+      {
+        "path": "research/sources/objects/021481a96c62136a65a9173b9add293bacfabbcd3eb80ba1808a17c1b7978e41",
+        "sha256": "021481a96c62136a65a9173b9add293bacfabbcd3eb80ba1808a17c1b7978e41",
+        "size": 16,
+        "media_type": "text/plain"
+      }
+    ],
     "stdout": {
-      "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
-      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "path": "research/sources/objects/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size": 0,
       "media_type": "text/plain"
     },
     "stderr": {
-      "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
-      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "path": "research/sources/objects/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "size": 0,
       "media_type": "text/plain"
     },
     "exit_status": 0,
     "elapsed_seconds": 0.25,
-    "observation": "The finite example fit; this remains exploratory."
+    "observation": "A four-row certificate, still exploratory until independently checked."
   },
   "fulltext-start": {
     "identifier": "arxiv:2601.00001v1",

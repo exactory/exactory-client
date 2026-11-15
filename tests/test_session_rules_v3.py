@@ -86,6 +86,12 @@ class SessionRulesTests(ExcerptSessionCase):
                 self.assertEqual(caught.exception.code, 'invalid_review_context')
 
     def test_result_support_source_citations_require_v3_delivery_without_changing_v2(self):
+        from research_harness import review_route_capacity
+        from test_review_output_profile import build_row
+        profile = patch.object(review_route_capacity, 'read_profile_priors', return_value=[
+            build_row(level=None, kind='single', thinking=1000)])
+        profile.start()
+        self.addCleanup(profile.stop)
         case = study_fixtures.ReadinessPartsTests()
         self.addCleanup(case.doCleanups)
         case.setUp()
@@ -105,6 +111,7 @@ class SessionRulesTests(ExcerptSessionCase):
                 sha256=hashlib.sha256(content[:20].encode()).hexdigest())))
         limit_codex_input(case, case.measure(case.logical) * 2)
         old = case.assign('old-support')
+        self.assertNotIn('review_parts', case.packet(old))
         output = case.final_output(old)
         output['support']['checks'][0]['evidence'] = [source]
         case.invoke(old, output)
@@ -117,6 +124,7 @@ class SessionRulesTests(ExcerptSessionCase):
         case.logical['source_rules'] = RULES
         case.logical['assessor']['id'] = 'another-verifier'
         new = case.assign('new-support', reviewer_id='another-verifier')
+        self.assertNotIn('review_parts', case.packet(new))
         self.assertEqual(case.packet(new)['source_rules'], RULES)
         output = case.final_output(new)
         output['support']['checks'][0]['evidence'] = [source]

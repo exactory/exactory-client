@@ -88,10 +88,10 @@ class SeriesTests(unittest.TestCase):
                    return_value=self.case.build_provider_response(output)):
             self.assertEqual(run_series(self.case.store, 'bar-first', emit=observe), 3)
         self.assertEqual(observed[-1]['code'], 'review_slot_exhausted')
-        self.assertEqual(len(self.case.read_records()['review_output_refusal']), 2)
+        self.assertEqual(len(self.case.read_records()['review_output_refusal']), 3)
         turns = [turn for path in (self.case.root / 'intermediate/reviews/bar').rglob('series.json')
                  for turn in json.loads(path.read_text())['turns']]
-        self.assertEqual(sum(len(turn['runs']) for turn in turns), 2)
+        self.assertEqual(sum(len(turn['runs']) for turn in turns), 3)
         self.assertTrue(all(turn['runs'] for turn in turns))
 
     def test_recorded_terminal_stop_advances_the_view_revision(self):
@@ -103,6 +103,24 @@ class SeriesTests(unittest.TestCase):
         self.assertIn(steps[-1]['stop_id'], self.case.read_records()['review_series_stop'])
         marker = json.loads((self.case.root / '.exactory/output-views.json').read_text())
         self.assertEqual(marker['revision'], steps[-1]['revision_after_driver'])
+
+    def test_scoped_driver_start_reaches_a_retained_ending(self):
+        from research_harness.review_continuation import plan_next
+        initial = plan_next(self.case.read_records(), self.case.artifacts, 'bar-first')
+        terminal = dict(initial, state='stop', code='review_provider_refused', details={})
+        with patch('research_harness.review_series.plan_next', return_value=terminal), patch(
+                'research_harness.review_transport.send_request',
+                side_effect=AssertionError('A terminal plan must not call a reviewer')):
+            code, rows = self.drive()
+        self.assertEqual(code, 3)
+        records = self.case.read_records()
+        driver, = records['review_series_run'].values()
+        self.assertEqual(driver['scope']['root_assignment_id'], 'bar-first')
+        ending = rows[-1]
+        retained = records['review_series_stop'][ending['stop_id']]
+        self.assertEqual(retained['code'], 'review_provider_refused')
+        self.assertEqual(driver['ended']['stop_id'], retained['id'])
+        self.assertEqual(ending['revision_after_driver'], self.case.store.revision)
 
     def test_busy_and_dependency_refusals_are_replanned(self):
         original = cli.OPERATIONS['review-run']
@@ -216,15 +234,19 @@ class SeriesTests(unittest.TestCase):
             code, steps = self.drive()
         self.assertEqual(code, 3)
         operation.assert_called_once()
-        step = steps[0]['details'].pop('step')
+        step = steps[0]['details']['step']
         self.assertEqual(step['id'], 7)
         self.assertEqual(step['command'], 'review-route')
-        self.assertEqual(steps, [dict(state='handoff', chain=initial['chain'],
+        expected = dict(state='handoff', chain=initial['chain'],
             head_id='bar-first', progress=initial['progress'], command='review-route',
             code='review_route_runtime_stale',
-            provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=1),
-            capacity_forecast=initial['capacity_forecast'],
-            details=dict(assignment_id='bar-first', route_id='route'))])
+            provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0))
+        self.assertEqual({key: steps[0][key] for key in expected}, expected)
+        self.assertEqual(steps[0]['details']['assignment_id'], 'bar-first')
+        self.assertEqual(steps[0]['details']['route_id'], 'route')
+        self.assertEqual(steps[0]['error']['code'], 'review_route_runtime_stale')
+        stop = self.case.read_records()['review_series_stop'][steps[0]['stop_id']]
+        self.assertEqual(stop['plan']['state'], 'handoff')
 
     def test_planner_refusal_is_replanned_from_fresh_snapshot(self):
         from research_harness.review_continuation import plan_next
@@ -283,7 +305,7 @@ class SeriesTests(unittest.TestCase):
         sleep.assert_not_called()
         self.assertEqual(steps[-1]['not_before'], policy['not_before'])
 
-    def test_second_refusal_ends_the_series_after_two_calls(self):
+    def test_two_refusal_replacements_end_the_series_after_three_calls(self):
         output = self.case.build_review_output('bar')
         output['value']['status'] = 'invalid'
         with patch('research_harness.review_transport.send_request',
@@ -292,8 +314,8 @@ class SeriesTests(unittest.TestCase):
         self.assertEqual(code, 3)
         self.assertEqual(steps[-1]['code'], 'review_slot_exhausted')
         self.assertEqual(steps[-1]['command'], 'review-assignment')
-        self.assertEqual(send.call_count, 2)
-        self.assertEqual(len(self.case.read_records()['review_output_refusal']), 2)
+        self.assertEqual(send.call_count, 3)
+        self.assertEqual(len(self.case.read_records()['review_output_refusal']), 3)
 
     def test_driver_restarts_after_capture_without_a_second_call(self):
         from research_harness import review_call_capture

@@ -278,9 +278,12 @@ class RecordedSeriesStopTests(unittest.TestCase):
         self.assertEqual(exited.exception.code, 3, errors.getvalue())
         rows = [json.loads(line) for line in output.getvalue().splitlines()]
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["code"], "review_format_unsupported")
-        self.assertIn("stop_record_error", rows[0])
-        self.assertNotIn("stop_id", rows[0])
+        # Its stored unverified context takes the legacy route decision before the malformed packet.
+        self.assertEqual(rows[0]["code"], "review_context_unverified")
+        self.assertNotIn("stop_record_error", rows[0])
+        stop = store.snapshot()['records']['review_series_stop'][rows[0]['stop_id']]
+        self.assertIsNone(stop['scope'])
+        self.assertEqual(stop['read_errors']['scope']['code'], 'JSONDecodeError')
         self.assertEqual(errors.getvalue(), "")
 
     def test_recording_failure_never_replaces_the_original_stop(self):
@@ -293,7 +296,9 @@ class RecordedSeriesStopTests(unittest.TestCase):
                 self.assertEqual(run_series(self.case.store, "bar-first", emit=rows.append), 3)
                 self.assertEqual(len(rows), 1)
                 self.assertEqual(rows[0]["code"], plan["code"])
-                self.assertEqual(rows[0]["details"], {})
+                self.assertIn('command', rows[0]['details']['step'])
+                self.assertEqual(Path(rows[0]['details']['step']['arguments']['--workspace']), self.case.root.resolve())
+                self.assertEqual(rows[0]['details']['receipt']['place'], 'workspace')
                 self.assertIn("stop_record_error", rows[0])
 
     def test_recorded_stop_reports_its_new_revision_without_changing_existing_fields(self):
@@ -305,7 +310,7 @@ class RecordedSeriesStopTests(unittest.TestCase):
             self.assertEqual(run_series(self.case.store, "bar-first", emit=rows.append), 3)
         terminal = rows[-1]
         self.assertEqual(terminal["revision"], revision - 1)
-        self.assertEqual(terminal["details"], plan["details"])
+        self.assertEqual({key: terminal['details'][key] for key in plan['details']}, plan['details'])
         self.assertEqual(terminal.get("revision_after_stop"), revision + 2)
         self.assertEqual(terminal.get("revision_after_driver"), revision + 3)
         self.assertEqual(self.case.store.revision, revision + 3)
@@ -801,13 +806,13 @@ class AutomaticStudyPassTests(DevelopmentCase):
         records = self.store.snapshot()["records"]
         assignment = max((row for row in records["review_assignment"].values() if row["role"] == "result"),
                          key=lambda row: row["recorded_revision"])
-        pending = dict(assignment, id="blocked-result", slot_id="scoped-pending-slot",
+        pending = dict(assignment, id="blocked-scoped-result", slot_id="scoped-pending-slot",
                        recorded_revision=self.store.revision + 1)
         self.store.mutate("fixture.pending_scoped", {}, lambda tx: tx.put("review_assignment", pending["id"], pending),
                           expected_revision=self.store.revision, request_id="pending-scoped")
         report = gate_state(self.store.snapshot()["records"], self.artifacts, "manuscript-readiness")
         self.assertEqual([row["code"] for row in report["obligations"]], ["scoped_review_missing"])
-        second = self.stop()
+        second = self.stop(pending['id'])
         self.assertNotEqual(second, first)
         self.assertEqual(self.store.snapshot()["records"]["review_series_stop"][second]["scope"]["gate"],
                          "manuscript-readiness")

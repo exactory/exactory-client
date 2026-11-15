@@ -10,6 +10,7 @@ import json
 import math
 import os
 import struct
+from typing import TYPE_CHECKING
 from pathlib import Path
 import tempfile
 from . import review_transport as transport
@@ -28,6 +29,7 @@ VERIFICATION_SIZE_STOP_CODES = (
 )
 PROFILE_PROTOCOL = 'exactory-route-output-profile-v1'
 PROFILE_ATTEMPT_LIMIT = 500
+DEFAULT_INPUT_TOKENS = 150000
 CLAUDE_CHARACTERS_PER_TOKEN = 1.36
 CODEX_CHARACTERS_PER_TOKEN = 2.10
 TOKEN_RATIO_MARGIN = 0.05
@@ -762,17 +764,17 @@ def describe_task_kind(role, packet, operation='review.invoke'):
         return 'correction'
     if 'staged_review' in packet:
         return 'staged'
+    header = packet.get('review_parts', {})
+    if header.get('kind') in ('read', 'combine', 'check', 'final'):
+        return header['kind']
+    if packet.get('problem_evidence_parts', {}).get('stage') == 'part':
+        return 'read'
     if 'reviewer_excerpts' in packet:
         return 'request'
     if 'reading_turn' in packet:
         return 'reading'
     if 'reading_record' in packet:
         return 'final'
-    header = packet.get('review_parts', {})
-    if header.get('kind') in ('read', 'combine', 'check', 'final'):
-        return header['kind']
-    if packet.get('problem_evidence_parts', {}).get('stage') == 'part':
-        return 'read'
     return 'single'
 
 
@@ -915,9 +917,13 @@ def describe_task(role, packet, *, route, request, operation='review.invoke', co
     characters = unique if count_carried else without_carried
     frame = copy.deepcopy(projected)
     _clear_material(frame, kind)
+    frame.pop('output_refusal', None)
     frame_characters = min(without_carried, measure(frame)) if frame != projected else without_carried
     minimum = actual.get('native', {}).get('scientific_context', {}).get('openness_minimum', {})
     targets = len(actual.get('review_parts', {}).get('targets', [])) if kind == 'final' and 'review_parts' in actual else 1 + len(minimum.get('neighbours', [])) if kind in ('single', 'final') else 0
+    notice = actual.get('output_refusal')
+    notice_fields = ({'notice_characters': len(json.dumps(notice, ensure_ascii=False, sort_keys=True, allow_nan=False))}
+                     if notice is not None else {})
     return dict(
         kind=kind,
         characters=characters,
@@ -927,6 +933,7 @@ def describe_task(role, packet, *, route, request, operation='review.invoke', co
         duplicate_characters=total - unique,
         targets=targets,
         count_carried_state=count_carried,
+        **notice_fields,
     )
 
 
@@ -1586,11 +1593,19 @@ def describe_open_route_reports(records, artifacts=None):
             except (OSError, ValueError, KeyError, ResearchError):
                 installed = None
             statuses = []
+            forecasts = {}
             for head in plans:
-                plan = json.loads(artifacts.read(head['capacity_plan']['artifact']))
+                if 'capacity_plan_kind' in head:
+                    plan = read_chain_capacity_plan(artifacts, head)
+                    forecasts[head['id']] = describe_capacity_forecast(plan, route, report['output_profile'],
+                        records=records, turn_kind=head['capacity_plan_kind'])
+                else:
+                    plan = json.loads(artifacts.read(head['capacity_plan']['artifact']))
                 statuses.append(
                     dict(assignment_id=head['id'], **describe_cli_version_status(plan['profile'], installed)),
                 )
+            if forecasts:
+                report['capacity_forecast'] = forecasts
             report['cli_profile_status'] = dict(
                 installed=installed,
                 plans=statuses,
@@ -1624,6 +1639,630 @@ def describe_work_units(role, packet):
     return {'type': kind, 'unit': 'response', 'count': 1}
 
 
+# These constants belong to POLICY. Existing chains use the values in their stored plan.
+CAPACITY_PLAN_PROTOCOL = 'exactory-route-capacity-plan-v1'
+CAPACITY_REQUEST_KEY = 'capacity_request'
+EXCERPT_TEXT_CHARACTERS = 6000
+EXCERPT_FIELDS_CHARACTERS = 700
+CITED_SOURCE_CHARACTERS = 600
+GAP_ROW_CHARACTERS = 400
+CARD_ENTRY_CHARACTERS = 2200
+DECISION_ROW_CHARACTERS = 360
+NOTES_MINIMUM_CHARACTERS = 6000
+NOTES_MAXIMUM_CHARACTERS = 20000
+TARGET_PREFERRED_CHARACTERS = 30000
+TARGET_MAXIMUM_CHARACTERS = 60000
+FRAME_MAXIMUM_CHARACTERS = 200000
+PLAN_VIOLATED_MESSAGE = ('The exact request of this turn is larger than the stored capacity plan of its chain allows. '
+                         'The plan is computed so that this cannot occur, so this is a harness defect. Keep the plan and '
+                         'the request as its evidence. For an internal step that gate-auto-pass covers, use '
+                         'gate-auto-pass with the recorded harness stop.')
+BELOW_FLOOR_MESSAGE = ('The smallest allocation at this step of the capacity plan is larger than the room for it: '
+                       'details.minimum against details.room. The room can come from the input limit of the route, '
+                       'from its output profile or from the share of one target. Inspect those, then record a route '
+                       'that can serve the chain with review-route.')
+CAPACITY_PLAN_DESCRIPTION = ('The capacity plan of a chain is fixed at its first assignment: the limits of the route, '
+                             'the rule of measurement, the output profile, the frames, the inventory, the targets and '
+                             'the allowances. Every later turn of the chain names the plan by its digest.')
+CAPACITY_FORECAST_DESCRIPTION = ('The capacity forecast estimates the remaining turns and calls from the current '
+                                 'output profile. It can change between turns. The stored plan and its allowances do '
+                                 'not change with it.')
+
+
+def divide_room(room, parts):
+    """Give every part its serialized minimum, then share space by preferred size up to its cap."""
+    from .errors import ResearchError
+    if type(room) is not int or room < 0 or any(
+            any(type(part[key]) is not int for key in ('minimum', 'preferred', 'maximum'))
+            or not 0 <= part['minimum'] <= part['preferred'] <= part['maximum'] for part in parts):
+        raise ResearchError('invalid_input', 'Room and part sizes must be nonnegative integers with minimum <= preferred <= maximum.')
+    minimum = sum(part['minimum'] for part in parts)
+    if minimum > room:
+        raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
+                            dict(room=room, minimum=minimum, command='review-route'))
+    result = [dict(copy.deepcopy(part), allowance=part['minimum']) for part in parts]
+    remaining = room - minimum
+    active = [part for part in result if part['allowance'] < part['maximum']]
+    while remaining and active:
+        weight = sum(max(1, part['preferred']) for part in active)
+        shares = [remaining * max(1, part['preferred']) // weight for part in active]
+        # Integer remainders have stable input order; every iteration consumes room or saturates a part.
+        residue = remaining - sum(shares)
+        for index in range(residue):
+            shares[index] += 1
+        for part, share in zip(active, shares):
+            granted = min(share, part['maximum'] - part['allowance'])
+            part['allowance'] += granted
+            remaining -= granted
+        active = [part for part in active if part['allowance'] < part['maximum']]
+    return dict(room=room, minimum=minimum, parts=result, fill=remaining)
+
+
+def _summarize_capacity_inventory(inventory):
+    unique = {}
+    for row in inventory:
+        unique.setdefault(row.get('sha256', row['handle']), row)
+    kinds = {}
+    for row in unique.values():
+        group = kinds.setdefault(row['kind'], dict(units=0, characters=0))
+        group['units'] += 1
+        group['characters'] += row['characters']
+    return dict(digest=digest(inventory), units=len(unique),
+                characters=sum(row['characters'] for row in unique.values()), by_kind=kinds)
+
+
+def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_budget=None,
+                        records=None, artifacts=None):
+    """Pin a chain's budgets; builders supply serialized field sizes and stable target handles.
+
+    No current packet protocol opts in. The fixture declaration is consumed at assignment preparation;
+    future protocol builders call this function and bind the returned artifact under their own version.
+    """
+    from .review_refusal_notice import BOUNDED_NOTICE_CHARACTERS
+    from .errors import ResearchError
+    limits = describe_route_capacity(route, profile, records=records, artifacts=artifacts)
+    text_room = limits['input_text_characters']['value']
+    handles = [row if isinstance(row, str) else row['handle'] for row in targets]
+    inventory_summary = _summarize_capacity_inventory(inventory)
+    # A reading request carries the latest notes and every allowance row, even before entries exist.
+    maximum_rows = []
+    for handle, target in zip(handles, targets):
+        counts = target if isinstance(target, dict) else {}
+        overhead = counts.get('gap_rows', 0) * GAP_ROW_CHARACTERS + counts.get('source_rows', 0) * CITED_SOURCE_CHARACTERS
+        maximum_rows.append(dict(handle=handle, excerpts=TARGET_MAXIMUM_CHARACTERS, rows=overhead,
+                                 allowance=TARGET_MAXIMUM_CHARACTERS + overhead))
+    carried_bound = NOTES_MAXIMUM_CHARACTERS + measure_capacity_value(route, maximum_rows)
+    frame = {}
+    rooms = {}
+    for kind, fields in frames.items():
+        floor = describe_material_levels(kind)[-1]
+        carried_minimum = carried_bound if kind in ('reading', 'read') else 0
+        bound = min(sum(fields.values()), FRAME_MAXIMUM_CHARACTERS,
+                    text_room - BOUNDED_NOTICE_CHARACTERS - floor - carried_minimum)
+        if bound < 0:
+            raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
+                                dict(kind=kind, room=text_room, minimum=sum(fields.values()) + floor +
+                                     carried_minimum + BOUNDED_NOTICE_CHARACTERS, command='review-route'))
+        # Lower the frame at a measured range boundary when even its floor would exceed that range.
+        own = [row for row in profile['rows'] if row['kind'] == kind and row['attempts'] >= 4
+               and row['task_level'] not in (None, 'unmeasured')]
+        unsafe = [row['task_level'] for row in own if row['at_or_over_limit'] / row['attempts'] > 0.05]
+        if unsafe:
+            preceding = max((level for level in TASK_LEVELS if type(level) is int and level < min(unsafe)), default=0)
+            lowered = preceding - floor - carried_minimum - BOUNDED_NOTICE_CHARACTERS
+            if lowered < 0:
+                raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
+                    dict(kind=kind, room=preceding, minimum=floor + carried_minimum + BOUNDED_NOTICE_CHARACTERS,
+                         command='review-route'))
+            bound = min(bound, lowered)
+        remaining = bound
+        bounded_fields = {}
+        unit_fields = []
+        for name, size in fields.items():
+            bounded_fields[name] = min(size, remaining)
+            remaining -= bounded_fields[name]
+            if bounded_fields[name] < size:
+                unit_fields.append(name)
+        frame[kind] = dict(fields=copy.deepcopy(fields), characters=sum(fields.values()),
+                           bound=bound, bounded_fields=bounded_fields, unit_fields=unit_fields)
+        rooms[kind] = text_room - bound - BOUNDED_NOTICE_CHARACTERS
+    admission_room = rooms.get('final', min(rooms.values()))
+    if 'final' in frame:
+        final = select_task_limits(route, profile, 'final', targets=len(handles),
+            frame_characters=frame['final']['bound'] + BOUNDED_NOTICE_CHARACTERS)
+        page_room = min(admission_room, final['material_allowance'])
+    else:
+        page_room = admission_room
+    pool = min(admission_room, carried_budget) if carried_budget is not None else admission_room
+    parts = [dict(id='notes', minimum=NOTES_MINIMUM_CHARACTERS,
+                  preferred=NOTES_MAXIMUM_CHARACTERS, maximum=NOTES_MAXIMUM_CHARACTERS)]
+    for handle, target in zip(handles, targets):
+        counts = target if isinstance(target, dict) else {}
+        overhead = counts.get('gap_rows', 0) * GAP_ROW_CHARACTERS + counts.get('source_rows', 0) * CITED_SOURCE_CHARACTERS
+        minimum = EXCERPT_TEXT_CHARACTERS + EXCERPT_FIELDS_CHARACTERS + overhead
+        maximum = min(TARGET_MAXIMUM_CHARACTERS + overhead, page_room // 2)
+        if minimum > maximum:
+            raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
+                                dict(room=maximum, minimum=minimum, target=handle, command='review-route'))
+        parts.append(dict(id=handle, minimum=minimum, preferred=min(TARGET_PREFERRED_CHARACTERS + overhead, maximum),
+                          maximum=maximum, overhead=overhead))
+    carried = divide_room(pool, parts)
+    allocations = [dict(handle=row['id'], excerpts=row['allowance'] - row['overhead'],
+                        rows=row['overhead'], allowance=row['allowance']) for row in carried['parts'][1:]]
+    notes = carried['parts'][0]['allowance']
+    allowance_rows = measure_capacity_value(route, allocations)
+    # Splitting all units to the floor gives the largest card count, independent of the planned turn count.
+    unique_units = {row.get('sha256', row['handle']): row for row in inventory}
+    cards = sum(max(1, math.ceil(row['characters'] / describe_material_levels('read')[-1]))
+                for row in unique_units.values())
+    card_reserve = cards * CARD_ENTRY_CHARACTERS
+    late_reserve = pool // 10
+    card_budget = max(0, pool - card_reserve - late_reserve)
+    tasks = {}
+    for kind, value in frame.items():
+        carried_characters = notes + allowance_rows if kind in ('reading', 'read') else 0
+        selected = select_task_limits(route, profile, kind, targets=len(handles),
+            frame_characters=value['bound'] + BOUNDED_NOTICE_CHARACTERS,
+            carried_characters=carried_characters, calibrated=limits['request_measure'] == 'calibrated')
+        level_limits = select_task_limits(route, profile, kind, targets=selected['target_allowance'],
+            frame_characters=value['bound'] + BOUNDED_NOTICE_CHARACTERS,
+            carried_characters=carried_characters, calibrated=limits['request_measure'] == 'calibrated')
+        selected['levels'] = level_limits['levels']
+        tasks[kind] = dict(selected, carried_characters=carried_characters,
+                           notice_characters=BOUNDED_NOTICE_CHARACTERS)
+        policy_ceiling = (describe_material_levels(kind)[0] if selected['state'] == 'unmeasured'
+                          else selected['material_allowance'])
+        input_ceiling = max(row['material_allowance'] for row in selected['levels']
+                            if row['task_characters'] <= text_room and row['material_allowance'] <= policy_ceiling)
+        tasks[kind]['adaptation'] = dict(lower_at_percent=75, raise_at_percent=35,
+                                         policy_ceiling=policy_ceiling, ceiling=input_ceiling)
+        tasks[kind]['request_bound'] = dict(text_characters=selected['task_characters'],
+            characters=limits['input_characters']['value'], tokens_upper=limits['input_tokens']['value'])
+        minimum = value['bound'] + carried_characters + BOUNDED_NOTICE_CHARACTERS + describe_material_levels(kind)[-1]
+        if minimum > text_room:
+            raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
+                                dict(kind=kind, room=text_room, minimum=minimum, command='review-route'))
+    pinned_profile = dict(copy.deepcopy(profile), states={kind: task['state'] for kind, task in tasks.items()})
+    return dict(protocol=CAPACITY_PLAN_PROTOCOL, policy=POLICY, route_class=describe_route_class(route),
+        limits=copy.deepcopy(limits), measure=dict(rule=limits['request_measure'],
+            characters_per_token=(CLAUDE_CHARACTERS_PER_TOKEN if route['adapter'] == 'claude_cli_v1'
+                                  else CODEX_CHARACTERS_PER_TOKEN) if limits['request_measure'] == 'calibrated' else None,
+            count_carried_state=COUNT_CARRIED_STATE, non_ascii_limit=0.05, ratio_margin=TOKEN_RATIO_MARGIN),
+        profile=pinned_profile, frame=frame, inventory=inventory_summary,
+        targets=dict(handles=handles, digest=digest(handles)),
+        allocation=dict(rooms=rooms, admission_room=admission_room, page_room=page_room, carried=carried, targets=allocations, notes=notes,
+            carried_turn_pool=pool, card_rate=card_budget / max(1, inventory_summary['characters']),
+            card_reserve=card_reserve, card_budget=card_budget, late_unit_reserve=late_reserve,
+            largest_card_count=cards, entry_sizes=dict(excerpt_text=EXCERPT_TEXT_CHARACTERS,
+                excerpt_fields=EXCERPT_FIELDS_CHARACTERS, cited_source=CITED_SOURCE_CHARACTERS,
+                gap=GAP_ROW_CHARACTERS, card=CARD_ENTRY_CHARACTERS, decision=DECISION_ROW_CHARACTERS)), task=tasks)
+
+
+def read_chain_capacity_plan(artifacts, assignment):
+    """Read the authenticated artifact; never replan a stored chain from current priors."""
+    from .errors import ResearchError
+    reference = assignment['capacity_plan']
+    plan = json.loads(artifacts.read(reference['artifact']))
+    if reference['protocol'] != CAPACITY_PLAN_PROTOCOL or digest(plan) != reference['digest']:
+        raise ResearchError('artifact_corrupt', 'The stored capacity plan does not match its pinned digest.')
+    return plan
+
+
+def describe_capacity_forecast(plan, route, profile, *, records=None, turn_kind=None,
+                               remaining_inventory=None, remaining_targets=None, completed_kinds=(), observations_by_kind=None):
+    """Compute advisory calls separately from the pinned budgets, including expected replacements."""
+    by_kind = {}
+    selected = {}
+    inventory = (_summarize_capacity_inventory(remaining_inventory) if remaining_inventory is not None
+                 else plan['inventory'])
+    handles = plan['targets']['handles'] if remaining_targets is None else remaining_targets
+    total_characters = inventory['characters']
+    for kind in plan['task']:
+        pinned = derive_plan_task_limits(plan, kind, (observations_by_kind or {}).get(kind, ()))
+        current = select_task_limits(route, profile, kind, targets=len(handles),
+            frame_characters=plan['frame'][kind]['bound'] + pinned['notice_characters'],
+            carried_characters=pinned['carried_characters'])
+        # Current priors estimate the cost of the pinned task; they do not choose a new allowance.
+        sample = next(row for row in current['levels'] if row['material_allowance'] == pinned['material_allowance'])
+        current.update(sample)
+        current['target_allowance'] = pinned['target_allowance']
+        selected[kind] = dict(current, kind=kind)
+        allowance = pinned['material_allowance']
+        if kind in ('reading', 'read'):
+            turns = math.ceil(total_characters / allowance)
+            largest = math.ceil(total_characters / describe_material_levels(kind)[-1])
+        elif kind == 'final':
+            entries = [row for row in plan['allocation']['targets'] if row['handle'] in handles]
+            pages = _count_capacity_pages(allowance, entries, plan['allocation']['notes'],
+                                          max(1, current['target_allowance']))
+            turns = sum(pages.values())
+            largest = sum(_count_capacity_pages(describe_material_levels(kind)[-1], entries,
+                                                 plan['allocation']['notes'], 1).values())
+        else:
+            turns = 1
+            largest = 1
+        if kind in completed_kinds:
+            turns = 0
+            largest = 0
+        share = current['at_or_over_limit_share']
+        by_kind[kind] = dict(turns=turns, material_allowance=allowance, state=current['state'],
+            at_or_over_limit_share=share, sample_size=current['sample_size'],
+            expected_calls=0 if not turns else turns / (1 - share) if share is not None and share < 1 else None,
+            largest_state_turns=largest)
+    expected = [row['expected_calls'] for row in by_kind.values()]
+    return dict(profile_digest=profile['digest'], by_kind=by_kind, units=copy.deepcopy(inventory['by_kind']),
+        basis='remaining_inputs' if remaining_inventory is not None or remaining_targets is not None else 'initial_inventory',
+        turns=sum(row['turns'] for row in by_kind.values()),
+        largest_state_turns=sum(row['largest_state_turns'] for row in by_kind.values()),
+        expected_calls=sum(expected) if all(value is not None for value in expected) else None,
+        next_call=describe_next_capacity_call(records or {}, route, selected[turn_kind or next(iter(selected))]),
+        capacity_warning=dict(input=not all(row['request_bound']['text_characters'] <=
+            plan['limits']['input_text_characters']['value'] for row in plan['task'].values()),
+            output=describe_output_warning(selected)))
+
+
+def describe_plan_preflight(records, route, request, plan, kind, *, observations=()):
+    """Compare the exact native text with the pinned rule and bound; forecasts remain advisory."""
+    from .review_preflight import PLANNED_PROTOCOL
+    measured = measure_request(route, request)
+    rule = plan['measure']
+    calibrated = rule['rule'] == 'calibrated' and measured['non_ascii_share'] <= rule['non_ascii_limit']
+    measured['tokens_upper'] = (math.ceil(measured['text_characters'] / rule['characters_per_token'])
+                                if calibrated else measured['utf8_bytes'])
+    measured['measure'] = 'calibrated' if calibrated else 'bytes'
+    measured['characters_per_token'] = rule['characters_per_token'] if calibrated else None
+    bounds = derive_plan_task_limits(plan, kind, observations)['request_bound']
+    comparisons = {name: dict(value=measured[name], bound=value,
+                              fits=value is None or measured[name] <= value)
+                   for name, value in bounds.items()}
+    fits = all(row['fits'] for row in comparisons.values())
+    measured['fits'] = fits
+    return dict(protocol=PLANNED_PROTOCOL, request_measure=measured,
+        plan_comparison=dict(digest=digest(plan), kind=kind, fits=fits, sizes=comparisons),
+        capacity_forecast=describe_capacity_forecast(plan, route, read_output_profile(records, route), records=records, turn_kind=kind,
+            observations_by_kind={kind: observations}))
+
+
+def prepare_assignment_capacity(records, artifacts, route, declaration):
+    """Validate a builder declaration once at assignment admission and publish or reuse its plan."""
+    from .operations import fields, text
+    from .errors import ResearchError
+    fields(declaration, ('kind',), ('plan', 'frames', 'inventory', 'targets', 'carried_budget'))
+    if 'plan' in declaration:
+        fields(declaration, ('kind', 'plan'))
+        reference = declaration['plan']
+        fields(reference, ('protocol', 'digest', 'artifact'))
+        plan = read_chain_capacity_plan(artifacts, dict(capacity_plan=reference))
+        if plan['route_class'] != describe_route_class(route):
+            raise ResearchError('invalid_input', 'A continued capacity plan keeps its route class.')
+    else:
+        fields(declaration, ('kind', 'frames', 'inventory', 'targets'), ('carried_budget',))
+        frames, inventory, targets = (declaration[key] for key in ('frames', 'inventory', 'targets'))
+        if not isinstance(frames, dict) or not frames or any(kind not in TURN_KINDS or kind == 'staged' for kind in frames):
+            raise ResearchError('invalid_input', 'A capacity declaration needs bounded frames for supported turn kinds.')
+        for frame in frames.values():
+            if not isinstance(frame, dict) or any(type(size) is not int or size < 0 for size in frame.values()):
+                raise ResearchError('invalid_input', 'Frame fields state their serialized nonnegative character sizes.')
+        if not isinstance(inventory, list) or not isinstance(targets, list):
+            raise ResearchError('invalid_input', 'A capacity inventory and its targets must be lists.')
+        unit_handles = []
+        for row in inventory:
+            fields(row, ('handle', 'kind', 'characters'), ('sha256',))
+            text(row['handle'], 'Unit handle')
+            text(row['kind'], 'Unit kind')
+            if type(row['characters']) is not int or row['characters'] < 0:
+                raise ResearchError('invalid_input', 'An inventory unit states its nonnegative serialized characters.')
+            unit_handles.append(row['handle'])
+        handles = []
+        for target in targets:
+            if isinstance(target, dict):
+                fields(target, ('handle',), ('source_rows', 'gap_rows'))
+                if any(type(count) is not int or count < 0 for key, count in target.items() if key != 'handle'):
+                    raise ResearchError('invalid_input', 'Target row counts must be nonnegative integers.')
+                handle = target['handle']
+            else:
+                handle = target
+            text(handle, 'Target handle')
+            handles.append(handle)
+        if len(set(handles)) != len(handles) or len(set(unit_handles)) != len(unit_handles):
+            raise ResearchError('invalid_input', 'Capacity target and unit handles must be unique.')
+        if declaration['kind'] not in frames:
+            raise ResearchError('invalid_input', 'The assignment turn kind must have a frame in its capacity plan.')
+        budget = declaration.get('carried_budget')
+        if budget is not None and (type(budget) is not int or budget < 0):
+            raise ResearchError('invalid_input', 'The carried budget must be a nonnegative integer.')
+        plan = plan_chain_capacity(route, read_output_profile(records, route), frames=frames,
+                                   inventory=inventory, targets=targets, carried_budget=budget, records=records, artifacts=artifacts)
+        from .review_protocol import _put_json
+        reference = dict(protocol=CAPACITY_PLAN_PROTOCOL, digest=digest(plan), artifact=_put_json(artifacts, plan))
+    if declaration['kind'] not in plan['task']:
+        raise ResearchError('invalid_input', 'The assignment turn kind must have a frame in its capacity plan.')
+    return dict(capacity_plan=copy.deepcopy(reference), capacity_plan_kind=declaration['kind'])
+
+
+def describe_assignment_capacity(records, artifacts, assignment):
+    """Expose a stored plan and a live forecast outside the immutable assignment."""
+    plan = read_chain_capacity_plan(artifacts, assignment)
+    route = records['review_route'][assignment['route_id']]
+    return dict(capacity_plan=plan, capacity_forecast=describe_capacity_forecast(
+        plan, route, read_output_profile(records, route), records=records, turn_kind=assignment['capacity_plan_kind']))
+
+
+def derive_plan_task_limits(plan, kind, observations=(), *, notice_characters=0):
+    """Derive allowances from pinned levels and authenticated observations supplied by the verifier."""
+    task = copy.deepcopy(plan['task'][kind])
+    levels = [row['material_allowance'] for row in task['levels']]
+    allowance = task['material_allowance']
+    adaptation = task['adaptation']
+    output_limit = plan['limits']['output_tokens']['value']
+    for observation in observations:
+        outcome = observation.get('outcome')
+        if outcome is not None and outcome not in ('output_over_cap', 'input_over_limit', 'timeout', 'provider_refused'):
+            continue
+        value = observation.get('material_allowance', observation.get('material_characters', allowance))
+        index = next((index for index in range(len(levels) - 1, -1, -1) if levels[index] >= value), 0)
+        output = observation.get('output_tokens')
+        if outcome is not None or output is not None and output * 100 >= output_limit * adaptation['lower_at_percent']:
+            index = min(index + 1, len(levels) - 1)
+        elif output is not None and output * 100 <= output_limit * adaptation['raise_at_percent']:
+            index = max(0, index - 1)
+        allowance = min(adaptation['ceiling'], levels[index])
+    if allowance != task['material_allowance']:
+        selected = next(row for row in task['levels'] if row['material_allowance'] == allowance)
+        task.update(copy.deepcopy(selected))
+        task['answer_bound'] = (min(selected['default_answer_bound'], selected['answer_room_characters'])
+                                if selected['qualifies'] else selected['smallest_answer_bound'])
+        task['request_bound']['text_characters'] = selected['task_characters']
+    if notice_characters:
+        task.update(level_material_allowance=allowance, notice_characters=notice_characters,
+                    material_allowance=max(levels[-1], allowance - notice_characters))
+        task['task_characters'] = (plan['frame'][kind]['bound'] + task.get('carried_characters', 0)
+                                   + task['material_allowance'] + notice_characters)
+        task['request_bound']['text_characters'] = task['task_characters']
+    return task
+
+
+def derive_turn_task_limits(records, artifacts, assignment, *, kind=None, notice_characters=0):
+    """Read the chain's attempts against its stored plan; later profiles cannot change an allowance."""
+    from . import openness_reading, review_failure_class as failures
+
+    plan = read_chain_capacity_plan(artifacts, assignment)
+    kind = kind or assignment.get('capacity_plan_kind') or describe_assignment_kind(assignment)
+    identifiers = set()
+    for member in openness_reading._list_chain(records, assignment):
+        identifiers.update(failures.list_turn_assignments(records, member))
+    observations = []
+    for attempt in sorted(records.get('review_attempt', {}).values(),
+                          key=lambda row: (row.get('recorded_revision', 0), row['id'])):
+        if attempt['assignment_id'] not in identifiers:
+            continue
+        member = records['review_assignment'][attempt['assignment_id']]
+        task = attempt.get('task') or describe_assignment_task(records, None, member)
+        if member.get('capacity_plan_kind', task['kind']) != kind or member['route_id'] != assignment['route_id']:
+            continue
+        classification = failures.classify_attempt(records, artifacts, attempt)
+        observation = dict(output_tokens=(attempt.get('usage') or {}).get('output_tokens'),
+                           outcome=classification['outcome'] if classification else None)
+        value = task.get('level_material_allowance', task.get('material_allowance', task.get('material_characters')))
+        if value is not None:
+            observation['material_allowance'] = value
+        observations.append(observation)
+    return derive_plan_task_limits(plan, kind, observations, notice_characters=notice_characters)
+
+
+CAPACITY_EFFORT_MESSAGE = ('The harness keeps this review on its route and at its effort. Only the owner changes the '
+                           'effort: record a route with the other effort with review-route.')
+OUTPUT_OVER_CAP_DECISION_MESSAGE = ('No smaller task that the protocol admits is left for this turn within its recovery '
+                                    'allowance. at_or_over_limit_share, profile_rows and attempts show what was '
+                                    'measured. The owner decides whether the review moves to a route with another '
+                                    'effort or another output limit; record that route with review-route.')
+CAPACITY_DECISION_MESSAGE = ('This protocol has no smaller task for this turn on this route. The steps of the answer '
+                             'move the review to another route. required_unit, when present, names the unit of a '
+                             'later release that gives this protocol a smaller task.')
+
+
+def list_capacity_recovery_rows():
+    """D1 11.2: every installed kind and protocol has a handler or explicitly has none.
+
+    Reading-v7-turns adds its reading/material-level row when that builder ships.
+    Parts v3, session rules v4 and final pages likewise add their own rows, never change legacy packets.
+    """
+    from . import openness_reading, review_excerpts, review_parts, review_problem_parts
+    from . import review_protocol, review_staged, review_output_correction, bar_sources
+
+    rows = []
+    for version in (openness_reading.PROTOCOL_V1, openness_reading.PROTOCOL_V2, openness_reading.PROTOCOL,
+                    openness_reading.PROTOCOL_V4, openness_reading.PROTOCOL_V5, openness_reading.PROTOCOL_V6,
+                    openness_reading.MATH_PROTOCOL):
+        unit = 'reading-math-v2' if version == openness_reading.MATH_PROTOCOL else 'reading-v7-turns'
+        for kind in ('reading', 'final'):
+            rows.append(dict(kind=kind, protocol=version, handler='nothing', required_unit=unit))
+    for kind in review_parts.KINDS:
+        rows.append(dict(kind=kind, protocol=review_parts.PROTOCOL,
+                         handler='parts_v2_read' if kind == 'read' else 'nothing'))
+    # Its frozen final also carries reviewer_excerpts, so its measured kind is request.
+    for kind in ('read', 'request'):
+        rows.append(dict(kind=kind, protocol=review_problem_parts.PROTOCOL, handler='nothing'))
+    for version in (review_excerpts.PROTOCOL_V1, review_excerpts.PROTOCOL, review_excerpts.SESSION_PROTOCOL):
+        rows.append(dict(kind='request', protocol=version, handler='nothing'))
+    for version in dict.fromkeys((review_protocol.PROTOCOL, review_protocol._VERIFICATION_PROTOCOL,
+                                 bar_sources.PROTOCOL, review_protocol._PROBLEM_PROTOCOL_V1,
+                                 review_protocol._PROBLEM_PROTOCOL, review_protocol._PROBLEM_RESULT_PROTOCOL_V3,
+                                 review_protocol._PROBLEM_RESULT_PROTOCOL_V4, review_protocol.PROBLEM_PROTOCOL)):
+        rows.append(dict(kind='single', protocol=version, handler='single_request_series'))
+    rows.append(dict(kind='staged', protocol=review_staged.PROTOCOL, handler='staged_controller'))
+    rows.append(dict(kind='correction', protocol=review_output_correction.PROTOCOL, handler='nothing',
+                     next='refusal_replacement'))
+    for adapter in tuple(transport.LOCAL_ADAPTERS) + (transport.ADAPTER,):
+        rows.append(dict(kind='probe', protocol=adapter, handler='nothing', next='route_unverified'))
+    return rows
+
+
+def describe_capacity_recovery_row(assignment, packet, route):
+    from . import openness_reading, review_excerpts, review_parts, review_problem_parts, review_staged
+    from .review_protocol import PROTOCOL
+
+    kind = describe_task_kind(assignment['role'], packet)
+    version = openness_reading.find_protocol(packet)
+    if version is None:
+        if kind in review_parts.KINDS and review_parts.KEY in packet:
+            version = packet[review_parts.KEY]['protocol']
+        elif 'problem_evidence_parts' in packet:
+            version = review_problem_parts.PROTOCOL
+        elif kind == 'request':
+            version = packet[review_excerpts.KEY]['protocol']
+        elif kind == 'staged':
+            version = review_staged.PROTOCOL
+        elif kind == 'probe':
+            version = route['adapter']
+        else:
+            version = packet.get('protocol', PROTOCOL)
+    row = next(row for row in list_capacity_recovery_rows()
+               if row['kind'] == kind and row['protocol'] == version)
+    # A repair is the existing initial-size handler even when its ordinary packet is single.
+    from .review_parts_repair import applies
+    if applies(assignment, packet) and kind not in ('read', 'combine', 'check', 'final'):
+        row = dict(row, handler='context_repair')
+    return row
+
+
+def describe_capacity_decision(records, artifacts, assignment, outcome, details):
+    """Use D2's role-specific route steps for the decision member of R52."""
+    from .review_failure_class import OUTCOME_CODES, ROUTE_DECISION_QUESTION
+    from .review_plan_steps import select_route_steps, describe_step
+
+    # Diagnostics without a native packet can name route setup, but cannot fill an attestation.
+    numbers = (select_route_steps(records, artifacts, assignment)
+               if assignment['role'] != 'native_math' or assignment.get('context', {}).get('native_packet')
+               else [7])
+    if numbers in ([4], [5]):
+        numbers = [7] + numbers
+    steps = [describe_step(records, artifacts, assignment, number) for number in numbers]
+    if details.get('required_unit'):
+        for step in steps:
+            if step['id'] in (4, 5):
+                step['prerequisites'].insert(0, dict(condition='The installed release holds ' + details['required_unit'] + '.'))
+    details = dict(details, message=(OUTPUT_OVER_CAP_DECISION_MESSAGE if outcome == 'output_over_cap'
+                                    else CAPACITY_DECISION_MESSAGE))
+    return dict(kind='decision', code=details.get('code', OUTCOME_CODES[outcome]),
+                owner_decides=ROUTE_DECISION_QUESTION,
+                then=[dict(answer='Move to another route', steps=steps)], details=details)
+
+
+def plan_capacity_recovery(records, artifacts, assignment, outcome) -> 'RecoveryResult':
+    """Return a proved smaller request or D2's decision member, preserving route and effort."""
+    from . import review_failure_class as failures, review_protocol
+
+    packet = review_protocol._read_json(artifacts, assignment['packet'])
+    route = records['review_route'][assignment['route_id']]
+    row = describe_capacity_recovery_row(assignment, packet, route)
+    plan = read_chain_capacity_plan(artifacts, assignment) if assignment.get('capacity_plan') else None
+    profile = plan['profile'] if plan else read_output_profile(records, route)
+    profile_rows = [copy.deepcopy(value) for value in profile['rows'] if value['kind'] == row['kind']]
+    sample = sum(value['attempts'] for value in profile_rows)
+    share = sum(value['at_or_over_limit'] for value in profile_rows) / sample if sample else None
+    identifiers = set(failures.list_turn_assignments(records, assignment))
+    attempts = []
+    for attempt in sorted(records.get('review_attempt', {}).values(),
+                          key=lambda value: (value.get('recorded_revision', 0), value['id'])):
+        if attempt['assignment_id'] not in identifiers:
+            continue
+        member = records['review_assignment'][attempt['assignment_id']]
+        task = attempt.get('task') or describe_assignment_task(records, None, member)
+        frozen = review_protocol._read_json(artifacts, member['packet'])
+        header = frozen.get('review_parts', {})
+        material = task.get('level_material_allowance', task.get('material_allowance',
+                       header.get('unit_characters', task.get('material_characters'))))
+        levels = ([value['material_allowance'] for value in plan['task'][row['kind']]['levels']]
+                  if plan and row['kind'] in plan['task'] else describe_material_levels(row['kind']))
+        level = (next((index for index in range(len(levels) - 1, -1, -1)
+                       if levels[index] >= material), 0) if material is not None else None)
+        attempts.append(dict(attempt_id=attempt['id'], assignment_id=member['id'],
+            output_tokens=(attempt.get('usage') or {}).get('output_tokens'),
+            material_characters=task.get('material_characters'), task_level=task.get('task_level'),
+            material_allowance=material, level=level))
+    details = dict(row, route_id=assignment['route_id'], effort=describe_route_class(route)['effort'],
+                   effort_message=CAPACITY_EFFORT_MESSAGE,
+                   at_or_over_limit_share=share, profile_rows=profile_rows, attempts=attempts)
+    replacement = (failures.plan_output_replacement(records, artifacts, assignment,
+                    allow_single=outcome == 'output_over_cap', outcome=outcome)
+                   if row['handler'] in ('single_request_series', 'parts_v2_read', 'context_repair')
+                   and outcome in ('output_over_cap', 'input_over_limit', 'timeout', 'provider_refused') else None)
+    if replacement is not None:
+        details.update(replacement)
+        if outcome != 'output_over_cap':
+            details['code'] = failures.OUTCOME_CODES[outcome]
+    if replacement is not None and replacement['state'] == 'replace':
+        payload = {key: copy.deepcopy(assignment[key]) for key in
+                   ('id', 'role', 'route_id', 'dossier_id', 'reviewer_id', 'author_id', 'context')}
+        payload['id'] += '-replacement'
+        payload['context'] = replacement['context']
+        return dict(kind='replace', reason='capacity', payload=payload,
+                    preflight=replacement['preflight'], details=details)
+    return describe_capacity_decision(records, artifacts, assignment, outcome, details)
+
+
+def describe_next_capacity_call(records, route, selected):
+    """Report medians only from retained, eligible observations in the selected kind and task range."""
+    from statistics import median
+    assignments = records.get('review_assignment', {})
+    observations = []
+    attempts = ((group, attempt) for group in ('review_attempt', 'review_route_probe', 'review_output_correction')
+                for attempt in records.get(group, {}).values())
+    for group, attempt in attempts:
+        assignment = assignments.get(attempt.get('assignment_id'), {})
+        candidate = records.get('review_route', {}).get(attempt.get('route_id') or assignment.get('route_id'))
+        task = attempt.get('task', {})
+        if (candidate is not None and describe_route_class(candidate) == describe_route_class(route)
+                and (group == 'review_route_probe' or attempt.get('origin') == 'instrumented')
+                and qualifies_for_output_profile(attempt)
+                and attempt.get('completed_generation') and task.get('kind') == selected.get('kind')
+                and _find_task_level(task.get('characters')) == selected['task_level']):
+            observations.append(attempt)
+    observations.sort(key=lambda row: row['recorded_revision'], reverse=True)
+    result = {}
+    for name, field in (('output_tokens', 'output_tokens'), ('duration_seconds', 'wall_seconds')):
+        values = [(row.get('usage') or {}).get(field) for row in observations[:PROFILE_ATTEMPT_LIMIT]]
+        values = [value for value in values if isinstance(value, (int, float))]
+        result[name] = median(values) if values else None
+    if not any(value is not None for value in result.values()):
+        result['reason'] = 'The selected profile row has no retained medians.'
+    return result
+
+
+def _count_capacity_pages(room, targets, notes, targets_per_page):
+    """Pack the granted entries under the same room admission function used to grant them."""
+    from .errors import ResearchError
+    pages = 0
+    condensing = 0
+    parts = []
+    note = dict(id='notes', minimum=notes, preferred=notes, maximum=notes)
+    for target in targets:
+        allowance = target['allowance']
+        if allowance + notes > room:
+            allowance = room // 2
+            condensing += math.ceil(target['allowance'] / room)
+        part = dict(id=target['handle'], minimum=allowance, preferred=allowance, maximum=allowance)
+        try:
+            if len(parts) >= targets_per_page:
+                parts = []
+            divide_room(room, [note] + parts + [part])
+        except ResearchError as error:
+            if error.code != 'review_route_capacity_below_floor':
+                raise
+            parts = []
+            divide_room(room, [note, part])
+        if not parts:
+            pages += 1
+        parts.append(part)
+    return dict(pages=pages, condensing_turns=condensing, closing_pages=int(pages > 1))
+
+
+def measure_capacity_value(route, value):
+    """Measure a serialized value inside native packet framing, including its escaped field quotes."""
+    request = transport._build_local_request(route, '', {'carried': value}, [])
+    empty = transport._build_local_request(route, '', {'carried': None}, [])
+    return measure_request(route, request)['text_characters'] - measure_request(route, empty)['text_characters'] + len('null')
 # Allow the recorded 22-part capture and the seven-turn healthy delivery;
 # the four padded texts require about 216 parts and need a decision.
 SESSION_PENDING_TURN_LIMIT = 32

@@ -14,7 +14,8 @@ from openness_reading_fixtures import OpennessReadingCase
 from test_openness_search_sharing import SearchSharingCase
 from research_harness import openness_reading as reading, problem_openness as openness, problem_openness_sources as sources
 from research_harness import review_protocol as protocol, review_transport as transport
-from research_harness.capture_selection import PACKET_KEY, describe_capture_selections, select_main_capture
+from research_harness.capture_selection import (PACKET_KEY, bind_packet_selections,
+                                              describe_capture_selections, select_main_capture)
 from research_harness.evidence import digest
 from research_harness.literature import import_bundle
 from research_harness.reading import record_reading
@@ -49,7 +50,7 @@ def build_before_capture_binding():
             for name in names:
                 function = namespace[name]
                 if name in ('list_reading_texts', 'list_math_text_rows', '_list_legacy_texts',
-                            'list_reading_rows', 'build_delivery'):
+                            'list_reading_rows', 'build_delivery', 'has_deliverable_passage'):
                     function = adapt_builder(function)
                 stack.enter_context(patch.object(module, name, function))
         yield
@@ -58,10 +59,16 @@ def build_before_capture_binding():
 class OpennessCaptureBindingTests(unittest.TestCase):
     def open_case(self, version):
         case = (OpennessReadingCase if version == 4 else SearchSharingCase)()
+        # Explicit release contexts own historical construction; capture-binding cases use current exports.
+        case.historical_v5 = False
         self.addCleanup(case.doCleanups)
         case.setUp()
         if version == 4:
             case.limit_input()
+        else:
+            patcher = patch.object(reading, 'find_chain_protocol', return_value=reading.PROTOCOL_V5)
+            patcher.start()
+            case.addCleanup(patcher.stop)
         return case
 
     def choose_capture(self, case, capture):
@@ -89,6 +96,13 @@ class OpennessCaptureBindingTests(unittest.TestCase):
         self.assertEqual(reading.verify_chain(records, case.artifacts, final), saved['reading_turns'])
         self.assertEqual(openness.assess_openness(records, case.artifacts), [])
         route = records['review_route']['route']
+        native = json.loads(case.artifacts.read(final['context']['native_packet']))
+        historical = native['scientific_context']['openness_minimum']['schema_version'] == 1
+        namespace = dict(vars(reading))
+        if historical:
+            exec(compile(BUILDERS_PATH.read_bytes(), str(BUILDERS_PATH), 'exec'), namespace)
+            bound = bind_packet_selections(records, native['scientific_context'],
+                                           artifacts=case.artifacts, review=final)
         for index, identifier in enumerate(identifiers):
             assignment = records['review_assignment'][identifier]
             self.assertEqual(assignment, before['review_assignment'][identifier])
@@ -96,10 +110,13 @@ class OpennessCaptureBindingTests(unittest.TestCase):
             packet = json.loads(packet_bytes)
             prefix = dict(records, review_assignment={key: row for key, row in records['review_assignment'].items()
                                                       if key in identifiers[:index]})
+            if historical and index == 0:
+                prefix = dict(bound, review_assignment=prefix['review_assignment'])
             with transport.text_only_delivery(True):
                 ordinary = protocol.build_packet(prefix, case.artifacts, None, 'native_math', 'openness-reviewer',
                                                  native_packet=assignment['context']['native_packet'])
-                rebuilt, _ = reading.prepare_packet(prefix, case.artifacts, assignment, route, ordinary)
+                prepare = namespace['prepare_packet'] if historical and index == 0 else reading.prepare_packet
+                rebuilt, _ = prepare(prefix, case.artifacts, assignment, route, ordinary)
             self.assertEqual(json.dumps(rebuilt, sort_keys=True, ensure_ascii=False).encode(), packet_bytes)
             self.assertEqual(assignment['prompt'], protocol.canonical_prompt(
                 'native_math', reading_stage=reading.find_stage(packet), reading_protocol=reading.find_protocol(packet)))
@@ -118,7 +135,8 @@ class OpennessCaptureBindingTests(unittest.TestCase):
             identifiers, saved = self.complete_chain(case, native)
         packet_bytes = case.artifacts.read(native)
         self.assertNotIn(PACKET_KEY, json.loads(packet_bytes)['scientific_context'])
-        rebuilt_export = case.export(priority=case.versions, name='unbound-export-rebuilt')
+        with build_before_capture_binding():
+            rebuilt_export = case.export(priority=case.versions, name='unbound-export-rebuilt')
         self.assertEqual(case.artifacts.read(rebuilt_export), packet_bytes)
         before = case.store.snapshot()['records']
         compact = case.capture(case.versions[0], pdf_text=COMPACT_TEXT)
@@ -225,6 +243,7 @@ class OpennessCaptureBindingTests(unittest.TestCase):
         from research_harness import review_excerpts
         for version in (reading.PROTOCOL_V4, reading.PROTOCOL_V5):
             with self.subTest(protocol=version), ExitStack() as stack:
+                current_export = openness.export_openness
                 owner = V4ReplayTests()
                 self.addCleanup(owner.doCleanups)
                 stack.callback(owner.doCleanups)
@@ -251,7 +270,9 @@ class OpennessCaptureBindingTests(unittest.TestCase):
                 self.assertEqual(reading.verify_chain(records, case.artifacts,
                     records['review_assignment'][identifiers[-1]]), saved['reading_turns'])
                 self.assertEqual(records['problem_openness'], before['problem_openness'])
-                selected = owner.fixture.export('selected', support='standalone-proof', priority=True)
+                # The replay owner installs its old exporter; this last operation is a current export.
+                with patch.object(openness, 'export_openness', new=current_export):
+                    selected = owner.fixture.export('selected', support='standalone-proof', priority=True)
                 self.assertEqual(selected['scientific_context']['openness_delivery']['sources'][0]['selected_source_id'],
                                  compact['source_id'])
 

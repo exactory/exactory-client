@@ -1195,6 +1195,56 @@ form, one stronger form or one relation.
 The attempt on the exact statement keeps the steps above, and a relation of the statement can
 still be proved as an obligation inside it.
 
+### A certified computation as evidence of the accounts
+
+A finite computation whose output a checker verifies can support an entry of the accounts,
+for example a boundary. Its path is a bounded solver objective with the standard
+`certificate`, as above; no lighter path exists, and a probe alone supports no such entry.
+The steps, with the refusal that each wrong turn meets:
+
+1. Produce the certificate once, with `exactory-lab probe` in the problem workspace, before
+   the objective is proposed. The command records the `probe-intent` and the `probe` itself.
+   The output is exploratory evidence. Do not record a second outcome and do not run the
+   producer again.
+2. Initialize an objective whose claim is the finite statement that the certificate
+   establishes, with its own attack root under the problem workspace and
+   `review_workspace` set to the problem workspace. Its proposal has the role `research`
+   and a computation contract over the finite domain, with `already_determined: false`
+   (`already_determined` refuses `true` for this role). Write a text for the objective that
+   explains why the checker is sound, and name that text in `basis.deduction_digest` and in
+   `preflight.inspected_evidence`. The probe output is in neither field: `search admit`
+   refuses it there with `exploratory_evidence`. Name the probe in the uncertainty of the
+   contract.
+3. After `search begin`, copy the bytes that the probe kept into the run directory, with the
+   executable checker beside them, obtain the independent input review, and save the observed
+   review as `verification-review.json` in the run directory before you run
+   `exactory-math verify certificate`. The checker file is executable before that review,
+   because a later change of its mode changes the reviewed subject. Then acknowledge the
+   move with `journal add`: a local checkpoint needs the journal receipt of its move.
+4. Interpret the run with `search interpret` before the checkpoint, and obtain the policy
+   review of the terminal result. Build the manifest of kind `certificate` from the input
+   record of the run, with its `verification` record. `search checkpoint` refuses the
+   manifest before the interpretation, and an analytical manifest that wraps the same
+   certificate, with `exploratory_evidence`.
+5. Obtain the result review of the checkpoint, accept it with `search accept`, and deliver
+   the objective with `search deliver-attempt`. Cite the `native_attempt_digest` that the
+   delivery returns, and no other digest.
+6. Record the value with `problem-value`. The entry of the accounts cites
+   `{kind: "result", native_attempt_digest, acceptance_id, purpose, extension_reason:
+   null}`, and its argument says what the finite result establishes for the question. A
+   reference `{kind: "probe", id}` in that place is refused with
+   `problem_boundary_evidence_missing`.
+
+The path takes four reviewer assignments, all of the role `native_math` in the problem
+workspace: the proposal, the input of the run, the policy of the verification, and the
+result of the checkpoint. The delivery and the value record add none. Recording the value
+needs no `problem-attempt`, no problem openness review and no value review.
+[Computation admission and mandatory interpretation](../math-solver/SEARCH.md#computation-admission-and-mandatory-interpretation)
+states the native commands and their payloads, and `exactory-research example probe-intent`
+and `example probe` print the two probe payloads. The plugin test
+`skills/math-solver/harness/tests/test_certificate_path_example.py` runs the whole path and
+each of these refusals.
+
 ## Openness
 
 1. Search for the exact statement and for each declared neighbour. Each of these formulations
@@ -1207,14 +1257,72 @@ still be proved as an obligation inside it.
    [Literature tools](../../docs/research-workflow.md#literature-tools-search-read-expand-and-synthesize),
    on every page of the query, so that the captured response holds only the fields that the
    import reads.
+   Since 0.90.0 three more rules apply to a search. For a row that a response returned and
+   that the harness cannot import (an `invalid_work` item of the receipt), add
+   `row_dispositions: [{source_id, index, reason}]` to the search payload: `source_id` names
+   the response, `index` is the zero-based place of the row, and `reason` says what the row
+   is and why the search needs no work from it. The record keeps `row_excerpt`, the first
+   20,000 characters of the row that the provider returned, with the digest and the byte
+   length of the whole row, and the reviewer receives these beside your reason. A reading
+   that the reason names by its id is delivered as a supporting reading, unless it is
+   already decisive (step 3). For a Crossref query that means articles,
+   capture it with `filter=type:journal-article`; inspect the other returned types when the
+   query calls for them. To replace a stored search that has gaps, integrity errors or open
+   judgments, record a new search with `completes: [{search_id, closed_gaps: [{text, how}]}]`
+   that captures every query of the earlier search again as the same request and has no gap
+   of its own. The spec of step 3 then binds the new search alone, and the reviewer does not
+   read the earlier one. A capture with another filter asks another query and completes
+   nothing. The
+   [search coverage section](../../docs/research-cli.md#search-depth-coverage-and-provisional-questions-search)
+   states the ten conditions and the refusal `search_completion_invalid`, whose details name
+   the condition and the query, row or work to repair.
 2. Read every decisive prior or settling work in full. Keep an unavailable source as a gap.
+   Since 0.90.0, when `fulltext` cannot fetch a complete source that a person can open, for
+   example because the publisher refuses automated requests, use `import-fulltext`. It
+   records a PDF or a UTF-8 text file inside the workspace, also a Markdown document of a
+   repository or a question page with its answers. Register the work first: `acquire` for a
+   DOI or an OpenAlex id, and for a source that has only a URL, `import-response` with a
+   captured `web` or `mcp` metadata response and `mappings` that create the `url:` work.
+   Give that exact identifier to `import-fulltext`. State in `origin` who saved the file
+   (`saved_by`), the public HTTP or HTTPS address that it came from (`obtained_from`), the
+   time with its zone (`obtained_at`) and how it was saved (`statement`). The harness keeps
+   the bytes of the file and labels the origin as reported and not verified. A complete
+   article bundle and a full reading over that text count where a full reading is required.
+   When the result is `pending` (a PDF whose extraction failed, or a file without text), the
+   capture gives no reading credit: correct the file or the extraction options and import it
+   again with a new request id. The reported origin travels with the text to the reviewers, into the export and into
+   the record of the post. When the harness later fetches the original, the fetched text is
+   the main one, and the earlier reading keeps its credit when the two originals have the
+   same bytes.
 3. Write the openness spec `{assignment_id, reviewer_id, minimum: {searches: [{formulation,
    search_id}], settling_work_id, duplicate_resolutions}}`. Each `searches` entry binds one
    formulation to a search that addresses it: the search's `question` is the formulation's exact
    text, or that text is one of its `queries`. Every formulation, the exact statement and each
    declared neighbour, needs at least one entry. Bind as well every search that addresses a
    formulation and has a `relevant`, `contradictory`, `potentially_relevant`, `unresolved` or
-   `duplicate` result, or nonempty `gaps`. For a text route, add
+   `duplicate` result, or nonempty `gaps`. Since 0.90.0 `minimum` takes three more optional
+   fields. `results: [{native_attempt_digest, acceptance_id, cited_as}]` binds an accepted
+   result of a solver objective of this record. Bind every such result that a bound search
+   cites, for example a theorem that a disposition names: the export cannot find a result
+   from its name, and without the binding the reviewer reads the citation and not the
+   theorem. Run `search deliver-attempt` in the objective first, also when the objective was
+   delivered under an earlier release, because the delivery writes the link from the
+   acceptance to its review; give the `native_attempt_digest` that it returns and, in
+   `cited_as`, the name under which the searches cite the result. The harness does not
+   compare that label with the search records, so give it exactly.
+   `supporting_reading_ids` binds further reading records by id. For a reading that is not
+   already decisive, the export itself binds an exact reading id that occurs in
+   `dispositions[].reason`, `resolved[].reason`, `impact`, `scope`, `gaps[]` or
+   `row_dispositions[].reason` of a bound search. Name every other reading here, also one
+   that only another field cites, such as `completes[].closed_gaps[].how`. A supporting
+   reading is delivered as its record alone. When
+   the openness judgment needs the text of a work, judge the work `relevant` in a search
+   record, so that its full reading is decisive and its text is delivered.
+   `family_readings: [{search_digest, work_id, version_id}]` chooses which read version
+   stands for a decisive work that has no complete full reading of its own, for example an
+   arXiv id without a version. Without an entry the export takes the latest version of the
+   same work that has a complete full reading, and reports it under
+   `derived_family_readings`; give an entry only to choose another version. For a text route, add
    `minimum.text_priority`: the version ids of the read works, the decisive ones first (the works
    that state a formulation open or hold the strongest partial result). While the packet exceeds
    the route's input limit, the route withholds the full-text bodies of the listed versions from
@@ -1268,14 +1376,43 @@ still be proved as an obligation inside it.
    A refusal of these checks writes nothing, so the same assignment id can be exported again.
    For `supported_open` and `already_solved`, `problem-openness` (step 7) makes the same checks
    again on the returned minimum, with the evidence checks.
+   After these checks the export computes the forecast of the review and returns it as
+   `audit_forecast: {outcomes, gaps, notices, searched_through}`. `outcomes` states for
+   `supported_open` and for `already_solved` whether the harness can record that outcome,
+   `"possible"` or `"blocked"`, and `gaps` lists the conditions that block each outcome, with
+   the evidence that each concerns and, where a command repairs it, `details.command`. Read the
+   forecast before you start the review: a chain over a packet whose gaps block both
+   outcomes reads every unit and can end only in `unresolved`.
+   - Without `--accept-gaps`, an export whose forecast blocks both resolved outcomes returns
+     `openness_minimum_gaps` with the forecast in its details and delivers no review packet. Repair the gaps that can be
+     repaired: a new capture in a search that reassesses or completes the one with the gap,
+     `resolved` for a work that an earlier search left `potentially_relevant` or
+     `unresolved`, the missing full reading, or `import-fulltext` for a source that the
+     harness cannot fetch. Then export again.
+   - Export with `--accept-gaps` only when a gap cannot be repaired and you want the
+     reviewer's `unresolved` finding with its grounds. The packet is then written, and the
+     forecast comes back under `warnings`. The option changes no check.
+   - Without a declared settling work and without another gap, `supported_open` is possible
+     and `already_solved` is blocked by `settling_undeclared`. That is the state of a
+     statement that you hold open, and it needs no repair.
+   The result also names what the export bound beyond the spec. `derived_family_readings`
+   lists each family version that the export chose, with its link. `supporting_readings`
+   lists the supporting reading records, each with `cited_by`, the searches and fields that
+   name it, or an empty list for a reading that only the spec names.
+   The [CLI reference](../../docs/research-cli.md#problem-creation) lists every gap
+   condition with its repair, and the refusals of `results`.
 5. Put the exported packet in the `context` of a `review-assignment` with that assignment id and
    reviewer id, `role: "native_math"`, `dossier_id: null`, a verified route and an author from
    the record. Run it with `review-run`.
 6. When the receipt of that assignment shows `reading_chain`, one input of the route cannot hold
    every unit of the packet complete, or the units together exceed the 120,000 characters of one
-   turn, and the reviewer reads them in a chain of turns. A new chain records the protocol
-   `exactory-openness-reading-v5` (prompt templates `exactory-openness-reading-v5/reading` and
-   `exactory-openness-reading-v5/final`). A chain that an earlier release started under
+   turn, and the reviewer reads them in a chain of turns. Since 0.90.0 a new chain records
+   the protocol `exactory-openness-reading-v6` (prompt templates
+   `exactory-openness-reading-v6/reading` and `exactory-openness-reading-v6/final`), which
+   keeps the rules of v5 that this step describes and adds those of step 6a. A chain that an
+   earlier release started under `exactory-openness-reading-v5` (prompt templates
+   `exactory-openness-reading-v5/reading` and `exactory-openness-reading-v5/final`) continues
+   as v5, and one that started under
    `exactory-openness-reading-v4` continues as v4, with the v4 templates. The units are the full
    texts of the readings and the packet's own records (the bound search records, the reading
    records and the statement record). Under v5 the bound search records travel in two kinds of
@@ -1322,7 +1459,8 @@ still be proved as an obligation inside it.
      valid and the chain continues. On a route whose representation gives no sound measurement,
      `status` is `"unknown"` and the floor, the headroom and the warning are null. Keep the
      floor, the headroom and the warning of every turn in your report. A floor above the limit
-     is still refused with `review_input_too_large` and `phase: "final_preflight"` (below).
+     is still refused, since 0.90.0 with `review_chain_projection_over_limit` and
+     `phase: "final_preflight"` (below).
    - When a turn's run ends without output, `review-series` runs the turn again, waits, stops
      or replaces the turn under the outcomes of a failed reviewer call in the
      [CLI reference](../../docs/research-cli.md#review-chains-and-review-series): a replacement
@@ -1373,7 +1511,8 @@ still be proved as an obligation inside it.
      characters is an output refusal (`invalid_reading_response`, `path` `/passage_requests`),
      handled as above: the command runs the same turn once more, and the chain does not continue
      from the refused answer.
-   - When `review-assignment` refuses the final turn with `review_input_too_large`,
+   - When `review-assignment` refuses the final turn with
+     `review_chain_projection_over_limit` (`review_input_too_large` before 0.90.0),
      `review-series` ends with a `stop` of that code (exit status 3), and the refusal's
      `details` name the size of each part: the base packet, the notes, the excerpts and the
      passages. What remains after every withholding is the protected evidence, the statement, and
@@ -1381,7 +1520,8 @@ still be proved as an obligation inside it.
      records preserves their mandatory evidence. A new chain starts with empty excerpt, passage
      and note lists, so its final turn carries only what its own turns gather. Report the four
      sizes in your summary and continue the work that does not depend on this chain.
-   - When `review-assignment` refuses a turn with `review_input_too_large` and `phase:
+   - When `review-assignment` refuses a turn with `review_chain_projection_over_limit`
+     (`review_input_too_large` before 0.90.0) and `phase:
      "final_preflight"`, before that turn is planned, the mandatory final input already exceeds
      the route's limit: the statement record, the protected source and screening bodies, the
      required proof bytes, the excerpts and passages gathered so far, the final prompt and, in a
@@ -1397,6 +1537,50 @@ still be proved as an obligation inside it.
    - When the final turn returns a native result that `problem-openness` does not accept, the
      command does not run the turn again; it ends with the handoff
      `openness_review_not_approved` (step 7).
+6a. What a chain under `exactory-openness-reading-v6` adds (since 0.90.0). A review that
+   stays one turn follows the same answer rules under the prompt template
+   `exactory-review-v7/native_math`.
+   - The first assignment needs a packet of this release. A packet that an earlier release
+     exported is refused with `openness_packet_outdated`: export again (step 4).
+   - The first assignment also computes a projection of every request that the chain can
+     make. When the route cannot hold the fixed parts of the chain together with a record
+     allowance of 300,000 characters, nothing is recorded and the refusal is
+     `review_chain_projection_over_limit` with `reason: "below_floor"`. This stop, and each
+     stop of this code in a chain of an earlier protocol, is a decision stop:
+     `details.decision` states the question for the user and the steps of each answer
+     (wait for a reading protocol that bounds the record, or run over a packet that binds
+     less material). Report the stop with its details, and do not choose an answer
+     yourself.
+   - The answer of the final turn is a finding without a decision:
+     `{schema_version: 3, subject_digest, claim_digest, reviewer, findings: {statement,
+     assumptions, scope, dependencies, policy, openness: {outcome, coverage, reason,
+     grounds}}}`. The reviewer returns `supported_open` or `already_solved` only when the
+     forecast of the packet states that outcome possible, and otherwise `unresolved` with
+     its grounds. An `unresolved` finding is a complete answer, and `review-series` records
+     it (state `record`).
+   - An answer that does not satisfy that contract is the output refusal
+     `openness_finding_invalid`; its details name the failed `rule`, the `path` in the
+     answer and the `forecast`. In a chain, `review-series` runs the turn once more, and a
+     second refused output ends with the handoff `review_slot_exhausted`. A review of one
+     turn reaches that handoff after its first refused output in this release. Follow the
+     export step of the handoff.
+   - Before each turn, and when `problem-openness` refuses a finding with a resolved
+     outcome, the planner compares the gaps of the packet with the gaps that the records
+     give now. When they differ, the command ends with the handoff
+     `openness_packet_outdated` (exit status 3), whose `details.added` and
+     `details.removed` name each changed entry and the fact that changed. Export a new
+     packet under a new assignment id and start a new chain. The answer of the reviewer
+     gets no refusal for it. A changed current statement, or a new material search that
+     the packet does not bind, recorded while the chain runs, ends the chain in this
+     handoff. A changed capture of a decisive work does so when it changes the gaps of the
+     minimum; another extraction of the same original need not.
+   - The reading record has a third allowance, `allowances.record`, which bounds what the
+     chain keeps of the reviewer's excerpts and passages. `allowances.record.not_retained`
+     counts the entries that it could not keep. Report these counts with the finding.
+   - The receipt of each `review-assignment` carries `reading_chain_admission`,
+     `capacity_forecast` and `capacity_warning.input` beside `diagnostics.final_input`. In a
+     v6 chain the projection is a limit that the harness enforces
+     (`capacity_forecast.is_bound: true`).
 7. Record the observed finding with `exactory-research problem-openness` and
    `{assignment_id}`: the single assignment, or the final turn of a reading chain that returned the
    native result. For a chain that `review-series` ran, the command records the finding itself
@@ -1415,7 +1599,37 @@ still be proved as an obligation inside it.
    turn's request (`openness_reading_incomplete` names the missing ones by kind and identity). In
    a v5 chain, the entry of the first reading turn that completes an original search under the
    delivery rule of step 6 lists that search under `completed_searches`.
-8. On `unresolved`, fill the recorded gap and obtain a new finding.
+   Since 0.90.0, for a v6 chain and for a review of one turn under
+   `exactory-review-v7/native_math`, `problem-openness` records the finding of step 6a. The
+   harness adds the statement digest, the search date, the minimum, its gaps and the
+   delivered evidence to the record, and the reviewer's answer holds none of them. A
+   resolved outcome still passes the audit of the minimum. When `problem-openness` refuses
+   a finding with a resolved outcome after the records changed, `review-series` ends with
+   the handoff `openness_packet_outdated` (step 6a). Another refusal keeps its code and
+   follows the rule that the harness holds for that code: a handoff whose command is
+   `export`, kind `problem-openness`, or a decision stop, as for
+   `openness_statement_mismatch`. Follow the returned plan. An `unresolved` finding still
+   needs the current statement of the problem. Such a review never ends with
+   `openness_review_not_approved`.
+8. On `unresolved`, fill the recorded gap and obtain a new finding. Since 0.90.0 the
+   obligation `problem_openness_unresolved` of `status` and `next` carries `gaps`, the gaps
+   of the finding's minimum computed again from the current records, with `details.command`
+   where a command repairs one, and `grounds`, the grounds that the reviewer stated, each
+   with `next`, the step that its kind asks of you:
+   - `reviewer_gap`: the evidence lacks something beyond the gaps of the forecast. Repair it
+     with `search`, `fulltext` or `import-fulltext`, and `read`, then export.
+   - `source_settles`: a decisive work that the packet read in full proves or refutes the
+     statement. Repair the gaps, then export with that work as `settling_work_id`, or record
+     a new statement.
+   - `settling_source_rejected`: the declared settling work does not settle the statement.
+     Export without it.
+   - `own_argument`: the reviewer's own argument proves or refutes the statement. Check the
+     argument, for example in a solver objective whose accepted result you then bind under
+     `minimum.results` (step 3), or record a new statement.
+   - `packet_defect`: the packet lacks or contradicts something that a finding needs. Record
+     the defect and export again.
+   A ground is the reviewer's observation. Verify it against the sources before you act on
+   it.
 9. On `already_solved`, redirect to the settling result, or record a new statement.
 10. When a neighbour is added, a new material search is not bound, a bound search or reading
    changes, or the finding no longer covers the current formulation, refresh the finding
@@ -2005,15 +2219,17 @@ accounts with the parts that the harness derives, and the records that their ent
    - Exit status 3 with a `handoff` on the last line: the next step needs you. Perform the step
      that the handoff names. Run `review-series` again only when the step leaves more work in
      the chain, and with the new assignment id when the step starts a new chain.
-     `review_slot_exhausted` (two outputs of the head were refused; the assignment is exhausted)
-     names `review-output-correction` when that operation accepts the head (a problem result
-     reassessment whose latest failure is `review_reassessment_mismatch`), `export`, kind
-     `problem-openness`, for an openness chain (Openness, step 6), and `review-assignment` for
-     an initial bar (role `bar` without `prior_assignment_id`: a new eligible reviewer replaces
-     the slot). For a bar continuation, a slate, a result or an adjudicator the plan is a `stop`
-     with this code and no command: the slot keeps its continuity or its fixed adjudicator, and
-     `review-assignment` of a new reviewer is refused (`review_slots_fixed`,
-     `review_resampling_forbidden` or `review_adjudicator_fixed`); report the stop as below.
+     `review_slot_exhausted` names `review-output-correction` when that operation admits the
+     head and its request fits the route (the one metadata correction of a problem result
+     reassessment; replacements can then remain). Otherwise the turn position is exhausted, and
+     the code names the step of the role of the head: `export`, kind `problem-openness`, for an
+     openness chain (Openness, step 6), `review-assignment` of a new eligible reviewer for a bar
+     and for an adjudicator, and `review-assignment` of a context repair with the member
+     `exhaustion` for a slate and for a result. `review_refusal_notice_metadata_too_large` names
+     the same step of the role. `details.step` holds the payload, the fields that you choose and the
+     prerequisites. For the repair, probe the new route after the last refusal, then take the
+     step ([the CLI reference](../../docs/research-cli.md#review-chains-and-review-series), "A
+     position whose replacements are spent").
      `openness_review_not_approved` (the final turn of an openness chain
      returned a result that `problem-openness` does not accept) names `export`, kind
      `problem-openness` (Openness, step 7). `review_resampling_forbidden`
@@ -2027,8 +2243,8 @@ accounts with the parts that the harness derives, and the records that their ent
      of the [route instructions](../../docs/research-decisions.md#commands-and-shared-state):
      assign the role again on the new route, or, for a slot with history, retire the stale route
      and continue the slot through the context repair of step 2. Then run `review-series` with
-     the new assignment. `assessment_incomplete` and `review_worker_reconciliation_required` are
-     the handoffs of a staged review, below.
+     the new assignment. `review_worker_reconciliation_required` is the handoff of a staged
+     review, and `assessment_incomplete` is its stop, below.
    - Exit status 3 with a `stop` on the last line: a typed limit or refusal, with its `code` and
      `details`; the harness cannot continue the chain. A refused action of the chain ends the
      command this way with the refusal's code (for example `review_input_too_large` or a
@@ -2081,10 +2297,12 @@ accounts with the parts that the harness derives, and the records that their ent
    (`action: "accept"`) or reconciles a worker (`action: "reconcile"`), neither with a reviewer
    call, and records the final, the controller's effective result, with `value-review` naming
    the controller's assignment id (state `record`). A refused output gets one retry with the
-   same request and then a smaller task; build no task envelope by hand. Two handoffs end the
-   command with exit status 3: `review_worker_reconciliation_required` (a pending invocation of
-   an earlier version has no pool membership) names `review-attempt`, and `assessment_incomplete`
-   names `review-assignment`. An assessment that the reviewer cannot complete, or that the
+   same request and then a smaller task; build no task envelope by hand. Two endings have exit
+   status 3. The handoff `review_worker_reconciliation_required` (a pending invocation of an
+   earlier version has no pool membership) names `review-attempt`. The stop
+   `assessment_incomplete` carries the incomplete outcome in its details, and its decision
+   offers two inspections, `record-check` and `status`. An assessment that the reviewer cannot
+   complete, or that the
    bounded execution cannot finish, is recorded as `assessment_incomplete`: the slot stays
    occupied, `next` names the research or recovery work, and no second reviewer replaces it. The
    [CLI reference](../../docs/research-cli.md#staged-problem-reviews) states the records, the
@@ -2215,9 +2433,15 @@ is refused (`export_destination_outside_final`). Use the exported `title.txt`,
 Keep an exported `formal-statement.txt` when the record includes one. The export
 also writes `citation-refs.json`, the reference list of the same citations for
 the citation check: one entry for each entry of `citations.json`, in the same
-order, with the title and the authors that the record holds for the work and,
-when the work has one, with its DOI or its arXiv id. That file is not sent with
-the post. Run the
+order, with the title and the authors of the citation and, when the work has
+one, with its DOI or its arXiv id. Since 0.90.0 the title and the authors of a
+citation with a DOI or an arXiv id are those of the registry record that the
+store captured for that identifier, and both files hold the same values. Where
+the store holds no such record, the export uses the values of the work record
+and lists the citation in its result under `missing_registry_citations`, with
+the `acquire` command that captures the record (`capture_command`). Run that
+command for every listed citation and export again before the citation check.
+That file is not sent with the post. Run the
 citation and duplicate checks below on those exported files unchanged. A change
 to any part after export requires a new statement record and starts the post gate
 again.
@@ -2298,18 +2522,24 @@ Check every citation locator before posting, exactly as `/exactory:propose-grand
    prints the command with twice the pages (`--search-pages`), but the reliable fix is the DOI
    or the arXiv id in `bibliography`, which is resolved without a search.
    The exported list is not edited. An entry of it that has an identifier and is blocking
-   shows a difference between the record and the registry: the title or the authors that the
-   record holds for the work differ from the registry record of the identifier, or the
-   registry holds another work, or no work, under the identifier. The entry's `detail` states
-   the difference. No command changes a title, an author list or an identifier that a work
-   record already holds: a new acquisition of the work fills only a title or an author list
-   that is empty, and `problem-citation-metadata` refuses a work that has a DOI or an arXiv
-   identity (`problem_citation_work_ineligible`). So do not acquire the work again and do not
-   export again to change a value that the record holds, because both give the same entry.
-   Fetch the registry record of the identifier and compare it with the document that the
-   record read, so that you know which of the two differs. The entry stays blocking and the
-   post waits: keep the report, and report the entry, its `detail` and the result of your
-   comparison to the user.
+   shows a difference between the exported text and the registry: the title or the authors of
+   the entry differ from the registry record of the identifier, or the registry holds another
+   work, or no work, under the identifier. The entry's `detail` states the difference and the
+   repair. Since 0.90.0 the export takes the title and the authors from the registry record
+   that the store captured for the identifier. So when the export listed the work under
+   `missing_registry_citations`, or the registry record changed after the capture, capture the
+   record with `acquire` (the `capture_command` of the listed entry, or `acquire` with the DOI
+   or the arXiv id of the work), export again and run the check again. The registry values of
+   the export do not enter the binding of the reviews. An `acquire` can still fill an empty
+   title or author list of the work record or add an alias, which changes the citation that
+   the reviews bind: run `exactory-research gate post` after the acquisition and refresh a
+   review that became stale. An acquisition keeps a title and an author list that the work
+   record already holds and does not replace its identifier, and `problem-citation-metadata` refuses a
+   work that has a DOI or an arXiv identity (`problem_citation_work_ineligible`). When the
+   entry is still blocking after a new capture and a new export, fetch the registry record of
+   the identifier and compare it with the document that the record read, so that you know
+   which of the two differs. The entry then stays blocking and the post waits: keep the
+   report, and report the entry, its `detail` and the result of your comparison to the user.
    An entry of the exported list without `doi` and without `arxivId` is a work whose locator
    is an https URL. The check searches Crossref and OpenAlex for its title and compares the
    authors of each work that it finds under that title. A work whose authors agree verifies
@@ -2446,6 +2676,12 @@ Optional at creation: `--paper <arxiv-id-or-doi>` (repeat, at most 10) and
   statement with a named conjecture as a claim about its standing.
 - Do not let a selection stand in for openness or significance; the slate authorizes research,
   the reviews establish the claim.
+- Do not start an openness chain over a packet whose forecast blocks both resolved outcomes
+  while a gap can still be repaired; `--accept-gaps` is for a gap that cannot be repaired.
+- Do not leave an accepted result of the record that a bound search cites out of
+  `minimum.results`; the reviewer then reads its name and not its proof.
+- Do not present a supplied text as one that the harness fetched; `import-fulltext` records
+  what a person reports, and the finding says when a decisive judgment rests on it.
 - Do not reuse a review, a finding or an attempt of another statement for this one; the harness
   refuses it, and the refusal is right.
 - Do not take a reviewed candidate up in another record without the carry; a `source.reference`

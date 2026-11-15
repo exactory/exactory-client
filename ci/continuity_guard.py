@@ -1,5 +1,7 @@
 """Finite continuity matrix and the completion contract for executed stop answers."""
 
+from ci.capacity_guard import run_evidence_tests
+
 STOP_END_MESSAGE = ('A stop answer did not end at an eligible assignment that follows the stopped head, at a recorded action, '
                     'or at a stated boundary without a serving route. Make the journey of the answer reach one of these ends.')
 STOP_ANSWER_MESSAGE = ('The executed journeys do not match the answers of the stop, a journey did not run the commands of its '
@@ -13,6 +15,91 @@ SIZE_OUTCOMES = (
     ('input_over_limit', None), ('input_over_limit', 'compacted'),
     ('response_over_limit', None), ('timeout', None),
 )
+
+STAGE2_REQUIREMENTS = frozenset(('scientific_refused', 'exhaustion', 'refusal_notice',
+    'refusal_ladder', 'finality', 'task_size', 'capacity_position', 'legacy_boundary', 'registry'))
+STAGE2_EVIDENCE_MESSAGE = ('A Stage 2 continuity requirement or supported chain is missing executed evidence. '
+                         'Keep a real-command journey for each supported chain and run every named evidence test.')
+STAGE2_EVIDENCE = (
+    dict(id='session-refusal', requirement='scientific_refused', chains=('session',), tests=(
+        'test_review_refusal_planner.RefusalPlannerTests.test_first_refusal_plans_and_executes_replacement_then_records',)),
+    dict(id='focused-refusal', requirement='scientific_refused', chains=('adjudication',), tests=(
+        'test_review_refusal_planner.PlannerChainRowsTests.test_focused_adjudication_executes_the_planned_row',)),
+    dict(id='repair-refusal', requirement='scientific_refused', chains=('context_repair', 'parts_v2:context_repair'), tests=(
+        'test_review_refusal_planner.PlannerChainRowsTests.test_repaired_bar_final_executes_the_planned_row',
+        'test_review_exhaustion_repair.ExhaustionRepairTests.test_parts_final_uses_the_versioned_exhaustion_cause_and_replays_the_old_final')),
+    dict(id='result-parts-refusal', requirement='scientific_refused', chains=('parts_v2:problem_result',), tests=(
+        'test_review_refusal_planner.PlannerChainRowsTests.test_parts_read_combine_check_and_final_execute_the_planned_row',)),
+    dict(id='native-parts-refusal', requirement='scientific_refused', chains=('parts_v2:native_math',), tests=(
+        'test_review_refusal_planner.PlannerChainRowsTests.test_native_parts_executes_the_planned_row',)),
+    dict(id='verification-parts-refusal', requirement='scientific_refused', chains=('parts_v2:study_verification',), tests=(
+        'test_review_refusal_planner.PlannerChainRowsTests.test_verification_parts_executes_the_planned_row',)),
+    dict(id='other-installed-parts-refusals', requirement='scientific_refused',
+        chains=('parts_v1', 'parts_v2:problem_adjudicator', 'parts_v2:study_readiness'), tests=(
+        'test_continuity_guard.ContinuityGuardTests.test_other_installed_parts_execute_the_refusal_replacement',)),
+    dict(id='role-exhaustion', requirement='exhaustion', chains=(), tests=(
+        'test_d2_outcomes.OutcomeTests.test_exhausted_bar_continuation_accepts_a_new_blind_reviewer',
+        'test_d2_outcomes.OutcomeTests.test_focused_exhaustion_accepts_another_reviewer_and_refuses_resampling',
+        'test_d2_outcomes.OutcomeTests.test_slate_and_result_exhaustion_keep_their_reviewer_slots',
+        'test_review_exhaustion_repair.ExhaustionRepairTests.test_result_handoff_has_complete_binding_and_records_without_retirement',
+        'test_review_exhaustion_repair.ExhaustionRepairTests.test_slate_handoff_admits_the_same_complete_binding')),
+    dict(id='notice-bounds-and-isolation', requirement='refusal_notice', chains=(), tests=(
+        'test_review_refusal_notice.ContractCheckRegistryTests.test_every_check_attribution_is_registered_and_registry_fields_are_explicit',
+        'test_review_refusal_notice.RefusalNoticeTests.test_every_registered_validator_produces_a_notice_without_the_other_reviewers_markers',
+        'test_review_refusal_notice.RefusalNoticeTests.test_bounded_notice_limits_serialized_entries_details_and_part_for_large_outputs')),
+    dict(id='bounded-ladder-and-correction-history', requirement='refusal_ladder', chains=(), tests=(
+        'test_review_refusal_planner.PlannerChainRowsTests.test_a7_real_refused_read_descends_and_admits_its_bounded_notice',
+        'test_review_refusal_planner.RefusalPlannerTests.test_a7_whole_then_bounded_and_capacity_floor_end_at_role_step',
+        'test_review_correction_history_planner.CorrectionHistoryPlannerTests.test_forty_long_historical_reviews_replace_without_spending_a_correction',
+        'test_review_refusal_planner.CorrectionPlannerTests.test_new_reassessment_reruns_once_then_corrects_and_records')),
+    dict(id='c12-output-and-store-boundaries', requirement='refusal_ladder', chains=(), tests=(
+        'test_review_refusal_planner.PlannerChainRowsTests.test_c12_a_bar_abstract_link_executes_planned_replacement_and_records',
+        'test_review_refusal_planner.PlannerChainRowsTests.test_c12_b_bar_mixed_links_executes_replacement_and_reading_handoff',
+        'test_review_refusal_planner_citations.CitationPlannerRoleTests.test_c12_c_result_abstract_alone_and_beside_unread_fulltext_reach_repair',
+        'test_review_refusal_planner_citations.CitationPlannerRoleTests.test_c12_c_adjudication_abstract_alone_and_beside_unread_fulltext_reach_new_reviewer')),
+    dict(id='validator-upgrade-finality', requirement='finality', chains=(), tests=(
+        'test_review_refusal_replacement.RefusalReplacementTests.test_second_replacement_lists_revived_attempt_and_keeps_head_finality',
+        'test_review_refusal_replacement.RefusalReplacementTests.test_revived_head_without_successor_records_its_original_observation',
+        'test_review_exhaustion_repair.ExhaustionRepairTests.test_origin_uses_stored_evidence_after_the_validator_changes',
+        'test_review_exhaustion_repair.ExhaustionRepairTests.test_every_earlier_repair_prompt_keeps_its_exact_bytes')),
+    dict(id='smaller-tasks-and-finite-floors', requirement='task_size', chains=(), tests=(
+        'test_review_task_size.TaskAllowanceTests.test_all_pinned_reading_levels_step_down_without_lowering_effort',
+        'test_review_task_size.RecoveryRowsTests.test_k2_every_installed_kind_protocol_pair_has_an_explicit_row',
+        'test_review_task_size.RecoveryRowsTests.test_a19_reduced_context_cap_replaces_a_read_and_real_assignment_halves_it',
+        'test_review_task_size.RecoveryRowsTests.test_a21_timeout_and_provider_refusal_use_the_lower_read_after_their_retries',
+        'test_review_task_size.RecoveryRowsTests.test_input_over_limit_replaces_a_read_on_the_same_route',
+        'test_review_task_size.RecoveryRowsTests.test_floor_has_one_identical_retry_and_then_full_decision_evidence',
+        'test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers')),
+    dict(id='capacity-links-in-refusal-position', requirement='capacity_position', chains=(), tests=(
+        'test_review_exhaustion_capacity_position.MixedCapacityPositionTests.test_mixed_capacity_and_refusal_position_repairs_without_rewriting_history',
+        'test_review_exhaustion_capacity_position.MixedCapacityPositionTests.test_capacity_replacement_of_a_refusal_keeps_the_second_refusal_replacement',
+        'test_review_exhaustion_capacity_position.MixedCapacityPositionTests.test_copied_refusal_context_counts_as_capacity')),
+    dict(id='no-unreviewed-registry-rows', requirement='registry', chains=(), tests=(
+        'test_continuity_guard.ContinuityGuardTests.test_stage2_registry_has_no_unreviewed_rows',)),
+    dict(id='legacy-reading-and-native-boundaries', requirement='legacy_boundary', chains=('reading', 'native_math'), tests=(
+        'test_review_refusal_replacement_parts.PartsReplacementTests.test_v6_reading_continues_with_its_stored_prompt_version_and_cannot_carry_refusal',
+        'test_review_continuation.ContinuationTests.test_two_refused_native_outputs_need_a_new_controller_attestation',
+        'test_d2_outcomes.OutcomeTests.test_native_math_handoff_accepts_a_new_attested_packet',
+        'test_review_task_size.RecoveryRowsTests.test_legacy_reading_and_final_decisions_include_profile_attempts_and_migration')),
+)
+
+
+def list_stage2_evidence_tests(rows=STAGE2_EVIDENCE):
+    return sorted({identifier for row in rows for identifier in row['tests']})
+
+
+def validate_stage2_evidence(rows, outcomes, supported_chains):
+    """Require executed journeys and coverage of each installed refusal replacement adapter."""
+    identities = [row.get('id') for row in rows]
+    chains = {chain for row in rows if row.get('requirement') == 'scientific_refused'
+              for chain in row.get('chains', ())}
+    if (len(set(identities)) != len(rows) or None in identities
+            or {row.get('requirement') for row in rows} != STAGE2_REQUIREMENTS
+            or chains != set(supported_chains)
+            or any(not row.get('tests') for row in rows)
+            or any(outcomes.get(identifier) != 'passed' for identifier in list_stage2_evidence_tests(rows))):
+        return [STAGE2_EVIDENCE_MESSAGE]
+    return []
 
 
 def list_size_cases(kinds):
@@ -84,16 +171,18 @@ def validate_stop_journeys(stop, journeys, registry):
 
 def build_kind_packet(kind):
     """Small retained packet projections for the outcome counter, not admission fixtures."""
+    from research_harness import openness_reading, review_excerpts, review_parts, review_staged
     if kind == 'reading':
-        return dict(reading_turn={})
+        return dict(reading_turn=dict(protocol=openness_reading.PROTOCOL_V6))
     if kind == 'final':
-        return dict(reading_record={})
+        return dict(reading_record=dict(protocol=openness_reading.PROTOCOL_V6))
     if kind in ('read', 'combine', 'check'):
-        return dict(review_parts=dict(kind=kind))
+        return dict(review_parts=dict(kind=kind, protocol=review_parts.PROTOCOL,
+            adapter='problem_result', series_key='0' * 64, unit_characters=15000))
     if kind == 'request':
-        return dict(reviewer_excerpts={})
+        return dict(reviewer_excerpts=dict(protocol=review_excerpts.SESSION_PROTOCOL))
     if kind == 'staged':
-        return dict(staged_review={})
+        return dict(staged_review=dict(protocol=review_staged.PROTOCOL))
     if kind == 'probe':
         return dict(allowed_control='synthetic', evidence_control='synthetic')
     if kind == 'correction':

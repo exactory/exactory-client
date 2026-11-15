@@ -1,0 +1,26 @@
+{
+  "exactory-openness-reading-v1": {
+    "reading": "7ece546fab4e952b1ff5b4206b00265521c5f1fd837a518386a9b543b3d2fd46",
+    "final": "690035312fd785f4e31a3a829c8a3ece06cd9536390aea2b1273a1bf14d271cb"
+  },
+  "exactory-openness-reading-v2": {
+    "reading": "e27f008fb858f538169297a8057724fddf5ed81a4e8bb55546a7e78054de2ad0",
+    "final": "ad5b238e4389fa989ed152956aa47153d29560b61ae0758faea7a98227642fde"
+  },
+  "exactory-openness-reading-v3": {
+    "reading": "6cf5f8fc811dd921f28a41ab8e34867f70f369aabca701d916e799b8f0cbb1f4",
+    "final": "52e9809aea5be9638d61d32a9d060344954150e4a734b08961eecc28c91241f1"
+  },
+  "exactory-openness-reading-v4": {
+    "reading": "6cf5f8fc811dd921f28a41ab8e34867f70f369aabca701d916e799b8f0cbb1f4",
+    "final": "48bc75aa3a2bba3644b5749c17ac3749b28b392816ff345cc7a4249200e3e554"
+  },
+  "exactory-openness-reading-v5": {
+    "reading": "d68343fb9be3fa8ffc0a1dbfcc0862e719beb854e04971c4e6489ed9cea49b79",
+    "final": "138bbdefdccd7ffe3bf292101bbd0a182e2363bf01b566e0a6670eef9ca57515"
+  },
+  "exactory-openness-reading-math-v1": {
+    "reading": "6cf9461e35f39ca5df20a466bbc20d5fe7b85fdd9e8c48a5e5e28a9f6d579518",
+    "final": "87b2d790dd77e1cf2fb54e5a36c4e5c9d8c67e191a773f74789519683ccc496f"
+  }
+}

@@ -64,11 +64,11 @@ class ReportAndHookNativeWritersTests(unittest.TestCase):
         )
         report = self.root / ".exactory/citation-check.json"
         cache = self.root / ".exactory/citation-cache.json"
-        cache.write_text(json.dumps({"version": 2, "records": {"doi:10.1234/synthetic": {
+        cache.write_text(json.dumps({"version": 3, "records": {"doi:10.1234/synthetic": {
             "source": "crossref", "title": "Synthetic citation", "titles": ["Synthetic citation"],
             "authors": ["Alice Example"], "year": 2026, "doi": "10.1234/synthetic",
         }}}))
-        # A writable report and cache from an earlier release remain readable.
+        # Current metadata in legacy writable files is republished read-only.
         report.write_text("{}")
         for _ in range(2):
             output = self.run_command("bin/exactory-check", "lookup")

@@ -657,6 +657,9 @@ class RunnerTests(unittest.TestCase):
                                 side_effect=AssertionError('Tests cannot call a model.'))
         boundary.start()
         self.addCleanup(boundary.stop)
+        self.route = dict(id='route', adapter='openai_responses_v1', model='gpt-6-astra',
+                          endpoint='https://example.test/responses',
+                          configuration=dict(max_output_tokens=128000, timeout_seconds=600))
 
     def test_real_harness_dry_run_finishes_and_restores_the_route_limit(self):
         import tempfile
@@ -710,11 +713,9 @@ class RunnerTests(unittest.TestCase):
                 return dict(status='completed', usage=dict(input_tokens=2, output_tokens=3))
 
             send = ledger.wrap_sender(respond)
-            send(dict(id='route', adapter='claude_cli_v1', model='claude-opus-5-5', endpoint='claude://local',
-                      configuration=dict(effort='max', max_output_tokens=128000, timeout_seconds=600)), {})
+            send(self.route, {})
             with self.assertRaises(ResearchError) as raised:
-                send(dict(id='route', adapter='claude_cli_v1', model='claude-opus-5-5', endpoint='claude://local',
-                      configuration=dict(effort='max', max_output_tokens=128000, timeout_seconds=600)), {})
+                send(self.route, {})
             self.assertEqual(raised.exception.code, 'measurement_budget_exhausted')
             self.assertEqual(len(ledger.calls), 1)
             self.assertEqual(ledger.calls[0]['usage']['output_tokens'], 3)
@@ -740,8 +741,7 @@ class RunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent) as directory:
             budget = PaidBudget(2, Path(directory) / 'usage.json')
             sender = budget.wrap_sender(lambda route, request, credential: dict(status='completed'))
-            sender(dict(id='route', adapter='claude_cli_v1', model='claude-opus-5-5', endpoint='claude://local',
-                      configuration=dict(effort='max', max_output_tokens=128000, timeout_seconds=600)), dict(input=[dict(content='{"allowed_control":"abc"}')]))
+            sender(self.route, dict(input=[dict(content='{"allowed_control":"abc"}')]))
             self.assertEqual([call['kind'] for call in budget.calls], ['probe'])
 
     def test_unexpected_failure_retains_workspace_and_surfaces(self):

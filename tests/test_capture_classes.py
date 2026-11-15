@@ -20,7 +20,7 @@ from research_harness.reading import record_reading
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / 'tests/fixtures/research/capture-classes.json'
 CAPTURE_FIELD_ROLES = {
-    'acquisition.py': 'Record externally imported responses.',
+    'acquisition.py': 'Record externally imported responses and supplied full-text provenance.',
     'bar_sources.py': 'Deliver session sources and retain their provenance and range sizes.',
     'evidence.py': 'Record fetched source provenance.',
     'fulltext_jobs.py': 'Authenticate retained originals and assembled range provenance.',
@@ -33,7 +33,7 @@ CAPTURE_FIELD_ROLES = {
     'review_source_complete.py': 'Measure assembled originals without reading their whole body.',
     'review_transport.py': 'Elide only a fetched HTML original with its complete extraction (C28).',
     'source_candidates.py': 'Describe held candidate provenance.',
-    'source_links.py': 'Own capture admission by use and validate assembled source bytes.',
+    'source_links.py': 'Own capture admission by use, describe supplied readings and validate assembled source bytes.',
     'visual_assets.py': 'Require a fetched HTML original for visual resources.',
 }
 
@@ -73,7 +73,7 @@ class CaptureClassTests(unittest.TestCase):
             case.capture(version, pdf_text='A complete synthetic theorem. References: none.\f')
         records = case.store.snapshot()['records']
         capture = records['work'][version]['fulltexts'][-1]
-        if method == 'external_import':
+        if method in ('external_import', 'supplied_file'):
             source = records['source'][capture['source_id']]
             source.update(capture_method=method, origin_verified=False, imported=True, http_status=None)
             case.store.mutate('fixture.import', {},
@@ -201,6 +201,16 @@ class CaptureClassTests(unittest.TestCase):
             results = self.collect_site_results(case, version, capture, source)
             self.assertIs(results['openness_packet_source'], True)
             self.assertIs(results['openness_packet_alternative'], True)
+
+    def test_supplied_capture_is_admitted_at_the_four_uses_and_never_elided(self):
+        case, version, capture = self.create_capture_case('supplied_file')
+        source = case.store.snapshot()['records']['source'][capture['source_id']]
+        expected = {use: True for use in ('article_bundle', 'complete_original', 'session_source_delivery',
+                                          'openness_packet_source', 'openness_packet_alternative')}
+        expected.update(complete_source_route='review_complete_source_mismatch', html_original_elision=False)
+        self.assertEqual(self.collect_site_results(case, version, capture, source), expected)
+        for use in source_links.CAPTURE_CLASSES_BY_USE:
+            self.assertEqual(source_links.admits_capture_class(source, use), expected[use] is True)
 
     def test_capture_fields_stay_in_modules_with_reviewed_roles(self):
         modules = self.find_capture_field_modules(ROOT / 'research_harness')

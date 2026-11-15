@@ -44,12 +44,14 @@ def render_packet(packet, **options):
         **paragraphs.select_prompt_parameters(packet['role'], packet), **options)
 
 
-def select_texts(prompt):
+def select_texts(prompt, *, include_capacity=True):
     parameters = prompt['parameters']
     versions = parameters.get('problem_paragraphs', [])
     if 'problem_objection_carry' in parameters:
         versions = ['exactory-problem-objection-carry-v1'] + versions
-    return [text for paragraph in paragraphs.PARAGRAPHS for version, text in paragraph.versions if version in versions]
+    return [text.format(**parameters['capacity']) if paragraph.name == 'capacity-notice' else text
+            for paragraph in paragraphs.PARAGRAPHS if include_capacity or paragraph.name != 'capacity-notice'
+            for version, text in paragraph.versions if version in versions]
 
 
 FROZEN = Path(__file__).with_name('fixtures') / 'review-prompts-0.82.0.json.xz'
@@ -143,7 +145,10 @@ class OptionalParagraphTests(unittest.TestCase):
             'exactory-problem-slate-forming-v1': 'e14ff7ce5d6f1a0bd2d03b1f2fd7f45c596e14902eea5083dd7bc66d78f78d2b',
             'exactory-problem-replacement-v1': '92d8d0ace0a5c7dbd61d340f2fe6e6c5f93760ca1b7764853b7217f1dbbd12c0',
             'exactory-problem-areas-v1': 'e9a1aa5a8fa12579bbaff0cc1902f1f012c6bb7e872c02dff25131afab93da05',
-            'exactory-review-delivery-notice-v1': '56dea5b68d33ecb400797772300180198ecafafa1bd1b2b77fb1ba4053284825'}
+            'exactory-review-delivery-notice-v1': '56dea5b68d33ecb400797772300180198ecafafa1bd1b2b77fb1ba4053284825',
+            'exactory-route-capacity-notice-v1': '236975ce56b6cd564d0cb30faa61eaedff10fb2a4570c2b8b460538e4850bf98',
+            'exactory-review-output-refusal-whole-v1': 'a88f7b5fbe7e14971371e9e7b6956202ccb49a2a207e74d8946502884e8d0b75',
+            'exactory-review-output-refusal-bounded-v1': '61d96ac0b67b91f1890d4c5c8216fc7e995b85859e1afeaf744f2dedafa4db65'}
         actual = {version: hashlib.sha256(text.encode()).hexdigest()
                   for paragraph in paragraphs.PARAGRAPHS[1:] for version, text in paragraph.versions}
         self.assertEqual(actual, expected)
@@ -175,6 +180,9 @@ class OptionalParagraphTests(unittest.TestCase):
             role = 'adjudicator' if paragraph.name == 'replacement' else paragraph.roles[0]
             for carry in ((False, True) if role in ('result', 'slate') else (False,)):
                 parameters = dict(problem_paragraphs=[paragraph.versions[0][0]])
+                if paragraph.name == 'capacity-notice':
+                    parameters['capacity'] = dict(protocol=paragraphs.CAPACITY_NOTICE_PROTOCOL,
+                        kind='request', output_tokens=128000, answer_bound=15000)
                 if carry:
                     parameters['problem_objection_carry'] = CARRY
                 prompt = protocol.canonical_prompt(role, orchestration='problem_creation', **parameters)
@@ -358,7 +366,7 @@ class OptionalParagraphTests(unittest.TestCase):
             self.assertEqual(select_texts(prompt), expected)
             self.assertTrue(protocol._prompt_matches(build_assignment('result', prompt), packet=packet))
             if 'staged_task' in option:
-                self.assertTrue(staged.matches_prompt(build_assignment('result', prompt), 3))
+                self.assertTrue(staged.matches_prompt(build_assignment('result', prompt), protocol.find_common_prompt_version(prompt)))
 
     def test_compact_context_preserves_applicability_without_repeating_accounts(self):
         packet = build_packet(accounts=True, replacement=True, areas=True)
@@ -413,18 +421,19 @@ class ParagraphPathTests(ResultPartsCase):
         self.case.expected['value']['accounts'] = dict(answer='A supported answer.', replacement=dict(statement='Earlier form.'))
         self.oversized(count=6)
         assignment = self.assign('parts-with-accounts')
-        expected = select_texts(render_packet(self.packet(assignment)))
+        # The scientific paragraphs persist; capacity belongs to the current turn.
+        expected = select_texts(render_packet(self.packet(assignment)), include_capacity=False)
         self.assertEqual(len(expected), 2)
         turns = 0
         while self.packet(assignment).get('review_parts', {}).get('kind',
                 self.packet(assignment).get('problem_evidence_parts', {}).get('stage')) != 'final':
-            self.assertEqual(select_texts(assignment['prompt']), expected)
+            self.assertEqual(select_texts(assignment['prompt'], include_capacity=False), expected)
             self.assertTrue(protocol._prompt_matches(assignment, packet=self.packet(assignment)))
             self.invoke(assignment)
             turns += 1
             self.assertLess(turns, 20)
             assignment = self.assign('turn-' + str(turns), assignment['id'])
-        self.assertEqual(select_texts(assignment['prompt']), expected)
+        self.assertEqual(select_texts(assignment['prompt'], include_capacity=False), expected)
         self.assertTrue(protocol._prompt_matches(assignment, packet=self.packet(assignment)))
 
     def test_stage_b_bar_has_no_areas_paragraph(self):
@@ -484,7 +493,8 @@ class CurrentParagraphPathTests(ParagraphPathTests):
         repaired = ResultRepairJourneyTests.repair_assignment(self, first, binding)
         packet = self.packet(repaired)
         self.assertTrue(protocol._prompt_matches(repaired, packet=packet))
-        self.assertEqual(select_texts(repaired['prompt']), select_texts(first['prompt']))
+        self.assertEqual(select_texts(repaired['prompt'], include_capacity=False),
+                         select_texts(first['prompt'], include_capacity=False))
 
     def test_replacement_preflight_keeps_the_recorded_paragraph_versions(self):
         from research_harness import review_failure_class as failures
@@ -526,9 +536,21 @@ class StagedParagraphPathTests(ResultPartsCase):
         self.assertEqual(select_texts(child['prompt']), expected)
         self.assertNotIn('problem_evidence', packet)
         self.assertTrue(protocol._prompt_matches(child, packet=packet))
-        self.assertTrue(staged.matches_prompt(child, 3))
+        self.assertTrue(staged.matches_prompt(child, protocol.find_common_prompt_version(child['prompt'])))
         self.assertEqual(digest(protocol.build_assignment_request(self.case.read_records(), self.case.artifacts, child)),
                          child['planned_request_digest'])
+
+    def test_stored_controller_keeps_its_common_version_when_a_child_is_assigned(self):
+        self.assertEqual(protocol.COMMON_VERSION, 4)
+        self.oversized()
+        with patch.object(protocol, 'COMMON_VERSION', 3):
+            controller = self.assign_staged('stored-controller')
+        self.assertEqual(controller['prompt']['parameters']['common_version'], 3)
+        task_id = controller['staged_review']['task_ids'][0]
+        child = self.case.assign('result', 'first', identifier='stored-child',
+            controller_assignment_id=controller['id'], task_id=task_id)
+        self.assertEqual(child['prompt']['parameters']['common_version'], 3)
+        self.assertTrue(staged.matches_prompt(child, 3))
 
 
 if __name__ == '__main__':

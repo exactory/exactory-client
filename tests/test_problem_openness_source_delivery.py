@@ -46,6 +46,17 @@ class SourceDeliveryTests(unittest.TestCase):
         f.proof = f.artifacts.put(self.prefix + data + b"\nEnd of native study.\n", "text/plain")
         manifest = dict(f.manifest, artifacts=[{"path": "attempt/proof.md", "digest": f.proof["sha256"], "role": "proof"}])
         f.replace_manifest(manifest, identifier="contained-proof")
+        original_output = f.output
+        def build_output(packet, outcome="unresolved"):
+            if packet["scientific_context"].get("openness_minimum", {}).get("schema_version") == 2:
+                from test_openness_finding_answer import build_answer
+                grounds = ([dict(kind="reviewer_gap", text="A remaining literature gap.")]
+                           if outcome == "unresolved" else [])
+                return build_answer(packet, outcome, grounds)
+            return original_output(packet, outcome)
+        output = patch.object(f, "output", side_effect=build_output)
+        output.start()
+        self.addCleanup(output.stop)
 
     def export(self, identifier="source-openness", *, support="contained-proof", priority=False):
         f = self.case

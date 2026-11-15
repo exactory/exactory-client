@@ -85,6 +85,27 @@ class ReadingHandoffTests(unittest.TestCase):
         return cli.OPERATIONS[plan['command']](self.case.store, plan['payload'],
             expected_revision=self.case.store.revision, request_id=request)
 
+    def replace_refused(self):
+        plan = self.plan()
+        self.assertEqual((plan['state'], plan['command']), ('replace', 'review-assignment'))
+        return self.execute(plan, 'replace-' + plan['payload']['id'])['result']
+
+    def repair_exhausted(self, plan):
+        step = plan['details']['step']
+        self.assertEqual(step['id'], 2)
+        probe_id = 'exhaustion-probe-' + plan['head_id']
+        def respond(route, request, credential):
+            from research_harness.review_excerpts import read_sent_packet
+            packet = read_sent_packet(request)
+            return self.case.build_provider_response(dict(allowed_control=packet['allowed_control'],
+                evidence_control=packet['evidence_control'], excluded_controls=[]))
+        with patch.object(protocol.transport, 'send_request', side_effect=respond):
+            self.case.mutate(protocol.probe_route, dict(id=probe_id, route_id='route'), credential='fixture')
+        payload = dict(step['payload'], id='repair-' + plan['head_id'], route_id='route')
+        payload['context']['context_repair'].update(probe_id=probe_id,
+            reason='Reassess the retained findings after the position exhausted its refusal replacements.')
+        return self.case.mutate(protocol.record_assignment, payload)['result']
+
     def read_source(self, index=0):
         self.case.mutate(reading.record_reading, self.case.full_note(self.bundles[index], 'reading-' + str(index)))
 
@@ -106,14 +127,15 @@ class ReadingHandoffTests(unittest.TestCase):
             self.assertEqual(plan['details']['step']['id'], 13)
             self.assertEqual(plan['details']['then'], dict(command='review-series', assignment_id=final['id']))
             after = self.case.read_records()
+            for kind, values in before.items():
+                if kind != 'literature_operation':
+                    self.assertEqual(after[kind], values, kind)
+            self.assertEqual(after['review_series_stop'][plan['stop_id']]['plan']['state'], 'handoff')
             driver, = after['review_series_run'].values()
             self.assertEqual(driver['ended']['code'], 'reading_missing')
-            operations = dict(before['literature_operation'])
-            for suffix, operation in (('', 'review.series_start'), (':end', 'review.series_end')):
-                operations[driver['id'] + suffix] = dict(
-                    operation=operation, runtime=self.case.store.describe_runtime())
-            self.assertEqual(after, dict(before, review_series_run={driver['id']: driver},
-                                         literature_operation=operations))
+            self.assertEqual(driver['ended']['stop_id'], plan['stop_id'])
+            self.assertEqual(set(after['literature_operation']) - set(before['literature_operation']),
+                             {plan['stop_id'], driver['id'], driver['id'] + ':end'})
             self.read_source()
             record = self.plan()
             self.assertEqual(record, dict(state='record', chain='session', head_id='final',
@@ -165,9 +187,10 @@ class ReadingHandoffTests(unittest.TestCase):
         with patch.object(reading, 'current_readings', side_effect=AssertionError('A pure refusal reads no reading')):
             self.assertEqual(review_refusal.classify_observed_output(self.case.read_records(), self.case.artifacts,
                              'attempt-final')['code'], 'source_link_not_fulltext')
-        self.assertEqual(self.plan()['state'], 'run')
+        self.assertEqual(self.plan()['state'], 'replace')
+        replacement = self.replace_refused()
         output['value']['evidence'][-1] = self.abstract_link['artifact']
-        self.invoke(final, output, 'corrected-final')
+        self.invoke(replacement, output, 'corrected-final')
         self.assertEqual(self.plan()['state'], 'record')
         self.execute(self.plan(), 'record-corrected')
         self.assertEqual(self.plan()['state'], 'done')
@@ -177,8 +200,9 @@ class ReadingHandoffTests(unittest.TestCase):
         with self.assertRaises(ResearchError) as caught:
             self.execute(self.plan())
         self.assertEqual(caught.exception.code, 'source_link_not_fulltext')
+        replacement = self.replace_refused()
         output['value']['evidence'][-1] = self.abstract_link['artifact']
-        self.invoke(final, output, 'corrected-final')
+        self.invoke(replacement, output, 'corrected-final')
         plan = self.plan()
         self.assertEqual((plan['state'], plan['command']), ('handoff', 'read'))
         self.assertEqual(len(plan['details']['readings']), 1)
@@ -192,14 +216,18 @@ class ReadingHandoffTests(unittest.TestCase):
         with self.assertRaises(ResearchError) as caught:
             self.execute(self.plan())
         self.assertEqual(caught.exception.code, 'source_link_not_fulltext')
+        self.assertEqual(self.plan()['state'], 'replace')
         report = check_continuation(self.case.store)
         self.assertEqual(next(row for row in report['chains'] if row['head_id'] == 'final')['boundary'], 'run')
+        self.assertEqual(self.plan()['state'], 'run')
         rows = []
         with patch.object(protocol.transport, 'send_request', return_value=self.case.build_provider_response(output)):
             self.assertEqual(run_series(self.case.store, 'initial', emit=rows.append), 3)
         plan = rows[-1]
         self.assertEqual((plan['state'], plan['code']), ('handoff', 'review_slot_exhausted'))
-        self.assertEqual(len(self.case.read_records()['review_output_refusal']), 2)
+        self.assertEqual(len(self.case.read_records()['review_output_refusal']), 3)
+        self.assertEqual(len([row for row in self.case.read_records()['review_assignment'].values()
+                              if 'output_refusal' in row['context']]), 2)
         step = plan['details']['step']
         self.assertEqual(step['excluded_reviewer_ids'], ['first', 'second'])
         replacement = self.case.mutate(protocol.record_assignment, dict(step['payload'], id='replacement',
@@ -229,7 +257,8 @@ class ReadingHandoffTests(unittest.TestCase):
         self.assertEqual((rows[-1]['state'], rows[-1]['code'], rows[-1]['command']),
                          ('handoff', 'reading_missing', 'read'))
         self.assertEqual(rows[-1]['details']['readings'][0]['captures'][0]['bundle_id'], 'updated-bundle')
-        self.assertNotIn('review_series_stop', self.case.read_records())
+        retained = self.case.read_records()['review_series_stop'][rows[-1]['stop_id']]
+        self.assertEqual(retained['plan']['state'], 'handoff')
         self.assertNotIn('review_output_refusal', self.case.read_records())
 
     def test_slate_and_result_finals_use_the_same_reading_step_and_recording_command(self):
@@ -281,9 +310,13 @@ class ReadingHandoffTests(unittest.TestCase):
         rows = []
         with patch.object(protocol.transport, 'send_request', return_value=self.case.build_provider_response(output)):
             self.assertEqual(run_series(self.case.store, 'initial', emit=rows.append), 3)
-        self.assertEqual((rows[-1]['state'], rows[-1]['code']), ('stop', 'review_slot_exhausted'))
-        self.assertEqual([step['id'] for step in rows[-1]['details']['steps']], [8, 7, 1])
-        self.assertTrue(rows[-1]['details']['decision']['then'])
+        self.assertEqual((rows[-1]['state'], rows[-1]['code']), ('handoff', 'review_slot_exhausted'))
+        self.assertEqual(rows[-1]['details']['step']['id'], 2)
+        self.assertEqual(len(self.case.read_records()['review_output_refusal']), 3)
+        repaired = self.repair_exhausted(rows[-1])
+        self.assertEqual((repaired['slot_id'], repaired['reviewer_id']), ('bar-first', 'first'))
+        self.assertIn('exhaustion', repaired['context']['context_repair'])
+        self.assertEqual(self.plan()['head_id'], repaired['id'])
 
     def test_stored_reviews_and_refusal_certificates_keep_their_identities_through_the_handoff(self):
         final, output = self.build_final(abstract=True)
@@ -291,8 +324,9 @@ class ReadingHandoffTests(unittest.TestCase):
             self.execute(self.plan())
         self.assertEqual(caught.exception.code, 'source_link_not_fulltext')
         certificate = copy.deepcopy(self.case.read_records()['review_output_refusal'])
+        replacement = self.replace_refused()
         output['value']['evidence'][-1] = self.abstract_link['artifact']
-        self.invoke(final, output, 'corrected-final')
+        self.invoke(replacement, output, 'corrected-final')
         self.read_source()
         saved = self.execute(self.plan(), 'record-corrected')['result']
         from research_harness import research_decisions as decisions
@@ -322,9 +356,10 @@ class ReadingHandoffTests(unittest.TestCase):
                     fixture.execute(plan)
                 self.assertEqual(caught.exception.code, code)
                 self.assertEqual(fixture.case.read_records()['review_output_refusal']['attempt-final']['code'], code)
+                replacement = fixture.replace_refused()
                 output['value']['status'] = 'sufficient'
                 output['value']['evidence'][0]['link'] = fixture.links[0]
-                fixture.invoke(final, output, 'corrected-final')
+                fixture.invoke(replacement, output, 'corrected-final')
                 self.assertEqual(fixture.plan()['state'], 'handoff')
                 self.assertEqual(fixture.plan()['command'], 'read')
 
@@ -386,6 +421,8 @@ class ReadingHandoffTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'source_link_not_fulltext')
         self.assertEqual(self.case.read_records()['review_output_refusal']['attempt-final']['code'],
                          'source_link_not_fulltext')
+        self.assertEqual(self.plan()['state'], 'replace')
+        self.replace_refused()
         self.assertEqual(self.plan()['state'], 'run')
 
     def test_catalog_gap_keeps_the_pure_refusal_before_the_corrected_output_needs_reading(self):
@@ -400,8 +437,9 @@ class ReadingHandoffTests(unittest.TestCase):
         self.assertIsNotNone(failure)
         self.assertEqual((failure['code'], failure['check']), ('invalid_value_review', 'review.support'))
         self.assertEqual(records['review_output_refusal']['attempt-final'], certificate)
+        replacement = self.replace_refused()
         output['support'] = None
-        self.invoke(final, output, 'corrected-final')
+        self.invoke(replacement, output, 'corrected-final')
         self.assertEqual((self.plan()['state'], self.plan()['command']), ('handoff', 'read'))
 
     def test_a_reading_completed_during_the_recording_error_records_without_a_reviewer_call(self):

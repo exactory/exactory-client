@@ -360,7 +360,8 @@ class UncoveredReviewTests(LiteratureCase):
                      configuration=dict(max_output_tokens=1000, timeout_seconds=5))
         serving = dict(route, id='serving', endpoint='https://serving.example/responses')
         parent = dict(id='bar', role='bar', route_id='old', slot_id='slot', dossier_id=None,
-                      reviewer_id='reviewer', author_id='author', context={})
+                      reviewer_id='reviewer', author_id='author', context={},
+                      context_state=dict(context_status='verified_for_route'))
         records = dict(review_route={'old': route, 'serving': serving}, review_assignment={'bar': parent})
         assignment = dict(parent, id='stopped-result', role='result')
         steps = describe_capacity_steps(records, self.artifacts, assignment, [dict(route_id='serving')],

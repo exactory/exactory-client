@@ -34,6 +34,7 @@ class FailureClassTests(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         self.artifacts = ArtifactStore(Path(directory.name))
         self.assignment = dict(id='head', role='result', route_id='route', context={},
+                               context_state=dict(context_status='verified_for_route'),
                                reviewer_id='reviewer', author_id='author', dossier_id=None,
                                packet=self.put({}), recorded_revision=1)
         # These small output stubs do not include authenticated request envelopes.
@@ -373,12 +374,10 @@ class FailureClassTests(unittest.TestCase):
         attempt = self.attempt('{}', status='completed', provider_status='completed', code=None)
         attempt['output'] = self.put({})
         self.records['review_output_refusal'] = {attempt['id']: dict(code='invalid_value_review')}
-        self.assertEqual(self.plan()['state'], 'run')
-        second = self.attempt('{}', status='completed', provider_status='completed', code=None)
-        second['output'] = self.put({})
-        self.records['review_output_refusal'][second['id']] = dict(code='invalid_value_review')
-        self.assertEqual(self.plan()['code'], 'review_slot_exhausted')
-        self.assertEqual(self.plan()['state'], 'stop')
+        self.assertEqual(self.classify(attempt)['outcome'], 'scientific_refused')
+        position = failures.count_position(self.records, self.artifacts, self.assignment)
+        self.assertEqual(position['failures_by_outcome'], dict(model_at_capacity=1, scientific_refused=1))
+        self.assertEqual(position['failed_attempts'], 2)
 
     def test_single_retry_outcomes_and_scientific_refusal(self):
         for answer, changes, code in [
@@ -399,7 +398,7 @@ class FailureClassTests(unittest.TestCase):
             self.records.setdefault('review_output_refusal', {})[attempt['id']] = dict(
                 attempt_id=attempt['id'], assignment_id='head', code='invalid_value_review')
             self.assertEqual(self.classify(attempt)['outcome'], 'scientific_refused')
-            self.assertEqual(self.plan()['state'], 'run' if count == 1 else 'stop')
+            self.assertEqual(failures.count_position(self.records, self.artifacts, self.assignment)['failed_attempts'], count)
 
     def test_total_allowance_class_changes_completed_output_and_replacement(self):
         for index in range(8):
@@ -475,6 +474,7 @@ class FailureClassTests(unittest.TestCase):
         next(iter(self.records['review_attempt'].values()))['response'] = None
         self.assertTrue(protocol._initial_size_failure(self.records, self.artifacts, self.assignment, self.assignment))
         self.assertEqual(self.plan()['state'], 'replace')
+        self.records['review_assignment']['parent'] = dict(self.assignment, id='parent', context={}, recorded_revision=0)
         self.assignment['context'] = dict(prior_assignment_id='parent')
         self.assertFalse(protocol._initial_size_failure(
             self.records, self.artifacts, self.assignment, self.assignment))
@@ -505,8 +505,9 @@ class FailureClassTests(unittest.TestCase):
                         self.records['review_output_refusal'][attempt['id']] = dict(
                             attempt_id=attempt['id'], assignment_id='head', code=code)
                         self.assertEqual(self.classify(attempt)['outcome'], 'scientific_refused')
-                        plan = self.plan()
-                        self.assertEqual((plan['state'], plan['code']), (state, 'review_slot_exhausted'))
+                        position = failures.count_position(self.records, self.artifacts, self.assignment)
+                        self.assertEqual(position['failures_by_outcome']['scientific_refused'],
+                                         1 if state == 'run' else 2)
 
     def test_unknown_answer_and_timeout_stop_and_reset_does_not_evade_total(self):
         self.attempt('Some unclassified failure.', provider_status='failed')
@@ -720,3 +721,25 @@ class SafeguardNoticeTests(unittest.TestCase):
             self.assertEqual((self.plan()['state'], self.plan()['code']),
                 ('run' if count < limit else 'wait',
                  'review_provider_refused' if count < limit else 'review_sequence_wait'))
+
+
+class ScientificRecoveryTests(unittest.TestCase):
+    def test_first_refusal_after_provider_failure_executes_authenticated_replacement(self):
+        from test_review_refusal_replacement import RefusalReplacementTests
+        fixture = RefusalReplacementTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        context = fixture.case.deliver_supporting('first')
+        assignment = fixture.case.assign('bar', 'first', identifier='initial', **context)
+        with patch.object(protocol.transport, 'send_request', side_effect=OSError('Synthetic provider failure')):
+            fixture.case.mutate(protocol.invoke_assignment,
+                dict(id='provider-failed', assignment_id=assignment['id']), credential='fixture')
+        output = fixture.case.build_review_output('bar')
+        output['value']['status'] = 'invalid'
+        fixture.invoke(assignment, output)
+        with self.assertRaises(ResearchError):
+            fixture.record(assignment, output)
+        with patch.object(protocol.transport, 'send_request', side_effect=AssertionError('Planning makes no call')):
+            plan = failures.plan_after_failure(fixture.case.read_records(), fixture.case.artifacts, assignment['id'])
+        self.assertEqual(plan['state'], 'replace')
+        fixture.case.mutate(protocol.record_assignment, plan['payload'])

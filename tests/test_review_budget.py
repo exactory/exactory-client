@@ -9,6 +9,7 @@ from unittest.mock import patch
 from research_harness import output_views, review_protocol as protocol
 from research_harness import review_task_execution as execution
 from research_harness.check_mode import check_mutation
+from research_harness.evidence import digest
 from research_harness.operations import immutable_record
 from research_harness.storage import Store
 from test_review_task_execution import TaskExecutionFixture
@@ -21,6 +22,18 @@ CALLS = (('review.invoke', 'review_invocation', 'review_attempt'),
 
 
 class BudgetFixture(TaskExecutionFixture):
+    def setUp(self):
+        super().setUp()
+        packet = dict(protocol=protocol.PROTOCOL, role='standalone', dossier_id=None,
+                      reviewer_id='independent-reviewer', evidence=[])
+        packet['digest'] = digest(packet)
+        prompt = protocol.canonical_prompt('standalone')
+        self.put('review_assignment', 'assignment', dict(id='assignment', role='standalone',
+            route_id='route', dossier_id=None, reviewer_id='independent-reviewer', author_id='author',
+            context={}, slot_id='assignment', packet=protocol._put_json(self.store.build_artifact_store(), packet),
+            packet_digest=packet['digest'], prompt=prompt, prompt_hash=prompt['rendered_prompt_hash'],
+            context_state=dict(context_status='verified_for_route'), recorded_revision=self.store.revision + 1))
+
     def set_budget(self, maximum):
         self.put('review_budget', 'store', dict(id='store', max_calls=maximum, reason='Test allowance'))
 

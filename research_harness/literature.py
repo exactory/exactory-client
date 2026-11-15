@@ -41,7 +41,7 @@ results and does not establish universal novelty.
 
 import copy
 import json
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from .artifacts import ArtifactStore, _Workspace
 from .cohort_evidence import cohort_report
@@ -61,8 +61,8 @@ from .providers import _json
 from . import resources
 from . import screening
 from .reading import bundle_digest, current_readings, fulltext_coverage, registry_abstract_present, required_unit_obligations
-from .search_pages import (NATIVE_PARSE_VERSION, QUERY_PARAMETER_NAMES, build_search_coverage, enumerate_pages,
-                           find_capture_interval_warnings, find_captured_ordering, native_page)
+from .search_pages import (NATIVE_PARSE_VERSION, build_search_coverage, enumerate_pages,
+                           find_capture_interval_warnings, find_captured_ordering, find_captured_query_values, native_page)
 from .source_links import admits_capture_class, captured_source, complete_original, contains, covers_text, exact_work, fulltext_capture, original_identity, read_locator, validate_link
 
 
@@ -72,6 +72,12 @@ NOVELTY_VERDICTS = ("nothing-new", "scooped", "replicate-extend", "contradicted"
 DISPOSITIONS = ("relevant", "contradictory", "potentially_relevant", "out_of_scope", "duplicate", "unresolved")
 CARRIED_DISPOSITIONS = ("contradictory", "unresolved")
 UNIT_KINDS = ("text", "abstract", "figure", "table", "equation", "supplement", "bibliography")
+SEARCH_QUERY_BINDING_MESSAGE = ('query does not equal the value of a search-query parameter of the captured URL '
+    'of this response, or the path segment that a web import bound with query_path. Give one of these exact '
+    'values. For arXiv, bind search_query, or id_list when search_query is absent or empty. The search row '
+    'of the CLI reference names the parameters of each provider. For a web or MCP capture, you can instead '
+    'name a saved value of the response with query_locator. A capture from arXiv, OpenAlex or Crossref '
+    'needs the value of its URL parameter in every case.')
 
 
 def _reference(value, records, artifacts, version_id, bibliography_unit):
@@ -244,16 +250,9 @@ def _search_response(records, artifacts, response, scope, *, parse_version=1):
         if read_locator(artifacts, source["response"], response["query_locator"]) != response["query"]:
             raise ResearchError("invalid_search", "The recorded query must equal its original response value")
     else:
-        names = QUERY_PARAMETER_NAMES.get(source["provider"], {"q", "query", "search", "search_query"})
-        actual = [value for key, value in parse_qsl(urlsplit(source["url"]).query) if key in names]
+        actual = find_captured_query_values(source)
         if response["query"] not in actual and (path_query is None or response["query"] != path_query["value"]):
-            raise ResearchError("invalid_search",
-                                "query does not equal the value of a search-query parameter of the captured URL "
-                                "of this response, or the path segment that a web import bound with query_path. "
-                                "Give one of these exact values. The search row of the CLI reference names the "
-                                "parameters of each provider. For a web or MCP capture, you can instead name a "
-                                "saved value of the response with query_locator. A capture from arXiv, OpenAlex "
-                                "or Crossref needs the value of its URL parameter in every case.")
+            raise ResearchError("invalid_search", SEARCH_QUERY_BINDING_MESSAGE)
     if source["provider"] in ("arxiv", "openalex", "crossref"):
         page = native_page(source, artifacts.read(source["response"]), response["query"], scope, parse_version=parse_version)
         found, pending = page["found"], []
@@ -356,7 +355,7 @@ def _search_evidence_digest(evaluation, scope, found, cited=()):
     return digest([scope, works])
 
 
-def _dispositions(records, value):
+def validate_search_dispositions(value):
     found = set(value["found_work_ids"])
     judged = {}
     for item in _items_list(value["dispositions"], "Dispositions"):
@@ -375,6 +374,10 @@ def _dispositions(records, value):
         text(item["work_id"], "Resolved work", code="invalid_search")
         text(item["reason"], "Resolution", code="invalid_search")
         resolved[item["work_id"]] = item["reason"]
+    return judged, resolved
+
+
+def check_carried_search_findings(records, value, judged, resolved):
     selection = records.get("search_selection", {}).get(value["profile"] + ":" + value["purpose"])
     previous = records.get("literature_search", {}).get(selection["search_id"]) if selection else None
     for item in (previous or {}).get("dispositions", []):
@@ -382,7 +385,6 @@ def _dispositions(records, value):
         if item["disposition"] in CARRIED_DISPOSITIONS and not carried and item["work_id"] not in resolved:
             raise ResearchError("search_findings_dropped", "Carry forward or explicitly resolve the selected search's contradictory and unresolved findings",
                                 {"work_id": item["work_id"], "disposition": item["disposition"], "search_id": previous["id"]})
-    return judged
 
 
 def _build_judged_records(records, value):
@@ -515,18 +517,322 @@ def build_search_receipt(value, found, pending, page_groups, pages):
     incomplete = [dict(item, query=queries[item["group_id"]]) for item in pending
                   if item["code"] == "search_response_incomplete"]
     excluded = [dict(item, query=group["query"]) for group in page_groups for item in group.get("excluded_items", [])]
-    return {"id": value["id"], "pending": pending, "found_work_ids": sorted(found),
+    result = {"id": value["id"], "pending": pending, "found_work_ids": sorted(found),
             "invalid_work_count": len(invalid), "invalid_works": invalid,
             "incomplete_response_count": len(incomplete), "incomplete_responses": incomplete,
             "excluded_item_count": len(excluded), "excluded_items": excluded,
             "warnings": find_capture_interval_warnings(pages)}
+    if "row_dispositions" in value:
+        result.update(row_disposition_count=len(value["row_dispositions"]), row_dispositions=value["row_dispositions"])
+    if any("listed_ids" in page for page in pages):
+        missing = [dict(item, query=queries[item["group_id"]]) for item in pending
+                   if item["code"] == "search_id_list_entry_missing"]
+        result.update(missing_identifier_count=len(missing), missing_identifiers=missing)
+    return result
+
+
+ROW_DISPOSITION_MESSAGE = (
+    'A row disposition of this search is not valid. Give row_dispositions as a list of {source_id, index, reason}. '
+    'source_id names a registry response of this search, index is the zero-based position of a row that the '
+    'response returned and that the harness could not import, and reason is a nonempty text. A row that the '
+    'harness imported, a row that a recorded import rule leaves out, and a second entry for one row take no '
+    'disposition. To account for a row of a search that is already stored, record a new search with completes.')
+ROW_DISPOSITION_PIN_MESSAGE = (
+    'A stored row disposition does not match its search. It names no response of the search, or the row at its '
+    'index in the saved response does not have the stored row_digest. Inspect the stored search record and the '
+    'saved response that details.entry names.')
+
+
+def build_row_dispositions(records, artifacts, entries, responses, captures):
+    """Validate author statements at admission and read their evidence from saved responses."""
+    from .search_pages import read_search_rows
+    if not isinstance(entries, list):
+        raise ResearchError("invalid_search", ROW_DISPOSITION_MESSAGE, {"entry": entries})
+    captured = {capture["source"]["id"]: capture for capture in captures}
+    rows, seen, result = {}, set(), []
+    for entry in entries:
+        try:
+            fields(entry, ("source_id", "index", "reason"), code="invalid_search")
+            text(entry["source_id"], "Response source", code="invalid_search")
+            text(entry["reason"], "Row disposition reason", code="invalid_search")
+            if type(entry["index"]) is not int or entry["index"] < 0:
+                raise ResearchError("invalid_search", ROW_DISPOSITION_MESSAGE)
+            key = (entry["source_id"], entry["index"])
+            capture = captured.get(entry["source_id"])
+            if capture is None or key in seen:
+                raise ResearchError("invalid_search", ROW_DISPOSITION_MESSAGE)
+            page = capture["page"]
+            if (page is None or entry["index"] in page["imported_indices"]
+                    or not any(item.get("index") == entry["index"] for item in page["pending"])):
+                raise ResearchError("invalid_search", ROW_DISPOSITION_MESSAGE)
+            if entry["source_id"] not in rows:
+                response = next(row for row in responses if row["source_id"] == entry["source_id"])
+                rows[entry["source_id"]] = read_search_rows(records, artifacts, capture["source"], response)
+            if entry["index"] >= len(rows[entry["source_id"]]):
+                raise ResearchError("invalid_search", ROW_DISPOSITION_MESSAGE)
+            result.append(dict(rows[entry["source_id"]][entry["index"]], reason=entry["reason"]))
+            seen.add(key)
+        except ResearchError as error:
+            raise ResearchError("invalid_search", ROW_DISPOSITION_MESSAGE, {"entry": entry}) from error
+    for capture in captures:
+        page = capture["page"]
+        capture["row_dispositions"] = [row for row in result if row["source_id"] == capture["source"]["id"]]
+        if page is not None:
+            page["pending"] = [item for item in page["pending"]
+                               if (item["source_id"], item.get("index")) not in seen]
+    return result
+
+
+def check_search_row_dispositions(records, artifacts):
+    """Authenticate saved row pins without changing stored records or their digests."""
+    from .search_pages import read_search_rows
+    checked = []
+    for search in records.get("literature_search", {}).values():
+        rows = {}
+        for entry in search.get("row_dispositions", []):
+            response = next((row for row in search["responses"] if row["source_id"] == entry["source_id"]), None)
+            source = records.get("source", {}).get(entry["source_id"])
+            if response is not None and source is not None:
+                if source["id"] not in rows:
+                    rows[source["id"]] = read_search_rows(records, artifacts, source, response)
+                if (type(entry["index"]) is int and 0 <= entry["index"] < len(rows[source["id"]])
+                        and rows[source["id"]][entry["index"]]["row_digest"] == entry["row_digest"]):
+                    continue
+            raise ResearchError("invalid_search", ROW_DISPOSITION_PIN_MESSAGE, {"search_id": search["id"], "entry": entry})
+        if search.get("row_dispositions"):
+            checked.append(search["id"])
+    return sorted(checked)
+
+
+SEARCH_COMPLETION_PAYLOAD_MESSAGE = (
+    'completes is not valid. Give a list of {search_id, closed_gaps: [{text, how}]}. Each search_id names a '
+    'different stored search other than this one. Each closed_gaps entry has a nonempty text, stated once, and a '
+    'nonempty how. Correct the payload, or record the search without completes.')
+SEARCH_COMPLETION_FORMULATION_MESSAGE = (
+    'This search and the search that it completes differ in profile or in question. Record the completing search '
+    'with the same profile and the same question, or record it without completes.')
+SEARCH_COMPLETION_TIME_MESSAGE = (
+    'captured_at of this search is earlier than captured_at of the search that it completes. Give a capture time '
+    'that is not earlier, or record the search without completes.')
+SEARCH_COMPLETION_QUERIES_MESSAGE = (
+    'The query in details.query of the completed search is missing from this search, or the captures of this '
+    'search ask it as another request: another provider, another address or other matching parameters. Capture '
+    'that query again as the same request, or record the search without completes.')
+SEARCH_COMPLETION_CLEAN_MESSAGE = (
+    'This search cannot complete another search as it is. It has an integrity error, a nonempty gaps list or a '
+    'query without a stated coverage, or its coverage of the query in details.query is weaker than that of the '
+    'completed search, in the order complete, top_k, bounded_unordered. Record a search without integrity errors '
+    'and with empty gaps that covers each earlier query at least as far, or record this search without completes.')
+SEARCH_COMPLETION_PAGES_MESSAGE = (
+    'The pages that the completed search captured for the query in details.query form no verified whole or '
+    'leading part, so this search must cover that query with the kind complete or top_k. Capture a complete '
+    'enumeration or a verified leading part of the query, or record the search without completes.')
+SEARCH_COMPLETION_ROWS_MESSAGE = (
+    'A row that the completed search returned for the query in details.query is not accounted for. details names '
+    'it by row_id, or by row_digest, source_id and index when the row has no identifier. Account for it in one of '
+    'four ways. Import it. Leave it out under a recorded import rule. Give a row disposition to a row of the same '
+    'provider and the same captured request: for a row with a provider identifier, the row with that identifier, '
+    'and for a row without one, a row with the same row digest. Or cover the query with the kind complete. The identifier of '
+    'an earlier row must then be absent from the responses of this search for the query; where the search holds '
+    'row dispositions for the query, from its responses of the earlier captured request. An earlier row without '
+    'an identifier is accepted under a complete coverage without a check of absence. '
+    'A disposition of another row does not account for this row. Otherwise record the search without completes.')
+SEARCH_COMPLETION_WORKS_MESSAGE = (
+    'The work in details.work_id, which the completed search found, is not among found_work_ids of this search. '
+    'Capture and import that work in this search, or record the search without completes.')
+SEARCH_COMPLETION_JUDGMENTS_MESSAGE = (
+    'The completed search judged the work in details.work_id relevant, contradictory, potentially_relevant or '
+    'unresolved, and this search judges it otherwise without an entry under resolved. Add {work_id, reason} to '
+    'resolved, or record the search without completes.')
+SEARCH_COMPLETION_GAPS_MESSAGE = (
+    'closed_gaps has no entry for the gap of the completed search in details.text. Add {text, how} with that exact '
+    'text and with how this search closes the gap, or record the search without completes.')
+SEARCH_COMPLETION_DIGEST_MESSAGE = (
+    'The stored completes of a search is not a list, names a search that the store does not hold, or holds a '
+    'search_digest that differs from the digest of that search. Inspect the record that '
+    'details.completing_search_id names and, where details.search_id names a stored search, that record.')
+
+
+def refuse_search_completion(condition, message, search_id, **details):
+    raise ResearchError("search_completion_invalid", message,
+                        dict(search_id=search_id, condition=condition, **details))
+
+
+def validate_search_completion_payload(records, value):
+    entries = value["completes"]
+    seen = set()
+    if not isinstance(entries, list):
+        refuse_search_completion("payload", SEARCH_COMPLETION_PAYLOAD_MESSAGE, None)
+    for entry in entries:
+        identifier = entry.get("search_id") if isinstance(entry, dict) else None
+        try:
+            fields(entry, ("search_id", "closed_gaps"))
+            text(identifier, "Completed search")
+            if identifier == value["id"] or identifier in seen or identifier not in records.get("literature_search", {}):
+                raise ResearchError("invalid_search", "Use a distinct stored earlier search")
+            seen.add(identifier)
+            if not isinstance(entry["closed_gaps"], list):
+                raise ResearchError("invalid_search", "Give an array of gap statements")
+            texts = set()
+            for gap in entry["closed_gaps"]:
+                fields(gap, ("text", "how"))
+                text(gap["text"], "Earlier gap")
+                text(gap["how"], "How the author closed the gap")
+                if gap["text"] in texts:
+                    raise ResearchError("invalid_search", "State each closed gap once")
+                texts.add(gap["text"])
+        except ResearchError:
+            refuse_search_completion("payload", SEARCH_COMPLETION_PAYLOAD_MESSAGE, identifier)
+
+
+def read_search_capture_facts(records, artifacts, search):
+    """Read each immutable search's completion evidence once per evaluation."""
+    evaluation = Evaluation.of(records, artifacts)
+    return evaluation.once(("search_completion_capture_facts", digest(search)),
+                           lambda: _read_search_capture_facts(records, evaluation, search))
+
+
+def _read_search_capture_facts(records, artifacts, search):
+    """Read the identities and raw rows needed only when a search completes another."""
+    from .search_pages import compute_query_identity, read_search_rows
+    facts = {}
+    for response in search["responses"]:
+        source = records["source"][response["source_id"]]
+        query = response["query"]
+        identity = compute_query_identity(source)
+        if identity is None:
+            identity = dict(provider=source["provider"], address=urlunsplit(urlsplit(source["url"])._replace(query="")), query=query)
+        fact = facts.setdefault(query, dict(identities=set(), rows=[], pages=[]))
+        fact["identities"].add(digest(identity))
+        fact["rows"].extend(dict(row, query_identity=digest(identity))
+                            for row in read_search_rows(records, artifacts, source, response))
+        if source["provider"] in {"openalex", "crossref", "arxiv"}:
+            fact["pages"].append(native_page(source, artifacts.read(source["response"]), query, search["scope"],
+                                           parse_version=search.get("native_parse_version", 1)))
+    return facts
+
+
+def normalize_search_row_id(identifier):
+    from .identities import normalize_identifier
+    if identifier is None:
+        return None
+    try:
+        return normalize_identifier(identifier)
+    except ResearchError:
+        if identifier.startswith("https://"):
+            try:
+                return normalize_identifier("url:" + identifier)
+            except ResearchError:
+                pass
+        return identifier
+
+
+def build_search_completions(records, artifacts, search):
+    """Check R38 in order and compute immutable pins and missing-row notices."""
+    from .openness_minimum import check_search_coverage
+    from .search_pages import check_search_page_prefix
+
+    result = []
+    later_facts = None
+    later_coverage = {row["query"]: row["kind"] for row in search["coverage"]}
+    strength = {"complete": 3, "top_k": 2, "bounded_unordered": 1, "unspecified": 0}
+    imported = {normalize_search_row_id(alias) for work_id in search["found_work_ids"]
+                for alias in [work_id] + records["work"][work_id].get("aliases", [])}
+    judged = {row["work_id"]: row["disposition"] for row in search["dispositions"]}
+    resolved = {row["work_id"] for row in search.get("resolved", []) if row.get("reason", "").strip()}
+    for entry in search["completes"]:
+        earlier = records["literature_search"][entry["search_id"]]
+        def require(condition, name, message, **details):
+            if not condition:
+                refuse_search_completion(name, message, earlier["id"], **details)
+        require(earlier["profile"] == search["profile"] and earlier.get("question") == search.get("question"),
+                "formulation", SEARCH_COMPLETION_FORMULATION_MESSAGE)
+        require(timestamp(search["captured_at"]) >= timestamp(earlier["captured_at"]),
+                "time", SEARCH_COMPLETION_TIME_MESSAGE)
+        if later_facts is None:
+            later_facts = read_search_capture_facts(records, artifacts, search)
+        earlier_facts = read_search_capture_facts(records, artifacts, earlier)
+        for query in earlier["queries"]:
+            require(query in later_facts and earlier_facts[query]["identities"] == later_facts[query]["identities"],
+                    "queries", SEARCH_COMPLETION_QUERIES_MESSAGE, query=query)
+        require(check_search_coverage(search), "clean", SEARCH_COMPLETION_CLEAN_MESSAGE)
+        for coverage in find_search_coverage(earlier, records, artifacts):
+            query = coverage["query"]
+            require(strength[later_coverage[query]] >= strength[coverage["kind"]],
+                    "clean", SEARCH_COMPLETION_CLEAN_MESSAGE, query=query)
+        for query in earlier["queries"]:
+            require(check_search_page_prefix(earlier_facts[query]["pages"]) or later_coverage[query] in {"complete", "top_k"},
+                    "pages", SEARCH_COMPLETION_PAGES_MESSAGE, query=query)
+        not_returned = []
+        for query in earlier["queries"]:
+            facts = later_facts[query]
+            returned = {normalize_search_row_id(row["row_id"]) for row in facts["rows"]}
+            disposed_places = {(row["source_id"], row["index"]) for row in search.get("row_dispositions", [])}
+            disposed = [row for row in facts["rows"] if (row["source_id"], row["index"]) in disposed_places]
+            excluded = {normalize_search_row_id(item["id"]) for page in facts["pages"]
+                        for item in page.get("excluded_items", [])}
+            for row in earlier_facts[query]["rows"]:
+                identity = normalize_search_row_id(row["row_id"])
+                if identity is not None and (identity in imported or identity in excluded):
+                    continue
+                if any(row["query_identity"] == later["query_identity"] and row["provider"] == later["provider"] and (
+                        row["row_id"] is not None and row["row_id"] == later["row_id"]
+                        or row["row_id"] is None and later["row_id"] is None
+                        and row["row_digest"] == later["row_digest"]) for later in disposed):
+                    continue
+                details = dict(query=query, row_id=row["row_id"])
+                if identity is None:
+                    details.update(row_digest=row["row_digest"], source_id=row["source_id"], index=row["index"])
+                # Searches without row dispositions retain the released query-level absence rule.
+                matching_returned = ({normalize_search_row_id(later["row_id"]) for later in facts["rows"]
+                                      if later["query_identity"] == row["query_identity"]} if disposed else returned)
+                require(later_coverage[query] == "complete" and (identity is None or identity not in matching_returned),
+                        "rows", SEARCH_COMPLETION_ROWS_MESSAGE, **details)
+                item = dict(query=query, row_id=row["row_id"])
+                if item not in not_returned:
+                    not_returned.append(item)
+        for work_id in earlier["found_work_ids"]:
+            require(work_id in search["found_work_ids"], "works", SEARCH_COMPLETION_WORKS_MESSAGE, work_id=work_id)
+        for judgment in earlier["dispositions"]:
+            work_id = judgment["work_id"]
+            require(judgment["disposition"] not in {"relevant", "contradictory", "potentially_relevant", "unresolved"}
+                    or judgment["disposition"] == judged.get(work_id) or work_id in resolved,
+                    "judgments", SEARCH_COMPLETION_JUDGMENTS_MESSAGE, work_id=work_id)
+        closed = {gap["text"] for gap in entry["closed_gaps"]}
+        for gap in earlier["gaps"]:
+            require(gap in closed, "gaps", SEARCH_COMPLETION_GAPS_MESSAGE, text=gap)
+        result.append(dict(search_id=earlier["id"], search_digest=digest(earlier),
+                           not_returned=not_returned, closed_gaps=entry["closed_gaps"]))
+    return result
+
+
+def check_search_completion_pins(records):
+    """Authenticate every completion edge without reinterpreting stored searches."""
+    searches = records.get("literature_search", {})
+    checked = []
+    for search in searches.values():
+        entries = search.get("completes", [])
+        if not isinstance(entries, list):
+            refuse_search_completion("search_digest", SEARCH_COMPLETION_DIGEST_MESSAGE, None,
+                                    completing_search_id=search["id"])
+        for entry in entries:
+            identifier = entry.get("search_id") if isinstance(entry, dict) else None
+            earlier = searches.get(identifier) if isinstance(identifier, str) else None
+            if earlier is None or digest(earlier) != entry.get("search_digest"):
+                refuse_search_completion("search_digest", SEARCH_COMPLETION_DIGEST_MESSAGE, identifier,
+                                        completing_search_id=search["id"])
+        if entries:
+            checked.append(search["id"])
+    return sorted(checked)
 
 
 def record_search(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         fields(value, ("id", "profile", "purpose", "queries", "responses", "captured_at", "found_work_ids", "verdict",
                        "cited_work_ids", "impact", "gaps", "dispositions"),
-               ("resolved", "scope", "question", "binding", "depth", "hits_per_query"), code="invalid_search")
+               ("resolved", "scope", "question", "binding", "depth", "hits_per_query", "completes", "row_dispositions"), code="invalid_search")
+        if "completes" in value:
+            validate_search_completion_payload(records, value)
         profile_name(value["profile"])
         current_scope = records.get("literature_scope", {}).get(value["profile"])
         provisional = current_scope is None
@@ -578,18 +884,24 @@ def record_search(store, payload, *, expected_revision, request_id):
                     raise ResearchError("invalid_search", "Capture at most " + str(amount)
                                         + " hits per query under this policy; record the captured ordering when claiming a ranked prefix",
                                         {"query": query, "found": len(hits), "limit": amount})
+        if "row_dispositions" in value:
+            value = dict(value, row_dispositions=build_row_dispositions(
+                records, evaluation, value["row_dispositions"], value["responses"], captures))
         page_groups, enumeration_pending = enumerate_pages(pages)
         pending.extend(enumeration_pending)
         if found != set(value["found_work_ids"]) or set(by_query) != set(value["queries"]):
             raise ResearchError("invalid_search", "Search results and queries must account for every saved response")
         if not set(value["cited_work_ids"]) <= found or value["verdict"] == "replicate-extend" and not value["cited_work_ids"]:
             raise ResearchError("invalid_search", "A replicate-extend verdict must cite acquired work from the search")
-        _dispositions(dict(records, search_selection={}) if provisional else records, value)
+        judged, resolved = validate_search_dispositions(value)
         coverage = build_search_coverage(value["queries"], amount, captures, page_groups, pending)
         base = dict(value, hits_per_query=amount, coverage=coverage, pending=pending, page_groups=page_groups,
                     integrity_errors=find_search_integrity_errors({"pending": pending}))
         if pages:
             base["native_parse_version"] = NATIVE_PARSE_VERSION
+        if "completes" in value:
+            base["completes"] = build_search_completions(records, evaluation, base)
+        check_carried_search_findings(dict(records, search_selection={}) if provisional else records, value, judged, resolved)
         result = build_search_receipt(value, found, pending, page_groups, pages)
         if provisional:
             record = dict(base, scope_digest=None, provisional=True)

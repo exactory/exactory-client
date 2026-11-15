@@ -176,10 +176,14 @@ class ProviderUsageTests(unittest.TestCase):
         original = copy.deepcopy(plan)
         with patch.object(review_series, 'plan_next', return_value=plan), patch(
                 'research_harness.automatic_overrides.record_series_stop',
-                return_value=dict(id='stop', recorded_revision=2)) as record:
+                side_effect=lambda store, row: dict(id='stop', recorded_revision=2, plan=copy.deepcopy(row))) as record:
             rows = []
             self.assertEqual(self.run_usage_series(store, emit=rows.append), 3)
-        self.assertEqual(record.call_args.args[1], original)
+        retained = record.call_args.args[1]
+        self.assertEqual({key: retained[key] for key in original if key != 'details'},
+                         {key: value for key, value in original.items() if key != 'details'})
+        self.assertNotIn('provider_usage', retained)
+        self.assertIn('decision', retained['details'])
         self.assertEqual(plan, original)
         self.assertEqual(rows[0]['provider_usage']['windows'][0]['utilization'], .8)
         self.assertEqual(rows[0]['stop_id'], 'stop')

@@ -72,6 +72,7 @@ class SingleEntryTests(unittest.TestCase):
             'previous': dict(id='previous', role='result', route_id='route', dossier_id=None,
                              reviewer_id='prior-reviewer', author_id='author', context={},
                              slot_id='previous', recorded_revision=0)})
+        self.read_output_profile = capacity.read_output_profile
         profile = patch.object(capacity, 'read_output_profile', return_value=dict(rows=[]))
         profile.start()
         self.addCleanup(profile.stop)
@@ -190,6 +191,7 @@ class SingleEntryTests(unittest.TestCase):
         packet['paper']['sources'] = {}
         assignment = dict(id='first', role='verification', route_id='route', dossier_id=None,
             reviewer_id='reviewer', author_id='author', context={}, history=[],
+            context_state=dict(context_status='verified_for_route'),
             packet=protocol._put_json(self.artifacts, packet), prompt=protocol.canonical_prompt('verification'))
         from research_harness.review_single_request import build_output_replacement
         self.assertIsNone(build_output_replacement(self.records, self.artifacts, assignment))
@@ -240,6 +242,10 @@ class SingleEntryTests(unittest.TestCase):
         from research_harness import review_preflight
         from research_harness.review_single_request import build_output_replacement
         for adapter, packet in build_adapter_cases().items():
+            if adapter == 'context_repair':
+                with self.subTest(adapter=adapter):
+                    self.check_real_repair_replacement_is_admitted()
+                continue
             with self.subTest(adapter=adapter), tempfile.TemporaryDirectory() as directory:
                 store = Store(Path(directory), create=True)
                 artifacts = store.build_artifact_store()
@@ -254,8 +260,6 @@ class SingleEntryTests(unittest.TestCase):
                 if packet['role'] == 'adjudicator':
                     context.update(review_ids=[row['id'] for row in packet['assessments']],
                                    objection_id=packet['objection']['id'])
-                if 'context_repair' in packet:
-                    context['context_repair'] = dict(assignment_id='previous')
                 for entry in packet.get('evidence', []):
                     artifacts.put(entry['content'].encode(), entry['artifact']['media_type'])
                 packet.pop('digest', None)
@@ -264,20 +268,16 @@ class SingleEntryTests(unittest.TestCase):
                     reviewer_id='reviewer', author_id='author', context=context, history=[], session_id='first',
                     history_assignment_id=None, recorded_revision=1, packet=protocol._put_json(artifacts, packet),
                     packet_digest=packet['digest'], prompt=build_adapter_prompt(packet),
-                    reassessment_required='context_repair' in packet)
+                    reassessment_required='context_repair' in packet,
+                    context_state=dict(context_status='verified_for_route'))
                 if 'subject' in packet:
                     assignment['subject'] = packet['subject']
-                if 'context_repair' in packet:
-                    assignment['slot_id'] = 'previous'
                 attempt = dict(id='over-cap', assignment_id='first', origin='instrumented',
                     status='failed', response=None, output=None, error=None,
                     usage=dict(output_tokens=128000), recorded_revision=1)
                 def seed(records, value):
                     return [('review_route', 'route', self.route), ('review_assignment', 'first', assignment),
                             ('review_attempt', 'over-cap', attempt),
-                            ('review_assignment', 'previous', dict(id='previous', role='result', context={},
-                                reviewer_id='prior-reviewer', author_id='author', dossier_id=None,
-                                route_id='route', slot_id='previous', recorded_revision=0)),
                             ('research_intent', 'intent', dict(payload=dict(authors=['author']))),
                             ('strategy_dossier', 'dossier', dict(payload=dict(intent_id='intent')))], {}
                 prepared_mutation(store, 'fixture.single', {}, seed,
@@ -297,6 +297,67 @@ class SingleEntryTests(unittest.TestCase):
                 self.assertTrue(protocol._prompt_matches(record, packet=planned_packet))
                 from research_harness.review_input_projection import packets_from_request
                 self.assertEqual(packets_from_request(request, assignments=[record])[-1], planned_packet)
+
+    def check_real_repair_replacement_is_admitted(self):
+        from codex_route_fixtures import build_codex_response, limit_codex_input
+        from research_harness import review_parts_repair, review_preflight
+        from research_harness.review_input_projection import packets_from_request
+        from review_parts_fixtures import make_output
+        from test_review_parts_repair_journey import ResultRepairJourneyTests
+
+        # Keep the predecessor, route probe and stored repair fully authenticated.
+        # Deferring prospective parts models an ordinary repair stored before task entry,
+        # as FrozenSingleTests does for its ordinary native assignment.
+        with patch.object(capacity, 'read_output_profile', self.read_output_profile):
+            fixture = ResultRepairJourneyTests()
+            fixture.setUp()
+            self.addCleanup(fixture.doCleanups)
+            fixture.oversized(count=6, characters=60000, room=110000)
+            previous = fixture.assign('repair-origin')
+            fixture.invoke(previous)
+            binding = fixture.contaminate(previous)
+            limit_codex_input(fixture, 2000000)
+            with patch.object(review_parts_repair, 'prepare_packet', side_effect=lambda records, artifacts,
+                    value, route, packet, prompt, history, **options: packet):
+                assignment = fixture.repair_assignment(previous, binding, 'ordinary-repair')
+            case, artifacts = fixture.case, fixture.case.artifacts
+            self.assertNotIn(parts.KEY, fixture.packet(assignment))
+            frozen = artifacts.read(assignment['packet'])
+            before = protocol.build_assignment_request(case.read_records(), artifacts, assignment)
+            review_preflight.check_request(review_preflight.build_assignment_report(
+                case.read_records(), artifacts, assignment, before), before)
+
+            def incomplete(route, request, credential):
+                response = build_codex_response(route, request, {})
+                response['status'] = 'incomplete'
+                response['usage']['output_tokens'] = route['configuration']['max_output_tokens']
+                return response
+
+            with patch.object(protocol.transport, 'send_request', side_effect=incomplete):
+                case.mutate(protocol.invoke_assignment,
+                    dict(id='repair-over-cap', assignment_id=assignment['id']), credential='fixture')
+            recovery = failures.plan_after_failure(case.read_records(), artifacts, assignment['id'])
+            self.assertEqual(recovery['state'], 'replace', recovery)
+            payload = recovery['details']['recovery']['payload']
+            self.assertEqual(payload['context'], dict(capacity_replacement=assignment['id']))
+            record = case.mutate(protocol.record_assignment, payload)['result']
+            records = case.read_records()
+            planned_packet = fixture.packet(record)
+            self.assertEqual((planned_packet[parts.KEY]['adapter'], parts.find_kind(planned_packet)),
+                             ('context_repair', 'read'))
+            self.assertEqual(protocol.context_repair.slot_id(records, record),
+                             protocol.context_repair.slot_id(records, assignment))
+            self.assertEqual(record['capacity_replacement_of'], assignment['id'])
+            self.assertTrue(protocol._prompt_matches(record, packet=planned_packet))
+            request = protocol.build_assignment_request(records, artifacts, record)
+            report = review_preflight.check_request(review_preflight.build_assignment_report(
+                records, artifacts, record, request), request)
+            self.assertLessEqual(report['input_size']['value'], report['input_size']['limit'])
+            self.assertEqual(packets_from_request(request, assignments=[record])[-1], planned_packet)
+            fixture.invoke(record, make_output(planned_packet))
+            self.assertTrue(protocol.assignment_state(case.read_records(), artifacts, record['id'])['ready'])
+            self.assertEqual(artifacts.read(assignment['packet']), frozen)
+            self.assertEqual(protocol.build_assignment_request(case.read_records(), artifacts, assignment), before)
 
 
 class FrozenSingleTests(unittest.TestCase):
@@ -337,6 +398,140 @@ class FrozenSingleTests(unittest.TestCase):
         self.assertLessEqual(packet[parts.KEY]['unit_characters'], inventory['characters'] // 2)
         self.assertEqual(replacement['route_id'], self.first['route_id'])
         self.assertEqual(replacement['reviewer_id'], self.first['reviewer_id'])
+
+    def test_first_output_read_timeout_replaces_it_without_changing_the_frozen_origin(self):
+        from codex_route_fixtures import build_codex_response, bind_codex_response
+        from research_harness.review_continuation import plan_next
+        from test_review_output_profile import build_row
+        self.record_over_cap()
+        profile = dict(rows=[build_row(level=None, kind='single', thinking=1000),
+                             build_row(level=None, kind='read', thinking=1000)])
+        with patch.object(capacity, 'read_output_profile', return_value=profile):
+            planned = plan_next(self.case.store.snapshot()['records'], self.case.artifacts, 'first')
+            first_read = protocol.record_assignment(self.case.store, planned['payload'],
+                expected_revision=self.case.store.revision, request_id='replace-single')['result']
+            before = protocol.build_assignment_request(self.case.store.snapshot()['records'],
+                                                        self.case.artifacts, first_read)
+            old = self.case.read_packet(first_read)[parts.KEY]['unit_characters']
+            self.assertGreater(old, 30000)
+            def timeout(route, request, credential):
+                response = build_codex_response(route, request, {})
+                response['output'][0]['content'][0]['text'] = ''
+                response['usage']['output_tokens'] = 1
+                response['status'] = 'failed'
+                response['execution'] = dict(timeout=True)
+                return bind_codex_response(route, request, response)
+            for number in range(2):
+                with patch.object(protocol.transport, 'send_request', side_effect=timeout):
+                    protocol.invoke_assignment(self.case.store,
+                        dict(id='timeout-' + str(number), assignment_id=first_read['id']),
+                        expected_revision=self.case.store.revision, request_id='timeout-' + str(number))
+                if number == 0:
+                    revision = self.case.store.revision
+                    payload = {key: first_read[key] for key in
+                               ('role', 'route_id', 'dossier_id', 'reviewer_id', 'author_id')}
+                    payload.update(id='premature-replacement', context=dict(capacity_replacement=first_read['id']))
+                    with self.assertRaises(ResearchError) as caught:
+                        protocol.record_assignment(self.case.store, payload,
+                            expected_revision=revision, request_id='premature-replacement')
+                    self.assertEqual(caught.exception.code, 'invalid_review_context')
+                    self.assertEqual(self.case.store.revision, revision)
+            next_plan = plan_next(self.case.store.snapshot()['records'], self.case.artifacts, first_read['id'])
+            self.assertEqual(next_plan['state'], 'replace', next_plan)
+            replacement = protocol.record_assignment(self.case.store, next_plan['payload'],
+                expected_revision=self.case.store.revision, request_id='replace-read')['result']
+        header = self.case.read_packet(replacement)[parts.KEY]
+        self.assertEqual((header['entry'], header['replaces_assignment_id']), ('output', self.first['id']))
+        self.assertLessEqual(header['unit_characters'], old // 2)
+        self.assertEqual(replacement['slot_id'], first_read['slot_id'])
+        self.assertEqual(replacement['capacity_replacement_of'], first_read['id'])
+        self.assertEqual(replacement['context'], first_read['context'])
+        self.assertEqual(parts.read_logical_packet(self.case.artifacts, header), self.case.read_packet(self.first))
+        self.assertEqual(protocol.build_assignment_request(self.case.store.snapshot()['records'],
+                         self.case.artifacts, first_read), before)
+
+    def test_capacity_recovery_of_a_refusal_read_keeps_its_frozen_notice(self):
+        self.complete_refusal_read_capacity_recovery()
+
+    def test_capacity_recovery_of_a_bounded_refusal_read_keeps_its_frozen_notice(self):
+        self.complete_refusal_read_capacity_recovery(bounded=True)
+
+    def complete_refusal_read_capacity_recovery(self, *, bounded=False):
+        from codex_route_fixtures import build_codex_response, bind_codex_response, invoke_codex, limit_codex_input
+        from research_harness.review_continuation import plan_next
+        from research_harness.review_refusal_replacement import validate_replacement_origin
+        from review_parts_fixtures import make_output
+        from test_review_output_profile import build_row
+        self.record_over_cap()
+        if bounded:
+            limit_codex_input(self.case, 60000)
+        profile = dict(rows=[build_row(level=None, kind='single', thinking=1000),
+                             build_row(level=None, kind='read', thinking=1000)])
+        with patch.object(capacity, 'read_output_profile', return_value=profile):
+            planned = plan_next(self.case.store.snapshot()['records'], self.case.artifacts, self.first['id'])
+            first_read = protocol.record_assignment(self.case.store, planned['payload'],
+                expected_revision=self.case.store.revision, request_id='replace-single')['result']
+            bad = make_output(self.case.read_packet(first_read))
+            bad.pop('kind')
+            if bounded:
+                bad['diagnostic_padding'] = 'x' * 100000
+            invoke_codex(self.case, first_read['id'], bad)
+            if bounded:
+                limit_codex_input(self.case, 120000)
+            payload = {key: copy.deepcopy(first_read[key]) for key in
+                       ('role', 'route_id', 'dossier_id', 'reviewer_id', 'author_id', 'context')}
+            payload.update(id='refusal-read', context=dict(payload['context'],
+                output_refusal=dict(assignment_id=first_read['id'])))
+            refusal_read = protocol.record_assignment(self.case.store, payload,
+                expected_revision=self.case.store.revision, request_id='replace-refusal')['result']
+            notice = self.case.read_packet(refusal_read)['output_refusal']
+            self.assertEqual(notice['form'], 'bounded' if bounded else 'whole')
+            old_unit = self.case.read_packet(refusal_read)[parts.KEY]['unit_characters']
+            self.assertGreater(old_unit, 30000)
+            frozen = copy.deepcopy(self.case.store.snapshot()['records'])
+            before = protocol.build_assignment_request(frozen, self.case.artifacts, refusal_read)
+            def timeout(route, request, credential):
+                response = build_codex_response(route, request, {})
+                response['output'][0]['content'][0]['text'] = ''
+                response['usage']['output_tokens'] = 1
+                response['status'] = 'failed'
+                response['execution'] = dict(timeout=True)
+                return bind_codex_response(route, request, response)
+            for number in range(2):
+                with patch.object(protocol.transport, 'send_request', side_effect=timeout):
+                    protocol.invoke_assignment(self.case.store,
+                        dict(id='refusal-timeout-' + str(number), assignment_id=refusal_read['id']),
+                        expected_revision=self.case.store.revision, request_id='refusal-timeout-' + str(number))
+            following = plan_next(self.case.store.snapshot()['records'], self.case.artifacts, refusal_read['id'])
+            self.assertEqual(following['state'], 'replace', following)
+            reduced = protocol.record_assignment(self.case.store, following['payload'],
+                expected_revision=self.case.store.revision, request_id='reduce-refusal-read')['result']
+            records = self.case.store.snapshot()['records']
+            packet = self.case.read_packet(reduced)
+            validate_replacement_origin(records, self.case.artifacts, reduced)
+            self.assertEqual(packet['output_refusal'], notice)
+            self.assertEqual(parts.read_logical_packet(self.case.artifacts, packet[parts.KEY]),
+                             self.case.read_packet(self.first))
+            self.assertLessEqual(packet[parts.KEY]['unit_characters'], old_unit // 2)
+            self.assertEqual(packet[parts.KEY]['replaces_assignment_id'], self.first['id'])
+            self.assertEqual(reduced['slot_id'], first_read['slot_id'])
+            self.assertTrue(protocol._prompt_matches(reduced, packet=packet))
+            invoke_codex(self.case, reduced['id'], make_output(packet))
+        records = self.case.store.snapshot()['records']
+        attempt = records['review_attempt']['attempt-' + reduced['id']]
+        self.assertTrue(protocol.authenticate_attempt(records, self.case.artifacts, reduced, attempt))
+        self.assertTrue(protocol.assignment_state(records, self.case.artifacts, reduced['id'])['ready'])
+        continued = self.case.assign('after-notice-recovery', reduced['id'])
+        next_packet = self.case.read_packet(continued)
+        self.assertEqual(next_packet[parts.KEY]['series_assignment_id'], packet[parts.KEY]['series_assignment_id'])
+        self.assertNotIn('output_refusal', next_packet)
+        invoke_codex(self.case, continued['id'], make_output(next_packet))
+        records = self.case.store.snapshot()['records']
+        self.assertTrue(protocol.assignment_state(records, self.case.artifacts, continued['id'])['ready'])
+        self.assertEqual(protocol.build_assignment_request(records, self.case.artifacts, refusal_read), before)
+        for kind in ('review_assignment', 'review_attempt', 'review_output_refusal'):
+            for identifier, row in frozen.get(kind, {}).items():
+                self.assertEqual(records[kind][identifier], row)
 
     def test_completed_capped_answer_without_usable_output_enters_its_series(self):
         from research_harness.review_continuation import plan_next
@@ -568,6 +763,12 @@ class FrozenSingleTests(unittest.TestCase):
             original = protocol.record_assignment(self.case.store, payload,
                 expected_revision=self.case.store.revision, request_id='historic-opus')['result']
         invoke(original, {}, over_cap=True)
+        recovery = capacity.plan_capacity_recovery(self.case.store.snapshot()['records'],
+                                                   self.case.artifacts, original, 'output_over_cap')
+        self.assertEqual(recovery['kind'], 'replace')
+        self.assertEqual(recovery['details']['effort'], 'max')
+        self.assertEqual(recovery['details']['kind'], 'single')
+        self.assertEqual(recovery['details']['attempts'][0]['output_tokens'], 128000)
         assignment = protocol.record_assignment(self.case.store,
             plan_next(self.case.store.snapshot()['records'], self.case.artifacts, original['id'])['payload'],
             expected_revision=self.case.store.revision, request_id='enter-series')['result']

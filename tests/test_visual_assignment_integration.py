@@ -26,6 +26,7 @@ class VisualAssignmentIntegrationTests(unittest.TestCase):
         install_bounded_visual_backend(self, [route])
         self.records['workspace'] = {'problem': {'orchestration': 'problem_creation', 'authors': ['Author']}}
         self.case.prior['session_id'] = 'original-session'
+        self.case.prior['prompt'] = protocol.canonical_prompt('result')
         self.value = {'id': 'visual-result', 'route_id': 'visual', 'dossier_id': None, 'role': 'result',
                       'reviewer_id': 'Astra', 'author_id': 'Author', 'context': {'prior_assignment_id': 'prior'}}
         self.packet = copy.deepcopy(self.case.packet)

@@ -46,9 +46,12 @@ class StagedEntryTests(ResultPartsCase):
         records = self.case.read_records()
         with transport.text_only_delivery(True):
             expected = protocol.build_packet(records, self.case.artifacts, None, 'result', 'first')
+        expected = protocol.prepare_capacity_notice(records, records['review_route']['route'], 'result', expected)
         assignment = self.assign('ordinary')
         self.assertEqual(self.packet(assignment), expected)
-        self.assertEqual(assignment['prompt'], protocol.canonical_prompt('result', orchestration='problem_creation'))
+        from research_harness.review_prompt_paragraphs import select_prompt_parameters
+        self.assertEqual(assignment['prompt'], protocol.canonical_prompt('result', orchestration='problem_creation',
+            **select_prompt_parameters('result', expected)))
         self.assertTrue(read_history(self.case.artifacts, assignment))
 
     def test_explicit_oversized_upgrade_is_a_controller_with_immutable_frame_children(self):
@@ -597,7 +600,9 @@ class StagedEntryTests(ResultPartsCase):
             staged_review=dict(kind='controller'))
         packet['digest'] = digest(packet)
         controller = dict(id='focused-controller', role='adjudicator', subject=packet['subject'], reviewer_id='judge',
-            route_id='route', slot_id='focused-slot', author_id='author', context=dict(objection_id='objection',
+            route_id='route', slot_id='focused-slot', author_id='author',
+            prompt=protocol.canonical_prompt('adjudicator', orchestration='problem_creation'),
+            context=dict(objection_id='objection',
                 review_ids=['review-bar-first','review-bar-second']), packet=protocol._put_json(self.case.artifacts,packet))
         changes = staged_protocol.prepare_controller(records, self.case.artifacts, controller, packet,
                                                        records['review_route']['route'])

@@ -167,8 +167,9 @@ class ProblemDirectionTests(ProblemDeliveryCase):
         records = self.store.snapshot()['records']
         for identifier in ('bar-first', 'bar-second', 'slate-first', 'result-first'):
             assignment = records['review_assignment'][identifier]
-            self.assertEqual(assignment['prompt']['template_id'],
-                             'exactory-problem-review-v5/' + assignment['role'] + '/sources-v3')
+            base = protocol.prompt_paragraphs.strip_prompt_paragraphs(assignment['prompt'], assignment['role'])
+            self.assertEqual(base['template_id'], 'exactory-problem-review-v5/' + assignment['role'] + '/sources-v3')
+            self.assertTrue(protocol._prompt_matches(assignment))
 
     def test_new_result_requires_a7_evidence(self):
         self.prepare_statement_and_bars()
@@ -334,7 +335,8 @@ class ProblemDirectionTests(ProblemDeliveryCase):
         assessment['id'] = 'assessment-a7'
         self.mutate(self.load_problem_module().record_assessment, assessment)
         successor = self.assign('result', 'first', identifier='result-a7')
-        self.assertEqual(successor['prompt']['template_id'], 'exactory-problem-review-v5/result')
+        base = protocol.prompt_paragraphs.strip_prompt_paragraphs(successor['prompt'], 'result')
+        self.assertEqual(base['template_id'], 'exactory-problem-review-v5/result')
         for key in ('reviewer_id', 'session_id', 'slot_id', 'route_id', 'author_id', 'subject'):
             self.assertEqual(successor[key], prior[key])
         self.assertEqual(successor['history_assignment_id'], prior['id'])

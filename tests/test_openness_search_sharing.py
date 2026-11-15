@@ -21,6 +21,7 @@ V5 = 'exactory-openness-reading-v5'
 class SearchSharingCase(OpennessReadingCase):
     text_sizes = (1000,)
     reading_protocol = None
+    historical_v5 = True
 
     def record_searches(self):
         first = minimum_fixtures.ProblemOpennessMinimumTests.search(self, self.versions)
@@ -67,6 +68,7 @@ class FifteenSearchChainTests(OpennessReadingCase):
     """The measured delivery shape; scientific search integrity is exercised by SearchSharingTests separately."""
     text_sizes = (1000,)
     reading_protocol = None
+    historical_v5 = True
 
     def build_statement(self, identifier='statement-1', **changes):
         questions = ['Exact formulation %d of the finite bound problem.' % index for index in range(5)]
@@ -84,7 +86,7 @@ class FifteenSearchChainTests(OpennessReadingCase):
         return searches
 
     def test_measured_shape_delivers_two_disposition_bodies_and_fifteen_original_search_receipts(self):
-        from research_harness.problem_openness import export_openness
+        from openness_legacy_fixtures import export_as_0_85_3 as export_openness
         native = export_openness(self.store, {'assignment_id': 'turn-1', 'reviewer_id': 'openness-reviewer',
             'minimum': {'searches': [{'formulation': row['question'], 'search_id': row['id']}
                                      for row in self.searches], 'settling_work_id': None,
@@ -170,13 +172,16 @@ class SearchSharingTests(SearchSharingCase):
         paths = set((self.root / 'research' / 'sources').rglob('*'))
         with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 150000), self.assertRaises(ResearchError) as caught:
             self.assign('turn-1', reference)
+        # This historical first assignment keeps the release's preflight refusal.
         self.assertEqual(caught.exception.code, 'review_input_too_large')
         self.assertEqual(caught.exception.details['phase'], 'final_preflight')
         self.assertEqual(self.store.snapshot(), before)
         self.assertEqual(set((self.root / 'research' / 'sources').rglob('*')), paths)
 
     def test_an_authenticated_but_altered_shared_body_is_delivered_again_without_credit(self):
-        original = reading._build_reading_turn
+        from openness_legacy_fixtures import load_0_87_0_openness_reading
+        released = load_0_87_0_openness_reading()
+        original = released._build_reading_turn
         target = {}
         def alter(*args):
             packet = original(*args)
@@ -188,7 +193,8 @@ class SearchSharingTests(SearchSharingCase):
             packet.pop('digest')
             packet['digest'] = digest(packet)
             return packet
-        with patch.object(reading, '_build_reading_turn', side_effect=alter):
+        with patch.object(protocol, 'openness_reading', released), patch.object(
+                released, '_build_reading_turn', side_effect=alter):
             native = self.start()
         self.invoke('turn-1', self.build_reading_response(self.read_packet('turn-1'), excerpts=[]))
         records = self.store.snapshot()['records']

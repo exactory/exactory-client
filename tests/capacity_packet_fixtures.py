@@ -122,9 +122,285 @@ def build_scaled_record_units(quantity, size):
         case.doCleanups()
 
 
+def _build_native_quantity_packet(artifacts, statement, context, evidence=()):
+    from research_harness import native_review
+    subject = dict(statement=statement)
+    native = dict(protocol=native_review.PROTOCOL, kind='result', root='synthetic-root',
+        objective_id='synthetic-objective', contract=dict(orchestration='problem_creation'),
+        subject=subject, subject_digest=digest(subject), claim_digest=digest(subject),
+        reviewer=dict(source='host', actor_id='reviewer', attestation_id='review-assignment:quantity'),
+        scientific_context=context, evidence=list(evidence), execution_provenance=[], unmaterialized_digests=[])
+    reference = artifacts.put(json.dumps(native).encode('utf-8'), 'application/json')
+    return review_protocol.build_packet({}, artifacts, None, 'native_math', 'reviewer', native_packet=reference)
+
+
+def build_scaled_stage2_native_records(quantity, size):
+    """Scale native ingress records before the actual common packet builder.
+
+    The portable envelope validates the v2 minimum's closed row shapes. Gaps
+    and notices come from their production projectors; no emitted packet is
+    edited to manufacture quantity coverage.
+    """
+    from research_harness import openness_minimum
+    if quantity not in ('sources', 'gaps', 'notices'):
+        raise ValueError('The v2 native factory scales source, gap and notice entries')
+    with tempfile.TemporaryDirectory() as directory:
+        artifacts = ArtifactStore(Path(directory))
+        statement = 'Every finite synthetic system satisfies the stated bound.'
+        searches = {str(index): dict(id='search-' + str(index), queries=[statement],
+            found_work_ids=[], dispositions=[], responses=[], coverage=[],
+            captured_at='2026-11-01T00:00:00Z') for index in range(size)}
+        bindings = [dict(formulation=statement, search_digest=digest(search))
+                    for search in searches.values()]
+        families = [dict(search_digest=bindings[index]['search_digest'],
+            work_id='work-' + str(index), version_id='family-' + str(index))
+            for index in range(size)]
+        minimum = dict(schema_version=2, statement=statement, neighbours=[], searches=bindings,
+            reading_digests=[], settling_work_id=None, duplicate_resolutions=[],
+            family_readings=families,
+            supporting_reading_digests=[digest(dict(reading=index)) for index in range(size)],
+            results=[dict(native_attempt_digest=digest(dict(attempt=index)),
+                acceptance_id='acceptance-' + str(index), cited_as='Result ' + str(index),
+                link_digest=digest(dict(link=index)), result_digest=digest(dict(result=index)))
+                for index in range(size)])
+        openness_minimum.validate_minimum(minimum)
+        # Missing family bindings are a genuine minimum-gap shape. The quantity
+        # input need not provide accepted result bodies to the portable loader.
+        gaps = openness_minimum.list_minimum_gaps(dict(minimum, searches=[], results=[]),
+                                                  statement, {}, artifacts)
+        notices = openness_minimum.list_minimum_notices(dict(minimum, results=[], reading_digests=[]),
+                                                        {'literature_search': searches}, artifacts)
+        context = dict(scope='objective', openness_minimum=minimum,
+            minimum_gaps=gaps, decisive_work_ids=['work-' + str(index) for index in range(size)],
+            audit_forecast=dict(gaps=gaps, notices=notices,
+                outcomes=openness_minimum.forecast_outcomes(gaps), searched_through='2026-11-01'))
+        return _build_native_quantity_packet(artifacts, statement, context)
+
+
+def build_scaled_v6_reading_records(quantity, size):
+    """Build the v6 manifest and exact delivery receipts before assembling a turn."""
+    from research_harness import openness_reading as reading, review_search_delivery
+    from research_harness.problem_openness import serialize_record
+    if quantity not in ('texts', 'searches'):
+        raise ValueError('The v6 record factory scales manifest text or search receipts')
+    count = size if quantity == 'searches' else 1
+    formulation = 'x' * size if quantity == 'texts' else 'A finite synthetic formulation.'
+    searches = [dict(id='search-' + str(index), queries=[formulation]) for index in range(count)]
+    bindings = [dict(formulation=formulation, search_digest=digest(search), search=search)
+                for search in searches]
+    planned = review_search_delivery.plan_search_delivery(bindings)
+    originals = {digest(search): serialize_record(search) for search in searches}
+    bodies = dict(originals, **planned['bodies'])
+    delivered = {sha256: dict(content=content, deliveries=[dict(assignment_id='reading-1',
+        attempt_id='attempt-1', part=1, parts=1, start=0, end=len(content))])
+        for sha256, content in bodies.items()}
+    receipts = review_search_delivery.verify_search_deliveries(planned['manifest'], delivered, originals)
+    record = reading._create_record(reading.PROTOCOL_V6, planned['manifest'])
+    record.update(search_receipts=receipts, planned_reading_turns=count)
+    record['allowances']['record'] = dict(characters=max(300000, size), used=0, not_retained={})
+    with tempfile.TemporaryDirectory() as directory:
+        artifacts = ArtifactStore(Path(directory))
+        minimum = dict(schema_version=2, statement=formulation, neighbours=[],
+            searches=[{key: row[key] for key in ('formulation', 'search_digest')} for row in bindings],
+            reading_digests=[], settling_work_id=None, duplicate_resolutions=[], family_readings=[],
+            supporting_reading_digests=[], results=[])
+        packet = _build_native_quantity_packet(artifacts, formulation,
+                                               dict(scope='objective', openness_minimum=minimum))
+        return reading._assemble_reading_turn(artifacts, packet, record, [], [], [], 1)
+
+
+def build_scaled_family_reading_plans(quantity, size):
+    """Scale found records bound to one text, then emit each position of its reading plan."""
+    from research_harness import openness_reading as reading
+    if quantity != 'sources':
+        raise ValueError('The family reading factory scales found work ids')
+    with tempfile.TemporaryDirectory() as directory:
+        artifacts = ArtifactStore(Path(directory))
+        reference = artifacts.put(b'A synthetic complete article.', 'text/plain')
+        version = 'arxiv:2601.00001v1'
+        note = dict(id='reading', version_id=version)
+        minimum = dict(schema_version=2, statement='A finite bound.', neighbours=[], reading_digests=[digest(note)],
+            searches=[], settling_work_id=None, duplicate_resolutions=[], supporting_reading_digests=[], results=[],
+            family_readings=[dict(search_digest='a' * 64, work_id='found-' + str(index), version_id=version)
+                             for index in range(size)])
+        context = dict(openness_minimum=minimum, family_reading_plan_version=reading.FAMILY_READING_PLAN_VERSION)
+        records = dict(reading=dict(reading=note), source=dict(capture={}), work={version: dict(
+            id=version, fulltexts=[dict(availability='available', extraction_status='extracted',
+                source_id='capture', original=reference, text=reference)])})
+        packet = _build_native_quantity_packet(artifacts, minimum['statement'], context,
+            [dict(digest=reference['sha256'], kind='artifact', artifact=reference)])
+        rows = reading.list_reading_texts(records, packet['native'])
+        units = reading.list_reading_units(artifacts, rows)
+        record = reading._create_record(reading.PROTOCOL_V6)
+        return [reading._assemble_reading_turn(artifacts, packet, record, before, now, remaining, 1)
+                for before, now, remaining in ((units, [], []), ([], units, []), ([], [], units))]
+
+
+def build_scaled_correction_history(quantity, size):
+    """Read a scaled immutable history component through its production reader.
+
+    The correction builder copies this reader's historical_reviews subtree
+    without projecting it. This factory isolates that frozen input component;
+    command-backed Q11 evidence covers correction eligibility and admission.
+    """
+    from research_harness import problem_rubric, review_context_repair
+    if quantity not in ('texts', 'reviews'):
+        raise ValueError('The correction history factory scales text or retained reviews')
+    count = size if quantity == 'reviews' else 1
+    content = 'x' * size if quantity == 'texts' else 'A finite historical scientific finding.'
+    with tempfile.TemporaryDirectory() as directory:
+        artifacts = ArtifactStore(Path(directory))
+        reference = artifacts.put(b'A finite supplied source.', 'text/plain')
+        histories = []
+        for index in range(count):
+            identifier = 'historical-review-' + str(index)
+            assignment_id = 'historical-assignment-' + str(index)
+            objection_id = 'historical-objection-' + str(index)
+            value = dict(status='sufficient', consequence=content,
+                bar_ids=['historical-bar-first', 'historical-bar-second'],
+                objective_adequacy='adequate', method_adequacy='adequate',
+                reason=content, evidence=[reference], work_items=[],
+                assurances=[dict(kind=kind, status='passed', reason=content, evidence=[reference])
+                            for kind in problem_rubric.PROBLEM_CHECKS],
+                objection_findings=[dict(id=objection_id, status='continuing',
+                                         reason=content, evidence=[reference])],
+                rubric=dict(admission={item: 'pass' for item in problem_rubric.ADMISSION_ITEMS},
+                    significance=dict(B1=2, B2=0), priority=2, attempt='pass',
+                    accessibility='E-F', calibration='pass'),
+                rubric_evidence={item: content for item in problem_rubric.ITEMS})
+            payload = dict(id=identifier, assignment_id=assignment_id, dossier_id=None,
+                stage='result', support=None, value=value, limitations=[content],
+                objections=[dict(id=objection_id, claim=content, reason=content,
+                    resolution_condition=content, evidence=[reference])])
+            saved = dict(id=identifier, assignment_id=assignment_id, reviewer_id='historical-reviewer',
+                dossier_id=None, dossier_digest=None, recorded_revision=index + 1,
+                subject=dict(kind='problem', statement_id='historical-statement'),
+                payload=payload, support=None, independence_at_recording='verified_for_route',
+                output_digest=digest(payload), packet_digest=digest(dict(assignment=assignment_id)),
+                prompt_hash=digest('An independently assigned historical result review.'))
+            delivered = review_protocol.deliver_review({'value_review': {identifier: saved}}, saved)
+            histories.append(delivered)
+        frozen = dict(protocol='exactory-problem-review-v2', role='result',
+                      historical_reviews=histories)
+        assignment = dict(id='frozen-history-reader', context={},
+                          packet=review_protocol._put_json(artifacts, frozen))
+        records = {'review_assignment': {assignment['id']: assignment}}
+        return review_context_repair.frozen_reassessment_packet(records, artifacts, assignment)
+
+
+def build_scaled_correction_references(quantity, size):
+    """Build a real eligible correction from scaled held records/source bytes."""
+    from research_harness import research_decisions, review_output_correction
+    from research_harness.errors import ResearchError
+    from research_harness.evaluation import Evaluation
+    from test_problem_result_reassessment_binding import ResultReassessmentBindingTests
+    if quantity not in ('identifiers', 'sources'):
+        raise ValueError('The correction reference factory scales record identities or source bytes')
+    case = ResultReassessmentBindingTests()
+    case.setUp()
+    try:
+        fixture = case.fixture
+        identifier_size = size if quantity == 'identifiers' else 12
+        identifier = 'value-' + 'x' * identifier_size
+        value = dict(case.value, id=identifier)
+        fixture.put('problem_value', identifier, value)
+        fixture.expected['value'] = dict(value, digest=digest(value))
+        case.reference = dict(kind='record', record_kind='problem_value', id=identifier)
+        record_kind = 'quantity_record_' + 'k' * identifier_size
+        held = dict(id='quantity-held-record', text='A held finite account record.')
+        fixture.put(record_kind, held['id'], held)
+        typed = dict(kind='record', record_kind=record_kind, id=held['id'], digest=digest(held))
+        fixture.expected['account_records'] = [dict(record=held, cite=typed)]
+
+        respond = fixture.build_provider_response
+        def build_response(output):
+            response = respond(output)
+            if 'allowed_control' in output:
+                # An explicit synthetic provider observation gives this real
+                # construction journey room. The quantity benchmark remains
+                # the separately keyed stage1 route; this is no claim that its
+                # smaller allowance admits the complete stress packet.
+                response['usage']['input_tokens'] = max(1000000, size * 32)
+            return response
+        fixture.build_provider_response = build_response
+        build_review = fixture.build_review_output
+        def build_output(stage, *args, **kwargs):
+            output = build_review(stage, *args, **kwargs)
+            if stage == 'result':
+                output['objections'] = [dict(id='prior-objection',
+                    claim='The scope needs an explicit finite restriction.',
+                    reason='The supplied standard has a finite scope.',
+                    resolution_condition='Retain the finite scope.', evidence=[fixture.supporting])]
+            return output
+        fixture.build_review_output = build_output
+        capture = fixture.capture
+        def capture_source(identifier, *args, **kwargs):
+            kwargs['body'] = 'x' * (size if quantity == 'sources' else 30) + ' References: none.'
+            return capture(identifier, *args, **kwargs)
+        fixture.capture = capture_source
+        fixture.add_reading_and_computation()
+        from research_harness.direction_sources import build_reading_passages
+        # The complete source remains supplied through its actual held/read
+        # artifact. Use the production option that avoids also emitting every
+        # whole-text chunk; partial bibliography/abstract units retain passages.
+        fixture.expected['passages'] = []
+        readings = [row['reading'] for row in fixture.expected['readings']]
+        for passage, data in build_reading_passages(
+                fixture.read_records(), fixture.artifacts, readings, whole_text=False):
+            if fixture.artifacts.put(data, passage['excerpt']['media_type']) != passage['excerpt']:
+                raise AssertionError('The canonical reading passage lost its actual held bytes')
+            fixture.expected['passages'].append(passage)
+        source_link = fixture.read_records()['reading']['decisive-reading']['inspections'][0]['link']
+        case.prepare()
+        references = [case.reference, typed, dict(kind='source', link=source_link), fixture.supporting]
+        frozen = review_protocol._read_json(fixture.artifacts, case.assignment['packet'])
+        prior = frozen['historical_reviews'][0]['payload']['objections'][0]
+        output = copy.deepcopy(case.output)
+        output['value']['reason'] = 'This retained scientific reasoning differs from its predecessor.'
+        output['value']['objection_findings'] = [dict(id=prior['id'], status='continuing',
+            reason='The scoped finding remains material.', evidence=copy.deepcopy(references))]
+        output['value']['evidence'] = copy.deepcopy(references)
+        output['reassessment']['findings'][0]['evidence'] = copy.deepcopy(references)
+        for row in output['value']['assurances'] + output['objections']:
+            row['evidence'] = copy.deepcopy(references)
+        # This stress shape can exceed the default optional arena by itself.
+        # Retain the same exact inputs across authentication; request capacity,
+        # Store mutations and validation stay unchanged.
+        stress_bytes = sum(len(json.dumps(value, ensure_ascii=False).encode('utf-8'))
+                           for value in (output, frozen))
+        raw_artifacts = fixture.artifacts
+        arena = Evaluation(fixture.read_records(), raw_artifacts,
+                           retention_budget_bytes=max(64 * 1024 * 1024, 8 * stress_bytes))
+        fixture.artifacts = arena
+        fixture.store.build_artifact_store = lambda: arena
+        for attempt_id in ('refused-one', 'refused-two'):
+            case.observe(output, attempt_id)
+            try:
+                fixture.mutate(research_decisions.record_value_review, case.payload(output))
+            except ResearchError as error:
+                if error.code != 'review_reassessment_mismatch':
+                    raise
+            else:
+                raise AssertionError('The changed confirmed review was not natively refused')
+        records = fixture.read_records()
+        packet = review_output_correction.prepare_packet(records, arena, case.assignment['id'])
+        if size <= 64:
+            default = review_output_correction.prepare_packet(records, raw_artifacts, case.assignment['id'])
+            if default != packet:
+                raise AssertionError('The local retention budget changed the same-record correction output')
+        return packet
+    finally:
+        case.doCleanups()
+
+
 FACTORIES = {
     'artifact_body_text': build_scaled_artifact_bodies,
     'staged_original_text': build_scaled_staged_originals,
     'staged_adjudicator_original_text': build_scaled_staged_adjudicator_originals,
     'canonical_record_units': build_scaled_record_units,
+    'stage2_native_records': build_scaled_stage2_native_records,
+    'v6_reading_records': build_scaled_v6_reading_records,
+    'family_reading_plans': build_scaled_family_reading_plans,
+    'correction_history_component': build_scaled_correction_history,
+    'correction_reference_records': build_scaled_correction_references,
 }

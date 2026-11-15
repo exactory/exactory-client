@@ -36,6 +36,7 @@ class CapacitySignalTests(unittest.TestCase):
         self.addCleanup(self.case.doCleanups)
         self.case.setUp()
         self.case.records['review_route']['route'] = build_route()
+        self.case.assignment['context_state'] = dict(context_status='verified_for_route')
 
     def test_claude_output_maximum_reduced_and_fallback_have_distinct_details(self):
         for message, outcome, detail in (
@@ -339,11 +340,16 @@ class ResponseLimitJourneyTests(unittest.TestCase):
             route_id='serving', reviewer_id=assignment['reviewer_id']))['result']
         output = dict(verdict=case.verdict(), checks=[dict(dimension=kind, reason='Checked the exact evidence.',
             evidence=fixture.references) for kind in ('soundness', 'novelty', 'impact')])
-        self.assertEqual(self.drive(case, 'new', lambda packet: output), 3)
-        boundary = plan_next(case.store.snapshot()['records'], case.artifacts, 'new')
-        self.assertEqual((boundary['state'], boundary['command']), ('handoff', 'bind-verdict'))
+        def respond(packet):
+            if packet.get('review_parts', {}).get('kind') not in (None, 'final'):
+                from review_parts_fixtures import make_output
+                return make_output(packet)
+            return output
+        self.assertEqual(self.drive(case, 'new', respond), 3)
+        terminal = plan_next(case.store.snapshot()['records'], case.artifacts, 'new')
+        self.assertEqual((terminal['state'], terminal['command']), ('handoff', 'bind-verdict'))
         # The role's terminal handoff requires the owner's supplied verdict body.
         payload = case.build_bind_payload(fixture.task['digest'], case.verdict(), observed=False)
-        payload['assessment'].update(assignment_id=following['id'], checks=output['checks'])
+        payload['assessment'].update(assignment_id=terminal['head_id'], checks=output['checks'])
         bound = self.execute(case, 'bind-verdict', payload)
         self.assertIn('result', bound)

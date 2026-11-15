@@ -310,13 +310,18 @@ class MinimumAssessmentTests(ProblemCase):
         result = problem_openness.export_openness(self.store, spec, destination, accept_gaps=True)
         self.assertEqual(result["audit_forecast"], forecast)
         self.assertEqual(result["warnings"][0]["details"], forecast)
-        self.assertIn("v5", result["warnings"][0]["message"])
+        warning = result["warnings"][0]
+        self.assertEqual(warning["code"], caught.exception.code)
+        for outcome in forecast["outcomes"]:
+            self.assertIn(outcome, warning["message"])
+        self.assertIn("can record only an unresolved finding", warning["message"])
         packet = json.loads(self.artifacts.read(result["native_packet"]))
         self.assertNotIn("accept_gaps", json.dumps(packet))
-        self.assertEqual(set(packet["scientific_context"]), {"openness_minimum"})
+        self.assertEqual(set(packet["scientific_context"]), {"openness_minimum", "minimum_gaps",
+                                                          "audit_forecast", "decisive_work_ids"})
         self.assertTrue((destination / "inputs.json").is_file())
 
-    def test_g2_bounded_enumeration_is_a_notice_and_keeps_legacy_packet_bytes(self):
+    def test_g2_bounded_enumeration_is_a_notice_and_keeps_stored_packet_bytes(self):
         first = self.capture_page({"meta": {"count": 4}, "results": [
             {"id": "https://openalex.org/W123", "title": "Authored source", "type": "article"}]})
         payload = self.build_search_payload([first])
@@ -329,8 +334,12 @@ class MinimumAssessmentTests(ProblemCase):
         source = Path(__file__).with_name("fixtures") / "openness_export_0_69_15.py.txt"
         exec(compile(source.read_text(), str(source), "exec"), legacy)
         old = legacy["export_openness"](self.store, spec, self.root / "old-packet")
+        old_packet_bytes = self.artifacts.read(old["native_packet"])
+        old_manifest_bytes = (self.root / "old-packet" / "inputs.json").read_bytes()
         result = problem_openness.export_openness(self.store, spec, self.root / "packet")
-        self.assertEqual(result["native_packet"], old["native_packet"])
+        self.assertNotEqual(result["native_packet"], old["native_packet"])
+        self.assertEqual(self.artifacts.read(old["native_packet"]), old_packet_bytes)
+        self.assertEqual((self.root / "old-packet" / "inputs.json").read_bytes(), old_manifest_bytes)
         forecast = result["audit_forecast"]
         self.assertEqual(forecast["outcomes"], {"supported_open": "possible", "already_solved": "blocked"})
         self.assertEqual([gap["condition"] for gap in forecast["gaps"]], ["settling_undeclared"])

@@ -7,12 +7,15 @@ from codex_route_fixtures import invoke_codex, limit_codex_input, read_sent_pack
 from test_research_problem_claims import ProblemCase
 from test_research_problem_openness_minimum import ProblemOpennessMinimumTests
 from research_harness import review_protocol as protocol
+from research_harness import openness_reading
+from research_harness.problem_openness import export_openness as export_current_openness
 from research_harness.literature import import_bundle
 from research_harness.reading import record_reading
 
 # Two of the three full texts fit one reading turn; the single-turn packet with all three does not.
 INPUT_LIMIT_CHARACTERS = 26000
 RESULT_FINDINGS = ('statement', 'assumptions', 'scope', 'dependencies', 'policy')
+PREPARE_PACKET = openness_reading.prepare_packet
 
 
 def build_theorem(number):
@@ -35,6 +38,8 @@ def build_sized_body(number, characters):
 
 class OpennessReadingCase(ProblemCase):
     text_sizes = None
+    route_model = 'fixture-model'
+    historical_v5 = False
     # Historical unit, withholding and prompt expectations stay explicit under v4. V5 cases set this to None.
     reading_protocol = 'exactory-openness-reading-v4'
 
@@ -69,7 +74,7 @@ class OpennessReadingCase(ProblemCase):
             self.texts[version] = capture['text']
         self.searches = self.record_searches()
         self.search = self.searches[0]
-        record_codex_route(self)
+        record_codex_route(self, model=self.route_model)
 
     def record_searches(self):
         """The searches that the openness minimum binds: one search that finds every read work."""
@@ -80,6 +85,9 @@ class OpennessReadingCase(ProblemCase):
 
     def export(self, priority=(), name='openness-packet', assignment_id='turn-1'):
         from research_harness.problem_openness import export_openness
+        if self.historical_v5 and export_openness is export_current_openness:
+            from openness_legacy_fixtures import export_as_0_85_3
+            export_openness = export_as_0_85_3
         minimum = {'searches': [{'formulation': self.selected['statement'], 'search_id': search['id']}
                                 for search in self.searches],
                    'settling_work_id': None, 'duplicate_resolutions': []}
@@ -92,9 +100,21 @@ class OpennessReadingCase(ProblemCase):
         context = {'native_packet': native_packet}
         if prior is not None:
             context['prior_assignment_id'] = prior
+        if (self.historical_v5 and prior is None and protocol.openness_reading is openness_reading
+                and openness_reading.prepare_packet is PREPARE_PACKET
+                and openness_reading.is_openness_packet(json.loads(self.artifacts.read(native_packet)))):
+            from openness_legacy_fixtures import load_0_87_0_openness_reading
+            with patch.object(protocol, 'openness_reading', load_0_87_0_openness_reading()):
+                return self.assign_historical_head(identifier, native_packet)
         return self.mutate(protocol.record_assignment, {'id': identifier, 'route_id': 'route', 'dossier_id': None,
             'role': 'native_math', 'reviewer_id': 'openness-reviewer', 'author_id': 'problem-author',
             'context': context})['result']
+
+    def assign_historical_head(self, identifier, native_packet):
+        """Seed the old first assignment; later assignments use the installed continuation code."""
+        return self.mutate(protocol.record_assignment, {'id': identifier, 'route_id': 'route', 'dossier_id': None,
+            'role': 'native_math', 'reviewer_id': 'openness-reviewer', 'author_id': 'problem-author',
+            'context': {'native_packet': native_packet}})['result']
 
     def invoke(self, identifier, output, attempt=None):
         return invoke_codex(self, identifier, output, attempt)
@@ -148,6 +168,16 @@ class OpennessReadingCase(ProblemCase):
                     'evidence': [entry['digest'] for entry in native['evidence']], 'searched_at': '2026-10-15',
                     'coverage': 'The recorded search for the exact statement with bounded coverage.',
                     'reason': 'The three read papers prove other cases and leave the statement open.'}
+        if (native['contract'].get('orchestration') == 'problem_creation'
+                and native['scientific_context']['openness_minimum']['schema_version'] == 2
+                and ('reading_record' not in packet
+                     or packet['reading_record']['protocol'] == 'exactory-openness-reading-v6')):
+            return {'schema_version': 3, 'subject_digest': native['subject_digest'], 'claim_digest': native['claim_digest'],
+                    'reviewer': native['reviewer'],
+                    'findings': dict({key: 'Assessed the exact supplied subject.' for key in RESULT_FINDINGS},
+                        openness=dict({key: openness[key] for key in ('outcome', 'coverage', 'reason')},
+                            grounds=[] if outcome != 'unresolved' else [dict(kind='reviewer_gap',
+                                text='The reviewer identifies a remaining literature gap.')]))}
         if outcome != 'unresolved':
             openness['minimum'] = native['scientific_context']['openness_minimum']
         return {'schema_version': 2, 'subject_digest': native['subject_digest'], 'claim_digest': native['claim_digest'],

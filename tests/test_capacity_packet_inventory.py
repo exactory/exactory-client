@@ -232,6 +232,114 @@ def build_parts_fixture_packets():
 
 
 class QuantityFactoryTests(unittest.TestCase):
+    def test_correction_evidence_union_closes_each_legal_locator_shape(self):
+        from research_harness.strategy import evidence_fields
+        from research_harness.source_links import validate_link_fields
+        registry = read_packet_registry()
+        artifact = dict(path='research/sources/objects/' + 'a' * 64,
+                        sha256='a' * 64, size=1, media_type='text/plain')
+        text = dict(kind='text', start=0, end=1, quote='x')
+        locators = [text, dict(kind='span', start=0, end=1, sha256='b' * 64, excerpt='x'),
+            dict(kind='json', pointer='/claim', value=dict(claim=[True, {'scope': 'finite'}])),
+            dict(kind='pdf', page_index=0, printed_page='iv', region=[0, 0, 1, 1]),
+            dict(kind='html', anchor=text, assets=[dict(url='https://example.invalid/figure.png',
+                source_id='captured-asset', artifact=artifact)])]
+        for locator in locators:
+            # These are closed grammar shapes. The separate real constructor
+            # test proves source/reading availability and exact-byte delivery.
+            reference = dict(kind='source', link=dict(version_id='arxiv:2601.76001v1',
+                source_id='capture', artifact=artifact, locator=locator))
+            evidence_fields(reference, review_binding=True)
+            validate_link_fields(reference['link'])
+            packet = dict(protocol='exactory-reassessment-disposition-correction-v1',
+                original_output=dict(reassessment=dict(findings=[dict(evidence=[reference])])))
+            with self.subTest(locator=locator['kind']):
+                self.assertEqual(validate_packet('correction', packet, registry,
+                                                request_limit_characters=1000), [])
+                if locator['kind'] == 'json':
+                    self.assertTrue(validate_packet('correction', packet, registry))
+                changed = copy.deepcopy(packet)
+                changed['original_output']['reassessment']['findings'][0]['evidence'][0]['link']['locator']['unregistered'] = 'x'
+                self.assertTrue(validate_packet('correction', changed, registry,
+                                                request_limit_characters=1000))
+        for reference in (artifact, dict(kind='record', record_kind='problem-value', id='value',
+                                        digest='c' * 64, origin='d' * 64)):
+            evidence_fields(reference, review_binding=True)
+            packet = dict(protocol='exactory-reassessment-disposition-correction-v1',
+                original_output=dict(reassessment=dict(findings=[dict(evidence=[reference])])))
+            self.assertEqual(validate_packet('correction', packet, registry), [])
+
+    def test_correction_record_and_source_references_use_real_eligible_builder(self):
+        from capacity_packet_fixtures import build_scaled_correction_references
+        from research_harness import review_output_correction
+        original = review_output_correction.prepare_packet
+        registry = read_packet_registry()
+        for quantity in ('identifiers', 'sources'):
+            observed = []
+            def prepare(*args, **kwargs):
+                packet = original(*args, **kwargs)
+                observed.append(copy.deepcopy(packet))
+                return packet
+            with self.subTest(quantity=quantity), patch.object(
+                    review_output_correction, 'prepare_packet', side_effect=prepare):
+                packet = build_scaled_correction_references(quantity, 31)
+                self.assertIn(packet, observed)
+                self.assertEqual(validate_packet('correction', packet, registry), [])
+                output = packet['original_output']
+                arrays = [output['value']['evidence'], output['objections'][0]['evidence'],
+                    output['value']['objection_findings'][0]['evidence'],
+                    output['reassessment']['findings'][0]['evidence']]
+                arrays.extend(row['evidence'] for row in output['value']['assurances'])
+                for references in arrays:
+                    self.assertEqual({row.get('kind', 'artifact') for row in references},
+                                     {'artifact', 'record', 'source'})
+                    if quantity == 'identifiers':
+                        self.assertGreaterEqual(max(len(row.get('id', '')) for row in references), 31)
+                        self.assertGreaterEqual(max(len(row.get('record_kind', '')) for row in references), 31)
+                    else:
+                        source = next(row['link'] for row in references if row.get('kind') == 'source')
+                        self.assertGreaterEqual(len(source['locator']['quote']), 31)
+                changed = copy.deepcopy(packet)
+                changed['original_output']['reassessment']['findings'][0]['evidence'][0]['undeclared'] = 'x'
+                self.assertTrue(validate_packet('correction', changed, registry))
+
+    def test_correction_history_component_uses_frozen_reader_and_exact_copy(self):
+        from unittest.mock import patch
+        from capacity_packet_fixtures import build_scaled_correction_history
+        from research_harness import review_context_repair, review_output_correction
+        observed = []
+        original = review_context_repair.frozen_reassessment_packet
+        def read_frozen(records, artifacts, assignment):
+            value = original(records, artifacts, assignment)
+            self.assertEqual(value, json.loads(artifacts.read(assignment['packet'])))
+            observed.append(value)
+            return value
+        with patch.object(review_context_repair, 'frozen_reassessment_packet', side_effect=read_frozen):
+            packet = build_scaled_correction_history('reviews', 3)
+        self.assertEqual(observed, [packet])
+        self.assertEqual(len(packet['historical_reviews']), 3)
+        self.assertEqual(len({row['id'] for row in packet['historical_reviews']}), 3)
+        self.assertEqual(len({row['assignment_id'] for row in packet['historical_reviews']}), 3)
+        scaled = build_scaled_correction_history('texts', 17)['historical_reviews'][0]
+        self.assertEqual(scaled['payload']['value']['reason'], 'x' * 17)
+        self.assertEqual(scaled['payload']['limitations'], ['x' * 17])
+        self.assertEqual(validate_packet('correction', dict(
+            protocol=review_output_correction.PROTOCOL,
+            historical_reviews=packet['historical_reviews']), read_packet_registry()), [])
+
+        # The production correction builder preserves this complete component;
+        # eligibility and whole-request planning retain their separate Q11 tests.
+        from test_review_output_correction import CorrectionTests
+        case = CorrectionTests()
+        self.addCleanup(case.doCleanups)
+        case.setUp()
+        case.prepare_refused()
+        records, artifacts = case.fixture.read_records(), case.fixture.artifacts
+        assignment = records['review_assignment'][case.case.assignment['id']]
+        frozen = original(records, artifacts, assignment)
+        correction = review_output_correction.prepare_packet(records, artifacts, assignment['id'])
+        self.assertEqual(correction['historical_reviews'], frozen['historical_reviews'])
+
     def test_shipped_properties_execute_scaled_upstream_factories_and_gaps_are_explicit(self):
         from ci.capacity_guard import read_matrix
         from capacity_packet_fixtures import FACTORIES

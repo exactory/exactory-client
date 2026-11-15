@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from codex_route_fixtures import invoke_codex, record_codex_route
 from research_harness import bar_sources, problem_forming, problem_forming_import
-from research_harness import review_excerpts
+from research_harness import review_capacity_evidence, review_excerpts, review_prompt_paragraphs
 from research_harness import review_protocol as protocol
 from research_harness.evidence import digest
 import test_problem_forming_import as import_fixtures
@@ -131,7 +131,8 @@ class SlateFormingTests(unittest.TestCase):
         carried = protocol.collect_carried_records(case.read_records(), case.artifacts, None, packets=[packet])
         for reference in references:
             self.assertIsNotNone(protocol.find_carried_record(case.read_records(), carried, reference, frozen=True))
-        self.assertTrue(assignment['prompt']['template_id'].endswith('/slate-forming-v2'))
+        self.assertIn('exactory-problem-slate-forming-v2',
+                      assignment['prompt']['parameters'][review_prompt_paragraphs.PARAMETER])
         output = case.build_slate_output(['candidate-1'])
         output['value']['status'] = 'unresolved'
         output['source_requests'] = [dict(id='probe-output', kind='artifact', sha256=artifact['sha256'])]
@@ -158,9 +159,13 @@ class SlateFormingTests(unittest.TestCase):
         reference = fixture.reference('forming_call', call, imported['source_origin'])
         case.record_candidate(source=dict(kind='phenomenon', reference='An imported observation.', evidence=[reference]))
         case.observe_bars()
-        # Freeze the legacy assignment as releases before 0.89.2 stored it, without capacity admission.
+        from capacity_evidence_fixtures import build_capacity_prior
+        route = case.read_records()['review_route']['route']
+        # The historical all-body packet needs its own synthetic keyed allowance.
+        priors = tuple(review_capacity_evidence.read_capacity_priors()) + (
+            build_capacity_prior(route, 10000000, 'historical-forming-prior'),)
         with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL), \
-                patch('research_harness.review_route_capacity.require_covered_assignment'):
+                patch.object(review_capacity_evidence, 'CAPACITY_PRIORS', priors):
             legacy = case.assign('slate', 'first', identifier='legacy-slate')
         old_packet_bytes = case.artifacts.read(legacy['packet'])
         old_packet = json.loads(old_packet_bytes)

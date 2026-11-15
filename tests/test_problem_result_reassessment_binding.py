@@ -167,7 +167,7 @@ class ResultReassessmentBindingTests(unittest.TestCase):
                 self.contract(assignment=dict(self.assignment, prompt=prompt))
         old = protocol.previous_problem_result_prompt(repair=True)
         self.assertNotIn('without a digest, which the harness binds', old['text'])
-        edited = copy.deepcopy(self.assignment['prompt'])
+        edited = protocol.canonical_prompt('result', repair=True, orchestration='problem_creation')
         edited['text'] += ' '
         version_one = protocol.canonical_prompt('result', version=1, repair=True, orchestration='problem_creation')
         # 0.56.1 binds a record reference without a digest in the objections and the reassessment of every problem

@@ -1,10 +1,16 @@
 """Mechanical openness minimum over exact common search and reading records."""
 
 from datetime import timezone
+from collections import ChainMap
 import re
 
 from .errors import ResearchError
 from .evidence import digest
+
+
+FAMILY_READING_SPEC_REFUSAL = (
+    "Bind a decisive work from this search, without a complete full reading of its own, "
+    "to another record of the same work with a complete full reading.")
 
 
 class OpennessError(ResearchError):
@@ -116,10 +122,33 @@ def check_search_coverage(search):
                 and not find_search_integrity_errors(search) and not search.get("gaps"))
 
 
-def find_material_searches(records, formulations):
-    """Find searches whose judgments can change the declared openness claim."""
-    return [search for search in records.get("literature_search", {}).values()
-            if (search.get("question") in formulations or set(formulations).intersection(search["queries"]))
+def list_search_completions(records, bound):
+    """Keep every pinned completion edge and the search that made its statements."""
+    searches = records.get("literature_search", {})
+    completions, visited = [], set()
+    pending = list(bound)
+    while pending:
+        search = pending.pop()
+        if search["id"] in visited:
+            continue
+        visited.add(search["id"])
+        for entry in search.get("completes", []):
+            earlier = searches.get(entry["search_id"])
+            if earlier is not None and digest(earlier) == entry["search_digest"]:
+                completions.append(dict(entry, completing_search_id=search["id"]))
+                pending.append(earlier)
+    return completions
+
+
+def find_material_searches(records, formulations, bound=()):
+    """Find material searches except ancestors of the searches this minimum binds."""
+    searches = records.get("literature_search", {})
+    bound = set(bound)
+    selected = [search for search in searches.values() if bound and digest(search) in bound]
+    completed = {entry["search_id"] for entry in list_search_completions(records, selected)}
+    return [search for search in searches.values()
+            if search["id"] not in completed
+            and (search.get("question") in formulations or set(formulations).intersection(search["queries"]))
             and (search.get("gaps") or any(row["disposition"] in {
                 "relevant", "contradictory", "potentially_relevant", "unresolved", "duplicate"}
                 for row in search["dispositions"]))]
@@ -155,7 +184,7 @@ def validate_minimum_bindings(minimum, statement, records):
              "openness_statement_mismatch")
     formulations = {minimum["statement"], *minimum["neighbours"]}
     bound = {item["search_digest"] for item in minimum["searches"]}
-    unbound = sorted(search["id"] for search in find_material_searches(records, formulations)
+    unbound = sorted(search["id"] for search in find_material_searches(records, formulations, bound)
                      if digest(search) not in bound)
     _require(not unbound, "Bind each search in search_ids to the declared formulation it addresses: a search with a "
              "relevant, contradictory, potentially_relevant, unresolved or duplicate result, or with gaps, can change "
@@ -208,6 +237,10 @@ def audit_minimum(finding, statement, records, artifacts, delivered):
     require_unblocked_outcome(gaps, finding["outcome"], {"reading_missing", "reading_deferred"})
     require_unblocked_outcome(gaps, finding["outcome"],
                               {"settling_undeclared", "settling_not_decisive", "settling_declared"})
+    result_digests = {row["result_digest"] for row in minimum.get("results", [])}
+    _require(result_digests <= bound & delivered,
+             "The finding and observed packet must bind every accepted result", "openness_evidence_mismatch")
+    require_unblocked_outcome(gaps, finding["outcome"], {"result_undelivered", "result_changed"})
 
 
 # Keep the historic audit messages and their codes in one place. The two
@@ -223,6 +256,11 @@ GAP_REFUSALS = {
     "settling_undeclared": ("openness_settling_source", "Already solved requires the fully read settling work from a bound search"),
     "settling_declared": ("openness_settling_source", "A declared settling source cannot support an open finding"),
 }
+from .problem_openness_reviews import RESULT_UNDELIVERED_MESSAGE, RESULT_CHANGED_MESSAGE
+GAP_REFUSALS.update({
+    "result_undelivered": ("openness_result_gap", RESULT_UNDELIVERED_MESSAGE),
+    "result_changed": ("openness_result_changed", RESULT_CHANGED_MESSAGE),
+})
 
 
 def require_unblocked_outcome(gaps, outcome, conditions, binding=None):
@@ -254,7 +292,8 @@ def list_minimum_gaps(minimum, statement, records, artifacts):
     from .literature import find_search_integrity_errors
     from .evaluation import Evaluation
     from .reading import fulltext_coverage
-    from .source_deferrals import assess_deferrals
+    from .source_deferrals import _check_artifact, assess_deferrals
+    from .identities import find_work_family_link
 
     artifacts = Evaluation.of(records, artifacts)
     searches = {digest(row): row for row in records.get("literature_search", {}).values()}
@@ -321,28 +360,68 @@ def list_minimum_gaps(minimum, statement, records, artifacts):
             add_gap("duplicate_source_not_decisive", item, search, work, command="export", canonical_work_id=canonical)
         else:
             required.setdefault(canonical, (item, search))
-    pinned = dict(records, reading={key: row for key, row in records.get("reading", {}).items()
-                                   if digest(row) in minimum["reading_digests"]})
+    family_versions = {}
+    if minimum["schema_version"] == 2:
+        for row in minimum["family_readings"]:
+            identity, work, version = row["search_digest"], row["work_id"], row["version_id"]
+            search = searches.get(identity)
+            item = next((item for item, _ in selected if item["search_digest"] == identity), None)
+            if (item is None or work == version or work not in records.get("work", {})
+                    or version not in records.get("work", {})
+                    or not any(disposition["work_id"] == work and disposition["disposition"] in {"relevant", "contradictory"}
+                               for disposition in search["dispositions"])
+                    or find_work_family_link(records, work, version) is None):
+                add_gap("reading_missing", item, search, work, command="export", version_id=version,
+                        assessment_error={"code": "openness_reading_gap", "message": FAMILY_READING_SPEC_REFUSAL})
+            else:
+                family_versions[(identity, work)] = version
+    # Nested component checks also consume readings. Keep the pinned view all
+    # the way down without enumerating any other record kind (R10).
+    pinned = ChainMap({"reading": {key: row for key, row in records.get("reading", {}).items()
+                                   if digest(row) in minimum["reading_digests"]}}, records)
     pinned_artifacts = Evaluation.of(pinned, artifacts)
     try:
-        deferred = {row["version_id"]: row for row in assess_deferrals(records, artifacts)
-                    if row["status"] in {"active", "stale"}}
+        if minimum["schema_version"] == 1:
+            deferred = {row["version_id"]: row for row in assess_deferrals(records, artifacts)
+                        if row["status"] in {"active", "stale"}}
+        else:
+            # Both active and stale decisions block a resolved finding. Their
+            # wider research-graph dependency status is outside R10; only the
+            # selected, unresumed decisions of decisive works matter here.
+            deferred = {}
+            versions = set(required) | set(family_versions.values())
+            for version in sorted(versions):
+                selection = records.get("source_deferral_selection", {}).get(version, {})
+                saved = records.get("source_deferral", {}).get(selection.get("deferral_id"))
+                if saved is None or selection.get("resume_id") or saved["profile"] != "research":
+                    continue
+                for reference in [saved["authorization"]] + saved["acquisition_evidence"]:
+                    _check_artifact(artifacts, reference)
+                deferred[version] = dict(saved, status="active")
     except ResearchError as error:
         # Retain the store's error at the historic reading-check position. An
         # unresolved finding can still report it without failing status/next.
         add_gap("reading_deferred", command="resume-source", assessment_error=error.as_dict())
         deferred = {}
     for work in sorted(required):
-        item, search = required[work]
-        if work in deferred:
-            add_gap("reading_deferred", item, search, work, command="resume-source", status=deferred[work]["status"])
-        try:
-            coverage = fulltext_coverage(pinned, pinned_artifacts, work)
-        except ResearchError as error:
-            add_gap("reading_missing", item, search, work, command="reading", assessment_error=error.as_dict())
-            continue
-        if not coverage["complete"]:
-            add_gap("reading_missing", item, search, work, command="reading", missing=coverage["missing"])
+        bindings = ([required[work]] if minimum["schema_version"] == 1 else
+                    [(item, search) for item, search in selected if any(
+                        row["work_id"] == work and row["disposition"] in {"relevant", "contradictory"}
+                        for row in search["dispositions"])])
+        for item, search in bindings:
+            version = family_versions.get((item["search_digest"], work), work)
+            for deferred_work in sorted({work, version}.intersection(deferred)):
+                add_gap("reading_deferred", item, search, work, command="resume-source",
+                        status=deferred[deferred_work]["status"])
+            try:
+                coverage = fulltext_coverage(pinned, pinned_artifacts, version)
+            except ResearchError as error:
+                details = ({} if minimum["schema_version"] == 2 and error.code == "missing_version" else
+                           {"assessment_error": error.as_dict()})
+                add_gap("reading_missing", item, search, work, command="reading", **details)
+                continue
+            if not coverage["complete"]:
+                add_gap("reading_missing", item, search, work, command="reading", missing=coverage["missing"])
     settling = minimum["settling_work_id"]
     if settling is None:
         add_gap("settling_undeclared", outcomes=["already_solved"])
@@ -351,6 +430,13 @@ def list_minimum_gaps(minimum, statement, records, artifacts):
     else:
         item, search = required[settling]
         add_gap("settling_declared", item, search, settling, outcomes=["supported_open"])
+    from .problem_openness_reviews import has_result_changed, PROOF_ROLES, validate_bound_results
+    for binding, body in zip(minimum.get("results", []), validate_bound_results(minimum, records, artifacts)):
+        if has_result_changed(records, binding, body):
+            add_gap("result_changed", command="search deliver-attempt", result=binding)
+        for part in body["artifacts"]:
+            if part["delivery"] == "described" and part["role"] in PROOF_ROLES:
+                add_gap("result_undelivered", command="export", result=binding, artifact=part)
     return gaps
 
 
@@ -388,10 +474,19 @@ def list_minimum_notices(minimum, records, artifacts):
                 pages.append(dict(page, captured_at=source["captured_at"]))
         receipt = build_search_receipt(search, search["found_work_ids"], search.get("pending", []),
                                        search.get("page_groups", []), pages)
-        notices.append(dict(binding, search_id=search["id"], coverage=search.get("coverage", []),
+        notices.append(dict(binding, **({"completes": list_search_completions(records, [search])} if search.get("completes") else {}), search_id=search["id"], coverage=search.get("coverage", []),
                             incomplete_responses=receipt["incomplete_responses"],
                             excluded_item_count=receipt["excluded_item_count"], excluded_items=receipt["excluded_items"],
                             warnings=receipt["warnings"]))
+    from .source_links import describe_supplied_readings
+    bound = set(minimum['reading_digests'])
+    notices.extend(dict(kind='supplied_text', **row) for row in describe_supplied_readings(records,
+        [reading for reading in records.get('reading', {}).values() if digest(reading) in bound]))
+    from .problem_openness_reviews import PROOF_ROLES, RESULT_DESCRIBED_MESSAGE, validate_bound_results
+    for binding, body in zip(minimum.get("results", []), validate_bound_results(minimum, records, artifacts)):
+        notices.extend(dict(condition="result_described", result=binding, artifact=part,
+                            message=RESULT_DESCRIBED_MESSAGE) for part in body["artifacts"]
+                       if part["delivery"] == "described" and part["role"] not in PROOF_ROLES)
     return notices
 
 

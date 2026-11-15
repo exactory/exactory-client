@@ -4,7 +4,7 @@ import copy
 import json
 import shutil
 import tempfile
-from contextlib import nullcontext
+from contextlib import ExitStack, nullcontext
 from unittest.mock import patch
 
 from codex_route_fixtures import build_codex_response, invoke_codex, record_codex_route, probe_codex_route
@@ -29,10 +29,62 @@ class MatrixPartsCase(VerificationPartsTests):
         super().setUp()
 
 
+class MatrixReadingCase(OpennessReadingCase):
+    # Both the historical and bounded protocols must use reading turns even
+    # when their full requests fit the backend's input capacity.
+    text_sizes = (80000, 80000)
+
+
 def execute(case, command, payload):
     return cli.OPERATIONS[command](case.store, payload,
         expected_revision=case.store.revision,
         request_id='size-matrix-' + str(case.store.revision))['result']
+
+
+def execute_additional_refusal_chain(owner, chain):
+    """Exercise the remaining installed adapters through the planner and real admission."""
+    from codex_route_fixtures import limit_codex_input
+    if chain == 'parts_v1':
+        from problem_parts_fixtures import ResultPartsCase
+        fixture = owner.prepare(ResultPartsCase)
+        fixture.oversized()
+    elif chain == 'parts_v2:study_readiness':
+        from test_review_parts_study import ReadinessPartsTests
+        fixture = owner.prepare(ReadinessPartsTests)
+        fixture.enlarge_readiness()
+    elif chain == 'parts_v2:problem_adjudicator':
+        from test_review_parts_adjudication_journey import AdjudicationPartsCase
+        fixture = owner.prepare(AdjudicationPartsCase)
+        fixture.oversized()
+    else:
+        raise ValueError(chain)
+    case = fixture.case
+    head = fixture.assign()
+    from research_harness.review_continuation import _describe_chain
+    owner.assertEqual(_describe_chain(head), chain)
+    packet = fixture.packet(head)
+    good = fixture.output(head) if chain == 'parts_v1' else make_output(packet)
+    bad = copy.deepcopy(good)
+    bad.pop('stage' if chain == 'parts_v1' else 'kind')
+    fixture.invoke(head, bad)
+    route = case.store.snapshot()['records']['review_route'][head['route_id']]
+    limit_codex_input(fixture, transport.local_input_limit(route) + 15000)
+    plan = plan_next(case.store.snapshot()['records'], case.artifacts, head['id'])
+    owner.assertEqual((plan['state'], plan['command']), ('replace', 'review-assignment'), plan)
+    owner.assertEqual(plan['payload']['context']['output_refusal'], {'assignment_id': head['id']})
+    replacement = execute(case, plan['command'], plan['payload'])
+    supplied = fixture.packet(replacement)
+    owner.assertIn('output_refusal', supplied)
+    owner.assertEqual(supplied['output_refusal']['refused'][-1]['assignment_id'], head['id'])
+    preflight = check_preflight(case, replacement)
+    corrected = fixture.output(replacement) if chain == 'parts_v1' else make_output(supplied)
+    fixture.invoke(replacement, corrected)
+    state = protocol.assignment_state(case.store.snapshot()['records'], case.artifacts, replacement['id'])
+    owner.assertTrue(state['ready'], state)
+    following = plan_next(case.store.snapshot()['records'], case.artifacts, head['id'])
+    owner.assertEqual(following['head_id'], replacement['id'])
+    owner.assertEqual(following['state'], 'continue', following)
+    return dict(chain=chain, assignment_id=head['id'], replacement=replacement['id'], preflight=preflight)
 
 
 def fail_size_request(outcome, detail):
@@ -89,8 +141,9 @@ def prepare_assignment(owner, kind):
             head = fixture.assign('prepare-' + str(number), head['id'])
         raise AssertionError(PARTS_KIND_MESSAGE.format(kind=kind))
     if kind == 'reading':
-        case = owner.prepare(OpennessReadingCase)
-        case.limit_input()
+        case = owner.prepare(MatrixReadingCase)
+        case.serving_input_limit = transport.CODEX_INPUT_LIMIT_CHARS
+        case.limit_input(260000)
         reference = case.export(assignment_id='size-head')
         return case, case.assign('size-head', reference), case
     if kind == 'single':
@@ -158,7 +211,7 @@ def check_preflight(case, assignment):
 
 def describe_subject(case, assignment):
     packet = json.loads(case.artifacts.read(assignment['packet']))
-    native = packet.get('native', {})
+    native = packet.get('native', packet.get('reading_turn', {}))
     return dict(role=assignment['role'], dossier_id=assignment.get('dossier_id'),
         subject=assignment.get('subject', packet.get('subject')),
         native_subject=native.get('subject_digest'), claim=native.get('claim_digest'))
@@ -173,14 +226,115 @@ def execute_decision(owner, case, head, stop, fixture):
 
 
 def _execute_decision(owner, case, head, stop, fixture):
-    """Execute every supplied answer; current size stops each have one route answer."""
+    """Execute each supplied answer from the same independent stopped record."""
     answers = stop['details']['decision']['then']
-    owner.assertEqual(len(answers), 1, 'A new answer needs its own independent fixture journey.')
+    owner.assertTrue(answers)
+    journeys = []
+    completed = []
+    if len(answers) == 1:
+        completed.append(_execute_answer(owner, case, head, answers[0], fixture))
+    else:
+        from research_harness import openness_reading
+        from research_harness.storage import Store
+        owner.assertEqual([answer['answer'] for answer in answers],
+                          [openness_reading.WAIT_PROBLEM_ANSWER, openness_reading.SMALLER_PACKET_ANSWER])
+        with tempfile.TemporaryDirectory() as directory:
+            saved = shutil.copytree(case.root, directory + '/stopped')
+            for answer in answers:
+                shutil.rmtree(case.root)
+                shutil.copytree(saved, case.root)
+                case.store = Store(case.root)
+                case.artifacts = case.store.build_artifact_store()
+                completed.append(_execute_projection_answer(owner, case, head, answer, fixture))
+    for answer, (boundary, commands) in zip(answers, completed):
+        journeys.append(dict(answer=answer['answer'], accepted_commands=commands, end=boundary))
+    from ci.continuity_guard import validate_stop_journeys
+    from research_harness.stop_classes import STOP_REGISTRY
+    owner.assertEqual(validate_stop_journeys(stop, journeys, STOP_REGISTRY), [])
+    return completed[0]
+
+
+def _execute_projection_answer(owner, case, head, answer, fixture):
+    from research_harness import openness_reading, review_route_capacity
+    from research_harness.capture_selection import select_main_capture
+    from research_harness.check_mode import check_mutation
+    from research_harness.literature import import_bundle
+    from research_harness.reading import record_reading
+    from openness_reading_fixtures import build_sized_body
+
+    commands = []
+    waiting = answer['answer'] == openness_reading.WAIT_PROBLEM_ANSWER
+    records = case.store.snapshot()['records']
+    old_native = json.loads(case.artifacts.read(head['context']['native_packet']))
+    old_material = sum(len(case.artifacts.read(row['artifact']))
+                       for row in openness_reading.list_reading_rows(records, case.artifacts, old_native))
+    route = records['review_route'][head['route_id']]
+    old_request = protocol.build_assignment_request(records, case.artifacts, head)
+    old_characters = review_route_capacity.measure_request(route, old_request,
+        records=records, artifacts=case.artifacts)['text_characters']
+    with ExitStack() as installed:
+        if waiting:
+            installed.enter_context(patch.object(openness_reading, 'find_chain_protocol',
+                                                  return_value=openness_reading.PROTOCOL_V6))
+            installed.enter_context(patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', fixture.serving_input_limit))
+        else:
+            for number, version in enumerate(fixture.versions, 1):
+                capture = case.capture(version, pdf_text=build_sized_body(number, 1000))
+                case.mutate(select_main_capture, dict(version_id=version, source_id=capture['source_id'],
+                    reason='Use the complete compact representation for this smaller packet.'))
+                bundle = case.bundle(version, capture=capture, bundle_id='matrix-compact-' + str(number))
+                case.mutate(import_bundle, bundle)
+                case.mutate(record_reading, case.full_note(bundle, 'matrix-compact-' + str(number)))
+        owner.assertEqual(len(answer['steps']), 1)
+        step = answer['steps'][0]
+        owner.assertEqual((step['id'], step['command']), (4, 'export'))
+        reference = fixture.export(name='matrix-projection-export', assignment_id='matrix-following')
+        commands.append(step['command'])
+        if not waiting:
+            native = json.loads(case.artifacts.read(reference))
+            material = sum(len(case.artifacts.read(row['artifact'])) for row in
+                openness_reading.list_reading_rows(case.store.snapshot()['records'], case.artifacts, native))
+            owner.assertLess(material, old_material)
+        owner.assertEqual([entry.get('check', False) for entry in step['then']],
+                          [False] if waiting else [True, False])
+        for entry in step['then']:
+            owner.assertEqual(entry['command'], 'review-assignment')
+            payload = copy.deepcopy(entry['payload'])
+            payload.update(id='matrix-following', route_id=head['route_id'], reviewer_id=head['reviewer_id'],
+                           context=dict(native_packet=reference))
+            if entry.get('check'):
+                before = case.store.snapshot()
+                checked = check_mutation(case.store, protocol.record_assignment, payload,
+                    expected_revision=case.store.revision, request_id='matrix-projection-check', bounded_payload=payload)
+                owner.assertEqual(checked['check'], 'accepted')
+                owner.assertEqual(case.store.snapshot(), before)
+            else:
+                following = execute(case, entry['command'], payload)
+            commands.append(entry['command'])
+        packet = json.loads(case.artifacts.read(following['packet']))
+        if waiting:
+            owner.assertEqual(openness_reading.find_protocol(packet), openness_reading.PROTOCOL_V6)
+            owner.assertTrue(following['reading_chain_admission']['projection']['finite'])
+        else:
+            owner.assertIsNone(openness_reading.find_protocol(packet))
+            records = case.store.snapshot()['records']
+            request = protocol.build_assignment_request(records, case.artifacts, following)
+            measured = review_route_capacity.measure_request(route, request, records=records, artifacts=case.artifacts)
+            owner.assertLess(measured['text_characters'], old_characters)
+        owner.assertEqual(describe_subject(case, following), describe_subject(case, head))
+        preflight = check_preflight(case, following)
+        plan = plan_next(case.store.snapshot()['records'], case.artifacts, following['id'])
+        owner.assertEqual((plan['head_id'], plan['state']), (following['id'], 'run'))
+        return dict(kind='assignment', id=following['id'], prior_head=head['id'], eligible=True,
+            preflight=preflight, subject=describe_subject(case, following), record=following), commands
+
+
+def _execute_answer(owner, case, head, answer, fixture):
     commands = []
     event = None
     following = None
-    for step in answers[0]['steps']:
-        number = step['id']
+    for step in answer['steps']:
+        number = step.get('id')
         if number == 8:
             evidence = case.artifacts.put(b'Continue this stopped review on a serving route.', 'text/plain')
             event = execute(case, step['command'], dict(step['payload'], id='matrix-retire',
@@ -216,10 +370,6 @@ def _execute_decision(owner, case, head, stop, fixture):
     owner.assertEqual(plan['state'], 'run', plan)
     boundary = dict(kind='assignment', id=following['id'], prior_head=head['id'], eligible=True,
         preflight=preflight, subject=describe_subject(case, following), record=following)
-    from ci.continuity_guard import validate_stop_journeys
-    from research_harness.stop_classes import STOP_REGISTRY
-    owner.assertEqual(validate_stop_journeys(stop, [dict(answer=answers[0]['answer'],
-        accepted_commands=commands, end=boundary)], STOP_REGISTRY), [])
     return boundary, commands
 
 
@@ -298,8 +448,20 @@ def execute_correction_size(owner, outcome, detail, prepared=None):
     classified = classify_attempt(records, case.artifacts, attempt)
     owner.assertEqual((classified['outcome'], classified['signal'].get('detail')), (outcome, detail))
     stop = plan_next(records, case.artifacts, head['id'])
-    owner.assertEqual((stop['state'], stop['code']), ('stop', 'review_slot_exhausted'))
-    boundary, commands = execute_decision(owner, case, head, stop, fixture)
+    owner.assertEqual(stop['code'], 'review_slot_exhausted')
+    if stop['state'] == 'replace':
+        following = execute(case, stop['command'], stop['payload'])
+        packet = json.loads(case.artifacts.read(following['packet']))
+        owner.assertEqual(packet['output_refusal']['form'], 'bounded')
+        owner.assertEqual(protocol.context_repair.slot_id(case.read_records(), following),
+                          protocol.context_repair.slot_id(case.read_records(), head))
+        boundary = dict(kind='assignment', id=following['id'], prior_head=head['id'], eligible=True,
+            preflight=check_preflight(case, following), subject=describe_subject(case, following), record=following)
+        owner.assertEqual(plan_next(case.read_records(), case.artifacts, following['id'])['state'], 'run')
+        commands = [stop['command']]
+    else:
+        owner.assertEqual(stop['state'], 'stop', stop)
+        boundary, commands = execute_decision(owner, case, head, stop, fixture)
     return dict(kind='correction', outcome=outcome, detail=detail, assignment_id=head['id'],
         subject=describe_subject(case, head), attempt_id=attempt['id'], request_digest=attempt['request_digest'],
         call=attempt, accepted_commands=['review-output-correction'] + commands, boundary=boundary)

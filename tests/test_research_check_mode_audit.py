@@ -412,7 +412,7 @@ REFUSED_OUTCOMES = {
     "result": "unknown_cycle",
     "resume-source": "source_deferral_inapplicable",
     "review": "candidate_checkpoint_missing",
-    "review-adjudication": "review_adjudication_unverified",
+    "review-adjudication": "review_record_missing",
     "review-assignment": "review_record_missing",
     "review-attempt": "review_record_missing",
     "review-context": "review_record_missing",
