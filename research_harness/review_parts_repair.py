@@ -394,7 +394,8 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
             frozen = context_repair.frozen_reassessment_packet(records, artifacts, prior)
             chain = context_repair._exposure_lineage(records, prior)
             history = context_repair.collect_scientific_history(
-                records, artifacts, chain, context_repair.ROLES + ('adjudicator',))
+                records, artifacts, chain, context_repair.ROLES + ('adjudicator',),
+                exhausted_position=frozen['context_repair'].get('exhaustion', {}).get('position', ()))
             predecessor = records['review_assignment'][packet['context_repair']['assignment_id']]
             identifiers = {ancestor['id'] for ancestor in context_repair._exposure_lineage(records, predecessor)}
             binding = context_repair.bind_predecessor(records, predecessor,

@@ -343,8 +343,8 @@ def find_chain_head(records, assignment):
     return head
 
 
-def _has_stale_exhaustion_repair(records, artifacts, predecessor, exhaustion):
-    """A later cause rebinds the accepted exhaustion proof without rechecking its outputs."""
+def _has_recorded_exhaustion_repair(records, artifacts, predecessor, exhaustion):
+    """A repair or its replacement retains the admitted proof without rechecking outputs."""
     for prior in records.get('review_assignment', {}).values():
         binding = prior.get('context', {}).get('context_repair', {})
         if (binding.get('assignment_id') != predecessor['id']
@@ -355,6 +355,8 @@ def _has_stale_exhaustion_repair(records, artifacts, predecessor, exhaustion):
         except ResearchError as error:
             if error.code == 'review_context_repair_stale':
                 return True
+        else:
+            return True
     return False
 
 
@@ -384,8 +386,8 @@ def prepare_repair(records, artifacts, assignment_payload):
                        for later in records.get('review_assignment', {}).values())):
             raise ResearchError('review_context_repair_mismatch', EXHAUSTION_MISMATCH_MSG)
         from .review_protocol import has_exhausted_position
-        stale_exhaustion = _has_stale_exhaustion_repair(records, artifacts, predecessor, exhaustion)
-        if not stale_exhaustion and not has_exhausted_position(records, artifacts, predecessor):
+        recorded_exhaustion = _has_recorded_exhaustion_repair(records, artifacts, predecessor, exhaustion)
+        if not recorded_exhaustion and not has_exhausted_position(records, artifacts, predecessor):
             raise ResearchError('review_context_repair_mismatch', EXHAUSTION_MISMATCH_MSG)
         try:
             _validate_exhaustion_records(records, artifacts, predecessor, exhaustion)

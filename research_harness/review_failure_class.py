@@ -444,11 +444,12 @@ def plan_output_replacement(records, artifacts, assignment, *, allow_single=True
         if outcome == 'input_over_limit':
             options['capacity_replacement'] = dict(input_over_limit=True,
                 unit_characters=packet[parts.KEY]['unit_characters'] if is_read else parts.READ_CHARACTERS)
-        if is_repair and not is_read:
+        if is_repair and not is_read and 'context_repair' in value['context']:
             predecessor = records['review_assignment'][value['context']['context_repair']['assignment_id']]
             chain = protocol.context_repair._exposure_lineage(records, predecessor)
             scientific_history = protocol.context_repair.collect_scientific_history(
-                records, staged, chain, protocol.context_repair.ROLES + ('adjudicator',))
+                records, staged, chain, protocol.context_repair.ROLES + ('adjudicator',),
+                exhausted_position=logical['context_repair'].get('exhaustion', {}).get('position', ()))
             predecessor_state = protocol.assignment_state(records, staged, predecessor['id'])
             options['repair'] = dict(scientific_history=scientific_history,
                 predecessor_binding=protocol.context_repair.bind_predecessor(

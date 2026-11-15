@@ -166,6 +166,90 @@ class ExhaustionRepairTests(unittest.TestCase):
             repair.validate_repair_binding(self.case.read_records(), self.case.artifacts, saved)
         self.assertEqual(before, self.case.read_records())
 
+    def build_capacity_repair(self, *, continuing):
+        from codex_route_fixtures import record_codex_route, probe_codex_route, invoke_codex
+        record_codex_route(self.case, 'bounded-route', output_tokens=128000)
+        head = self.case.mutate(protocol.record_assignment, dict(id='bounded-initial',
+            route_id='bounded-route', dossier_id=None, role='result', reviewer_id='first',
+            author_id='author', context={}))['result']
+        for number in range(3):
+            output = self.case.build_review_output('result')
+            output['value']['status'] = 'invalid'
+            invoke_codex(self.case, head['id'], output)
+            with self.assertRaises(ResearchError):
+                self.record(head, output)
+            if number < 2:
+                head = self.replace(head, 'bounded-refusal-' + str(number))
+        probe_codex_route(self.case, 'bounded-exhaustion-probe', 'bounded-route')
+        payload = self.build_payload(head)
+        payload['route_id'] = 'bounded-route'
+        payload['context']['context_repair']['probe_id'] = 'bounded-exhaustion-probe'
+        saved = self.case.mutate(protocol.record_assignment, payload)['result']
+        first_packet = protocol._read_json(self.case.artifacts, saved['packet'])
+        if continuing:
+            output = self.case.build_review_output('result')
+            output['value']['status'] = 'unresolved'
+            output['source_requests'] = [dict(id='page', kind='inventory_page', page=0)]
+            invoke_codex(self.case, saved['id'], output)
+            saved = self.case.mutate(protocol.record_assignment, dict(payload, id='ordinary-continuation',
+                context=dict(prior_assignment_id=saved['id'])))['result']
+        from codex_route_fixtures import build_codex_response
+        def over_cap(route, request, credential):
+            response = build_codex_response(route, request, {})
+            response['status'] = 'incomplete'
+            response['usage']['output_tokens'] = route['configuration']['max_output_tokens']
+            return response
+        with patch.object(protocol.transport, 'send_request', side_effect=over_cap):
+            self.case.mutate(protocol.invoke_assignment,
+                dict(id='repair-over-cap', assignment_id=saved['id']), credential='fixture')
+        return saved, first_packet
+
+    def check_capacity_history_after_upgrade(self, *, continuing):
+        from research_harness import review_parts as parts
+        from research_harness.review_route_capacity import plan_capacity_recovery
+        saved, original = self.build_capacity_repair(continuing=continuing)
+        with patch.object(refusal, 'classify_observed_output', return_value=None):
+            recovery = plan_capacity_recovery(self.case.read_records(), self.case.artifacts,
+                                              saved, 'output_over_cap')
+            if continuing:
+                self.assertEqual((recovery['kind'], recovery['code']), ('decision', 'review_output_over_cap'))
+                self.assertNotIn('handler_error', recovery['details'])
+                payload = {key: copy.deepcopy(saved[key]) for key in
+                           ('route_id', 'dossier_id', 'role', 'reviewer_id', 'author_id', 'context')}
+                payload['id'] = 'continued-capacity-replacement'
+            else:
+                self.assertEqual(recovery['kind'], 'replace', recovery)
+                payload = recovery['payload']
+            replacement = self.case.mutate(protocol.record_assignment, payload)['result']
+        packet = protocol._read_json(self.case.artifacts, replacement['packet'])
+        logical = parts.read_logical_packet(self.case.artifacts, packet[parts.KEY])
+        self.assertEqual(logical['context_repair']['exhaustion'], original['context_repair']['exhaustion'])
+        self.assertEqual(logical['historical_reviews'], original['historical_reviews'])
+        for identifier in original['context_repair']['exhaustion']['position']:
+            turn = next(row for row in logical['scientific_history'] if row['assignment_id'] == identifier)
+            original_turn = next(row for row in original['scientific_history'] if row['assignment_id'] == identifier)
+            self.assertIsNone(original_turn['observed_output'])
+            self.assertEqual([protocol._read_json(self.case.artifacts, row['artifact']) for row in turn['outputs']],
+                [[protocol.read_raw_observation(self.case.read_records(), self.case.artifacts, row['attempt_id'])
+                  for row in original_turn['raw_observations']]])
+        repair.validate_repair_origin(self.case.read_records(), self.case.artifacts, replacement)
+
+    def test_capacity_recovery_keeps_refused_history_after_a_validator_upgrade(self):
+        self.check_capacity_history_after_upgrade(continuing=False)
+
+    def test_ordinary_continuation_capacity_recovery_keeps_exhaustion_raw_history(self):
+        self.check_capacity_history_after_upgrade(continuing=True)
+
+    def test_revived_predecessor_cannot_fork_its_active_repair(self):
+        head = self.build_position()
+        self.admit(head)
+        before = self.case.store.snapshot()
+        with patch.object(refusal, 'classify_observed_output', return_value=None):
+            with self.assertRaises(ResearchError) as caught:
+                self.case.mutate(protocol.record_assignment, self.build_payload(head, 'forked-repair'))
+        self.assertEqual(caught.exception.code, 'review_resampling_forbidden')
+        self.assertEqual(self.case.store.snapshot(), before)
+
     def test_origin_refuses_forged_position_refusal_output_and_probe_records(self):
         head = self.build_position()
         saved = self.admit(head)

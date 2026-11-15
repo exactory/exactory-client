@@ -16,6 +16,22 @@
       ]
     },
     {
+      "id": "repair-capacity-preserves-exhaustion-history",
+      "record": "20261114054500-bar-cannot-be-recorded-after-instalment-deliveries",
+      "class": "repair capacity planning and immutable refusal history",
+      "summary": "Ordinary repair continuations crashed during capacity planning, and shrinking an exhaustion repair reclassified its predecessor refusals as unrecorded science after a validator upgrade.",
+      "expected": "Ordinary continuations return the measured capacity decision without a missing-binding exception. Repair replacements retain an authenticated admitted exhaustion binding and carry the exact raw observations through parts; an active repair still cannot be forked.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_repair_journey.BarRepairJourneyTests.test_over_cap_ordinary_repair_continuation_enters_parts_with_its_history",
+        "test_review_parts_repair_journey.BarRepairJourneyTests.test_refused_capped_ordinary_repair_continuation_enters_parts_with_its_history",
+        "test_review_exhaustion_repair.ExhaustionRepairTests.test_capacity_recovery_keeps_refused_history_after_a_validator_upgrade",
+        "test_review_exhaustion_repair.ExhaustionRepairTests.test_ordinary_continuation_capacity_recovery_keeps_exhaustion_raw_history",
+        "test_review_exhaustion_repair.ExhaustionRepairTests.test_revived_predecessor_cannot_fork_its_active_repair"
+      ]
+    },
+    {
       "id": "capacity-task-size-keeps-route-effort",
       "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
       "class": "output capacity recovery at pinned task levels",
