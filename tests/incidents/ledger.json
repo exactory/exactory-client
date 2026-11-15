@@ -5200,6 +5200,20 @@
       ]
     },
     {
+      "id": "openness-invalid-finding-keeps-refusal-over-changed-records",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "openness finding refusal recovery",
+      "summary": "G12 still expected an identical rerun of a refused first native assignment after D2 introduced the exhausted-position handoff for native assignments that cannot carry a refusal replacement.",
+      "expected": "Keep the openness.finding refusal with code openness_finding_invalid when searches change, and hand off the first native assignment to export with review_slot_exhausted and outcome scientific_refused. A valid resolved answer over changed records instead hands off with openness_packet_outdated, while a valid unresolved answer remains recordable.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_packet_freshness.PacketFreshnessTests.test_g12_invalid_answer_keeps_its_contract_refusal_over_changed_records",
+        "test_openness_packet_freshness.PacketFreshnessTests.test_g12_resolved_final_is_exported_without_an_answer_refusal",
+        "test_openness_packet_freshness.PacketFreshnessTests.test_g12_unresolved_answer_is_recordable_over_changed_records"
+      ]
+    },
+    {
       "id": "output-view-binding-kind-reads-make-progress",
       "record": "20261113110022-every-open-record-and-review-capacity",
       "summary": "The W8 renderer repeated one binding-kind query indefinitely when a stored 0.82.0 fixture returned only populated kinds and omitted empty ones.",
