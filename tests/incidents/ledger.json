@@ -7340,6 +7340,20 @@
         "test_review_session_v4_record.SessionAllowancePlanTests.test_allowance_page_cursor_is_rebuilt_from_the_authenticated_turn",
         "test_review_session_v4_record.SessionAllowancePlanTests.test_v7_fixture_admission_plan_artifacts_keep_their_base_digests"
       ]
+    },
+    {
+      "id": "math-v1-carried-reading-selection",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "math reading continuity",
+      "summary": "A new math review chain must preserve verified readings when a math-v1 final stops at its route limit.",
+      "fixed_in": "open",
+      "expected": "Selection credits unchanged delivered units and parts, carries verified source entries, and preserves all math-v1 records while excluding other reviewers, routes, subjects and problem chains.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_carried_math.MathStoppedChainTests.test_g8_three_readings_survive_ruling_24_2_final_stop_and_keep_record_digests",
+        "test_openness_carried_math.MathCarriedSelectionTests.test_g8_changed_neighbour_keeps_credit_and_filters_entries_and_notes",
+        "test_openness_carried_math.MathPartialRangeTests.test_g8_two_of_three_parts_credit_exact_ranges_and_report_remainder"
+      ]
     }
   ]
 }

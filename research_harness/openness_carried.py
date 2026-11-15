@@ -1,7 +1,7 @@
-"""Pure D2 selection of earlier problem readings for a new v7 chain.
+"""Pure D2 selection of earlier problem or math readings for a new chain.
 
 The caller supplies the new first assignment's identity and recorded revision. Stored selections bind
-items, never a rerun of the selection policy. The later D2 route-identity unit supplies
+items, never a rerun of the selection policy. Route equality uses
 review_context_repair.is_same_route(first, second), with the identity of Ruling 2.
 """
 
@@ -20,10 +20,99 @@ from .operations import normalized_text
 from .problem_openness import serialize_record
 
 SELECTION_PROTOCOL = 'exactory-openness-carried-selection-v1'
+
+
+def _verify_math_prefix(records, artifacts, native, chain, rows, observations):
+    """Apply math-v1's binding and record checks to a ready reading prefix.
+
+    reading._require_math_continuity requires a native final result at the endpoint.
+    This prefix keeps its checks, without that terminal requirement or final coverage.
+    Observation, output validation and record rebuilding use the original protocol's code.
+    """
+    from .review_protocol import canonical_prompt, find_common_prompt_version
+    first = chain[0]
+    first_packet = json.loads(artifacts.read(first['packet']))
+    record = reading._create_record(reading.MATH_PROTOCOL,
+                                   excerpt_protocol=reading._find_record(first_packet).get('excerpt_protocol'))
+    for index, (assignment, observation) in enumerate(zip(chain, observations)):
+        packet, output = json.loads(artifacts.read(assignment['packet'])), observation['output']
+        turn = packet[reading.TURN_KEY]
+        v7._require_selected(
+            reading.find_stage(packet) == 'reading' and reading.find_protocol(packet) == reading.MATH_PROTOCOL
+            and assignment['role'] == 'native_math'
+            and turn['statement'] == native['subject']
+            and all(turn[key] == native[key] for key in ('subject_digest', 'claim_digest', 'reviewer'))
+            and assignment['context']['native_packet'] == first['context']['native_packet']
+            and assignment['route_id'] == first['route_id']
+            and normalized_text(assignment['reviewer_id']) == normalized_text(first['reviewer_id'])
+            and normalized_text(assignment['author_id']) == normalized_text(first['author_id'])
+            and assignment.get('reading_chain') == dict(first_assignment_id=first['id'], turn=index + 1)
+            and assignment['prompt'] == canonical_prompt('native_math', reading_stage='reading',
+                reading_protocol=reading.MATH_PROTOCOL, common_version=find_common_prompt_version(assignment['prompt']))
+            and reading._project_withheld_notes(record, reading._find_record(packet)) == reading._find_record(packet))
+        reading.validate_turn_output(packet, output)
+        reading._require(reading.has_deliverable_passage(records, artifacts, packet, output,
+            assignment=assignment, turn=observation['turn']), reading.PASSAGE_PROGRESS_ERR_MSG, path='/passage_requests')
+        record = reading._extend_record(records, artifacts, packet, {'output': output}, rows,
+                                        observations[:index + 1], reading.MATH_PROTOCOL)
+
+
+def observe_math_chain(records, artifacts, assignment):
+    """Authenticate math-v1 reading turns in the observation form consumed by credit_carried_turn.
+
+    A stopped final needs no output. Only the preceding ready reading prefix supplies
+    credit, checked excerpts, passage answers and notes. Searches complete when all
+    parts of their original record reached those readings, without problem factoring.
+    """
+    chain = reading._list_chain(records, assignment)
+    while chain and reading.find_stage(json.loads(artifacts.read(chain[-1]['packet']))) != 'reading':
+        chain.pop()
+    if not chain:
+        return []
+    endpoint = chain[-1]
+    native = load_packet(artifacts, endpoint['context']['native_packet'], endpoint['reviewer_id'])
+    v7._require_selected(reading.is_math_openness_packet(native))
+    rows = reading.list_reading_rows(records, artifacts, native, review=endpoint)
+    spans = reading._compute_spans(artifacts, rows)
+    observations = reading._observe_turns(records, artifacts, chain, rows, spans)
+    _verify_math_prefix(records, artifacts, native, chain, rows, observations)
+    by_identity = {reading.review_excerpts.find_identity(row): row for row in rows}
+    result, completed = [], set()
+    for index, (saved, observed) in enumerate(zip(chain, observations)):
+        packet = json.loads(artifacts.read(saved['packet']))
+        earlier = reading._find_record(packet)
+        retained = reading._extend_record(records, artifacts, packet, {'output': observed['output']},
+                                          rows, observations[:index + 1], reading.MATH_PROTOCOL)
+        deliveries = []
+        for delivered in observed['turn']['delivered_units'] + observed['turn'].get('delivered_parts', []):
+            row = by_identity[reading.review_excerpts.find_identity(delivered)]
+            text = artifacts.read(row['artifact']).decode('utf-8')
+            start, end = delivered.get('start', 0), delivered.get('end', len(text))
+            span = text[start:end]
+            deliveries.append(dict(identity=v7._describe_identity(row), sha256=row['artifact']['sha256'],
+                part=delivered.get('part', 1), parts=delivered.get('parts', 1), start=start, end=end,
+                span_sha256=hashlib.sha256(span.encode('utf-8')).hexdigest(), text=span))
+        whole, parts = reading._collect_coverage(observations[:index + 1])
+        searches = [row['artifact']['sha256'] for row in rows
+                    if row.get('record_kind') == 'literature_search' and row['artifact']['sha256'] not in completed
+                    and reading._is_complete(reading.review_excerpts.find_identity(row),
+                        spans[reading.review_excerpts.find_identity(row)], whole, parts)]
+        completed.update(searches)
+        origin = dict(chain=chain[0]['id'], protocol=reading.MATH_PROTOCOL, assignment_id=saved['id'],
+                      attempt_id=observed['turn']['attempt_id'])
+        result.append(dict(origin=origin, turn=dict(number=index + 1, assignment_id=saved['id'],
+            attempt_id=origin['attempt_id'], kind='reading'), deliveries=deliveries, notes=observed['output']['notes'],
+            excerpts=v7._describe_checked_entries(records, rows, retained['excerpts'][len(earlier['excerpts']):]),
+            passages=v7._describe_checked_entries(records, rows, retained['passages'][len(earlier['passages']):]),
+            searches=searches))
+    return result
+
+
 CHAIN_OBSERVERS = MappingProxyType({
     'exactory-openness-reading-v5': v7.observe_carried_chain,
     'exactory-openness-reading-v6': v7.observe_carried_chain,
     'exactory-openness-reading-v7': v7.observe_v7_chain,
+    reading.MATH_PROTOCOL: observe_math_chain,
 })
 
 
@@ -37,7 +126,9 @@ def _describe_chain(records, artifacts, first, identity):
     if protocol not in CHAIN_OBSERVERS:
         return None
     native = load_packet(artifacts, first['context']['native_packet'], first['reviewer_id'])
-    if not reading.is_openness_packet(native):
+    is_math = identity.get('packet_kind', 'problem') == 'math'
+    if (not (reading.is_math_openness_packet(native) if is_math else reading.is_openness_packet(native))
+            or protocol.startswith('exactory-openness-reading-math-') != is_math):
         return None
     minimum = native['scientific_context']['openness_minimum']
     if (first['author_id'] != identity['author_id']
@@ -53,7 +144,8 @@ def list_qualifying_chains(records, artifacts, identity):
     """Return {chains, passed_over}, newest first; passed_over rows give reason reviewer_id.
 
     identity is {reviewer_id, author_id, route, subject_digest, claim_digest, formulations,
-    recorded_revision}. The revision is the new first assignment's cutoff, exclusive.
+    recorded_revision}. packet_kind is 'math' for a math packet; its default is 'problem'
+    for the existing problem callers. The revision is the new first assignment's cutoff, exclusive.
     """
     chains, passed_over = [], []
     for first in sorted(records.get('review_assignment', {}).values(),
@@ -128,12 +220,15 @@ def credit_carried_turn(inventory, observation):
                 notes=dict(classification='current', units=[]))
 
 
-def _list_search_dependencies(records, artifacts, first):
+def _list_search_dependencies(records, artifacts, first, *, packet_kind='problem'):
     """Map legacy search components to the original logical searches on which notes depend.
 
     Components convey no delivery credit. Even a partially delivered original can affect notes;
     its whole binding is therefore a conservative dependency before its completion receipt exists.
+    Math-v1 delivers originals, so its observations already name their dependencies.
     """
+    if packet_kind == 'math':
+        return {}
     native = load_packet(artifacts, first['context']['native_packet'], first['reviewer_id'])
     manifest = reading._plan_search_delivery(artifacts, native)['manifest']
     originals = {row['search_digest']: dict(
@@ -200,7 +295,8 @@ def select_carried_readings(records, artifacts, inventory, identity):
         observations = observe_qualifying_chain(records, artifacts, chain, identity)
         first = records['review_assignment'][chain['chain']]
         classes = classify_carried_notes(inventory, observations,
-            search_dependencies=_list_search_dependencies(records, artifacts, first))
+            search_dependencies=_list_search_dependencies(records, artifacts, first,
+                packet_kind=identity.get('packet_kind', 'problem')))
         for observation, notes in zip(observations, classes):
             # The v7 observer must likewise expose only turns that this chain ran itself.
             if observation['origin']['chain'] != chain['chain'] or observation['turn']['kind'] != 'reading':
@@ -286,7 +382,8 @@ def verify_carried_selection(records, artifacts, inventory, identity, selection,
                                  and normalized_text(first['reviewer_id']) == normalized_text(identity['reviewer_id']))
             observed = CHAIN_OBSERVERS[chain['protocol']](eligible, artifacts, endpoint)
             classes = classify_carried_notes(inventory, observed,
-                search_dependencies=_list_search_dependencies(records, artifacts, first))
+                search_dependencies=_list_search_dependencies(records, artifacts, first,
+                    packet_kind=identity.get('packet_kind', 'problem')))
             for value, classification in zip(observed, classes):
                 observations[value['origin']['assignment_id']] = value
                 notes[value['origin']['assignment_id']] = classification
