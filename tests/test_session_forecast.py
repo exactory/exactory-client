@@ -256,8 +256,13 @@ class SessionForecastTests(unittest.TestCase):
                         old_head = scenario.plan()['head_id']
                         output = scenario.case.build_review_output('bar')
                         output['value']['status'] = 'unresolved'
-                        scenario.case.mutate(protocol.invoke_assignment,
-                            dict(id='earlier-part', assignment_id=old_head), credential='fixture')
+                        with patch.object(protocol.transport, 'send_request',
+                                          return_value=scenario.case.build_provider_response(output)):
+                            scenario.case.mutate(protocol.invoke_assignment,
+                                dict(id='earlier-part', assignment_id=old_head), credential='fixture')
+                        records = scenario.case.read_records()
+                        self.assertTrue(protocol.authenticate_attempt(records, scenario.case.artifacts,
+                            records['review_assignment'][old_head], records['review_attempt']['earlier-part']))
                 else:
                     scenario.request_texts([2200000])
                 stopped = scenario.refuse_direct_run() if entry == 'direct' else scenario.plan()
