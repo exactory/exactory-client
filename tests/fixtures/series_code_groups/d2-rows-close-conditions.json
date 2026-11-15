@@ -510,6 +510,9 @@
         "research_harness/bar_sources.py:prior_context#2": [
           "form"
         ],
+        "research_harness/openness_reading_v7.py:prepare_next_assignment#1": [
+          "payload"
+        ],
         "research_harness/problem_delivery.py:_read_review_binding#1": [
           "content"
         ],
@@ -1360,6 +1363,9 @@
       },
       "review_source_continuation_fork": {
         "research_harness/openness_reading.py:_read_prior#1": [
+          "record"
+        ],
+        "research_harness/openness_reading_v7.py:prepare_next_assignment#1": [
           "record"
         ],
         "research_harness/review_continuation.py:_find_head#1": [

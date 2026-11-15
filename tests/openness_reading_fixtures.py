@@ -74,7 +74,7 @@ class OpennessReadingCase(ProblemCase):
             self.texts[version] = capture['text']
         self.searches = self.record_searches()
         self.search = self.searches[0]
-        record_codex_route(self, model=self.route_model)
+        record_codex_route(self, model=self.route_model, output_tokens=getattr(self, 'route_output_tokens', 1000))
 
     def record_searches(self):
         """The searches that the openness minimum binds: one search that finds every read work."""

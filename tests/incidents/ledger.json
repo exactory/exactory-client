@@ -6621,6 +6621,26 @@
       ],
       "fixed_in": "open",
       "test_kind": "real_shape"
+    },
+    {
+      "id": "v7-bounded-reading-turns-and-one-request-final",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "bounded reading admission, retention and capacity recovery",
+      "summary": "The reading chain accumulated receipts and excerpt metadata outside its advertised grants, then its final could not fit after 57 turns.",
+      "expected": "V7 binds a stored plan, inventory and reconstructed state; bounded reading requests reach a one-request final with all grants used. Eight floor targets start v7, nine fall back to byte-identical v6, and an unserved packet has executable decision answers. Dense failed-final measurements survive export without compounded margins. Pages use fixed row ids, references authenticate, and a max-effort 138371-token event halves material on the same route.",
+      "fixed_in": "0.91.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_turns.IncidentV7CommandTests.test_a13_incident_twenty_searches_twenty_nine_texts_uses_allowances_and_authenticates_final",
+        "test_openness_reading_v7_turns.TurnPacketTests.test_q1_every_allowance_shortest_and_longest_excerpts_reaches_final_after_sixty_turns",
+        "test_openness_reading_v7_turns.TurnPacketTests.test_exact_target_and_notes_grants_reserve_final_collection_overhead",
+        "test_openness_reading_v7_turns.V7CommandTests.test_q4_output_limit_replacements_use_every_lower_level_on_same_route",
+        "test_openness_reading_v7_turns.V7CommandTests.test_q5_failed_final_exports_and_successor_keeps_ratio_without_carried_readings",
+        "test_openness_reading_v7_turns.V7CommandTests.test_q7_eight_targets_start_v7_and_nine_start_byte_identical_v6",
+        "test_openness_reading_v7_turns.V7CommandTests.test_q7_q8_five_thousand_targets_refuse_both_admissions_before_writing",
+        "test_openness_reading_v7_turns.ListPageTests.test_q8_pages_keep_plan_order_when_used_order_changes",
+        "test_openness_reading_v7_turns.V7CommandTests.test_max_138371_output_tokens_halves_material_on_the_same_claude_route"
+      ]
     }
   ]
 }

@@ -1,6 +1,6 @@
 """Expand packet-local citations and retain bounded reviewer arguments.
 
-The future protocol builders supply ``handle_table`` as a mapping from a handle
+Protocol builders supply ``handle_table`` as a mapping from a handle
 (u, e, c, t, g, h, n or m) to an entry with ``reference``. That reference is the
 exact native citation. An entry used with offsets also holds ``text``, the text
 of that delivery, and may hold its ``part``. Split units can additionally hold
@@ -13,7 +13,8 @@ live records. ``build_gap_handles`` numbers the supplied minimum_gaps from zero.
 Material packets additionally hold capacity.answer_bound and material_state.
 ``advance_material`` returns the next state, handle table and material_request;
 protocol builders put those members in the next packet. The state holds text
-artifact descriptors, never argument bodies. No current packet builder opts in.
+artifact descriptors, never argument bodies. V7 resolves the table and material
+state from its bound inventory and state artifacts instead of request members.
 """
 
 import copy
@@ -93,22 +94,55 @@ def _expand_value(table, value, path):
     return expanded, count
 
 
-def expand_handles(packet, output):
+def _resolve_packet(packet, artifacts=None, assignment=None):
+    if HANDLE_TABLE in packet:
+        return packet
+    from .openness_reading import find_protocol, PROTOCOL_V7
+    if find_protocol(packet) == PROTOCOL_V7:
+        from .openness_reading_v7 import build_handle_packet
+        return build_handle_packet(packet, artifacts, assignment)
+    return packet
+
+
+def _validate_v7_refs(packet, output, *, raw):
+    if 'reading_final' not in packet or not isinstance(output, dict):
+        return
+    findings = output.get('findings')
+    openness = findings.get('openness') if isinstance(findings, dict) else None
+    grounds = openness.get('grounds') if isinstance(openness, dict) else None
+    for ground in grounds if isinstance(grounds, list) else []:
+        references = ground.get('refs') if isinstance(ground, dict) else None
+        if not isinstance(references, list):
+            continue  # The role validator reports the malformed container.
+        for reference in references:
+            if not raw and isinstance(reference, dict) and 'ref' not in reference:
+                continue  # Already expanded authenticated output.
+            handle = reference.get('ref') if isinstance(reference, dict) else None
+            if (not isinstance(reference, dict) or set(reference) != {'ref'}
+                    or not isinstance(handle, str) or handle[:1] not in ('g', 'h', 'n', 'm')):
+                _refuse_handle('/findings/openness/grounds/refs', handle)
+
+
+def expand_handles(packet, output, *, artifacts=None, assignment=None, raw=False):
     """Expand citations before role validation, preserving legacy outputs exactly."""
+    packet = _resolve_packet(packet, artifacts, assignment)
     if HANDLE_TABLE not in packet:
         return output
     with contract_check('review.shape'):
+        _validate_v7_refs(packet, output, raw=raw)
         if packet.get('material_state', {}).get('pending') and not is_material_output(packet, output):
             raise ResearchError('invalid_review_material', INVALID_MATERIAL_MESSAGE,
                                 {'path': '/stage', 'pending': packet['material_state']['pending']})
         return _expand_value(packet[HANDLE_TABLE], output, '')[0]
 
 
-def describe_expansion(packet, output, response):
+def describe_expansion(packet, output, response, *, artifacts=None, assignment=None):
     """Bind expanded native citations to the exact provider answer text."""
+    packet = _resolve_packet(packet, artifacts, assignment)
     if HANDLE_TABLE not in packet:
         return output, None
     with contract_check('review.shape'):
+        _validate_v7_refs(packet, output, raw=True)
         expanded, count = _expand_value(packet[HANDLE_TABLE], output, '')
     answer = extract_answer_text(response)
     certificate = dict(protocol=EXPANSION_PROTOCOL, references=count,
@@ -117,8 +151,9 @@ def describe_expansion(packet, output, response):
     return expanded, certificate
 
 
-def record_handle_output(packet, observation, artifacts):
+def record_handle_output(packet, observation, artifacts, *, assignment=None):
     """Retain expansion and material state in the durable transport capture."""
+    packet = _resolve_packet(packet, artifacts, assignment)
     if observation['status'] != 'completed' or HANDLE_TABLE not in packet:
         return observation
     from .review_protocol import _put_json, _read_json
@@ -141,7 +176,7 @@ def record_handle_output(packet, observation, artifacts):
     return result
 
 
-def derive_expanded_output(packet, observation, response):
+def derive_expanded_output(packet, observation, response, *, artifacts=None, assignment=None):
     """Repeat answer recovery and handle expansion when authenticating an attempt."""
     source = observation
     if 'handle_expansion' in observation and 'answer_recovery' in observation:
@@ -149,7 +184,7 @@ def derive_expanded_output(packet, observation, response):
         source = dict(observation, output=recovered['output'] if recovered else None)
     raw = derive_output(source, response)
     try:
-        expanded, certificate = describe_expansion(packet, raw, response)
+        expanded, certificate = describe_expansion(packet, raw, response, artifacts=artifacts, assignment=assignment)
     except ResearchError as error:
         # A refused raw answer still has authentic provenance. Its contract
         # check must be able to repeat the refusal rather than lose the call.
@@ -171,15 +206,22 @@ def build_gap_handles(minimum_gaps, artifacts):
 
 
 def is_material_output(packet, output):
-    return HANDLE_TABLE in packet and isinstance(output, dict) and output.get('stage') == 'material'
+    from .openness_reading import find_protocol, PROTOCOL_V7
+    return (HANDLE_TABLE in packet or find_protocol(packet) == PROTOCOL_V7) and isinstance(output, dict) and output.get('stage') == 'material'
 
 
-def validate_material(packet, output):
+def validate_material(packet, output, *, artifacts=None, assignment=None):
     """Check a material part once at the output-contract boundary."""
+    packet = _resolve_packet(packet, artifacts, assignment) if HANDLE_TABLE not in packet else packet
     with contract_check('review.shape'):
         fields(output, ('stage', 'title', 'part', 'text', 'more'), code='invalid_review_material', path='')
         for name in ('title', 'text'):
             text(output[name], 'Material ' + name, code='invalid_review_material')
+        if any(packet.get(key, {}).get('protocol') == 'exactory-openness-reading-v7'
+               for key in ('reading_turn', 'reading_final')):
+            if len(output['title']) > 120:
+                raise ResearchError('invalid_review_material', INVALID_MATERIAL_MESSAGE,
+                                    dict(path='/title', maximum_characters=120))
         state = packet.get('material_state', {'arguments': {}, 'pending': None})
         pending = state['pending']
         part = output['part']
@@ -211,8 +253,9 @@ def advance_material(packet, output, artifacts):
     return dict(material_state=state, handle_table=table, material_request=request)
 
 
-def authenticate_material(packet, output, material, artifacts):
+def authenticate_material(packet, output, material, artifacts, *, assignment=None):
     """Rebuild stored argument descriptors from the authenticated part bytes."""
+    packet = _resolve_packet(packet, artifacts, assignment)
     try:
         validate_material(packet, output)
     except ResearchError:

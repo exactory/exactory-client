@@ -363,6 +363,10 @@ def classify_attempt(records, artifacts, attempt):
 def list_turn_assignments(records, assignment):
     """Group replacements of the same initial context or the same continuation parent."""
     from .review_refusal_replacement import read_position_context
+    capacity_chain = assignment.get('capacity_plan') and assignment.get('reading_chain')
+    if capacity_chain:
+        while assignment.get('capacity_replacement_of'):
+            assignment = records['review_assignment'][assignment['capacity_replacement_of']]
     parent = assignment.get('context', {}).get('prior_assignment_id')
     result = []
     for other in records.get('review_assignment', {}).values():
@@ -382,6 +386,11 @@ def list_turn_assignments(records, assignment):
             continue
         if read_position_context(other) == read_position_context(assignment):
             result.append(other['id'])
+    if capacity_chain:
+        for other in sorted(records.get('review_assignment', {}).values(),
+                            key=lambda row: row['recorded_revision']):
+            if other.get('capacity_replacement_of') in result and other['id'] not in result:
+                result.append(other['id'])
     return result
 
 
@@ -553,6 +562,11 @@ def has_smaller_task(artifacts, previous, assignment):
     """
     old = protocol._read_json(artifacts, previous['packet'])
     new = protocol._read_json(artifacts, assignment['packet'])
+    if assignment.get('capacity_plan') and assignment.get('reading_chain'):
+        before = old.get('reading_turn', old.get('reading_final', {})).get('capacity', {})
+        after = new.get('reading_turn', new.get('reading_final', {})).get('capacity', {})
+        return (after.get('material_allowance', float('inf')) < before.get('material_allowance', 0)
+                or after.get('answer_bound', float('inf')) < before.get('answer_bound', 0))
     if parts.find_kind(new) != 'read':
         return False
     return (parts.find_kind(old) != 'read'

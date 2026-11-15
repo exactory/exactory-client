@@ -84,6 +84,15 @@ def _count_remaining_turns(records, artifacts, plan):
     packet = protocol._read_json(artifacts, assignment['packet'])
     from . import openness_reading, review_excerpts, review_parts
     if openness_reading.TURN_KEY in packet:
+        if packet[openness_reading.TURN_KEY].get('protocol') == openness_reading.PROTOCOL_V7:
+            from .review_route_capacity import derive_turn_task_limits
+            binding = packet[openness_reading.TURN_KEY]
+            characters = binding['plan']['remaining']['characters']
+            if plan['state'] == 'continue':
+                characters = max(0, characters - sum(row['characters'] for row in binding['plan']['now']
+                    if not row.get('request') and row['kind'] != 'list_page'))
+            allowance = derive_turn_task_limits(records, artifacts, assignment, kind='reading')['material_allowance']
+            return math.ceil(characters / allowance) + 1
         reading = packet[openness_reading.TURN_KEY]['reading_plan']
         units = list(reading['remaining'])
         if plan['state'] not in ('continue', 'record'):

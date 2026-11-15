@@ -184,7 +184,7 @@ def _build_assignment_payload(records, assignment, *, replace=False):
                     'correction', 'source_delivery')}
         context['prior_assignment_id'] = assignment['id']
     maximum = (openness_reading.RESERVED_IDENTIFIER_CHARACTERS if assignment['prompt']['template_id'].startswith(
-        openness_reading.PROTOCOL_V6 + '/') else None)
+        (openness_reading.PROTOCOL_V6 + '/', 'exactory-openness-reading-v7/')) else None)
     payload.update(id=_find_unused_id(records, lineage[0]['id'] + '-t' + str(len(lineage) + 1), maximum=maximum),
                    context=context)
     return payload
@@ -476,6 +476,11 @@ def _plan_head(records, artifacts, assignment):
     pending = _plan_pending_call(records, assignment)
     if pending is not None:
         return pending
+    if assignment.get('capacity_plan') and assignment.get('reading_chain'):
+        from .openness_reading_v7 import describe_ratio_handoff
+        handoff = describe_ratio_handoff(records, artifacts, assignment)
+        if handoff is not None:
+            return handoff
     if assignment['context_state']['context_status'] != 'verified_for_route':
         if assignment.get('staged_review', {}).get('kind') == 'controller':
             from .problem_delivery import describe_review_tasks
@@ -557,6 +562,7 @@ def _plan_head(records, artifacts, assignment):
             capacity_replacement = (recovery.get('kind') == 'replace'
                 and recovery.get('payload', {}).get('context', {}).get('capacity_replacement') == assignment['id'])
             if (not single_replacement and not capacity_replacement and assignment['role'] == 'native_math'
+                    and not assignment.get('capacity_plan')
                     and not assignment.get('context', {}).get('prior_assignment_id')):
                 from .native_review import load_packet
                 packet = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
@@ -606,7 +612,7 @@ def _plan_head(records, artifacts, assignment):
     continuing = (is_parts and (assignment[review_parts.KEY]['kind'] != 'final'
                                 or state['output'].get('kind') == 'requests')
                   or review_problem_parts.find_stage(packet) == 'part'
-                  or openness_reading.find_stage(packet) is not None and state['output'].get('stage') == 'reading'
+                  or openness_reading.find_stage(packet) is not None and state['output'].get('stage') in ('reading', 'material')
                   or bool(state.get('pending_source_requests'))
                   or bool(state['output'].get('settled_requests'))
                   or (assignment.get('subject', {}).get('kind') == 'problem'

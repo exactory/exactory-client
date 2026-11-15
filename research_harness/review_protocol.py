@@ -30,6 +30,37 @@ from . import review_transport as transport
 from .review_answer_recovery import derive_output, extract_answer_text, recover_answer
 from . import bar_sources
 from . import openness_reading
+from .openness_reading_v7 import (PROTOCOL as READING_V7_PROTOCOL, TARGET_PAGE_SENTENCE,
+                                  LIST_PAGE_SENTENCE, NOTES_COST_TEXT)
+
+# Writer placeholders. These texts are pinned by the v7 template and must be
+# revised before NEW_PROBLEM_CHAIN_PROTOCOLS enables v7 by default.
+V7_LIMITS_TEXT = ('capacity states the route output limit in tokens and this turn answer bound in characters. '
+                  'Reasoning and answer share the output limit; an answer cut at the limit is lost. ')
+V7_HANDLES_TEXT = ('Copy supplied handles: u units, e excerpts, c cards, t targets, g supplied gaps, '
+                   'h reviewer gaps, n notes, m arguments. Cite {ref:handle}; span offsets address the delivered '
+                   'part, with an optional part number, and expansion adds no body text. ')
+V7_MATERIAL_TEXT = ('For an argument return {stage:material,title,part,text,more}; keep one title and consecutive '
+                    'parts starting at 1, title at most 120 characters, text within capacity.answer_bound, '
+                    'at most eight parts with more:false '
+                    'on part 8. The next turn requests the next part; cite the completed m handle in the final. ')
+V7_READING_PROMPT = ('Read reading_turn.plan.now and evidence. Return exactly {schema_version:2,stage:reading,'
+    'subject_digest,claim_digest,reviewer,notes,excerpts,gaps,passage_requests}. Notes replace earlier notes '
+    'within allowances.notes. '
+    'Excerpts are {unit,text,purpose,targets}, with a purpose of at most 200 characters '
+    'and at least one target; their serialized cost is charged to every target. Gaps are {formulation,text}, '
+    'text at most 600 characters. Request at most ten passages as {id,unit,anchor,characters} or '
+    '{id,kind:list_page,list,after}. ' + NOTES_COST_TEXT + ' ' + TARGET_PAGE_SENTENCE + ' ' + LIST_PAGE_SENTENCE
+    + ' ' + V7_LIMITS_TEXT + V7_HANDLES_TEXT + V7_MATERIAL_TEXT)
+V7_FINAL_PROMPT = ('Assess reading_final.page from its notes, entries, gaps, material and fill. '
+    'Return exactly {schema_version:3,subject_digest,claim_digest,reviewer,findings:{statement,assumptions,scope,'
+    'dependencies,policy,openness:{outcome,coverage,reason,grounds}}}. Use the supplied bindings. '
+    'Each ground is {kind,text,work_id?,refs?}, with text at most 600 characters and refs a list of {ref:handle} '
+    'from g, h, n or m. Reason is at most 4000 characters; each coverage row is at most 800 characters. '
+    'Return supported_open or already_solved only when the forecast permits it and grounds is empty; '
+    'otherwise return unresolved with grounds, or empty grounds when both outcomes are blocked. '
+    'A reading response may instead request a passage or a list page that makes progress. '
+    + V7_LIMITS_TEXT + V7_HANDLES_TEXT + V7_MATERIAL_TEXT)
 from . import review_excerpts
 from . import review_problem_parts, review_parts
 from . import review_handles
@@ -872,6 +903,11 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
     reading or final turn of a native openness reading chain, and reading_protocol the
     protocol of its prompts, by default the current one. common_version names the common text that opens the prompt,
     by default the current one; it is independent of version, which names the scientific contract."""
+    if reading_protocol == READING_V7_PROTOCOL and capacity is not None:
+        result = canonical_prompt(role, reading_stage=reading_stage, reading_protocol=reading_protocol,
+                                  common_version=common_version)
+        result['parameters']['capacity'] = copy.deepcopy(capacity)
+        return result
     if problem_objection_carry is not None or problem_paragraphs is not None or capacity is not None:
         if (problem_paragraphs and orchestration != 'problem_creation'
                 and not prompt_paragraphs.has_only_shared_paragraphs(problem_paragraphs)):
@@ -960,6 +996,10 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
             raise ResearchError('invalid_review_context', 'A reading stage belongs to a native openness reading chain')
         from .native_review import PROMPT
         reading_protocol = reading_protocol or openness_reading.PROTOCOL
+        if reading_protocol == 'exactory-openness-reading-v7':
+            prompt = common + (V7_READING_PROMPT if reading_stage == 'reading' else V7_FINAL_PROMPT)
+            return _build_prompt(reading_protocol + '/' + reading_stage, prompt,
+                                 {'role': role, 'reading_stage': reading_stage}, common_version)
         texts = openness_reading.PROMPTS[reading_protocol]
         from .openness_reading import PROTOCOL_V6
         if reading_protocol == PROTOCOL_V6:
@@ -1820,7 +1860,7 @@ def _find_session_bodies(records, artifacts, prior, *, evaluate_states=True):
 def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
     """Build the role allowlist; caller-authored prompts and narrative substitutes are rejected."""
     canonical_prompt(role)
-    fields(context, (), ('artifact_refs', 'bundle', 'objection_id', 'review_ids', 'correction', 'prior_assignment_id', 'source_links', 'context_repair', 'verification_task_id', 'native_packet', 'source_delivery'))
+    fields(context, (), ('artifact_refs', 'bundle', 'objection_id', 'review_ids', 'correction', 'prior_assignment_id', 'source_links', 'context_repair', 'verification_task_id', 'native_packet', 'source_delivery', 'reading_replacement'))
     if 'source_delivery' in context:
         from .review_source_complete import MODE
         if context['source_delivery'] != MODE or role != 'result' or 'prior_assignment_id' not in context:
@@ -1980,7 +2020,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 add_problem_objections(records, artifacts, packet, bars)
                 packet['problem_review_currency'] = compute_problem_review_currency(records, artifacts)
     elif role == 'native_math':
-        fields(context, ('native_packet',), ('prior_assignment_id',))
+        fields(context, ('native_packet',), ('prior_assignment_id', 'reading_replacement'))
         if dossier_id is not None:
             raise ResearchError('invalid_review_context', 'Native mathematics has no strategic dossier prerequisite')
         from .native_review import load_packet
@@ -2430,7 +2470,7 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
                     request_digest=digest(request), route_digest=digest(route), runtime=route.get('runtime'),
                     usage={}, error=error_row)
         if packet is not None:
-            observation = review_handles.record_handle_output(packet, observation, artifacts)
+            observation = review_handles.record_handle_output(packet, observation, artifacts, assignment=assignment)
         capture_call(store, operation, payload, invocation, route, observation,
                      request_id=request_id, _authority=authority)
         authority.finish_transport()
@@ -2724,6 +2764,11 @@ def _prompt_matches(assignment, packet=None):
     source_rules = envelope.get('parameters', {}).get('source_rules')
     if source_rules is not None and packet is not None and packet.get('source_rules') != source_rules:
         return False
+    if envelope.get('template_id', '').startswith(READING_V7_PROTOCOL + '/'):
+        parameters = envelope['parameters']
+        return envelope == canonical_prompt('native_math', reading_stage=parameters['reading_stage'],
+            reading_protocol=READING_V7_PROTOCOL, common_version=find_common_prompt_version(envelope),
+            capacity=parameters.get('capacity'))
     base = prompt_paragraphs.strip_prompt_paragraphs(envelope, assignment['role'])
     if base is None:
         return False
@@ -3409,6 +3454,10 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                         raise
                     if reading_chain is not None:
                         diagnostics = reading_chain.pop('diagnostics', {})
+                        for key in ('capacity_plan', 'capacity_plan_kind', 'protocol_selection',
+                                    'capacity_replacement_of', 'slot_id'):
+                            if key in reading_chain:
+                                value = dict(value, **{key: reading_chain.pop(key)})
                         value = dict(value, reading_chain=reading_chain)
         if staged_repair:
             from . import review_parts_repair
@@ -3562,6 +3611,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         if prompt_parent is not None:
             base_prompt_parameters['common_version'] = find_common_prompt_version(prompt_parent['prompt'])
         base_prompt_parameters.update(prompt_paragraphs.select_prompt_parameters(value['role'], packet))
+        if openness_reading.find_protocol(packet) == READING_V7_PROTOCOL:
+            binding = packet.get('reading_turn', packet.get('reading_final'))
+            base_prompt_parameters['capacity'] = binding['capacity']
         if (value['role'] == 'native_math' and openness_reading.find_stage(packet) is None
                 and openness_reading.is_openness_packet(packet['native'])
                 and packet['native']['scientific_context']['openness_minimum']['schema_version'] == 2):
@@ -3660,8 +3712,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         # that turn's bound without changing the recorded paragraphs of ancestors.
         packet = prepare_capacity_notice(records, route, value['role'], packet)
         parameters = prompt_paragraphs.select_prompt_parameters(value['role'], packet)
-        if (prompt_paragraphs.CAPACITY_PARAMETER in parameters
-                or prompt_paragraphs.CAPACITY_PARAMETER in prompt['parameters']):
+        if (openness_reading.find_protocol(packet) != READING_V7_PROTOCOL
+                and (prompt_paragraphs.CAPACITY_PARAMETER in parameters
+                     or prompt_paragraphs.CAPACITY_PARAMETER in prompt['parameters'])):
             base = prompt_paragraphs.strip_prompt_paragraphs(prompt, value['role'])
             recorded = prompt_paragraphs.read_paragraph_parameters(prompt)
             prompt = prompt_paragraphs.append_prompt_paragraphs(base, value['role'],
@@ -3676,6 +3729,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             packet['digest'] = digest(packet)
         from .review_route_capacity import CAPACITY_REQUEST_KEY, prepare_assignment_capacity
         capacity_members = {}
+        if value.get('capacity_plan'):
+            capacity_members = {key: value[key] for key in ('capacity_plan', 'capacity_plan_kind')}
         if CAPACITY_REQUEST_KEY in packet:
             declaration = packet.pop(CAPACITY_REQUEST_KEY)
             capacity_members = prepare_assignment_capacity(records, artifacts, route, declaration)
@@ -3880,6 +3935,11 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         packet = _read_json(artifacts, assignment['packet'])
         if not _prompt_matches(assignment, packet=packet):
             raise ResearchError('review_prompt_mismatch', 'Invoke the recorded canonical reviewer prompt')
+        if openness_reading.find_protocol(packet) == READING_V7_PROTOCOL:
+            from .openness_reading_v7 import describe_ratio_handoff, RATIO_EXPORT_MESSAGE
+            handoff = describe_ratio_handoff(records, artifacts, assignment)
+            if handoff is not None:
+                raise ResearchError(openness_reading.PROJECTION_STOP, RATIO_EXPORT_MESSAGE, handoff['details'])
         from .review_source_complete import validate
         validate(records, artifacts, assignment, packet)
         validate_assignment_inventories(records, artifacts, assignment['id'])
@@ -3970,7 +4030,7 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
         material_matches = True
         if review_handles.is_material_output(packet, output):
             material = _read_json(artifacts, attempt['material']) if 'material' in attempt else None
-            material_matches = review_handles.authenticate_material(packet, output, material, artifacts)
+            material_matches = review_handles.authenticate_material(packet, output, material, artifacts, assignment=assignment)
         elif 'material' in attempt:
             material_matches = False
         return (has_supported_binding(assignment, attempt)
@@ -3982,7 +4042,8 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
                     policy=assignment.get('request_policy')))
                 and attempt.get('packet_digest') == assignment['packet_digest']
                 and attempt.get('prompt_hash') == assignment['prompt_hash']
-                and review_handles.derive_expanded_output(packet, dict(attempt, output=output), response) == output
+                and review_handles.derive_expanded_output(packet, dict(attempt, output=output), response,
+                                                          artifacts=artifacts, assignment=assignment) == output
                 and material_matches)
     except (ResearchError, ValueError, TypeError, KeyError):
         return False
@@ -4278,9 +4339,9 @@ def collect_adjudication_evidence(output):
 def validate_adjudication_contract(records, artifacts, assignment, packet, output, *, attempt=None):
     """Validate only the focused output and the adjudicator's frozen delivery."""
     from .review_handles import expand_handles, is_material_output, validate_material
-    output = expand_handles(packet, output)
+    output = expand_handles(packet, output, artifacts=artifacts, assignment=assignment)
     if is_material_output(packet, output):
-        validate_material(packet, output)
+        validate_material(packet, output, artifacts=artifacts, assignment=assignment)
         return
     from .review_refusal import contract_check, validate_evidence_contract
     parts_kind = review_parts.find_kind(packet)

@@ -132,7 +132,7 @@ class RecoveryRowsTests(unittest.TestCase):
         self.assertEqual({kind for kind, _ in actual}, set(capacity.TURN_KINDS))
         for row in rows:
             self.assertIn(row['handler'], ('nothing', 'parts_v2_read', 'context_repair',
-                                          'single_request_series', 'staged_controller'))
+                                          'single_request_series', 'staged_controller', 'reading_v7', 'final_v7'))
         self.assertIs(failures.plan_capacity_recovery, capacity.plan_capacity_recovery)
 
     def test_legacy_reading_and_final_decisions_include_profile_attempts_and_migration(self):

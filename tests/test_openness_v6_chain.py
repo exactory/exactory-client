@@ -135,9 +135,10 @@ class V6ChainTests(OpennessReadingCase):
         reference = self.export()
         with self.assertRaises(ResearchError) as caught:
             self.assign('turn-1', reference)
-        self.assertEqual(caught.exception.code, reading.PROJECTION_STOP)
-        self.assertEqual(caught.exception.details['reason'], 'below_floor')
-        self.assertLess(caught.exception.details['projection']['record_total'], reading.RECORD_ALLOWANCE_FLOOR)
+        self.assertEqual(caught.exception.code, 'review_route_capacity_below_floor')
+        refusal = caught.exception.details['admissions'][0]['details']
+        self.assertEqual(refusal['reason'], 'below_floor')
+        self.assertLess(refusal['projection']['record_total'], reading.RECORD_ALLOWANCE_FLOOR)
         self.assertFalse(self.store.snapshot()['records'].get('review_assignment'))
 
     def build_stub_output(self, packet, shape, number, purpose_characters=500):
@@ -376,9 +377,10 @@ class IncidentV6ChainTests(OpennessReadingCase):
         try:
             record, projection, requests, _ = V6ChainTests.drive_stub(self, 'uncharged-diagnostics')
         except ResearchError as error:
-            self.assertEqual(error.code, reading.PROJECTION_STOP)
-            self.assertEqual(error.details['reason'], 'below_floor')
-            projection = error.details['projection']
+            self.assertEqual(error.code, 'review_route_capacity_below_floor')
+            refusal = error.details['admissions'][0]['details']
+            self.assertEqual(refusal['reason'], 'below_floor')
+            projection = refusal['projection']
             self.assertLess(projection['record_total'], projection['record_floor'])
             self.assertFalse(self.store.snapshot()['records'].get('review_assignment'))
             state, largest = 'stop', 0

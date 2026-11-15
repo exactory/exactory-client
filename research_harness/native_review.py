@@ -1,6 +1,7 @@
 """Canonical native mathematical review packets, without strategic-value gates."""
 
 from datetime import date
+import json
 import re
 
 from .artifacts import validate_reference
@@ -210,7 +211,8 @@ PROBLEM_OPENNESS_PROMPT = render_finding_prompt()
 def uses_finding_contract(assignment):
     """The saved prompt, rather than today's packet shape, selects the answer contract."""
     template = assignment.get("prompt", {}).get("template_id", "")
-    return template in ("exactory-openness-reading-v6/final", "exactory-review-v7/native_math")
+    return template in ("exactory-openness-reading-v6/final", "exactory-openness-reading-v7/final",
+                        "exactory-review-v7/native_math")
 
 
 def _require_finding(condition, rule, path, forecast):
@@ -225,6 +227,7 @@ def validate_finding(packet, output):
     native = packet.get("native", packet)
     context = native["scientific_context"]
     forecast = context["audit_forecast"]
+    v7 = packet.get('reading_final', {}).get('protocol') == 'exactory-openness-reading-v7'
     with contract_check("openness.finding"):
         def require(condition, rule, path):
             _require_finding(condition, rule, path, forecast)
@@ -247,8 +250,14 @@ def validate_finding(packet, output):
         require(_nonempty(openness["reason"]), "nonempty_text", base + "/reason")
         coverage = openness["coverage"]
         minimum = context["openness_minimum"]
+        target_count = len(packet['reading_final']['page']['targets']) if v7 else 1 + len(minimum['neighbours'])
         require(_nonempty(coverage) or isinstance(coverage, list)
-                and len(coverage) == 1 + len(minimum["neighbours"]), "coverage", base + "/coverage")
+                and len(coverage) == target_count, "coverage", base + "/coverage")
+        if v7:
+            require(len(openness['reason']) <= 4000, 'reason_bound', base + '/reason')
+            require(all(len(json.dumps(row, ensure_ascii=False, separators=(',', ':'))) <= 800 for row in coverage)
+                    if isinstance(coverage, list) else len(coverage) <= 800 * target_count,
+                    'coverage_bound', base + '/coverage')
         grounds = openness["grounds"]
         require(isinstance(grounds, list), "grounds_list", base + "/grounds")
         turns = {row["assignment_id"] for row in packet.get("reading_record", {}).get("turns", [])
@@ -256,9 +265,17 @@ def validate_finding(packet, output):
         for index, ground in enumerate(grounds):
             path = base + "/grounds/" + str(index)
             require(isinstance(ground, dict) and {"kind", "text"} <= set(ground)
-                    and set(ground) <= {"kind", "text", "work_id", "turns"}, "ground_fields", path)
+                    and set(ground) <= ({"kind", "text", "work_id", "refs"} if v7
+                                        else {"kind", "text", "work_id", "turns"}), "ground_fields", path)
             require(isinstance(ground["kind"], str) and ground["kind"] in GROUND_NEXT_STEPS, "ground_kind", path + "/kind")
             require(_nonempty(ground["text"]), "nonempty_text", path + "/text")
+            if v7:
+                require(len(ground['text']) <= 600, 'ground_bound', path + '/text')
+            if 'refs' in ground:
+                references = ground['refs']
+                require(isinstance(references, list), 'recorded_references', path + '/refs')
+                for reference in references:
+                    validate_reference(reference)
             if "work_id" in ground:
                 require(_nonempty(ground["work_id"]), "work_id", path + "/work_id")
             if ground["kind"] == "source_settles":

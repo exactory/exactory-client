@@ -68,9 +68,11 @@ def record_codex_route(case, identifier='route', *, output_tokens=1000, timeout_
 def probe_codex_route(case, probe_id, route_id='route'):
     def respond_to_probe(route, request, credential):
         packet = json.loads(request['input'][0]['content'][len(transport.PACKET_LABEL):])
-        return build_codex_response(route, request, {'allowed_control': packet['allowed_control'],
+        response = build_codex_response(route, request, {'allowed_control': packet['allowed_control'],
                                                      'evidence_control': packet['evidence_control'],
                                                      'excluded_controls': []})
+        response['usage']['input_tokens'] = getattr(case, 'capacity_probe_tokens', response['usage']['input_tokens'])
+        return response
     with patch.object(transport, 'send_request', side_effect=respond_to_probe):
         protocol.probe_route(case.store, {'id': probe_id, 'route_id': route_id}, credential='test-only',
                              expected_revision=case.store.revision, request_id='codex-probe-' + probe_id)

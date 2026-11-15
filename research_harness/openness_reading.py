@@ -40,6 +40,9 @@ PROTOCOL = 'exactory-openness-reading-v3'
 PROTOCOL_V4 = 'exactory-openness-reading-v4'
 PROTOCOL_V5 = 'exactory-openness-reading-v5'
 PROTOCOL_V6 = 'exactory-openness-reading-v6'
+PROTOCOL_V7 = 'exactory-openness-reading-v7'
+NEW_PROBLEM_CHAIN_PROTOCOLS = (PROTOCOL_V6,)
+PROTOCOL_SELECTION_TEXT = 'The chain uses {protocol}; earlier admission refusals: {refusals}.'
 # The protocol of a math-solver result review's chain: the units of v3 in the math order, no statement record, and a
 # final passage request that must deliver characters.
 MATH_PROTOCOL = 'exactory-openness-reading-math-v1'
@@ -674,20 +677,20 @@ def find_chain_protocol(native, prior_protocol=None):
     if is_math_openness_packet(native):
         return MATH_PROTOCOL
     if prior_protocol is not None:
-        return prior_protocol if prior_protocol in (PROTOCOL_V5, PROTOCOL_V6) else PROTOCOL_V4
+        return prior_protocol if prior_protocol in (PROTOCOL_V5, PROTOCOL_V6, PROTOCOL_V7) else PROTOCOL_V4
     return PROTOCOL_V6 if native['scientific_context']['openness_minimum'].get('schema_version') == 2 else PROTOCOL_V5
 
 
 def require_reserved_identifier(identifier, protocol):
     """Refuse an identifier that exceeds the length reserved by a finite v6 projection."""
-    if protocol == PROTOCOL_V6 and len(identifier) > RESERVED_IDENTIFIER_CHARACTERS:
+    if protocol in (PROTOCOL_V6, PROTOCOL_V7) and len(identifier) > RESERVED_IDENTIFIER_CHARACTERS:
         raise ResearchError('invalid_input', IDENTIFIER_LIMIT_MESSAGE,
                             {'characters': len(identifier), 'maximum_characters': RESERVED_IDENTIFIER_CHARACTERS})
 
 
 def find_stage(packet):
     """The reading-chain stage of a native_math packet: 'reading', 'final', or None for a single-turn packet."""
-    return 'reading' if TURN_KEY in packet else 'final' if RECORD_KEY in packet else None
+    return 'reading' if TURN_KEY in packet else 'final' if RECORD_KEY in packet or 'reading_final' in packet else None
 
 
 def find_binding(packet):
@@ -705,7 +708,45 @@ def find_protocol(packet):
     """The reading protocol under which a reading or final turn's packet was built; None for a single-turn packet."""
     if TURN_KEY in packet:
         return packet[TURN_KEY]['protocol']
+    if 'reading_final' in packet:
+        return packet['reading_final']['protocol']
     return packet[RECORD_KEY]['protocol'] if RECORD_KEY in packet else None
+
+
+def choose_chain_protocol(records, artifacts, route, native, *, packet=None, assignment=None):
+    """Run the ordered admissions once and retain every result that was needed."""
+    from . import openness_reading_v7 as v7
+    overlay = v7._PlanningArtifacts(artifacts)
+    if packet is None:
+        packet = dict(protocol='native', role='native_math', reviewer_id=native['reviewer'], dossier_id=None,
+                      native=native, evidence=[])
+    admissions = []
+    for protocol in NEW_PROBLEM_CHAIN_PROTOCOLS:
+        if protocol == PROTOCOL_V7:
+            result = v7.check_v7_admission(records, artifacts, route, native)
+        elif protocol == PROTOCOL_V6:
+            rows = list_reading_rows(records, artifacts, native, review=assignment)
+            delivery = _plan_search_delivery(artifacts, native)
+            for content in delivery['bodies'].values():
+                overlay.put(content, 'application/json')
+            record = _create_record(PROTOCOL_V6, delivery['manifest'], excerpt_protocol=review_excerpts.SESSION_PROTOCOL)
+            record['planned_reading_turns'] = sum(len(parts) for parts in _compute_spans(
+                overlay, list_delivery_rows(rows, delivery['manifest'])).values())
+            projection = project_reading_chain(route, packet, rows, record, artifacts=overlay, records=records,
+                eligible_texts=_classify_final_texts(records, artifacts, native, rows, PROTOCOL_V6))
+            result = dict(admit_reading_chain(route, projection, records=records, artifacts=artifacts,
+                                              assignment=assignment), protocol=PROTOCOL_V6)
+        else:
+            raise ResearchError('invalid_input', 'A new problem chain needs an installed admission protocol.')
+        report = {key: copy.deepcopy(value) for key, value in result.items()
+                  if key not in ('inventory', 'capacity_members', 'capacity_plan', 'forecast')}
+        admissions.append(report)
+        if result['state'] == 'record':
+            refusals = '; '.join(row['protocol'] + ': ' + row.get('reason', row.get('details', {}).get('reason', 'refused'))
+                                 for row in admissions if row['state'] != 'record') or 'none'
+            return dict(protocol=protocol, admissions=admissions, result=result,
+                        message=PROTOCOL_SELECTION_TEXT.format(protocol=protocol, refusals=refusals))
+    return dict(protocol=None, admissions=admissions)
 
 
 def _describe_identity(value):
@@ -1419,7 +1460,10 @@ def forecast_reading_chain(records, artifacts, route, packet, rows, record, *, r
 
 
 def describe_reading_receipt(records, artifacts, assignment, route, logical, packet, request, *, admit_turn=True):
-    """Attach forecasts to receipts only; the saved assignment, prompt and request keep their bytes."""
+    """Attach forecasts to receipts only; saved assignments, prompts and requests keep their bytes."""
+    if find_protocol(packet) == PROTOCOL_V7:
+        from .openness_reading_v7 import describe_turn_receipt
+        return describe_turn_receipt(records, artifacts, assignment, route, packet, request)
     record = _find_record(packet)
     rows = list_reading_rows(records, artifacts, logical['native'])
     selected = _classify_final_texts(records, artifacts, logical['native'], rows, record['protocol'])
@@ -2102,6 +2146,14 @@ def prepare_packet(records, artifacts, value, route, packet):
             raise ResearchError('openness_packet_outdated', PACKET_OUTDATED_MESSAGE, {'handoff': 'export'})
     from .capture_selection import bind_packet_selections
     records = bind_packet_selections(records, native['scientific_context'], artifacts=artifacts, review=value)
+    if prior_id is not None:
+        prior = records.get('review_assignment', {}).get(prior_id)
+        if prior is not None and find_protocol(json.loads(artifacts.read(prior['packet']))) == PROTOCOL_V7:
+            from .openness_reading_v7 import prepare_next_assignment
+            return prepare_next_assignment(records, artifacts, value, route, packet)
+    if value['context'].get('reading_replacement'):
+        from .openness_reading_v7 import prepare_next_assignment
+        return prepare_next_assignment(records, artifacts, value, route, packet)
     if prior_id is None:
         _require_initial_captures(records, native)
         if (not (is_openness_packet(native) or is_math_openness_packet(native))
@@ -2110,11 +2162,25 @@ def prepare_packet(records, artifacts, value, route, packet):
         from .review_protocol import canonical_prompt
         rows = list_reading_rows(records, artifacts, native, review=value)
         characters = sum(len(artifacts.read(row['artifact']).decode('utf-8')) for row in rows)
-        if (characters <= review_excerpts.TURN_FULLTEXT_CHARACTERS
+        if (PROTOCOL_V7 not in NEW_PROBLEM_CHAIN_PROTOCOLS and characters <= review_excerpts.TURN_FULLTEXT_CHARACTERS
                 and _fits(route, canonical_prompt('native_math', version=7 if is_openness_packet(native) else 6)['text'],
                           packet, [row['artifact'] for row in rows])):
             return packet, None
         protocol = find_chain_protocol(native)
+        selection = None
+        if is_openness_packet(native) and protocol == PROTOCOL_V6:
+            selection = choose_chain_protocol(records, artifacts, route, native, packet=packet, assignment=value)
+            if selection['protocol'] is None:
+                from .openness_reading_v7 import describe_admission_stop
+                stop = describe_admission_stop(records, artifacts, value, route, packet, selection)
+                raise ResearchError('review_route_capacity_below_floor', stop['message'], stop)
+            protocol = selection['protocol']
+            if protocol == PROTOCOL_V7:
+                from .openness_reading_v7 import prepare_first_assignment
+                prepared, chain = prepare_first_assignment(records, artifacts, value, route, packet, [],
+                                                           admission=selection['result'])
+                chain['protocol_selection'] = {key: item for key, item in selection.items() if key != 'result'}
+                return prepared, chain
         require_reserved_identifier(value['id'], protocol)
         plan = _plan_search_delivery(artifacts, native) if protocol in (PROTOCOL_V5, PROTOCOL_V6) else None
         if plan is not None:
@@ -2123,6 +2189,8 @@ def prepare_packet(records, artifacts, value, route, packet):
         record = _create_record(protocol, plan['manifest'] if plan is not None else None,
                                 excerpt_protocol=review_excerpts.SESSION_PROTOCOL)
         chain = {'first_assignment_id': value['id'], 'turn': 1}
+        if selection is not None:
+            chain['protocol_selection'] = {key: item for key, item in selection.items() if key != 'result'}
         if protocol == PROTOCOL_V6:
             record['planned_reading_turns'] = sum(len(parts) for parts in
                 _compute_spans(artifacts, list_delivery_rows(rows, record['search_delivery'])).values())
@@ -2253,10 +2321,13 @@ def _validate_reading_response(binding, output, protocol):
             review_excerpts.validate_passage_request(request, INVALID_RESPONSE, kinds, path=path)
 
 
-def validate_turn_output(packet, output):
+def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
     """The output contract of a reading-chain turn under the protocol of its packet. A reading turn returns a reading
     response. A final turn returns the native result review, or a reading response with at least one passage request
     while the passage allowance has characters left."""
+    if find_protocol(packet) == PROTOCOL_V7:
+        from .openness_reading_v7 import validate_turn_output as validate_v7
+        return validate_v7(packet, output, artifacts=artifacts, assignment=assignment)
     from .native_review import validate_output
     final = find_stage(packet) == 'final'
     if final and not (isinstance(output, dict) and output.get('stage') == 'reading'):
@@ -2278,6 +2349,9 @@ def validate_turn_output(packet, output):
 
 def has_deliverable_passage(records, artifacts, packet, output, *, assignment=None, attempt=None, turn=None):
     """A final reading response must retain a delivered passage after all preceding output entries and its receipt."""
+    if find_protocol(packet) == PROTOCOL_V7:
+        from .openness_reading_v7 import has_deliverable_requests
+        return has_deliverable_requests(artifacts, packet, output, assignment)
     if (find_stage(packet) != 'final' or packet[RECORD_KEY]['protocol'] not in
             (PROTOCOL_V4, PROTOCOL_V5, PROTOCOL_V6, MATH_PROTOCOL) or output.get('stage') != 'reading'):
         return True

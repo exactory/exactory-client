@@ -186,6 +186,9 @@
         "research_harness/ocr.py:OcrPdfExtractor.extract_page#1": [
           "form"
         ],
+        "research_harness/openness_reading.py:choose_chain_protocol#1": [
+          "form"
+        ],
         "research_harness/openness_reading.py:require_reserved_identifier#1": [
           "limit"
         ],
@@ -498,6 +501,10 @@
         "research_harness/review_handles.py:validate_material#3": [
           "form",
           "limit"
+        ],
+        "research_harness/review_handles.py:validate_material#4": [
+          "form",
+          "limit"
         ]
       },
       "invalid_review_route": {
@@ -764,6 +771,9 @@
           "content"
         ],
         "research_harness/direction_reviews.py:_collect_task_graph#5": [
+          "content"
+        ],
+        "research_harness/openness_reading_v7.py:read_bound_state#1": [
           "content"
         ],
         "research_harness/research_decisions.py:validate_review_contract#1": [

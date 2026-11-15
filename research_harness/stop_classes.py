@@ -5,6 +5,7 @@ Unknown codes retain the decision class used by stored records.
 """
 
 import copy
+from .openness_reading_v7 import ADMISSION_QUESTION, ADMISSION_SMALLER_ANSWER, ADMISSION_ROUTE_ANSWER
 
 
 _STORED_CONTENT_CODES_REVIEW_A = (
@@ -78,6 +79,12 @@ STOP_REGISTRY.update({
         proof='test_review_capacity_plan.CapacityPlanTests.test_exact_request_above_pinned_bound_is_harness_defect',
         next=copy.deepcopy(STOP_REGISTRY['review_series_no_progress']['next'])),
 })
+STOP_REGISTRY['review_route_capacity_below_floor']['problem_chain_next'] = dict(
+    kind='decision', owner_decides=ADMISSION_QUESTION,
+    then=[dict(answer=ADMISSION_SMALLER_ANSWER, steps=[dict(id=4, command='export'),
+                 dict(command='review-assignment', check=True)]),
+          dict(answer=ADMISSION_ROUTE_ANSWER, steps=[dict(id=7, command='review-route'),
+                 dict(command='review-probe'), dict(id=4, command='export')])])
 for _code, _outcome in (
         ('review_provider_refused', 'provider_refused'), ('review_output_over_cap', 'output_over_cap'),
         ('review_response_too_large', 'response_over_limit'),

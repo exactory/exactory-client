@@ -283,6 +283,8 @@ def complete_plan(records, artifacts, assignment, plan):
         # Reading-v7 changes the problem-chain row to export when it can carry these verified turns.
         from .openness_reading import describe_projection_decision, find_protocol
         packet = protocol._read_json(artifacts, assignment['packet'])
+        if find_protocol(packet) == 'exactory-openness-reading-v7' and details.get('ratio'):
+            return dict(plan, state='handoff', command='export')
         details['decision'] = describe_projection_decision(find_protocol(packet), records=records,
                                                            artifacts=artifacts, assignment=assignment)
         plan['state'] = 'stop'

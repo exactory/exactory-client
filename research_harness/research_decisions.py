@@ -287,9 +287,9 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
     """Check the frozen scientific contract and the exact attempt's permitted delivery."""
     from .review_handles import expand_handles, is_material_output, validate_material
     packet = read_assignment_packet(records, artifacts, assignment['id'])
-    output = expand_handles(packet, output)
+    output = expand_handles(packet, output, artifacts=artifacts, assignment=assignment)
     if is_material_output(packet, output):
-        validate_material(packet, output)
+        validate_material(packet, output, artifacts=artifacts, assignment=assignment)
         return
     from . import bar_sources, review_context_repair, review_excerpts, review_supplied_evidence
     from .review_protocol import has_problem_result_rubric, is_previous_prompt
