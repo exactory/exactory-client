@@ -28,8 +28,11 @@ NOTICE_METADATA_TOO_LARGE_MSG = (
     'its path and its message stay unchanged, so no replacement can carry this refusal. Run review-series on the '
     'head and take the step of its role.')
 BOUNDED_NOTICE_METADATA_TOO_LARGE_MSG = (
-    'The bounded refusal notice exceeds 45,000 characters after its parts are shortened. Its fixed metadata '
-    'cannot be shortened further. Run review-series on the head and take the step of its role.')
+    'The bounded refusal notice of this position still exceeds 45,000 characters, counted as the request of '
+    'the route carries them, after its details and its refused part are shortened. The identifiers, the '
+    'paths and the messages of its entries stay unchanged, so no replacement can carry these refusals. '
+    'details.characters gives the size against details.limit_characters. Run review-series on the head and '
+    'take the step that it plans.')
 NOTICE_DELIVERY_MSG = (
     'The request of the replacement does not carry the refusal notice unchanged within the limits of the route '
     'and of the task; the details give the measurements. Run review-series on the head and take the step that it '

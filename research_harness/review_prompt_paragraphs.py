@@ -77,12 +77,12 @@ UNREAD_FINAL_PARAGRAPH_VERSION = 'exactory-openness-unread-final-v1'
 # (UNREAD_CORE_CHARACTERS, ruling 39; the member measures up to 663), so the text stays under 800 characters. A later
 # change of the text needs a new registered version.
 UNREAD_FINAL_PROMPT = (
-    '\n\nUnread ranges. The provider refused one reading turn of this chain in every permitted sequence, so the '
-    'chain ends without the text of that turn and of what follows it. reading_final.unread describes the complete '
-    'set of unread ranges, whose handle is x1: count, the number of its rows; causes, with rows and characters for '
-    'provider_refused (the ranges of the refused turn) and not_delivered (the ranges that no turn reached); rows, '
-    'the first rows; and omitted, the number of rows not shown. The list unread holds every row, and the list '
-    'unread_attempts every attempt of the refused turn. The harness records no outcome other than unresolved. '
+    '\n\nUnread ranges. The last permitted sequence of one reading turn ended with a refusal by the provider at the '
+    'lowest reading level, so the chain ends with ranges that it had still to deliver. reading_final.unread '
+    'describes the complete set of these ranges, whose handle is x1: count, the number of its rows; causes, with '
+    'rows and characters for provider_refused (the ranges of the last refused request) and not_delivered (the other '
+    'ranges); rows, the first rows; and omitted, the number of rows not shown. The list unread holds every row, and '
+    'the list unread_attempts every attempt of that turn. The harness records no outcome other than unresolved. '
     'grounds must hold a reviewer_gap whose refs holds {ref:"x1"}. A ground about one unread unit can add '
     '{ref:<unit>}, with the unit of its row.')
 

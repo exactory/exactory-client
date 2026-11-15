@@ -668,8 +668,10 @@ def _plan_sequence_end(last, classification, position):
 
 
 REFUSAL_NOTICE_HANDOFF_MSG = (
-    'The notice entry of one refusal of this position still exceeds 6,000 characters after its details are '
-    'shortened, so no replacement can carry the refusal. Take the step in the details; it continues the slot as '
+    'The refusal notice of this position cannot be brought within its bounds: the notice entry of one refusal '
+    'still exceeds 6,000 characters after its details are shortened, or, in a chain with a capacity plan, the '
+    'bounded notice still exceeds 45,000 characters after its details and its refused part are shortened. No '
+    'replacement can carry the refusal. Take the step in the details; it continues the slot or the chain as '
     'the step of an exhausted position does.')
 
 
