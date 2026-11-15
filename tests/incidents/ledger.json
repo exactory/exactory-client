@@ -5469,7 +5469,7 @@
       "class": "requested review stop and closed calls",
       "summary": "T6: stopping a running chain required manual process termination and left its final invocation unexplained after the post.",
       "expected": "One durable boundary prevents admission and launch, settles owned calls without losing captured outputs, and requires an explicit release after drivers acknowledge. Posted calls expose administrative closure steps; historical invocations retain their documented failed-attempt import.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.2",
       "test_kind": "real_shape",
       "tests": [
         "test_review_stop_processes.StopProcessTests.test_now_ends_registered_transport_and_owner_records_attempt_before_return",
@@ -5498,7 +5498,7 @@
       "class": "review call ordering",
       "summary": "A chain could repeatedly take capacity while an independent review had no durable place to wait.",
       "expected": "Covered calls wait in request order among eligible routes. A dead waiter is abandoned, a stop withdraws only its scope, and an uncontended call writes no wait record.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.2",
       "test_kind": "real_shape",
       "tests": [
         "test_review_stop_processes.StopProcessTests.test_single_waits_then_starts_before_a_chains_next_call",
@@ -5531,7 +5531,7 @@
         "test_review_uncovered_stop.UncoveredReviewTests.test_unverified_route_is_rejected_before_validating_its_runtime"
       ],
       "class": "review capacity by construction",
-      "fixed_in": "open",
+      "fixed_in": "0.89.2",
       "test_kind": "real_shape"
     },
     {
@@ -5622,7 +5622,7 @@
       "class": "review capacity diagnostics and call ordering",
       "summary": "T3 and T4: separate verified routes were serialized without actionable capacity advice, and waiting series needed an outer restart loop.",
       "expected": "Planned waits and queued calls name their store and route limits. A store wait on an idle verified route supplies a scheduler for participating verified routes. Three drivers on one route finish in request order without external commands or automatic stop records.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.2",
       "test_kind": "real_shape",
       "tests": [
         "test_review_queue_triage.QueueTriageTests.test_recording_the_suggested_scheduler_allows_two_verified_routes_to_run_together",
@@ -5636,7 +5636,7 @@
       "class": "review capacity advisory diagnostics",
       "summary": "The route-capacity snapshot let JSON decoding in its advisory task report replace the existing malformed-packet terminal stop with CLI input_io.",
       "expected": "An unavailable advisory task measure preserves the scientific terminal refusal, series exit code and retained diagnostic.",
-      "fixed_in": "open",
+      "fixed_in": "0.89.2",
       "test_kind": "real_shape",
       "tests": [
         "test_automatic_gate_override.RecordedSeriesStopTests.test_malformed_packet_keeps_the_cli_terminal_stop_and_exit_code",
@@ -5657,7 +5657,7 @@
         "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
         "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call"
       ],
-      "fixed_in": "open",
+      "fixed_in": "0.89.2",
       "test_kind": "real_shape"
     },
     {
@@ -5669,7 +5669,7 @@
       "tests": [
         "test_session_forecast.SessionForecastTests.test_forecast_uses_matching_request_profile_and_observed_usage_medians"
       ],
-      "fixed_in": "open",
+      "fixed_in": "0.89.2",
       "test_kind": "real_shape"
     },
     {
@@ -5683,7 +5683,7 @@
         "test_size_reports.SizeReportTests.test_size_diagnostics_do_not_change_the_process_delivery_mode",
         "test_size_reports.SizeReportTests.test_size_report_uses_only_its_keyed_capacity_witness"
       ],
-      "fixed_in": "open",
+      "fixed_in": "0.89.2",
       "test_kind": "real_shape"
     },
     {
@@ -5701,7 +5701,7 @@
         "test_review_continuation_regressions.ContinuationRegressionTests.test_series_ends_with_the_exhausted_fixed_slot_stop",
         "test_review_series.SeriesTests.test_stale_runtime_refusal_hands_off_recording_a_new_route"
       ],
-      "fixed_in": "open",
+      "fixed_in": "0.89.2",
       "test_kind": "real_shape"
     },
     {
@@ -5714,7 +5714,7 @@
         "test_size_reports.SizeReportTests.test_value_receipt_reports_cited_records_and_transitive_bodies_outside_storage",
         "test_size_reports.SizeReportTests.test_missing_report_body_refuses_before_recording_a_value"
       ],
-      "fixed_in": "open",
+      "fixed_in": "0.89.2",
       "test_kind": "real_shape"
     }
   ]
