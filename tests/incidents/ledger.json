@@ -4768,7 +4768,9 @@
         "test_review_refusal_notice.RefusalNoticeTests.test_each_form_measures_its_recorded_prompt_and_non_notice_task",
         "test_review_refusal_replacement_incident.PartOffsetReplacementIncidentTests.test_revision_200_repaired_bar_gets_part_offsets_and_records_in_its_slot",
         "test_review_single_request.FrozenSingleTests.test_capacity_recovery_of_a_refusal_read_keeps_its_frozen_notice",
-        "test_review_single_request.FrozenSingleTests.test_capacity_recovery_of_a_bounded_refusal_read_keeps_its_frozen_notice"
+        "test_review_single_request.FrozenSingleTests.test_capacity_recovery_of_a_bounded_refusal_read_keeps_its_frozen_notice",
+        "test_series_code_reach.CodeReachTests.test_notice_codes_follow_the_installed_refusal_classifier_domain",
+        "test_series_code_reach.CodeReachTests.test_selected_output_refusals_cover_replaced_and_superseded_heads"
       ]
     },
     {
@@ -4787,7 +4789,9 @@
         "test_review_refusal_replacement.RefusalReplacementTests.test_second_replacement_lists_revived_attempt_and_keeps_head_finality",
         "test_review_refusal_replacement_parts.PartsReplacementTests.test_every_parts_kind_can_be_replaced_and_the_corrected_series_records",
         "test_review_single_request.FrozenSingleTests.test_capacity_recovery_of_a_refusal_read_keeps_its_frozen_notice",
-        "test_review_single_request.FrozenSingleTests.test_capacity_recovery_of_a_bounded_refusal_read_keeps_its_frozen_notice"
+        "test_review_single_request.FrozenSingleTests.test_capacity_recovery_of_a_bounded_refusal_read_keeps_its_frozen_notice",
+        "test_series_code_reach.CodeReachTests.test_notice_codes_follow_the_installed_refusal_classifier_domain",
+        "test_series_code_reach.CodeReachTests.test_selected_output_refusals_cover_replaced_and_superseded_heads"
       ]
     },
     {

@@ -85,33 +85,37 @@
       "review_context_unverified"
     ],
     "codes_15": [
+      "review_assignment_replaced",
+      "review_assignment_superseded"
+    ],
+    "codes_16": [
       "assessment_incomplete",
       "review_resampling_forbidden"
     ],
-    "codes_16": [
+    "codes_17": [
       "invalid_round"
     ],
-    "codes_17": [
+    "codes_18": [
       "configuration_missing",
       "constitution_revalidation_required",
       "objective_mismatch",
       "profile_mismatch"
     ],
-    "codes_18": [
+    "codes_19": [
       "context_missing",
       "innovation_missing",
       "rationale_missing",
       "standards_missing"
-    ],
-    "codes_19": [
-      "exploratory_evidence",
-      "missing_evidence"
     ],
     "codes_2": [
       "http_status",
       "rate_limited"
     ],
     "codes_20": [
+      "exploratory_evidence",
+      "missing_evidence"
+    ],
+    "codes_21": [
       "openness_reading_incomplete",
       "review_parts_incomplete"
     ],
@@ -426,6 +430,16 @@
       ],
       "values": "reachable"
     },
+    "research_harness/review_refusal_notice.py:_build_refused_entry:diagnosis['code']": {
+      "sources": [
+        "research_harness/review_refusal.py:classify_observed_output"
+      ],
+      "values": "reachable"
+    },
+    "research_harness/review_refusal_replacement.py:require_selected_output:code": {
+      "sources": [],
+      "values": "codes_15"
+    },
     "research_harness/review_route_capacity.py:describe_capacity_decision:details.get('code', OUTCOME_CODES[outcome])": {
       "sources": [
         "research_harness/review_route_capacity.py:plan_capacity_recovery"
@@ -472,7 +486,7 @@
     },
     "research_harness/review_staged_protocol.py:invoke_task:'assessment_incomplete' if head['state'] == 'incomplete' else 'review_resampling_forbidden'": {
       "sources": [],
-      "values": "codes_15"
+      "values": "codes_16"
     },
     "research_harness/review_staged_protocol.py:plan_frontier.prepare:obligations[0]['code']": {
       "sources": [
@@ -530,7 +544,7 @@
     },
     "research_harness/rounds.py:_RoundEvidence.many:self.error_code": {
       "sources": [],
-      "values": "codes_16"
+      "values": "codes_17"
     },
     "research_harness/rounds.py:_canonical_adapter.prepare:item['code']": {
       "sources": [
@@ -552,11 +566,11 @@
     },
     "research_harness/synthesis.py:_record.prepare:item[\"code\"]": {
       "sources": [],
-      "values": "codes_17"
+      "values": "codes_18"
     },
     "research_harness/synthesis.py:_synthesis_state:kind + \"_missing\"": {
       "sources": [],
-      "values": "codes_18"
+      "values": "codes_19"
     },
     "skills/math-solver/harness/search_controller/attempt_delivery.py:deliver_snapshot:error.code": {
       "sources": [
@@ -592,11 +606,11 @@
     },
     "skills/math-solver/harness/search_controller/provenance.py:collect_import_sources:\"exploratory_evidence\" if state[\"service\"].get(\"probe_origins\", {}).get(current) else \"missing_evidence\"": {
       "sources": [],
-      "values": "codes_19"
+      "values": "codes_20"
     },
     "skills/math-solver/harness/search_controller/reviewer.py:require_review:\"review_parts_incomplete\" if review_parts.KEY in assignment else \"openness_reading_incomplete\"": {
       "sources": [],
-      "values": "codes_20"
+      "values": "codes_21"
     }
   },
   "emitted": [
@@ -1416,6 +1430,9 @@
     "review_record_missing",
     "review_recording_required",
     "review_refusal_notice_metadata_too_large",
+    "review_refusal_replacement_ineligible",
+    "review_refusal_replacement_mismatch",
+    "review_refusal_replacement_origin_invalid",
     "review_request_changed",
     "review_request_policy_mismatch",
     "review_resampling_forbidden",
@@ -2560,6 +2577,10 @@
     "review_reassessment_missing",
     "review_record_missing",
     "review_recording_required",
+    "review_refusal_notice_metadata_too_large",
+    "review_refusal_replacement_ineligible",
+    "review_refusal_replacement_mismatch",
+    "review_refusal_replacement_origin_invalid",
     "review_request_changed",
     "review_request_policy_mismatch",
     "review_resampling_forbidden",
@@ -3643,6 +3664,10 @@
     "review_reassessment_missing",
     "review_record_missing",
     "review_recording_required",
+    "review_refusal_notice_metadata_too_large",
+    "review_refusal_replacement_ineligible",
+    "review_refusal_replacement_mismatch",
+    "review_refusal_replacement_origin_invalid",
     "review_request_changed",
     "review_request_policy_mismatch",
     "review_resampling_forbidden",
@@ -4048,6 +4073,7 @@
     "research_harness/review_reading.py",
     "research_harness/review_refusal.py",
     "research_harness/review_refusal_notice.py",
+    "research_harness/review_refusal_replacement.py",
     "research_harness/review_request_evaluation.py",
     "research_harness/review_request_fit.py",
     "research_harness/review_request_restoration.py",
@@ -6401,6 +6427,9 @@
       "unit": "registry-rows"
     },
     "review_record_missing": {
+      "unit": "registry-rows"
+    },
+    "review_refusal_notice_metadata_too_large": {
       "unit": "registry-rows"
     },
     "review_request_changed": {

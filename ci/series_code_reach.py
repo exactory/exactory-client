@@ -183,6 +183,10 @@ COMPUTED_CODE_SITES = {
         'codes': ['review_correction_invalid'], 'sources': ['research_harness/review_output_correction.py:invoke_correction']},
     'research_harness/review_plan_steps.py:complete_plan:code': {
         'sources': ['research_harness/review_continuation.py:plan_next']},
+    "research_harness/review_refusal_notice.py:_build_refused_entry:diagnosis['code']": {
+        'sources': ['research_harness/review_refusal.py:classify_observed_output']},
+    'research_harness/review_refusal_replacement.py:require_selected_output:code': {
+        'codes': ['review_assignment_replaced', 'review_assignment_superseded']},
     "research_harness/review_refusal.py:refused_attempts:failure['code']": {
         'sources': ['research_harness/review_refusal.py:refused_attempts']},
     'research_harness/review_staged.py:_record_completion_rejection:error.code': {

@@ -372,6 +372,41 @@ def boundary():
             roots = reach.collect_command_roots(sources)
         self.assertEqual(roots['review-stop'], ('research_harness/cli.py:action',))
 
+    def test_notice_codes_follow_the_installed_refusal_classifier_domain(self):
+        notice = 'research_harness/review_refusal_notice.py'
+        refusal = 'research_harness/review_refusal.py'
+        site = notice + ":_build_refused_entry:diagnosis['code']"
+        self.assertIn(site, reach.COMPUTED_CODE_SITES)
+        sources = {notice: '''
+def _build_refused_entry(diagnosis):
+    entry = {}
+    entry.update(code=diagnosis['code'])
+    return entry
+''', refusal: '''
+def classify_observed_output(changed):
+    if changed:
+        raise ResearchError('new_locator_refusal', 'Locator refused')
+    raise ResearchError('new_delivery_refusal', 'Delivery refused')
+'''}
+        report = reach.analyze_sources(sources, {'notice': [notice + ':_build_refused_entry']},
+                                       {site: reach.COMPUTED_CODE_SITES[site]})
+        self.assertEqual(set(report['by_command']['notice']),
+                         {'new_locator_refusal', 'new_delivery_refusal'})
+
+    def test_selected_output_refusals_cover_replaced_and_superseded_heads(self):
+        path = 'research_harness/review_refusal_replacement.py'
+        site = path + ':require_selected_output:code'
+        self.assertIn(site, reach.COMPUTED_CODE_SITES)
+        sources = {path: '''
+def require_selected_output(has_replacement):
+    code = 'review_assignment_replaced' if has_replacement else 'review_assignment_superseded'
+    raise ResearchError(code, 'The output is not selected')
+'''}
+        report = reach.analyze_sources(sources, {'selected': [path + ':require_selected_output']},
+                                       {site: reach.COMPUTED_CODE_SITES[site]})
+        self.assertEqual(set(report['by_command']['selected']),
+                         {'review_assignment_replaced', 'review_assignment_superseded'})
+
     def test_fixture_regenerates_and_names_every_unreviewed_registry_row(self):
         expected = json.loads(FIXTURE.read_text())
         actual = reach.build_fixture(ROOT)
