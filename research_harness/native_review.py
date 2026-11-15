@@ -221,7 +221,12 @@ def _require_finding(condition, rule, path, forecast):
                             dict(rule=rule, path=path, forecast=forecast))
 
 
-def validate_finding(packet, output):
+UNREAD_OUTCOME_MESSAGE = 'Unread ranges permit only an unresolved finding.'
+UNREAD_SET_REFERENCE_MESSAGE = 'Give a reviewer_gap ground that references the complete unread set x1.'
+UNREAD_UNIT_REFERENCE_MESSAGE = 'A cited unread unit must belong to the complete unread set.'
+
+
+def validate_finding(packet, output, *, artifacts=None):
     """Check a v3 answer using only its immutable assignment packet and output."""
     from .review_refusal import contract_check
     native = packet.get("native", packet)
@@ -285,6 +290,23 @@ def validate_finding(packet, output):
                 require(isinstance(references, list) and all(isinstance(item, str) for item in references)
                         and len(set(references)) == len(references) and set(references) <= turns,
                         "reading_turns", path + "/turns")
+        unread = packet.get('reading_final', {}).get('unread') if v7 else None
+        if unread is not None:
+            def require_unread(condition, rule, message, path):
+                if not condition:
+                    raise ResearchError('openness_finding_invalid', message,
+                                        dict(rule=rule, path=path, forecast=forecast))
+            require_unread(openness['outcome'] == 'unresolved', 'unread_outcome',
+                           UNREAD_OUTCOME_MESSAGE, base + '/outcome')
+            require_unread(any(ground['kind'] == 'reviewer_gap'
+                and unread['artifact'] in ground.get('refs', []) for ground in grounds),
+                'unread_set_reference', UNREAD_SET_REFERENCE_MESSAGE, base + '/grounds')
+            rows = json.loads(artifacts.read(unread['artifact']))['rows']
+            units = {row['unit']: row['artifact'] for row in rows}
+            require_unread(all(reference['unit'] in units and
+                {key: value for key, value in reference.items() if key != 'unit'} == units[reference['unit']]
+                for ground in grounds for reference in ground.get('refs', []) if 'unit' in reference),
+                'unread_unit_reference', UNREAD_UNIT_REFERENCE_MESSAGE, base + '/grounds')
         outcomes = forecast["outcomes"]
         rule = next((row for row in FINDING_RULES if row["outcome"] == openness["outcome"]), None)
         require(rule is not None, "outcome", base + "/outcome")

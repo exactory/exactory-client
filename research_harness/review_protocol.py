@@ -907,7 +907,7 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
     by default the current one; it is independent of version, which names the scientific contract."""
     if reading_protocol == READING_V7_PROTOCOL and capacity is not None:
         result = canonical_prompt(role, reading_stage=reading_stage, reading_protocol=reading_protocol,
-                                  common_version=common_version)
+                                  common_version=common_version, problem_paragraphs=problem_paragraphs)
         result['parameters']['capacity'] = copy.deepcopy(capacity)
         return result
     if problem_objection_carry is not None or problem_paragraphs is not None or capacity is not None:
@@ -1862,7 +1862,7 @@ def _find_session_bodies(records, artifacts, prior, *, evaluate_states=True):
 def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
     """Build the role allowlist; caller-authored prompts and narrative substitutes are rejected."""
     canonical_prompt(role)
-    fields(context, (), ('artifact_refs', 'bundle', 'objection_id', 'review_ids', 'correction', 'prior_assignment_id', 'source_links', 'context_repair', 'verification_task_id', 'native_packet', 'source_delivery', 'reading_replacement'))
+    fields(context, (), ('artifact_refs', 'bundle', 'objection_id', 'review_ids', 'correction', 'prior_assignment_id', 'source_links', 'context_repair', 'verification_task_id', 'native_packet', 'source_delivery', 'reading_replacement', 'unread'))
     if 'source_delivery' in context:
         from .review_source_complete import MODE
         if context['source_delivery'] != MODE or role != 'result' or 'prior_assignment_id' not in context:
@@ -2022,7 +2022,10 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 add_problem_objections(records, artifacts, packet, bars)
                 packet['problem_review_currency'] = compute_problem_review_currency(records, artifacts)
     elif role == 'native_math':
-        fields(context, ('native_packet',), ('prior_assignment_id', 'reading_replacement'))
+        fields(context, ('native_packet',), ('prior_assignment_id', 'reading_replacement', 'unread'))
+        if 'unread' in context:
+            fields(context['unread'], ('assignment_id',), code='invalid_review_context')
+            text(context['unread']['assignment_id'], 'Unread position', code='invalid_review_context')
         if dossier_id is not None:
             raise ResearchError('invalid_review_context', 'Native mathematics has no strategic dossier prerequisite')
         from .native_review import load_packet
@@ -3013,6 +3016,11 @@ def find_replacement(records, assignment):
         and other['recorded_revision'] > assignment['recorded_revision']), None)
     if successor is not None:
         return successor
+    unread = next((other for other in records.get('review_assignment', {}).values()
+        if other.get('context', {}).get('unread') == dict(assignment_id=assignment['id'])
+        and other['recorded_revision'] > assignment['recorded_revision']), None)
+    if unread is not None:
+        return unread
     parent = assignment.get('context', {}).get('prior_assignment_id')
     if parent is None:
         if (assignment['role'] != 'adjudicator'
@@ -3030,6 +3038,7 @@ def find_replacement(records, assignment):
                  role=assignment['role'], **{'context.prior_assignment_id': parent}).values()
                  if other['id'] != assignment['id'] and other['role'] == assignment['role']
                  and other.get('context', {}).get('prior_assignment_id') == parent
+                 and other.get('context', {}).get('unread') == assignment.get('context', {}).get('unread')
                  and other['recorded_revision'] > assignment['recorded_revision']), None)
 
 

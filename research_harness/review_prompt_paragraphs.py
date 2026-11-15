@@ -72,6 +72,14 @@ REFUSAL_PARAGRAPH_VERSIONS = {'whole': 'exactory-review-output-refusal-whole-v1'
                               'bounded': 'exactory-review-output-refusal-bounded-v1'}
 
 
+UNREAD_FINAL_PARAGRAPH_VERSION = 'exactory-openness-unread-final-v1'
+UNREAD_FINAL_PROMPT = ('\n\nreading_final.unread names the complete unread set x1; return unresolved with a reviewer_gap reference to x1 and request further rows with list_page unread or unread_attempts.')
+
+
+def _has_unread_final(role, packet):
+    return 'unread' in packet.get('reading_final', {})
+
+
 def _has_whole_refusal(role, packet):
     return packet.get('output_refusal', {}).get('form') == 'whole'
 
@@ -450,6 +458,8 @@ PARAGRAPHS = (
                     ((CAPACITY_NOTICE_PROTOCOL, CAPACITY_NOTICE_PROMPT),)),
     PromptParagraph('delivery-notice', ('bar', 'slate', 'result'), _has_delivery_notice,
                     ((DELIVERY_NOTICE_PROTOCOL, DELIVERY_NOTICE_PROMPT),)),
+    PromptParagraph('unread-final', ('native_math',), _has_unread_final,
+                    ((UNREAD_FINAL_PARAGRAPH_VERSION, UNREAD_FINAL_PROMPT),)),
     PromptParagraph('output-refusal-whole', ('bar', 'slate', 'result', 'adjudicator', 'verification', 'native_math', 'manuscript', 'standalone'),
                     _has_whole_refusal, ((REFUSAL_PARAGRAPH_VERSIONS['whole'], REFUSAL_WHOLE_PROMPT),)),
     PromptParagraph('output-refusal-bounded', ('bar', 'slate', 'result', 'adjudicator', 'verification', 'native_math', 'manuscript', 'standalone'),
@@ -457,7 +467,7 @@ PARAGRAPHS = (
 
 
 def has_only_shared_paragraphs(versions):
-    shared = [version for paragraph in PARAGRAPHS if paragraph.name in ('delivery-notice', 'output-refusal-whole', 'output-refusal-bounded')
+    shared = [version for paragraph in PARAGRAPHS if paragraph.name in ('delivery-notice', 'output-refusal-whole', 'output-refusal-bounded', 'unread-final')
               for version, _ in paragraph.versions]
     return isinstance(versions, list) and all(version in shared for version in versions)
 
@@ -470,13 +480,13 @@ def has_capacity_paragraph(versions):
 def select_prompt_parameters(role, packet):
     """Select the paragraphs called for by this delivered packet, including compact task contexts."""
     problem = packet.get('subject', {}).get('kind') == 'problem'
-    if not problem and not _has_delivery_notice(role, packet) and 'output_refusal' not in packet:
+    if not problem and not _has_delivery_notice(role, packet) and 'output_refusal' not in packet and not _has_unread_final(role, packet):
         return {}
     conditions = (packet.get(CONDITIONS) if 'value' not in packet.get('problem_evidence', {}) else None)
     from .bar_sources import PROTOCOL_V3
     versions = [paragraph.versions[0 if paragraph.name == 'slate-forming'
                 and packet.get('source_rules') != PROTOCOL_V3 else -1][0] for paragraph in PARAGRAPHS[1:]
-                if role in paragraph.roles and (problem or paragraph.name in ('delivery-notice', 'output-refusal-whole', 'output-refusal-bounded')) and
+                if role in paragraph.roles and (problem or paragraph.name in ('delivery-notice', 'output-refusal-whole', 'output-refusal-bounded', 'unread-final')) and
                 (paragraph.name in conditions if conditions is not None and paragraph.name not in ('delivery-notice', 'capacity-notice', 'output-refusal-whole', 'output-refusal-bounded')
                  else paragraph.condition(role, packet))]
     if role in PARAGRAPHS[0].roles and _has_carry(role, packet):
@@ -569,7 +579,7 @@ def _append_selected_paragraphs(base, carried, versions, selected, capacity=None
 def _describe_template_suffix(selected):
     return ''.join('/' + version[len('exactory-problem-') if version.startswith('exactory-problem-')
                                else len('exactory-'):] for version, _ in selected
-                   if version not in REFUSAL_PARAGRAPH_VERSIONS.values())
+                   if version not in tuple(REFUSAL_PARAGRAPH_VERSIONS.values()) + (UNREAD_FINAL_PARAGRAPH_VERSION,))
 
 
 def strip_prompt_paragraphs(prompt, role):

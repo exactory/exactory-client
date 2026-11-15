@@ -119,7 +119,9 @@ def _validate_v7_refs(packet, output, *, raw):
                 continue  # Already expanded authenticated output.
             handle = reference.get('ref') if isinstance(reference, dict) else None
             if (not isinstance(reference, dict) or set(reference) != {'ref'}
-                    or not isinstance(handle, str) or handle[:1] not in ('g', 'h', 'n', 'm')):
+                    or not isinstance(handle, str) or handle[:1] not in (
+                        ('g', 'h', 'n', 'm', 'u', 'x') if packet['reading_final'].get('unread')
+                        else ('g', 'h', 'n', 'm'))):
                 _refuse_handle('/findings/openness/grounds/refs', handle)
 
 

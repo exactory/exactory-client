@@ -17617,7 +17617,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.native_review": {
-      "ast_sha256": "77b0690bd8527b578d99319d98d0c40de136640582f8d450c72face157bfca33",
+      "ast_sha256": "36def28c41e5d0dd5697798b516122cac65aec76bc63942dfed9d17938cefff2",
       "functions": {
         "_closed": "42e89b4afe40f000d59d6f9b80dc1335795381afadd36f76fc48f62e7f944cb3",
         "_nonempty": "9a6abcbc7e7271ccb4bb730efbeb22ba18339942e47553315e7c90ecd98da2bb",
@@ -17627,11 +17627,11 @@
         "_validate_objections": "87109c20feab58dc89156859a473b8ffdc1e3177bbaf2e1d85cfea029c9a050d",
         "_validate_openness": "b6633538c0afaa69fa4b0a5e58d78ba65cad285cc63e3c63d5aaf799841b1b87",
         "load_packet": "104049a31fd33ad5ffbdf5c58ef775f3421e610214bf27e0f6cbc1b56cde9962",
-        "render_finding_prompt": "5517c8429ab5ff3fe87b3d72c450e1df44e688b9c3b9bb9cdf303eaa27c28d6b",
-        "render_finding_rule": "bacf38752a1f07d7546b2fa310d64139a8e7c1dd9c88e57152af204377378658",
+        "render_finding_prompt": "efeeb4b41f1e814a4a69d74269068dcb1a0895c56b2e0d30cdb877890486684c",
+        "render_finding_rule": "b1941337a5e436a11cfab7e0a258d54d0b4be2aa56ade680f86c43426f1b1f63",
         "require_assignment_identity": "8362970e19295e7272afb78b13f3c2d2d0a26af263d5fc49e75b03786f308165",
-        "uses_finding_contract": "b7161181d5cd3e2b52184a127965cb28506cf1e3c8d4c266fdeb52f3356c10d4",
-        "validate_finding": "8de7328f9921aac6ecdc715eb15dcf0c3602f44303f8d08a324a8e0e74373685",
+        "uses_finding_contract": "1629d232bd656d344db4ba6594fe53ed09122e8e51c70acf1049ee8a86a73786",
+        "validate_finding": "20a59ad438c54b6fce038516f4faa4d3a5c77d11ce71ebd9187be8e102f54e8c",
         "validate_output": "207260b20a33b964bebf5c4e91589e183d37428d4ce0db8f46f2aa16d956b9fb"
       },
       "packet_call_digests": [
@@ -17741,7 +17741,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.openness_reading": {
-      "ast_sha256": "1a077adc46b97b5f0ba44185fbbe7443d6528a1b62b785578bcf7927b2c62028",
+      "ast_sha256": "fc5c4f7e3e06dfeffce2e8a956d7f1353dee7372db80c1f1c2ed93611571b4c7",
       "functions": {
         "_add_source": "bf750a7009979c804b515fe2fa49795c9649ea87dcafa53f80cef1045aeb2340",
         "_assemble_reading_turn": "9c44a6537d6d1fae1af0dc44b726cd7059da1ee593c0d2f800617c0c1655160a",
@@ -17797,15 +17797,15 @@
         "classify_retained_entry": "af520de26229a08ca63144c195d19cb46b839fedf9e03b354e62a4b4782734cd",
         "describe_projection_decision": "402158beaf69a5067c4296bbc463aac386936a18fce1885e571cd61caa424a57",
         "describe_reading_entry_bounds": "264163c88693d479311b469308fc43e27b0e04b3cdc445d57a457333189f2812",
-        "describe_reading_receipt": "5da13864397005f64ab2d724abbd583a68b4c25a782106383cf389c1264c032b",
+        "describe_reading_receipt": "006654862c4f914da0064a7ab6d947086c5e4df923c24a5a718758bff5c88e73",
         "describe_reading_units": "05bd1bf570b20853560118ebd8d19b9bf5d4c3a2b0504c93f3bc22fabdceed17",
         "find_binding": "44f8e7bb15c9ea1145c02fa11984823400f020c5cab290f512c020d81526313e",
-        "find_chain_protocol": "dfa5a97b09a5724f647d59746fe514fe5a5db508c0827272c83742b1e5950a82",
+        "find_chain_protocol": "46552355af0b8ed6d64f8a26e013d20dbfc86136e3689db9c2b1981291e5ecc7",
         "find_final_assignment": "ecdc0e4b739e56b8b7a197457ad0d3dd060c97a555ec349b5cf8b7df17ef20a4",
-        "find_protocol": "e579358e86334b8069364ef96df82fa792d845824b1e026a1a8c7b332a398f88",
-        "find_stage": "f59db0d5fb5d6efbbc4773f9f9fd43f50fe3ce37e9df6f11aa4eec0cda3eea0e",
+        "find_protocol": "f8dee9693a5f4fcf18fd38e0340ff399f94c4664ecec20f9e16a619d1beb813f",
+        "find_stage": "0cfffc01660b23276cae9f3c802488b1329f79a0c7fea4edc77e484fc6a3ca4d",
         "forecast_reading_chain": "9cd5eb169d11790172c806a720162c243304a4b68ec918fd251ac93968598ace",
-        "has_deliverable_passage": "7e0c53a35008c75e4ec205a8ecc298fd5d85c306f8c6edd112c9aa4c38d41a3b",
+        "has_deliverable_passage": "0df3ebffdc03c8a54e769bd5496aaaed46382f5d81a28a4d22283cd3bc3f8815",
         "is_math_openness_packet": "0959d5b2aaff8265c20719a67419e161665341735b5f0eec6edb10d2226f2129",
         "is_openness_packet": "ca252095a297deb029b41bb0dcf13e4e6b45e0b69b8d80fcd168675104fa3dac",
         "list_delivery_rows": "57dfc60434dbea625bd962aae2e281cb07f13d37a03cf19ce068cc40c63a632b",
@@ -17821,13 +17821,13 @@
         "measure_record_entries": "f835bc235c5a6516fdc22f1898b1c0a5f440718e42c46b8c6ad2d0e9ab7ff716",
         "measure_retained_entries": "480b1668a5724d25f65f260ea68fdd3e097f00cbb5df5074d4db051f6d7cbb03",
         "preflight_final_input": "b5c82070e11ea6cd94e81610a4671bc9ff36ee12beda8d18d3f1b8a0826beb7d",
-        "prepare_packet": "ae85e8e3d261431a313dcb8abb50f18600b99ecb596503c5eeee4ef73b7f5413",
+        "prepare_packet": "ab0fcf9bfc38bd4b0561e980d39e41423555eb78c5fd5e33495c6ebad8846a51",
         "project_reading_chain": "14fbc62d0285cb441ba84884e4bf52a1d39786e3e1c8fdc7b52013661c05112f",
-        "require_reserved_identifier": "cb2e96a3bfef963b78f8c82a640a8117b3f6e8f35f91473a9fe1c23497cb1979",
+        "require_reserved_identifier": "920907e14f682ca584804fa4498b345652d56a93c73763cddbfd6a4351f51c41",
         "select_delivered_bodies": "4fdbd56f8443be78f2cc1f00f09bd56ae642ce916b6e7fcaa9edceea59acda4c",
-        "validate_turn_output": "9c8603cdeb1655ae867de6018eaa2aca6a895dc631da2a376bb4c85dbcccbbb8",
-        "verify_chain": "7dac38ebf6047298dc8f42540ed7cf55557cacd008c76ac6f16f1baf49f56ece",
-        "verify_problem_coverage": "4ef7c16ea8191b5cc681db3fb28281d278ddfcd1a0af1f5655f80def633d140d"
+        "validate_turn_output": "0fe618c0a6d042056087a925d6ad55dbd1aca91d3d90f1bbc40fb21abd5a2acc",
+        "verify_chain": "fade1aa0552c1cd8ae910badd2360851365a2673c5cabbc64d0ab78547bbfa0b",
+        "verify_problem_coverage": "d625e11296d3352351ed00577ebf6d37cc8b3c12966b5fff65bceeea362801f8"
       },
       "packet_call_digests": [
         "014f465ba0828bb632aa3c2daf1e395ed1d268d241d06ccf9659db0a9c87e183",
@@ -18071,18 +18071,18 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "998b21161da5d9af48a3dbdb6e76936eb5c9c712067572631ca13a05a5ae92b4",
+      "ast_sha256": "158c74dce430d5a3fe8e6bc1527b2e90885d3d2b3fa6318253b513b9ba8c9d84",
       "functions": {
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
-        "_append_unit": "629c5db0e25b4213ba6039d312a855e33611a7b234119aaf48eb535be45b8a24",
-        "_bind_body": "3285a25f23efc3b4f08436cb563c816fcbb278fbbcbc48f92039276450cdda22",
+        "_append_unit": "f6cb4ac11ffc0db1bbc01ecf87ec1ca4e26a2ccc64a24c9aebe0b2c8d2ce16a7",
+        "_bind_body": "2987a8c5ea3492523f72bf960edfd02af8b55595d336b5dceb7f2c1e22a7f8a5",
         "_describe_checked_entries": "801983d7a44989fff7031afb726c8865c654c64be1bbbe6a43a4103672a0430a",
-        "_describe_identity": "add590285050401fa2ee46d7b812c9414e729865eb19b3e0c0980927d3fd0aad",
+        "_describe_identity": "9bb7503add880d286c1090f5e1c17b70f16c710c36367bf548a1fb11dd75b8cb",
         "_describe_json": "7c6004e53039a80228d53341ea102c68af46e1cc51855d15c96893ebef98c919",
         "_require_selected": "1756d3596364595c60b215e7b5399de39b723df692cf0f0fc491826408282dbb",
-        "build_chain_state": "5393b01bbb47a181435c1707e50bad7aa34157964e8b47bb0bc4a3efd9d34527",
-        "build_inventory": "0a823cd657e85892e55f07fea72e8f1de8efcea6da1a32dccd17c16a5422ce84",
-        "describe_carried_pool": "b914bca9f58e59bbed321478394a63d0afb98dc99ba007bab1c7dd206fa6ae24",
+        "build_chain_state": "1ad5728da1cef9433124d25c51598ce80e77c9b76ba59ec74a4f15cd48569330",
+        "build_inventory": "543bab306bae3a905a1169963dd36f45157da878818d28597eb1ec34f091f24f",
+        "describe_carried_pool": "b8c0046b42a8d1d5d4d96483e43f2c49afbc294acad7e86f5b965bc922646932",
         "observe_carried_chain": "7830acc80f56e928029aec9390682f3131b0401efcfae5710bc27f826ef9fe5c",
         "plan_inventory": "427d865ada5c730d6601f112e91becc1da90deba9d364145001dcbdee033d0d0",
         "project_carried_turn": "0c984a434694f523c26e101401f7d285b7d189fdf69c5cab89491985e5cbb682"
@@ -18749,19 +18749,19 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.problem_openness": {
-      "ast_sha256": "d18ddb84de8a07a8a721986ab7c8472649db62cc47f33b6bf971cb78e5ed4dfe",
+      "ast_sha256": "2077e9218895979b8c6f67a3c837714af19958c69eaf9354403b0831f1fa74f3",
       "functions": {
         "_is_utf8": "802384d729df9c710bdc631eac4e0a7c325b5239cf38258e5f37412a5cae902c",
-        "assess_openness": "7b066abf8c21d4f02ac737e7c79d8ebdc7f182bd680d65be0d7ef6a2281fd714",
+        "assess_openness": "c410e5151ddd5e8dc8acb9fd52a000a8a4ff9f87869e0077ccd8ce2440d53f68",
         "assess_packet_freshness": "116f99eb5655456ba0d0766c0516e3f0804bc404754a5fbd6b68ccebd8400d39",
         "bind_family_readings": "a40f34badca793c7bb3af5f44fcdfbe35c195e6e8c0a4a3331ca40b17fbf788e",
         "build_minimum": "a20449b67717a37b27a7010e7e2acc42617749efb6b37beffd74c5475037ceb4",
         "collect_reading_artifacts": "b63b0f429513e0f895d968c72f40969a2724732715e006454e340a98c4cd772b",
         "describe_family_readings": "ad0295317f9f534de6ac57d08a2d0c8d074afa1f922228a1cecd6858b286f7df",
         "describe_gap_fact": "23dcb18ade44f5a8d2fdfc01d68d1484828e68884d61bff384b46f47c7ddf298",
-        "export_openness": "4ebce391866487e34fdd24e9d6bbc66f90ece985e1641ba2523445775db141ec",
+        "export_openness": "928249db2b199b1ff61587247fe2b32d629ae57bb8e78e55ed33abf52ef8fe75",
         "list_reading_citations": "1e10edb49b268265b79893763303217b089a037928712089e634bd7c4eeb086b",
-        "prepare_openness": "51eb386834b7edef773cd288b45d8322cc791c864039a94b41090228ecc6ddd4",
+        "prepare_openness": "5a4f2b61c30306a7d1d1bf56e9bfa9d03eb83a71df43cf848fed89dfb8456e90",
         "serialize_record": "f7243934e28cc8ee92a7c6af903b9056bd8864249cf01df9d8466a5a00442d69"
       },
       "packet_call_digests": [
@@ -19694,28 +19694,28 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.review_continuation": {
-      "ast_sha256": "32e1c6eef9fc35bd8c3c7d9976f6d5a19241344b27749ea30ec3e2fe099f6c5f",
+      "ast_sha256": "ccf293ec88f3c5cbb50df543e079c8fe8c09248746adb98cb268772234dd047f",
       "functions": {
-        "_build_assignment_payload": "7f0c97f8b14e70600223795dcf3a3e4954aa43f5fdbb710d3d31f7c2182eae77",
-        "_build_run_payload": "fcf8be341144efc3597bc00811100fbeeb8485de66a6f7a845ac30a918042465",
+        "_build_assignment_payload": "852d5d1d923e2a76803f72f49e0dd9aab3c6cb448cfa7a8807a80b5a87cd7f4e",
+        "_build_run_payload": "d74332719fa5e822c1bdc1f4e8feb83fb6b76a964f1106185956b9670b2497fa",
         "_collect_context_failure": "591e12413fff0246fc27cac36b5f5ae874a21b169b05a5975a48401eeb46b07c",
         "_describe_chain": "98e8f34d05cae16a3ef9c44db7b043062f4c5508d51c448bf5be4e303c98a4a4",
         "_describe_progress": "f09641decb6004b043d473c3422d29b58a1bedadb8f0a01a58554ce7e3612d94",
         "_describe_wait": "62c568107866ab0b84aec03d01b282c1a9370bc69d39e6deae803c42fe10724d",
         "_find_head": "7453d93e4a84678e0dbfd60f57a7c1b6d0fd372b897020a3c07b9583795cf4b5",
-        "_find_parent": "f51f383740ff2413f7d5bbadc0cc9bff7f061da6a2de23ba847c7fa9f110d220",
+        "_find_parent": "8ec4586424f5b12e3228069f3649ab4f97f6d75b8092d7fcb4d9ad692cfb8eb6",
         "_find_unused_id": "85d44158791d47d98b9bf90e8ba34193bc65cbf4e810e620f3dd96edf0f1da61",
         "_list_lineage": "82418b850a1f1352896e4fb7eb86c376099e02cf7639c35189226c2a983224fa",
         "_list_recorded_finals": "56efee52bfddd11cd39b68c9290b8c653a6bdaf8e893ef5f564de7507bc54f56",
         "_plan_capacity": "3028023c9278ac1ed39d35cfea830bd951fb0cdc91299a1cfd074cd6341d0c08",
-        "_plan_head": "fe6e9287d833a99871eb6dd337d2ec3a85c03e51ea4287d33d0c1b07b81559a9",
+        "_plan_head": "f002a0d9550c0fd4be8215e7695804a000bd0f9918bfd88c5ac2b74681bbc32c",
         "_plan_openness_freshness": "566b53e47a9b4af1c6b87d0a6462c574514a4d38c2a506f3fd6112f904f4bf93",
         "_plan_pending_call": "4fb7347433b3599c8e4fdbaddefb307d2de0ed714e14e93141bae3eb2dde94c4",
         "_plan_recording": "3dab2e4318a5924715b81e71d381f4fdc44d59bec1dc2125fec69456bb2e1bc4",
         "_plan_staged": "565884d0529f825d290771106691a69b3d02eb4623266f039148b33f9e079a90",
         "_plan_staged_action": "f38bdf1b1e806c7a32a3ce6b8ba708f97b966cc291a1743dbee9314c6b889829",
         "annotate_review_obligations": "b6e1aca68d9c41d87a08433f58801ed2cc41063f215d23493172e2fefd28ff06",
-        "describe_context_failure": "9b2efd35521f0b8060abf75617b9b9f4d272ce83ab8a3df0ed6419d1ef052fe3",
+        "describe_context_failure": "dbecd6bba10b0547cf1bb395df820d3fef6dab3014a6821833c878f6f71c600b",
         "describe_next_actions": "c29846e3d47b956c91a7dfb7b0a8672fdc06768ab4dab76a7a1295d4bcf7b895",
         "list_chain_heads": "50c311e412c685b42d3b546ddff78b5ed8396707d7ee86bc6b54dac9f5468fa6",
         "plan_next": "1b3d09fa87559af6cd0498daf13874a91001ae52a13c3110ce5bf68c900eda5b",
@@ -19948,22 +19948,22 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_failure_class": {
-      "ast_sha256": "53a548ca298b86009269a663eebf47d2abfb512560b2a202962377881b784071",
+      "ast_sha256": "21cfd698d1fa791983bd2df20de1190f099c5f5236d31f0ef6ac4d1fbb5ff9cc",
       "functions": {
         "_describe_sequence_counts": "1903571802ceebaa2e6413b445ccec82fa398d7cf4b738a57b18c5747957e01c",
         "_is_scheduled_unknown": "18dbfaffb3993eab30b42d6bf376556828c162d79bcca21ce050df0f51cd2f2e",
         "_plan_sequence_end": "690d7f1e80cf09b469e922af21fb3a7afca0a8494124ebe9e0ccb3b4af93dce5",
         "calculate_over_cap_allowance": "02725e6e72fa52388488302235060fb06e5074f0d913e6347df335cd64865f9b",
         "classify_attempt": "588c8e2032c7356d9cc7a28539b4ec3d12a7a4e10844f907161af865e7836661",
-        "count_position": "010e1c6f25f2563e629f55761d83029aaa10f70797756f896721e095bd02284b",
+        "count_position": "b0434473c1801aae88476154875c06f937c9b08aadcf74dadd7b3ef3dfa75a21",
         "find_capacity_signal": "b870ffda8a65d0565029aa5348be128646a06aec6702e64c3bf30de5888cf037",
         "find_output_cap_signal": "6f59f04a865cce942c17d9c6d81c771009d0ea962b72c3e6b92116e43dafca5b",
         "find_safeguard_notice": "f7009c2ad7f4d22a276386c1374d2309091fc5e5d2bcc2cd081f1c31bd3b9e13",
-        "has_smaller_task": "60d7a4636142367f08313cdc1c48630cf2f755d20bf482930a1998e346ee393d",
-        "list_turn_assignments": "88bca3a0201a0de78aa0e75a7da4d28eb63940c697afe1b5e0e52f7397b6003a",
+        "has_smaller_task": "80bb5eb8bff91f61b78800f3e2cfb25880612ce57a386086340680468439f7b4",
+        "list_turn_assignments": "c459557d60564eb8ea2566a13ec5f25f000a927b439c8cbb7bc928347f7d7413",
         "parse_observation_time": "a45e9741d77a027bf18518e09c8b1a262125934f0d6cecd3ac63c3c30df7f367",
         "parse_reset_time": "329cd60d6bb86719c819441543f5e9aae44305bd754318af2996e51f1dc23488",
-        "plan_after_failure": "0fa28be4380ae92dc4fa8f9e641c64b74ddace643c62f0b02688b02048e2af20",
+        "plan_after_failure": "3cd94b6be10c13acb93116323b29d0ef67f9def8eaa4449629f043f68f3b54c2",
         "plan_output_replacement": "4ffcc61f5bc883f9f888739c941db2e21b0b85ce1933c124f6fd10d304fc5fbf",
         "plan_refusal_recovery": "fc11b4b1d6915e3ac237cebd8ad53507dee9206e32ba650d2208191ce5c83f7e",
         "plan_scheduled_retry": "d9de465ba74c6d4fc57df8aa62eee4c4073cad20d97b2a126860705d1ff0748e",
@@ -19977,19 +19977,19 @@
       "reason": "Reviewed explicit capacity replacement command context and frozen refusal notice forwarding into both real parts fitters, with exact candidate preflight and strict smaller-request checks. Changed AST requires declaration review."
     },
     "research_harness.review_handles": {
-      "ast_sha256": "e0a449a84b66ffbba77165f64cbdff9ebed60011b119382000e24cec5c5141b4",
+      "ast_sha256": "62caa83444e693065ef92b7bc5300edd0fd48f37fff0b2c004e8027d5f758d64",
       "functions": {
         "_expand_value": "3d9624a1411cd821bd3fdcbe417072a07a432c8099b2d7dfa53c46fae504cfaa",
         "_refuse_handle": "915d5b47f24ddee7a7a3492784adfdd8386f9db2b8bfb1470e2770bc84c650ab",
         "advance_material": "be1b31db99c34369a64c27c9f5c6d9401559247047da2bb97cc6df5df8fa4e84",
-        "authenticate_material": "ecd6a63a355b196393b6948ae971ff2b7b00be3b061a34385548c47ba9b528b1",
+        "authenticate_material": "5ba05cca7552c9a8e8c330fdccb463e459556f5b2f0e84a2132f8945a8ac5e4a",
         "build_gap_handles": "99761be4d98e910cd45de3f6d5c1b9761f4e9570ba4bb970cc28b244a2bd9a50",
-        "derive_expanded_output": "81182a92e3925dc811b5333795af46debdb16ea830f53dae8d0a2894c2e7bfdd",
-        "describe_expansion": "129c98c25724cc0db40d8239a5fddb3e463b8eedfce318b5914347961c94ff47",
-        "expand_handles": "c9973a5f90f00cb87d01d181539bee70b67cf79f7a48fec0cb679ee118a14420",
-        "is_material_output": "b0f1ca316e2a2f0a589ae23811318aaded29116c2192c7c16ee8df0ef6be151e",
-        "record_handle_output": "f3ab0200527fcfca361eb6154b3d0a3b5726ebe2cf55d568717cc74867c32ae0",
-        "validate_material": "74a9d0ebdd321cc570b6209e3311f95f70ceb5bd9d56f62e868cc4ba012f3ebf"
+        "derive_expanded_output": "4e0b6863beadf48979dc759d8c473600622c9c567a7801975bace6ceef27da2e",
+        "describe_expansion": "f2421dc4660a52231689a02bf487c679cdb4ae2aefd84ff0c0a69333fe46b4ba",
+        "expand_handles": "9fac95ac7876a6df00fa2f4de4fa53282c35c117771a55b147bfc64162bb0729",
+        "is_material_output": "8ab06ac48e4a0683f6f62ce067cd2952f4d14341b89c5c69fe9d9203dd99ed39",
+        "record_handle_output": "8b81b25a6e5885db6d40dcbed842f0a3526f9e343f28d0f261e9a5a222733551",
+        "validate_material": "58bf93c95a5a7c70a8ae7620b8de2295a61949a7b8a405afbfccc8327477a42b"
       },
       "packet_call_digests": [
         "08a3801a5dc278a4fa3ec3959db6d5254e5c484656c412791dbd2ee5f4e0babc",
@@ -20722,11 +20722,11 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_plan_steps": {
-      "ast_sha256": "abb69fc79ca004c30f6f10b39d41cc49bc12eeaad2fc81076104046d9bdac93e",
+      "ast_sha256": "1cd06d9dae19e8b1ff0bc52ae4162cd65688c7a058f26796a2f75a5d03323efe",
       "functions": {
         "_build_identity_payload": "8c41d637f54ac4de2e9d293d13134f6a1383c0f7c5aa4b5a49def65900292e6e",
         "_describe_session_route_steps": "01fa8f8c3ca1320a76e96825d7dbde99f8a691b141450938e35ba8faa1df2244",
-        "complete_plan": "967e1832e5ea2d588f2f4d1aa4d7cf614a66a2d39dc37722701863be38c4ac5d",
+        "complete_plan": "a0376b0e519a3d6d5d7c665fe1f2af5b0a620e99eb70c4812ad03908e4d33010",
         "describe_capacity_steps": "442d2c73dfadb15ff6bb92ede22da18610582beb03970aa5b8e17049ba6bb735",
         "describe_role_handoff": "d65f685aa227cdcc7b1b2afa6a57b59d717acb8108d7a53febd4949d11744429",
         "describe_step": "b58ff7a5887eb4e40bc93fb01c56eca87957f6ec9f2bb489bd3cbfb0b04eb991",
@@ -20903,10 +20903,10 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_prompt_paragraphs": {
-      "ast_sha256": "5595373bc224f49f433f67022164b4011f8331e08f7cb465ed8b87a9e87de7b1",
+      "ast_sha256": "89a36a2af352e7604c285eaa8eea054837488ca1bd213cc3d6237896a173b09c",
       "functions": {
         "_append_selected_paragraphs": "b463ad8836dd7f7e2c0961c4c64ade4a0ed5bfbbce62519f3b113f910050ffd6",
-        "_describe_template_suffix": "b8ae43f32014989ccb84b2dff65f356ba3b4ed9b5f4d5f9f560f2851b9e88747",
+        "_describe_template_suffix": "c3800a380dad412ec2eabb656c368209f4434960ad3366bc2706d64ad49d51b1",
         "_has_accounts": "2c1535199e1d3ff7182d77d55bef95c7c2d0a8c03ff0f7484f9c52044b810eff",
         "_has_areas": "284eb21e3b6c2f47949968d1ee6dedcb554fab432d604c37e03dcc3eaf8aec88",
         "_has_bounded_refusal": "32f8bf44558932af05afd0e1c716c740d2b016cb13b6ac6b8ca63c9a997abf40",
@@ -20921,11 +20921,11 @@
         "append_prompt_paragraphs": "6af71600e7b6dff6096a81c0cd60c21e7a33eaf66c3e4fff691912fb85564a5d",
         "append_rubric_definition": "bfb1a91a0c98eec409091ae5972839c1a86b6cb119acaeae2d3bc0b349018191",
         "has_capacity_paragraph": "754241c893eeeff237964841d50bbf00be6efea18045546c73a7d96014c368ef",
-        "has_only_shared_paragraphs": "b2743477dc2e400a51f14411b38bfc020478e9d233a88c9bfdf3090b830af1d3",
+        "has_only_shared_paragraphs": "166b7a20a8537eb169566985b0c87df30660b2032556f8429a6463d733ebb97f",
         "matches_packet_paragraphs": "aec9e28fbf61f98ff68cbf675a1a0be3882f9d9aac792f84aa1c10264e4fd208",
         "preserve_prompt_conditions": "45db596afafb54ffd1215890cc4dc4b33a4300355bf843706328c25add5d68a0",
         "read_paragraph_parameters": "f306d07ecdd19836459099c32cbef18737b7d4480cfb6be18dc41e00ae0d0da4",
-        "select_prompt_parameters": "ce1099c3eec93d13b41b1a70d8e51be4aff84948f84d44e81b3d719576d46a79",
+        "select_prompt_parameters": "be25f8eb3ab1559715132ff0c93cae98b110c2a6c1b273e95c55ae78eb7100a3",
         "strip_prompt_paragraphs": "71a44e7971252ba5eb62bf3c3a4146c9fc2d1f22000ed46f17ab67e8bf6517f5"
       },
       "packet_call_digests": [
@@ -20948,7 +20948,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "6df2ce450d81fc4854d1e46ade9f16175b5252acf29a17719cdf5adc328d2231",
+      "ast_sha256": "20b2df961a68876c037756d64cbcee583024b0b43d245b17b220c05d296e71da",
       "functions": {
         "_assignment_state": "805eca7b4483852dbee0f8e05928cde22acbc7c7be8ec46ba127c3e71a0ddcbc",
         "_bars": "fd41a7b94078e8e0761696db4a7cc67b063cbb5787f76d6d3dae65fcc7fe5f9f",
@@ -20962,7 +20962,7 @@
         "_get": "fbf39112fc5589dd72eec0bcfdb2b3e9794d5c56fe0bfcb74ea6dfae7d077a78",
         "_initial_size_failure": "aec16d19bac7057f6d1cfb44556bd18434ebc5153026e0b27542c4a9af560df1",
         "_initial_slot": "5ead01961de08355f5028ad45bf3efd2d0b8d412544cdcf8efed3b2eab354eef",
-        "_invoke_once": "1efda5f673500457f630bcb85156afa39ec3965d9ea5122ccc38176aa51c4faa",
+        "_invoke_once": "f700a48a93775b9f158551b43cd52538b9d8ee19398568f3c4bee92a2213b038",
         "_is_evidence_refresh_needed": "0f27626505af03ea9b3e38ce700f9ee647c34cc3a114e32bcd1fb149a119cf93",
         "_is_problem_refresh": "bf5b04ebef5e63bbeb79a0b3cb1666cb10d56fefdbd290c2e8a7fcea73dfb47a",
         "_list_packet_records": "ac8eefd28584f8e1c4078e7e1b14c3c28c754d7eda0f6f3050f29f969274c931",
@@ -20974,7 +20974,7 @@
         "_payload": "c526bb2f57889470221ebb4e0bfe3b3ac0f4218f5a89615a1dd28c4744bf29eb",
         "_prepare_review_mutation": "2385be60d23b526de9f5574449784387944603ad8060cba6b95193bb17775c42",
         "_project_scoped_result": "c2a9b83a0c4760d56232bbf6de7ed4ef74c50d5ad4f6b1e1e4dc502f33c61ebe",
-        "_prompt_matches": "da21c9878a27a3ef0da256a33e7659e5d4c06f87cad94480e6be4de341206cc8",
+        "_prompt_matches": "1f4d4abb685d7311050d7e32aea93eafc0d3d44ad87c83e72bfc31645151c493",
         "_put_json": "fae2721f42a5483694e38ac7a3a6006092ae8cefdf894fa21447ad2fd2070ad0",
         "_read_adjudication_review": "fcd04105dbc2473eacdbe01f05d5c23484a337f9c0afe0dcdb0fb12f5c6a144f",
         "_read_context_records": "85765f3f4614191373498fcca61846681cf30770af351b7458e03d6555400796",
@@ -21004,14 +21004,14 @@
         "adjudication_state": "85f960c89e49983c5bfd8a51b0e54717b8a58e29054007c29d85ccd32a437447",
         "assignment_state": "17a13d99847baed913e864239a7741d8a80cc7e485fac86ac7914ab4fd4c1bf8",
         "authenticate_attempt": "d252e3abaf0670e3eb03594daf1f561c97375433df7407521df73750d399b2f8",
-        "authenticate_provenance": "aa8d47a5671af63e14683586a5ca7b6ba49f7b8901372c12ea27c79556d22ff3",
+        "authenticate_provenance": "023afe3f58b3810906b30ca9cf07e79c32313a8a727c78403c6a76efe5c5147e",
         "build_assignment_request": "ee048f3d4f549dad3ceb3bb7048a02bbf255cf23f25d4909915f05313cf02f88",
         "build_direction_evidence": "d36fbb4c4c32504a80d6b8b40994f45ee17ae018197aa6cea66c82bd20f54632",
-        "build_packet": "b389805850b131702a836bbc5bfd61b984c123021b4f56220f321e029197873c",
+        "build_packet": "62319198819bd5e71b376ebe3a19e635cf24ceb3db9fd8f01014dfd1d1c888bf",
         "build_probe_prompt": "54844f87f0fe366a9faa59c946d9ead80149d0b62d047c288579b11bafc1579e",
         "build_problem_subject": "e96122a41158bfff642fd370cbd33d7f54ee259af8fbc6521565a58df4fc7005",
         "build_rubric_objection": "b90e9c2ef1e913c48efb2bd743ff95efa254b2da574a4fea211248c864bc7707",
-        "canonical_prompt": "4d1a99189a7d93b1b9e38042afb40213b9ac046f97f9178364708d847b010eb7",
+        "canonical_prompt": "1c6214ce446e3c043fff555600eda43fec3ba411c043c2cb7bbdfd9fb6f07633",
         "collect_adjudication_evidence": "8ef3c2bb7ebcd0bfe25dcd84a272ae0f9824a51137616936f28ce481999ddcaa",
         "collect_carried_records": "f9962ad55bb34a6a6a01507c872b4cfb771413ba3fd73d38e9f37c6ad4ac0f6f",
         "collect_historical_bar_objections": "0cce846dc00f86534e2bba1197859c3395e7ca521046af8d1bd8cae6f5a6d35e",
@@ -21032,13 +21032,13 @@
         "find_common_prompt_version": "6703a50571e3b46cfad68c28e864395900405707189ba798c45360fd4725e44f",
         "find_current_problem_bar_ids": "a036fa4d45d9540f193b9d85cb1bd8421bd1a6c9ff7aa6d25b15289ca9b99e48",
         "find_historical_bar_reviews": "c8bb404a069fd9c0016aa0dad013a15778a4e697bdd76ae0c2a19de67c2ef3c5",
-        "find_replacement": "ae2c26fabb04b0d6b1ea0a1d4b1dec2d82d5851989e4b3dea0e53ac974cd7ff2",
+        "find_replacement": "2eb201c01420fe1ad7b02fb7015c550405e42891b9259cef8e1187873df420f1",
         "has_ended_without_output": "f21d60ceabff57cdfa464f0a0b05ddd53ba4358dc46fd5b541060fceeec9d057",
         "has_exhausted_position": "a6a36d007af0c26245e0fdb1edb9a4e261a1fb5c301586ba7ea56d2f4665e141",
         "has_pending_invocation": "1100f816ca4769d642bcb040f697439bfd738a2a00c832bbbf9b153965e9ac76",
         "has_problem_result_rubric": "f7dcd7d5cc3c12342b63edfe47e3608e43d7c23902b5f02f268d9d5ef6767a8e",
         "has_verified_history": "80bcffdb051ef2a341dc4bd4a86f1dff05304d863526c75525803e349074c3bc",
-        "invoke_assignment": "15cce1bf133c8891bd90efb74ca8b18b4b650af9a1ad638a9d6a02a307490cfd",
+        "invoke_assignment": "92b54a86d106ace4958914983de7bf9954809048bd31275c3f713d07475a697b",
         "is_dead_assignment": "0e87b884f14015390061ab33a6f17a4a95770ae46620127610f25244a62fcd85",
         "is_previous_prompt": "6a89da49434d83987b303155068983a6499cb140a6eb0b906a4e6c1043537f42",
         "is_version_2_problem_result": "b12d8be5451fd095516bf97d562c067466acb6d216815b6fe20a93f9e3520a0d",
@@ -21050,12 +21050,12 @@
         "read_raw_observation": "14e6b6c7ca97a4e3992d908f1d94f3add3a92bee7561ace63d220fb8cbf06834",
         "read_route_runtime": "e60df76fe94a9b3f2b98373e22d2c1bc846ca050d50044e4744a7e60fe71bca2",
         "record_adjudication": "01d2fc25fe7225693aa60a9e3e8f098c2ece6ac5656ce378a07989533681a79d",
-        "record_assignment": "71e66ba53b553331014387b65308b9a68f3a65c0758507ae6ecae1c1972dcb45",
+        "record_assignment": "7297bb9f48c79336fedbc139c516bd0a01035b824b17ec8f64272de19aed7c88",
         "record_attempt": "7145b51d5cdbea1477432a5cce61efb366e8dd94540e082fde33066063c4b8f3",
         "record_context_event": "725358847e29626ae330f19fe7a2b1530b762238e0893f3021cebbe0c70e49eb",
         "record_route": "eaa1d126f04ed9ff04f92ff38836725f9ba40802efcda880e2c6adc7b94d874e",
         "require_calibrated_bars": "4745670f6df434f7415d772c4d326d2a17cd2e8da151123a8a685015189fe214",
-        "require_verified_assignment": "6332b4b8c16021c30927a699f2cdaecd51f4916f88c290ba3db7683120ad1b07",
+        "require_verified_assignment": "8cbd79a074d2cf9b72f1d7692e9ead66475b7ece1407e441541656492363e7f9",
         "resolve_original_calibrations": "057135282546307ba2591b22cec7139406898e6d473eb9d3d024249d40e9ee23",
         "retired_routes": "67364cd241ee40cd8a7e467d59785bc6e9ed1686e36975fdd4ea8a284eaa2b54",
         "retry_runtime_check": "5c78d7db97dfe0a11b717a4fc5dfa09f1048d2e41d3952e03bc103b6c7e9d3fe",
@@ -21063,7 +21063,7 @@
         "route_state": "a09d749a19fca2f87e714801f9c01b8646c569ff35ec8cec56aaf41735079156",
         "source_delivery_packet": "d096a91acf1a700c66a444dd0ea7faabc1b9583e7b7fb8b3275ffea57e11bdc8",
         "usage_report": "0c53dcb11f44e93937f92c9b53a77709388b021a1880c683c87aa76ee6d53251",
-        "validate_adjudication_contract": "c6c73e0b13ec47dd4dd50983248aba3525dbd821c57d359d6be62bf97ff8de09",
+        "validate_adjudication_contract": "7ebec65adbede358b6d1b2189a3b8ce1f7fe8a8adeeddb02de72e5fb1fc64fa0",
         "validate_assignment_inventories": "f73054328a6e1cd28f4c62afa267e8c8d3f25a0b5d72f46a4b285c545e087893",
         "validate_observation_fields": "196ef273f6fa01aa1966f19aeb02b75a9e34d76ef489cd9e0bc4ee5ebf176b99",
         "validate_problem_bars": "4d7f0a59a432880fbbc451aeeb8e2b1317874041c6b74f131fa7a35adf2a1dbe",
@@ -36518,6 +36518,290 @@
         },
         "protocol": {
           "class": "fixed"
+        }
+      }
+    },
+    "stage3_unread_attempt": {
+      "bound": {
+        "serialized_characters": 2000
+      },
+      "class": "fixed",
+      "ground": "One recorded position attempt, in immutable recorded order. Its row names the first provider-refused range, which anchors the shared position history. row is null when a refused list-only position has no provider-refused source range. Identifiers have at most 120 characters.",
+      "members": {
+        "assignment_id": {
+          "class": "fixed"
+        },
+        "attempt_id": {
+          "class": "fixed"
+        },
+        "id": {
+          "class": "fixed"
+        },
+        "outcome": {
+          "class": "fixed"
+        },
+        "row": {
+          "class": "fixed"
+        },
+        "sequence": {
+          "class": "fixed"
+        },
+        "time": {
+          "class": "fixed"
+        }
+      }
+    },
+    "stage3_unread_context": {
+      "bound": {
+        "serialized_characters": 1024
+      },
+      "class": "fixed",
+      "ground": "Admission validates context.unread once. assignment_id names the refused head and has the v7 reserved identifier length of 120.",
+      "members": {
+        "assignment_id": {
+          "bound": {
+            "characters": 120
+          },
+          "class": "fixed"
+        }
+      }
+    },
+    "stage3_unread_final": {
+      "bound": {
+        "serialized_characters": 30000
+      },
+      "class": "fixed",
+      "ground": "A bounded fixed member: x1 expands to the complete artifact descriptor, never its rows. The prefix includes omission and cause counts. No-notice finals use the existing 45000-character frame reservation, retaining 2000 characters for the paragraph and keys; notice-bearing finals charge unread to their measured material room. Pages precede optional fill and every exact request passes the pinned plan.",
+      "members": {
+        "artifact": {
+          "class": "fixed",
+          "members": {
+            "media_type": {
+              "class": "fixed"
+            },
+            "path": {
+              "class": "fixed"
+            },
+            "sha256": {
+              "class": "fixed"
+            },
+            "size": {
+              "class": "fixed"
+            }
+          }
+        },
+        "causes": {
+          "class": "fixed",
+          "members": {
+            "not_delivered": {
+              "class": "fixed",
+              "members": {
+                "characters": {
+                  "class": "fixed"
+                },
+                "rows": {
+                  "class": "fixed"
+                }
+              }
+            },
+            "provider_refused": {
+              "class": "fixed",
+              "members": {
+                "characters": {
+                  "class": "fixed"
+                },
+                "rows": {
+                  "class": "fixed"
+                }
+              }
+            }
+          }
+        },
+        "count": {
+          "class": "fixed"
+        },
+        "digest": {
+          "class": "fixed"
+        },
+        "handle": {
+          "class": "fixed"
+        },
+        "omitted": {
+          "class": "fixed"
+        },
+        "rows": {
+          "bound": {
+            "serialized_characters": 30000
+          },
+          "class": "fixed",
+          "items": {
+            "$ref": "stage3_unread_row"
+          }
+        }
+      }
+    },
+    "stage3_unread_lists": {
+      "class": "fixed",
+      "ground": "Fixed-order list_page supplier vocabulary; each list row has a 2000-character maximum.",
+      "members": {
+        "unread": {
+          "$ref": "stage3_unread_row"
+        },
+        "unread_attempts": {
+          "$ref": "stage3_unread_attempt"
+        }
+      }
+    },
+    "stage3_unread_row": {
+      "bound": {
+        "serialized_characters": 2000
+      },
+      "class": "fixed",
+      "ground": "One range of a physical required u unit. Labels and identifiers use the 120-character reserve. Attempt details live in the artifact attempts list; this row carries only a fixed summary.",
+      "members": {
+        "artifact": {
+          "class": "fixed",
+          "members": {
+            "media_type": {
+              "class": "fixed"
+            },
+            "path": {
+              "class": "fixed"
+            },
+            "sha256": {
+              "class": "fixed"
+            },
+            "size": {
+              "class": "fixed"
+            }
+          }
+        },
+        "attempts": {
+          "class": "fixed",
+          "members": {
+            "count": {
+              "class": "fixed"
+            },
+            "first": {
+              "class": "fixed"
+            },
+            "last": {
+              "class": "fixed"
+            },
+            "outcomes": {
+              "class": "fixed",
+              "members": {
+                "answer_malformed": {
+                  "class": "fixed"
+                },
+                "completed": {
+                  "class": "fixed"
+                },
+                "context_unverified": {
+                  "class": "fixed"
+                },
+                "execution_incomplete": {
+                  "class": "fixed"
+                },
+                "format_unsupported": {
+                  "class": "fixed"
+                },
+                "input_over_limit": {
+                  "class": "fixed"
+                },
+                "interrupted": {
+                  "class": "fixed"
+                },
+                "model_at_capacity": {
+                  "class": "fixed"
+                },
+                "output_over_cap": {
+                  "class": "fixed"
+                },
+                "provider_refused": {
+                  "class": "fixed"
+                },
+                "provider_unavailable": {
+                  "class": "fixed"
+                },
+                "response_over_limit": {
+                  "class": "fixed"
+                },
+                "runtime_stale": {
+                  "class": "fixed"
+                },
+                "runtime_unavailable": {
+                  "class": "fixed"
+                },
+                "scientific_refused": {
+                  "class": "fixed"
+                },
+                "stopped": {
+                  "class": "fixed"
+                },
+                "timeout": {
+                  "class": "fixed"
+                },
+                "unknown": {
+                  "class": "fixed"
+                },
+                "usage_limit": {
+                  "class": "fixed"
+                }
+              }
+            },
+            "sequences": {
+              "class": "fixed"
+            }
+          }
+        },
+        "cause": {
+          "class": "fixed"
+        },
+        "characters": {
+          "class": "fixed"
+        },
+        "end": {
+          "class": "fixed"
+        },
+        "id": {
+          "class": "fixed"
+        },
+        "label": {
+          "class": "fixed"
+        },
+        "part": {
+          "class": "fixed"
+        },
+        "start": {
+          "class": "fixed"
+        },
+        "unit": {
+          "class": "fixed"
+        }
+      }
+    },
+    "stage3_unread_set": {
+      "class": "artifact",
+      "ground": "Canonical JSON stored at unread-final admission. Both lists are artifact-only and unbounded in count; no request expands x1 to their contents. list_page delivers bounded rows in this fixed order.",
+      "members": {
+        "attempts": {
+          "bound": {
+            "row_serialized_characters": 2000
+          },
+          "class": "artifact",
+          "items": {
+            "$ref": "stage3_unread_attempt"
+          }
+        },
+        "rows": {
+          "bound": {
+            "row_serialized_characters": 2000
+          },
+          "class": "artifact",
+          "items": {
+            "$ref": "stage3_unread_row"
+          }
         }
       }
     }
@@ -92320,6 +92604,14 @@
             },
             "protocol": {
               "class": "fixed"
+            },
+            "reading_final": {
+              "class": "fixed",
+              "members": {
+                "unread": {
+                  "$ref": "stage3_unread_final"
+                }
+              }
             },
             "reading_record": {
               "bound": {

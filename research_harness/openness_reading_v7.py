@@ -128,6 +128,149 @@ def list_target_labels(native):
             for index, value in enumerate([minimum['statement']] + minimum['neighbours'])]
 
 
+UNREAD_PACKET_CHARACTERS = 30000
+UNREAD_FINAL_MESSAGE = 'Assign the final over the unread ranges after the last provider-refused sequence at the reading floor.'
+
+
+def plan_unread_final(records, artifacts, assignment, position):
+    """R72 uses the shared position count and the pinned lowest reading level."""
+    if not (assignment.get('capacity_plan') and assignment.get('reading_chain')):
+        return None
+    packet = json.loads(artifacts.read(assignment['packet']))
+    if reading.find_protocol(packet) != PROTOCOL or 'reading_turn' not in packet:
+        return None
+    plan = capacity.read_chain_capacity_plan(artifacts, assignment)
+    floor = plan['task']['reading']['levels'][-1]['material_allowance']
+    bounds = packet['reading_turn']['capacity']
+    if not (position['sequence_ended'] and position['sequences_remaining'] == 0
+            and position['failures'] and position['failures'][-1][1]['outcome'] == 'provider_refused'
+            and position['sequence'] == position['permitted_sequences']
+            and bounds.get('level_material_allowance', bounds['material_allowance']) <= floor):
+        return None
+    from .review_continuation import _find_unused_id
+    payload = {key: copy.deepcopy(assignment[key]) for key in
+               ('role', 'route_id', 'dossier_id', 'reviewer_id', 'author_id')}
+    context = dict(native_packet=assignment['context']['native_packet'], unread=dict(assignment_id=assignment['id']))
+    if assignment['context'].get('prior_assignment_id'):
+        context['prior_assignment_id'] = assignment['context']['prior_assignment_id']
+    payload.update(id=_find_unused_id(records, assignment['id'] + '-unread',
+        maximum=reading.RESERVED_IDENTIFIER_CHARACTERS), context=context)
+    return dict(state='replace', command='review-assignment', payload=payload,
+                details=dict(reason='unread', message=UNREAD_FINAL_MESSAGE))
+
+
+def build_unread_set(records, artifacts, assignment, inventory, state, *, position=None):
+    """Describe the missing ranges and the entire position history in fixed-size rows."""
+    from .review_failure_class import count_position
+    if position is None:
+        position = count_position(records, artifacts, assignment)
+    packet = json.loads(artifacts.read(assignment['packet']))
+    refused = packet['reading_turn']['plan']['now']
+    attempts = position['attempts']
+    outcomes = {}
+    for attempt in attempts:
+        outcomes[attempt['outcome']] = outcomes.get(attempt['outcome'], 0) + 1
+    summary = dict(count=len(attempts), sequences=len({row['sequence'] for row in attempts}),
+        outcomes=outcomes, first=attempts[0]['time'], last=attempts[-1]['time'])
+    rows = []
+    for body, start, end in _find_remaining_ranges(inventory, state):
+        boundaries = {start, end}
+        for row in refused:
+            if row['handle'] == body['handle']:
+                boundaries.update(value for value in (row['start'], row['end']) if start < value < end)
+        points = sorted(boundaries)
+        for left, right in zip(points, points[1:]):
+            cause = ('provider_refused' if any(row['handle'] == body['handle']
+                and row['start'] <= left and right <= row['end'] for row in refused) else 'not_delivered')
+            row = dict(id='%s:%d:%d' % (body['handle'], left + 1, left), unit=body['handle'],
+                label=body.get('label', body['kind'])[:LABEL_CHARACTERS], part=left + 1,
+                start=left, end=right, characters=right - left, cause=cause, artifact=body['artifact'])
+            if cause == 'provider_refused':
+                row['attempts'] = summary
+            rows.append(row)
+    rows.sort(key=lambda row: (row['cause'] != 'provider_refused', -row['characters'], row['unit'], row['start']))
+    refused_row = next((row['id'] for row in rows if row['cause'] == 'provider_refused'), None)
+    return dict(rows=rows, attempts=[dict(id=str(index), row=refused_row, **attempt)
+        for index, attempt in enumerate(attempts)])
+
+
+def _supply_unread_rows(plan, state, artifacts):
+    return json.loads(artifacts.read(state['unread']['artifact']))['rows'] if 'unread' in state else []
+
+
+def _supply_unread_attempts(plan, state, artifacts):
+    return json.loads(artifacts.read(state['unread']['artifact']))['attempts'] if 'unread' in state else []
+
+
+def describe_unread_packet(artifacts, state, *, route=None, allowance=None):
+    """Keep the complete member, including its prefix and counters, within 30,000 characters."""
+    value = json.loads(artifacts.read(state['unread']['artifact']))
+    result = dict(handle='x1', artifact=state['unread']['artifact'], digest=state['unread']['digest'],
+        causes={cause: dict(rows=sum(row['cause'] == cause for row in value['rows']),
+            characters=sum(row['characters'] for row in value['rows'] if row['cause'] == cause))
+            for cause in ('provider_refused', 'not_delivered')},
+        count=len(value['rows']), rows=[], omitted=len(value['rows']))
+    for row in value['rows']:
+        candidate = dict(result, rows=result['rows'] + [row], omitted=result['omitted'] - 1)
+        if (len(serialize_record(candidate).decode('utf-8')) > UNREAD_PACKET_CHARACTERS
+                or allowance is not None and capacity.measure_capacity_value(route, candidate) > allowance):
+            break
+        result = candidate
+    return result
+
+
+def _read_unread_history(records, unread):
+    return dict(records, **{kind: {key: row for key, row in records.get(kind, {}).items()
+        if row.get('recorded_revision', 0) < unread['admitted_revision']}
+        for kind in ('review_assignment', 'review_attempt', 'review_context_event')})
+
+
+def _bind_unread_state(records, artifacts, assignment, inventory, state, *, publish=True):
+    admission = (assignment if publish else min((row for row in records['review_assignment'].values()
+        if row['context'].get('unread') == assignment['context']['unread']),
+        key=lambda row: row['recorded_revision']))
+    unread = dict(assignment_id=assignment['context']['unread']['assignment_id'],
+                  admitted_revision=admission['recorded_revision'])
+    records = _read_unread_history(records, unread)
+    origin = records['review_assignment'][unread['assignment_id']]
+    from .review_failure_class import count_position
+    position = count_position(records, artifacts, origin)
+    _require_verification(plan_unread_final(records, artifacts, origin, position) is not None,
+                          COVERAGE_VERIFICATION_MESSAGE)
+    value = build_unread_set(records, artifacts, origin, inventory, state, position=position)
+    reference = (artifacts.put(serialize_record(value), 'application/json') if publish
+                 else describe_artifact(serialize_record(value), 'application/json'))
+    return dict(state, unread=dict(unread, artifact=reference, digest=digest(value)))
+
+
+def prepare_unread_assignment(records, artifacts, value, route, logical):
+    """Admit only the exact R72 step selected by the planner at this position."""
+    from .review_failure_class import plan_after_failure
+    from .review_protocol import find_replacement
+    identifier = value['context']['unread']['assignment_id']
+    reading.require_reserved_identifier(value['id'], PROTOCOL)
+    prior = records.get('review_assignment', {}).get(identifier)
+    if prior is None or find_replacement(records, prior) is not None:
+        raise ResearchError('invalid_review_context', UNREAD_FINAL_MESSAGE)
+    action = plan_after_failure(records, artifacts, identifier)
+    expected = action.get('payload', {})
+    if (action['state'] != 'replace' or action.get('details', {}).get('reason') != 'unread'
+            or any(expected.get(key) != value.get(key) for key in
+                   ('context', 'role', 'route_id', 'dossier_id', 'reviewer_id', 'author_id'))):
+        raise ResearchError('invalid_review_context', UNREAD_FINAL_MESSAGE)
+    frozen = json.loads(artifacts.read(prior['packet']))
+    plan, inventory, before = read_bound_state(artifacts, prior, frozen)
+    state = _bind_unread_state(records, artifacts, value, inventory, before)
+    limits = capacity.derive_turn_task_limits(records, artifacts, prior, kind='final')
+    packet = build_turn_packet(artifacts, route, logical, prior['reading_chain']['first_assignment_id'],
+        prior['reading_chain']['turn'], inventory, state, plan, limits, 'final',
+        requests=state.get('pending_requests', []))
+    chain = dict(first_assignment_id=prior['reading_chain']['first_assignment_id'], turn=prior['reading_chain']['turn'],
+        inventory=prior['reading_chain']['inventory'], state=artifacts.put(serialize_record(state), 'application/json'),
+        capacity_plan=prior['capacity_plan'], capacity_plan_kind='final')
+    return packet, chain
+
+
 def _supply_allowance_rows(plan, state, artifacts):
     by_handle = {row['handle']: row for row in state['allowances']['targets']}
     return [dict(id=handle, **by_handle[handle]) for handle in plan['targets']['handles']]
@@ -195,6 +338,8 @@ def describe_affected_note_delivery(route, origin, notes, handle):
 # Each supplier returns rows with unique immutable string ids in that fixed order,
 # with a serialized row bound measured at reserved identifier lengths (<=2000).
 LIST_PAGE_SUPPLIERS = {
+    'unread': dict(supply=_supply_unread_rows, row_characters=LIST_ROW_CHARACTERS, fixed_at='unread_final_admission'),
+    'unread_attempts': dict(supply=_supply_unread_attempts, row_characters=LIST_ROW_CHARACTERS, fixed_at='unread_final_admission'),
     'allowances': dict(supply=_supply_allowance_rows, row_characters=512, fixed_at='first_assignment'),
     'affected_notes': dict(supply=_supply_affected_note_rows, row_characters=LIST_ROW_CHARACTERS, fixed_at='first_assignment'),
 }
@@ -222,7 +367,7 @@ def build_list_page(name, after, plan, state, route, material_allowance, *, arti
     _require_reading(start < len(rows), list=name, after=after)
     selected = []
     for row in rows[start:]:
-        size = capacity.measure_capacity_value(route, serialize_record(row).decode('utf-8'))
+        size = len(serialize_record(row).decode('utf-8'))
         if size > declared:
             raise ResearchError('review_route_capacity_plan_violated', capacity.PLAN_VIOLATED_MESSAGE,
                                 dict(list=name, row=row['id'], characters=size, bound=declared))
@@ -729,6 +874,8 @@ def build_chain_state(inventory, turns, *, route, plan, initial_state=None):
         state['searches'].extend(sha for sha in projected['searches'] if sha not in state['searches'])
         state['gaps'].extend(copy.deepcopy(projected['gaps']))
         state['arguments'].extend(copy.deepcopy(projected['arguments']))
+        if projected.get('unread'):
+            state['unread'] = copy.deepcopy(projected['unread'])
         if projected.get('references'):
             state.setdefault('references', {}).update(copy.deepcopy(projected['references']))
         for page in projected.get('list_pages', []):
@@ -906,9 +1053,9 @@ def _build_delivery(artifacts, body, start, end, *, passage=None):
     return row, evidence
 
 
-def _pack_deliveries(artifacts, route, inventory, state, allowance, requests):
+def _pack_deliveries(artifacts, route, inventory, state, allowance, requests, *, include_remaining=True):
     now, evidence, pages = [], [], []
-    remaining = _find_remaining_ranges(inventory, state)
+    remaining = _find_remaining_ranges(inventory, state) if include_remaining else []
     required = {row['handle'] for row in list_required_affected_notes(state['_plan'], state)['required']}
     if any(body['handle'] in required for body, _, _ in remaining):
         requests = ()
@@ -919,7 +1066,8 @@ def _pack_deliveries(artifacts, route, inventory, state, allowance, requests):
         if request.get('kind') == 'list_page':
             plan = state['_plan']
             room = allowance - capacity.measure_capacity_value(route, now) - capacity.measure_capacity_value(route, evidence)
-            if room < 2000 + LIST_PAGE_SUPPLIERS[request['list']]['row_characters']:
+            # A row can double when escaped into the page's JSON-string body.
+            if room < 4000 + 2 * LIST_PAGE_SUPPLIERS[request['list']]['row_characters']:
                 break
             page = build_list_page(request['list'], request['after'], plan, state, route, room - 2000, artifacts=artifacts)
             content = serialize_record(page).decode('utf-8')
@@ -1049,18 +1197,37 @@ def build_turn_packet(artifacts, route, logical, chain, number, inventory, state
             label=by_handle[handle].get('label', by_handle[handle]['kind'])[:120])
             for handle in dict.fromkeys(row['unit'] for row in binding['entries'])]
         material = {key: binding[key] for key in FINAL_MATERIAL_FIELDS}
-        used = _measure_final_material(route, material)
-        for note in reversed(state['notes'][:-1]):
+        unread_cost, extra_room = 0, 0
+        if 'unread' in state:
+            # No-notice requests already reserve 45k in the immutable plan.
+            # Share that fixed frame with unread metadata and pages; leave 2k
+            # for the new paragraph and binding keys. Notice-bearing requests
+            # use their separately measured, smaller task bound instead.
+            if 'level_material_allowance' not in limits:
+                extra_room = max(0, plan['task']['final']['notice_characters'] - 2000)
+            room = limits['material_allowance'] + extra_room - _measure_final_material(route, material)
+            binding['unread'] = describe_unread_packet(artifacts, state, route=route,
+                allowance=room - (8000 if requests else 0))
+            unread_cost = capacity.measure_capacity_value(route, binding['unread'])
+        used = _measure_final_material(route, material) + unread_cost
+        for note in (reversed(state['notes'][:-1]) if not requests else ()):
+
             if note['classification'] != 'current':
                 continue
             candidate = dict(material, fill=binding['fill'] + [dict(handle='n%d' % note['turn'], text=note['text'])])
-            if _measure_final_material(route, candidate) > limits['material_allowance']:
+            if _measure_final_material(route, candidate) + unread_cost > limits['material_allowance'] + extra_room:
                 break
             binding['fill'] = candidate['fill']
-        if used > limits['material_allowance']:
+        if used > limits['material_allowance'] + extra_room:
             raise ResearchError('review_route_capacity_plan_violated', capacity.PLAN_VIOLATED_MESSAGE,
                                 dict(kind='final', material_characters=used, bound=limits['material_allowance']))
-        packet.update(native=frame, reading_final=binding, evidence=[])
+        evidence = []
+        if requests:
+            now, evidence, _ = _pack_deliveries(artifacts, route, inventory, dict(state, _plan=plan),
+                max(0, limits['material_allowance'] + extra_room - unread_cost - _measure_final_material(route,
+                    {key: binding[key] for key in FINAL_MATERIAL_FIELDS})), requests, include_remaining=False)
+            binding['plan'] = dict(now=now)
+        packet.update(native=frame, reading_final=binding, evidence=evidence)
     packet['digest'] = digest(packet)
     return packet
 
@@ -1215,7 +1382,7 @@ def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
         if artifacts is not None:
             native = json.loads(artifacts.read(assignment['context']['native_packet']))
             packet = dict(packet, native=native)
-        validate_finding(packet, output)
+        validate_finding(packet, output, artifacts=artifacts)
         return
     required = {'schema_version', 'stage', 'subject_digest', 'claim_digest', 'reviewer',
                 'notes', 'excerpts', 'gaps', 'passage_requests'}
@@ -1374,6 +1541,8 @@ def project_own_turn(artifacts, route, packet, output, assignment_id, attempt_id
         request_deliveries=[dict(id=row['request'], characters=row['characters'],
             complete=row['kind'] == 'list_page' or row['end'] >= row['request_end'])
             for row in rows if row.get('request')])
+    if state is not None and 'unread' in state:
+        projected['unread'] = copy.deepcopy(state['unread'])
     if inventory is not None:
         projected['searches'] = _collect_completed_searches(artifacts, inventory, state, projected['deliveries'])
     return projected
@@ -1463,6 +1632,10 @@ def build_handle_packet(packet, artifacts, assignment):
     binding = packet.get('reading_turn', packet.get('reading_final'))
     table = copy.deepcopy(inventory.get('references', {}))
     table.update(copy.deepcopy(state.get('references', {})))
+    if 'unread' in state:
+        table['x1'] = dict(reference=state['unread']['artifact'])
+        for row in inventory['units'] + inventory['material']:
+            table[row['handle']] = dict(reference=dict(row['artifact'], unit=row['handle']))
     for row in state['entries']:
         if row['status'] in ('verified', 'delivered'):
             table[row['handle']] = dict(reference=describe_artifact(row['text'].encode('utf-8'), 'text/plain; charset=utf-8'))
@@ -1571,8 +1744,8 @@ def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_
         requests = state.get('pending_requests', [])
         notes_cost = (capacity.measure_capacity_value(route, state['latest_notes'])
                       - capacity.measure_capacity_value(route, '')) if state['latest_notes'] is not None else 0
-        kind = 'reading' if (_find_remaining_ranges(inventory, state) or requests
-                             or notes_cost > state['allowances']['notes']) else 'final'
+        kind = ('final' if 'unread' in state else 'reading' if (_find_remaining_ranges(inventory, state) or requests
+                             or notes_cost > state['allowances']['notes']) else 'final')
         number = prior['reading_chain']['turn'] + 1
     notice = frozen.get('output_refusal') if replacement else None
     notice_characters = len(json.dumps(notice, ensure_ascii=False, sort_keys=True, allow_nan=False)) if notice else 0
@@ -1883,7 +2056,7 @@ def _verify_turn_binding(records, artifacts, first, assignment, packet, native, 
     notice_characters = len(json.dumps(packet['output_refusal'], ensure_ascii=False, sort_keys=True,
                                       allow_nan=False)) if refusal else 0
     prior_id = (assignment.get('capacity_replacement_of') or (refusal['assignment_id'] if refusal else
-                assignment['context'].get('prior_assignment_id')))
+                assignment['context'].get('unread', {}).get('assignment_id') or assignment['context'].get('prior_assignment_id')))
     if prior_id is None:
         limits = capacity.derive_plan_task_limits(plan, kind)
     else:
@@ -1917,7 +2090,8 @@ def _verify_replacement_origin(records, artifacts, assignment, packet):
     validate_replacement_origin(records, artifacts, assignment, packet)
 
 
-def _verify_required_coverage(artifacts, inventory, state, plan, selection):
+def _verify_required_coverage(artifacts, inventory, state, plan, selection, *,
+                              records=None, packet=None, output=None, assignment=None):
     """Condition 4: ranges, required affected notes and reconstructed original searches."""
     required = {row['handle'] for row in list_required_affected_notes(plan, selection)['required']}
     remaining = _find_remaining_ranges(inventory, state)
@@ -1929,6 +2103,27 @@ def _verify_required_coverage(artifacts, inventory, state, plan, selection):
                 missing.append(dict(unit=body['handle'], start=0, end=body['characters']))
     searches = _collect_completed_searches(artifacts, inventory, state, [])
     expected = {row['search_digest'] for row in inventory['search_delivery']['searches']}
+    if 'unread' in state:
+        records = _read_unread_history(records, state['unread'])
+        origin = records['review_assignment'][state['unread']['assignment_id']]
+        before = json.loads(artifacts.read(origin['reading_chain']['state']))
+        rebuilt = build_unread_set(records, artifacts, origin, inventory, before)
+        unread = packet.get('reading_final', {}).get('unread', {})
+        finding = output.get('findings', {}).get('openness', {})
+        stored = json.loads(artifacts.read(state['unread']['artifact']))
+        reference = describe_artifact(serialize_record(rebuilt), 'application/json')
+        _require_verification(rebuilt == stored and digest(rebuilt) == unread.get('digest')
+            and reference == unread.get('artifact') == state['unread']['artifact']
+            and finding.get('outcome') == 'unresolved'
+            and any(ground.get('kind') == 'reviewer_gap' and reference in ground.get('refs', [])
+                    for ground in finding.get('grounds', [])), COVERAGE_VERIFICATION_MESSAGE)
+        recorded = records.get('problem_openness', {}).get(assignment['id']) if assignment is not None else None
+        if recorded is not None:
+            _require_verification(recorded.get('outcome') == finding['outcome']
+                and recorded.get('grounds') == finding['grounds']
+                and recorded.get('unread') == dict(artifact=reference, digest=digest(rebuilt), **rebuilt),
+                COVERAGE_VERIFICATION_MESSAGE)
+        return searches
     _require_verification(not missing and expected <= set(searches), COVERAGE_VERIFICATION_MESSAGE,
                           ranges=missing, searches=sorted(expected - set(searches)))
     return searches
@@ -1981,6 +2176,8 @@ def verify_problem_coverage(records, artifacts, assignment, *, final=False):
     for number, member in enumerate(chain, 1):
         packet = json.loads(overlay.read(member['packet']))
         _verify_replacement_origin(records, overlay, member, packet)
+        if member['context'].get('unread') and 'unread' not in state:
+            state = _bind_unread_state(records, overlay, member, inventory, state, publish=False)
         _verify_rebuilt_state(overlay, member, packet, state)
         _verify_turn_binding(records, overlay, first, member, packet, native, route, inventory, state, plan, number)
         observed = assignment_state(records, overlay, member['id'])
@@ -1993,7 +2190,8 @@ def verify_problem_coverage(records, artifacts, assignment, *, final=False):
         own.append(dict(assignment=member, packet=packet, projection=projected))
         turns.append(dict(projected['turn'], number=number))
         state = build_chain_state(inventory, [projected], route=route, plan=plan, initial_state=state)['state']
-    searches = _verify_required_coverage(overlay, inventory, state, plan, selection) if final else state['searches']
+    searches = _verify_required_coverage(overlay, inventory, state, plan, selection,
+        records=records, packet=packet, output=observed['output'], assignment=assignment) if final else state['searches']
     units = [dict(row['identity'], artifact=row['artifact']) for row in inventory['units']
              if (row['sha256'] in searches if row['identity'].get('record_kind') == 'literature_search'
                  else all(_has_complete_body(inventory, state, body) for body in inventory['material']

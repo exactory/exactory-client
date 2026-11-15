@@ -410,6 +410,18 @@ def complete_plan(records, artifacts, assignment, plan):
                 answers.append(dict(answer='Keep this route', steps=[
                     describe_step(records, artifacts, assignment, 9),
                     dict(command='review-series', assignment_id=assignment['id'])]))
+            if code == 'review_turn_failures_exhausted' and details.get('outcome') == 'provider_refused':
+                from .openness_reading import find_protocol, PROTOCOL_V5, PROTOCOL_V6
+                packet = protocol._read_json(artifacts, assignment['packet'])
+                if find_protocol(packet) in (PROTOCOL_V5, PROTOCOL_V6):
+                    from .openness_successor import describe_successor_handoff
+                    successor = describe_successor_handoff(records, artifacts, assignment, code)
+                    if successor is not None:
+                        details['successor'] = successor['details']['successor']
+                        step = successor['details'].get('step')
+                        if step is not None:
+                            details['row'] = 4
+                            answers.append(dict(answer='Export on the same route', steps=[step]))
             details['decision'] = dict(owner_decides=question, then=answers)
             if code == 'review_response_too_large':
                 from .review_route_capacity import find_serving_routes

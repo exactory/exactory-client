@@ -2147,11 +2147,14 @@ def prepare_packet(records, artifacts, value, route, packet):
             raise ResearchError('openness_packet_outdated', PACKET_OUTDATED_MESSAGE, {'handoff': 'export'})
     from .capture_selection import bind_packet_selections
     records = bind_packet_selections(records, native['scientific_context'], artifacts=artifacts, review=value)
-    if prior_id is not None:
+    if prior_id is not None and not value['context'].get('unread'):
         prior = records.get('review_assignment', {}).get(prior_id)
         if prior is not None and find_protocol(json.loads(artifacts.read(prior['packet']))) == PROTOCOL_V7:
             from .openness_reading_v7 import prepare_next_assignment
             return prepare_next_assignment(records, artifacts, value, route, packet)
+    if value['context'].get('unread') and not value['context'].get('reading_replacement'):
+        from .openness_reading_v7 import prepare_unread_assignment
+        return prepare_unread_assignment(records, artifacts, value, route, packet)
     if value['context'].get('reading_replacement'):
         from .openness_reading_v7 import prepare_next_assignment
         return prepare_next_assignment(records, artifacts, value, route, packet)

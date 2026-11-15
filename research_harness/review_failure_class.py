@@ -376,7 +376,8 @@ def list_turn_assignments(records, assignment):
         if parent is not None:
             # find_replacement groups same-parent continuations, including the
             # supported prospective change from the Codex text to visual route.
-            if context.get('prior_assignment_id') == parent:
+            if (context.get('prior_assignment_id') == parent
+                    and context.get('unread') == assignment.get('context', {}).get('unread')):
                 result.append(other['id'])
             continue
         if any(other.get(key) != assignment.get(key) for key in ('route_id', 'dossier_id', 'subject')):
@@ -597,7 +598,7 @@ def count_position(records, artifacts, assignment):
         reason, _ = read_replacement_link(member)
         replacements[reason] += 1
     counts, provider_count, eligible = {}, 0, False
-    sequence_ends = {}
+    sequence_ends, attempt_rows = {}, []
     for revision, kind, row in ordered:
         if kind == 'assignment':
             if previous_member is not None and has_smaller_task(artifacts, previous_member, row):
@@ -614,6 +615,9 @@ def count_position(records, artifacts, assignment):
                 permitted += 1
             continue
         classification = classify_attempt(records, artifacts, row)
+        attempt_rows.append(dict(attempt_id=row['id'], assignment_id=row['assignment_id'],
+            sequence=sequence + int(ended), outcome=classification['outcome'] if classification else 'completed',
+            time=row.get('observed_at')))
         if classification is None:
             if row['assignment_id'] != assignment['id']:
                 continue
@@ -640,7 +644,7 @@ def count_position(records, artifacts, assignment):
         ended = len(failures) >= TURN_FAILURE_LIMIT or used >= limit
         if ended:
             sequence_ends[sequence] = revision
-    return dict(sequence=sequence, failures=failures, failures_by_outcome=counts,
+    return dict(sequence=sequence, attempts=attempt_rows, failures=failures, failures_by_outcome=counts,
                 failed_attempts=len(failures), sequence_ended=ended,
                 sequences_remaining=max(0, permitted - sequence), permitted_sequences=permitted,
                 provider_count=provider_count, provider_eligible=eligible, complete=complete,
@@ -764,6 +768,12 @@ def plan_after_failure(records, artifacts, assignment_id):
         recovery = plan_refusal_recovery(records, artifacts, assignment)
         recovery['details'] = dict(details, **recovery['details'])
         return dict(result, **recovery)
+    if (outcome == 'provider_refused' and position['sequence_ended']
+            and position['sequences_remaining'] == 0):
+        from .openness_reading_v7 import plan_unread_final
+        unread = plan_unread_final(records, artifacts, assignment, position)
+        if unread is not None:
+            return dict(result, **unread)
     if position['sequence'] > position['permitted_sequences']:
         result.update(state='stop', code='review_turn_failures_exhausted')
         return result
@@ -835,4 +845,6 @@ def plan_after_failure(records, artifacts, assignment_id):
         result.update(state=state, not_before=deadline)
     if result['state'] == 'wait' and datetime.now(timezone.utc) >= datetime.fromisoformat(result['not_before']):
         result['state'] = 'run'
+    if result['state'] == 'stop' and outcome == 'provider_refused':
+        result['stop_class'] = 'decision'
     return result

@@ -187,6 +187,12 @@ def prepare_openness(records, artifacts, value, revision):
         delivered.difference_update(row["search_digest"] for row in
                                     packet["scientific_context"]["openness_minimum"]["searches"])
         delivered.update(verified["searches"])
+    if (verified is not None and find_protocol(supplied) == PROTOCOL_V7
+            and 'unread' in verified['state']):
+        reference = verified['state']['unread']['artifact']
+        delivered.intersection_update(row['artifact']['sha256'] for row in verified['units'])
+        finding['unread'] = dict(artifact=reference, digest=reference['sha256'],
+                                **json.loads(artifacts.read(reference)))
     if finding_contract:
         # Whole-body receipt credit covers split reading units and reconstructed original searches.
         # The packet's remaining artifacts are delivered whole by the ordinary native evidence boundary.

@@ -46,7 +46,7 @@ def _find_parent(records, assignment):
     if not isinstance(assignment.get('staged_review', {}), dict):
         raise ResearchError('invalid_review_context', 'Review staging requires an object binding')
     has_posts = bool(records.get('problem_post'))
-    for key in ('context_repair', 'staged_upgrade', 'output_refusal'):
+    for key in ('context_repair', 'staged_upgrade', 'output_refusal', 'unread'):
         binding = context.get(key)
         if binding is not None or (key == 'output_refusal' and key in context):
             if not isinstance(binding, dict) or ((has_posts or key == 'output_refusal')
@@ -64,6 +64,7 @@ def _find_parent(records, assignment):
     if history_parent.get('role') != assignment['role']:
         history_id = None
     return (assignment.get('capacity_replacement_of') or context.get('prior_assignment_id') or history_id
+            or (context.get('unread') or {}).get('assignment_id')
             or (context.get('context_repair') or {}).get('assignment_id')
             or (context.get('staged_upgrade') or {}).get('assignment_id'))
 
@@ -202,7 +203,7 @@ def _build_run_payload(records, assignment):
                    if row['assignment_id'] == assignment['id']]
     count = len({row['id'] for row in attempts + invocations}) + 1
     maximum = (openness_reading.RESERVED_IDENTIFIER_CHARACTERS if assignment['prompt']['template_id'].startswith(
-        openness_reading.PROTOCOL_V6 + '/') else None)
+        (openness_reading.PROTOCOL_V6 + '/', openness_reading.PROTOCOL_V7 + '/')) else None)
     return dict(id=_find_unused_id(records, assignment['id'] + '-run-' + str(count), maximum=maximum),
                 assignment_id=assignment['id'])
 
@@ -580,6 +581,7 @@ def _plan_head(records, artifacts, assignment):
                     and not assignment.get('context', {}).get('prior_assignment_id')
                     and not assignment.get('context', {}).get('context_repair')
                     and not result.get('payload', {}).get('context', {}).get('output_refusal')
+                    and not result.get('payload', {}).get('context', {}).get('unread')
                     and not (initial and protocol._initial_size_failure(
                         records, artifacts, assignment, assignment))):
                 return dict(state='handoff', command='review-assignment',

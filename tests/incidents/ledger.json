@@ -6715,6 +6715,23 @@
         "test_openness_reading_v7_refusal.V7RefusalTests.test_a7_series_executes_refusal_replacement_and_records_without_losing_forecast",
         "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_reading_output_cap_decision_names_admitted_export"
       ]
+    },
+    {
+      "id": "unread-final-retains-provider-refused-reading-gap",
+      "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
+      "class": "reading continuity after provider refusal",
+      "summary": "A provider safeguard stop at one reading position ended the chain and repeated completed readings on the next export.",
+      "expected": "After the last floor sequence, admit an unresolved final over the authenticated complete unread set; page all ranges and attempts in fixed order, preserve refusal replacements, and carry completed readings into later exports.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_unread_final.UnreadFinalTests.test_g1_k7_provider_refused_reaches_recorded_unresolved_and_record_check",
+        "test_openness_unread_final.UnreadFinalTests.test_a7_unread_final_survives_scientific_refusal_replacement_and_origin_tampering",
+        "test_openness_unread_final.UnreadPagingTests.test_fixed_artifact_order_survives_pages_and_replacement_and_rejects_omitted_tampering",
+        "test_openness_unread_final.LegacyUnreadTests.test_g1_k7_incident_v5_two_safeguards_retry_then_last_sequence_names_row4",
+        "test_openness_unread_final.IncidentUnreadTests.test_g1_k7_six_completed_turns_survive_refusal_at_turn_seven_and_next_export_reads_one_text",
+        "test_openness_unread_final.UnreadFinalTests.test_g1_list_only_provider_refusal_reaches_an_empty_unread_finding"
+      ]
     }
   ]
 }
