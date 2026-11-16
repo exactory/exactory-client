@@ -79,6 +79,17 @@ class FixtureIsolationTests(unittest.TestCase):
         self.assertIn('Synthetic failure after protocol setup', result.errors[0][1])
         self.assertIs(openness_reading.find_chain_protocol, original)
 
+    def test_a_v6_guard_test_with_a_nested_case_restores_the_released_chain_order(self):
+        # The nested V6ChainTests case patches the order in its own setup; its cleanup runs after the test method.
+        import test_openness_v6_guard as guard_fixtures
+        original = openness_reading.NEW_PROBLEM_CHAIN_PROTOCOLS
+        case = guard_fixtures.V6GuardTests('test_problem_first_assignment_requires_a_finite_projection_and_math_v1_keeps_c5')
+        result = unittest.TestResult()
+        with patch.object(guard_fixtures.V6GuardTests, 'run_material_paths'):
+            case.run(result)
+        self.assertTrue(result.wasSuccessful(), result.failures + result.errors)
+        self.assertEqual(openness_reading.NEW_PROBLEM_CHAIN_PROTOCOLS, original)
+
 
 if __name__ == '__main__':
     unittest.main()
