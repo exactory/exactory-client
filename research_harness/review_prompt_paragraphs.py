@@ -111,13 +111,57 @@ SLATE_FORMING_PROMPT = (
     'does not establish the claimed gain.')
 
 
-# Placeholder for the writer's pass. A text change requires a new registered version.
+# Written in the writer's pass of 0.91.2. A later text change requires a new registered version.
 ACCOUNT_PROBES_PROMPT = (
-    '\n\nAccount probes (exactory-problem-account-probes-v1). '
-    'The account records deliver a probe outcome and, where held, its probe_intent with the question and program. '
-    'Program and output descriptors identify bytes by digest; they do not deliver those bytes. '
-    'A probe is exploratory and supports no fact, answer or gain in a grade. '
-    'Use these records to check what the account entry says about the observation.')
+    '\n\nThe probes that the accounts name (exactory-problem-account-probes-v1). '
+    'A probe is a local computation that the record attempted without a frozen plan. '
+    'account_records delivers the records of three groups of probes of this record. '
+    'The first are the probes that an entry of the accounts cites. '
+    'The second are the probes that a delivered forming call or form outcome names. '
+    'The third are the probes that value.derived_accounts lists beside a test as earlier computations. '
+    'One probe has up to two entries, with the same id. '
+    'The entry with the record_kind probe_intent states the intended computation. '
+    'It gives the question of the probe, and it names the interpreter, the program, the inputs and the time allowed. '
+    'The entry with the record_kind probe states what was recorded about the execution. '
+    'It gives the command, the exit status, the elapsed time, the output files with both output streams, and '
+    'observation. '
+    'The exit status is the exit code of the program, or timed_out, failed, output_bound or interrupted. '
+    'With failed or interrupted, the entry does not show that the program ran. '
+    'A launch can fail before the program starts, and a recovery records interrupted when it finds no complete '
+    'evidence of the run. '
+    'observation is text about the outcome that the author gave, or text of the launcher or of a recovery about how '
+    'the run ended. '
+    'The harness did not check it against the outputs. '
+    'revision, in both records, is the revision of the store at which the record was written. '
+    'program_run, where the records hold it, marks a run that the author declared under the id of a cycle that had '
+    'no plan at that time. '
+    'In the intent it names that cycle id, the path of the program and the outputs that the author declared as '
+    'read. '
+    'In the probe entry it gives the start time and the end time of the run, each null when it was not observed. '
+    'It names each captured output file and both streams with a path and a digest. '
+    'It also gives the outputs declared as read, and outputs_unread. '
+    'It does not show that a plan later admitted the program. '
+    'A probe without a recorded intent has the probe entry alone, and a probe record of the older form holds its '
+    'question itself. '
+    'The probe_intent entry names the program and each input by a descriptor. '
+    'The probe entry names each output file and both streams by a descriptor. '
+    'A descriptor gives a path, a digest, a size and a media type. '
+    'An output that was stored unread has sealed_path in place of path. '
+    'The records hold none of the bytes of these files. '
+    'Whether a file can be requested follows from the source rules of this turn, which this paragraph does not '
+    'change. '
+    'An entry whose cite holds an origin is a record that this record imported from another problem record. '
+    'It is a separate entry, also when a probe of this record has the same id. '
+    'A probe has exploratory standing. '
+    'The harness accepts it as evidence in a check that is not entered as a test, in a forming call and in a form '
+    'outcome. '
+    'It accepts no probe as evidence of a fact, a relation, a replacement or the gain. '
+    'A probe enters no grade as support. '
+    'Use these records to check what an entry, a forming call or an outcome says about a probe that it names. '
+    'They show what was asked, what was recorded about the execution and its outcome, and when each record was '
+    'written. '
+    'Cite such a record by copying its cite object. '
+    'The response shape of this turn is unchanged.')
 
 
 def _has_carry(role, packet):

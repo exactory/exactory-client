@@ -18,9 +18,13 @@ HISTORY_MISSING_MESSAGE = ("A gain claim and a passed test need a history. The c
                            "statement must cite, in source.evidence, a forming call or a form outcome whose form was "
                            "recorded before the evidence of the gain or the plan of the test. Without such a form, record "
                            "gain as null, and record the check as an observation")
-HISTORY_DATE_PERIOD_MESSAGE = ("The evidence date names a period that contains the recording time of a candidate "
-                               "form. That date does not show which came first. Enter a timestamp with a timezone "
-                               "for the evidence to decide the order, or record gain as null and the check as an observation")
+HISTORY_DATE_PERIOD_MESSAGE = ("A gain claim needs a form of the candidate that was recorded before the evidence of "
+                               "the gain. The date of that evidence names a period: a day, a month or a year. A form "
+                               "of the candidate was recorded within that period, in UTC, so the date does not show "
+                               "which came first. evidence gives the date with the entry or the reference that it "
+                               "comes from, and forms gives the recording time of each form. Where evidence names an "
+                               "entry in entry_id, enter the date of that entry as a timestamp with a timezone. "
+                               "Without such a time, record gain as null")
 
 
 def collect_entries(accounts):
@@ -206,9 +210,11 @@ def validate_fact(records, entry, entries, *, required_code=None, exploratory=Fa
         entry["date"] = max(dates)
     elif "date" not in entry:
         raise ResearchError("problem_account_date_missing",
-                            "The record cannot derive the date of this entry from the references in undated. Enter date, the day on "
-                            "which the fact became available, as YYYY, YYYY-MM, YYYY-MM-DD or a timestamp with a "
-                            "timezone, or enter unknown",
+                            "This entry gives no date, and the harness cannot derive one from its evidence. undated "
+                            "lists each reference of the entry that gives no date, and it is empty for an entry "
+                            "without evidence. Enter date, the day on which the fact became available, as YYYY, "
+                            "YYYY-MM, YYYY-MM-DD or a timestamp with a timezone. When that day is not known, enter "
+                            "unknown",
                             {"id": entry["id"], "undated": undated})
     validate_evidence_date(entry["date"])
 

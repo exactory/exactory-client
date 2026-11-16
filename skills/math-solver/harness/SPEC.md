@@ -87,8 +87,10 @@ closure; see `../SEARCH.md`, Common-store delivery. Its totals are exactly
 Moves and runs are consumed totals; elapsed duration is null. Workers and
 `timeout_seconds` are the largest admitted limits across nodes with an admission,
 or zero without one. Historical usage remains as recorded. The record adds its
-first common-store `recorded_revision` outside the summary digest; repeats retain
-that revision. Current succession is keyed
+first common-store `recorded_revision` and `recorded_at`, the UTC time of that
+first delivery, outside the summary digest; repeats retain both. A record
+delivered before 0.91.2 has no `recorded_at`, and a repeat adds none. Current
+succession is keyed
 by `(attack_root, objective_id)` and declared by the mutable pointer
 `native_attempt_current/<digest({attack_root, objective_id})>` containing
 `{attack_root, objective_id, native_attempt_digest, recorded_revision}`. Attempt
