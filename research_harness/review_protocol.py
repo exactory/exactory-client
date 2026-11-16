@@ -2258,6 +2258,8 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                     'review_ids': [review['id'] for review in historical]}
             elif problem and role == 'slate':
                 packet.update({key: previous[key] for key in ('bar_ids', 'candidates', 'candidate_set_digest')})
+                if previous.get(review_parts.KEY, {}).get('adapter') == 'problem_slate':
+                    packet.update({key: previous[key] for key in ('bars', 'own_bars')})
                 packet['material_objections'] = collect_historical_bar_objections(records, artifacts)
             elif problem and role == 'bar' and refreshed:
                 packet['problem_refresh'] = {'assignment_id': prior['id'],
@@ -3426,6 +3428,8 @@ def _is_problem_refresh(records, artifacts, prior, previous):
     slate's candidates or bars changed, or a bar lacks rubric calibration or an added area's standard. An exact
     superseded result prompt also permits one prospective contract refresh. Undelivered evidence permits
     reassessment in the same session and slot."""
+    if previous.get(review_parts.KEY, {}).get('adapter') == 'problem_slate':
+        previous = review_parts.read_logical_packet(artifacts, previous[review_parts.KEY])
     if any(review['assignment_id'] == prior['id'] and _is_evidence_refresh_needed(records, artifacts, review)
            for review in records.get('value_review', {}).values()):
         return True
@@ -4019,12 +4023,14 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                                     recorded_revision=expected_revision + 1), artifacts)
         if upgrade is None and not staged_repair:
             from .review_route_capacity import require_covered_assignment
+            from . import review_parts_slate
             require_covered_assignment(records, artifacts, value, packet, prompt, history=history)
             if 'context_repair' in packet:
                 from . import review_parts_repair
                 packet = review_parts_repair.prepare_packet(records, artifacts, value, route, packet, prompt, history,
                     base_prompt_parameters=base_prompt_parameters, slot_id=slot_identifier, repair=repair)
-            else:
+            elif (not review_parts_slate.applies(value, packet)
+                  or review_parts_slate.can_start_series(records, artifacts, value, route, packet, prompt, history)):
                 packet = review_parts.prepare_packet(records, artifacts, value, route, packet, prompt, history,
                     base_prompt_parameters=base_prompt_parameters, slot_id=slot_identifier)
         if review_parts.find_kind(packet) is not None:

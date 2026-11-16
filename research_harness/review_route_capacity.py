@@ -428,10 +428,13 @@ def _can_deliver_parts(assignment, packet, route):
             and find_adapter(assignment, packet) is not None)
 
 
-def _build_serving_parts(records, artifacts, assignment, route, packet, prompt):
-    from . import review_parts, review_prompt_paragraphs
+def _build_serving_parts(records, artifacts, assignment, route, packet, prompt, history=()):
+    from . import review_parts, review_parts_slate, review_prompt_paragraphs
     from .review_staged_protocol import ControllerArtifacts
     staged = ControllerArtifacts(artifacts)
+    if (review_parts_slate.applies(assignment, packet)
+            and not review_parts_slate.can_start_series(records, staged, assignment, route, packet, prompt, history)):
+        return None
     parameters = prompt.get('parameters', {})
     base = dict(orchestration=parameters.get('orchestration'), repair=bool(parameters.get('context_repair')),
                 excerpts='reviewer_excerpts' in parameters, common_version=parameters.get('common_prompt_version'))
@@ -439,7 +442,8 @@ def _build_serving_parts(records, artifacts, assignment, route, packet, prompt):
     if assignment['role'] in ('bar', 'slate', 'result'):
         base['excerpts'] = True
     planned = review_parts.prepare_packet(records, staged, dict(assignment, route_id=route['id']),
-        route, copy.deepcopy(packet), prompt, [], base_prompt_parameters=base)
+        route, copy.deepcopy(packet), prompt, history if review_parts_slate.applies(assignment, packet) else [],
+        base_prompt_parameters=base)
     if review_parts.find_kind(planned) is None:
         return None
     turn_prompt = review_parts.build_turn_prompt(assignment['role'], base, planned[review_parts.KEY])
@@ -500,6 +504,7 @@ def find_serving_routes(records, role, packet, *, artifacts, assignment, prompt,
     from .review_excerpts import read_sent_packet
     from .review_problem_parts import preserves_ordinary_packet
     from .review_plan_steps import find_capacity_parent, select_route_steps
+    from . import review_parts_slate
     parent = find_capacity_parent(records, assignment, packet)
     result = []
     prompt_record = prompt if isinstance(prompt, dict) else dict(canonical_prompt(role), text=prompt)
@@ -521,7 +526,10 @@ def find_serving_routes(records, role, packet, *, artifacts, assignment, prompt,
         candidate_packet = copy.deepcopy(packet)
         profile = read_output_profile(records, route)
         try:
-            if parent is not None and 1 in select_route_steps(records, artifacts, parent):
+            starts_slate_series = (review_parts_slate.applies(assignment, packet)
+                and review_parts_slate.can_start_series(records, artifacts, assignment, route, packet, prompt_record, history))
+            if (parent is not None and not starts_slate_series
+                    and 1 in select_route_steps(records, artifacts, parent)):
                 request = _build_serving_repair(records, artifacts, assignment, parent, route)
                 if request is not None:
                     measure = measure_request(route, request, profile, records=records, artifacts=artifacts)
@@ -550,7 +558,7 @@ def find_serving_routes(records, role, packet, *, artifacts, assignment, prompt,
             if request is None:
                 if not _can_deliver_parts(assignment, packet, route):
                     continue
-                request = _build_serving_parts(records, artifacts, assignment, route, candidate_packet, prompt_record)
+                request = _build_serving_parts(records, artifacts, assignment, route, candidate_packet, prompt_record, history)
                 if request is None:
                     continue
                 delivery = 'parts'

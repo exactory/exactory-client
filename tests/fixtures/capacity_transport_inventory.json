@@ -48,6 +48,7 @@
     "research_harness/review_failed_request_history.py",
     "research_harness/review_parts.py",
     "research_harness/review_parts_repair.py",
+    "research_harness/review_parts_slate.py",
     "research_harness/review_parts_v3.py",
     "research_harness/review_preflight.py",
     "research_harness/review_problem_parts.py",

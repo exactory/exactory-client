@@ -261,6 +261,9 @@ FINAL_ANSWER = (
     'or source that this packet does not hold, and stays within review_parts.request_room.'
 )
 
+SLATE_ADAPTER = 'Placeholder: review slate forming records with artifact descriptors, carried bodies and accounts.'
+FINAL_SLATE = 'Placeholder: return the ordinary slate review, assessing the bars and candidate potential.'
+
 FINAL_RESULT = (
     'Final of a problem result review. The units of this series were the entries of openness_searches, '
     'assessment_evidence, readings, passages, computations and formal_checks of problem_evidence, and every '

@@ -2078,11 +2078,19 @@ def _prepare_v2_packet(records, artifacts, value, route, packet, prompt, history
 def prepare_packet(records, artifacts, value, route, packet, prompt, history, **options):
     """New admission is ordered; recorded series always keep their protocol."""
     from .review_protocol import _read_json
+    from .review_parts_roles import find_adapter, get_adapter
     prior = records.get('review_assignment', {}).get(value.get('context', {}).get('prior_assignment_id'))
     recorded = (_read_json(artifacts, prior['packet']).get(KEY, {}).get('protocol')
                 if prior and prior.get('packet') else None)
     protocols = (recorded,) if recorded in (PROTOCOL, 'exactory-review-parts-v3') else NEW_SERIES_PROTOCOLS
+    adapter = find_adapter(value, packet)
+    can_start = get_adapter(adapter).get('can_start_series') if adapter is not None else None
+    if recorded is None and can_start is not None and not can_start(
+            records, artifacts, value, route, packet, prompt, history):
+        return packet
     for protocol in protocols:
+        if adapter is not None and protocol not in get_adapter(adapter).get('protocols', protocols):
+            continue
         if protocol == PROTOCOL:
             return _prepare_v2_packet(records, artifacts, value, route, packet, prompt, history, **options)
         if protocol == 'exactory-review-parts-v3':

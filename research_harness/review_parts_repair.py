@@ -28,7 +28,11 @@ def find_role_adapter(packet):
     ordinary.pop('context_repair', None)
     value = dict(role=packet.get('role'), context={})
     name = find_adapter(value, ordinary)
-    return get_adapter(name) if name is not None else None
+    adapter = get_adapter(name) if name is not None else None
+    # This delegation is part of recorded v2 repair inventories and prompts.
+    # A role added only under a later protocol cannot change that contract.
+    return (adapter if adapter is not None and parts.PROTOCOL in
+            adapter.get('protocols', (parts.PROTOCOL,)) else None)
 
 
 def list_role_units(packet):
