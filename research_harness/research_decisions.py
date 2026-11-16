@@ -277,7 +277,8 @@ def find_review_undelivered_references(records, artifacts, evidence, delivery, *
             from .review_parts import has_series_reference
             if has_series_reference(artifacts, delivery['actual_packets'], reference):
                 continue
-        packets = delivery['packets'] if require_complete_artifacts or reference.get('kind') == 'source' else ()
+        from .review_parts_v3 import is_span_reference
+        packets = delivery['packets'] if require_complete_artifacts or reference.get('kind') == 'source' or is_span_reference(reference) else ()
         missing.extend(undelivered_references(records, artifacts, [reference], delivery['carried_records'],
             delivery['artifacts'], delivery['source_mappings'], frozen=True, packets=packets))
     return missing

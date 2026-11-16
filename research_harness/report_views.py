@@ -62,14 +62,24 @@ def describe_parts_turn(assignment, state, series, *, ended_without_output=False
     result = {key: header[key] for key in
               ('protocol', 'adapter', 'series_assignment_id', 'kind', 'turn')}
     result['recorded_revision'] = assignment['recorded_revision']
-    result.update({key: copy.deepcopy(plan[key]) for key in
-                   ('unit_allowance', 'card_allowance', 'remaining_turns')})
-    result['unit_allowance_floor'] = plan.get('unit_allowance_floor')
-    total = plan['units_carded'] + plan['units_remaining']
-    result.update(units_carded=0, units_remaining=total)
     packets = series['packets']
     inventory = (series.get('delivery') or {}).get('inventory')
-    if inventory is not None:
+    planned = header['protocol'] == 'exactory-review-parts-v3'
+    if planned:
+        cursor = (series.get('state') or {}).get('cursor')
+        carded = cursor['unit_index'] if cursor else 0
+        total = sum(row['required'] for row in inventory['units']) if inventory else None
+        result.update(unit_allowance=plan['material_allowance'],
+            card_allowance=header.get('card_allowance', {}).get('characters', 0),
+            remaining_turns=None, unit_allowance_floor=None, units_carded=carded,
+            units_remaining=None if total is None else total - carded)
+    else:
+        result.update({key: copy.deepcopy(plan[key]) for key in
+                       ('unit_allowance', 'card_allowance', 'remaining_turns')})
+        result['unit_allowance_floor'] = plan.get('unit_allowance_floor')
+        total = plan['units_carded'] + plan['units_remaining']
+        result.update(units_carded=0, units_remaining=total)
+    if inventory is not None and not planned:
         reads = [packet for packet in packets if review_parts.find_kind(packet) == 'read']
         originals = [original for packet in reads
                      for original in packet[review_parts.KEY]['originals']]

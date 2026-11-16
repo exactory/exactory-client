@@ -109,12 +109,22 @@ def build_output_replacement(records, artifacts, assignment, *, identifier=None)
         refusal_notice=frozen_notice)
     if parts.find_kind(planned) != 'read':
         return None
+    capacity_members = {}
+    planned_v3 = planned[parts.KEY]['protocol'] == 'exactory-review-parts-v3'
+    if planned_v3:
+        declaration = planned.pop(capacity.CAPACITY_REQUEST_KEY)
+        capacity_members = capacity.prepare_assignment_capacity(records, artifacts, route, declaration)
+        planned.pop('digest', None)
+        from .evidence import digest
+        planned['digest'] = digest(planned)
     prompt = parts.build_turn_prompt(assignment['role'], parameters, planned[parts.KEY])
     request = protocol.transport.request_body(route, prompt['text'], planned, [], order=())
+    plan = capacity.read_chain_capacity_plan(artifacts, capacity_members) if planned_v3 else None
     preflight = review_preflight.check_request(review_preflight.build_report(
-        records, artifacts, route, assignment['role'], prompt, planned, request),
+        records, artifacts, route, assignment['role'], prompt, planned, request,
+        **(dict(capacity_plan=plan, turn_kind='read') if planned_v3 else {})),
         request, packet=planned, artifacts=artifacts)
-    if planned[parts.KEY]['unit_characters'] > inventory['characters'] // 2:
+    if not planned_v3 and planned[parts.KEY]['unit_characters'] > inventory['characters'] // 2:
         return None
     if retry_read:
         from .review_problem_parts import _measure
@@ -122,7 +132,7 @@ def build_output_replacement(records, artifacts, assignment, *, identifier=None)
         if _measure(route, request) >= _measure(route, old_request):
             return None
     return dict(packet=planned, prompt=prompt, preflight=preflight,
-                context=dict(capacity_replacement=assignment['id']))
+                context=dict(capacity_replacement=assignment['id']), **capacity_members)
 
 
 def prepare_replacement(records, artifacts, value, revision):
@@ -190,6 +200,8 @@ def prepare_replacement(records, artifacts, value, revision):
         keys += ('replaces_assignment_id',)
     record[parts.KEY] = {key: header[key] for key in keys}
     record['review_parts_plan'] = parts.describe_plan(packet)
+    if header['protocol'] == 'exactory-review-parts-v3':
+        record.update({key: planned[key] for key in ('capacity_plan', 'capacity_plan_kind')})
     from .problem_delivery import require_unposted_review
     require_unposted_review(records, record, artifacts)
     return [immutable_record(records, 'review_assignment', value['id'], record)], record

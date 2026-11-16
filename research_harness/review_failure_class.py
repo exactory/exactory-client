@@ -403,6 +403,15 @@ def plan_output_replacement(records, artifacts, assignment, *, allow_single=True
     from .review_problem_parts import _measure
 
     packet = protocol._read_json(artifacts, assignment['packet'])
+    if packet.get(parts.KEY, {}).get('protocol') == 'exactory-review-parts-v3':
+        from .review_parts_v3 import build_replacement
+        from .review_staged_protocol import ControllerArtifacts
+        replacement = build_replacement(records, artifacts if include_packet else ControllerArtifacts(artifacts),
+                                        assignment, outcome=outcome, identifier=replacement_id)
+        if replacement is None:
+            return None
+        return dict(replacement, state='replace', handler='parts_v3', code=OUTCOME_CODES[outcome],
+                    context=replacement['payload']['context'])
     from .review_route_capacity import describe_task_kind
     from .review_single_request import build_output_replacement, is_first_output_read
     single = describe_task_kind(assignment['role'], packet) == 'single'
@@ -563,6 +572,17 @@ def has_smaller_task(artifacts, previous, assignment):
     """
     old = protocol._read_json(artifacts, previous['packet'])
     new = protocol._read_json(artifacts, assignment['packet'])
+    if (assignment.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3'
+            and old.get(parts.KEY, {}).get('protocol') == 'exactory-review-parts-v3'):
+        old_header, new_header = old[parts.KEY], new[parts.KEY]
+        if old_header['kind'] in ('combine', 'check'):
+            before = old_header.get('block', {}).get('characters', old_header.get('block_characters'))
+            after = new_header.get('block', {}).get('characters', new_header.get('block_characters'))
+            return after is not None and before is not None and after < before
+        before, after = old_header['capacity'], new_header['capacity']
+        if old_header['kind'] == 'final':
+            return after['answer_bound'] < before['answer_bound']
+        return after['material_allowance'] < before['material_allowance']
     if assignment.get('capacity_plan') and assignment.get('reading_chain'):
         before = old.get('reading_turn', old.get('reading_final', {})).get('capacity', {})
         after = new.get('reading_turn', new.get('reading_final', {})).get('capacity', {})

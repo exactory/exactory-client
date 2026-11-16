@@ -7456,6 +7456,18 @@
         "test_foreground_write_stale_during_review_call.ForegroundWriteStaleDuringReviewCallTests.test_refuse_revision_read_before_review_completion_and_retry",
         "test_foreground_write_stale_during_review_call.ForegroundWriteStaleDuringReviewCallTests.test_refuse_prepared_value_after_review_completion_and_retry"
       ]
+    },
+    {
+      "id": "result-review-parts-v3-bounded-cited-search-frame",
+      "record": "20261112150500-result-review-frame-holds-cited-search-records",
+      "class": "review-capacity",
+      "summary": "Cited search records remain frozen units instead of growing the result series frame.",
+      "expected": "A 7,500,000-character result packet reaches a recorded review through bounded parts-v3 requests.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3.RecordedSeriesTests.test_real_shape_7500000_cited_search_characters_have_bounded_frames"
+      ]
     }
   ]
 }

@@ -1210,7 +1210,10 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
             staged_task=staged_task, composed=composed, claim_range=claim_range)
         base = canonical_prompt(role, **base_parameters)
         answer = kind == 'final' and bool(review_parts.get('answer'))
-        binding = dict(adapter=adapter, kind=kind, protocol=parts.PROTOCOL, answer=answer)
+        parts_protocol = review_parts.get('protocol', parts.PROTOCOL)
+        binding = dict(adapter=adapter, kind=kind, protocol=parts_protocol, answer=answer)
+        if parts_protocol == 'exactory-review-parts-v3':
+            binding['capacity'] = copy.deepcopy(review_parts['capacity'])
         entry = review_parts.get('entry')
         if entry is not None:
             binding['entry'] = entry
@@ -1224,11 +1227,16 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
                 sections.append(texts.FINAL_ANSWER)
             final_prompt = get_adapter(adapter)['final_prompt']
             sections.append(final_prompt(role, base_parameters) if callable(final_prompt) else final_prompt)
+        if parts_protocol == 'exactory-review-parts-v3':
+            sections = [base['text'], texts.PARTS_V3_COMMON, texts.PARTS_V3_PROMPTS[kind]]
+            if kind == 'final':
+                final_prompt = get_adapter(adapter)['final_prompt']
+                sections.append(final_prompt(role, base_parameters) if callable(final_prompt) else final_prompt)
         rendered = '\n\n'.join(sections)
         variant = 'final-answer' if answer else kind
         if entry is not None:
             variant += '-capacity-v1'
-        return _build_prompt(parts.PROTOCOL + '/' + adapter + '/' + variant,
+        return _build_prompt(parts_protocol + '/' + adapter + '/' + variant,
                              rendered, parameters,
                              COMMON_VERSION if common_version is None else common_version)
     common_version = COMMON_VERSION if common_version is None else common_version
@@ -2142,6 +2150,9 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
             fields(context, ('prior_assignment_id',), ('source_delivery',), code='invalid_review_context')
             prior, state = _source_parent(records, artifacts, context['prior_assignment_id'], dossier_id, reviewer_id, role)
             previous = source_delivery_packet(records, artifacts, prior)
+            if previous.get(review_parts.KEY, {}).get('protocol') == 'exactory-review-parts-v3':
+                previous = dict(review_parts.read_logical_packet(artifacts, previous[review_parts.KEY]),
+                                review_parts=previous[review_parts.KEY])
             if 'source_rules' not in previous:
                 packet.pop('source_rules', None)
             packet.update(bar_sources.continuation(records, artifacts, previous, review_parts.project_source_output(state['output'], role),
@@ -3051,7 +3062,8 @@ def _prompt_matches(assignment, packet=None):
     parts_parameters = parameters.get(review_parts.KEY)
     if parts_parameters is not None:
         binding = assignment.get(review_parts.KEY, {})
-        if (binding.get('protocol') != review_parts.PROTOCOL
+        if (binding.get('protocol') not in (review_parts.PROTOCOL, 'exactory-review-parts-v3')
+                or binding.get('protocol') != parts_parameters.get('protocol')
                 or any(binding.get(key) != parts_parameters.get(key) for key in ('adapter', 'kind'))):
             return False
         descriptor = parameters.get('base_prompt')
@@ -3331,14 +3343,16 @@ def _source_parent(records, artifacts, identifier, dossier_id, reviewer_id, role
     refresh = (final and prior.get('subject', {}).get('kind') == 'problem'
                and _is_problem_refresh(records, artifacts, prior, previous))
     parts_pending = parts_turn and (review_parts.find_kind(previous) != 'final'
-                                    or state['output'].get('kind') == 'requests')
+                                    or state['output'].get('kind') == 'requests'
+                                    or state['output'].get('stage') == 'material')
     part = review_problem_parts.find_stage(previous) == 'part' or parts_pending
     if part and not parts_turn:
         review_problem_parts.validate_part_output(previous, state['output'])
     if not refresh and (final or not part and not bar_sources.pending(previous, state['output'])
                         and not state['output'].get('settled_requests')):
         raise ResearchError('review_resampling_forbidden', 'A final phase assessment cannot be continued or sampled again')
-    if 'source_inventory' not in previous and not repair_adjudicator:
+    if ('source_inventory' not in previous and not repair_adjudicator
+            and previous.get(review_parts.KEY, {}).get('protocol') != 'exactory-review-parts-v3'):
         raise ResearchError('review_source_continuation_mismatch', 'A legacy packet has no immutable source-request inventory')
     return prior, state
 
@@ -3490,7 +3504,8 @@ def _require_focused_identity(previous, value):
 
 def prepare_capacity_notice(records, route, role, packet):
     """Add fixed capacity metadata only to a prospective profiled problem assignment."""
-    if packet.get('subject', {}).get('kind') != 'problem' or role not in bar_sources.ROLES:
+    if (packet.get('subject', {}).get('kind') != 'problem' or role not in bar_sources.ROLES
+            or packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3'):
         return packet
     from .review_route_capacity import (describe_route_capacity, describe_task_kind,
                                         read_output_profile, select_task_limits)
@@ -3578,6 +3593,10 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             if normalized_text(value['reviewer_id']) in {normalized_text(a) for a in intent.get('authors', [])}:
                 raise ResearchError('review_not_independent', 'An intent author cannot provide an independent assessment')
         if 'capacity_replacement' in value['context']:
+            capacity_prior = records.get('review_assignment', {}).get(value['context']['capacity_replacement'], {})
+            if capacity_prior.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+                from .review_parts_v3 import prepare_capacity_assignment
+                return prepare_capacity_assignment(records, artifacts, value, expected_revision + 1)
             from .review_single_request import prepare_replacement as prepare_capacity_replacement
             return prepare_capacity_replacement(records, artifacts, value, expected_revision + 1)
         if 'output_refusal' in value['context']:
