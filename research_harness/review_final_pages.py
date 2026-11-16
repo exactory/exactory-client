@@ -277,7 +277,9 @@ def plan_final_turns(page_room, target_allowance, target_minimum, notes, pool, t
     context['pool'] = _sum_entries(carried_pool)
     total = notes + context['pool'] + sum(_sum_entries(t['entries'] + t['rows']) for t in targets)
     if total <= page_room and len(targets) <= target_allowance:
-        turns.append(_build_page('final', context, carried_pool, pool, targets, targets))
+        turns.append(_build_page('page' if turns else 'final', context, carried_pool, pool, targets, targets))
+        if len(turns) > 1:
+            turns.extend(_plan_closing(context, [target['handle'] for target in targets], condense))
     else:
         turns.extend(_pack_pages(context, carried_pool, pool, targets, condense))
         turns.extend(_plan_closing(context, [target['handle'] for target in targets], condense))
@@ -500,20 +502,41 @@ def repack_final_turns(turns, completed, pending, page_room, target_allowance, *
     return result
 
 
-def prepare_final_turn(turns, number, page_room, target_allowance, floor, condense, *, pending=None):
+def prepare_final_turn(turns, number, page_room, target_allowance, floor, condense, *, pending=None, completed=(), inputs=None):
     """Admit a held/pending page at current limits without joining split groups.
 
     The family resumes pending work through pending_of, which names the original
     page identity. This function stores no passage or argument body.
     """
     selected = next((turn for turn in turns if turn['number'] == number), None)
-    if selected is None or selected['kind'] not in ('page', 'final') or type(floor) is not int or floor <= 0:
+    if selected is None or selected['kind'] not in ('page', 'final', 'closing', 'combine') or type(floor) is not int or floor <= 0:
         raise ResearchError('invalid_input', INVALID_SPLIT_MESSAGE)
     if type(page_room) is not int or page_room <= 0 or type(target_allowance) is not int or target_allowance <= 0:
         raise ResearchError('invalid_input', INVALID_FINAL_SIZES_MESSAGE)
-    if selected['characters'] <= page_room and len(selected['targets']) <= target_allowance:
+    if inputs is not None and selected['kind'] in ('page', 'final'):
+        kept = [turn for turn in turns if turn['number'] in completed]
+        pool = _apply_completed(inputs['pool'], kept, 'pool')
+        parts, source = [], {target['handle']: target for target in inputs['targets']}
+        for handle in selected['targets']:
+            target = source[handle]
+            rows = _apply_completed(target['rows'], kept, 'target', handle, 'rows')
+            entries = _apply_completed(target['entries'] + rows, kept, 'target', handle, 'entries')
+            parts.append(dict(target, entries=entries, rows=[]) if entries != target['entries'] + rows else dict(target, rows=rows))
+        selected = dict(selected, pool=pool, pool_inputs=inputs['pool'], parts=parts,
+            inputs=[source[handle] for handle in selected['targets']],
+            characters=inputs['notes'] + _sum_entries(pool) + sum(_sum_entries(part['entries'] + part['rows']) for part in parts),
+            context=dict(selected['context'], notes=inputs['notes']))
+    fits = (selected['block']['characters'] <= page_room if selected['kind'] == 'combine' else
+            selected['characters'] <= (inputs.get('closing_room', page_room) if inputs is not None and selected['kind'] == 'closing' else page_room))
+    if fits and (selected['kind'] not in ('page', 'final') or len(selected['targets']) <= target_allowance):
         return copy.deepcopy(turns)
-    context = dict(selected['context'], page_room=page_room, target_allowance=target_allowance)
+    context = dict(selected['context'], page_room=page_room, target_allowance=target_allowance,
+                   closing_room=min(selected['context']['closing_room'], page_room,
+                                    inputs.get('closing_room', page_room) if inputs is not None else page_room))
+    selected = dict(selected, context=context)
+    if selected['kind'] in ('closing', 'combine'):
+        updated = [selected if turn['number'] == number else turn for turn in turns]
+        return split_final_turn(updated, number, floor, condense, pending=pending)
     pool_turns, pool = _prepare_pool(context, selected['pool'], condense)
     context['pool'] = _sum_entries(pool)
     available = page_room - context['notes'] - context['pool']
@@ -686,11 +709,9 @@ def verify_page_plans(plans, read_inputs):
                         selected = next((turn for turn in previous['turns'] if turn['number'] == cause['turn']), None)
                         if selected is None:
                             raise ValueError
-                        if selected['kind'] in ('page', 'final') and (
-                                selected['characters'] > room or len(selected['targets']) > allowance):
-                            turns = prepare_final_turn(previous['turns'], cause['turn'], room, allowance, floor,
-                                                       inputs['condense'], pending=cause['pending'])
-                        else:
+                        turns = prepare_final_turn(previous['turns'], cause['turn'], room, allowance, floor,
+                            inputs['condense'], pending=cause['pending'], completed=cause['completed'], inputs=inputs)
+                        if turns == previous['turns']:
                             turns = split_final_turn(previous['turns'], cause['turn'], floor, inputs['condense'],
                                                      pending=cause['pending'])
                         if turns is None:

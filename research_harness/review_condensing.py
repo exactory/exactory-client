@@ -72,8 +72,9 @@ def validate_combination(block, output, measure, answer_bound):
         if (not isinstance(output, dict) or set(output) != {'block', 'summary', 'refs'}
                 or output['block'] != block['handle'] or not isinstance(output['summary'], str)
                 or not isinstance(output['refs'], list) or not output['refs']
-                or any(not isinstance(ref, str) or ref not in handles for ref in output['refs'])
-                or len(set(output['refs'])) != len(output['refs']) or measure(output) > bound):
+                or any(not (isinstance(ref, str) and ref in handles or isinstance(ref, dict)
+                            and ref in block.get('references', [])) for ref in output['refs'])
+                or len({digest(ref) for ref in output['refs']}) != len(output['refs']) or measure(output) > bound):
             raise ResearchError('invalid_value_review', INVALID_COMBINATION_MESSAGE,
                                 dict(block=block['handle'], combination_bound=bound))
     return copy.deepcopy(output)

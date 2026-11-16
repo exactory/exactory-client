@@ -98,13 +98,26 @@ def _expand_value(table, value, path):
     return expanded, count
 
 
+def _build_v7_handle_table(packet, artifacts, assignment):
+    from .openness_reading import find_protocol, PROTOCOL_V7
+    if find_protocol(packet) != PROTOCOL_V7:
+        return packet
+    from .openness_reading_v7 import build_handle_packet
+    return build_handle_packet(packet, artifacts, assignment)
+
+
+# Rows of later planned chain families use this same (packet, artifacts,
+# assignment) -> transient handle packet interface. Tables never travel.
+HANDLE_TABLE_BUILDERS = {key: _build_v7_handle_table for key in
+                         ('reading_turn', 'reading_final', 'reading_combine')}
+
+
 def _resolve_packet(packet, artifacts=None, assignment=None):
     if HANDLE_TABLE in packet:
         return packet
-    from .openness_reading import find_protocol, PROTOCOL_V7
-    if find_protocol(packet) == PROTOCOL_V7:
-        from .openness_reading_v7 import build_handle_packet
-        return build_handle_packet(packet, artifacts, assignment)
+    for member, build in HANDLE_TABLE_BUILDERS.items():
+        if member in packet:
+            return build(packet, artifacts, assignment)
     return packet
 
 
@@ -114,6 +127,12 @@ def _validate_v7_refs(packet, output, *, raw):
     findings = output.get('findings')
     openness = findings.get('openness') if isinstance(findings, dict) else None
     grounds = openness.get('grounds') if isinstance(openness, dict) else None
+    if 'page_plan_digest' in packet['reading_final']:
+        if 'closing' in packet['reading_final']:
+            grounds = output.get('grounds')
+        elif isinstance(output.get('targets'), list):
+            grounds = [ground for target in output['targets'] if isinstance(target, dict)
+                       for ground in target.get('grounds', []) if isinstance(target.get('grounds'), list)]
     for ground in grounds if isinstance(grounds, list) else []:
         references = ground.get('refs') if isinstance(ground, dict) else None
         if not isinstance(references, list):

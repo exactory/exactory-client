@@ -28,6 +28,15 @@
     },
     "research_harness.review_staged_protocol.build_packet": {
       "parameters": []
+    },
+    "research_harness.openness_final_pages.build_full_final": {
+      "parameters": []
+    },
+    "research_harness.openness_final_pages.build_final_packet": {
+      "parameters": []
+    },
+    "research_harness.openness_final_pages.build_validation_envelope": {
+      "parameters": []
     }
   },
   "callee_inventory": [
@@ -19250,7 +19259,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.native_review": {
-      "ast_sha256": "4fd7843cda6c970d3706f46aa76efd0af55be8e688cb85231cb560cff6ea6e52",
+      "ast_sha256": "83452d082cff805128be47cd9877db8e2629756afdee091649784e1c090f1e4e",
       "functions": {
         "_closed": "42e89b4afe40f000d59d6f9b80dc1335795381afadd36f76fc48f62e7f944cb3",
         "_nonempty": "9a6abcbc7e7271ccb4bb730efbeb22ba18339942e47553315e7c90ecd98da2bb",
@@ -19263,7 +19272,7 @@
         "render_finding_prompt": "efeeb4b41f1e814a4a69d74269068dcb1a0895c56b2e0d30cdb877890486684c",
         "render_finding_rule": "b1941337a5e436a11cfab7e0a258d54d0b4be2aa56ade680f86c43426f1b1f63",
         "require_assignment_identity": "8362970e19295e7272afb78b13f3c2d2d0a26af263d5fc49e75b03786f308165",
-        "uses_finding_contract": "1629d232bd656d344db4ba6594fe53ed09122e8e51c70acf1049ee8a86a73786",
+        "uses_finding_contract": "880273691b642d4f32ade592cfacbbec03d621d6ed1001c584e15a9e774faaf9",
         "validate_finding": "20a59ad438c54b6fce038516f4faa4d3a5c77d11ce71ebd9187be8e102f54e8c",
         "validate_output": "207260b20a33b964bebf5c4e91589e183d37428d4ce0db8f46f2aa16d956b9fb"
       },
@@ -19472,7 +19481,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.openness_reading": {
-      "ast_sha256": "752356d1c709a33b05855f533e14bcd09ce769fbe1d3aed6cb5f57af805eb785",
+      "ast_sha256": "4c65d3b5c13b731443fb9e1b783e61e758c9b9e1272b5a2c0b814f193513d956",
       "functions": {
         "_add_source": "bf750a7009979c804b515fe2fa49795c9649ea87dcafa53f80cef1045aeb2340",
         "_assemble_reading_turn": "9c44a6537d6d1fae1af0dc44b726cd7059da1ee593c0d2f800617c0c1655160a",
@@ -19525,17 +19534,17 @@
         "_verify_legacy_chain": "41054870c5f1ec80baf65c891368a9b87cf6f19e947cba8c1dede164d8d26f1d",
         "_verify_search_coverage": "3a0cd46a68ba59f71ffb2546853900e2a5c043b3b0387e40da13b15130f90589",
         "admit_reading_chain": "9966fa88293f0d3a3fce48ce97f6eac94e3e0cdf286b096df64e1daad097e168",
-        "choose_chain_protocol": "252e999435473ce1d5c887d66c91fe514af39fc20e9b4856a8d58ada91f854f0",
+        "choose_chain_protocol": "bf6d8aff9d2f1857eed57ce95c0ed3c7377d9a795265a15a0929f1fbf675a08a",
         "classify_retained_entry": "af520de26229a08ca63144c195d19cb46b839fedf9e03b354e62a4b4782734cd",
         "describe_projection_decision": "402158beaf69a5067c4296bbc463aac386936a18fce1885e571cd61caa424a57",
         "describe_reading_entry_bounds": "264163c88693d479311b469308fc43e27b0e04b3cdc445d57a457333189f2812",
         "describe_reading_receipt": "006654862c4f914da0064a7ab6d947086c5e4df923c24a5a718758bff5c88e73",
         "describe_reading_units": "05bd1bf570b20853560118ebd8d19b9bf5d4c3a2b0504c93f3bc22fabdceed17",
-        "find_binding": "44f8e7bb15c9ea1145c02fa11984823400f020c5cab290f512c020d81526313e",
+        "find_binding": "ef69c590f2637364f148bf3a17576e05d0be50d01303726f2edff2b2c5a95920",
         "find_chain_protocol": "46552355af0b8ed6d64f8a26e013d20dbfc86136e3689db9c2b1981291e5ecc7",
         "find_final_assignment": "ecdc0e4b739e56b8b7a197457ad0d3dd060c97a555ec349b5cf8b7df17ef20a4",
-        "find_protocol": "f8dee9693a5f4fcf18fd38e0340ff399f94c4664ecec20f9e16a619d1beb813f",
-        "find_stage": "0cfffc01660b23276cae9f3c802488b1329f79a0c7fea4edc77e484fc6a3ca4d",
+        "find_protocol": "ec2a90be424418b4519a35b82164a07282532f0138da1bb48d4b8626004d17b8",
+        "find_stage": "74e9cca1cc147f3b9d34ef75c1c28c5416c227dd43221f3994904395352afc60",
         "forecast_reading_chain": "9cd5eb169d11790172c806a720162c243304a4b68ec918fd251ac93968598ace",
         "has_deliverable_passage": "0df3ebffdc03c8a54e769bd5496aaaed46382f5d81a28a4d22283cd3bc3f8815",
         "is_math_openness_packet": "0959d5b2aaff8265c20719a67419e161665341735b5f0eec6edb10d2226f2129",
@@ -19803,17 +19812,17 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the activation of 0.91.0 (ruling 37): NEW_PROBLEM_CHAIN_PROTOCOLS becomes (PROTOCOL_V7, PROTOCOL_V6); no packet member, call, write or closed shape changes. Reviewed 0.91.1: a math openness packet that fits one turn stays a single native turn under (v7, v6); the condition reads the packet kind only, and no packet member, call, write or closed shape changes."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "39a6d5b1e56b959d887bc750346640d66b36f1ccd7a6e10f95da56fd2de9f7f3",
+      "ast_sha256": "d0d6654bdcdc388530a9b5a7e59aa603141336a68d4592f915764538f9931524",
       "functions": {
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
         "_append_unit": "f6cb4ac11ffc0db1bbc01ecf87ec1ca4e26a2ccc64a24c9aebe0b2c8d2ce16a7",
         "_bind_body": "2987a8c5ea3492523f72bf960edfd02af8b55595d336b5dceb7f2c1e22a7f8a5",
-        "_check_v7_admission": "9ddbc775e16edd78e721fbcd6b8cd6b9cc00707a429a6993dfb19ba2b00b8d0f",
+        "_check_v7_admission": "416f5e6f2996034b0b0bd5159992236cdd33f198c72924d6e2fffe202420d353",
         "_describe_checked_entries": "801983d7a44989fff7031afb726c8865c654c64be1bbbe6a43a4103672a0430a",
         "_describe_identity": "9bb7503add880d286c1090f5e1c17b70f16c710c36367bf548a1fb11dd75b8cb",
         "_describe_json": "7c6004e53039a80228d53341ea102c68af46e1cc51855d15c96893ebef98c919",
         "_require_selected": "1756d3596364595c60b215e7b5399de39b723df692cf0f0fc491826408282dbb",
-        "build_chain_state": "1ad5728da1cef9433124d25c51598ce80e77c9b76ba59ec74a4f15cd48569330",
+        "build_chain_state": "9e33587f2d5455a23df0c104a45545242994ff340945d01af2e3f396386d07da",
         "build_inventory": "543bab306bae3a905a1169963dd36f45157da878818d28597eb1ec34f091f24f",
         "compute_allowance_rows_bound": "43cedd0b96e55219fc11fc700beb8044053e677919c8c6088032814fc1e4703e",
         "describe_carried_pool": "b8c0046b42a8d1d5d4d96483e43f2c49afbc294acad7e86f5b965bc922646932",
@@ -20544,7 +20553,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.problem_openness": {
-      "ast_sha256": "6b8328bc991afcb0bb6c70f2ec9f8ec7393e25b4518094f60aedcc1f3a26f0a1",
+      "ast_sha256": "5475df5e74e64a35ebc79904ace36f9e9d862a63d0ab9b7d7dca6722fe276c24",
       "functions": {
         "_is_utf8": "802384d729df9c710bdc631eac4e0a7c325b5239cf38258e5f37412a5cae902c",
         "assess_openness": "30556492c6f2b1ea713c3d6a24af505ca668f988e5bb5d161d6073a70f8b1182",
@@ -20556,7 +20565,7 @@
         "describe_gap_fact": "23dcb18ade44f5a8d2fdfc01d68d1484828e68884d61bff384b46f47c7ddf298",
         "export_openness": "059b7ec53c5702791a1618a8bdb388dfefb72e4cbac8f90f3de06fb026660f1d",
         "list_reading_citations": "1e10edb49b268265b79893763303217b089a037928712089e634bd7c4eeb086b",
-        "prepare_openness": "1a2df4c6f385ad4d1318d90260507bf2a4523383fdd8c22e8114f02abd40c26a",
+        "prepare_openness": "d3a8611925c7c9e6249773f712bb5965ad7bb79b13c5772c84ce83b260416bcc",
         "serialize_record": "f7243934e28cc8ee92a7c6af903b9056bd8864249cf01df9d8466a5a00442d69"
       },
       "packet_call_digests": [
@@ -21415,7 +21424,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_composition": {
-      "ast_sha256": "0aa338b7c0deab37770773a0c01e8f93c1c88ddea0edfc4b28d4620523441882",
+      "ast_sha256": "4cb88c24804df1a13910d12c2dc24c2aa9d63df92ee48db7d978bb0fba5a7ce7",
       "functions": {
         "_attach_answer_schemas": "ab67073817ac74ddc43a7d45887023d0e5173deb10b9637f6e32d08c74c8a562",
         "_build_harness_fields": "76a404b204a7b182d785eefc7cf83b8b3091fd4c938b207ac3846d174a845217",
@@ -21466,7 +21475,7 @@
         "_reject": "8a1be411c619ada493fe42e138ef97bcedf1cdb07b45ee93a9b6ebb5f8b694bf",
         "_render_formulation_label": "3eab56c016f28d78c4eaaaf938d51443dec2bf04fa2e865e397513746c8a8699",
         "_require_array": "39bba1b2f9f355bec98247b48b11906ac5f72491b4380ca5cf1c54cf11770422",
-        "_resolve_target_id": "6b63cb6a7018e907ca9f126071f632c61e7c7edd485a44f72b39d4e3a2f9f504",
+        "_resolve_target_id": "bf5a57dc614631a39073ac9399d9e8aee4a307d54a69b6864ef86edec343306c",
         "_select_pages": "d4a48422f5f5699fcb39f4bcae15b5a5f6a54e2d273c80ae14956c9e8cc454eb",
         "_split_finding": "aa498937e607739d85cde2a664009e252247c0101628fd47931385405d9bef06",
         "_split_math_output": "b86c23374b0ceda4b85efdd16b45ed1f82e84eba8463ffe48a83f92e9df76eda",
@@ -21490,7 +21499,7 @@
         "_wrap_page_output": "b1b0da85199bc052f392ce8ea564595459555f1a1faab9d458b4de4419e8b641",
         "_write_path": "d4ebc5c46c5c12b3c05e3fca450b15dfa77ec1c1746600bcf8264f0bcd226294",
         "assemble_result": "8d8b9963ffec9fd4db58c07962e5dd5add2e1221874dadcb6a6bbbab141bf1cd",
-        "build_decision_rows": "68d5093d7853e636a1612e2886ed5e548dd9df30063f7eddf159ed33f69b8db5",
+        "build_decision_rows": "de7bf9556c3d8febf5ccbbe9c65b4c89c525ea9af5305847dcb6fcdcefc2b1ac",
         "build_root": "4d0c8c7e54bda4ec5a4d4d8b9d2f313e4f02a04d9e2d88985b909848e56be324",
         "compose_output": "c8d84d02bbccf2fb301027afac8e9ece9103685126efcc71388051c67b048868",
         "describe_owners": "d01b71779a9b02ee10b6dbc0ec3f92317b50d5af525c84cee6e2dd974a3c676a",
@@ -21499,7 +21508,7 @@
         "find_rule": "5ae5d93f96bb4a0b32468dc8d9608bbeaf5202b86872767a703b03cb2be2c429",
         "list_page_fields": "fc4c3fb6a41c7cefa154d9ddb196b3f1cac2166bb7641774783f89fe3cb402b5",
         "list_scalar_fields": "fb2d25fa78c42423850c2bddd12091985ee36133dd96ef608c5e745e7d301924",
-        "list_targets": "6d727be96c0040a8566e2b8860acf633c1e29c60d79a32138bf968690a99fca3",
+        "list_targets": "a33d534544b7e27deb57e31892ff1c8fce495c8b562d8c8283abd20c982625dd",
         "plan_incomplete_composition": "81a39319879ee7bac5de037e550b26c8c78c6767a6e892ce61c6415085daf8f3",
         "split_output": "15ee6ad17f00337fde6c16cda6dacc35f19ab6bbf2afc6f65df51e24dd36dcb5",
         "validate_closing_output": "6ba2989219b889245b2cff5cac846b46bd3b0559edde43d916c5194d1c5d6896",
@@ -21553,7 +21562,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_continuation": {
-      "ast_sha256": "be00348e5f134007ed6450fa55f91d2e628738ea2c88ade1ff5495d9e7026848",
+      "ast_sha256": "87136fc418848f7711d6a268926d97481e324fd28a0770dc9f320af7a236de13",
       "functions": {
         "_build_assignment_payload": "852d5d1d923e2a76803f72f49e0dd9aab3c6cb448cfa7a8807a80b5a87cd7f4e",
         "_build_run_payload": "d74332719fa5e822c1bdc1f4e8feb83fb6b76a964f1106185956b9670b2497fa",
@@ -21567,7 +21576,7 @@
         "_list_lineage": "82418b850a1f1352896e4fb7eb86c376099e02cf7639c35189226c2a983224fa",
         "_list_recorded_finals": "56efee52bfddd11cd39b68c9290b8c653a6bdaf8e893ef5f564de7507bc54f56",
         "_plan_capacity": "3028023c9278ac1ed39d35cfea830bd951fb0cdc91299a1cfd074cd6341d0c08",
-        "_plan_head": "f002a0d9550c0fd4be8215e7695804a000bd0f9918bfd88c5ac2b74681bbc32c",
+        "_plan_head": "2e3cb552359aba61f1851d9f39621854b302e2bdceb2f763005b18802b817a30",
         "_plan_openness_freshness": "15a0d5d09881f3417683d0778265b3031c782a784fc2ad195dbe74a36a61500c",
         "_plan_pending_call": "4fb7347433b3599c8e4fdbaddefb307d2de0ed714e14e93141bae3eb2dde94c4",
         "_plan_recording": "3dab2e4318a5924715b81e71d381f4fdc44d59bec1dc2125fec69456bb2e1bc4",
@@ -21836,7 +21845,7 @@
       "reason": "Reviewed explicit capacity replacement command context and frozen refusal notice forwarding into both real parts fitters, with exact candidate preflight and strict smaller-request checks. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_handles": {
-      "ast_sha256": "7257d93f0eccad48edf5fef1587f80cad93ebfba8e1b1c5fe5e51b2c7481d91e",
+      "ast_sha256": "0c539e1886dd6d9dcb6e791b3e8a18f9287054a38b709af0226404503af1d636",
       "functions": {
         "_expand_value": "3d9624a1411cd821bd3fdcbe417072a07a432c8099b2d7dfa53c46fae504cfaa",
         "_refuse_handle": "915d5b47f24ddee7a7a3492784adfdd8386f9db2b8bfb1470e2770bc84c650ab",
@@ -22810,7 +22819,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "b7788a3a3d7368b3373a19cc593bbc61bdf2662a87cc221c4862a72e8162a027",
+      "ast_sha256": "d5b24aa59728618a71adb157c383de65329a776135498e2300fb521648ed0fb6",
       "functions": {
         "_assignment_state": "805eca7b4483852dbee0f8e05928cde22acbc7c7be8ec46ba127c3e71a0ddcbc",
         "_bars": "fd41a7b94078e8e0761696db4a7cc67b063cbb5787f76d6d3dae65fcc7fe5f9f",
@@ -22873,7 +22882,7 @@
         "build_probe_prompt": "54844f87f0fe366a9faa59c946d9ead80149d0b62d047c288579b11bafc1579e",
         "build_problem_subject": "e96122a41158bfff642fd370cbd33d7f54ee259af8fbc6521565a58df4fc7005",
         "build_rubric_objection": "b90e9c2ef1e913c48efb2bd743ff95efa254b2da574a4fea211248c864bc7707",
-        "canonical_prompt": "1c6214ce446e3c043fff555600eda43fec3ba411c043c2cb7bbdfd9fb6f07633",
+        "canonical_prompt": "d53b24972379614bd04e615dfeed75201baa70776cf98b3ec45b0f09ccc7f1ad",
         "collect_adjudication_evidence": "8ef3c2bb7ebcd0bfe25dcd84a272ae0f9824a51137616936f28ce481999ddcaa",
         "collect_carried_records": "f9962ad55bb34a6a6a01507c872b4cfb771413ba3fd73d38e9f37c6ad4ac0f6f",
         "collect_historical_bar_objections": "0cce846dc00f86534e2bba1197859c3395e7ca521046af8d1bd8cae6f5a6d35e",
@@ -22900,7 +22909,7 @@
         "has_pending_invocation": "1100f816ca4769d642bcb040f697439bfd738a2a00c832bbbf9b153965e9ac76",
         "has_problem_result_rubric": "f7dcd7d5cc3c12342b63edfe47e3608e43d7c23902b5f02f268d9d5ef6767a8e",
         "has_verified_history": "80bcffdb051ef2a341dc4bd4a86f1dff05304d863526c75525803e349074c3bc",
-        "invoke_assignment": "e3d47a744d920c6e5593f2cb7839cc712ba5e84d5c11dbcdab115c0e2a46792b",
+        "invoke_assignment": "b76315eb92406db5663fa7d5730a08a635f890b66a096099690ff028f40aebec",
         "is_dead_assignment": "0e87b884f14015390061ab33a6f17a4a95770ae46620127610f25244a62fcd85",
         "is_previous_prompt": "6a89da49434d83987b303155068983a6499cb140a6eb0b906a4e6c1043537f42",
         "is_version_2_problem_result": "b12d8be5451fd095516bf97d562c067466acb6d216815b6fe20a93f9e3520a0d",
@@ -22912,7 +22921,7 @@
         "read_raw_observation": "14e6b6c7ca97a4e3992d908f1d94f3add3a92bee7561ace63d220fb8cbf06834",
         "read_route_runtime": "e60df76fe94a9b3f2b98373e22d2c1bc846ca050d50044e4744a7e60fe71bca2",
         "record_adjudication": "f65c72f2a1d78c38ccc43754e518ff050beb086db56d42f3b81322be2297d5db",
-        "record_assignment": "17af460848d614510cc75c2bc879b77d44269dbcc1366ef7719202d2cf92c062",
+        "record_assignment": "a0d64882a55fd1a60f08eec1540444f3a8cee55e868cca8fab50c4ee6f8891df",
         "record_attempt": "7145b51d5cdbea1477432a5cce61efb366e8dd94540e082fde33066063c4b8f3",
         "record_context_event": "725358847e29626ae330f19fe7a2b1530b762238e0893f3021cebbe0c70e49eb",
         "record_route": "eaa1d126f04ed9ff04f92ff38836725f9ba40802efcda880e2c6adc7b94d874e",
@@ -23013,7 +23022,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.review_refusal": {
-      "ast_sha256": "2d1de67b752733231719c8ea535fc4b6efb93ece5bed9c849eceb36c79e29a43",
+      "ast_sha256": "4fea70621b4cc4a126dc9b6529e5a5338ec169a9254697ca8c743adeab62d6b7",
       "functions": {
         "_find_delivered_part": "6fb04e71028feef3ef7ec90682db4f645b14889b69352c9a73a86a0bd5c82bac",
         "_frozen_pdf_capture": "d720f1747e180c4fc1efc6a9923a1691e1b4e554f52a1f3f1879fba5c6589f9b",
@@ -23022,7 +23031,7 @@
         "_validate_staged_final": "d4504365f23b3da1c22d18bafeea71f7360ee5f7b6265fb511f154c37e327fe0",
         "_validate_staged_objections": "76830b97bc4f81164c2bb4a0aeb7f66ffd873e9dcf40c1de644d6e0f9eda180d",
         "_validate_staged_pages": "4179cca8a7d476662b3ca834aecf2d9b38c61cda5a09e4afc9a9a94dac6533bb",
-        "classify_observed_output": "a08d3d964206a7e966955eeefced49d8d9024abfded97ea3523119ea8c9559d4",
+        "classify_observed_output": "454f890a1175bab303394b12eda6d8d477d247ea54861239c56cf89c4dfa1cc7",
         "contract_check": "0d40814fe91e0e1eb703c09e1f4643a73138d0da3f0860ab5e8026680b2dee5f",
         "evidence_arrays": "71556454ae0296cc56ad3abfa9313c7d76146dd4c74e327a0a7dca415d9a422c",
         "record_native_refusal": "d40201c986ad03e7127377e2282355b8f77565f15ff77487e69ccb70786b53bf",
@@ -23221,7 +23230,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_route_capacity": {
-      "ast_sha256": "e1578f8439864658846cb0411ff6b4fdf2fb7f385ab74391daae56603c8fe98b",
+      "ast_sha256": "1589c88047b7b9fcf7caccb2fbacdc0177fdcd9eaea12fdbb2c51bb0367afc2c",
       "functions": {
         "_build_serving_parts": "8f2f7be1d7e1d4cc20fa124af779a48e77d41ab31cb6c7aed1fe3ed6a3de3afe",
         "_build_serving_repair": "c50aaef3ccfcccf6064f9a4cdaa0a0f52111886dd9b185936b6d1e5a38ab47ca",
@@ -23229,7 +23238,6 @@
         "_clear_carried_answers": "ec3247ebd2ea6832479c9633ad6cb8228221315e54d452f0af42120032ad328d",
         "_clear_material": "90e10993e38c73281ba419d352e38cc8dcc44979c5fd71f6c4b530cb6bb0545a",
         "_collect_strings": "ec0518deeb23b8da9b1eacd1634dc2e018c3e69fcae3c5de317a52cb49823629",
-        "_count_capacity_pages": "cae4c2e03e90999bbd175c22935974afc10b57818474e0647c093c8c65ff1d52",
         "_create_profile_row": "656620b16bfdb3289c0add9eac47656157a710ac05bf768a93ce8fa8d4c9d31c",
         "_describe_answer_bounds": "5090c21e4d8a121f2516bf8de9c4d0033bd47c05b78254d38db5fa8ef7c13766",
         "_describe_limit": "3f2b36cb610d10b9e07e4ba53e4dc873975976f9ae32ddd4dd90f1937217531a",
@@ -23251,14 +23259,14 @@
         "derive_plan_task_limits": "0acf843326aadd0c9c146f587ae50629ae7f65217869cb9a51b47a6326d2a6c2",
         "derive_turn_task_limits": "dc3641c6ae1b8474f3c824220ab18a8268959be724cb6e9354bd2121a301f3e6",
         "describe_assignment_capacity": "eb2c92c7ff7184e20c1df0ca440768bc8b0e54f1753f39bcd20de5d232e7f669",
-        "describe_assignment_kind": "7feb00e09fe70fa10c53592a1178eeee0c4b5eee590258ff59bcd3dbdc1f7602",
+        "describe_assignment_kind": "1dbb5ca7228dac98907ad67e1a310df9e5aafe3f5c0eae851abb4ebf7de8879a",
         "describe_assignment_limits": "7d463bd8c8479f7a8f0b3874cb734df1acd143601602ed3a83c90530145c2443",
         "describe_assignment_task": "2b71c68cb791cd1175e1fa915606d94a502782dd6e154690bde3cd3720a7c349",
         "describe_assignment_warning": "7b4cf02e9d3aeaf2314a64c6af65361dca797dfb4a5288ffe4d83edf851e69fe",
-        "describe_attempt": "87d4342569dcc3b1fb98c6cd04cb3442a338b723d1624e86c4f85e3124f0457e",
+        "describe_attempt": "eab7bcf01663bfe5c5017b0f0a1bc2c2268793b9dd4d95e56564d0cbee322e44",
         "describe_binary_rules": "10dba71afb020afb5ccb28e84a6d0cb06bfb3d4b2a91d74ce4e0702d67b56b5e",
         "describe_capacity_decision": "963e313d4c944dac5960bd529faa50927ac7fa23a0b6adb2c3c5c27000727706",
-        "describe_capacity_forecast": "b6ff4e4c28af669d1f4381bbd35d18f8292efece677df6bd4ac650b4c823217e",
+        "describe_capacity_forecast": "19966e69c993d0661f1cf3aff1405380315e9d605f85a3ff21914f3505f85f7a",
         "describe_capacity_recovery_row": "18d1b563addad3079dd9ee5d96a20f9dc4372525839cc588f46a75f5a500c906",
         "describe_cli_version_status": "dd5d2885bce348ca26f78808bf2394ec24236d47ade407ef2f261853f4333a04",
         "describe_final_projection": "819899b335505b41409f8a284bc81c441a785d38cd472df54c318c62f8f07201",
@@ -23269,28 +23277,28 @@
         "describe_next_capacity_call": "ce1e087a414cac013c6e7862582c8ca6df7a1ff580dab2a3b3494901710c8bea",
         "describe_open_route_reports": "22d125513bd35b87825efbcd1c45894cd152084a73413e5dde760f1d27aba2b4",
         "describe_output_warning": "21de96d5af49fd055650e94897fadd5ab1bc0e52f6b62e24ade24413a0e1538f",
-        "describe_plan_preflight": "465cdd6f10a1bda16b379b5aa7ababac95c4e0dd3bb297c7674787b0c1be7dd2",
+        "describe_plan_preflight": "346aa1f1fdd478a2d9412378f361a34c1f90399fa45de639d19bb6bf90385ac5",
         "describe_route_capacity": "dc8c5c7fccc98f9fdaf056b80bbc9f508349b701d8981f39f27e2d819d94e024",
         "describe_route_class": "8c2e5fea846a7893c0a6d377dd0dbd77fa08d04cdb5b5dcd89b77cf8dae6cc92",
         "describe_route_report": "9b863e3edc15702489089729a9d56a67815a6b58bf38dcbd91810daee9f78f0f",
         "describe_session_forecast": "5f805fcd2f7eb89ac21c5e0ac4024b6a2711846ab5caa0b6aac58836327b1ba0",
         "describe_session_stop": "65cfe3b9fb9d3f1bf3d0506b7f01594166971485799cafe4497a32b995166af5",
         "describe_size_report": "7be62632b8c2997350e0fa36cc9e504b9c594f0b8744b9236c1a5574f63ed7e0",
-        "describe_task": "3eaaccea9d8ff817ee7cb4d4c8027cf810d60617dd511d85f6fd8dd6d63a1cc4",
-        "describe_task_kind": "899dbb55839bc249bc5d1670c0141ced1ac9e9b159a27ba9ce19a55f6e928fb1",
+        "describe_task": "ecfea327b2a8c2bb6cef77d6ccf962200075341a2e24ede9980950713de0ba6b",
+        "describe_task_kind": "05fab3a2832bf013cdf64b6ac04a8443b88732f8d58c51d81ce25b1429b6a762",
         "describe_text_room": "32432cfaa36ebb629ce9cbb6ce7441821d37da4b4284dd5fd2d769748a113169",
         "describe_unsolved_reviews": "b10c5662b5a0d27327b1b6e1a3145ad94acfab170899c5fe0fc1a0b0cdd12fd1",
         "describe_work_units": "468b91882eec9e12c79f14d7204231f94f8692d48afe20770440099acb5d84a7",
         "divide_room": "479df84167dc68c68051cf92f213230c797c15f1ac495e77fdb4b451d82ca270",
         "find_serving_routes": "18ca735abee774034b5023e33a7181caba87437212369e5ed2b131726f85f776",
-        "list_capacity_recovery_rows": "f7eb46440b7c38d38b47078dae1c6ecaa59472ca7381ebdb59a2c37863b86e34",
+        "list_capacity_recovery_rows": "0771a2174c7842a7d6c0f6b3968e34de22096ee3480aeea71ec7e2d59338ff4e",
         "measure_capacity_value": "24609ddec40349650469c624e2e8d9a807d7415e78a862b95afaf55d1297914b",
         "measure_request": "1615879024ec19d63e6243105beb627438f6d407aa9cc8fb5f7dcad5ce6b6abb",
         "merge_profile_rows": "be408c3437ff8b29f6436f534c5c9d273232ad182c39cc7068eb587fb2648b3b",
         "pack_profile_prior": "cf2f899f6e103c3086dc749c6ad02492e7cb9d493c94d904c9e468847b82f22d",
-        "plan_capacity_recovery": "3410862b70e8e3391102986923ceee2711b015c54c7554c4d74f1d9faf8156b6",
-        "plan_chain_capacity": "d8810b055fe9d42f2bb2a41bbc1b8a8c32b3a083053f660fc7a398c59e096fb1",
-        "prepare_assignment_capacity": "d50174f1332566ca52a1ad62dfa14d9effb434d8347bd244ec90492af63a99c3",
+        "plan_capacity_recovery": "cc965b98ec02ca0cbadb98eecd49678402ecc04fe6545c64bf1ade154e7a65fb",
+        "plan_chain_capacity": "0e62c9a62e26d129185e2cb9ddd21ce71e3b7d5064e74e2540f59e80dc9750dc",
+        "prepare_assignment_capacity": "4906f06a32317971f5989c12fd9f31976a7af6ee96f89c2ca0679e42fdd7bbc1",
         "qualifies_for_output_profile": "0b6dc9c47e30814e0677cf564d8471f1242e0b88c51e852b32df6b03846c08fd",
         "read_chain_capacity_plan": "bf38987008e1c94cba95973349a93c3130505138d155212b78db7f5650e32bb3",
         "read_installed_cli_version": "7ab8a808e85c473964f019ff6052eb71f04a036c0115a21d0b491c00f5ee310b",
@@ -23300,7 +23308,8 @@
         "require_covered_assignment": "26b8f1c9a35563db780e2428568c6c463c4659bae0b89489cc0817c27d79b73d",
         "scale_capacity_probe_size": "ef76790aa32dae503bd20a3b46ae0c47565600786dcc1eceedba0336a7e7bc07",
         "select_capacity_probe_size": "9a4958d5b028cdbdfdd1494c77d626f86a17cb2bfe5275d7d9a0d20d2d741792",
-        "select_task_limits": "b0e757a70c28dfddd3c48c8d1cff38e710439ddbbaf468d7475f904f1e500d59"
+        "select_task_limits": "a8eed35bbff03e60218eef058514db4b509b570b5d60a81949b60c5244eea1ef",
+        "count_capacity_final_turns": "bb0a6aab80d81d7e69522a1f80d1dba33d48024f16d255858e54d799b9795834"
       },
       "packet_call_digests": [
         "014bddc9eb9c24bab4b458c02b0ce7109edf1c96217bab41fdb89ce11cde32f5",
@@ -24810,6 +24819,34 @@
       },
       "packet_call_digests": [],
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+    },
+    "research_harness.openness_final_pages": {
+      "ast_sha256": "6ce18389bca2cef8869ba6164e5b7023e03950f2fc378f38d1010da292a37a39",
+      "functions": {
+        "read_binding": "2da24aa0945dc4a3857c77349290b841384ef906fff06f5393184d39aac5d679",
+        "read_page_plan": "edcd39f87509ab69c60c42f8c20a25f9cf0f5e7d311845411344fcf964fe32f7",
+        "read_final_currency": "5f1449fdbdfd0bc9550c61381498c4a926e56b893a83811609e26f9ffaacb907",
+        "measure_page_room": "9007c819098edbc3bab75f8aad9d768f5c8e115dc2070bad1681629ffa8c48b5",
+        "build_full_final": "b6acb1355e4742baa41bf322b316ca7595bf07274aaf40313a01ee19e5eaa531",
+        "build_final_inputs": "1b5e01642db2519e14b5454de3a2e59eaa6d1ab5ad8524ad40cbe2e7e656023f",
+        "list_final_progress": "7f408a109e7bbf99406e6dd85d354aa073fde6e60db54e226506d1c50db6dea1",
+        "prepare_final_packet": "fb9cd4e485f54f1aacdbc9b547ec8ddf97701e5836035c0d2c95fd66f3b48d86",
+        "publish_page_plan": "ba2ade2d94b18ebde66d4e82e843d7845bee8d192304b30556c61fc33f909ab1",
+        "build_validation_envelope": "c5da8a7878502c672cea8214a46541e7d64ea1a14f8ff5871a487cb226f0342a",
+        "list_page_outputs": "18373aa1334deb468cfb8a94555dfc70ec0f48242ce36d2ae1582914dd122e39",
+        "build_final_packet": "8d6a069f0258594639ab5f18a46df033c34d75b928b8e6ce716a727b96776f98",
+        "project_final_output": "8d4784bfaf92326b28b835e66c2b3ad17e760f3c5ed875916387f3e08976a65d",
+        "list_composite_turns": "d5bb3db6ad6173c90067328e1b340795aa81cf7e3d03a35cd02138de47ccc38e",
+        "read_composite_currency": "4bbc0254f15e8a36c4b1970c0a776a1a4103a1e34f3bbf380decbdedd5ff23e9",
+        "validate_composite_output": "0dd5efef37643163addedb37e4819b75d5385a9dc516f495577ffb2f70c89053",
+        "prepare_closing_composite": "bdac20df20ad370d370d0f1c815b02f073ddcc095947c675346bbc44cfe8c224",
+        "verify_final_page_plans": "a405a42eb775e44a94882b89f94d6526d90686b0024e7a3cd4cdfb62192235f7",
+        "verify_final_turn_binding": "2419d5e4b76cf4fbda5e4354aa96f2ce14764eaa0fc38341af8f83eff45190ba",
+        "supply_block_rows": "55c079bec8c67b1f87ad10412157e98c6e50fcf44d2f66d694a55fb8c5b72795",
+        "resolve_entry_request": "e4cb88aaf2be4e418b1f7b9451dd8dc21b47eb7e5ed3567e86b45c4bda0a5e50"
+      },
+      "packet_call_digests": [],
+      "reason": "Reviewed v7 page-plan integration: bounded packet selection from immutable plan, inventory and state artifacts; complete native validation stays transient."
     }
   },
   "certified_callers": {
@@ -40016,16 +40053,16 @@
           "quantity": "identifiers"
         },
         "entries": {
+          "class": "collection",
+          "quantity": "excerpts",
           "bound": {
-            "serialized_characters": "selected_request_input_limit"
+            "serialized_characters": "current_material_allowance"
           },
-          "class": "carried",
           "entry": "Q4",
           "fixture": "native_math/v7-bounded-turns",
           "items": {
-            "$ref": "v7_excerpt"
-          },
-          "quantity": "excerpts"
+            "$ref": "v7_final_entry"
+          }
         },
         "fill": {
           "bound": {
@@ -40048,7 +40085,7 @@
           "fixture": "native_math/v7-bounded-turns",
           "ground": "Forecast rows cost at most GAP_ROW_CHARACTERS (400) per gap_rows; reviewer rows include text of at most 600 characters and charge their exact wire size to the target grant. The two row classes and their exact closed members are declared separately as v7_forecast_gap and v7_reviewer_gap; items admits their combined vocabulary.",
           "items": {
-            "$ref": "v7_gap"
+            "$ref": "v7_final_entry"
           },
           "quantity": "gaps"
         },
@@ -40209,6 +40246,145 @@
         },
         "unread": {
           "$ref": "stage3_unread_final"
+        },
+        "page_plan_digest": {
+          "class": "reference",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 64
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns"
+        },
+        "final_turn": {
+          "class": "fixed",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 20
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns"
+        },
+        "closing": {
+          "class": "carried",
+          "quantity": "targets",
+          "bound": {
+            "serialized_characters": "current_material_allowance"
+          },
+          "entry": "Q7",
+          "fixture": "native_math/v7-bounded-turns",
+          "members": {
+            "rows": {
+              "class": "collection",
+              "quantity": "targets",
+              "bound": {
+                "serialized_characters": "current_material_allowance"
+              },
+              "entry": "Q7",
+              "fixture": "native_math/v7-bounded-turns",
+              "items": {
+                "$ref": "v7_final_entry"
+              }
+            }
+          }
+        },
+        "unread_summary": {
+          "class": "fixed",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 1024
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "members": {
+            "digest": {
+              "class": "reference",
+              "quantity": "identifiers",
+              "bound": {
+                "serialized_characters": 64
+              },
+              "entry": "Q1",
+              "fixture": "native_math/v7-bounded-turns"
+            },
+            "count": {
+              "class": "fixed",
+              "quantity": "identifiers",
+              "bound": {
+                "serialized_characters": 20
+              },
+              "entry": "Q1",
+              "fixture": "native_math/v7-bounded-turns"
+            },
+            "causes": {
+              "class": "fixed",
+              "quantity": "identifiers",
+              "bound": {
+                "serialized_characters": "selected_request_input_limit"
+              },
+              "entry": "Q1",
+              "fixture": "native_math/v7-bounded-turns",
+              "members": {
+                "provider_refused": {
+                  "class": "fixed",
+                  "quantity": "identifiers",
+                  "bound": {
+                    "serialized_characters": "selected_request_input_limit"
+                  },
+                  "entry": "Q1",
+                  "fixture": "native_math/v7-bounded-turns",
+                  "members": {
+                    "rows": {
+                      "class": "fixed",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 20
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    },
+                    "characters": {
+                      "class": "fixed",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 20
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    }
+                  }
+                },
+                "not_delivered": {
+                  "class": "fixed",
+                  "quantity": "identifiers",
+                  "bound": {
+                    "serialized_characters": "selected_request_input_limit"
+                  },
+                  "entry": "Q1",
+                  "fixture": "native_math/v7-bounded-turns",
+                  "members": {
+                    "rows": {
+                      "class": "fixed",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 20
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    },
+                    "characters": {
+                      "class": "fixed",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 20
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       },
       "quantity": "identifiers"
@@ -41244,6 +41420,1316 @@
         }
       },
       "quantity": "targets"
+    },
+    "v7_final_entry": {
+      "bound": {
+        "serialized_characters": "current_final_material_allowance"
+      },
+      "class": "fixed",
+      "entry": "Q4",
+      "fixture": "native_math/v7-bounded-turns",
+      "members": {
+        "end": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "handle": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "kind": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "purpose": {
+          "bound": {
+            "characters": 200
+          },
+          "class": "fixed",
+          "entry": "Q4",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "texts"
+        },
+        "sha256": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "start": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "status": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "targets": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "collection",
+          "entry": "Q7",
+          "fixture": "native_math/v7-bounded-turns",
+          "items": {
+            "bound": {
+              "serialized_characters": "selected_request_input_limit"
+            },
+            "class": "fixed",
+            "entry": "Q1",
+            "fixture": "native_math/v7-bounded-turns",
+            "quantity": "identifiers"
+          },
+          "quantity": "targets"
+        },
+        "text": {
+          "bound": {
+            "characters": 600
+          },
+          "class": "material",
+          "entry": "Q8",
+          "fixture": "native_math/v7-bounded-turns",
+          "ground": "project_own_turn charges the serialized row including text to the target allowance.",
+          "quantity": "texts"
+        },
+        "unit": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "block": {
+          "class": "reference",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 200
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns"
+        },
+        "summary": {
+          "class": "carried",
+          "quantity": "texts",
+          "bound": {
+            "serialized_characters": "combination_answer_bound"
+          },
+          "entry": "Q4",
+          "fixture": "native_math/v7-bounded-turns"
+        },
+        "refs": {
+          "class": "collection",
+          "quantity": "citations",
+          "bound": {
+            "serialized_characters": "combination_answer_bound"
+          },
+          "entry": "Q17",
+          "fixture": "native_math/v7-bounded-turns",
+          "items": {
+            "$ref": "v7_artifact_ref"
+          }
+        },
+        "entry": {
+          "class": "reference",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 200
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns"
+        },
+        "row": {
+          "class": "collection",
+          "quantity": "targets",
+          "bound": {
+            "serialized_characters": 360
+          },
+          "entry": "Q7",
+          "fixture": "native_math/v7-bounded-turns",
+          "items": {
+            "class": "fixed",
+            "quantity": "identifiers",
+            "bound": {
+              "serialized_characters": "selected_request_input_limit"
+            },
+            "entry": "Q1",
+            "fixture": "native_math/v7-bounded-turns"
+          }
+        },
+        "value": {
+          "class": "collection",
+          "quantity": "targets",
+          "bound": {
+            "serialized_characters": 360
+          },
+          "entry": "Q7",
+          "fixture": "native_math/v7-bounded-turns",
+          "items": {
+            "class": "fixed",
+            "quantity": "identifiers",
+            "bound": {
+              "serialized_characters": "selected_request_input_limit"
+            },
+            "entry": "Q1",
+            "fixture": "native_math/v7-bounded-turns"
+          }
+        },
+        "condition": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "formulation": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "outcomes": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "items": {
+            "bound": {
+              "serialized_characters": "selected_request_input_limit"
+            },
+            "class": "fixed",
+            "entry": "Q1",
+            "fixture": "native_math/v7-bounded-turns",
+            "quantity": "identifiers"
+          },
+          "quantity": "identifiers"
+        },
+        "target": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "label": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "reference": {
+          "$ref": "v7_artifact_ref"
+        },
+        "title": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        }
+      },
+      "quantity": "excerpts"
+    },
+    "v7_combine_binding": {
+      "class": "fixed",
+      "quantity": "identifiers",
+      "bound": {
+        "serialized_characters": "plan_final_request_bound"
+      },
+      "entry": "Q1",
+      "fixture": "native_math/v7-bounded-turns",
+      "members": {
+        "protocol": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "chain": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "turn": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "plan_digest": {
+          "bound": {
+            "characters": 64
+          },
+          "class": "reference",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "inventory_digest": {
+          "bound": {
+            "characters": 64
+          },
+          "class": "reference",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "state_digest": {
+          "bound": {
+            "characters": 64
+          },
+          "class": "reference",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "subject_digest": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "claim_digest": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "reviewer": {
+          "$ref": "v7_reviewer"
+        },
+        "page_plan_digest": {
+          "class": "reference",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 64
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns"
+        },
+        "final_turn": {
+          "class": "fixed",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 20
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns"
+        },
+        "capacity": {
+          "$ref": "v7_capacity_binding"
+        },
+        "block": {
+          "class": "carried",
+          "quantity": "excerpts",
+          "bound": {
+            "serialized_characters": "current_material_allowance"
+          },
+          "entry": "Q4",
+          "fixture": "native_math/v7-bounded-turns",
+          "members": {
+            "handle": {
+              "class": "reference",
+              "quantity": "identifiers",
+              "bound": {
+                "serialized_characters": 200
+              },
+              "entry": "Q1",
+              "fixture": "native_math/v7-bounded-turns"
+            },
+            "characters": {
+              "class": "fixed",
+              "quantity": "identifiers",
+              "bound": {
+                "serialized_characters": 20
+              },
+              "entry": "Q1",
+              "fixture": "native_math/v7-bounded-turns"
+            },
+            "artifact": {
+              "$ref": "v7_artifact_ref"
+            },
+            "entries": {
+              "class": "collection",
+              "quantity": "excerpts",
+              "bound": {
+                "serialized_characters": "current_material_allowance"
+              },
+              "entry": "Q4",
+              "fixture": "native_math/v7-bounded-turns",
+              "items": {
+                "$ref": "v7_final_entry"
+              }
+            }
+          }
+        },
+        "plan": {
+          "$ref": "v7_final_plan"
+        }
+      }
+    },
+    "v7_page_plan": {
+      "class": "fixed",
+      "quantity": "identifiers",
+      "bound": {
+        "serialized_characters": "stored_state_characters"
+      },
+      "entry": "Q1",
+      "fixture": "native_math/v7-bounded-turns",
+      "members": {
+        "protocol": {
+          "class": "reference",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 200
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns"
+        },
+        "chain": {
+          "class": "reference",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 200
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns"
+        },
+        "plan_digest": {
+          "class": "reference",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 64
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns"
+        },
+        "state_digest": {
+          "class": "reference",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 64
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns"
+        },
+        "currency": {
+          "class": "fixed",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "members": {
+            "packet_digest": {
+              "class": "reference",
+              "quantity": "identifiers",
+              "bound": {
+                "serialized_characters": 64
+              },
+              "entry": "Q1",
+              "fixture": "native_math/v7-bounded-turns"
+            },
+            "inventory_digest": {
+              "class": "reference",
+              "quantity": "identifiers",
+              "bound": {
+                "serialized_characters": 64
+              },
+              "entry": "Q1",
+              "fixture": "native_math/v7-bounded-turns"
+            }
+          }
+        },
+        "turns": {
+          "class": "collection",
+          "quantity": "turns",
+          "bound": {
+            "serialized_characters": "stored_final_turn_count"
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "items": {
+            "class": "fixed",
+            "quantity": "identifiers",
+            "bound": {
+              "serialized_characters": "selected_request_input_limit"
+            },
+            "entry": "Q1",
+            "fixture": "native_math/v7-bounded-turns",
+            "members": {
+              "kind": {
+                "class": "reference",
+                "quantity": "identifiers",
+                "bound": {
+                  "serialized_characters": 200
+                },
+                "entry": "Q1",
+                "fixture": "native_math/v7-bounded-turns"
+              },
+              "number": {
+                "class": "fixed",
+                "quantity": "identifiers",
+                "bound": {
+                  "serialized_characters": 20
+                },
+                "entry": "Q1",
+                "fixture": "native_math/v7-bounded-turns"
+              },
+              "targets": {
+                "class": "collection",
+                "quantity": "targets",
+                "bound": {
+                  "serialized_characters": "current_material_allowance"
+                },
+                "entry": "Q7",
+                "fixture": "native_math/v7-bounded-turns",
+                "items": {
+                  "class": "reference",
+                  "quantity": "identifiers",
+                  "bound": {
+                    "serialized_characters": 200
+                  },
+                  "entry": "Q1",
+                  "fixture": "native_math/v7-bounded-turns"
+                }
+              },
+              "characters": {
+                "class": "fixed",
+                "quantity": "identifiers",
+                "bound": {
+                  "serialized_characters": 20
+                },
+                "entry": "Q1",
+                "fixture": "native_math/v7-bounded-turns"
+              },
+              "context": {
+                "class": "fixed",
+                "quantity": "identifiers",
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "entry": "Q1",
+                "fixture": "native_math/v7-bounded-turns",
+                "members": {
+                  "page_room": {
+                    "class": "fixed",
+                    "quantity": "identifiers",
+                    "bound": {
+                      "serialized_characters": 20
+                    },
+                    "entry": "Q1",
+                    "fixture": "native_math/v7-bounded-turns"
+                  },
+                  "target_allowance": {
+                    "class": "fixed",
+                    "quantity": "identifiers",
+                    "bound": {
+                      "serialized_characters": 20
+                    },
+                    "entry": "Q1",
+                    "fixture": "native_math/v7-bounded-turns"
+                  },
+                  "target_minimum": {
+                    "class": "fixed",
+                    "quantity": "identifiers",
+                    "bound": {
+                      "serialized_characters": 20
+                    },
+                    "entry": "Q1",
+                    "fixture": "native_math/v7-bounded-turns"
+                  },
+                  "notes": {
+                    "class": "fixed",
+                    "quantity": "identifiers",
+                    "bound": {
+                      "serialized_characters": 20
+                    },
+                    "entry": "Q1",
+                    "fixture": "native_math/v7-bounded-turns"
+                  },
+                  "pool": {
+                    "class": "fixed",
+                    "quantity": "identifiers",
+                    "bound": {
+                      "serialized_characters": 20
+                    },
+                    "entry": "Q1",
+                    "fixture": "native_math/v7-bounded-turns"
+                  },
+                  "closing_room": {
+                    "class": "fixed",
+                    "quantity": "identifiers",
+                    "bound": {
+                      "serialized_characters": 20
+                    },
+                    "entry": "Q1",
+                    "fixture": "native_math/v7-bounded-turns"
+                  },
+                  "row_characters": {
+                    "class": "fixed",
+                    "quantity": "identifiers",
+                    "bound": {
+                      "serialized_characters": 20
+                    },
+                    "entry": "Q1",
+                    "fixture": "native_math/v7-bounded-turns"
+                  }
+                }
+              },
+              "parts": {
+                "class": "collection",
+                "quantity": "targets",
+                "bound": {
+                  "serialized_characters": "current_material_allowance"
+                },
+                "entry": "Q7",
+                "fixture": "native_math/v7-bounded-turns",
+                "items": {
+                  "class": "fixed",
+                  "quantity": "identifiers",
+                  "bound": {
+                    "serialized_characters": "selected_request_input_limit"
+                  },
+                  "entry": "Q1",
+                  "fixture": "native_math/v7-bounded-turns",
+                  "members": {
+                    "handle": {
+                      "class": "reference",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 200
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    },
+                    "entries": {
+                      "class": "collection",
+                      "quantity": "excerpts",
+                      "bound": {
+                        "serialized_characters": "stored_state_characters"
+                      },
+                      "entry": "Q4",
+                      "fixture": "native_math/v7-bounded-turns",
+                      "items": {
+                        "class": "fixed",
+                        "quantity": "identifiers",
+                        "bound": {
+                          "serialized_characters": "selected_request_input_limit"
+                        },
+                        "entry": "Q1",
+                        "fixture": "native_math/v7-bounded-turns",
+                        "members": {
+                          "handle": {
+                            "class": "reference",
+                            "quantity": "identifiers",
+                            "bound": {
+                              "serialized_characters": 200
+                            },
+                            "entry": "Q1",
+                            "fixture": "native_math/v7-bounded-turns"
+                          },
+                          "characters": {
+                            "class": "fixed",
+                            "quantity": "identifiers",
+                            "bound": {
+                              "serialized_characters": 20
+                            },
+                            "entry": "Q1",
+                            "fixture": "native_math/v7-bounded-turns"
+                          }
+                        }
+                      }
+                    },
+                    "rows": {
+                      "class": "collection",
+                      "quantity": "excerpts",
+                      "bound": {
+                        "serialized_characters": "stored_state_characters"
+                      },
+                      "entry": "Q4",
+                      "fixture": "native_math/v7-bounded-turns",
+                      "items": {
+                        "class": "fixed",
+                        "quantity": "identifiers",
+                        "bound": {
+                          "serialized_characters": "selected_request_input_limit"
+                        },
+                        "entry": "Q1",
+                        "fixture": "native_math/v7-bounded-turns",
+                        "members": {
+                          "handle": {
+                            "class": "reference",
+                            "quantity": "identifiers",
+                            "bound": {
+                              "serialized_characters": 200
+                            },
+                            "entry": "Q1",
+                            "fixture": "native_math/v7-bounded-turns"
+                          },
+                          "characters": {
+                            "class": "fixed",
+                            "quantity": "identifiers",
+                            "bound": {
+                              "serialized_characters": 20
+                            },
+                            "entry": "Q1",
+                            "fixture": "native_math/v7-bounded-turns"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "inputs": {
+                "class": "collection",
+                "quantity": "targets",
+                "bound": {
+                  "serialized_characters": "current_material_allowance"
+                },
+                "entry": "Q7",
+                "fixture": "native_math/v7-bounded-turns",
+                "items": {
+                  "class": "fixed",
+                  "quantity": "identifiers",
+                  "bound": {
+                    "serialized_characters": "selected_request_input_limit"
+                  },
+                  "entry": "Q1",
+                  "fixture": "native_math/v7-bounded-turns",
+                  "members": {
+                    "handle": {
+                      "class": "reference",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 200
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    },
+                    "entries": {
+                      "class": "collection",
+                      "quantity": "excerpts",
+                      "bound": {
+                        "serialized_characters": "stored_state_characters"
+                      },
+                      "entry": "Q4",
+                      "fixture": "native_math/v7-bounded-turns",
+                      "items": {
+                        "class": "fixed",
+                        "quantity": "identifiers",
+                        "bound": {
+                          "serialized_characters": "selected_request_input_limit"
+                        },
+                        "entry": "Q1",
+                        "fixture": "native_math/v7-bounded-turns",
+                        "members": {
+                          "handle": {
+                            "class": "reference",
+                            "quantity": "identifiers",
+                            "bound": {
+                              "serialized_characters": 200
+                            },
+                            "entry": "Q1",
+                            "fixture": "native_math/v7-bounded-turns"
+                          },
+                          "characters": {
+                            "class": "fixed",
+                            "quantity": "identifiers",
+                            "bound": {
+                              "serialized_characters": 20
+                            },
+                            "entry": "Q1",
+                            "fixture": "native_math/v7-bounded-turns"
+                          }
+                        }
+                      }
+                    },
+                    "rows": {
+                      "class": "collection",
+                      "quantity": "excerpts",
+                      "bound": {
+                        "serialized_characters": "stored_state_characters"
+                      },
+                      "entry": "Q4",
+                      "fixture": "native_math/v7-bounded-turns",
+                      "items": {
+                        "class": "fixed",
+                        "quantity": "identifiers",
+                        "bound": {
+                          "serialized_characters": "selected_request_input_limit"
+                        },
+                        "entry": "Q1",
+                        "fixture": "native_math/v7-bounded-turns",
+                        "members": {
+                          "handle": {
+                            "class": "reference",
+                            "quantity": "identifiers",
+                            "bound": {
+                              "serialized_characters": 200
+                            },
+                            "entry": "Q1",
+                            "fixture": "native_math/v7-bounded-turns"
+                          },
+                          "characters": {
+                            "class": "fixed",
+                            "quantity": "identifiers",
+                            "bound": {
+                              "serialized_characters": 20
+                            },
+                            "entry": "Q1",
+                            "fixture": "native_math/v7-bounded-turns"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "pool": {
+                "class": "collection",
+                "quantity": "excerpts",
+                "bound": {
+                  "serialized_characters": "stored_state_characters"
+                },
+                "entry": "Q4",
+                "fixture": "native_math/v7-bounded-turns",
+                "items": {
+                  "class": "fixed",
+                  "quantity": "identifiers",
+                  "bound": {
+                    "serialized_characters": "selected_request_input_limit"
+                  },
+                  "entry": "Q1",
+                  "fixture": "native_math/v7-bounded-turns",
+                  "members": {
+                    "handle": {
+                      "class": "reference",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 200
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    },
+                    "characters": {
+                      "class": "fixed",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 20
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    }
+                  }
+                }
+              },
+              "pool_inputs": {
+                "class": "collection",
+                "quantity": "excerpts",
+                "bound": {
+                  "serialized_characters": "stored_state_characters"
+                },
+                "entry": "Q4",
+                "fixture": "native_math/v7-bounded-turns",
+                "items": {
+                  "class": "fixed",
+                  "quantity": "identifiers",
+                  "bound": {
+                    "serialized_characters": "selected_request_input_limit"
+                  },
+                  "entry": "Q1",
+                  "fixture": "native_math/v7-bounded-turns",
+                  "members": {
+                    "handle": {
+                      "class": "reference",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 200
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    },
+                    "characters": {
+                      "class": "fixed",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 20
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    }
+                  }
+                }
+              },
+              "rows": {
+                "class": "collection",
+                "quantity": "excerpts",
+                "bound": {
+                  "serialized_characters": "stored_state_characters"
+                },
+                "entry": "Q4",
+                "fixture": "native_math/v7-bounded-turns",
+                "items": {
+                  "class": "fixed",
+                  "quantity": "identifiers",
+                  "bound": {
+                    "serialized_characters": "selected_request_input_limit"
+                  },
+                  "entry": "Q1",
+                  "fixture": "native_math/v7-bounded-turns",
+                  "members": {
+                    "handle": {
+                      "class": "reference",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 200
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    },
+                    "characters": {
+                      "class": "fixed",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 20
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    }
+                  }
+                }
+              },
+              "rows_inputs": {
+                "class": "collection",
+                "quantity": "excerpts",
+                "bound": {
+                  "serialized_characters": "stored_state_characters"
+                },
+                "entry": "Q4",
+                "fixture": "native_math/v7-bounded-turns",
+                "items": {
+                  "class": "fixed",
+                  "quantity": "identifiers",
+                  "bound": {
+                    "serialized_characters": "selected_request_input_limit"
+                  },
+                  "entry": "Q1",
+                  "fixture": "native_math/v7-bounded-turns",
+                  "members": {
+                    "handle": {
+                      "class": "reference",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 200
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    },
+                    "characters": {
+                      "class": "fixed",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 20
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    }
+                  }
+                }
+              },
+              "scope": {
+                "class": "reference",
+                "quantity": "identifiers",
+                "bound": {
+                  "serialized_characters": 200
+                },
+                "entry": "Q1",
+                "fixture": "native_math/v7-bounded-turns"
+              },
+              "component": {
+                "class": "reference",
+                "quantity": "identifiers",
+                "bound": {
+                  "serialized_characters": 200
+                },
+                "entry": "Q1",
+                "fixture": "native_math/v7-bounded-turns"
+              },
+              "block": {
+                "class": "fixed",
+                "quantity": "identifiers",
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "entry": "Q1",
+                "fixture": "native_math/v7-bounded-turns",
+                "members": {
+                  "handle": {
+                    "class": "reference",
+                    "quantity": "identifiers",
+                    "bound": {
+                      "serialized_characters": 200
+                    },
+                    "entry": "Q1",
+                    "fixture": "native_math/v7-bounded-turns"
+                  },
+                  "entries": {
+                    "class": "collection",
+                    "quantity": "targets",
+                    "bound": {
+                      "serialized_characters": "current_material_allowance"
+                    },
+                    "entry": "Q7",
+                    "fixture": "native_math/v7-bounded-turns",
+                    "items": {
+                      "class": "reference",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 200
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    }
+                  },
+                  "characters": {
+                    "class": "fixed",
+                    "quantity": "identifiers",
+                    "bound": {
+                      "serialized_characters": 20
+                    },
+                    "entry": "Q1",
+                    "fixture": "native_math/v7-bounded-turns"
+                  }
+                }
+              },
+              "output": {
+                "class": "fixed",
+                "quantity": "identifiers",
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "entry": "Q1",
+                "fixture": "native_math/v7-bounded-turns",
+                "members": {
+                  "handle": {
+                    "class": "reference",
+                    "quantity": "identifiers",
+                    "bound": {
+                      "serialized_characters": 200
+                    },
+                    "entry": "Q1",
+                    "fixture": "native_math/v7-bounded-turns"
+                  },
+                  "characters": {
+                    "class": "fixed",
+                    "quantity": "identifiers",
+                    "bound": {
+                      "serialized_characters": 20
+                    },
+                    "entry": "Q1",
+                    "fixture": "native_math/v7-bounded-turns"
+                  }
+                }
+              },
+              "entry_sizes": {
+                "class": "collection",
+                "quantity": "excerpts",
+                "bound": {
+                  "serialized_characters": "stored_state_characters"
+                },
+                "entry": "Q4",
+                "fixture": "native_math/v7-bounded-turns",
+                "items": {
+                  "class": "fixed",
+                  "quantity": "identifiers",
+                  "bound": {
+                    "serialized_characters": "selected_request_input_limit"
+                  },
+                  "entry": "Q1",
+                  "fixture": "native_math/v7-bounded-turns",
+                  "members": {
+                    "handle": {
+                      "class": "reference",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 200
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    },
+                    "characters": {
+                      "class": "fixed",
+                      "quantity": "identifiers",
+                      "bound": {
+                        "serialized_characters": 20
+                      },
+                      "entry": "Q1",
+                      "fixture": "native_math/v7-bounded-turns"
+                    }
+                  }
+                }
+              },
+              "split_of": {
+                "class": "fixed",
+                "quantity": "identifiers",
+                "bound": {
+                  "serialized_characters": 20
+                },
+                "entry": "Q1",
+                "fixture": "native_math/v7-bounded-turns"
+              },
+              "pending_of": {
+                "class": "fixed",
+                "quantity": "identifiers",
+                "bound": {
+                  "serialized_characters": 20
+                },
+                "entry": "Q1",
+                "fixture": "native_math/v7-bounded-turns"
+              }
+            }
+          }
+        },
+        "replaces": {
+          "class": "reference",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 64
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns"
+        },
+        "cause": {
+          "class": "fixed",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "members": {
+            "kind": {
+              "class": "reference",
+              "quantity": "identifiers",
+              "bound": {
+                "serialized_characters": 200
+              },
+              "entry": "Q1",
+              "fixture": "native_math/v7-bounded-turns"
+            },
+            "turn": {
+              "class": "fixed",
+              "quantity": "identifiers",
+              "bound": {
+                "serialized_characters": 20
+              },
+              "entry": "Q1",
+              "fixture": "native_math/v7-bounded-turns"
+            },
+            "attempt_id": {
+              "class": "reference",
+              "quantity": "identifiers",
+              "bound": {
+                "serialized_characters": 200
+              },
+              "entry": "Q1",
+              "fixture": "native_math/v7-bounded-turns"
+            },
+            "page_room": {
+              "class": "fixed",
+              "quantity": "identifiers",
+              "bound": {
+                "serialized_characters": 20
+              },
+              "entry": "Q1",
+              "fixture": "native_math/v7-bounded-turns"
+            },
+            "target_allowance": {
+              "class": "fixed",
+              "quantity": "identifiers",
+              "bound": {
+                "serialized_characters": 20
+              },
+              "entry": "Q1",
+              "fixture": "native_math/v7-bounded-turns"
+            },
+            "completed": {
+              "class": "collection",
+              "quantity": "turns",
+              "bound": {
+                "serialized_characters": "stored_final_turn_count"
+              },
+              "entry": "Q1",
+              "fixture": "native_math/v7-bounded-turns",
+              "items": {
+                "class": "fixed",
+                "quantity": "identifiers",
+                "bound": {
+                  "serialized_characters": 20
+                },
+                "entry": "Q1",
+                "fixture": "native_math/v7-bounded-turns"
+              }
+            },
+            "pending": {
+              "class": "collection",
+              "quantity": "turns",
+              "bound": {
+                "serialized_characters": "stored_final_turn_count"
+              },
+              "entry": "Q1",
+              "fixture": "native_math/v7-bounded-turns",
+              "items": {
+                "class": "fixed",
+                "quantity": "identifiers",
+                "bound": {
+                  "serialized_characters": 20
+                },
+                "entry": "Q1",
+                "fixture": "native_math/v7-bounded-turns"
+              }
+            }
+          }
+        }
+      }
+    },
+    "v7_page_plan_ref": {
+      "class": "fixed",
+      "quantity": "identifiers",
+      "bound": {
+        "serialized_characters": "selected_request_input_limit"
+      },
+      "entry": "Q1",
+      "fixture": "native_math/v7-bounded-turns",
+      "members": {
+        "protocol": {
+          "class": "reference",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 200
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns"
+        },
+        "digest": {
+          "class": "reference",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 64
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns"
+        },
+        "artifact": {
+          "$ref": "v7_artifact_ref"
+        },
+        "predecessors": {
+          "class": "collection",
+          "quantity": "turns",
+          "bound": {
+            "serialized_characters": "stored_final_plan_count"
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "items": {
+            "$ref": "v7_page_plan_descriptor"
+          }
+        }
+      }
+    },
+    "v7_page_plan_descriptor": {
+      "class": "fixed",
+      "quantity": "identifiers",
+      "bound": {
+        "serialized_characters": "selected_request_input_limit"
+      },
+      "entry": "Q1",
+      "fixture": "native_math/v7-bounded-turns",
+      "members": {
+        "protocol": {
+          "class": "reference",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 200
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns"
+        },
+        "digest": {
+          "class": "reference",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 64
+          },
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns"
+        },
+        "artifact": {
+          "$ref": "v7_artifact_ref"
+        }
+      }
     }
   },
   "fixtures": {
@@ -42866,7 +44352,8 @@
     "research_harness.verification",
     "research_harness.visual_assets",
     "research_harness.workspace",
-    "research_harness.zenodo"
+    "research_harness.zenodo",
+    "research_harness.openness_final_pages"
   ],
   "non_packet_names": {
     "context.output_refusal.assignment_id": "An allowlisted scoped-storage equality selector over an existing assignment context. It is query metadata, not a reviewer packet field.",
@@ -84996,6 +86483,12 @@
   "record_schemas": {
     "carried_selection": {
       "$ref": "v7_carried_selection_ref"
+    },
+    "final_page_plan": {
+      "$ref": "v7_page_plan"
+    },
+    "reading_chain.final_page_plan": {
+      "$ref": "v7_page_plan_ref"
     }
   },
   "roles": {
@@ -97640,246 +99133,7 @@
               "class": "fixed"
             },
             "reading_final": {
-              "class": "fixed",
-              "members": {
-                "allowances": {
-                  "$ref": "v7_allowances"
-                },
-                "capacity": {
-                  "$ref": "v7_capacity_binding"
-                },
-                "chain": {
-                  "bound": {
-                    "serialized_characters": "selected_request_input_limit"
-                  },
-                  "class": "fixed",
-                  "entry": "Q1",
-                  "fixture": "native_math/v7-bounded-turns",
-                  "quantity": "identifiers"
-                },
-                "claim_digest": {
-                  "bound": {
-                    "serialized_characters": "selected_request_input_limit"
-                  },
-                  "class": "fixed",
-                  "entry": "Q1",
-                  "fixture": "native_math/v7-bounded-turns",
-                  "quantity": "identifiers"
-                },
-                "entries": {
-                  "bound": {
-                    "serialized_characters": "selected_request_input_limit"
-                  },
-                  "class": "carried",
-                  "entry": "Q4",
-                  "fixture": "native_math/v7-bounded-turns",
-                  "items": {
-                    "$ref": "v7_excerpt"
-                  },
-                  "quantity": "excerpts"
-                },
-                "fill": {
-                  "bound": {
-                    "serialized_characters": "selected_request_input_limit"
-                  },
-                  "class": "collection",
-                  "entry": "Q5",
-                  "fixture": "native_math/v7-bounded-turns",
-                  "items": {
-                    "$ref": "v7_note_fill"
-                  },
-                  "quantity": "notes"
-                },
-                "gaps": {
-                  "bound": {
-                    "serialized_characters": "gap_rows plus target allowances"
-                  },
-                  "class": "collection",
-                  "entry": "Q8",
-                  "fixture": "native_math/v7-bounded-turns",
-                  "ground": "Forecast rows cost at most GAP_ROW_CHARACTERS (400) per gap_rows; reviewer rows include text of at most 600 characters and charge their exact wire size to the target grant. The two row classes and their exact closed members are declared separately as v7_forecast_gap and v7_reviewer_gap; items admits their combined vocabulary.",
-                  "items": {
-                    "$ref": "v7_gap"
-                  },
-                  "quantity": "gaps"
-                },
-                "inventory_digest": {
-                  "bound": {
-                    "characters": 64
-                  },
-                  "class": "reference",
-                  "entry": "Q1",
-                  "fixture": "native_math/v7-bounded-turns",
-                  "quantity": "identifiers"
-                },
-                "material": {
-                  "bound": {
-                    "serialized_characters": "selected_request_input_limit"
-                  },
-                  "class": "collection",
-                  "entry": "Q4",
-                  "fixture": "native_math/v7-bounded-turns",
-                  "items": {
-                    "$ref": "v7_material"
-                  },
-                  "quantity": "texts"
-                },
-                "material_request": {
-                  "bound": {
-                    "parts": 8,
-                    "title_characters": 120
-                  },
-                  "class": "fixed",
-                  "members": {
-                    "part": {
-                      "class": "fixed"
-                    },
-                    "ref": {
-                      "class": "fixed"
-                    },
-                    "stage": {
-                      "class": "fixed"
-                    },
-                    "title": {
-                      "class": "fixed"
-                    }
-                  }
-                },
-                "minimum": {
-                  "$ref": "v7_minimum"
-                },
-                "notes": {
-                  "bound": {
-                    "serialized_characters": 20000
-                  },
-                  "class": "fixed",
-                  "entry": "Q5",
-                  "fixture": "native_math/v7-bounded-turns",
-                  "quantity": "notes"
-                },
-                "notes_handle": {
-                  "bound": {
-                    "serialized_characters": "selected_request_input_limit"
-                  },
-                  "class": "fixed",
-                  "entry": "Q1",
-                  "fixture": "native_math/v7-bounded-turns",
-                  "quantity": "identifiers"
-                },
-                "page": {
-                  "bound": {
-                    "serialized_characters": "selected_request_input_limit"
-                  },
-                  "class": "fixed",
-                  "entry": "Q7",
-                  "fixture": "native_math/v7-bounded-turns",
-                  "members": {
-                    "number": {
-                      "bound": {
-                        "serialized_characters": "selected_request_input_limit"
-                      },
-                      "class": "fixed",
-                      "entry": "Q1",
-                      "fixture": "native_math/v7-bounded-turns",
-                      "quantity": "identifiers"
-                    },
-                    "pages": {
-                      "bound": {
-                        "serialized_characters": "selected_request_input_limit"
-                      },
-                      "class": "fixed",
-                      "entry": "Q1",
-                      "fixture": "native_math/v7-bounded-turns",
-                      "quantity": "identifiers"
-                    },
-                    "targets": {
-                      "bound": {
-                        "serialized_characters": "selected_request_input_limit"
-                      },
-                      "class": "collection",
-                      "entry": "Q7",
-                      "fixture": "native_math/v7-bounded-turns",
-                      "items": {
-                        "bound": {
-                          "serialized_characters": "selected_request_input_limit"
-                        },
-                        "class": "fixed",
-                        "entry": "Q1",
-                        "fixture": "native_math/v7-bounded-turns",
-                        "quantity": "identifiers"
-                      },
-                      "quantity": "targets"
-                    }
-                  },
-                  "quantity": "targets"
-                },
-                "plan": {
-                  "$ref": "v7_final_plan"
-                },
-                "plan_digest": {
-                  "bound": {
-                    "characters": 64
-                  },
-                  "class": "reference",
-                  "entry": "Q1",
-                  "fixture": "native_math/v7-bounded-turns",
-                  "quantity": "identifiers"
-                },
-                "protocol": {
-                  "bound": {
-                    "serialized_characters": "selected_request_input_limit"
-                  },
-                  "class": "fixed",
-                  "entry": "Q1",
-                  "fixture": "native_math/v7-bounded-turns",
-                  "quantity": "identifiers"
-                },
-                "reviewer": {
-                  "$ref": "v7_reviewer"
-                },
-                "sources": {
-                  "bound": {
-                    "serialized_characters": "selected_request_input_limit"
-                  },
-                  "class": "collection",
-                  "entry": "Q6",
-                  "fixture": "native_math/v7-bounded-turns",
-                  "items": {
-                    "$ref": "v7_source"
-                  },
-                  "quantity": "sources"
-                },
-                "state_digest": {
-                  "bound": {
-                    "characters": 64
-                  },
-                  "class": "reference",
-                  "entry": "Q1",
-                  "fixture": "native_math/v7-bounded-turns",
-                  "quantity": "identifiers"
-                },
-                "subject_digest": {
-                  "bound": {
-                    "serialized_characters": "selected_request_input_limit"
-                  },
-                  "class": "fixed",
-                  "entry": "Q1",
-                  "fixture": "native_math/v7-bounded-turns",
-                  "quantity": "identifiers"
-                },
-                "turn": {
-                  "bound": {
-                    "serialized_characters": "selected_request_input_limit"
-                  },
-                  "class": "fixed",
-                  "entry": "Q1",
-                  "fixture": "native_math/v7-bounded-turns",
-                  "quantity": "identifiers"
-                },
-                "unread": {
-                  "$ref": "stage3_unread_final"
-                }
-              }
+              "$ref": "v7_final_binding"
             },
             "reading_record": {
               "bound": {
@@ -101748,6 +103002,9 @@
             },
             "role": {
               "class": "fixed"
+            },
+            "reading_combine": {
+              "$ref": "v7_combine_binding"
             }
           }
         }

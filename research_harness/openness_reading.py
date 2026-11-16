@@ -696,13 +696,16 @@ def require_reserved_identifier(identifier, protocol):
 
 def find_stage(packet):
     """The reading-chain stage of a native_math packet: 'reading', 'final', or None for a single-turn packet."""
-    return 'reading' if TURN_KEY in packet else 'final' if RECORD_KEY in packet or 'reading_final' in packet else None
+    return ('reading' if TURN_KEY in packet else 'combine' if 'reading_combine' in packet else
+            'closing' if 'closing' in packet.get('reading_final', {}) else
+            'page' if 'page_plan_digest' in packet.get('reading_final', {}) else
+            'final' if RECORD_KEY in packet or 'reading_final' in packet else None)
 
 
 def find_binding(packet):
     """The reviewer binding of a native_math packet: its native packet, or a reading turn's copy of the subject,
     claim and reviewer of that native packet."""
-    return packet[TURN_KEY] if TURN_KEY in packet else packet['native']
+    return packet[TURN_KEY] if TURN_KEY in packet else packet['reading_combine'] if 'reading_combine' in packet else packet['native']
 
 
 def _find_record(packet):
@@ -714,6 +717,8 @@ def find_protocol(packet):
     """The reading protocol under which a reading or final turn's packet was built; None for a single-turn packet."""
     if TURN_KEY in packet:
         return packet[TURN_KEY]['protocol']
+    if 'reading_combine' in packet:
+        return packet['reading_combine']['protocol']
     if 'reading_final' in packet:
         return packet['reading_final']['protocol']
     return packet[RECORD_KEY]['protocol'] if RECORD_KEY in packet else None
@@ -749,6 +754,8 @@ def choose_chain_protocol(records, artifacts, route, native, *, packet=None, ass
         report = {key: copy.deepcopy(value) for key, value in result.items()
                   if key not in ('inventory', 'capacity_members', 'capacity_plan', 'forecast')}
         admissions.append(report)
+        if result.get('details', {}).get('reason') == 'output_floor' and protocol == PROTOCOL_V7:
+            break
         if result['state'] == 'record':
             refusals = '; '.join(row['protocol'] + ': ' + row.get('reason', row.get('details', {}).get('reason', 'refused'))
                                  for row in admissions if row['state'] != 'record') or 'none'

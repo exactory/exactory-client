@@ -212,7 +212,7 @@ def uses_finding_contract(assignment):
     """The saved prompt, rather than today's packet shape, selects the answer contract."""
     template = assignment.get("prompt", {}).get("template_id", "")
     return template in ("exactory-openness-reading-v6/final", "exactory-openness-reading-v7/final",
-                        "exactory-review-v7/native_math")
+                        "exactory-review-v7/native_math", "exactory-openness-reading-v7/closing")
 
 
 def _require_finding(condition, rule, path, forecast):

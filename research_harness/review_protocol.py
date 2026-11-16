@@ -224,6 +224,24 @@ V7_READING_PROMPT = (
     'scientific text and is no gap. The acceptance is a fact about the solver objective. It is no finding '
     'about the openness of the statement under review: read the result and note what it proves.'
     + openness_reading.SEARCH_FIELD_GUIDE_TEXT + openness_reading.SEARCH_COMPLETION_SENTENCE)
+V7_PAGE_PROMPT = (
+    'Read this page of the v7 final. Return {targets:[{formulation,coverage,grounds,sentence}]} for exactly '
+    'reading_final.page.targets in order. coverage has at most 800 characters; sentence at most 300; '
+    'a ground is {kind,text,work_id?,refs?}, with text at most 600 characters and citations by recorded handle. '
+    'A passage request may replace this answer. An argument may be written as '
+    '{stage:"material",title,part,text,more}; resume this page afterwards and cite the completed m handle.')
+V7_CLOSING_PROMPT = (
+    'Read the decision rows of this v7 final. Return {statement,assumptions,scope,dependencies,policy,outcome,reason,grounds}. '
+    'The first five fields and reason are nonempty text; reason has at most 4000 characters. '
+    'grounds holds grounds belonging to no single target, with the same kind,text,work_id?,refs? fields as a page. '
+    'outcome is supported_open, already_solved or unresolved and must agree with the forecast and every page ground. '
+    'A passage request or a material part may replace this answer; resume the closing page afterwards.')
+V7_COMBINE_PROMPT = (
+    'Read reading_combine.block and return {block,summary,refs}. block is its handle. '
+    'summary condenses its entries; refs is a nonempty list of distinct entry handles. '
+    'The complete serialized answer fits capacity.answer_bound and one quarter of the block. '
+    'Original entries remain available by handle and through a list_page request for the block.')
+
 V7_FINAL_PROMPT = (
     'This is the final turn of an openness review under exactory-openness-reading-v7. It answers one '
     'question: what does the evidence that this chain read establish about whether the exact statement in '
@@ -1250,12 +1268,13 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
             or not excerpts or repair or evidence_parts not in review_problem_parts.STAGES):
         raise ResearchError('invalid_review_context', 'Problem evidence parts require a result session with excerpt rules')
     if reading_stage is not None:
-        if role != 'native_math' or reading_stage not in openness_reading.STAGES:
+        if role != 'native_math' or reading_stage not in openness_reading.STAGES + (('page', 'closing', 'combine') if reading_protocol == READING_V7_PROTOCOL else ()):
             raise ResearchError('invalid_review_context', 'A reading stage belongs to a native openness reading chain')
         from .native_review import PROMPT
         reading_protocol = reading_protocol or openness_reading.PROTOCOL
         if reading_protocol == 'exactory-openness-reading-v7':
-            prompt = common + (V7_READING_PROMPT if reading_stage == 'reading' else V7_FINAL_PROMPT)
+            prompt = common + dict(reading=V7_READING_PROMPT, final=V7_FINAL_PROMPT, page=V7_PAGE_PROMPT,
+                                   closing=V7_CLOSING_PROMPT, combine=V7_COMBINE_PROMPT)[reading_stage]
             return _build_prompt(reading_protocol + '/' + reading_stage, prompt,
                                  {'role': role, 'reading_stage': reading_stage}, common_version)
         texts = openness_reading.PROMPTS[reading_protocol]
@@ -3892,7 +3911,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             base_prompt_parameters['common_version'] = find_common_prompt_version(prompt_parent['prompt'])
         base_prompt_parameters.update(prompt_paragraphs.select_prompt_parameters(value['role'], packet))
         if openness_reading.find_protocol(packet) == READING_V7_PROTOCOL:
-            binding = packet.get('reading_turn', packet.get('reading_final'))
+            binding = packet.get('reading_turn', packet.get('reading_final', packet.get('reading_combine')))
             base_prompt_parameters['capacity'] = binding['capacity']
         if (value['role'] == 'native_math' and openness_reading.find_stage(packet) is None
                 and openness_reading.is_openness_packet(packet['native'])
@@ -4269,7 +4288,19 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
                       packet_digest=invocation['packet_digest'], prompt_hash=invocation['prompt_hash'],
                       preflight=invocation['preflight'],
                       recorded_revision=revision)
-        return [immutable_record(records, 'review_attempt', value['id'], result)], result
+        assignment = records['review_assignment'][value['assignment_id']]
+        artifacts = store_artifacts
+        changes = [immutable_record(records, 'review_attempt', value['id'], result)]
+        if observation.get('status') == 'completed' and assignment.get('reading_chain', {}).get('final_page_plan'):
+            from .openness_final_pages import prepare_closing_composite
+            try:
+                changes.extend(prepare_closing_composite(records, artifacts, assignment, result,
+                    _read_json(artifacts, result['output'])))
+            except ResearchError as error:
+                if getattr(error, 'contract_check', None) is None:
+                    raise
+                # Keep the exact observation; its scientific refusal is recorded below.
+        return changes, result
     result = _invoke_once(store, payload, 'review.invoke', start, finish,
                           expected_revision=expected_revision, request_id=request_id, credential=credential,
                           after_start=after_start)

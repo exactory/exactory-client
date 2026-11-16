@@ -351,6 +351,18 @@ def classify_observed_output(records, artifacts, attempt_id):
                         validate_output(packet['native'], output)
                 else:
                     validate_turn_output(packet, output, artifacts=artifacts, assignment=assignment)
+                    if 'closing' in packet.get('reading_final', {}) and output.get('stage') not in ('reading', 'material'):
+                        from .review_composite import build_composite
+                        from .openness_final_pages import list_composite_turns, validate_composite_output
+                        # Classify this exact observation. Effective selection
+                        # would recheck its refusal while building the composite.
+                        observed = dict(records, review_attempt={key: row for key, row in records['review_attempt'].items()
+                            if row['assignment_id'] != assignment['id'] or key == attempt_id},
+                            review_output_refusal={key: row for key, row in records.get('review_output_refusal', {}).items()
+                                if key != attempt_id})
+                        composite, artifact = build_composite(observed, artifacts, assignment)
+                        envelope = list_composite_turns(observed, artifacts, assignment)['packet']
+                        validate_composite_output(observed, artifacts, assignment, envelope, json.loads(artifact[1]))
             # Reading the bound bodies stays outside the contract check: an unavailable body is not an output failure.
             if not has_deliverable_passage(records, artifacts, packet, output, assignment=assignment, attempt=attempt):
                 with contract_check('native.output'):

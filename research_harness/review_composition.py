@@ -979,6 +979,9 @@ def list_targets(rule, packet):
     if name in ('problem-openness', 'math-openness'):
         minimum = packet.get('native', packet)['scientific_context']['openness_minimum']
         targets = [dict(id=value, label=value) for value in [minimum['statement']] + minimum['neighbours']]
+        if 'page_plan_digest' in packet.get('reading_final', {}):
+            for index, target in enumerate(targets, 1):
+                target['handle'] = 't%d' % index
     elif rule['adapter'] == 'context_repair' and rule.get('base_adapter') is None:
         ordinary = dict(packet)
         ordinary.pop('context_repair')
@@ -1196,6 +1199,9 @@ def _resolve_target_id(targets, value):
     ids = [row['id'] for row in targets]
     if key in ids:
         return key
+    by_handle = {row['handle']: row['id'] for row in targets if 'handle' in row}
+    if key in by_handle:
+        return by_handle[key]
     if isinstance(key, str) and re.fullmatch(r't[0-9]+', key) and int(key[1:]) < len(ids):
         return ids[int(key[1:])]
     raise ResearchError('review_composition_conflict', FINAL_PAGE_INVALID_MESSAGE, dict(target=key))
@@ -1680,7 +1686,7 @@ def _collect_reference_handles(packet, value):
     return sorted(found, key=lambda handle: (_measure_final_value(handle), handle))
 
 
-def build_decision_rows(rule, packet, page_outputs):
+def build_decision_rows(rule, packet, page_outputs, *, measure=None):
     """Rows are [target handle, grade/status, sentence, evidence handles].
 
     Select the largest number of whole handles that fits each actual row, with
@@ -1688,8 +1694,9 @@ def build_decision_rows(rule, packet, page_outputs):
     space left by the target and status; the page answer remains unchanged.
     """
     from .review_route_capacity import DECISION_ROW_CHARACTERS
+    measure = measure or _measure_final_value
     definitions = list_targets(rule, packet)
-    handles = {target['id']: 't' + str(index) for index, target in enumerate(definitions)}
+    handles = {target['id']: target.get('handle', 't' + str(index)) for index, target in enumerate(definitions)}
     result = []
     for page in page_outputs:
         for item in page['output']['targets']:
@@ -1704,14 +1711,14 @@ def build_decision_rows(rule, packet, page_outputs):
                           if path.endswith(('/status', '/disposition', '/classification')) or '/rubric/' in path]
                 status = grades[0] if len(grades) == 1 else grades if grades else 'assessed' if item['fields'] else 'not_assessed'
             row = [handles[target], status, item['sentence'], []]
-            while _measure_final_value(row) > DECISION_ROW_CHARACTERS and row[2]:
+            while measure(row) > DECISION_ROW_CHARACTERS and row[2]:
                 row[2] = row[2][:-1]
             for handle in _collect_reference_handles(packet, item.get('grounds', item.get('fields'))):
-                if _measure_final_value(row[:3] + [row[3] + [handle]]) <= DECISION_ROW_CHARACTERS:
+                if measure(row[:3] + [row[3] + [handle]]) <= DECISION_ROW_CHARACTERS:
                     row[3].append(handle)
                 else:
                     break
-            if _measure_final_value(row) > DECISION_ROW_CHARACTERS:
+            if measure(row) > DECISION_ROW_CHARACTERS:
                 raise ResearchError('review_composition_conflict', FINAL_PAGE_BOUND_MESSAGE)
             result.append(row)
     return result

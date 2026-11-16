@@ -77,7 +77,23 @@ def build_composite(records, artifacts, assignment):
 
 
 # Family lanes add their rows here. No process-local chain state is retained.
-FINAL_FAMILIES = {}
+def _list_v7_final_turns(records, artifacts, assignment):
+    from .openness_final_pages import list_composite_turns
+    return list_composite_turns(records, artifacts, assignment)
+
+
+def _read_v7_currency(records, artifacts, assignment):
+    from .openness_final_pages import read_composite_currency
+    return read_composite_currency(records, artifacts, assignment)
+
+
+def _validate_v7_composite(records, artifacts, assignment, packet, output):
+    from .openness_final_pages import validate_composite_output
+    return validate_composite_output(records, artifacts, assignment, packet, output)
+
+
+FINAL_FAMILIES = {'exactory-openness-reading-v7': dict(list_turns=_list_v7_final_turns,
+    read_currency=_read_v7_currency, validate_output=_validate_v7_composite)}
 
 
 def find_composition_rule(role, packet):

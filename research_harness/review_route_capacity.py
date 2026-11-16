@@ -786,6 +786,8 @@ def describe_task_kind(role, packet, operation='review.invoke'):
         return 'read'
     if 'reviewer_excerpts' in packet:
         return 'request'
+    if 'reading_combine' in packet:
+        return 'combine'
     if 'reading_turn' in packet:
         return 'reading'
     if 'reading_record' in packet or 'reading_final' in packet:
@@ -945,7 +947,7 @@ def describe_task(role, packet, *, route, request, operation='review.invoke', co
     notice_fields = ({'notice_characters': len(json.dumps(notice, ensure_ascii=False, sort_keys=True, allow_nan=False))}
                      if notice is not None else {})
     if 'reading_final' in actual:
-        targets = len(actual['reading_final']['page']['targets'])
+        targets = len(actual['reading_final'].get('page', {}).get('targets', []))
     return dict(
         kind=kind,
         characters=characters,
@@ -1044,7 +1046,7 @@ def describe_attempt(route, role, packet, request, response, *, operation='revie
              and transport.context_verified(route, request, response) and 'previous_response_id' not in request)
         and sends == 1 and type(usage.get('input_tokens')) is int and usage['input_tokens'] >= 0 else None,
     )
-    binding = packet.get('reading_turn', packet.get('reading_final', {}))
+    binding = packet.get('reading_turn', packet.get('reading_final', packet.get('reading_combine', {})))
     if binding.get('protocol') == 'exactory-openness-reading-v7':
         bound = binding['capacity']
         result['task'].update(material_allowance=bound['material_allowance'],
@@ -1289,7 +1291,7 @@ def _describe_answer_bounds(kind, targets, card_minimum):
     return (60000, 15000)
 
 
-def select_task_limits(route, profile, kind, *, targets=1, card_minimum=4000, calibrated=None, block_room=480000, frame_characters=40000, carried_characters=0, frame_matches_reading=False, text_room=None, minimum_targets=1):
+def select_task_limits(route, profile, kind, *, targets=1, card_minimum=4000, calibrated=None, block_room=480000, frame_characters=40000, carried_characters=0, frame_matches_reading=False, text_room=None, minimum_targets=1, page_target_counts=None):
     """Report each material level against its serialized frame plus task, at unchanged effort."""
     if kind == 'staged':
         return dict(
@@ -1331,7 +1333,7 @@ def select_task_limits(route, profile, kind, *, targets=1, card_minimum=4000, ca
         room = output_limit - reserve if reserve is not None else None
         if room is not None and calibrated:
             room = room * 18 // 10
-        for target_count in target_levels:
+        for target_count in ([page_target_counts[level]] if page_target_counts is not None else target_levels):
             default, minimum = _describe_answer_bounds(kind, target_count, card_minimum)
             attempts = row['attempts'] if row is not None else 0
             over = row['at_or_over_limit'] if row is not None else 0
@@ -1513,8 +1515,10 @@ def describe_assignment_kind(assignment):
     parameters = assignment.get('prompt', {}).get('parameters', {})
     if parameters.get('reading_stage') == 'reading':
         return 'reading'
-    if parameters.get('reading_stage') == 'final':
+    if parameters.get('reading_stage') in ('final', 'page', 'closing'):
         return 'final'
+    if parameters.get('reading_stage') == 'combine':
+        return 'combine'
     if str(parameters.get('evidence_parts', '')).endswith('/part'):
         return 'read'
     if assignment.get('staged_review'):
@@ -1750,9 +1754,38 @@ def _summarize_capacity_inventory(inventory):
                 characters=sum(row['characters'] for row in unique.values()), by_kind=kinds)
 
 
+def compute_final_target_allowances(limits, selected, targets, admission_room):
+    """Decision 26: pin the answer and input counts before selecting the final form."""
+    from .errors import ResearchError
+    output_room = limits['output_tokens']['value']
+    if limits['request_measure'] == 'calibrated':
+        output_room = output_room * 18 // 10
+    if output_room < _describe_answer_bounds('final', 1, 4000)[1]:
+        raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
+                            dict(kind='final', reason='output_floor', room=output_room, minimum=7500, command='review-route'))
+    sequence, count = [], max(1, targets)
+    while True:
+        sequence.append(count)
+        if count == 1:
+            break
+        count = max(1, count // 2)
+    counts, answers = {}, {}
+    for level in selected['levels']:
+        room = level['answer_room_characters'] if level['answer_room_characters'] is not None else output_room
+        answer = next((count for count in sequence if _describe_answer_bounds('final', count, 4000)[1] <= room), 1)
+        available = min(admission_room, level['material_allowance']) - NOTES_MINIMUM_CHARACTERS
+        inputs = available // (EXCERPT_TEXT_CHARACTERS + EXCERPT_FIELDS_CHARACTERS)
+        if inputs < 1:
+            raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
+                                dict(kind='final', room=available, minimum=EXCERPT_TEXT_CHARACTERS + EXCERPT_FIELDS_CHARACTERS, command='review-route'))
+        counts[level['material_allowance']] = max(1, min(answer, inputs))
+        answers[level['material_allowance']] = answer
+    return counts, answers
+
+
 def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_budget=None,
                         records=None, artifacts=None, measure=None, allowance_rows_bound=None,
-                        pending_requests_bound=0):
+                        pending_requests_bound=0, final_pages=False):
     """Pin a chain's budgets; builders supply serialized field sizes and stable target handles.
 
     Fixture declarations and v7 assignment builders bind the returned artifact
@@ -1837,6 +1870,21 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
         page_room = min(admission_room, final['material_allowance'])
     else:
         page_room = admission_room
+    page_counts = None
+    if final_pages and 'final' in frame:
+        evidence_limits = select_task_limits(route, profile, 'final', targets=len(handles),
+            frame_characters=frame['final']['bound'] + BOUNDED_NOTICE_CHARACTERS, text_room=text_room,
+            calibrated=limits['request_measure'] == 'calibrated', minimum_targets=len(handles))
+        page_counts, answer_counts = compute_final_target_allowances(limits, evidence_limits, len(handles), admission_room)
+        minimums = NOTES_MINIMUM_CHARACTERS + sum(EXCERPT_TEXT_CHARACTERS + EXCERPT_FIELDS_CHARACTERS + row['rows']
+                                                  for row in maximum_rows)
+        if minimums <= page_room and len(handles) <= answer_counts[final['material_allowance']]:
+            page_counts = None
+        else:
+            final = select_task_limits(route, profile, 'final', targets=len(handles),
+                frame_characters=frame['final']['bound'] + BOUNDED_NOTICE_CHARACTERS, text_room=text_room,
+                calibrated=limits['request_measure'] == 'calibrated', page_target_counts=page_counts)
+            page_room = min(admission_room, final['material_allowance'])
     pool = min(admission_room, carried_budget) if carried_budget is not None else admission_room
     if allowance_rows_bound is not None:
         # A one-request builder grants the room of its starting final, retaining the
@@ -1851,14 +1899,21 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
         overhead = counts.get('gap_rows', 0) * GAP_ROW_CHARACTERS + counts.get('source_rows', 0) * CITED_SOURCE_CHARACTERS
         minimum = EXCERPT_TEXT_CHARACTERS + EXCERPT_FIELDS_CHARACTERS + overhead
         maximum = min(TARGET_MAXIMUM_CHARACTERS + overhead, page_room // 2)
-        if minimum > maximum:
+        if minimum > maximum and page_counts is None:
             raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
                                 dict(room=maximum, minimum=minimum, target=handle, command='review-route'))
         parts.append(dict(id=handle, minimum=minimum, preferred=min(TARGET_PREFERRED_CHARACTERS + overhead, maximum),
                           maximum=maximum, overhead=overhead))
-    carried = divide_room(pool, parts)
-    allocations = [dict(handle=row['id'], excerpts=row['allowance'] - row['overhead'],
-                        rows=row['overhead'], allowance=row['allowance']) for row in carried['parts'][1:]]
+    if page_counts is not None:
+        from .review_final_pages import allocate_final_targets
+        allocated = allocate_final_targets(page_room, page_counts[final['material_allowance']], parts[0], parts[1:])
+        notes = allocated['notes']
+        # Each target has its own grant; no growing aggregate is divided into one request.
+        carried = dict(room=page_room, minimum=parts[0]['minimum'], parts=[dict(parts[0], allowance=notes)] + allocated['targets'])
+    else:
+        carried = divide_room(pool, parts)
+    allocations = [dict(handle=row['id'], excerpts=row['allowance'] - row.get('rows', row['overhead']),
+                        rows=row.get('rows', row['overhead']), allowance=row['allowance']) for row in carried['parts'][1:]]
     notes = carried['parts'][0]['allowance']
     allowance_rows = (allowance_rows_bound if allowance_rows_bound is not None
                       else measure_capacity_value(route, allocations))
@@ -1880,11 +1935,13 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
         if allowance_rows_bound is not None and kind == 'final':
             selected = select_task_limits(route, profile, kind, targets=len(handles),
                 frame_characters=value['bound'] + BOUNDED_NOTICE_CHARACTERS,
-                calibrated=limits['request_measure'] == 'calibrated', text_room=text_room, minimum_targets=len(handles))
+                calibrated=limits['request_measure'] == 'calibrated', text_room=text_room, minimum_targets=len(handles),
+                page_target_counts=page_counts)
         level_limits = select_task_limits(route, profile, kind, targets=selected['target_allowance'],
             frame_characters=value['bound'] + BOUNDED_NOTICE_CHARACTERS,
             carried_characters=carried_characters, calibrated=limits['request_measure'] == 'calibrated', text_room=text_room,
-            minimum_targets=len(handles) if allowance_rows_bound is not None and kind == 'final' else 1)
+            minimum_targets=len(handles) if allowance_rows_bound is not None and kind == 'final' else 1,
+            page_target_counts=page_counts if kind == 'final' else None)
         selected['levels'] = level_limits['levels']
         tasks[kind] = dict(selected, carried_characters=carried_characters,
                            notice_characters=BOUNDED_NOTICE_CHARACTERS)
@@ -1910,7 +1967,7 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
             count_carried_state=COUNT_CARRIED_STATE, non_ascii_limit=0.05, ratio_margin=TOKEN_RATIO_MARGIN)
     if measure is not None:
         measure_rule.update(copy.deepcopy(measure))
-    return dict(protocol=CAPACITY_PLAN_PROTOCOL, policy=POLICY, route_class=describe_route_class(route),
+    result = dict(protocol=CAPACITY_PLAN_PROTOCOL, policy=POLICY, route_class=describe_route_class(route),
         limits=copy.deepcopy(limits), measure=measure_rule,
         profile=pinned_profile, frame=frame, inventory=inventory_summary,
         targets=dict(handles=handles, digest=digest(handles)),
@@ -1920,6 +1977,10 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
             largest_card_count=cards, entry_sizes=dict(excerpt_text=EXCERPT_TEXT_CHARACTERS,
                 excerpt_fields=EXCERPT_FIELDS_CHARACTERS, cited_source=CITED_SOURCE_CHARACTERS,
                 gap=GAP_ROW_CHARACTERS, card=CARD_ENTRY_CHARACTERS, decision=DECISION_ROW_CHARACTERS)), task=tasks)
+
+    if page_counts is not None:
+        result['allocation']['final_form'] = 'pages'
+    return result
 
 
 def read_chain_capacity_plan(artifacts, assignment):
@@ -1957,10 +2018,10 @@ def describe_capacity_forecast(plan, route, profile, *, records=None, turn_kind=
             largest = math.ceil(total_characters / describe_material_levels(kind)[-1])
         elif kind == 'final':
             entries = [row for row in plan['allocation']['targets'] if row['handle'] in handles]
-            pages = _count_capacity_pages(allowance, entries, plan['allocation']['notes'],
+            pages = count_capacity_final_turns(allowance, entries, plan['allocation']['notes'],
                                           max(1, current['target_allowance']))
             turns = sum(pages.values())
-            largest = sum(_count_capacity_pages(describe_material_levels(kind)[-1], entries,
+            largest = sum(count_capacity_final_turns(describe_material_levels(kind)[-1], entries,
                                                  plan['allocation']['notes'], 1).values())
         else:
             turns = 1
@@ -1969,7 +2030,7 @@ def describe_capacity_forecast(plan, route, profile, *, records=None, turn_kind=
             turns = 0
             largest = 0
         share = current['at_or_over_limit_share']
-        by_kind[kind] = dict(turns=turns, material_allowance=allowance, state=current['state'],
+        by_kind[kind] = dict(turns=turns, **(pages if kind == 'final' else {}), material_allowance=allowance, state=current['state'],
             at_or_over_limit_share=share, sample_size=current['sample_size'],
             expected_calls=0 if not turns else turns / (1 - share) if share is not None and share < 1 else None,
             largest_state_turns=largest)
@@ -1997,7 +2058,7 @@ def describe_plan_preflight(records, route, request, plan, kind, *, observations
     measured['characters_per_token'] = rule['characters_per_token'] if calibrated else None
     from .review_excerpts import read_sent_packet
     sent = read_sent_packet(request) or {}
-    binding = sent.get('reading_turn', sent.get('reading_final', {}))
+    binding = sent.get('reading_turn', sent.get('reading_final', sent.get('reading_combine', {})))
     if binding.get('protocol') == 'exactory-openness-reading-v7':
         bounds = binding['capacity']
         observations = [dict(material_allowance=bounds.get('level_material_allowance', bounds['material_allowance']))]
@@ -2019,7 +2080,7 @@ def prepare_assignment_capacity(records, artifacts, route, declaration):
     from .errors import ResearchError
     from .review_field_classes import FRAME_UNIT_FIELD_PREFIX
     fields(declaration, ('kind',), ('plan', 'frames', 'inventory', 'targets', 'carried_budget',
-                                  'measure', 'allowance_rows_bound', 'pending_requests_bound'))
+                                  'measure', 'allowance_rows_bound', 'pending_requests_bound', 'final_pages'))
     if 'plan' in declaration:
         fields(declaration, ('kind', 'plan'))
         reference = declaration['plan']
@@ -2029,7 +2090,7 @@ def prepare_assignment_capacity(records, artifacts, route, declaration):
             raise ResearchError('invalid_input', 'A continued capacity plan keeps its route class.')
     else:
         fields(declaration, ('kind', 'frames', 'inventory', 'targets'),
-               ('carried_budget', 'measure', 'allowance_rows_bound', 'pending_requests_bound'))
+               ('carried_budget', 'measure', 'allowance_rows_bound', 'pending_requests_bound', 'final_pages'))
         frames, inventory, targets = (declaration[key] for key in ('frames', 'inventory', 'targets'))
         if not isinstance(frames, dict) or not frames or any(kind not in TURN_KINDS or kind == 'staged' for kind in frames):
             raise ResearchError('invalid_input', 'A capacity declaration needs bounded frames for supported turn kinds.')
@@ -2078,7 +2139,7 @@ def prepare_assignment_capacity(records, artifacts, route, declaration):
                                    inventory=inventory, targets=targets, carried_budget=budget,
                                    measure=declaration.get('measure'),
                                    allowance_rows_bound=declaration.get('allowance_rows_bound'),
-                                   pending_requests_bound=pending_bound,
+                                   pending_requests_bound=pending_bound, final_pages=declaration.get('final_pages', False),
                                    records=records, artifacts=artifacts)
         from .review_protocol import _put_json
         reference = dict(protocol=CAPACITY_PLAN_PROTOCOL, digest=digest(plan), artifact=_put_json(artifacts, plan))
@@ -2218,8 +2279,9 @@ def list_capacity_recovery_rows():
         unit = 'reading-math-v2' if version == openness_reading.MATH_PROTOCOL else 'reading-v7-turns'
         for kind in ('reading', 'final'):
             rows.append(dict(kind=kind, protocol=version, handler='nothing', required_unit=unit))
-    for kind in ('reading', 'final'):
-        rows.append(dict(kind=kind, protocol=openness_reading.PROTOCOL_V7, handler=kind + '_v7'))
+    for kind in ('reading', 'final', 'combine'):
+        rows.append(dict(kind=kind, protocol=openness_reading.PROTOCOL_V7,
+                         handler='final_v7' if kind == 'combine' else kind + '_v7'))
     for kind in review_parts.KINDS:
         rows.append(dict(kind=kind, protocol=review_parts.PROTOCOL,
                          handler='parts_v2_read' if kind == 'read' else 'nothing'))
@@ -2338,12 +2400,12 @@ def plan_capacity_recovery(records, artifacts, assignment, outcome) -> 'Recovery
                    effort_message=CAPACITY_EFFORT_MESSAGE,
                    at_or_over_limit_share=share, profile_rows=profile_rows, attempts=attempts)
     if row['handler'] in ('reading_v7', 'final_v7'):
-        from .openness_reading_v7 import plan_turn_recovery, FINAL_PAGES_STATEMENT
+        from .openness_reading_v7 import plan_turn_recovery, FINAL_PAGES_STATEMENT, FINAL_PAGE_FLOOR_STATEMENT, V7_FINAL_FORMS
         replacement = plan_turn_recovery(records, artifacts, assignment, outcome)
         if replacement is not None:
             replacement['details'].update(details)
             return replacement
-        details['range_not_served'] = FINAL_PAGES_STATEMENT
+        details['range_not_served'] = FINAL_PAGES_STATEMENT if V7_FINAL_FORMS == ('request',) else FINAL_PAGE_FLOOR_STATEMENT
         return describe_capacity_decision(records, artifacts, assignment, outcome, details)
     replacement = (failures.plan_output_replacement(records, artifacts, assignment,
                     allow_single=outcome == 'output_over_cap', outcome=outcome)
@@ -2391,32 +2453,24 @@ def describe_next_capacity_call(records, route, selected):
     return result
 
 
-def _count_capacity_pages(room, targets, notes, targets_per_page):
-    """Pack the granted entries under the same room admission function used to grant them."""
-    from .errors import ResearchError
-    pages = 0
-    condensing = 0
-    parts = []
-    note = dict(id='notes', minimum=notes, preferred=notes, maximum=notes)
-    for target in targets:
-        allowance = target['allowance']
-        if allowance + notes > room:
-            allowance = room // 2
-            condensing += math.ceil(target['allowance'] / room)
-        part = dict(id=target['handle'], minimum=allowance, preferred=allowance, maximum=allowance)
-        try:
-            if len(parts) >= targets_per_page:
-                parts = []
-            divide_room(room, [note] + parts + [part])
-        except ResearchError as error:
-            if error.code != 'review_route_capacity_below_floor':
-                raise
-            parts = []
-            divide_room(room, [note, part])
-        if not parts:
-            pages += 1
-        parts.append(part)
-    return dict(pages=pages, condensing_turns=condensing, closing_pages=int(pages > 1))
+def count_capacity_final_turns(room, targets, notes, targets_per_page):
+    """Count the granted entries through the same entry-aware final planner."""
+    if not targets:
+        return dict(pages=0, condensing_turns=0, closing_pages=0, forecast=False)
+    from .review_final_pages import count_final_turns
+    from .review_condensing import plan_condensing
+    entries = []
+    for row in targets:
+        # A grant is divisible across excerpt entries; its forecast uses whole
+        # entries at the maximum excerpt size and explicit bounded row entries.
+        remaining, parts = row['allowance'], []
+        while remaining:
+            size = min(remaining, EXCERPT_TEXT_CHARACTERS + EXCERPT_FIELDS_CHARACTERS)
+            parts.append(dict(handle='%s:%d' % (row['handle'], len(parts)), characters=size))
+            remaining -= size
+        entries.append(dict(handle=row['handle'], entries=parts, rows=[]))
+    return count_final_turns(room, targets_per_page, EXCERPT_TEXT_CHARACTERS + EXCERPT_FIELDS_CHARACTERS,
+        notes, [], entries, room, DECISION_ROW_CHARACTERS, plan_condensing)
 
 
 def measure_capacity_value(route, value):

@@ -2,6 +2,21 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "v7-final-pages-record-one-finding",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "D1 v7 final pages and composite authentication",
+      "summary": "A chain read 57 turns but its final exceeded the route limit.",
+      "expected": "The stored chain reaches an authenticated composed finding in bounded pages, without repeating its earlier readings.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_final_pages.IncidentFinalPagesTests.test_t4_fifty_seven_carried_turns_reach_a_recorded_paged_finding",
+        "test_openness_final_pages.FinalPagesCommandTests.test_a5_q7_nine_targets_record_one_authenticated_composite",
+        "test_openness_final_pages.CondensingCommandTests.test_stored_request_plan_condenses_at_measured_ratio_and_ignores_new_priors",
+        "test_openness_final_pages.FinalPagesCommandTests.test_verify_refuses_changed_plan_target_output_missing_page_and_currency"
+      ]
+    },
+    {
       "id": "final-page-plan-bounds-each-target-and-closing",
       "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
       "class": "review capacity (pure final page allocation and replay)",

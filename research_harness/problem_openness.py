@@ -139,7 +139,7 @@ def prepare_openness(records, artifacts, value, revision):
     from .openness_reading import PROTOCOL_V5, PROTOCOL_V6, PROTOCOL_V7, find_protocol, find_stage, verify_chain, verify_problem_coverage
     supplied = json.loads(artifacts.read(assignment["packet"]))
     stage = find_stage(supplied)
-    if stage == "reading" or (stage == "final" and output.get("stage") == "reading"):
+    if stage in ("reading", "page", "combine") or (stage in ("final", "closing") and output.get("stage") in ("reading", "material")):
         raise ResearchError("openness_reading_incomplete", "This turn of the reading chain returned no native result; "
                             "continue the chain to a final turn that returns it", {"assignment_id": assignment["id"]})
     finding_contract = uses_finding_contract(assignment)
@@ -183,7 +183,7 @@ def prepare_openness(records, artifacts, value, revision):
         raise ResearchError("openness_statement_mismatch", "The finding must name the exact current problem claim")
     delivered = {entry["digest"] for entry in packet["evidence"]}
     verified = None
-    if stage == "final" and find_protocol(supplied) in (PROTOCOL_V5, PROTOCOL_V6, PROTOCOL_V7):
+    if stage in ("final", "closing") and find_protocol(supplied) in (PROTOCOL_V5, PROTOCOL_V6, PROTOCOL_V7):
         verified = verify_problem_coverage(records, artifacts, assignment, final=True)
         delivered.difference_update(row["search_digest"] for row in
                                     packet["scientific_context"]["openness_minimum"]["searches"])
@@ -224,7 +224,7 @@ def prepare_openness(records, artifacts, value, revision):
                   statement_id=statement["id"], review=output, recorded_revision=revision)
     if composite is not None:
         record['composite'] = dict(id=composite['id'], digest=digest(composite))
-    if stage == "final":
+    if stage in ("final", "closing"):
         record["reading_turns"] = verified["turns"] if verified is not None else verify_chain(records, artifacts, assignment)
     from .problem_openness_reviews import validate_native_reviews
     native_reviews = validate_native_reviews(records, artifacts, packet, state)
