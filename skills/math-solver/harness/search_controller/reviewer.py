@@ -486,7 +486,10 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
                       'review_parts_incomplete')
             current = assignment_state(records, artifacts, assignment['id'])
             header = verified['packets'][-1][review_parts.KEY]
-            receipts = header['receipts'] + [dict(assignment_id=assignment['id'], attempt_id=current['attempt_id'])]
+            if header['protocol'] == 'exactory-review-parts-v3':
+                receipts = verified['state']['receipts']
+            else:
+                receipts = header['receipts'] + [dict(assignment_id=assignment['id'], attempt_id=current['attempt_id'])]
             # Native parts have no openness reading units; the verified series supplies their coverage.
             current = dict(current, reading_turns=[dict(assignment_id=receipt['assignment_id'],
                 attempt_id=receipt['attempt_id'], delivered_units=[]) for receipt in receipts])
@@ -530,6 +533,9 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
             artifacts.read(entry["artifact"])
         if supplied["kind"] == "result" and value.get("schema_version") == 2:
             delivered = {entry["digest"] for entry in supplied["evidence"]}
+            if assignment.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+                from research_harness.review_parts_v3 import list_native_citation_digests
+                delivered.update(list_native_citation_digests(records, artifacts, assignment, current))
             s.require(set(value["findings"]["openness"]["evidence"]) <= delivered,
                       "Openness evidence must be delivered in the observed review packet", "review_packet_mismatch")
             if new and value["findings"]["openness"]["outcome"] != "unresolved":
