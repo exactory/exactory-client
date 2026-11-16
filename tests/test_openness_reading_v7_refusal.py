@@ -1131,6 +1131,26 @@ class SuccessorProjectionTests(OpennessReadingCase):
             self.assertEqual(projected['scientific_context'][key], exported['scientific_context'][key], key)
 
 
+class Record12ShapeTests(unittest.TestCase):
+    def test_stopped_head_is_handed_to_an_export_whose_chain_carries_it(self):
+        from test_openness_carried_integration import Record12ShapeTests as ShapeFixture
+        fixture = ShapeFixture.build_fixture()
+        self.addCleanup(fixture.doCleanups)
+        before = fixture.store.snapshot()['records']
+        plan = plan_next(before, fixture.artifacts, 'stopped-57')
+        self.assertEqual((plan['state'], plan.get('command')), ('handoff', 'export'), plan)
+        self.assertEqual(plan['details']['successor']['protocol'], v7.PROTOCOL)
+        _, receipt = LegacySuccessorTests.execute_export(fixture, plan, identifier='shape-handoff')
+        self.assertEqual(receipt['protocol_selection']['protocol'], v7.PROTOCOL)
+        self.assertEqual(receipt['carried_readings'], plan['details']['successor']['carried_readings'])
+        stopped = next(row for row in receipt['carried_readings']['chains'] if row['chain'] == 'stopped')
+        self.assertEqual(len(stopped['turns']), 57)
+        after = fixture.store.snapshot()['records']
+        for kind, group in before.items():
+            for key, row in group.items():
+                self.assertEqual(digest(after[kind][key]), digest(row), (kind, key))
+
+
 class NoticeRoomTests(unittest.TestCase):
     def build_label_native(self, route, count, label_set):
         native = turn_fixtures.build_native(count)
