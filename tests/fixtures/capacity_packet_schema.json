@@ -16764,10 +16764,11 @@
       "callee": "CHAIN_OBSERVERS",
       "caller": "research_harness.openness_carried.observe_qualifying_chain",
       "classification": "listed module",
-      "reason": "The MappingProxyType CHAIN_OBSERVERS table is pinned by the full module AST; v5/v6 share observe_carried_chain and v7 uses observe_v7_chain.",
+      "reason": "The source-owned MappingProxyType CHAIN_OBSERVERS table is pinned by the full module AST; v5/v6 share observe_carried_chain, v7 uses observe_v7_chain and math-v1 uses observe_math_chain.",
       "targets": [
         "research_harness.openness_reading_v7.observe_carried_chain",
-        "research_harness.openness_reading_v7.observe_v7_chain"
+        "research_harness.openness_reading_v7.observe_v7_chain",
+        "research_harness.openness_carried.observe_math_chain"
       ]
     },
     {
@@ -16775,10 +16776,11 @@
       "callee": "CHAIN_OBSERVERS",
       "caller": "research_harness.openness_carried.verify_carried_selection",
       "classification": "listed module",
-      "reason": "The MappingProxyType CHAIN_OBSERVERS table is pinned by the full module AST; v5/v6 share observe_carried_chain and v7 uses observe_v7_chain.",
+      "reason": "The source-owned MappingProxyType CHAIN_OBSERVERS table is pinned by the full module AST; v5/v6 share observe_carried_chain, v7 uses observe_v7_chain and math-v1 uses observe_math_chain.",
       "targets": [
         "research_harness.openness_reading_v7.observe_carried_chain",
-        "research_harness.openness_reading_v7.observe_v7_chain"
+        "research_harness.openness_reading_v7.observe_v7_chain",
+        "research_harness.openness_carried.observe_math_chain"
       ]
     },
     {
@@ -17876,6 +17878,466 @@
       "targets": [
         "research_harness.openness_reading_v7.plan_turn_recovery"
       ]
+    },
+    {
+      "caller": "research_harness.openness_carried._describe_chain",
+      "callee": "research_harness.openness_reading.is_math_openness_packet",
+      "ast_sha256": "8abd5c8f7c71aaad62af5b519d86f42314fc4ba41084d3e80d64edcc91f72b78",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading.is_math_openness_packet"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.openness_reading._create_record",
+      "ast_sha256": "0c20efc55cb044d48cdf40b97520bac3dcf9acf7094a43bc296d44b401e4427f",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading._create_record"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.openness_reading_v7._require_selected",
+      "ast_sha256": "c4974f7a6fb0a4e4209df40a1db79559092dbad07438d5e41016f190a307b4d2",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading_v7._require_selected"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.openness_reading.validate_turn_output",
+      "ast_sha256": "2c00844fe23ec84ac0bc969a934dcc11b054d6c8181de69cf248564fb0ed927d",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading.validate_turn_output"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.openness_reading._require",
+      "ast_sha256": "8c0f786b2a33a7f9ad9a550f341a0297d769c0dd15e2a26de0273d0c545dfb4f",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading._require"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.openness_reading._extend_record",
+      "ast_sha256": "ebff761eca279532cd40f04a85c712add56ac17490d6718629e99421bf8999f1",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading._extend_record"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.openness_reading.has_deliverable_passage",
+      "ast_sha256": "cbf5c217140ca06d2b8e8a9eb598d1995d75e93d5950919d7060339ea5f4ad1e",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading.has_deliverable_passage"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.openness_reading._find_record",
+      "ast_sha256": "d464ebcd095089eb939af777b65f6b3da8e15e5c07e44d45049a51d95683bd7c",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading._find_record"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.openness_reading.find_stage",
+      "ast_sha256": "6989219798af030df8aaec089bf7cf3d9591064432a02637c42abd4b18fa4bbc",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading.find_stage"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.openness_reading.find_protocol",
+      "ast_sha256": "6f5c84ec3155190253aaf517039337940819bd5428742f0cd2c53a4c7085e387",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading.find_protocol"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.operations.normalized_text",
+      "ast_sha256": "dc8d8179ccdd7b5a36f7642714b3b48c7b07f80ccd4ec82ba4671b27de200ecd",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.operations.normalized_text"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.operations.normalized_text",
+      "ast_sha256": "d81f1bd517b980c1c96fe0b9746c622d88fe4b7ea58bb5796aeb108b591a66d5",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.operations.normalized_text"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.operations.normalized_text",
+      "ast_sha256": "bf52391ffdb1dcb664745fa3db97284b0e26e9c6ac6907c6db1cb6fe43984fbf",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.operations.normalized_text"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.operations.normalized_text",
+      "ast_sha256": "348537d4c5bae86b08a6be26f6897f42447073aaaa8f2d0c216999799ae44ede",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.operations.normalized_text"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.review_protocol.canonical_prompt",
+      "ast_sha256": "444a4059d29791a25ddd038f49c90de61b30ce6c621286ae036c84aee71138a2",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_protocol.canonical_prompt"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.openness_reading._project_withheld_notes",
+      "ast_sha256": "495d6f460947d5116a55b81a61e471b4a81b2e0477e20b91a20f55296faa9aed",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading._project_withheld_notes"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.openness_reading._find_record",
+      "ast_sha256": "c071b1c78f26b314bf0c935e87d749f73e9e1d1013c7d2ef002b48ae992a9c45",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading._find_record"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "callee": "research_harness.review_protocol.find_common_prompt_version",
+      "ast_sha256": "c381932a0e0f23fc75b0eeee9513fc665255f51b1b8525c29d5cc05904a2adb6",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_protocol.find_common_prompt_version"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.openness_reading._list_chain",
+      "ast_sha256": "87f8a10fab1bf31fbc023dbaf40c811120dc488bd25262ce8fe54819b502da49",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading._list_chain"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.native_review.load_packet",
+      "ast_sha256": "becd3381ed13fa870bcb610e104de3ae362f82398d343daceb5a05d361b3168b",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.native_review.load_packet"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.openness_reading_v7._require_selected",
+      "ast_sha256": "3d427b2953de34a71eb12413227c6ca4024ac62decd2ddfbb7bfc0a9752241d7",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading_v7._require_selected"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.openness_reading.list_reading_rows",
+      "ast_sha256": "0573a60af17179545f831997670dcc6007b4718b116885b46adb291240c84c82",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading.list_reading_rows"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.openness_reading._compute_spans",
+      "ast_sha256": "6e79c781811491213dbe4c3aa23196f5726cd76500bb474c6e0bfe2254391aca",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading._compute_spans"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.openness_reading._observe_turns",
+      "ast_sha256": "95e20a2454430f340f030a6f91980e6cf6fd99724fc85b3d4253520b3355d81b",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading._observe_turns"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.openness_carried._verify_math_prefix",
+      "ast_sha256": "8c318074d2dd9a93e71d6ebbb0a6ac6a5a9730915c0eae02520d75c0e2125465",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_carried._verify_math_prefix"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.openness_reading.is_math_openness_packet",
+      "ast_sha256": "8abd5c8f7c71aaad62af5b519d86f42314fc4ba41084d3e80d64edcc91f72b78",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading.is_math_openness_packet"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.review_excerpts.find_identity",
+      "ast_sha256": "ed1bfa1b22080d9a4f2c273896e5a11d1008ca1deef302ed136d68603f1e6e4b",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_excerpts.find_identity"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.openness_reading._find_record",
+      "ast_sha256": "c071b1c78f26b314bf0c935e87d749f73e9e1d1013c7d2ef002b48ae992a9c45",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading._find_record"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.openness_reading._extend_record",
+      "ast_sha256": "9ce918bb2120a475a91e2b53649fa2aac502fa212022b0287d1de8552b7b027d",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading._extend_record"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.openness_reading._collect_coverage",
+      "ast_sha256": "7fac504c15db68133b9e11cb84c04b8553503f8aed986077057cb5b57c4a002a",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading._collect_coverage"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.openness_reading.find_stage",
+      "ast_sha256": "cc553e313bff8d164856a8fcf7e405684e60ae41efbc60e7487df5e06eb13004",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading.find_stage"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.review_excerpts.find_identity",
+      "ast_sha256": "3ab219f0d8d5b1c92e9a00d52b4e43d465c2f793e21bfc96610d1b9adc961168",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_excerpts.find_identity"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.openness_reading._is_complete",
+      "ast_sha256": "9ccdacc09b7f207732b39ba7078f87642d2524ace5395ea97ea7b6170ed10495",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading._is_complete"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.openness_reading_v7._describe_checked_entries",
+      "ast_sha256": "08e0fc3dd560487d7abf6c757db1bacff9128d1ceb867e95bc252f55fdf2b109",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading_v7._describe_checked_entries"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.openness_reading_v7._describe_checked_entries",
+      "ast_sha256": "69879821d6958cbde7a159e4b2496588fee8ea7f8870660f6ef454522b4150fe",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading_v7._describe_checked_entries"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "callee": "research_harness.openness_reading_v7._describe_identity",
+      "ast_sha256": "dc859ef706df40a42e7cb84f0b054310cadabf9feaeadaf0c4023d2137cb971f",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_reading_v7._describe_identity"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.select_carried_readings",
+      "callee": "research_harness.openness_carried.classify_carried_notes",
+      "ast_sha256": "372cdf7796d6fb48b4543136cb8bd56266458cba6b87a37f4e15a7a95d10ad8a",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_carried.classify_carried_notes"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.select_carried_readings",
+      "callee": "research_harness.openness_carried._list_search_dependencies",
+      "ast_sha256": "8a72b51fde7504697e30f524bfce6dce8ffd2b6ca7e4bc2af0d4c09ba3af7ef7",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_carried._list_search_dependencies"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.verify_carried_selection",
+      "callee": "research_harness.openness_carried.classify_carried_notes",
+      "ast_sha256": "03eb6782efd756a45b0752a7bbda4876bf11975af10bede02f2c2b06eb5158bb",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_carried.classify_carried_notes"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.openness_carried.verify_carried_selection",
+      "callee": "research_harness.openness_carried._list_search_dependencies",
+      "ast_sha256": "8a72b51fde7504697e30f524bfce6dce8ffd2b6ca7e4bc2af0d4c09ba3af7ef7",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.openness_carried._list_search_dependencies"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "callee": "research_harness.errors.ResearchError",
+      "ast_sha256": "6c5ad0c6484e9359975e1de763072cb623a16502af2a26b27eda5d91ab6fc42d",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.errors.ResearchError"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.review_route_capacity.prepare_assignment_capacity",
+      "callee": "research_harness.operations.fields",
+      "ast_sha256": "ec2fd4bdd668111c71f7c964ba05d9bba1da91c3196a82d13a5d19c37bdbacbf",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.operations.fields"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.review_route_capacity.prepare_assignment_capacity",
+      "callee": "research_harness.operations.fields",
+      "ast_sha256": "8bf1cd334eb2ec675e52ecc33621cbe28050226953de1a8f2ffcd8042736eaef",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.operations.fields"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.review_route_capacity.prepare_assignment_capacity",
+      "callee": "research_harness.review_route_capacity.plan_chain_capacity",
+      "ast_sha256": "3c12430db97d9c70cb55ccf9a897a72b894735da8edc32bcb0f7f680b40dc162",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_route_capacity.plan_chain_capacity"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.review_route_capacity.prepare_assignment_capacity",
+      "callee": "research_harness.errors.ResearchError",
+      "ast_sha256": "eacfe953595f0bef976cb92663ad552c2e2c45db6c3b3eb4c30b3898143eeb0b",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.errors.ResearchError"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+    },
+    {
+      "caller": "research_harness.review_route_capacity.prepare_assignment_capacity",
+      "callee": "research_harness.errors.ResearchError",
+      "ast_sha256": "ceaadfd1bb6b9cd63e0115e6d52d758cbb5eab2a9a5dd8d9bca7c8adbf895edb",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.errors.ResearchError"
+      ],
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
     }
   ],
   "certificates": {
@@ -18863,13 +19325,13 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.openness_carried": {
-      "ast_sha256": "310b1e0ccec60c958eb842eb228da0a8bdb834fb8936b2687eeffff79b1303fd",
+      "ast_sha256": "d8fc4a50a7c3103a8424d195074365b73dd76331b018ef103e18d971578c4d0a",
       "functions": {
         "_count_characters": "e2a2bd30a7064019751f71e6460089f6113944250985699cc26032e713767abf",
-        "_describe_chain": "08762342e10be487998def63bcb84940843afc59197df81fcd4b0c48fd4ca781",
+        "_describe_chain": "81e2b697903eee6bb2162b26daa92a7c194d88fb0b3658d71f6cdafa8a84e831",
         "_describe_missing_ranges": "c0906f9e86da6d8d262c59d1b68db075e9600cbea35de7e66dfb8d704db1cb86",
         "_index_sources": "2de0f1bd51f9737123a71725d0c2002ab142fb671c53e0cbd4d556732921f833",
-        "_list_search_dependencies": "0d3604024444e77ebf159e9f5f16962c9f8c93e73e65571bf6e1d51196b750e7",
+        "_list_search_dependencies": "6b4e874a59a11769c5a308d843772683fd8e06048a5f84e271cd736a5ff2ae44",
         "_merge_ranges": "9b7bce78fbebc1fd7012f9226428b18fe26a67892f04b48908c33348095358a5",
         "_require_shape": "7b32d6377df0083d97e1511ea57ea9cb303633215668e28d4968fc57f00c828a",
         "_select_recorded_attempts": "1f34e795b3ba9e8d8d453fa5784ffecd6cf226492c146d5ac985c3e552d36f79",
@@ -18878,51 +19340,87 @@
         "classify_carried_notes": "9e180cf2c1f14caa28754531b470abf05fe3aa821e64801a7f1b1a4ba844dd6d",
         "credit_carried_turn": "6be211ff3069c5e68aa726fc407b1c04566499c355c76f95971a02e6f7f41bad",
         "describe_carried_selection": "e5a75c3e7a0002722ca4c2f1b604aceb611e4b15b65933cd1d969640869db964",
-        "list_qualifying_chains": "c6258e7e78b48feae62c211e98a14d1a05e3a5b2d0c09a35ad0c06d947beb453",
+        "list_qualifying_chains": "e8d7e624c9f3c66abe107438121cd9810b116e79bae7bb442aff03db0a1095ac",
         "observe_qualifying_chain": "f93665f40415d7d97f3570650c9c1a0a248af76ba8b2aba87671af67e829ad11",
-        "select_carried_readings": "091d655a96dda1216518c89fd6540048447a0fc3b2f7ad4c8cce6437f6ec3c66",
-        "verify_carried_selection": "63f79b86373b41d0cb7b28d233bd4477ffd2ff7f24f3eb9b33f62a7482942513"
+        "select_carried_readings": "ad3adafb806e744e0888adf7f9c0f3de6739a9a3e0b7971935e306d8b00ad3a0",
+        "verify_carried_selection": "6661cf55534324b3d3683cc555123d608b5bbd63c89e258758913ad38bf61514",
+        "_verify_math_prefix": "756a9b0e11d289023f5fd04f0d8908b09b9998217ac106a1dcb3558704d59913",
+        "observe_math_chain": "256aebc696b215d646a7eebb5502974bf657b1f4d82eb03cb4e38c7331cbb859"
       },
       "packet_call_digests": [
+        "03eb6782efd756a45b0752a7bbda4876bf11975af10bede02f2c2b06eb5158bb",
+        "0573a60af17179545f831997670dcc6007b4718b116885b46adb291240c84c82",
         "07474da0cc526095a7ca1813904a18aa75a29ba9eeda1136e89081427138ddb8",
         "07a3312aabf5ec02665a48a64eb49f45b406def9a53fd3b78eca3ff60d889b66",
+        "08e0fc3dd560487d7abf6c757db1bacff9128d1ceb867e95bc252f55fdf2b109",
         "0afc8087f2800d96f02345980a7edb410a687c519a813f463dc3c718c16e4670",
+        "0c20efc55cb044d48cdf40b97520bac3dcf9acf7094a43bc296d44b401e4427f",
         "0d78505366883239bd231df3af4a3ef2e48b2f2fd4c7d7d79934007efcf5d534",
         "0e0f6082e1f810daee883da83ecbd61cdc81bcb6e1f716dafb2a373e1107a8a5",
         "1627ae0f67c4e8af987a023e18e4ee7bc3008f637cc5af2c2a3f67804899e43e",
         "1982df5a1bf5941892521acba4a8ff373d98d07038a14324aeefc1411ac4ed3a",
         "284bdca050781dde8c6ad816b022d72d78b052c4e8ba219295a9e69f32bd02ec",
         "2aebe69d3939cdda30c4b54441fd7258afd1959eb83e8b97d1076d4a752ac08f",
+        "2c00844fe23ec84ac0bc969a934dcc11b054d6c8181de69cf248564fb0ed927d",
         "2fd3a44eac153a516e06773f2b718de5de9ddb6c1817851aa6481b11a7429fb4",
         "32819f4cb3be2964d70c4df0c8a2b78fec5e236e5f4990b0ee45a84b2ad42b8c",
+        "348537d4c5bae86b08a6be26f6897f42447073aaaa8f2d0c216999799ae44ede",
         "354704f013c7837df527eb97d0a8d3373e6fbd84aa6648963e51610d745054b0",
+        "372cdf7796d6fb48b4543136cb8bd56266458cba6b87a37f4e15a7a95d10ad8a",
+        "3ab219f0d8d5b1c92e9a00d52b4e43d465c2f793e21bfc96610d1b9adc961168",
+        "3d427b2953de34a71eb12413227c6ca4024ac62decd2ddfbb7bfc0a9752241d7",
         "42989492f7a04882dcb47965ad89951af8317259bae8c5850efe144dd18d93b7",
+        "444a4059d29791a25ddd038f49c90de61b30ce6c621286ae036c84aee71138a2",
+        "495d6f460947d5116a55b81a61e471b4a81b2e0477e20b91a20f55296faa9aed",
         "5105244c889b5577981cb3f1d34bd168444199cd38f31c66db9538ccc7a5d9f6",
         "67f81f559c76547ceff3c02e39c3466f2e4ae2785a3b5507bdbbf6de43c93ed1",
+        "69879821d6958cbde7a159e4b2496588fee8ea7f8870660f6ef454522b4150fe",
+        "6989219798af030df8aaec089bf7cf3d9591064432a02637c42abd4b18fa4bbc",
+        "6e79c781811491213dbe4c3aa23196f5726cd76500bb474c6e0bfe2254391aca",
         "6f5c84ec3155190253aaf517039337940819bd5428742f0cd2c53a4c7085e387",
         "6f727ace4915fc2908417ccf8a4c8e1c018831affff8f9f8c3e607e703e4ab6c",
         "785d513977dff6755f9935a6466cee51f1197a31653604df0696d82e1104af19",
+        "7fac504c15db68133b9e11cb84c04b8553503f8aed986077057cb5b57c4a002a",
         "82a050cb023d779d7260ba26f094e08252e30ad3df54a490447e9eed89165723",
+        "87f8a10fab1bf31fbc023dbaf40c811120dc488bd25262ce8fe54819b502da49",
+        "8a72b51fde7504697e30f524bfce6dce8ffd2b6ca7e4bc2af0d4c09ba3af7ef7",
+        "8abd5c8f7c71aaad62af5b519d86f42314fc4ba41084d3e80d64edcc91f72b78",
+        "8c0f786b2a33a7f9ad9a550f341a0297d769c0dd15e2a26de0273d0c545dfb4f",
+        "8c318074d2dd9a93e71d6ebbb0a6ac6a5a9730915c0eae02520d75c0e2125465",
         "8fa47e2463577cfccd0c60ca676fc6a900a151eda771eac7652dd9fd142c993f",
         "8ff7a805fc8e621c7f665dec7a6aa3b3ed66a4063274d2a3cc87095358f4b86a",
+        "95e20a2454430f340f030a6f91980e6cf6fd99724fc85b3d4253520b3355d81b",
         "98f66653b8a62ba7b4fed1168e77af88796052212d4b5c365cabb7ccd964aef1",
         "9989089eea15f51fdf60badb06fb1df0535b5f8237f42c92d72b66e820cf3d77",
+        "9ccdacc09b7f207732b39ba7078f87642d2524ace5395ea97ea7b6170ed10495",
+        "9ce918bb2120a475a91e2b53649fa2aac502fa212022b0287d1de8552b7b027d",
         "a65fb5cdb825e40e3628607d5172b235173317a746699c1fdc512915c8fe9c95",
         "bcff6ace90910e739459da2981e3f8498f4296f26ea33afc903ad32d76d1730b",
+        "becd3381ed13fa870bcb610e104de3ae362f82398d343daceb5a05d361b3168b",
         "bee2f7b5e496bb970ea247ddf9d9c70298761f59dfef0957cad084af90b437ec",
+        "bf52391ffdb1dcb664745fa3db97284b0e26e9c6ac6907c6db1cb6fe43984fbf",
+        "c071b1c78f26b314bf0c935e87d749f73e9e1d1013c7d2ef002b48ae992a9c45",
+        "c381932a0e0f23fc75b0eeee9513fc665255f51b1b8525c29d5cc05904a2adb6",
         "c4591c3ef28f19f6e06245f0f6d1caf7c587675a5817fc74f1fe040306672740",
+        "c4974f7a6fb0a4e4209df40a1db79559092dbad07438d5e41016f190a307b4d2",
         "c65b2382e8edb52047d37cd1e17dbfc90dbcd7f0d2cddd92e5c8f704ec73a11c",
+        "cbf5c217140ca06d2b8e8a9eb598d1995d75e93d5950919d7060339ea5f4ad1e",
+        "cc553e313bff8d164856a8fcf7e405684e60ae41efbc60e7487df5e06eb13004",
         "cf1dca3305a9903cb2dc09c66a6f71552482beac4ff8f7bc6a9aa4937a0eb140",
         "d2de6990f18000bdf4851e2f4a019b59c59b501fcd1fb89f10bbe4123c496aa2",
+        "d464ebcd095089eb939af777b65f6b3da8e15e5c07e44d45049a51d95683bd7c",
         "d81f1bd517b980c1c96fe0b9746c622d88fe4b7ea58bb5796aeb108b591a66d5",
         "dc859ef706df40a42e7cb84f0b054310cadabf9feaeadaf0c4023d2137cb971f",
+        "dc8d8179ccdd7b5a36f7642714b3b48c7b07f80ccd4ec82ba4671b27de200ecd",
         "dd07f921935e65a143b478dd5614c3e6b0681bc79a59cd87e70aca71de9ca6f8",
         "e936bacbfd40359a2b9702ccbcd968094b62c9d32ef4434b11f22b1450677ec0",
+        "ebff761eca279532cd40f04a85c712add56ac17490d6718629e99421bf8999f1",
+        "ed1bfa1b22080d9a4f2c273896e5a11d1008ca1deef302ed136d68603f1e6e4b",
         "edaa48f9b7b292ea77afc57d4d1662d317a271ae66a20f8729c588ac940c0349",
         "f013eb9d7635176aea0b64e444fadc93e413cc61c62fb93eb34f36060f8e2bff",
         "fc3140397252aa4c89048c885b9f6dd0d1d7c2f2842dae7387ca129a7e05dc9a"
       ],
-      "reason": "Reviewed complete selection/successor module: selection and planning collections stay in digest-bound artifacts or planner receipts; logical native packet and projected minimum fields use the existing closed native declarations. Whole source and functions are pinned, including unexecuted branches."
+      "reason": "Reviewed complete selection/successor module: selection and planning collections stay in digest-bound artifacts or planner receipts; logical native packet and projected minimum fields use the existing closed native declarations. Whole source and functions are pinned, including unexecuted branches. Reviewed Step A against 493461ef: math-v1 prefix authentication produces the existing internal observation form; credit_carried_turn projects its span_sha256 to the existing range sha256 and build_carried_selection retains its stored form. packet_kind selects a policy, not a wire member. Existing v7 carried selection references and bounded projected reading/final schemas are unchanged. Both dispatch sites now include the math observer, and its packet-source calls are declared."
     },
     "research_harness.openness_minimum": {
       "ast_sha256": "fbd57555c16ef3d15e17a839e39295183278727515d33e10092307bdfaa8a274",
@@ -22696,7 +23194,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_route_capacity": {
-      "ast_sha256": "14a66bdd335f9eaa409628a5ddd24713c55cb31fcecac7242b1c158410a56929",
+      "ast_sha256": "e1578f8439864658846cb0411ff6b4fdf2fb7f385ab74391daae56603c8fe98b",
       "functions": {
         "_build_serving_parts": "8f2f7be1d7e1d4cc20fa124af779a48e77d41ab31cb6c7aed1fe3ed6a3de3afe",
         "_build_serving_repair": "c50aaef3ccfcccf6064f9a4cdaa0a0f52111886dd9b185936b6d1e5a38ab47ca",
@@ -22764,8 +23262,8 @@
         "merge_profile_rows": "be408c3437ff8b29f6436f534c5c9d273232ad182c39cc7068eb587fb2648b3b",
         "pack_profile_prior": "cf2f899f6e103c3086dc749c6ad02492e7cb9d493c94d904c9e468847b82f22d",
         "plan_capacity_recovery": "3410862b70e8e3391102986923ceee2711b015c54c7554c4d74f1d9faf8156b6",
-        "plan_chain_capacity": "7bcbeb4951c20b4d690e4f0e14294c6b7cbfcec2abce1d985b9d6a72e4904881",
-        "prepare_assignment_capacity": "16e2840e44a5fe769451d06fe4271256c853c050ee2066f43f07faec07df40a8",
+        "plan_chain_capacity": "d8810b055fe9d42f2bb2a41bbc1b8a8c32b3a083053f660fc7a398c59e096fb1",
+        "prepare_assignment_capacity": "d50174f1332566ca52a1ad62dfa14d9effb434d8347bd244ec90492af63a99c3",
         "qualifies_for_output_profile": "0b6dc9c47e30814e0677cf564d8471f1242e0b88c51e852b32df6b03846c08fd",
         "read_chain_capacity_plan": "bf38987008e1c94cba95973349a93c3130505138d155212b78db7f5650e32bb3",
         "read_installed_cli_version": "7ab8a808e85c473964f019ff6052eb71f04a036c0115a21d0b491c00f5ee310b",
@@ -22812,6 +23310,7 @@
         "3119ca2bde0c6b49837baf039cbce6d2514ebd66385630b71e705904b140dbcb",
         "328a08fb920fdb67924261789055b9a82c29f249ead1898adcd6c66c21e5744a",
         "371ea6c3676c38afa11582c1dbb45961f2bd1e6342dc52911a5482b4b178f9c9",
+        "3c12430db97d9c70cb55ccf9a897a72b894735da8edc32bcb0f7f680b40dc162",
         "3e9d21827fce68ca03497d462c43b5d75bf6ae8018f347c692d6aadd0e0554b3",
         "3ef6de15a3156cac320c6b2b230185098474a0e18b1c2dc9537ecc7444899095",
         "3f35809fe3285b9c83234862ed66066ef9c9916dfebccfe0796f87e21503b245",
@@ -22838,6 +23337,7 @@
         "69cf543f5b92e9c1d722a6a2e11ee5e2aec5d5d6072c2e5dd30d92cb34e0fd0e",
         "6a1ea2b9d90987ec0422730e0cec7dd48a891246f8b6a9c48e57b019567fd407",
         "6c4b59c6048f86b6a4785ed24caf1f8d0cb5081e54c6d2da777e692497daef9e",
+        "6c5ad0c6484e9359975e1de763072cb623a16502af2a26b27eda5d91ab6fc42d",
         "7143de2d68fb3a8f091ca541660a9a24699797383e1e6bb3a643776a8efc32f8",
         "75b59a9ec838dbee0383f259c99a7887f208afddf5d3fed91853f56e08dfa9df",
         "776f0474c79a81eb9abce04f2cc08a7ae278b2a8c3906af16bba3bfb8292b76f",
@@ -22851,6 +23351,7 @@
         "8872703e07e4d5c7b053fe60efddd0e51063d65bf8cb90265d3e02d7724d1273",
         "889a5ecd919d4f2fef928e74a0ad419456da73d39d3a5789704645fecf70bfc6",
         "8abaec634a536215775eee245706f864d88d290cbe5fc180709d83ca623e2419",
+        "8bf1cd334eb2ec675e52ecc33621cbe28050226953de1a8f2ffcd8042736eaef",
         "8e7fb7260e376c8e0d97e7e0a5d46b25b71ced27093a30cf88f09a0eb4948117",
         "8f6086969b1e7b72e53943da096e4fe5a2e2b87bb25142b85b20ca37fd1db40d",
         "8ff7a805fc8e621c7f665dec7a6aa3b3ed66a4063274d2a3cc87095358f4b86a",
@@ -22883,6 +23384,7 @@
         "c813fb9c7ca91d0f0041ea07ab95bb4178a8bc80f6c0ee33589db2763c23e5e4",
         "cdcae789d00445b7b5e058162a385e8d1bf1ef43d6f654e19f0ea4128b051ad9",
         "cdcdaf743119233362a539f200263ebb8e3a754e16b86d6c56db9db77e4b9eec",
+        "ceaadfd1bb6b9cd63e0115e6d52d758cbb5eab2a9a5dd8d9bca7c8adbf895edb",
         "ced9fb38633ba3abc0916759a89778c15c2a96497fc372dfc8911baaeae6df2c",
         "d045d55dc485a6db6fa133679542cba7492fc75771dee3dd74222f6c3467b63c",
         "d7494f28340048b918e213b14a9cd4347969ac0651586805bb56917d719aa7f4",
@@ -22896,6 +23398,8 @@
         "e445f841b873a3daefbceb8431f184d74bb88a8ad0c5ed62514bf90d7434603b",
         "e8e44a11f9d6ac22eb6e5222019ae81e9a55dd8e8c1933be350cc13a3f93c709",
         "e9d698efaa5fa17a9be6fd437e66e69212260150e4b69d15910723f4d7878aa4",
+        "eacfe953595f0bef976cb92663ad552c2e2c45db6c3b3eb4c30b3898143eeb0b",
+        "ec2fd4bdd668111c71f7c964ba05d9bba1da91c3196a82d13a5d19c37bdbacbf",
         "ee6518c36f27217cac9d0a62ade45e31ee480e3707a43db5dda7d6917130452b",
         "eff82958e61dc06bec6e96a0ac964fb9b6301955d137450147b84aa5a125eacb",
         "f13d9f000b2ebdff4731c879af6f4beb85de68c336274fd37c3241f7ef4ad184",
@@ -22906,7 +23410,7 @@
         "fc5b7c32b023357b2fb7c9a8d9d5624677a2845dd5a2e022120779e13eb9cbda",
         "ffdfc783a549c42578e6236ef07694427415cee2147068c18cd11ab6d1bd4c94"
       ],
-      "reason": "Reviewed task-kind precedence: explicit staged/parts markers, then session request marker, then native reading markers; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Reviewed task-kind precedence: explicit staged/parts markers, then session request marker, then native reading markers; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed Step A against 493461ef: zero-size frame tags and descriptor minima affect planner accounting only. Request turns reserve notes, allowance rows and pending request sizes; carried_components is numeric metadata inside the digest-bound plan artifact, not a reviewer packet member. prepare_assignment_capacity validates and forwards the pending bound; the existing plan reference and packet schemas are unchanged."
     },
     "research_harness.review_search_delivery": {
       "ast_sha256": "a38342246d0a658b81d42fcadbee55b2c23fe5a1056dd7c3e340a6bde7d786da",
@@ -24416,6 +24920,7 @@
       "research_harness.review_refusal_notice.select_refusal_notice",
       "research_harness.review_refusal_replacement.prepare_replacement",
       "research_harness.review_route_capacity.plan_chain_capacity",
+      "research_harness.review_route_capacity.prepare_assignment_capacity",
       "research_harness.review_route_capacity.require_covered_assignment",
       "research_harness.review_source_batches.plan_packet",
       "research_harness.review_source_batches.require_progress",
@@ -24570,11 +25075,13 @@
       "research_harness.openness_reading.has_deliverable_passage"
     ],
     "research_harness.openness_reading._compute_spans": [
+      "research_harness.openness_carried.observe_math_chain",
       "research_harness.openness_reading._require_problem_continuity",
       "research_harness.openness_reading.has_deliverable_passage",
       "research_harness.openness_reading.prepare_packet"
     ],
     "research_harness.openness_reading._create_record": [
+      "research_harness.openness_carried._verify_math_prefix",
       "research_harness.openness_reading._require_problem_continuity",
       "research_harness.openness_reading.prepare_packet"
     ],
@@ -24587,12 +25094,16 @@
       "research_harness.openness_reading.preflight_final_input"
     ],
     "research_harness.openness_reading._extend_record": [
+      "research_harness.openness_carried._verify_math_prefix",
+      "research_harness.openness_carried.observe_math_chain",
       "research_harness.openness_reading.prepare_packet"
     ],
     "research_harness.openness_reading._find_delivery_turns": [
       "research_harness.openness_reading.measure_final_input"
     ],
     "research_harness.openness_reading._find_record": [
+      "research_harness.openness_carried._verify_math_prefix",
+      "research_harness.openness_carried.observe_math_chain",
       "research_harness.openness_reading._fit_turn",
       "research_harness.openness_reading._measure_parts",
       "research_harness.openness_reading.describe_reading_receipt"
@@ -24606,6 +25117,7 @@
       "research_harness.openness_reading.prepare_packet"
     ],
     "research_harness.openness_reading._list_chain": [
+      "research_harness.openness_carried.observe_math_chain",
       "research_harness.openness_reading.prepare_packet"
     ],
     "research_harness.openness_reading._list_remaining_units": [
@@ -24637,6 +25149,7 @@
       "research_harness.openness_reading.measure_final_input"
     ],
     "research_harness.openness_reading._observe_turns": [
+      "research_harness.openness_carried.observe_math_chain",
       "research_harness.openness_reading.prepare_packet"
     ],
     "research_harness.openness_reading._plan_search_delivery": [
@@ -24651,6 +25164,7 @@
       "research_harness.openness_reading.project_reading_chain"
     ],
     "research_harness.openness_reading._project_withheld_notes": [
+      "research_harness.openness_carried._verify_math_prefix",
       "research_harness.openness_reading._require_problem_continuity"
     ],
     "research_harness.openness_reading._raise_projection_stop": [
@@ -24670,6 +25184,7 @@
       "research_harness.openness_reading.project_reading_chain"
     ],
     "research_harness.openness_reading._require": [
+      "research_harness.openness_carried._verify_math_prefix",
       "research_harness.openness_reading.validate_turn_output"
     ],
     "research_harness.openness_reading._require_initial_captures": [
@@ -24704,6 +25219,7 @@
       "research_harness.openness_reading.prepare_packet"
     ],
     "research_harness.openness_reading.find_protocol": [
+      "research_harness.openness_carried._verify_math_prefix",
       "research_harness.openness_reading._list_withholdable_bodies",
       "research_harness.openness_reading._list_withholding_candidates",
       "research_harness.openness_reading.has_deliverable_passage",
@@ -24713,6 +25229,8 @@
       "research_harness.review_route_capacity.require_covered_assignment"
     ],
     "research_harness.openness_reading.find_stage": [
+      "research_harness.openness_carried._verify_math_prefix",
+      "research_harness.openness_carried.observe_math_chain",
       "research_harness.openness_reading._fit_turn",
       "research_harness.openness_reading.has_deliverable_passage",
       "research_harness.openness_reading.validate_turn_output"
@@ -24721,6 +25239,8 @@
       "research_harness.openness_reading.describe_reading_receipt"
     ],
     "research_harness.openness_reading.is_math_openness_packet": [
+      "research_harness.openness_carried._describe_chain",
+      "research_harness.openness_carried.observe_math_chain",
       "research_harness.openness_reading.find_chain_protocol",
       "research_harness.openness_reading.list_reading_rows",
       "research_harness.openness_reading.prepare_packet"
@@ -24741,6 +25261,7 @@
       "research_harness.openness_reading.list_reading_rows"
     ],
     "research_harness.openness_reading.list_reading_rows": [
+      "research_harness.openness_carried.observe_math_chain",
       "research_harness.openness_reading.has_deliverable_passage",
       "research_harness.openness_reading.prepare_packet",
       "research_harness.openness_reading_v7.build_inventory",
@@ -24794,12 +25315,15 @@
       "research_harness.openness_reading_v7.plan_inventory"
     ],
     "research_harness.openness_reading_v7._describe_identity": [
+      "research_harness.openness_carried.observe_math_chain",
       "research_harness.openness_reading_v7.observe_carried_chain"
     ],
     "research_harness.openness_reading_v7._describe_json": [
       "research_harness.openness_reading_v7.build_chain_state"
     ],
     "research_harness.openness_reading_v7._require_selected": [
+      "research_harness.openness_carried._verify_math_prefix",
+      "research_harness.openness_carried.observe_math_chain",
       "research_harness.openness_reading_v7._append_carried_reading",
       "research_harness.openness_reading_v7.project_carried_turn"
     ],
@@ -24815,7 +25339,8 @@
     ],
     "research_harness.operations.fields": [
       "research_harness.problem_openness_reviews.required_evidence",
-      "research_harness.review_protocol.validate_adjudication_contract"
+      "research_harness.review_protocol.validate_adjudication_contract",
+      "research_harness.review_route_capacity.prepare_assignment_capacity"
     ],
     "research_harness.operations.immutable_record": [
       "research_harness.review_staged_protocol.prepare_controller"
@@ -25031,6 +25556,7 @@
       "research_harness.bar_sources.describe_settlements"
     ],
     "research_harness.review_excerpts.find_identity": [
+      "research_harness.openness_carried.observe_math_chain",
       "research_harness.openness_reading._list_withholdable_bodies",
       "research_harness.openness_reading.measure_final_input",
       "research_harness.openness_reading.project_reading_chain",
@@ -25710,6 +26236,7 @@
       "research_harness.review_protocol.add_focused_adjudication"
     ],
     "research_harness.review_protocol.canonical_prompt": [
+      "research_harness.openness_carried._verify_math_prefix",
       "research_harness.openness_reading.prepare_packet",
       "research_harness.review_parts.validate_turn_output",
       "research_harness.review_problem_parts._prepare_legacy_packet",
@@ -26308,6 +26835,48 @@
     ],
     "research_harness.workspace.write_projection": [
       "research_harness.review_delivery.deliver_packet"
+    ],
+    "research_harness.openness_reading.validate_turn_output": [
+      "research_harness.openness_carried._verify_math_prefix"
+    ],
+    "research_harness.openness_reading.has_deliverable_passage": [
+      "research_harness.openness_carried._verify_math_prefix"
+    ],
+    "research_harness.operations.normalized_text": [
+      "research_harness.openness_carried._verify_math_prefix"
+    ],
+    "research_harness.review_protocol.find_common_prompt_version": [
+      "research_harness.openness_carried._verify_math_prefix"
+    ],
+    "research_harness.native_review.load_packet": [
+      "research_harness.openness_carried.observe_math_chain"
+    ],
+    "research_harness.openness_carried._verify_math_prefix": [
+      "research_harness.openness_carried.observe_math_chain"
+    ],
+    "research_harness.openness_reading._collect_coverage": [
+      "research_harness.openness_carried.observe_math_chain"
+    ],
+    "research_harness.openness_reading._is_complete": [
+      "research_harness.openness_carried.observe_math_chain"
+    ],
+    "research_harness.openness_reading_v7._describe_checked_entries": [
+      "research_harness.openness_carried.observe_math_chain"
+    ],
+    "research_harness.openness_carried.classify_carried_notes": [
+      "research_harness.openness_carried.select_carried_readings",
+      "research_harness.openness_carried.verify_carried_selection"
+    ],
+    "research_harness.openness_carried._list_search_dependencies": [
+      "research_harness.openness_carried.select_carried_readings",
+      "research_harness.openness_carried.verify_carried_selection"
+    ],
+    "research_harness.review_route_capacity.plan_chain_capacity": [
+      "research_harness.review_route_capacity.prepare_assignment_capacity"
+    ],
+    "research_harness.openness_carried.observe_math_chain": [
+      "research_harness.openness_carried.observe_qualifying_chain",
+      "research_harness.openness_carried.verify_carried_selection"
     ]
   },
   "computed_sites": {},
