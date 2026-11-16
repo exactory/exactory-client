@@ -678,6 +678,11 @@ _NAMED_CAUSE_CODES_RECOVERY = (
     'xml_timeout',
 )
 _NAMED_CAUSE_CODES_CLOSING = (
+    'final_pending',
+    'requested_range_not_delivered',
+    'series_invalid',
+    'unit_not_delivered',
+    'unobserved_turn',
     'artifact_sealed',
     'execution_observation_mismatch',
     'extractor_missing',
@@ -686,6 +691,7 @@ _NAMED_CAUSE_CODES_CLOSING = (
     'invalid_input',
     'invalid_native_review_packet',
     'invalid_review_material',
+    'invalid_review_session_turn',
     'invalid_review_route',
     'invalid_target',
     'malformed_pdf',

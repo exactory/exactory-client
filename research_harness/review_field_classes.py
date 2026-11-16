@@ -268,6 +268,8 @@ FIELD_CLASSES = {
             'source_inventory': {'class': 'reference', 'characters': 256, 'unit_rule': 'bound_digest'},
             'source_reply_batch': {'class': 'fixed', 'characters': 8000, 'overflow_unit': True},
             'source_rules': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
+            'session_turn': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'session_final': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
         },
         'exactory-independent-review-v1': {
             'area': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
@@ -310,6 +312,8 @@ FIELD_CLASSES = {
             'source_reply_batch': {'class': 'fixed', 'characters': 8000, 'overflow_unit': True},
             'source_rules': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'subject': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
+            'session_turn': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'session_final': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
         },
         'exactory-problem-review-v2': {
             'area': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
@@ -352,6 +356,8 @@ FIELD_CLASSES = {
             'source_reply_batch': {'class': 'fixed', 'characters': 8000, 'overflow_unit': True},
             'source_rules': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'subject': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
+            'session_turn': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'session_final': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
         },
     },
     'correction': {
@@ -453,6 +459,11 @@ FIELD_CLASSES = {
     },
     'result': {
         'exactory-independent-review-sources-v2': {
+            'bar_ids': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            'bars': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            'own_bars': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            'historical_reviews': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            'source_artifacts': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'assessor': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'commitments': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'digest': {'class': 'reference', 'characters': 256, 'unit_rule': 'bound_digest'},
@@ -483,6 +494,8 @@ FIELD_CLASSES = {
             'support_contract': {'class': 'fixed', 'characters': 4000, 'overflow_unit': True},
             'visual_context_repair': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'work_item_records': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            'session_turn': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'session_final': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
         },
         'exactory-independent-review-v1': {
             'area': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
@@ -561,6 +574,8 @@ FIELD_CLASSES = {
             'visual_route_transition': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'visual_source_delivery': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'work_item_records': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            'session_turn': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'session_final': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
         },
         'exactory-problem-review-v2': {
             'area': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
@@ -634,6 +649,8 @@ FIELD_CLASSES = {
             'visual_route_transition': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'visual_source_delivery': {'class': 'fixed', 'characters': 13000, 'overflow_unit': True},
             'work_item_records': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            'session_turn': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'session_final': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
         },
         'exactory-review-staged-v2': {
             'commitments': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
@@ -659,11 +676,15 @@ FIELD_CLASSES = {
             'subject': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'visual_context_repair': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'work_item_records': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            'session_turn': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'session_final': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
         },
         'readiness': {
             'execution_observations': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'inputs': {'class': 'fixed', 'characters': 32000, 'overflow_unit': True},
             'kind': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
+            'session_turn': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'session_final': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
         },
     },
     'round': {
@@ -727,6 +748,8 @@ FIELD_CLASSES = {
             'source_rules': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'subject': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'work_item_records': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            'session_turn': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'session_final': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
         },
         'exactory-independent-review-v1': {
             'area': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
@@ -770,6 +793,8 @@ FIELD_CLASSES = {
             'source_rules': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'subject': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'work_item_records': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            'session_turn': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'session_final': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
         },
         'exactory-problem-review-v2': {
             'area': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
@@ -802,6 +827,8 @@ FIELD_CLASSES = {
             'source_reply_batch': {'class': 'fixed', 'characters': 8000, 'overflow_unit': True},
             'source_rules': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'subject': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
+            'session_turn': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'session_final': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
         },
     },
     'standalone': {

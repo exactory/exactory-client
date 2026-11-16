@@ -363,7 +363,7 @@ def classify_attempt(records, artifacts, attempt):
 def list_turn_assignments(records, assignment):
     """Group replacements of the same initial context or the same continuation parent."""
     from .review_refusal_replacement import read_position_context
-    capacity_chain = assignment.get('capacity_plan') and assignment.get('reading_chain')
+    capacity_chain = assignment.get('capacity_plan') and (assignment.get('reading_chain') or assignment.get('session_chain'))
     if capacity_chain:
         while assignment.get('capacity_replacement_of'):
             assignment = records['review_assignment'][assignment['capacity_replacement_of']]
@@ -583,9 +583,9 @@ def has_smaller_task(artifacts, previous, assignment):
         if old_header['kind'] == 'final':
             return after['answer_bound'] < before['answer_bound']
         return after['material_allowance'] < before['material_allowance']
-    if assignment.get('capacity_plan') and assignment.get('reading_chain'):
-        before = old.get('reading_turn', old.get('reading_final', {})).get('capacity', {})
-        after = new.get('reading_turn', new.get('reading_final', {})).get('capacity', {})
+    if assignment.get('capacity_plan') and (assignment.get('reading_chain') or assignment.get('session_chain')):
+        before = old.get('session_turn', old.get('session_final', old.get('reading_turn', old.get('reading_final', {})))).get('capacity', {})
+        after = new.get('session_turn', new.get('session_final', new.get('reading_turn', new.get('reading_final', {})))).get('capacity', {})
         return (after.get('material_allowance', float('inf')) < before.get('material_allowance', 0)
                 or after.get('answer_bound', float('inf')) < before.get('answer_bound', 0))
     if parts.find_kind(new) != 'read':
@@ -741,7 +741,7 @@ def plan_refusal_recovery(records, artifacts, assignment):
     payload['id'] = assignment['id'] + '-refusal'
     while payload['id'] in records.get('review_assignment', {}):
         payload['id'] += '-next'
-    if assignment.get('capacity_plan') and assignment.get('reading_chain'):
+    if assignment.get('capacity_plan') and (assignment.get('reading_chain') or assignment.get('session_chain')):
         from .review_continuation import _find_unused_id
         payload['id'] = _find_unused_id(records, assignment['id'] + '-refusal',
                                        maximum=protocol.openness_reading.RESERVED_IDENTIFIER_CHARACTERS)
@@ -822,7 +822,7 @@ def plan_after_failure(records, artifacts, assignment_id):
             allowance = calculate_over_cap_allowance(recovery['details']['at_or_over_limit_share'])
             if recovery['kind'] == 'replace' and (position['failed_attempts'] >= TURN_FAILURE_LIMIT
                     or outcome == 'output_over_cap' and len(position['over_cap_by_level']) >= allowance
-                    and recovery['details']['handler'] not in ('reading_v7', 'final_v7')):
+                    and recovery['details']['handler'] not in ('reading_v7', 'final_v7', 'request_session_v4', 'final_session_v4')):
                 from .review_route_capacity import describe_capacity_decision
                 recovery = describe_capacity_decision(records, artifacts, assignment, outcome,
                     dict(recovery['details'], over_cap_allowance=allowance,
@@ -851,6 +851,10 @@ def plan_after_failure(records, artifacts, assignment_id):
                 result.update(state='stop', code=recovery.get('code', OUTCOME_CODES[outcome]))
                 if recovery['kind'] == 'decision':
                     details['decision'] = {key: recovery[key] for key in ('owner_decides', 'then')}
+                details.update(recovery['details'], recovery=recovery)
+                return result
+            if recovery['details']['handler'] in ('request_session_v4', 'final_session_v4'):
+                # Earlier reductions do not spend the identical retry at this floor.
                 details.update(recovery['details'], recovery=recovery)
                 return result
     if position['sequence_ended']:

@@ -33,7 +33,7 @@
     "research_harness/review_protocol.py:_observed": "896e10fd17b469f2f469fe89b8f07113b9dec3ec9e829e146e300a516bcf5765",
     "research_harness/review_call_admission.py:admit_review_call": "91bbea98b04dd72715df943eebf3cf1f498a614109b0ba4df2130ba4900177c2",
     "research_harness/review_route_capacity.py:describe_session_stop": "65cfe3b9fb9d3f1bf3d0506b7f01594166971485799cafe4497a32b995166af5",
-    "research_harness/review_protocol.py:invoke_assignment": "e3d47a744d920c6e5593f2cb7839cc712ba5e84d5c11dbcdab115c0e2a46792b"
+    "research_harness/review_protocol.py:invoke_assignment": "31aacadd8ee8064ebcab4510209a4dfb51657f6a6507e62938bffb5775baba51"
   },
   "limit_readers": [
     "research_harness/batches.py",
@@ -48,6 +48,7 @@
     "research_harness/review_failed_request_history.py",
     "research_harness/review_parts.py",
     "research_harness/review_parts_repair.py",
+    "research_harness/review_parts_v3.py",
     "research_harness/review_preflight.py",
     "research_harness/review_problem_parts.py",
     "research_harness/review_protocol.py",
@@ -1873,7 +1874,7 @@
     "skills/math-solver/harness/search_controller/cli.py": "9762296da2edd0164115e6caff107645477f33d91479a6144031d277e4505848",
     "skills/math-solver/harness/search_controller/adoption.py": "48a4f1030bb3527af6cb21b01035a2a8b2b6eb5c7f9f6ce1c15c72f589a8ef59",
     "skills/math-solver/harness/search_controller/strategy_refresh.py": "c7f6f855fc6b91d788ef4d03ce8c8e2c4aae14b843a404e8ced7079c47871bce",
-    "skills/math-solver/harness/search_controller/reviewer.py": "8f4db8310b939cc7015cc4a7c00790c151b392153cf41d1148ce0e2a7b7c5ba6",
+    "skills/math-solver/harness/search_controller/reviewer.py": "ae332382da5987887eaf6924f1875d981d369f4127e1ff3ad625b25e32bcaadc",
     "skills/math-solver/harness/search_controller/closure_delivery.py": "76714a2668c73a72348864b3c2d21d267998f43ce11f0be0dbfbd5144d99ae2a",
     "skills/math-solver/harness/search_controller/storage.py": "e6935835f974cf385a5f303e927038779dfc7692d06f24eab3257ba0d6b885d2",
     "skills/math-solver/harness/search_controller/attempt_delivery.py": "9e3f2d9190656ae04caaf09eaf3ed39c4898a53e158db48d1007a5b97a585656",

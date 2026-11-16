@@ -138,6 +138,11 @@ def _build_parts_v3_handle_packet(packet, artifacts, assignment):
     return build_handle_packet(packet, artifacts, assignment)
 
 
+def _build_session_handles(packet, artifacts, assignment):
+    from .review_session_v4 import build_handle_packet
+    return build_handle_packet(packet, artifacts, assignment)
+
+
 # Rows of later planned chain families use this same (packet, artifacts,
 # assignment) -> transient handle packet interface. Tables never travel.
 HANDLE_TABLE_BUILDERS = {
@@ -145,6 +150,8 @@ HANDLE_TABLE_BUILDERS = {
     'reading_final': _build_v7_handle_table,
     'reading_combine': _build_v7_handle_table,
     'review_parts': _build_parts_v3_handle_packet,
+    'session_turn': _build_session_handles,
+    'session_final': _build_session_handles,
 }
 
 
@@ -271,7 +278,8 @@ def build_gap_handles(minimum_gaps, artifacts):
 
 def is_material_output(packet, output):
     from .openness_reading import find_protocol, PROTOCOL_V7
-    return (HANDLE_TABLE in packet or find_protocol(packet) == PROTOCOL_V7
+    return (HANDLE_TABLE in packet or 'session_turn' in packet or 'session_final' in packet
+            or find_protocol(packet) == PROTOCOL_V7
             or packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3') and isinstance(output, dict) and output.get('stage') == 'material'
 
 
@@ -279,14 +287,14 @@ def validate_material(packet, output, *, artifacts=None, assignment=None):
     """Check a material part once at the output-contract boundary."""
     packet = _resolve_packet(packet, artifacts, assignment) if HANDLE_TABLE not in packet else packet
     with contract_check('review.shape'):
-        if (packet.get('reading_turn', {}).get('protocol') == 'exactory-openness-reading-v7'
+        if ('session_turn' in packet or packet.get('reading_turn', {}).get('protocol') == 'exactory-openness-reading-v7'
                 or packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3'
                 and packet['review_parts']['kind'] != 'final'):
             raise ResearchError('invalid_review_material', MATERIAL_READING_TURN_MESSAGE, dict(path='/stage'))
         fields(output, ('stage', 'title', 'part', 'text', 'more'), code='invalid_review_material', path='')
         for name in ('title', 'text'):
             text(output[name], 'Material ' + name, code='invalid_review_material')
-        if any(packet.get(key, {}).get('protocol') == 'exactory-openness-reading-v7'
+        if 'session_final' in packet or any(packet.get(key, {}).get('protocol') == 'exactory-openness-reading-v7'
                for key in ('reading_turn', 'reading_final')) or packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
             if len(output['title']) > 120:
                 raise ResearchError('invalid_review_material', INVALID_MATERIAL_MESSAGE,

@@ -613,6 +613,12 @@
         "research_harness/review_continuation.py:_list_lineage#1": [
           "content"
         ],
+        "research_harness/review_parts_v3.py:prepare_capacity_assignment#1": [
+          "record"
+        ],
+        "research_harness/review_parts_v3.py:prepare_capacity_assignment#2": [
+          "limit"
+        ],
         "research_harness/review_prompt_paragraphs.py:_render_selected_paragraphs#1": [
           "content"
         ],
@@ -1352,6 +1358,36 @@
         ],
         "research_harness/review_parts.py:read_inventory#2": [
           "content"
+        ],
+        "research_harness/review_parts_v3.py:_read_series_inventory#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:_validate_frozen_inventory#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:_validate_frozen_inventory#2": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:_validate_frozen_inventory#3": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:_validate_frozen_inventory#4": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:_validate_frozen_inventory#5": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:build_series_inventory#1": [
+          "content",
+          "record"
+        ],
+        "research_harness/review_parts_v3.py:build_series_inventory#2": [
+          "content",
+          "record"
+        ],
+        "research_harness/review_parts_v3.py:enumerate_packet_units#1": [
+          "content",
+          "record"
         ]
       },
       "review_parts_route_unsupported": {
@@ -1387,6 +1423,9 @@
           "content"
         ],
         "research_harness/review_parts_native.py:read_prior_assignment#1": [
+          "record"
+        ],
+        "research_harness/review_parts_v3.py:prepare_capacity_assignment#1": [
           "record"
         ],
         "research_harness/review_protocol.py:record_assignment.prepare#1": [

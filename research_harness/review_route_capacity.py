@@ -779,6 +779,10 @@ def describe_task_kind(role, packet, operation='review.invoke'):
         return 'correction'
     if 'staged_review' in packet:
         return 'staged'
+    if 'session_turn' in packet:
+        return 'request'
+    if 'session_final' in packet:
+        return 'final'
     header = packet.get('review_parts', {})
     if header.get('kind') in ('read', 'combine', 'check', 'final'):
         return header['kind']
@@ -869,6 +873,9 @@ def _project_request(request, packet):
 def _clear_carried_answers(packet, kind):
     if packet.get('reading_turn', {}).get('protocol') == 'exactory-openness-reading-v7':
         packet['reading_turn']['notes'] = None
+    if 'session_final' in packet:
+        for key in ('notes', 'entries', 'sources', 'fill'):
+            packet['session_final'][key] = None if key == 'notes' else []
     if 'reading_final' in packet:
         for key in ('notes', 'entries', 'gaps', 'material', 'sources', 'fill'):
             packet['reading_final'][key] = None if key == 'notes' else []
@@ -930,7 +937,8 @@ def describe_task(role, packet, *, route, request, operation='review.invoke', co
                 raise
             return measure_request(route, _project_request(request, framed))['text_characters'] - visible
     unique = min(total, measure(projected)) if duplicates else total
-    count_carried = COUNT_CARRIED_STATE if count_carried_state is None else count_carried_state
+    count_carried = (True if 'session_turn' in actual or 'session_final' in actual
+                     else COUNT_CARRIED_STATE if count_carried_state is None else count_carried_state)
     without_carried = unique
     if kind in ('reading', 'read'):
         _clear_carried_answers(projected, kind)
@@ -948,6 +956,11 @@ def describe_task(role, packet, *, route, request, operation='review.invoke', co
                      if notice is not None else {})
     if 'reading_final' in actual:
         targets = len(actual['reading_final'].get('page', {}).get('targets', []))
+    session = actual.get('session_turn', actual.get('session_final'))
+    if session is not None:
+        notice_fields.update({key: session['capacity'][key] for key in ('material_allowance', 'level_material_allowance')})
+        labels = session.get('targets', [])
+        targets = (labels.get('count', len(labels)) if isinstance(labels, dict) else len(labels)) if kind == 'final' else 0
     return dict(
         kind=kind,
         characters=characters,
@@ -1046,8 +1059,9 @@ def describe_attempt(route, role, packet, request, response, *, operation='revie
              and transport.context_verified(route, request, response) and 'previous_response_id' not in request)
         and sends == 1 and type(usage.get('input_tokens')) is int and usage['input_tokens'] >= 0 else None,
     )
-    binding = packet.get('reading_turn', packet.get('reading_final', packet.get('reading_combine', {})))
-    if binding.get('protocol') == 'exactory-openness-reading-v7':
+    binding = packet.get('session_turn', packet.get('session_final', packet.get('reading_turn',
+        packet.get('reading_final', packet.get('reading_combine', {})))))
+    if binding.get('protocol') in ('exactory-openness-reading-v7', 'exactory-independent-review-sources-v4'):
         bound = binding['capacity']
         result['task'].update(material_allowance=bound['material_allowance'],
                               level_material_allowance=bound.get('level_material_allowance', bound['material_allowance']),
@@ -1513,6 +1527,8 @@ def describe_assignment_kind(assignment):
     if header.get('kind') in TURN_KINDS:
         return header['kind']
     parameters = assignment.get('prompt', {}).get('parameters', {})
+    if parameters.get('session_stage') in ('request', 'final'):
+        return parameters['session_stage']
     if parameters.get('reading_stage') == 'reading':
         return 'reading'
     if parameters.get('reading_stage') in ('final', 'page', 'closing'):
@@ -2013,7 +2029,7 @@ def describe_capacity_forecast(plan, route, profile, *, records=None, turn_kind=
         current['target_allowance'] = pinned['target_allowance']
         selected[kind] = dict(current, kind=kind)
         allowance = pinned['material_allowance']
-        if kind in ('reading', 'read'):
+        if kind in ('reading', 'read', 'request'):
             turns = math.ceil(total_characters / allowance)
             largest = math.ceil(total_characters / describe_material_levels(kind)[-1])
         elif kind == 'final':
@@ -2058,9 +2074,10 @@ def describe_plan_preflight(records, route, request, plan, kind, *, observations
     measured['characters_per_token'] = rule['characters_per_token'] if calibrated else None
     from .review_excerpts import read_sent_packet
     sent = read_sent_packet(request) or {}
-    binding = sent.get('reading_turn', sent.get('reading_final', sent.get('reading_combine',
-                                                                       sent.get('review_parts', {}))))
-    if binding.get('protocol') in ('exactory-openness-reading-v7', 'exactory-review-parts-v3'):
+    binding = sent.get('session_turn', sent.get('session_final', sent.get('reading_turn', sent.get('reading_final',
+        sent.get('reading_combine', sent.get('review_parts', {}))))))
+    if binding.get('protocol') in ('exactory-openness-reading-v7', 'exactory-review-parts-v3',
+                                  'exactory-independent-review-sources-v4'):
         bounds = binding['capacity']
         observations = [dict(material_allowance=bounds.get('level_material_allowance', bounds['material_allowance']))]
     bounds = derive_plan_task_limits(plan, kind, observations)['request_bound']
@@ -2228,9 +2245,9 @@ def derive_turn_task_limits(records, artifacts, assignment, *, kind=None, notice
             continue
         observation = dict(output_tokens=(attempt.get('usage') or {}).get('output_tokens'),
                            outcome=classification['outcome'] if classification else None)
-        if kind == 'final' and plan['measure'].get('margin_applied'):
+        if kind == 'final' and (plan['measure'].get('margin_applied') or member.get('session_chain')):
             packet = json.loads(artifacts.read(member['packet']))
-            if attempt.get('material') or packet.get('reading_final', {}).get('material_request'):
+            if attempt.get('material') or packet.get('session_final', packet.get('reading_final', {})).get('material_request'):
                 # This release retries a material part by halving its text
                 # bound. It keeps the final's already granted input material.
                 observation.update(output_tokens=None, outcome=None)
@@ -2286,6 +2303,8 @@ def list_capacity_recovery_rows():
     for kind in ('reading', 'final', 'combine'):
         rows.append(dict(kind=kind, protocol=openness_reading.PROTOCOL_V7,
                          handler='final_v7' if kind == 'combine' else kind + '_v7'))
+    for kind in ('request', 'final'):
+        rows.append(dict(kind=kind, protocol='exactory-independent-review-sources-v4', handler=kind + '_session_v4'))
     for kind in review_parts.KINDS:
         rows.append(dict(kind=kind, protocol=review_parts.PROTOCOL,
                          handler='parts_v2_read' if kind == 'read' else 'nothing'))
@@ -2314,7 +2333,8 @@ def describe_capacity_recovery_row(assignment, packet, route):
     from .review_protocol import PROTOCOL
 
     kind = describe_task_kind(assignment['role'], packet)
-    version = openness_reading.find_protocol(packet)
+    version = (packet.get('source_rules') if 'session_turn' in packet or 'session_final' in packet
+               else openness_reading.find_protocol(packet))
     if version is None:
         if kind in review_parts.KINDS and review_parts.KEY in packet:
             version = packet[review_parts.KEY]['protocol']
@@ -2405,6 +2425,13 @@ def plan_capacity_recovery(records, artifacts, assignment, outcome) -> 'Recovery
     details = dict(row, route_id=assignment['route_id'], effort=describe_route_class(route)['effort'],
                    effort_message=CAPACITY_EFFORT_MESSAGE,
                    at_or_over_limit_share=share, profile_rows=profile_rows, attempts=attempts)
+    if row['handler'] in ('request_session_v4', 'final_session_v4'):
+        from .review_session_v4 import plan_turn_recovery
+        replacement = plan_turn_recovery(records, artifacts, assignment, outcome)
+        if replacement is not None:
+            replacement['details'].update(details)
+            return replacement
+        return describe_capacity_decision(records, artifacts, assignment, outcome, details)
     if row['handler'] == 'parts_v3':
         from .review_parts_v3 import plan_turn_recovery
         replacement = plan_turn_recovery(records, artifacts, assignment, outcome)
