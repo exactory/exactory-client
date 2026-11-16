@@ -379,7 +379,8 @@ class FieldClassTests(unittest.TestCase):
         minimum = sum(frames['request'].values())
         profile = capacity.read_output_profile({}, self.route)
         tokens = capacity.describe_route_capacity(self.route, profile)['input_tokens']['value']
-        floor = capacity.describe_material_levels('request')[-1] + BOUNDED_NOTICE_CHARACTERS
+        carried = capacity.NOTES_MAXIMUM_CHARACTERS + capacity.measure_capacity_value(self.route, [])
+        floor = capacity.describe_material_levels('request')[-1] + BOUNDED_NOTICE_CHARACTERS + carried
         for difference in (-1, 0):
             room = floor + minimum + difference
             measure = dict(rule='calibrated', characters_per_token=(room + 0.5) / tokens)
@@ -394,6 +395,7 @@ class FieldClassTests(unittest.TestCase):
                 result = self.fields.plan_role_capacity(self.route, 'result', packet, ('request',),
                                                         profile=profile, measure=measure)
                 self.assertEqual(result['plan']['frame']['request']['bound'], minimum)
+                self.assertEqual(result['plan']['task']['request']['carried_characters'], carried)
                 frame = self.fields.classify_packet(self.route, 'result', packet,
                     bounded_fields=result['plan']['frame']['request']['bounded_fields'])['frame']
                 self.assertLessEqual(capacity.measure_capacity_value(self.route, frame), minimum)
