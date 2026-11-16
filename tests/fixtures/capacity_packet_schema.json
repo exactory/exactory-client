@@ -17323,16 +17323,6 @@
       ]
     },
     {
-      "ast_sha256": "5740e0de20aa49f2eb11f09c6927636bfcd9f6af047352f31d0e10ed73a80621",
-      "callee": "research_harness.openness_minimum.list_minimum_gaps",
-      "caller": "research_harness.openness_successor._project_successor_native",
-      "classification": "listed module",
-      "reason": "Reviewed cross-module call from the pinned carried-selection/successor module. The target is a listed source function; the complete caller AST pins its arguments and every local write.",
-      "targets": [
-        "research_harness.openness_minimum.list_minimum_gaps"
-      ]
-    },
-    {
       "ast_sha256": "30d128719066b2811df29844a85f9037c88c77dfb740ce079995cf71223eef98",
       "callee": "research_harness.evidence.digest",
       "caller": "research_harness.openness_successor._project_successor_native",
@@ -17340,36 +17330,6 @@
       "reason": "Reviewed cross-module call from the pinned carried-selection/successor module. The target is a listed source function; the complete caller AST pins its arguments and every local write.",
       "targets": [
         "research_harness.evidence.digest"
-      ]
-    },
-    {
-      "ast_sha256": "e329d33d1a8025401c5690c83003115c71c1abbd082c8611b481563fd21e98f2",
-      "callee": "research_harness.openness_minimum.forecast_outcomes",
-      "caller": "research_harness.openness_successor._project_successor_native",
-      "classification": "listed module",
-      "reason": "Reviewed cross-module call from the pinned carried-selection/successor module. The target is a listed source function; the complete caller AST pins its arguments and every local write.",
-      "targets": [
-        "research_harness.openness_minimum.forecast_outcomes"
-      ]
-    },
-    {
-      "ast_sha256": "803ff4445e170ccc797134fad049eda2bb9098ae83fc46a6d68558ebdc0382d2",
-      "callee": "research_harness.openness_minimum.list_minimum_notices",
-      "caller": "research_harness.openness_successor._project_successor_native",
-      "classification": "listed module",
-      "reason": "Reviewed cross-module call from the pinned carried-selection/successor module. The target is a listed source function; the complete caller AST pins its arguments and every local write.",
-      "targets": [
-        "research_harness.openness_minimum.list_minimum_notices"
-      ]
-    },
-    {
-      "ast_sha256": "07fcf416423e072619938fab419d8978dae5a76d2a84627fd64e39e2aec7005c",
-      "callee": "research_harness.openness_minimum.find_searched_through",
-      "caller": "research_harness.openness_successor._project_successor_native",
-      "classification": "listed module",
-      "reason": "Reviewed cross-module call from the pinned carried-selection/successor module. The target is a listed source function; the complete caller AST pins its arguments and every local write.",
-      "targets": [
-        "research_harness.openness_minimum.find_searched_through"
       ]
     },
     {
@@ -17443,11 +17403,11 @@
       ]
     },
     {
-      "ast_sha256": "9249a08df7c8e9f55070eb9f15a0c5ba45ed5a5f10fbe295f815b7119b9f38ee",
+      "ast_sha256": "f3edfa7cbd3549b83f63f31ea98ddf4c3ca2bf491ce5992026d7ef9a7275adfe",
       "callee": "research_harness.review_protocol.build_packet",
       "caller": "research_harness.openness_successor.admit_successor_chain",
       "classification": "listed module",
-      "reason": "Reviewed cross-module call from the pinned carried-selection/successor module. The target is a listed source function; the complete caller AST pins its arguments and every local write.",
+      "reason": "Reviewed 0.91.3: build the logical packet from the projected overlay reference so v6 and v7 measure the same evidence.",
       "targets": [
         "research_harness.review_protocol.build_packet"
       ]
@@ -17894,6 +17854,36 @@
       "classification": "standard library",
       "targets": [
         "any"
+      ]
+    },
+    {
+      "ast_sha256": "6f51620acefcd6a94c1116d2d2ef52caa6e3ffc0d65a709e81e7e6aa367e5d33",
+      "callee": "research_harness.problem_openness.describe_minimum_forecast",
+      "caller": "research_harness.openness_successor._project_successor_native",
+      "classification": "listed module",
+      "reason": "Reviewed 0.91.3: share export construction and serialize projected evidence only in the planning overlay.",
+      "targets": [
+        "research_harness.problem_openness.describe_minimum_forecast"
+      ]
+    },
+    {
+      "ast_sha256": "d943869b4e5e519cd930a8985e030ae270c7c1adf59fc68e86918357b510aa38",
+      "callee": "research_harness.problem_openness.bind_minimum_records",
+      "caller": "research_harness.openness_successor._project_successor_native",
+      "classification": "listed module",
+      "reason": "Reviewed 0.91.3: share export construction and serialize projected evidence only in the planning overlay.",
+      "targets": [
+        "research_harness.problem_openness.bind_minimum_records"
+      ]
+    },
+    {
+      "ast_sha256": "3a4e83707fef6fbf3c1d23f3824efcae5127cb3cf78b950814943b02b07d6257",
+      "callee": "research_harness.problem_openness.serialize_record",
+      "caller": "research_harness.openness_successor.admit_successor_chain",
+      "classification": "listed module",
+      "reason": "Reviewed 0.91.3: share export construction and serialize projected evidence only in the planning overlay.",
+      "targets": [
+        "research_harness.problem_openness.serialize_record"
       ]
     }
   ],
@@ -19404,38 +19394,37 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.openness_successor": {
-      "ast_sha256": "91e33ae51aaa4aaaa5a11842aecdc89727a46f9edbd61df28b3c48dd769117c3",
+      "ast_sha256": "e7d68f251eea198b80f311080d526add85b7dfc4d2001d8f19478969a134d412",
       "functions": {
-        "_project_successor_native": "0de9e1c43a0bc6110caade10147bf3141daf94c700348e79ec671ad52b2a55f1",
-        "admit_successor_chain": "890932ee7823dd7ee815ec347f4ad6168994950ba3d864cdd567dff1eed6b46b",
+        "_project_successor_native": "789cedbfd6b54ba2db9f8c281844fdfb7347328362dec1d484f6da085eda92d8",
+        "admit_successor_chain": "29cc22a90f5b68497c8a87938327ab3bff5d4bbbb4b94a5d4f472fac84871507",
         "describe_input_handoff": "f5a2c1fda191f3137d74dc551ff7bef66631da044764ec40568b3c1b91a7c2b1",
         "describe_successor_handoff": "0dba13772cc3d8ac7fc4e4a45d083d7b0478f8ad7f552d994c97e4a566e2f8ee"
       },
       "packet_call_digests": [
         "07a3312aabf5ec02665a48a64eb49f45b406def9a53fd3b78eca3ff60d889b66",
-        "07fcf416423e072619938fab419d8978dae5a76d2a84627fd64e39e2aec7005c",
         "0f855871972b232b05ff7f6fef0178bc01054428d0c60fd2644cd20f99b6367d",
         "1c2e447fc27c00376163a8085e92af55c02aa130f78907195f371a66daf4cd43",
         "20db91aec2e881d8ba325ce7f6d44e8cc8b899ad994d4f5e9a99318fc28a1873",
         "30d128719066b2811df29844a85f9037c88c77dfb740ce079995cf71223eef98",
         "366124535260c0142d1764d6e9dfc33de08cae3617cc909ab6df3fe86cdedd65",
+        "3a4e83707fef6fbf3c1d23f3824efcae5127cb3cf78b950814943b02b07d6257",
         "45138a258a60e1c393c36f3ca30e94c028ed9ae17f3d700bca274375d7f36863",
         "4e774ea13033c086f8998f860f0acfb06d406a824b0f92a43982c09f8a87e042",
-        "5740e0de20aa49f2eb11f09c6927636bfcd9f6af047352f31d0e10ed73a80621",
         "5d494c5c5c152a0fb501209783e4aae9c338582f32e22e053368dc9654ea983a",
         "6989219798af030df8aaec089bf7cf3d9591064432a02637c42abd4b18fa4bbc",
+        "6f51620acefcd6a94c1116d2d2ef52caa6e3ffc0d65a709e81e7e6aa367e5d33",
         "6f5c84ec3155190253aaf517039337940819bd5428742f0cd2c53a4c7085e387",
-        "803ff4445e170ccc797134fad049eda2bb9098ae83fc46a6d68558ebdc0382d2",
         "856af886dafad308e88e098217d80a9aadbd51ff1023eb314f10d7ae97895d69",
         "91010dcb8548007f5c50ae292be2e897b413448070f4a738b2218d21f46caefb",
-        "9249a08df7c8e9f55070eb9f15a0c5ba45ed5a5f10fbe295f815b7119b9f38ee",
         "b4f255e209b17138dbe3789d91888de617bebe36f0b996aed5e05775fbd12ec2",
         "b8a818420af085a2292d5f309dd2a0b69cf5240f9d3966d00a9a79f2e187be85",
         "bf10528469a9920e64376d8971ad811301c60dfd6f910f5dd3b021656cabf69e",
-        "e329d33d1a8025401c5690c83003115c71c1abbd082c8611b481563fd21e98f2",
-        "f1d2db70dd01c36ab300c219150805519decc3b147df41ccac68d4ce44c07017"
+        "d943869b4e5e519cd930a8985e030ae270c7c1adf59fc68e86918357b510aa38",
+        "f1d2db70dd01c36ab300c219150805519decc3b147df41ccac68d4ce44c07017",
+        "f3edfa7cbd3549b83f63f31ea98ddf4c3ca2bf491ce5992026d7ef9a7275adfe"
       ],
-      "reason": "Reviewed complete selection/successor module: selection and planning collections stay in digest-bound artifacts or planner receipts; logical native packet and projected minimum fields use the existing closed native declarations. Whole source and functions are pinned, including unexecuted branches. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Reviewed complete selection/successor module: selection and planning collections stay in digest-bound artifacts or planner receipts; logical native packet and projected minimum fields use the existing closed native declarations. Whole source and functions are pinned, including unexecuted branches. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.3: _project_successor_native carries all newly bound evidence in digest order through the planning overlay and uses export context helpers; v2 packets stay unchanged. admit_successor_chain stores a changed projection only in the overlay and builds the logical packet from that reference for both admissions."
     },
     "research_harness.operations": {
       "ast_sha256": "7a7259d4608d2d8309156acf6ea55d3779a24ba3d2abb9468f34a62a9f977408",
@@ -20046,17 +20035,19 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.problem_openness": {
-      "ast_sha256": "478cd43c1018528b2c64dab01c7f06c76edf5a488563795eb115c544d1f54940",
+      "ast_sha256": "7060a5d104e3d659431ba54a505c49d7570660a012231da88699ee107435e163",
       "functions": {
         "_is_utf8": "802384d729df9c710bdc631eac4e0a7c325b5239cf38258e5f37412a5cae902c",
         "assess_openness": "c410e5151ddd5e8dc8acb9fd52a000a8a4ff9f87869e0077ccd8ce2440d53f68",
         "assess_packet_freshness": "116f99eb5655456ba0d0766c0516e3f0804bc404754a5fbd6b68ccebd8400d39",
         "bind_family_readings": "a40f34badca793c7bb3af5f44fcdfbe35c195e6e8c0a4a3331ca40b17fbf788e",
+        "bind_minimum_records": "edc3d27b3c5cf62a412f38a2b429b013ad566f4a1ff63ac7eb118e8f26191081",
         "build_minimum": "a20449b67717a37b27a7010e7e2acc42617749efb6b37beffd74c5475037ceb4",
         "collect_reading_artifacts": "b63b0f429513e0f895d968c72f40969a2724732715e006454e340a98c4cd772b",
         "describe_family_readings": "ad0295317f9f534de6ac57d08a2d0c8d074afa1f922228a1cecd6858b286f7df",
         "describe_gap_fact": "23dcb18ade44f5a8d2fdfc01d68d1484828e68884d61bff384b46f47c7ddf298",
-        "export_openness": "059b7ec53c5702791a1618a8bdb388dfefb72e4cbac8f90f3de06fb026660f1d",
+        "describe_minimum_forecast": "70c265a91f3e19ec775b09d13b8f1f78c53c348c708f78619578417cb67b05b8",
+        "export_openness": "2e3986305108d5b456eb0b9632e8b415bb1e629612a138df87525b44b51e2927",
         "list_reading_citations": "1e10edb49b268265b79893763303217b089a037928712089e634bd7c4eeb086b",
         "prepare_openness": "5a4f2b61c30306a7d1d1bf56e9bfa9d03eb83a71df43cf848fed89dfb8456e90",
         "serialize_record": "f7243934e28cc8ee92a7c6af903b9056bd8864249cf01df9d8466a5a00442d69"
@@ -20076,7 +20067,7 @@
         "f3b61f78adea174b2b0e2ca15f0967d7919b350edc020214e24829480130396e",
         "faf81d5df46f6fb0bbdf3673766717d7a835e3219b8535bfb470dada5c4ed7d9"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.91.3: describe_minimum_forecast shares the existing gap and forecast construction between export and projection. bind_minimum_records shares bound search, decisive reading and inspected artifact, supporting reading and statement evidence plus decisive and family context. export_openness delegates those two constructions while retaining refusal order, result binding, declaration validation, spec context and sorted evidence."
     },
     "research_harness.problem_openness_reviews": {
       "ast_sha256": "dfa213888c1b7488093077f71797cb8738f0662b12183da143c485b33ecfbefe",
@@ -42246,8 +42237,10 @@
     "exactory-openness-reading-v5": "Key of the source-owned CHAIN_OBSERVERS dispatch table in openness_carried; a protocol value selects an observer, never a packet member. The complete table AST and its two observer call sites are pinned.",
     "exactory-openness-reading-v6": "Key of the source-owned CHAIN_OBSERVERS dispatch table in openness_carried; a protocol value selects an observer, never a packet member. The complete table AST and its two observer call sites are pinned.",
     "exactory-openness-reading-v7": "Key of the source-owned CHAIN_OBSERVERS dispatch table in openness_carried; a protocol value selects an observer, never a packet member. The complete table AST and its two observer call sites are pinned.",
+    "forecast": "Internal describe_minimum_forecast return value; export stores it under audit_forecast.",
     "present_or_both_blocked": "prompt text lookup keyed by the grounds selectors of FINDING_RULES; read only by render_finding_rule",
     "series_stop_id": "Driver ending/receipt metadata only: review_series._bind_ending_receipt retains a requested review_stop identifier in stop_id and binds its distinct review_series_stop receipt in series_stop_id. It is not a reviewer packet member.",
+    "supporting": "Internal bind_minimum_records return value listing supporting reading records; not a packet member.",
     "undated": "Reviewed 0.91.2: problem_accounts.validate_fact writes undated only in problem_account_date_missing ResearchError.details. Its validate_value callers are record_value (command refusal) and problem_delivery._assess_minimum (gate/status obligations), not reviewer packet construction. Native openness assessment_error gaps capture reading/deferral errors and never these account validators."
   },
   "non_packet_sites": [

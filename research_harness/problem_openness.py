@@ -440,6 +440,48 @@ def list_reading_citations(reading_id, searches):
     return list(citations.values())
 
 
+def describe_minimum_forecast(minimum, statement, records, artifacts):
+    """Describe the bound minimum's gaps and forecast for export and successor admission."""
+    from .openness_minimum import (find_searched_through, forecast_outcomes, list_minimum_gaps, list_minimum_notices)
+    gaps = list_minimum_gaps(minimum, statement, records, artifacts)
+    forecast = {"outcomes": forecast_outcomes(gaps), "gaps": gaps,
+                "notices": list_minimum_notices(minimum, records, artifacts),
+                "searched_through": find_searched_through(minimum, records)}
+    return {"gaps": gaps, "forecast": forecast}
+
+
+def bind_minimum_records(records, artifacts, statement, bound, minimum):
+    """Carry every bound record and inspected decisive artifact, with its derived context."""
+    evidence = {}
+
+    def include_record(record):
+        artifact = artifacts.put(serialize_record(record), "application/json")
+        evidence[artifact["sha256"]] = {"digest": artifact["sha256"], "kind": "blob", "artifact": artifact}
+
+    reading_digests = set(minimum["reading_digests"])
+    readings = [row for row in records.get("reading", {}).values() if digest(row) in reading_digests]
+    for _, search in bound:
+        include_record(search)
+    for reading in readings:
+        include_record(reading)
+        for artifact in collect_reading_artifacts(records, artifacts, reading):
+            evidence[artifact["sha256"]] = {"digest": artifact["sha256"], "kind": "artifact", "artifact": artifact}
+    supporting = [row for row in records.get("reading", {}).values()
+                  if digest(row) in minimum.get("supporting_reading_digests", [])]
+    for reading in supporting:
+        include_record(reading)
+    include_record(statement)
+    decisive = {row["work_id"] for _, search in bound for row in search["dispositions"]
+                if row["disposition"] in {"relevant", "contradictory"}}
+    read_decisive_work_ids = {reading["version_id"] for reading in readings if reading["version_id"] in decisive}
+    read_decisive_work_ids.update(row["work_id"] for row in minimum.get("family_readings", []))
+    context = {"decisive_work_ids": sorted(read_decisive_work_ids)}
+    if minimum.get("family_readings"):
+        from .openness_reading import FAMILY_READING_PLAN_VERSION
+        context["family_reading_plan_version"] = FAMILY_READING_PLAN_VERSION
+    return {"evidence": evidence, "supporting": supporting, "context": context}
+
+
 def export_openness(store, spec, destination=None, *, accept_gaps=False):
     records = store.snapshot()["records"]
     marker = require_problem(records)
@@ -463,11 +505,6 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
         raise ResearchError("problem_statement_missing", "Record the exact statement before openness review")
     artifacts = ArtifactStore(store.root)
     bound, required, evidence = [], set(), {}
-
-    def include_record(record):
-        data = serialize_record(record)
-        artifact = artifacts.put(data, "application/json")
-        evidence[artifact["sha256"]] = {"digest": artifact["sha256"], "kind": "blob", "artifact": artifact}
 
     for binding in spec["minimum"]["searches"]:
         fields(binding, ("formulation", "search_id"))
@@ -497,40 +534,19 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
     # Check the declaration against the store before writing the packet.
     from .openness_minimum import validate_minimum_bindings
     validate_minimum_bindings(minimum, statement["statement"], records)
-    if minimum["schema_version"] == 2:
-        reading_digests = set(minimum["reading_digests"])
-        readings = {identifier: row for identifier, row in records.get("reading", {}).items()
-                    if digest(row) in reading_digests}
-    from .openness_minimum import (find_searched_through, forecast_outcomes, list_minimum_gaps, list_minimum_notices)
-    gaps = list_minimum_gaps(minimum, statement["statement"], records, artifacts)
-    forecast = {"outcomes": forecast_outcomes(gaps), "gaps": gaps,
-                "notices": list_minimum_notices(minimum, records, artifacts),
-                "searched_through": find_searched_through(minimum, records)}
+    described = describe_minimum_forecast(minimum, statement["statement"], records, artifacts)
+    gaps, forecast = described["gaps"], described["forecast"]
     blocked = all(outcome == "blocked" for outcome in forecast["outcomes"].values())
     if blocked and not accept_gaps:
         raise ResearchError("openness_minimum_gaps", "The bound minimum blocks both resolved outcomes. Repair the "
                             "reported gaps, or use --accept-gaps to export for an unresolved finding.", forecast)
-    for _, search in bound:
-        include_record(search)
-    for reading in readings.values():
-        include_record(reading)
-        for artifact in collect_reading_artifacts(records, artifacts, reading):
-            evidence[artifact["sha256"]] = {"digest": artifact["sha256"], "kind": "artifact", "artifact": artifact}
-    supporting = [row for row in records.get("reading", {}).values()
-                  if digest(row) in minimum.get("supporting_reading_digests", [])]
-    for reading in supporting:
-        include_record(reading)
-    include_record(statement)
+    bindings = bind_minimum_records(records, artifacts, statement, bound, minimum)
+    evidence.update(bindings["evidence"])
+    supporting = bindings["supporting"]
     from .capture_selection import describe_capture_selections
-    read_decisive_work_ids = {reading["version_id"] for reading in readings.values()
-                              if reading["version_id"] in decisive}
-    read_decisive_work_ids.update(row["work_id"] for row in minimum.get("family_readings", []))
     scientific_context = {"openness_minimum": minimum, "minimum_gaps": gaps, "audit_forecast": forecast,
-                          "decisive_work_ids": sorted(read_decisive_work_ids),
+                          **bindings["context"],
                           **describe_capture_selections(records)}
-    if minimum.get("family_readings"):
-        from .openness_reading import FAMILY_READING_PLAN_VERSION
-        scientific_context["family_reading_plan_version"] = FAMILY_READING_PLAN_VERSION
     if "source_evidence" in spec:
         from .problem_openness_screening import resolve_source_evidence
         source_evidence, source_artifacts = resolve_source_evidence(records, artifacts, spec["source_evidence"], materialize=True)
