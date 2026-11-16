@@ -530,6 +530,10 @@ def _plan_head(records, artifacts, assignment):
                     payload=_build_assignment_payload(records, assignment, replace=True),
                     code='review_input_too_large', details=dict(assignment_id=assignment['id']))
     failed = protocol.has_ended_without_output(records, assignment['id'])
+    if attempts and assignment.get('capacity_plan_kind') == 'final':
+        from .review_failure_class import classify_final_capacity_attempt
+        latest = max(attempts, key=lambda row: row.get('recorded_revision', 0))
+        failed = failed or classify_final_capacity_attempt(records, artifacts, latest) is not None
     unverified = bool(attempts) and all(row['status'] != 'completed'
         or not protocol._context_observed(artifacts, row) for row in attempts)
     state = None

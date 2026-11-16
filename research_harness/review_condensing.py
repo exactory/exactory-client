@@ -110,7 +110,7 @@ def plan_condensing(entries, room):
         characters = sum(entry['characters'] for entry in remaining)
         if characters > room:
             blocks = cut_condensing_blocks(remaining, room)
-    return dict(blocks=initial, rounds=rounds, entries=remaining,
+    return dict(blocks=initial, rounds=rounds, entries=remaining, minimum_block_characters=1,
                 turns=sum(len(round_) for round_ in rounds), remaining_characters=characters)
 
 

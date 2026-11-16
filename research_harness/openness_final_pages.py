@@ -18,6 +18,7 @@ from .problem_openness import serialize_record
 FINAL_PAGES_RECEIPT = 'This final is assigned in pages, followed by one closing page; condensing turns precede entries that exceed their room.'
 FINAL_PAGES_RELEASE_TEXT = 'A v7 chain whose final exceeds one request takes its final in pages and records one composed finding.'
 PAGE_PLAN_INVALID_MESSAGE = 'The final page plan or its turn differs from the stored plan and the preceding chain state.'
+COMPOSED_REFUSAL_TEXT = 'The composed finding was refused; correct the closing answer using this check and composed path.'
 
 
 def read_binding(packet):
@@ -37,9 +38,9 @@ def read_final_currency(native, inventory):
 
 def measure_page_room(records, artifacts, prior, plan, limits):
     """Use only pinned limits and earlier measurements, including ratio-only changes."""
-    from . import openness_reading as reading
+    from .review_failure_class import list_capacity_chain_assignments
     ratio = plan['measure']['characters_per_token']
-    identifiers = {member['id'] for member in reading._list_chain(records, prior)}
+    identifiers = list_capacity_chain_assignments(records, prior)
     for attempt in records.get('review_attempt', {}).values():
         if attempt['assignment_id'] in identifiers:
             measured = capacity.measure_attempt_ratio(attempt, margin=plan['measure']['ratio_margin'])
@@ -128,12 +129,15 @@ def list_final_progress(state, plan):
     return completed, pending
 
 
-def prepare_final_packet(records, artifacts, prior, route, logical, number, inventory, state, plan, limits):
+def prepare_final_packet(records, artifacts, prior, route, logical, number, inventory, state, plan, limits,
+                         *, reference=None, attempt_id=None):
     """Freeze the first final plan, or append a replayable successor, and assign its next turn."""
     from . import openness_reading_v7 as v7
     room = measure_page_room(records, artifacts, prior, plan, limits)
     chain = prior['reading_chain']['first_assignment_id']
-    reference = prior['reading_chain'].get('final_page_plan')
+    reference = reference or prior['reading_chain'].get('final_page_plan')
+    if attempt_id is None and reference is not None:
+        attempt_id = state['turns'][-1]['attempt_id']
     inputs, catalog, full = build_final_inputs(artifacts, route, logical, chain, number, inventory, state, plan, limits, room)
     changed = False
     if reference is None:
@@ -150,10 +154,10 @@ def prepare_final_packet(records, artifacts, prior, route, logical, number, inve
         prior_binding = read_binding(json.loads(artifacts.read(prior['packet'])))
         old_level = prior_binding.get('capacity', {}).get('level_material_allowance', prior_binding.get('capacity', {}).get('material_allowance'))
         cause_kind = ('level' if limits['target_allowance'] != previous['target_allowance'] or
-                      'page_plan_digest' in prior_binding and limits['material_allowance'] != old_level else
+                      limits['material_allowance'] != old_level else
                       'ratio' if room < previous['page_room'] else None)
         if cause_kind is not None:
-            cause = dict(kind=cause_kind, attempt_id=state['turns'][-1]['attempt_id'], page_room=room,
+            cause = dict(kind=cause_kind, attempt_id=attempt_id, page_room=room,
                          completed=completed, pending=pending)
             if cause_kind == 'level':
                 cause['target_allowance'] = limits['target_allowance']
@@ -168,7 +172,7 @@ def prepare_final_packet(records, artifacts, prior, route, logical, number, inve
     selected = next((turn for turn in page_plan['turns'] if turn['number'] not in completed), None)
     if selected is None:
         raise ResearchError('review_resampling_forbidden', 'This final already has its terminal closing answer.')
-    floor = min(capacity.describe_material_levels('final')[-1], max(inputs['target_minimum'], room - inputs['notes']))
+    floor = min(row['material_allowance'] for row in plan['task']['final']['levels'])
     while True:
         prepared = pages.prepare_final_turn(page_plan['turns'], selected['number'], room, limits['target_allowance'],
             floor, condensing.plan_condensing, pending=pending, completed=completed, inputs=inputs)
@@ -176,7 +180,7 @@ def prepare_final_packet(records, artifacts, prior, route, logical, number, inve
             break
         if prepared is None:
             raise ResearchError('review_route_capacity_below_floor', capacity.BELOW_FLOOR_MESSAGE)
-        cause = dict(kind='split', turn=selected['number'], attempt_id=state['turns'][-1]['attempt_id'],
+        cause = dict(kind='split', turn=selected['number'], attempt_id=attempt_id,
                      completed=completed, pending=pending)
         page_plan = pages.build_page_plan(chain, digest(plan), digest(state), page_plan['currency'], prepared,
                                           digest(page_plan), cause)
@@ -188,6 +192,40 @@ def prepare_final_packet(records, artifacts, prior, route, logical, number, inve
     return packet, reference
 
 
+def prepare_capacity_packet(records, artifacts, prior, route, logical, number, inventory, state, plan, limits):
+    """Split the failed final task before applying its observed level change."""
+    frozen = json.loads(artifacts.read(prior['packet']))
+    binding = read_binding(frozen)
+    reference = prior['reading_chain'].get('final_page_plan')
+    if reference is None:
+        historical = dict(records, review_attempt={key: row for key, row in records.get('review_attempt', {}).items()
+            if row['recorded_revision'] < prior['recorded_revision']})
+        old_limits = capacity.derive_turn_task_limits(historical, artifacts, prior, kind='final')
+        room = measure_page_room(historical, artifacts, prior, plan, old_limits)
+        inputs, _, _ = build_final_inputs(artifacts, route, logical, prior['reading_chain']['first_assignment_id'],
+            number, inventory, state, plan, old_limits, room)
+        page_plan = pages.build_page_plan(prior['reading_chain']['first_assignment_id'], digest(plan), digest(state),
+            read_final_currency(logical['native'], inventory), pages.plan_final_turns(**inputs))
+        reference = publish_page_plan(artifacts, page_plan)
+        selected = page_plan['turns'][0]['number']
+    else:
+        page_plan = read_page_plan(artifacts, reference)
+        selected = binding['final_turn']
+    completed, pending = list_final_progress(state, page_plan)
+    floor = min(row['material_allowance'] for row in plan['task']['final']['levels'])
+    turns = pages.split_final_turn(page_plan['turns'], selected, floor, condensing.plan_condensing, pending=pending)
+    if turns is None:
+        return None
+    attempt = max((row for row in records['review_attempt'].values() if row['assignment_id'] == prior['id']),
+                  key=lambda row: row['recorded_revision'])
+    cause = dict(kind='split', turn=selected, attempt_id=attempt['id'], completed=completed, pending=pending)
+    successor = pages.build_page_plan(page_plan['chain'], digest(plan), digest(state), page_plan['currency'],
+                                      turns, digest(page_plan), cause)
+    reference = publish_page_plan(artifacts, successor, previous=reference)
+    return prepare_final_packet(records, artifacts, prior, route, logical, number, inventory, state, plan, limits,
+                                reference=reference, attempt_id=attempt['id'])
+
+
 def publish_page_plan(artifacts, plan, *, previous=None):
     reference = dict(protocol=pages.FINAL_PAGE_PLAN_PROTOCOL, digest=digest(plan),
                 artifact=artifacts.put(serialize_record(plan), 'application/json'))
@@ -195,6 +233,18 @@ def publish_page_plan(artifacts, plan, *, previous=None):
         reference['predecessors'] = copy.deepcopy(previous.get('predecessors', [])) + [
             {key: copy.deepcopy(previous[key]) for key in ('protocol', 'digest', 'artifact')}]
     return reference
+
+
+def read_final_position(artifacts, reference, number):
+    """Condensation keeps its page/closing position; target splits start positions."""
+    plans = [read_page_plan(artifacts, item) for item in reference.get('predecessors', []) + [reference]]
+    selected = next(turn for turn in plans[-1]['turns'] if turn['number'] == number)
+    for plan in reversed(plans[:-1]):
+        parent = next((turn for turn in plan['turns'] if turn['number'] == selected.get('split_of')), None)
+        if (parent is not None and selected['kind'] in ('page', 'closing')
+                and parent['kind'] in (selected['kind'], 'final') and parent['targets'] == selected['targets']):
+            selected = parent
+    return selected['number']
 
 
 def build_validation_envelope(artifacts, assignment, packet, targets=None):
@@ -399,7 +449,11 @@ def read_composite_currency(records, artifacts, assignment):
 
 def validate_composite_output(records, artifacts, assignment, packet, output):
     from .native_review import validate_finding
-    validate_finding(packet, output, artifacts=artifacts)
+    try:
+        validate_finding(packet, output, artifacts=artifacts)
+    except ResearchError as error:
+        error.details['composed_finding'] = True
+        raise
 
 
 def prepare_closing_composite(records, artifacts, assignment, attempt, output):
@@ -408,6 +462,9 @@ def prepare_closing_composite(records, artifacts, assignment, attempt, output):
     from .operations import immutable_record
     packet = json.loads(artifacts.read(assignment['packet']))
     if 'closing' not in packet.get('reading_final', {}):
+        return []
+    from .review_failure_class import classify_final_capacity_attempt
+    if classify_final_capacity_attempt(records, artifacts, attempt) is not None:
         return []
     from .openness_reading_v7 import validate_turn_output
     from .review_refusal import contract_check
@@ -420,10 +477,46 @@ def prepare_closing_composite(records, artifacts, assignment, attempt, output):
     return [immutable_record(records, 'review_composite', composite['id'], composite)]
 
 
+def describe_composed_refusal(records, artifacts, attempt, check, path):
+    """Locate a composed field's owning target using only this reviewer's answers."""
+    certificate = records.get('review_output_refusal', {}).get(attempt['id'], {})
+    if check != 'openness.finding' or not certificate.get('details', {}).get('composed_finding'):
+        return None
+    assignment = records['review_assignment'][attempt['assignment_id']]
+    packet = json.loads(artifacts.read(assignment['packet']))
+    if 'closing' not in packet.get('reading_final', {}):
+        return None
+    result = dict(check=check, path=path, closing_answer=json.loads(artifacts.read(attempt['output'])),
+                  message=COMPOSED_REFUSAL_TEXT)
+    state = json.loads(artifacts.read(assignment['reading_chain']['state']))
+    outputs = list_page_outputs(state)
+    items = [item for page in outputs for item in page['output']['targets']]
+    components = path.split('/')
+    target_index = None
+    if len(components) > 4 and components[1:3] == ['findings', 'openness'] and components[4].isdigit():
+        index = int(components[4])
+        owned = items if components[3] == 'coverage' else [item for item in items for _ in item.get('grounds', [])] if components[3] == 'grounds' else []
+        if index < len(owned):
+            target_index = items.index(owned[index])
+    if target_index is not None:
+        from .openness_reading_v7 import build_handle_packet
+        envelope = build_validation_envelope(artifacts, assignment, packet,
+            capacity.read_chain_capacity_plan(artifacts, assignment)['targets']['handles'])
+        envelope['handle_table'] = build_handle_packet(packet, artifacts, assignment)['handle_table']
+        rule = composition.find_rule(assignment['role'], envelope)
+        route = records['review_route'][assignment['route_id']]
+        rows = composition.build_decision_rows(rule, envelope, outputs, measure=lambda row:
+            capacity.measure_capacity_value(route, dict(handle='decision:' + row[0], value=row)) + 1)
+        result['decision_row'] = rows[target_index]
+    return result
+
+
 def verify_final_page_plans(records, artifacts, assignment, native, inventory, plan, route):
     """Replay each immutable plan with the state and observations that preceded it."""
     from . import openness_reading as reading
-    chain = reading._list_chain(records, assignment)
+    chain = sorted((member for member in records['review_assignment'].values()
+        if member.get('reading_chain', {}).get('first_assignment_id') == assignment['reading_chain']['first_assignment_id']
+        and member['recorded_revision'] <= assignment['recorded_revision']), key=lambda row: row['recorded_revision'])
     values, owners = [], {}
     for member in chain:
         reference = member['reading_chain'].get('final_page_plan')
@@ -443,8 +536,11 @@ def verify_final_page_plans(records, artifacts, assignment, native, inventory, p
             raise ResearchError('artifact_corrupt', PAGE_PLAN_INVALID_MESSAGE)
         historical = dict(records, review_attempt={key: row for key, row in records['review_attempt'].items()
             if row['recorded_revision'] < member['recorded_revision']})
-        prior_id = member['context'].get('prior_assignment_id') or member['context']['unread']['assignment_id']
+        prior_id = member.get('capacity_replacement_of') or member['context'].get('output_refusal', {}).get('assignment_id') or member['context'].get('prior_assignment_id') or member['context']['unread']['assignment_id']
         prior = records['review_assignment'][prior_id]
+        if 'cause' not in value and member.get('capacity_replacement_of') and not prior['reading_chain'].get('final_page_plan'):
+            historical = dict(records, review_attempt={key: row for key, row in records['review_attempt'].items()
+                if row['recorded_revision'] < prior['recorded_revision']})
         limits = capacity.derive_turn_task_limits(historical, artifacts, prior, kind='final')
         room = measure_page_room(historical, artifacts, prior, plan, limits)
         logical = dict(protocol=json.loads(artifacts.read(member['packet']))['protocol'], role=member['role'],
@@ -455,11 +551,11 @@ def verify_final_page_plans(records, artifacts, assignment, native, inventory, p
             previous = values[values.index(value) - 1]
             completed, pending = list_final_progress(state, previous)
             cause = value['cause']
-            if (cause['completed'] != completed or cause['pending'] != pending
-                    or cause['attempt_id'] != state['turns'][-1]['attempt_id']):
+            attempt = historical['review_attempt'].get(cause['attempt_id'])
+            if (cause['completed'] != completed or cause['pending'] != pending or attempt is None
+                    or cause['attempt_id'] != state['turns'][-1]['attempt_id'] and attempt['assignment_id'] != prior_id):
                 raise ResearchError('artifact_corrupt', PAGE_PLAN_INVALID_MESSAGE)
-        return dict(inputs, floor=min(capacity.describe_material_levels('final')[-1],
-            max(inputs['target_minimum'], room - inputs['notes'])))
+        return dict(inputs, floor=min(row['material_allowance'] for row in plan['task']['final']['levels']))
     pages.verify_page_plans(values, read_inputs)
 
 
@@ -473,9 +569,15 @@ def verify_final_turn_binding(records, artifacts, assignment, packet, logical, i
     selected = next((turn for turn in page_plan['turns'] if turn['number'] == binding['final_turn']), None)
     if selected is None:
         raise ResearchError('artifact_corrupt', PAGE_PLAN_INVALID_MESSAGE)
+    position = read_final_position(artifacts, reference, selected['number'])
+    if assignment['reading_chain'].get('final_position', position) != position:
+        raise ResearchError('artifact_corrupt', PAGE_PLAN_INVALID_MESSAGE)
     expected = build_final_packet(records, artifacts, records['review_route'][assignment['route_id']], logical,
         assignment['reading_chain']['first_assignment_id'], assignment['reading_chain']['turn'], inventory, state, plan,
         limits, page_plan, selected)
+    if packet.get('output_refusal'):
+        from .review_refusal_notice import attach_refusal_notice
+        expected = attach_refusal_notice(expected, packet['output_refusal'])
     if expected != packet:
         raise ResearchError('artifact_corrupt', PAGE_PLAN_INVALID_MESSAGE)
 

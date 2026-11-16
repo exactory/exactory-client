@@ -260,3 +260,13 @@ def validate_replacement_origin(records, artifacts, assignment, packet=None):
                 and digest(protocol._read_json(artifacts, attempt['output'])) == entry['output_digest']
                 and attempt['request_digest'] == certificate['request_digest'])
     require(entries[-1]['assignment_id'] == prior['id'] and entries[-1]['status'] == 'refused')
+    if assignment.get('reading_chain', {}).get('final_page_plan'):
+        from .openness_final_pages import describe_composed_refusal
+        from .review_route_capacity import measure_capacity_value
+        route = records['review_route'][assignment['route_id']]
+        context = describe_composed_refusal(records, artifacts, records['review_attempt'][entries[-1]['attempt_id']],
+                                           entries[-1]['check'], entries[-1]['path'])
+        if context is not None:
+            context['closing_answer'] = notices._retain_value(context['closing_answer'], notices.COMPOSED_CLOSING_ANSWER_CHARACTERS,
+                lambda value: measure_capacity_value(route, value))
+        require(notice.get('composed_finding') == context)

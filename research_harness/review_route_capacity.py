@@ -2219,9 +2219,7 @@ def derive_turn_task_limits(records, artifacts, assignment, *, kind=None, notice
         return derive_series_task_limits(records, artifacts, assignment, kind=kind, notice_characters=notice_characters)
     plan = read_chain_capacity_plan(artifacts, assignment)
     kind = kind or assignment.get('capacity_plan_kind') or describe_assignment_kind(assignment)
-    identifiers = set()
-    for member in openness_reading._list_chain(records, assignment):
-        identifiers.update(failures.list_turn_assignments(records, member))
+    identifiers = failures.list_capacity_chain_assignments(records, assignment)
     # Older identical retries and refusal replacements did not consume response
     # limits. Only explicit capacity replacements apply the new reduction.
     response_origins = {response_replacement}
@@ -2282,6 +2280,7 @@ OUTPUT_OVER_CAP_DECISION_MESSAGE = ('No smaller task that the protocol admits is
 CAPACITY_DECISION_MESSAGE = ('This protocol has no smaller task for this turn on this route. The steps of the answer '
                              'move the review to another route. required_unit, when present, names the unit of a '
                              'later release that gives this protocol a smaller task.')
+FINAL_FLOOR_DECISION_TEXT = 'This final turn has no smaller task; after one repeated run, choose the supplied route steps or an admitted export.'
 
 
 def list_capacity_recovery_rows():
@@ -2303,6 +2302,8 @@ def list_capacity_recovery_rows():
     for kind in ('reading', 'final', 'combine'):
         rows.append(dict(kind=kind, protocol=openness_reading.PROTOCOL_V7,
                          handler='final_v7' if kind == 'combine' else kind + '_v7'))
+        if kind == 'final':
+            rows[-1]['forms'] = ['request', 'page', 'closing']
     for kind in ('request', 'final'):
         rows.append(dict(kind=kind, protocol='exactory-independent-review-sources-v4', handler=kind + '_session_v4'))
     for kind in review_parts.KINDS:
@@ -2361,6 +2362,8 @@ def describe_capacity_decision(records, artifacts, assignment, outcome, details)
     """Use D2's role-specific route steps for the decision member of R52."""
     from .review_failure_class import OUTCOME_CODES, ROUTE_DECISION_QUESTION
     from .review_plan_steps import select_route_steps, describe_step
+    from .openness_reading_v7 import V7_FINAL_FORMS
+    final_pages = 'pages' in V7_FINAL_FORMS or bool(assignment.get('reading_chain', {}).get('final_page_plan'))
 
     # Diagnostics without a native packet can name route setup, but cannot fill an attestation.
     numbers = (select_route_steps(records, artifacts, assignment)
@@ -2375,11 +2378,15 @@ def describe_capacity_decision(records, artifacts, assignment, outcome, details)
                 step['prerequisites'].insert(0, dict(condition='The installed release holds ' + details['required_unit'] + '.'))
     details = dict(details, message=(OUTPUT_OVER_CAP_DECISION_MESSAGE if outcome == 'output_over_cap'
                                     else CAPACITY_DECISION_MESSAGE))
+    if (final_pages and outcome == 'output_over_cap' and details.get('protocol') == 'exactory-openness-reading-v7'
+            and details.get('kind') in ('final', 'combine')):
+        details['message'] = FINAL_FLOOR_DECISION_TEXT
     answers = [dict(answer='Move to another route', steps=steps)]
     if outcome == 'output_over_cap' and assignment.get('reading_chain'):
         from . import openness_reading as reading, review_protocol as protocol
         packet = protocol._read_json(artifacts, assignment['packet'])
-        if reading.find_protocol(packet) in (reading.PROTOCOL_V5, reading.PROTOCOL_V6):
+        version = reading.find_protocol(packet)
+        if version in (reading.PROTOCOL_V5, reading.PROTOCOL_V6) or version == reading.PROTOCOL_V7 and final_pages:
             from .openness_successor import describe_successor_handoff, OUTPUT_CAP_EXPORT_MESSAGE
             handoff = describe_successor_handoff(records, artifacts, assignment, OUTCOME_CODES[outcome])
             if handoff is not None and handoff['state'] == 'handoff':
