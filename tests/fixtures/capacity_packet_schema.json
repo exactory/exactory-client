@@ -19707,7 +19707,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.problem_accounts": {
-      "ast_sha256": "3abe3c48d35d3d6468532f90c1db59d2d8e27886855f89ae76ceb310ec97e17b",
+      "ast_sha256": "5b326b0a345c0d3e6d3d1a1d5254b4284f3e19f3d9891c5191b9518470a46e4a",
       "functions": {
         "collect_account_evidence": "75b28f01bcd1ecc1f3b2de937cd21a1ff425239022ade25af1fa41c10dee7940",
         "collect_candidate_form_history": "cec18153174e589f30d75fde922f35e00c9aa88f4bcb477ab571c73e5c04b763",
@@ -19727,7 +19727,7 @@
         "validate_account_evidence": "7d1221620b5c8d3dabd0c3467c7e309497d9de9b3bad7a1f56fe0da364b91967",
         "validate_accounts": "87f1effe094d0757df5142f0393d1bd85aa5ddc6b607d018d86e1dd81378fde6",
         "validate_alternatives": "be34a0c86838a1b2f9836281bac7ee029d06fa0fdd05cb3746823608e8bdad55",
-        "validate_fact": "94f256f22ac81e95238a7ab7cf306253822dfedea28b08dbd4a369ed358d79eb",
+        "validate_fact": "41cb4cabbf3dbb684b0ed2dfe316bcc5d12dadded92fd4a1ec9bc7bbfd5ab257",
         "validate_paragraph": "f638d8e2eb2ab67a9c5b530d737e44b21141f22de8faa2e958cfa5e5c107fb7e",
         "validate_relations": "eafaf95820067cc5bbf3074c030ca7ab8f3f2205ce01f79b036d7767cc159036",
         "validate_replacement": "8c37fb62d81cb9fd1778f0e37f764b9b1b1c5efae9977ae533a15fda8a854a6f",
@@ -19735,7 +19735,7 @@
         "validate_tier_two": "3e2c6fab7ec884afcd7b58bbb2b3cacc130c4a1e59b35b32248eb7730dd54832"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in describe_account_records; version 1 follows its existing projection. Reviewed 0.91.2 snapshot and reading dates, versioned history diagnostics and form checks. Traced entry_id and undated through validate_value to command refusals and problem_delivery._assess_minimum gate/status obligations only; classified both as non-packet names after verifying that packet obligations instead come from collect_results/assess_account_currency. The already reviewed version 2 probe projection and accounts_version declarations remain intact; no further packet members or closed shapes change."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in describe_account_records; version 1 follows its existing projection. Reviewed 0.91.2 snapshot and reading dates, versioned history diagnostics and form checks. Traced entry_id and undated through validate_value to command refusals and problem_delivery._assess_minimum gate/status obligations only; classified both as non-packet names after verifying that packet obligations instead come from collect_results/assess_account_currency. The already reviewed version 2 probe projection and accounts_version declarations remain intact; no further packet members or closed shapes change. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.problem_areas": {
       "ast_sha256": "bd7409ab6ad4c0cb5283bf7676cc985299d034a8e2829f5791537dd87e65faaa",
@@ -22204,7 +22204,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_prompt_paragraphs": {
-      "ast_sha256": "e672d48f58a35a105df8197a33f96fceaab52d5b667e0982a125cc6cfefe79de",
+      "ast_sha256": "8556f4e7ac4ee561652f18d7087597c065eac7f8cb9ec85780be77d97e5894b3",
       "functions": {
         "_append_selected_paragraphs": "b463ad8836dd7f7e2c0961c4c64ade4a0ed5bfbbce62519f3b113f910050ffd6",
         "_describe_template_suffix": "c3800a380dad412ec2eabb656c368209f4434960ad3366bc2706d64ad49d51b1",
@@ -22249,7 +22249,7 @@
         "bd01b36e067355a8f0c1e765513e33161679a741f0cc47e75c8ba682741d2e43",
         "c028215c5274d690c4dbc9e561a96faefb9da20033afaeee3184646b0134c60e"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_protocol": {
       "ast_sha256": "c79c53bac9303cb9c2bc4633c2d56b32cc551785d332dbfcb0a573481362adb9",
