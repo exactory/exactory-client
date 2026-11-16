@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from test_openness_final_pages import FinalPagesSupport
+from openness_named_gap_fixtures import build_ground
 import test_openness_reading_v7_turns as turn_fixtures
 from codex_route_fixtures import build_codex_response, bind_codex_response
 from research_harness import openness_reading as reading, openness_reading_v7 as v7
@@ -15,6 +16,28 @@ from research_harness.evidence import digest
 
 
 class PageReplacementTests(FinalPagesSupport):
+    def build_v7_answer(self, packet):
+        output = turn_fixtures.V7CommandTests.build_v7_answer(self, packet)
+        if 'reading_turn' in packet:
+            binding = packet['reading_turn']
+            for row, body in zip(binding['plan']['now'], packet['evidence']):
+                if row['kind'] == 'fulltext':
+                    output['excerpts'].append(dict(unit=row['handle'], text=body['content'][:100],
+                        purpose='The partial result behind the named search gap.',
+                        targets=[target['handle'] for target in binding['allowances']['targets']]))
+        return output
+
+    def build_page_gap(self, packet, target, text='A page gap.'):
+        quote = next(row for row in packet['reading_final']['entries'] if row.get('status') == 'verified')
+        # The final packet abbreviates formulations; use the selected record's literal text.
+        supplied = dict(identity=dict(unit=quote['unit']), sentence=quote['text'],
+            formulation=([self.selected['statement']] + self.selected['neighbours'])[int(target[1:]) - 1],
+            missing_term='finite extremal example')
+        ground = build_ground(dict(packet, _fixture=supplied))
+        ground.update(text=text, need='Search for finite extremal examples for this formulation.',
+            unsettled='The delivered partial result does not settle the formulation.')
+        return ground
+
     def answer(self, packet):
         if reading.find_protocol(packet) != v7.PROTOCOL:
             return self.build_reading_response(packet, excerpts=[]) if reading.find_stage(packet) == 'reading' else self.build_native_result(packet, outcome='unresolved')
@@ -26,7 +49,7 @@ class PageReplacementTests(FinalPagesSupport):
         binding = packet['reading_final']
         if 'closing' in binding:
             return dict({key: 'Assessed.' for key in ('statement', 'assumptions', 'scope', 'dependencies', 'policy')},
-                        outcome='unresolved', reason='A remaining gap.', grounds=[dict(kind='reviewer_gap', text='A gap remains.')])
+                        outcome='unresolved', reason='A remaining gap.', grounds=[dict(kind='own_argument', text='The recorded argument needs further checking.')])
         if 'page_plan_digest' not in binding:
             return self.build_v7_finding(packet, binding['notes_handle'])
         return dict(targets=[dict(formulation=target, coverage='Read.', grounds=[], sentence='A gap remains.')
@@ -110,9 +133,10 @@ class PageReplacementTests(FinalPagesSupport):
         native = self.export_targets(9)
         head, packet = self.start_final(native)
         answer = self.answer(packet)
-        answer['targets'][0]['grounds'] = [dict(kind='reviewer_gap', text='g' * 601)]
+        answer['targets'][0]['grounds'] = [dict(kind='own_argument', text='g' * 601)]
         receipt = self.invoke(head, answer)
         self.assertIn('output_refusal', receipt)
+        self.assertEqual(receipt['output_refusal']['details']['rule'], 'ground_bound')
         saved = self.freeze_records()
         replacement = self.replace(head)
         after = self.read_packet(replacement)
@@ -141,10 +165,12 @@ class PageReplacementTests(FinalPagesSupport):
         head, _ = self.start_final(native)
         # Page-owned grounds make a resolved closing outcome inconsistent.
         while reading.find_stage(self.read_packet(head)) != 'closing':
-            output = self.answer(self.read_packet(head))
+            packet = self.read_packet(head)
+            output = self.answer(packet)
             for row in output['targets']:
-                row['grounds'] = [dict(kind='reviewer_gap', text='A page gap.')]
-            self.invoke(head, output)
+                row['grounds'] = [self.build_page_gap(packet, row['formulation'])]
+            receipt = self.invoke(head, output)
+            self.assertNotIn('output_refusal', receipt, receipt)
             following = 'ground-%d' % len(self.store.snapshot()['records']['review_assignment'])
             self.assign(following, native, prior=head)
             head = following
@@ -181,8 +207,9 @@ class PageReplacementTests(FinalPagesSupport):
         saved = self.freeze_records()
         for number in range(3):
             output = self.answer(self.read_packet(head))
-            output['targets'][0]['grounds'] = [dict(kind='reviewer_gap', text='g' * 601)]
-            self.invoke(head, output)
+            output['targets'][0]['grounds'] = [dict(kind='own_argument', text='g' * 601)]
+            receipt = self.invoke(head, output)
+            self.assertEqual(receipt['output_refusal']['details']['rule'], 'ground_bound')
             if number < 2:
                 head = self.replace(head)
         action = plan_next(self.store.snapshot()['records'], self.artifacts, head)
@@ -392,7 +419,7 @@ class PageReplacementTests(FinalPagesSupport):
         native = self.export_targets(9)
         head, _ = self.start_final(native)
         bad = self.answer(self.read_packet(head))
-        bad['targets'][0]['grounds'] = [dict(kind='reviewer_gap', text='g' * 601)]
+        bad['targets'][0]['grounds'] = [dict(kind='own_argument', text='g' * 601)]
         self.invoke(head, bad)
         head = self.replace(head)
         packet = self.read_packet(head)
@@ -438,15 +465,18 @@ class PageReplacementTests(FinalPagesSupport):
         native = self.export_targets(9)
         head, _ = self.start_final(native)
         while reading.find_stage(self.read_packet(head)) != 'closing':
-            output = self.answer(self.read_packet(head))
-            output['targets'][0]['grounds'] = [dict(kind='reviewer_gap', text='A page ground.')]
-            self.invoke(head, output)
+            packet = self.read_packet(head)
+            output = self.answer(packet)
+            output['targets'][0]['grounds'] = [self.build_page_gap(packet, output['targets'][0]['formulation'], 'A page ground.')]
+            receipt = self.invoke(head, output)
+            self.assertNotIn('output_refusal', receipt, receipt)
             following = 'local-%d' % len(self.store.snapshot()['records']['review_assignment'])
             self.assign(following, native, prior=head)
             head = following
         output = self.answer(self.read_packet(head))
-        output['grounds'] = [dict(kind='reviewer_gap', text='g' * 601)]
-        self.invoke(head, output)
+        output['grounds'] = [dict(kind='own_argument', text='g' * 601)]
+        receipt = self.invoke(head, output)
+        self.assertEqual(receipt['output_refusal']['details']['rule'], 'ground_bound')
         head = self.replace(head)
         self.assertNotIn('composed_finding', self.read_packet(head)['output_refusal'])
         self.finish(native, head)
@@ -475,7 +505,7 @@ class PageReplacementTests(FinalPagesSupport):
         native = self.export_targets(9)
         head, _ = self.start_final(native)
         output = self.answer(self.read_packet(head))
-        output['targets'][0]['grounds'] = [dict(kind='reviewer_gap', text='g' * 601)]
+        output['targets'][0]['grounds'] = [dict(kind='own_argument', text='g' * 601)]
         self.invoke(head, output)
         head = self.replace(head)
         notice = self.read_packet(head)['output_refusal']
@@ -489,7 +519,7 @@ class PageReplacementTests(FinalPagesSupport):
         self.assertEqual(self.read_packet(head)['output_refusal'], notice)
         self.assertEqual(failures.count_position(records, self.artifacts, member)['replacements']['output_refused'], 0)
         output = self.answer(self.read_packet(head))
-        output['targets'][0]['grounds'] = [dict(kind='reviewer_gap', text='g' * 601)]
+        output['targets'][0]['grounds'] = [dict(kind='own_argument', text='g' * 601)]
         self.invoke(head, output)
         head = self.replace(head)
         records = self.store.snapshot()['records']
@@ -533,9 +563,13 @@ class PageReplacementTests(FinalPagesSupport):
         native = self.export_targets(9)
         head, _ = self.start_final(native)
         while reading.find_stage(self.read_packet(head)) != 'closing':
-            output = self.answer(self.read_packet(head))
-            output['targets'][0]['grounds'] = [dict(kind='reviewer_gap', text='The page reviewer gap.', refs=[dict(ref=self.read_packet(head)['reading_final']['notes_handle'])])]
-            self.invoke(head, output)
+            packet = self.read_packet(head)
+            output = self.answer(packet)
+            ground = self.build_page_gap(packet, output['targets'][0]['formulation'], 'The page reviewer gap.')
+            ground['refs'] = [dict(ref=packet['reading_final']['notes_handle'])]
+            output['targets'][0]['grounds'] = [ground]
+            receipt = self.invoke(head, output)
+            self.assertNotIn('output_refusal', receipt, receipt)
             following = 'bounded-%d' % len(self.store.snapshot()['records']['review_assignment'])
             self.assign(following, native, prior=head)
             head = following
