@@ -33,10 +33,9 @@ VISUAL_TEXT_ROUTE_MESSAGE = ('Protocol v7 delivers text units. Register and prob
 VISUAL_TEXT_ROUTE_QUESTION = 'Which text route of this model should read the packet?'
 VISUAL_TEXT_ROUTE_ANSWER = 'Register and probe the text route of the same model.'
 LABEL_CHARACTERS = 120
-SELECTION_MISMATCH_MESSAGE = ('An item of this selection does not match the authenticated turn that it comes from, or '
-                              'the inventory of the new chain does not hold its unit. Select only ranges, searches, '
-                              'excerpts and passages that the turn delivered or verified and whose units the new '
-                              'inventory holds.')
+SELECTION_MISMATCH_MESSAGE = ('The stored selection is not the selection that the harness makes for the store as it '
+                              'stood before the first assignment, or a chain that gives a carried turn no longer '
+                              'authenticates.')
 ALLOWANCES_CHARACTERS = 30000
 TARGET_LABELS_CHARACTERS = 100000
 DECISIVE_WORK_IDS_CHARACTERS = 10000
@@ -84,6 +83,9 @@ KEEP_REVIEWER_TEXT = ('A new chain carries the verified reading turns of an earl
                       'chain when you export again for the same statement.')
 PASSED_OVER_TEXT = ('The earlier chain {chain} read the same statement on the same route under another reviewer_id, '
                     'so this chain carries none of its turns.')
+SUPERSEDED_TEXT = ('The chain {chain} read {units} units that a later chain read again; its {entries} excerpts and '
+                   'passage answers of those units stay in its own records, and the new chain carries the later '
+                   'reading of each unit.')
 FINAL_MATERIAL_FIELDS = ('notes', 'entries', 'gaps', 'material', 'sources', 'fill')
 TARGET_PAGE_SENTENCE = (
     ' The list of formulations, the statement record and the other fields of the native packet each '
@@ -1533,10 +1535,16 @@ def describe_uncarried_chains(records, artifacts, value, route, native):
     built = prepare_inventory(built, native, route)
     _publish_bodies(overlay, built['bodies'])
     identity = _describe_carried_identity(records, value, route, native)
-    selection = build_carried_selection(records, artifacts, built['inventory'], identity)['selection']
-    report = describe_carried_selection(records, artifacts, built['inventory'], identity, selection)
+    try:
+        selection = build_carried_selection(records, artifacts, built['inventory'], identity)['selection']
+        report = describe_carried_selection(records, artifacts, built['inventory'], identity, selection)
+    except ResearchError as error:
+        if error.code not in ('artifact_missing', 'artifact_corrupt', 'storage_io', 'unsafe_path'):
+            raise
+        return dict(chains=[], would_carry=[], passed_over=[], refusal=dict(code=error.code, details=error.details))
     return dict(chains=[], would_carry=[row['chain'] for row in report['chains']],
-                passed_over=[dict(row, message=PASSED_OVER_TEXT.format(chain=row['chain'])) for row in report['passed_over']])
+                passed_over=[dict(row, message=PASSED_OVER_TEXT.format(chain=row['chain'])) for row in report['passed_over']],
+                outputs=report['outputs'])
 
 
 def read_carried_inventory(artifacts, first):
@@ -2206,10 +2214,9 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
 # The verification of a v7 chain has five conditions, and each has one refusal message. A chain that fails one gives
 # no finding.
 ORIGIN_VERIFICATION_MESSAGE = (
-    'The stored carried selection of this chain does not match its reference on the first assignment: the reference '
-    'does not name exactory-openness-carried-selection-v1, or its digest differs from the stored selection. The '
-    'harness cannot verify the turns that the chain carries, so the chain gives no finding. Check the record with '
-    'record-check.')
+    'The reference on the first assignment must name the protocol of the stored selection, which this release '
+    'verifies as version 1 or version 2, and its digest must match; for version 2 the store must give its records '
+    'at the revision before the first assignment, whose stamp must be the revision of its commit.')
 STATE_VERIFICATION_MESSAGE = (
     'A stored inventory or state of this chain differs from what the harness rebuilds from the native packet, the '
     'carried selection and the authenticated turns, or the state_digest in the packet of a turn does not name the '
@@ -2242,20 +2249,30 @@ def _require_verification(condition, message, **details):
         raise ResearchError('openness_reading_incomplete', message, details)
 
 
-def _verify_carried_origins(records, artifacts, first, native, route, plan):
+def _verify_carried_origins(records, artifacts, first, native, route, plan, evaluation):
     """Condition 1: authenticate named origin prefixes through their protocol observers.
 
-    The selection verifier also checks each stored item. It never selects again.
+    Version 2 first checks the complete selection against the authenticated store before this assignment.
     Origin observers recurse only into assignments recorded before this first turn.
     """
-    from .openness_carried import SELECTION_PROTOCOL, verify_carried_selection
+    from .openness_carried import SELECTION_PROTOCOL, verify_stored_selection
     reference = first['carried_selection']
     selection = json.loads(artifacts.read(reference['artifact']))
-    _require_verification(reference['protocol'] == SELECTION_PROTOCOL and reference['digest'] == digest(selection),
+    _require_verification(isinstance(selection, dict) and reference['protocol'] == selection.get('protocol')
+                          and reference['digest'] == digest(selection),
                           ORIGIN_VERIFICATION_MESSAGE)
+    cutoff = None
+    if reference['protocol'] == SELECTION_PROTOCOL:
+        stamp = first['recorded_revision']
+        _require_verification(hasattr(evaluation.records, 'read_snapshot')
+            and evaluation.records.verify_record_version('review_assignment', first['id'], stamp, digest(first)),
+            ORIGIN_VERIFICATION_MESSAGE)
+        cutoff = evaluation.read_snapshot(stamp - 1)
+        _require_verification(first['id'] not in cutoff.records.get('review_assignment', {}),
+                              ORIGIN_VERIFICATION_MESSAGE)
     base = read_carried_inventory(artifacts, first)
     identity = _describe_carried_identity(records, first, route, native)
-    projections = verify_carried_selection(records, artifacts, base, identity, selection, plan=plan)
+    projections = verify_stored_selection(records, artifacts, base, identity, selection, cutoff=cutoff, plan=plan)
     return selection, projections
 
 
@@ -2387,6 +2404,7 @@ def verify_problem_coverage(records, artifacts, assignment, *, final=False):
     """Verify a v7 prefix/final from its stored selection and plan, without admission or planning."""
     from .native_review import load_packet
     from .review_protocol import assignment_state
+    from .evaluation import Evaluation
     overlay = _PlanningArtifacts(artifacts)
     chain = reading._list_chain(records, assignment)
     first = records['review_assignment'][assignment['reading_chain']['first_assignment_id']]
@@ -2400,7 +2418,8 @@ def verify_problem_coverage(records, artifacts, assignment, *, final=False):
                               fixed_bounds=base['fixed_bounds'])
     _publish_bodies(overlay, built['bodies'])
     _require_verification(built['inventory'] == base, STATE_VERIFICATION_MESSAGE)
-    selection, projections = _verify_carried_origins(records, overlay, first, native, route, plan)
+    selection, projections = _verify_carried_origins(records, overlay, first, native, route, plan,
+                                                    Evaluation.of(records, artifacts))
     rebuilt = build_chain_state(base, projections, route=route, plan=plan)
     _require_verification(rebuilt['inventory'] == inventory, STATE_VERIFICATION_MESSAGE)
     state = rebuilt['state']

@@ -119,3 +119,43 @@ def export_as_0_85_3(*args, **kwargs):
     namespace = dict(vars(problem_openness))
     exec(compile(source, str(location), 'exec'), namespace)
     return namespace['export_openness'](*args, **kwargs)
+
+
+def select_as_0_91_1(records, artifacts, inventory, identity):
+    """The selection statements of 605a682 (0.91.2, unchanged since 0.91.1).
+
+    Keep the credit-only turn rule here so compatibility tests never manufacture
+    a version 1 selection by relabeling the current selection.
+    """
+    from research_harness import openness_carried as carried
+    candidates = []
+    for chain in carried.list_qualifying_chains(records, artifacts, identity)['chains']:
+        observations = carried.observe_qualifying_chain(records, artifacts, chain, identity)
+        first = records['review_assignment'][chain['chain']]
+        classes = carried.classify_carried_notes(inventory, observations,
+            search_dependencies=carried._list_search_dependencies(records, artifacts, first))
+        for observation, notes in zip(observations, classes):
+            if observation['origin']['chain'] != chain['chain'] or observation['turn']['kind'] != 'reading':
+                continue
+            credit = carried.credit_carried_turn(inventory, observation)
+            credit['notes'] = notes
+            candidates.append((observation, credit, dict(credit, ranges=[], searches=[])))
+    for unit in inventory['units']:
+        covered = []
+        for observation, credit, selected in candidates:
+            if unit['identity'].get('record_kind') == 'literature_search':
+                if unit['sha256'] in credit['searches']:
+                    selected['searches'].append(unit['sha256'])
+                    break
+            else:
+                for span in credit['ranges']:
+                    if span['unit'] != unit['handle']:
+                        continue
+                    extended = carried._merge_ranges(covered + [(span['start'], span['end'])])
+                    if carried._count_characters(extended) > carried._count_characters(covered):
+                        selected['ranges'].append(span)
+                        covered = extended
+                if carried._count_characters(covered) >= unit['characters']:
+                    break
+    selected = [row for observation, credit, row in candidates if row['ranges'] or row['searches']]
+    return sorted(selected, key=lambda row: records['review_attempt'][row['origin']['attempt_id']]['recorded_revision'])

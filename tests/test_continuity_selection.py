@@ -11,6 +11,7 @@ from research_harness import openness_reading as reading, openness_reading_v7 as
 from research_harness import review_protocol as protocol, review_route_capacity as capacity
 from research_harness import openness_carried
 from research_harness.evidence import digest
+from research_harness.evaluation import Evaluation
 import continuity_stage3_fixtures as stage3
 
 
@@ -22,11 +23,27 @@ class RecordedSelectionSupport:
                      if row.get('reading_chain', {}).get('first_assignment_id') == first),
                     key=lambda row: row['recorded_revision'])
         before = copy.deepcopy(records)
-        with patch.object(openness_carried, 'select_carried_readings', side_effect=AssertionError('reselection')):
+        head = records['review_assignment'][first]
+        selection = json.loads(self.artifacts.read(head['carried_selection']['artifact']))
+        self.assertEqual(selection['protocol'], 'exactory-openness-carried-selection-v2')
+        cutoff_revision = head['recorded_revision'] - 1
+        cutoff = Evaluation.of(records, self.artifacts).read_snapshot(cutoff_revision)
+        cutoff_digest = digest({kind: dict(rows) for kind, rows in cutoff.records.items()})
+        inventory = v7.read_carried_inventory(self.artifacts, head)
+        identity = v7._describe_carried_identity(records, head, records['review_route'][head['route_id']],
+            json.loads(self.artifacts.read(head['context']['native_packet'])))
+        self.assertEqual(openness_carried.select_carried_readings(cutoff.records, cutoff, inventory, identity),
+                         selection['turns'])
+        with patch.object(v7, 'check_v7_admission', side_effect=AssertionError('replanning')):
             result = stage3.record_finding(self, final['id'])
         self.assertTrue(result['reading_turns'])
+        after = self.store.snapshot()['records']
+        later_cutoff = Evaluation.of(after, self.artifacts).read_snapshot(cutoff_revision)
+        self.assertEqual(digest({kind: dict(rows) for kind, rows in later_cutoff.records.items()}), cutoff_digest)
+        self.assertEqual(openness_carried.select_carried_readings(later_cutoff.records, later_cutoff,
+            inventory, identity), selection['turns'])
         for kind in ('review_assignment', 'review_attempt', 'review_invocation'):
-            self.assertEqual(before[kind], self.store.snapshot()['records'][kind])
+            self.assertEqual(before[kind], after[kind])
         return packets
 
 

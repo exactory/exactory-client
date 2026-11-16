@@ -2,6 +2,25 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "carried-selection-leaves-out-turns-without-a-credit",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "carried selection",
+      "summary": "The selection of a new v7 chain carried a turn only when a range or a completed search was taken from it. A turn that delivered shared search fields or an earlier part of a search record was left out with its notes, excerpts and passage answers: on the store of record 12 at revision 1646, 12 of the 57 turns of the stopped chain with 164 entries. The verifier required a range or a search of every stored turn, so it agreed.",
+      "expected": "Every ready reading turn of a chain that the selection takes anything from is carried with its notes. An excerpt or a passage answer is carried when its own source is unchanged, unless the selection takes the reading of that unit from other chains, and the receipt counts every entry as carried, superseded or with a changed source. A selection of version 2 that lacks a turn, the end of a chain, a chain or an entry does not verify.",
+      "fixed_in": "0.91.3",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_carried.V5PartialSearchTests.test_turn_with_an_earlier_part_of_a_search_is_carried_with_its_entries",
+        "test_openness_carried.V5PartialSearchTests.test_last_ready_turn_without_a_credit_gives_the_starting_notes",
+        "test_openness_carried.V5CarriedSelectionTests.test_entry_of_a_turn_whose_delivered_units_changed_is_carried",
+        "test_openness_carried.V6PartialSearchTests.test_turn_with_an_earlier_part_of_a_search_is_carried_with_its_entries",
+        "test_openness_carried.V6PartialSearchTests.test_last_ready_turn_without_a_credit_gives_the_starting_notes",
+        "test_openness_carried.V6CarriedSelectionTests.test_entry_of_a_turn_whose_delivered_units_changed_is_carried",
+        "test_openness_carried_integration.Record12ShapeTests.test_stopped_chain_carries_all_57_turns_and_every_output",
+        "test_openness_carried_integration.Record12ShapeTests.test_v7_chain_reaches_a_verified_finding_with_the_carried_outputs"
+      ]
+    },
+    {
       "id": "phenomenon-account-probe-delivery",
       "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
       "class": "account probe provenance undelivered",
