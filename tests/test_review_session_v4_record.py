@@ -584,20 +584,21 @@ class SessionAllowancePlanTests(unittest.TestCase):
     def test_v7_fixture_admission_plan_artifacts_keep_their_base_digests(self):
         from research_harness import openness_reading_v7 as v7
         from test_openness_reading_v7_turns import MemoryArtifacts, build_native
-        # Pin the released 0.91.1 admission frames, including the unread-final reserve.
+        # Pin the admission frames of 0.92.0, including the unread-final reserve. They differ from 0.91.1 only by
+        # finding version 2: the plan and the final frame gain finding_index, and the final instructions grow.
         cases = [
             ('claude_cli_v1', 'claude-opus-5-5', 1,
-             'ce94d0a2fafca7081d272932aa9aab60ee0640dd4b94b70c9956f3a52f457a40',
-             'e0222dd632578e5d0f518019ed8f240993a1d7bc77b3b0e227e15d72f1bf14d2'),
+             'dfcf78f7efd4e4af3cc39df1980d9bb34ae8d8ebd40e8faa51eb8ed4eabf0ab8',
+             'd5f847a18426df3b7ce29b3c8a4cd88ceb7749b4c0cac4cbbef016d3684c5744'),
             ('claude_cli_v1', 'claude-opus-5-5', 2,
-             '963f6a28b756cd796eaa96a5b3f7d2f84997664dbf342affda7034b017f6c8b4',
-             '38e5e6e2ab82ea47ab026b7974c6e0d90b7047c1efb1d7b7779721fa7954f1c0'),
+             '60a30e88146dec281972772da13d6d76026e63ab63fd90203812afe234f109a1',
+             '6aabf2c2267a8b06189b015776ae4897fe94acc6f8c35c8a7c78e65b9d2b27d6'),
             ('codex_cli_v1', 'gpt-6-astra', 1,
-             '2b3c51eac6d2236b9764640f1eaed65df19043dd0afc522fed0da04b7f57e3a4',
-             '41bf28fc7056e35fd13b4e411dd970595ff53ff284613eb39c7562f71f14e2bc'),
+             '162de10e79ace533bbb33d6336358c24295f50056b9bf97a006b007453c92602',
+             'd1c3429246c8aebce238b5cf6b8a960c26904dac9cf6a7644685be0d6b436eac'),
             ('codex_cli_v1', 'gpt-6-astra', 8,
-             '2bb30a5266a46b32b6431072980c9f12c5af5ce82c021537665f066f46d31589',
-             '8ecf27b684fee6e503fc9d9b19c4295706a1fb615e64d7abc1acf347859b8bfc')]
+             'b0e2abcbee6e076b3984317856eb5dafa82e9316d4f36fae7238d2134453800d',
+             '46a11d5b3e7adb25f7889a210b641fee4d3094e483cfbd49c3e9a1c1be8eb2d5')]
         for adapter, model, targets, expected, expected_artifact in cases:
             with self.subTest(adapter=adapter, targets=targets), patch.object(v7, 'build_inventory',
                     return_value=v7.plan_inventory([], {})):
