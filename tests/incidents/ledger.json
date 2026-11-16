@@ -7,7 +7,7 @@
       "class": "account probe provenance undelivered",
       "summary": "Result reviewers received checks that cited probes without the probe questions, programs and observations.",
       "expected": "Version 2 values deliver every native probe cited by accounts, delivered forming calls or outcomes, with its intent when held. Binding, delivery and size reports agree; stored version 1 reviews keep their records, digests and prompts.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.2",
       "test_kind": "real_shape",
       "tests": [
         "test_problem_probe_delivery.ProbeDeliveryTests.test_eight_independent_routes_deliver_both_records_once_with_original_digests",
@@ -22,7 +22,7 @@
       "class": "accepted result date unavailable",
       "summary": "A result-only account could not derive a date because native acceptances carry no timestamp.",
       "expected": "New native snapshots carry the store delivery time outside their summary digest. The earliest matching snapshot supplies the result date; an older unstamped snapshot stays undated and the refusal names the reference.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.2",
       "test_kind": "real_shape",
       "tests": [
         "test_problem_accounts.ProblemAccountsTests.test_a_result_date_is_derived_but_history_keeps_its_precise_time",
@@ -36,7 +36,7 @@
       "class": "coarse evidence date and lexical date order",
       "summary": "A date on the forming day gave no explanation of its precision, and string minima could accept evidence that preceded the form.",
       "expected": "Version 2 values select both date minima by UTC instant and explain a period containing the form time with evidence and form provenance. Stored values without accounts_version retain their original validation and obligations.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.2",
       "test_kind": "real_shape",
       "tests": [
         "test_problem_accounts.ProblemAccountsTests.test_period_dates_explain_ambiguous_form_history",
@@ -7246,7 +7246,7 @@
       "class": "reading dates and gain history",
       "summary": "Accounts read a work year and reading revision that production never writes.",
       "expected": "Command-written readings date facts by reliable arXiv version assertions and remain unordered in gain history.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.2",
       "test_kind": "real_shape",
       "tests": [
         "test_problem_accounts.ReadingDateTests.test_c7_command_written_incident_derives_date_without_invented_members"
@@ -7258,7 +7258,7 @@
       "class": "review start visibility and bounded render takeover",
       "summary": "A running reviewer call had a committed invocation while series.json still showed no run. Concurrent renders and failed claimed passes also need durable catch-up and accurate failure advisories.",
       "expected": "A new call requests a zero-wait render before transport, with at most two lock attempts and two passes including failure recording. Busy or failed renders preserve the call, retain work and failure details, and the next successful lock-holding render consumes the retained marker.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.2",
       "test_kind": "real_shape",
       "tests": [
         "test_review_pending_views.PendingViewTests.test_transport_reads_pending_run_from_series_before_answering",
@@ -7289,7 +7289,7 @@
       "class": "explicit whole-store optimistic revision check during reviewer completion",
       "summary": "T7: a foreground problem-value expected revision 698 while a review route probe completed at 699. The measurement retained stale_revision without retrying.",
       "expected": "Reviewer completion between the foreground revision read and preparation or commit refuses stale_revision without a value or request receipt. The registry says to continue and the message says to read the current revision; retrying the same payload and request ID at that revision succeeds and replays without another mutation. This is the documented whole-store optimistic check, not a change to revision protection.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.2",
       "test_kind": "real_shape",
       "tests": [
         "test_foreground_write_stale_during_review_call.ForegroundWriteStaleDuringReviewCallTests.test_refuse_revision_read_before_review_completion_and_retry",
