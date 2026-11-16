@@ -19,9 +19,9 @@
     "research_harness/review_worker.py:import:ImportFrom(module='review_protocol', names=[alias(name='_observed')], level=1)"
   ],
   "operation_sites": [
-    "research_harness/review_output_correction.py:Call(func=Attribute(value=Name(id='protocol', ctx=Load()), attr='_invoke_once', ctx=Load()), args=[Name(id='store', ctx=Load()), Name(id='payload', ctx=Load()), Constant(value='review.output_correction'), Name(id='start', ctx=Load()), Name(id='finish', ctx=Load())], keywords=[keyword(arg='expected_revision', value=Name(id='expected_revision', ctx=Load())), keyword(arg='request_id', value=Name(id='request_id', ctx=Load())), keyword(arg='credential', value=Name(id='credential', ctx=Load()))])",
-    "research_harness/review_protocol.py:Call(func=Name(id='_invoke_once', ctx=Load()), args=[Name(id='store', ctx=Load()), Name(id='payload', ctx=Load()), Constant(value='review.invoke'), Name(id='start', ctx=Load()), Name(id='finish', ctx=Load())], keywords=[keyword(arg='expected_revision', value=Name(id='expected_revision', ctx=Load())), keyword(arg='request_id', value=Name(id='request_id', ctx=Load())), keyword(arg='credential', value=Name(id='credential', ctx=Load()))])",
-    "research_harness/review_protocol.py:Call(func=Name(id='_invoke_once', ctx=Load()), args=[Name(id='store', ctx=Load()), Name(id='payload', ctx=Load()), Constant(value='review.route_probe'), Name(id='start', ctx=Load()), Name(id='finish', ctx=Load())], keywords=[keyword(arg='expected_revision', value=Name(id='expected_revision', ctx=Load())), keyword(arg='request_id', value=Name(id='request_id', ctx=Load())), keyword(arg='credential', value=Name(id='credential', ctx=Load()))])"
+    "research_harness/review_output_correction.py:Call(func=Attribute(value=Name(id='protocol', ctx=Load()), attr='_invoke_once', ctx=Load()), args=[Name(id='store', ctx=Load()), Name(id='payload', ctx=Load()), Constant(value='review.output_correction'), Name(id='start', ctx=Load()), Name(id='finish', ctx=Load())], keywords=[keyword(arg='expected_revision', value=Name(id='expected_revision', ctx=Load())), keyword(arg='request_id', value=Name(id='request_id', ctx=Load())), keyword(arg='credential', value=Name(id='credential', ctx=Load())), keyword(arg='after_start', value=Name(id='after_start', ctx=Load()))])",
+    "research_harness/review_protocol.py:Call(func=Name(id='_invoke_once', ctx=Load()), args=[Name(id='store', ctx=Load()), Name(id='payload', ctx=Load()), Constant(value='review.invoke'), Name(id='start', ctx=Load()), Name(id='finish', ctx=Load())], keywords=[keyword(arg='expected_revision', value=Name(id='expected_revision', ctx=Load())), keyword(arg='request_id', value=Name(id='request_id', ctx=Load())), keyword(arg='credential', value=Name(id='credential', ctx=Load())), keyword(arg='after_start', value=Name(id='after_start', ctx=Load()))])",
+    "research_harness/review_protocol.py:Call(func=Name(id='_invoke_once', ctx=Load()), args=[Name(id='store', ctx=Load()), Name(id='payload', ctx=Load()), Constant(value='review.route_probe'), Name(id='start', ctx=Load()), Name(id='finish', ctx=Load())], keywords=[keyword(arg='expected_revision', value=Name(id='expected_revision', ctx=Load())), keyword(arg='request_id', value=Name(id='request_id', ctx=Load())), keyword(arg='credential', value=Name(id='credential', ctx=Load())), keyword(arg='after_start', value=Name(id='after_start', ctx=Load()))])"
   ],
   "call_operations": [
     "review.invoke",
@@ -29,11 +29,11 @@
     "review.route_probe"
   ],
   "admission_functions": {
-    "research_harness/review_protocol.py:_invoke_once": "f700a48a93775b9f158551b43cd52538b9d8ee19398568f3c4bee92a2213b038",
+    "research_harness/review_protocol.py:_invoke_once": "bca6bd6ffbbae0aeb1eb3ccb55ef0133a6a625c11a5246f8fb13e7f3ab030a39",
     "research_harness/review_protocol.py:_observed": "896e10fd17b469f2f469fe89b8f07113b9dec3ec9e829e146e300a516bcf5765",
     "research_harness/review_call_admission.py:admit_review_call": "91bbea98b04dd72715df943eebf3cf1f498a614109b0ba4df2130ba4900177c2",
     "research_harness/review_route_capacity.py:describe_session_stop": "65cfe3b9fb9d3f1bf3d0506b7f01594166971485799cafe4497a32b995166af5",
-    "research_harness/review_protocol.py:invoke_assignment": "92b54a86d106ace4958914983de7bf9954809048bd31275c3f713d07475a697b"
+    "research_harness/review_protocol.py:invoke_assignment": "e3d47a744d920c6e5593f2cb7839cc712ba5e84d5c11dbcdab115c0e2a46792b"
   },
   "limit_readers": [
     "research_harness/batches.py",
@@ -1876,7 +1876,7 @@
     "skills/math-solver/harness/search_controller/reviewer.py": "8f4db8310b939cc7015cc4a7c00790c151b392153cf41d1148ce0e2a7b7c5ba6",
     "skills/math-solver/harness/search_controller/closure_delivery.py": "76714a2668c73a72348864b3c2d21d267998f43ce11f0be0dbfbd5144d99ae2a",
     "skills/math-solver/harness/search_controller/storage.py": "e6935835f974cf385a5f303e927038779dfc7692d06f24eab3257ba0d6b885d2",
-    "skills/math-solver/harness/search_controller/attempt_delivery.py": "2fd6d081df989c94711fa4d75e178c337a2ccb478358d4201682f71474655fbc",
+    "skills/math-solver/harness/search_controller/attempt_delivery.py": "9e3f2d9190656ae04caaf09eaf3ed39c4898a53e158db48d1007a5b97a585656",
     "skills/math-solver/harness/search_controller/proof.py": "a8b94f3a2d4bf0f060b29eb1abfe062c745499a92fa5ae170b5d67f290b8ea0d",
     "skills/math-solver/harness/search_controller/rank_recovery.py": "fe88ffa31fb8dc528049cb94cb840adab82a0251fd0cb0bd253e892307efa5ec",
     "skills/math-solver/harness/search_controller/scheduler.py": "c74155c4782dc0bd66cf723871f37be68d31f36cac51f959c02d419ffed0895e",
