@@ -956,6 +956,8 @@ def describe_task(role, packet, *, route, request, operation='review.invoke', co
                      if notice is not None else {})
     if 'reading_final' in actual:
         targets = len(actual['reading_final'].get('page', {}).get('targets', []))
+    if actual.get('review_parts', {}).get('page_plan_digest'):
+        targets = len(actual['review_parts'].get('page', {}).get('targets', []))
     session = actual.get('session_turn', actual.get('session_final'))
     if session is not None:
         notice_fields.update({key: session['capacity'][key] for key in ('material_allowance', 'level_material_allowance')})
@@ -2086,10 +2088,13 @@ def describe_plan_preflight(records, route, request, plan, kind, *, observations
                    for name, value in bounds.items()}
     fits = all(row['fits'] for row in comparisons.values())
     measured['fits'] = fits
+    forecast = describe_capacity_forecast(plan, route, read_output_profile(records, route), records=records,
+        turn_kind=kind, observations_by_kind={kind: observations})
+    if binding.get('protocol') == 'exactory-review-parts-v3':
+        apply_final_page_forecast(forecast, binding.get('final_forecast'))
     return dict(protocol=PLANNED_PROTOCOL, request_measure=measured,
         plan_comparison=dict(digest=digest(plan), kind=kind, fits=fits, sizes=comparisons),
-        capacity_forecast=describe_capacity_forecast(plan, route, read_output_profile(records, route), records=records, turn_kind=kind,
-            observations_by_kind={kind: observations}))
+        capacity_forecast=forecast)
 
 
 def prepare_assignment_capacity(records, artifacts, route, declaration):
@@ -2170,8 +2175,27 @@ def describe_assignment_capacity(records, artifacts, assignment):
     """Expose a stored plan and a live forecast outside the immutable assignment."""
     plan = read_chain_capacity_plan(artifacts, assignment)
     route = records['review_route'][assignment['route_id']]
-    return dict(capacity_plan=plan, capacity_forecast=describe_capacity_forecast(
-        plan, route, read_output_profile(records, route), records=records, turn_kind=assignment['capacity_plan_kind']))
+    forecast = describe_capacity_forecast(plan, route, read_output_profile(records, route), records=records,
+        turn_kind=assignment['capacity_plan_kind'])
+    if assignment.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+        apply_final_page_forecast(forecast, assignment.get('review_parts_plan'))
+    return dict(capacity_plan=plan, capacity_forecast=forecast)
+
+
+def apply_final_page_forecast(forecast, counts):
+    """Prefer the fixed final packing to an earlier grant-only estimate."""
+    if not counts or 'pages' not in counts:
+        return
+    final = forecast['by_kind']['final']
+    before = final['turns']
+    final.update({key: counts[key] for key in ('pages', 'condensing_turns', 'closing_pages', 'repeated_pages', 'forecast')})
+    final['turns'] = final['pages'] + final['condensing_turns'] + final['closing_pages']
+    share = final['at_or_over_limit_share']
+    final['expected_calls'] = final['turns'] / (1 - share) if share is not None and share < 1 else None
+    forecast['turns'] += final['turns'] - before
+    calls = [row['expected_calls'] for row in forecast['by_kind'].values()]
+    forecast['expected_calls'] = sum(calls) if all(value is not None for value in calls) else None
+    forecast['basis'] = 'final_page_plan'
 
 
 def derive_plan_task_limits(plan, kind, observations=(), *, notice_characters=0):
@@ -2311,6 +2335,10 @@ def list_capacity_recovery_rows():
                          handler='parts_v2_read' if kind == 'read' else 'nothing'))
     for kind in review_parts.KINDS:
         rows.append(dict(kind=kind, protocol='exactory-review-parts-v3', handler='parts_v3'))
+        if kind == 'final':
+            rows[-1]['forms'] = ['request', 'page', 'closing', 'material']
+        elif kind == 'combine':
+            rows[-1]['forms'] = ['scientific', 'condense']
     # Its frozen final also carries reviewer_excerpts, so its measured kind is request.
     for kind in ('read', 'request'):
         rows.append(dict(kind=kind, protocol=review_problem_parts.PROTOCOL, handler='nothing'))

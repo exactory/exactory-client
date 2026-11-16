@@ -619,6 +619,9 @@
         ],
         "research_harness/review_parts_v3.py:plan_series_turn#2": [
           "limit"
+        ],
+        "research_harness/review_parts_v3.py:build_final_packet#1": [
+          "limit"
         ]
       },
       "review_series_superseded": {

@@ -1014,6 +1014,9 @@ def list_targets(rule, packet):
             review = review.get('payload', review)
             ids.extend(row['id'] for row in review.get('objections', []))
         targets = [dict(id=key, label=key) for key in dict.fromkeys(ids or ['bar'])]
+    if packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3' and 'page_plan_digest' in packet['review_parts']:
+        for index, target in enumerate(targets, 1):
+            target['handle'] = 't%d' % index
     return targets
 
 
@@ -1168,7 +1171,8 @@ def split_output(rule, packet, output, pages):
         return _split_native_assessment(rule, packet, output, pages)
     targets = list_targets(rule, packet)
     ids = [row['id'] for row in targets]
-    rows = {key: dict(target='t' + str(index), fields={}, sentence='') for index, key in enumerate(ids)}
+    rows = {row['id']: dict(target=row.get('handle', 't' + str(index)), fields={}, sentence='')
+            for index, row in enumerate(targets)}
     closing = dict(fields={}, bindings=[])
     harness = _build_harness_fields(rule, packet)
     for path, value in _list_rule_values(rule, output):

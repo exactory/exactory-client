@@ -1252,6 +1252,8 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
         binding = dict(adapter=adapter, kind=kind, protocol=parts_protocol, answer=answer)
         if parts_protocol == 'exactory-review-parts-v3':
             binding['capacity'] = copy.deepcopy(review_parts['capacity'])
+            if 'final_form' in review_parts:
+                binding['final_form'] = review_parts['final_form']
         entry = review_parts.get('entry')
         if entry is not None:
             binding['entry'] = entry
@@ -1267,11 +1269,18 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
             sections.append(final_prompt(role, base_parameters) if callable(final_prompt) else final_prompt)
         if parts_protocol == 'exactory-review-parts-v3':
             sections = [base['text'], texts.PARTS_V3_COMMON, texts.PARTS_V3_PROMPTS[kind]]
+            if review_parts.get('final_form') in ('page', 'closing'):
+                sections = [base['text'], texts.PARTS_V3_COMMON,
+                    texts.PARTS_V3_PAGE if review_parts['final_form'] == 'page' else texts.PARTS_V3_CLOSING]
+            elif review_parts.get('final_form') == 'combine':
+                sections = [base['text'], texts.PARTS_V3_COMMON, texts.PARTS_V3_CONDENSE]
             if kind == 'final':
                 final_prompt = get_adapter(adapter)['final_prompt']
                 sections.append(final_prompt(role, base_parameters) if callable(final_prompt) else final_prompt)
         rendered = '\n\n'.join(sections)
         variant = 'final-answer' if answer else kind
+        if parts_protocol == 'exactory-review-parts-v3' and 'final_form' in review_parts:
+            variant = review_parts['final_form']
         if entry is not None:
             variant += '-capacity-v1'
         return _build_prompt(parts_protocol + '/' + adapter + '/' + variant,
@@ -3396,6 +3405,7 @@ def _source_parent(records, artifacts, identifier, dossier_id, reviewer_id, role
     refresh = (final and prior.get('subject', {}).get('kind') == 'problem'
                and _is_problem_refresh(records, artifacts, prior, previous))
     parts_pending = parts_turn and (review_parts.find_kind(previous) != 'final'
+                                    or previous[review_parts.KEY].get('final_form') == 'page'
                                     or state['output'].get('kind') == 'requests'
                                     or state['output'].get('stage') == 'material')
     part = review_problem_parts.find_stage(previous) == 'part' or parts_pending
@@ -3699,7 +3709,10 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             state = assignment_state(records, artifacts, parent['id'])
             if not state['ready']:
                 raise ResearchError('review_context_unverified', 'Continue an observed uncontaminated verification turn')
-            if review_parts.find_kind(previous) == 'final' and state['output'].get('kind') != 'requests':
+            if (review_parts.find_kind(previous) == 'final' and state['output'].get('kind') != 'requests'
+                    and not (previous[review_parts.KEY].get('page_plan_digest') and
+                             state['output'].get('stage') == 'material')
+                    and previous[review_parts.KEY].get('final_form') != 'page'):
                 raise ResearchError('review_resampling_forbidden', 'A final verification cannot be continued')
             if any(prior.get('context', {}).get('prior_assignment_id') == parent['id']
                    and not has_ended_without_output(records, prior['id'])
@@ -3872,7 +3885,11 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 if problem and previous['id'] == latest['id'] and review_parts.KEY in previous:
                     previous_state = assignment_state(records, artifacts, previous['id'])
                     ended = has_ended_without_output(records, previous['id'])
+                    previous_parts = _read_json(artifacts, previous['packet'])[review_parts.KEY]
                     is_pending = (previous[review_parts.KEY]['kind'] != 'final' or ended
+                                  or previous_parts.get('final_form') == 'page'
+                                  or (previous_parts.get('page_plan_digest') and
+                                      (previous_state.get('output') or {}).get('stage') == 'material')
                                   or (previous_state.get('output') or {}).get('kind') == 'requests')
                     if is_pending:
                         _require_focused_identity(previous, value)
@@ -4272,6 +4289,9 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         completed = [a for a in _read_review_group(records, artifacts, 'review_attempt', 'assignment_id', value['assignment_id'])
                      if a['status'] == 'completed'
                      and _context_observed(artifacts, a)]
+        if assignment.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+            from .review_failure_class import classify_final_capacity_attempt
+            completed = [a for a in completed if classify_final_capacity_attempt(records, artifacts, a) is None]
         if completed:
             from .review_refusal import refused_attempts
             refused = refused_attempts(records, artifacts, completed)
@@ -4368,6 +4388,14 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         assignment = records['review_assignment'][value['assignment_id']]
         artifacts = store_artifacts
         changes = [immutable_record(records, 'review_attempt', value['id'], result)]
+        if observation.get('status') == 'completed' and assignment.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+            from .review_parts_v3 import prepare_closing_composite
+            try:
+                changes.extend(prepare_closing_composite(records, artifacts, assignment, result,
+                    _read_json(artifacts, result['output'])))
+            except ResearchError as error:
+                if getattr(error, 'contract_check', None) is None:
+                    raise
         if observation.get('status') == 'completed' and assignment.get('reading_chain', {}).get('final_page_plan'):
             from .openness_final_pages import prepare_closing_composite
             try:
@@ -4750,7 +4778,7 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
         return
     from .review_refusal import contract_check, validate_evidence_contract
     parts_kind = review_parts.find_kind(packet)
-    if parts_kind is not None:
+    if parts_kind is not None and not (packet[review_parts.KEY].get('page_plan_digest') and 'objection_id' in output):
         with contract_check('adjudication.shape'):
             review_parts.validate_turn_output(records, artifacts, assignment, packet, output, attempt=attempt)
         if parts_kind != 'final' or output.get('kind') == 'requests':

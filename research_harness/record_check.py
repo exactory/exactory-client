@@ -439,6 +439,14 @@ def check_acceptance_reviews(records, artifacts):
                   or (protocol.find_replacement(records, assignment) or {}).get('capacity_replacement_of') == assignment_id):
                 final = review_parts_native.find_final_assignment(records, artifacts, assignment_id)
         observed = protocol.assignment_state(records, artifacts, final['id']) if final is not None else {}
+        if final is not None and final.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+            from .review_composite import read_final_output
+            output, composite = read_final_output(records, artifacts, final)
+            if composite is not None:
+                binding = dict(id=composite['id'], digest=digest(composite))
+                if review.get('composite') != binding:
+                    raise ResearchError('record_acceptance_review_changed', 'The native acceptance link names another composite.')
+                observed = dict(observed, output=output, output_digest=digest(output))
         key = {name: link[name] for name in ('attack_root', 'objective_id', 'acceptance_digest')}
         if (identifier != digest(key) or final is None or final['role'] != 'native_math'
                 or final['id'] != review['final_assignment_id'] or not observed.get('ready')

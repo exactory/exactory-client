@@ -2,6 +2,22 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "parts-v3-final-pages-record-one-review",
+      "record": "20261112150500-result-review-frame-holds-cited-search-records",
+      "class": "D1 parts v3 final pages, currency and composite authentication",
+      "summary": "A result review can deliver its records as units but its targets and cards exceed one final request.",
+      "expected": "The stored series takes bounded target and closing pages, condenses overflowing entries, records one authenticated composed review, and repeats superseded targets after a late bound unit.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3_pages.PagedSeriesTests.test_a5_q7_two_hundred_material_objections_record_a_composite",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_a14_page_at_output_limit_splits_then_records",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_currency_source_request_keeps_page_one_and_optional_source_unrequested",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_currency_late_required_unit_reads_then_repeats_completed_page",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_verify_refuses_changed_plan_foreign_target_and_changed_output"
+      ]
+    },
+    {
       "id": "v7-final-pages-record-one-finding",
       "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
       "class": "D1 v7 final pages and composite authentication",

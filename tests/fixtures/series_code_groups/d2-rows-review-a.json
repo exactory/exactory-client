@@ -68,34 +68,7 @@
         "research_harness/scientific_delivery.py:ScientificDelivery._read_derived_locator_mapping#2": [
           "content"
         ],
-        "research_harness/openness_final_pages.py:read_composite_currency#1": [
-          "content"
-        ],
-        "research_harness/openness_final_pages.py:read_page_plan#1": [
-          "content"
-        ],
-        "research_harness/openness_final_pages.py:verify_final_page_plans.read_inputs#1": [
-          "content"
-        ],
-        "research_harness/openness_final_pages.py:verify_final_page_plans.read_inputs#2": [
-          "content"
-        ],
-        "research_harness/openness_final_pages.py:verify_final_turn_binding#1": [
-          "content"
-        ],
-        "research_harness/openness_final_pages.py:verify_final_turn_binding#2": [
-          "content"
-        ],
-        "research_harness/openness_final_pages.py:verify_final_turn_binding#3": [
-          "content"
-        ],
         "research_harness/openness_final_pages.py:verify_final_turn_binding#4": [
-          "content"
-        ],
-        "research_harness/review_final_pages.py:verify_page_plans#1": [
-          "content"
-        ],
-        "research_harness/review_final_pages.py:verify_page_plans#2": [
           "content"
         ]
       },
@@ -273,6 +246,15 @@
           "content"
         ],
         "research_harness/review_parts_v3.py:validate_turn_output#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:read_composite_currency#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:verify_final_page_plans.read_inputs#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:verify_final_page_plans.read_inputs#2": [
           "content"
         ]
       },

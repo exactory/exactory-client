@@ -84,6 +84,9 @@ def compute_replacement_key(packet):
 def validate_final(records, artifacts, assignment, output, *, attempt=None):
     from .workspace import strict_json
     packet = strict_json(artifacts.read(assignment['packet']))
+    if packet.get('review_parts', {}).get('page_plan_digest'):
+        from .review_parts import read_logical_packet
+        packet = read_logical_packet(artifacts, packet['review_parts'])
     return native_review.validate_output(packet['native'], output)
 
 
@@ -117,7 +120,11 @@ def read_prior_assignment(records, artifacts, value):
     state = assignment_state(records, artifacts, prior_id)
     if not state['ready']:
         raise ResearchError('review_source_continuation_unverified', 'The native predecessor needs a ready output')
-    if binding['kind'] == 'final' and state['output'].get('kind') != 'requests' and state['output'].get('stage') != 'material':
+    from .workspace import strict_json
+    page = (binding.get('protocol') == 'exactory-review-parts-v3' and
+            strict_json(artifacts.read(prior['packet']))[KEY].get('final_form') == 'page')
+    if (binding['kind'] == 'final' and not page
+            and state['output'].get('kind') != 'requests' and state['output'].get('stage') != 'material'):
         raise ResearchError('review_resampling_forbidden', 'A native final ends its review series')
     return prior
 
