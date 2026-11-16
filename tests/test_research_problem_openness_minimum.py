@@ -66,6 +66,29 @@ class ProblemOpennessMinimumTests(ProblemCase):
     def test_resolved_finding_requires_a_minimum(self):
         self.assert_error("openness_minimum_required", lambda: self.audit({"outcome": "supported_open", "evidence": []}))
 
+    def test_export_carries_every_record_that_its_minimum_binds(self):
+        from research_harness import openness_reading as reading
+        from research_harness.problem_openness import export_openness
+        version = self.metadata()
+        decisive = self.read(version)
+        support = self.abstract_note(self.metadata(2))
+        support['id'] = 'support-note'
+        self.mutate(record_reading, support)
+        support = self.store.snapshot()['records']['reading'][support['id']]
+        search = copy.deepcopy(self.search([version.rsplit('v', 1)[0]]))
+        search['dispositions'][0]['reason'] = 'The comparison in (support-note) supports this judgment.'
+        self.put('literature_search', search['id'], search)
+        reference = export_openness(self.store, dict(assignment_id='export-bound', reviewer_id='reviewer', minimum=dict(
+            searches=[dict(formulation=search['question'], search_id=search['id'])],
+            settling_work_id=None, duplicate_resolutions=[])), self.root / 'bound-packet')['native_packet']
+        packet = json.loads(self.artifacts.read(reference))
+        rows = reading.list_record_rows(self.artifacts, packet)
+        self.assertEqual({row['artifact']['sha256'] for row in rows},
+                         {digest(search), digest(decisive), digest(support), digest(self.selected)})
+        self.assertEqual(packet['scientific_context']['openness_minimum']['family_readings'], [dict(
+            search_digest=digest(search), work_id=version.rsplit('v', 1)[0], version_id=version)])
+        self.assertEqual(packet['scientific_context']['openness_minimum']['supporting_reading_digests'], [digest(support)])
+
     def test_exact_statement_and_every_declared_neighbour_need_bound_searches(self):
         exact = self.search()
         neighbour = "An equivalent extremal sequence formulation."

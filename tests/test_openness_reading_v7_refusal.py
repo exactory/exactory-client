@@ -762,6 +762,84 @@ class LegacySuccessorTests(OpennessReadingCase):
         return export_openness(self.store, dict(assignment_id=assignment_id,
             reviewer_id='openness-reviewer', minimum=minimum), self.root / name)['native_packet']
 
+    def prepare_bound_readings(self, *, family=False):
+        """Synthetic stopped-chain shape: a search cites two nondecisive readings."""
+        from research_harness.reading import record_reading
+        from test_research_problem_openness_minimum import ProblemOpennessMinimumTests
+        supporting = []
+        for number in (5, 6):
+            note = self.abstract_note(self.metadata(number))
+            note['id'] = 'support-%d' % number
+            self.mutate(record_reading, note)
+            supporting.append(self.store.snapshot()['records']['reading'][note['id']])
+        search = copy.deepcopy(self.search)
+        search['dispositions'][0]['reason'] = 'Compared (support-5) and (support-6).'
+        if family:
+            # The legacy minimum cannot use the complete reading of the linked v1.
+            search['dispositions'][0]['disposition'] = 'out_of_scope'
+        self.put('literature_search', search['id'], search)
+        self.searches = [search]
+        if family:
+            found = 'doi:10.48550/arxiv.' + self.versions[0][6:].rsplit('v', 1)[0]
+            self.searches.append(ProblemOpennessMinimumTests.search(self, [found]))
+        return supporting
+
+    def check_bound_reading_successor(self, *, family=False, targets=1):
+        from research_harness.review_series import run_series
+        self.prepare_bound_readings(family=family)
+        if targets > 1:
+            self.select_targets(targets)
+        head = self.fail_legacy_final()
+        before = copy.deepcopy(self.store.snapshot()['records'])
+        files = {path.relative_to(self.root): path.read_bytes() for path in self.root.rglob('*') if path.is_file()}
+        expected = reading.PROTOCOL_V6 if targets == 9 else v7.PROTOCOL
+        with patch.object(reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (v7.PROTOCOL, reading.PROTOCOL_V6)):
+            plan = plan_next(before, self.artifacts, head)
+            self.assertEqual((plan['state'], plan.get('command'),
+                plan['details'].get('successor', {}).get('protocol')), ('handoff', 'export', expected), plan)
+            self.assertEqual(self.store.snapshot()['records'], before)
+            self.assertEqual({path.relative_to(self.root): path.read_bytes()
+                for path in self.root.rglob('*') if path.is_file()}, files)
+            rows = []
+            self.assertEqual(run_series(self.store, head, emit=rows.append), 3)
+            self.assertEqual(rows[-1]['state'], 'handoff', rows[-1])
+            self.assertEqual(rows[-1]['details']['successor'], plan['details']['successor'])
+            self.assertEqual(rows[-1]['command'], 'export')
+            reference, receipt = self.execute_export(plan)
+            self.assertEqual(receipt['protocol_selection']['protocol'], expected)
+            if expected == v7.PROTOCOL:
+                self.assertTrue(receipt['carried_readings']['chains'])
+                self.assertEqual(receipt['carried_readings'], plan['details']['successor']['carried_readings'])
+            else:
+                self.assertTrue(plan['details']['successor']['reads_every_unit_again'])
+                self.assertEqual(receipt['carried_readings']['chains'], [])
+                self.assertEqual(reading._find_record(self.read_packet('successor'))['planned_reading_turns'],
+                                 plan['details']['successor']['planned_reading_turns'])
+            turns = self.finish_from(reference, 'successor')
+            if expected == reading.PROTOCOL_V6:
+                self.assertGreater(len(turns), 1)
+                delivered = [unit for turn in turns for unit in turn['delivered_units']]
+                self.assertTrue(all(self.unit_identity(version) in delivered for version in self.versions))
+            after = self.store.snapshot()['records']
+            self.assertTrue(after['problem_openness'])
+            self.assertFalse(any(row.get('code') == 'openness_reading_incomplete'
+                for records in after.values() for row in records.values()))
+            for kind, records in before.items():
+                for key, record in records.items():
+                    self.assertEqual(digest(after[kind][key]), digest(record), (kind, key))
+            for path, content in files.items():
+                if str(path).startswith('research/sources/objects/'):
+                    self.assertEqual((self.root / path).read_bytes(), content)
+
+    def test_k7_v5_head_whose_search_names_a_reading_exports_to_v7_and_records(self):
+        self.check_bound_reading_successor()
+
+    def test_k7_v5_head_with_a_family_reading_exports_to_v7_and_records(self):
+        self.check_bound_reading_successor(family=True)
+
+    def test_k7_named_reading_with_nine_targets_exports_to_v6_and_records(self):
+        self.check_bound_reading_successor(targets=9)
+
     def fail_legacy_final(self, fail=True, expected_protocol=reading.PROTOCOL_V5):
         native = self.export()
         self.assign('turn-1', native)
@@ -987,6 +1065,70 @@ class LegacySuccessorTests(OpennessReadingCase):
                 self.assign(following, reference, prior=current)
                 current = following
             self.fail('The v6 successor must finish.')
+
+
+class SuccessorProjectionTests(OpennessReadingCase):
+    reading_protocol = None
+    historical_v5 = True
+    prepare_bound_readings = LegacySuccessorTests.prepare_bound_readings
+    export = LegacySuccessorTests.export
+
+    def test_projected_packet_carries_every_record_that_its_minimum_binds(self):
+        from research_harness.native_review import load_packet
+        from research_harness.openness_successor import _project_successor_native
+        for family in (False, True):
+            with self.subTest(family=family):
+                case = SuccessorProjectionTests()
+                case.setUp()
+                try:
+                    supporting = case.prepare_bound_readings(family=family)
+                    reference = case.export()
+                    native = json.loads(case.artifacts.read(reference))
+                    records = case.store.snapshot()['records']
+                    files = {path.relative_to(case.root): path.read_bytes()
+                             for path in case.root.rglob('*') if path.is_file()}
+                    overlay = v7._PlanningArtifacts(case.artifacts)
+                    projected = _project_successor_native(records, overlay, native)
+                    rows = reading.list_record_rows(overlay, projected)
+                    self.assertEqual({row['record_id'] for row in rows if row.get('role') == 'supporting'},
+                                     {row['id'] for row in supporting})
+                    texts = reading.list_reading_texts(records, projected, artifacts=overlay)
+                    self.assertEqual({row['version_id'] for row in texts}, set(case.versions))
+                    minimum = projected['scientific_context']['openness_minimum']
+                    self.assertEqual(minimum['schema_version'], 2)
+                    self.assertEqual(len(minimum['family_readings']), int(family))
+                    if family:
+                        self.assertEqual(projected['scientific_context']['family_reading_plan_version'],
+                                         reading.FAMILY_READING_PLAN_VERSION)
+                    stored = overlay.put(v7.serialize_record(projected), 'application/json')
+                    self.assertEqual(load_packet(overlay, stored, 'openness-reviewer'), projected)
+                    self.assertEqual(_project_successor_native(records, overlay, projected), projected)
+                    self.assertEqual(json.loads(case.artifacts.read(reference)), native)
+                    self.assertEqual(case.store.snapshot()['records'], records)
+                    self.assertEqual({path.relative_to(case.root): path.read_bytes()
+                        for path in case.root.rglob('*') if path.is_file()}, files)
+                finally:
+                    case.doCleanups()
+
+    def test_projection_equals_the_export_of_the_same_declarations(self):
+        from research_harness.openness_successor import _project_successor_native
+        from research_harness.problem_openness import export_openness
+        self.prepare_bound_readings()
+        native = json.loads(self.artifacts.read(self.export()))
+        minimum = native['scientific_context']['openness_minimum']
+        records = self.store.snapshot()['records']
+        searches = {digest(row): row for row in records['literature_search'].values()}
+        spec = dict(assignment_id='turn-1', reviewer_id='openness-reviewer', minimum=dict(
+            searches=[dict(formulation=row['formulation'], search_id=searches[row['search_digest']]['id'])
+                      for row in minimum['searches']], settling_work_id=minimum['settling_work_id'],
+            duplicate_resolutions=minimum['duplicate_resolutions']))
+        projected = _project_successor_native(records, v7._PlanningArtifacts(self.artifacts), native)
+        reference = export_openness(self.store, spec, self.root / 'current-export')['native_packet']
+        exported = json.loads(self.artifacts.read(reference))
+        self.assertEqual([row['digest'] for row in projected['evidence']],
+                         [row['digest'] for row in exported['evidence']])
+        for key in ('openness_minimum', 'minimum_gaps', 'audit_forecast', 'decisive_work_ids'):
+            self.assertEqual(projected['scientific_context'][key], exported['scientific_context'][key], key)
 
 
 class NoticeRoomTests(unittest.TestCase):

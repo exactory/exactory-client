@@ -7314,6 +7314,22 @@
         "test_foreground_write_stale_during_review_call.ForegroundWriteStaleDuringReviewCallTests.test_refuse_revision_read_before_review_completion_and_retry",
         "test_foreground_write_stale_during_review_call.ForegroundWriteStaleDuringReviewCallTests.test_refuse_prepared_value_after_review_completion_and_retry"
       ]
+    },
+    {
+      "id": "successor-projection-binds-records-that-it-does-not-carry",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "successor admission",
+      "summary": "The admission of the next export upgraded the version 1 minimum of a v5 packet to version 2 and kept the evidence of the old packet. Where a bound search names a reading, the upgraded minimum binds that reading as a supporting reading, the projected packet did not carry it, and the stopped chain ended with openness_reading_incomplete in place of the handoff export.",
+      "expected": "The projected packet carries every record that its minimum binds, built by the function that the export uses, and a chain of v5 or v6 whose next request cannot fit ends with the handoff export when a protocol admits the projected packet.",
+      "fixed_in": "0.91.3",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_v5_head_whose_search_names_a_reading_exports_to_v7_and_records",
+        "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_v5_head_with_a_family_reading_exports_to_v7_and_records",
+        "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_named_reading_with_nine_targets_exports_to_v6_and_records",
+        "test_openness_reading_v7_refusal.SuccessorProjectionTests.test_projected_packet_carries_every_record_that_its_minimum_binds",
+        "test_openness_reading_v7_refusal.SuccessorProjectionTests.test_projection_equals_the_export_of_the_same_declarations"
+      ]
     }
   ]
 }

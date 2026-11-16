@@ -7,6 +7,7 @@ from . import review_protocol as protocol
 from .evidence import digest
 from .native_review import load_packet
 from .errors import ResearchError
+from .problem_openness import serialize_record
 
 # The messages of the handoff export that a stopped problem chain gets when a new chain is admitted. details.successor
 # holds that admission.
@@ -64,23 +65,25 @@ def describe_input_handoff(records, artifacts, assignment, *, continuation=None)
 
 def _project_successor_native(records, artifacts, native):
     """Upgrade a v5 minimum to the declaration made by the next current export."""
+    if native['scientific_context']['openness_minimum']['schema_version'] == 2:
+        return native
     native = copy.deepcopy(native)
     context = native['scientific_context']
     minimum = context['openness_minimum']
     if minimum['schema_version'] == 1:
-        from .problem_openness import build_minimum
+        from .problem_openness import build_minimum, describe_minimum_forecast, bind_minimum_records
         searches = {digest(row): row for row in records.get('literature_search', {}).values()}
         bound = [(row['formulation'], searches[row['search_digest']]) for row in minimum['searches']]
         readings = {key: row for key, row in records.get('reading', {}).items()
                     if digest(row) in minimum['reading_digests']}
         minimum = build_minimum(native['subject'], bound, readings, minimum, records=records, artifacts=artifacts)
         context['openness_minimum'] = minimum
-        from .openness_minimum import (list_minimum_gaps, forecast_outcomes, list_minimum_notices,
-                                      find_searched_through)
-        gaps = list_minimum_gaps(minimum, minimum['statement'], records, artifacts)
-        context.update(minimum_gaps=gaps, audit_forecast=dict(outcomes=forecast_outcomes(gaps), gaps=gaps,
-            notices=list_minimum_notices(minimum, records, artifacts),
-            searched_through=find_searched_through(minimum, records)))
+        described = describe_minimum_forecast(minimum, minimum['statement'], records, artifacts)
+        bindings = bind_minimum_records(records, artifacts, native['subject'], bound, minimum)
+        context.update(minimum_gaps=described['gaps'], audit_forecast=described['forecast'], **bindings['context'])
+        evidence = {row['digest']: row for row in native['evidence']}
+        evidence.update(bindings['evidence'])
+        native['evidence'] = [evidence[key] for key in sorted(evidence)]
     return native
 
 
@@ -93,12 +96,14 @@ def admit_successor_chain(records, artifacts, assignment):
     if not reading.is_openness_packet(native):
         return None
     overlay = v7._PlanningArtifacts(artifacts)
-    native = _project_successor_native(records, overlay, native)
+    projected = _project_successor_native(records, overlay, native)
+    reference = assignment['context']['native_packet']
+    if projected is not native:
+        reference = overlay.put(serialize_record(projected), 'application/json')
+    native = projected
     route = records['review_route'][assignment['route_id']]
-    logical = dict(protocol=protocol.PROTOCOL, role=assignment['role'], dossier_id=assignment['dossier_id'],
-                   reviewer_id=assignment['reviewer_id'], native=native,
-                   evidence=protocol.build_packet(records, overlay, assignment['dossier_id'], assignment['role'],
-                       assignment['reviewer_id'], native_packet=assignment['context']['native_packet'])['evidence'])
+    logical = protocol.build_packet(records, overlay, assignment['dossier_id'], assignment['role'],
+                                    assignment['reviewer_id'], native_packet=reference)
     selected = reading.choose_chain_protocol(records, overlay, route, native, packet=logical, assignment=assignment)
     result = {key: value for key, value in selected.items() if key != 'result'}
     if selected['protocol'] == v7.PROTOCOL:
