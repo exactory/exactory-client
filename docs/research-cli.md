@@ -713,11 +713,16 @@ a `stop` whose `code` and `details` are those of the refusal (for example
 `review_input_too_large` or a `review_parts_*` code). The driver renders the
 output views after each action that it executes, also when the action is
 refused, and at a terminal stop once the stop record is written or its
-writing failed, as a separate command would. The views of a chain, for
-example its `series.json`, are therefore current between the turns of one
-run while each render succeeds. A render that fails or is deferred does not
-stop the run: `status` and `next` then list the advisory
-`output_views_stale`, and `export --kind outputs` renders every view again.
+writing failed, as a separate command would. An action that starts an
+ordinary reviewer call also renders the views at the start of the call,
+after the start record is committed and before the request is sent
+([Final and intermediate outputs](#final-and-intermediate-outputs)). The
+views of a chain, for example its `series.json`, are therefore current
+between the turns of one run, and they show a running ordinary call as a run
+with the status `pending`, while each render succeeds. A render that fails
+or is deferred does not stop the run and does not hold a request back:
+`status` and `next` then list the advisory `output_views_stale`, and
+`export --kind outputs` renders every view again.
 `--check` is refused with `check_unsupported`
 before any workspace or model effect. Every `stop` and `wait` line that has a
 `code` carries `stop_class`, the class that the harness derives from the
@@ -4610,7 +4615,7 @@ since 0.73.0, and is checked, not refused.
 | `problem-statement` | `{id, title, area, statement, resolution_criteria, neighbours, formal_statement, candidate_id}` and the optional `revises_statement_id` | `problem_statement/<id>` and `problem_selection/current = {statement_id}`. Statement and criteria are nonempty text with TeX mathematics. Write `statement` in the two parts of [math-conjecturer Formulation step 1](../skills/math-conjecturer/SKILL.md#formulation), with the optional `---` line and the details in the same field. Neighbours are formulation texts, possibly empty. Formal statement is optional, null or `{language, text}`. `candidate_id` is optional, null or the id of a current candidate that the statement formulates (`problem_candidate_missing`). The area must equal the immutable problem record's area (`problem_area_mismatch`); for another subject class, the rule of [math-conjecturer Exploration](../skills/math-conjecturer/SKILL.md#exploration) applies. Any other changed field requires a new statement id and moves the selection. `revises_statement_id` is optional: the id of the statement record that this one revises (`problem_statement_missing` when the store holds no statement record with that id). The harness reads these references to list the runs on the earlier texts of a statement beside the runs on its current text ([The accounts of a value record](#the-accounts-of-a-value-record)). The statement digest covers `statement` and `resolution_criteria`, so a revision that changes only the neighbours keeps the digest. A record without the field keeps the bytes of 0.82.0. |
 | `problem-attempt` | `{id, statement_id, kind, solver, literature, outcomes, proportion}` | Appends `problem_attempt/<id>`, adding `recorded_revision`. Binds the current statement to a solver attempt delivered in this store or a critically assessed full-reading literature attempt. The latest record by recorded revision is current; a resolved attempt blocks posting as an open problem. |
 | `problem-openness` | `{assignment_id}` | Records `problem_openness/<id>` from the observed native result review. Every supplied minimum must pass the shared closed-schema validation. `supported_open` advances the claim; `unresolved` records the gap without an evidence audit; `already_solved` redirects to the settling result and blocks posting as open. |
-| `problem-value` | `{id, statement_id, accounts, motivation, current_state}` | `problem_value/<id>` holds the accounts of the statement and two ordered paragraph arrays. Each paragraph is `{text, evidence}` with the optional `field_fact`, and its nonempty evidence cites entries of the accounts. `accounts` is required (`problem_accounts_required` otherwise). The record adds `recorded_revision` and the dates that the harness derives. [The accounts of a value record](#the-accounts-of-a-value-record) gives the parts, the rules, the derived parts and the refusals. A value record that an earlier release recorded has no accounts and keeps its contract. Since 0.89.2 the response of a new `problem-value` carries `size_report`; [Imported forming history](#imported-forming-history) gives its scope and its fields (the size report). The stored receipt holds none. |
+| `problem-value` | `{id, statement_id, accounts, motivation, current_state}` | `problem_value/<id>` holds the accounts of the statement and two ordered paragraph arrays. Each paragraph is `{text, evidence}` with the optional `field_fact`, and its nonempty evidence cites entries of the accounts. `accounts` is required (`problem_accounts_required` otherwise). The record adds `recorded_revision`, the dates that the harness derives and, since 0.91.2, `accounts_version: 2`, which a payload cannot set. [The accounts of a value record](#the-accounts-of-a-value-record) gives the parts, the rules, the derived parts and the refusals. A value record that an earlier release recorded has no accounts and keeps its contract. Since 0.89.2 the response of a new `problem-value` carries `size_report`; [Imported forming history](#imported-forming-history) gives its scope and its fields (the size report). The stored receipt holds none. |
 | `problem-citation-metadata` | `{id, version_id, title, authors, year, evidence}` | Appends `problem_citation_metadata/<id>`, adding `provenance` and `recorded_revision`, for an existing `url:` work with no DOI and no arXiv identity among its id, its aliases and its metadata (`problem_citation_work_ineligible` otherwise) that a valid full reading of this store covers (`problem_value_reading_missing` otherwise). `title` is nonblank text, `authors` is a nonempty ordered array of nonblank names, and `year`, optional, is four ASCII digits; a record without a year is cited without one, with no fallback to the work's year. `evidence` is `{title: span, authors: [span, ...], year: span}`: one span for the title, one span per author in the same order, and a year span exactly when `year` is given. A span is `{kind, source_id, sha256, start, end}`. `kind` is `fulltext`, the extracted text of a `fulltext` capture of this exact version, or `response`, the captured response of a `source` record; `source_id` names that source record; `sha256` is the hash of the retained object, the `text.sha256` of the capture or the `response.sha256` of the source record; `start` and `end` are zero-based UTF-8 byte offsets into that object, end exclusive, with `0 <= start < end <= size`. The selected bytes must equal the UTF-8 encoding of the field value exactly (`problem_citation_span_mismatch` otherwise): no JSON escape is decoded, no whitespace is normalized and no fragments are combined, so a line-wrapped title in a PDF text needs another retained capture that holds the clean title. An offset inside a multibyte character, or an object that is not valid UTF-8, is `invalid_input`. Every object is resolved through the stored records and the artifact store, never through a caller path: an absent source record is `unknown_source`; a source whose response is not a complete capture, or a capture that is not available and extracted, is `source_pending`; a `sha256` that is not the response of that source, a full text that no capture of this version with that source holds, or a retained object that is missing is `problem_citation_evidence_unbound`; retained bytes that fail their integrity check are `artifact_corrupt`. The record keeps the resolved provenance of every span: the source record's identity fields and digest, the response hash and, for a full text, the capture digest with the text and original hashes. The latest record for a version by `(recorded_revision, id)` is selected and revalidated at every projection. A correction is a new id with the complete replacement payload; a changed payload under an existing id is `record_conflict`. The selected record supplies the citation text alone; the locator does not change. |
 | `problem-citation-locator` | `{id, version_id, reading_id, original_sha256, url, source_id}` | Appends `citation_locator/<id>`, adding `reading_digest`, `source_digest` and `recorded_revision`: the HTTPS location of the exact original that an existing reading read. It supplies the locator of a read work that has no DOI, no arXiv id and no bundle HTTPS URL, for example a manuscript PDF in a GitHub repository, after those three in the locator order of `export --kind problem` (below); the citation text does not change. Every field is nonblank text. A payload that fails any of these conditions is refused with `problem_citation_locator_unbound`: `url` is an absolute `https` URL with a host, without a user name, a password, a fragment, whitespace or the port 0; `reading_id` names a reading of `version_id`; the bundle of that reading has `original_sha256`; `source_id` names a `source` record with this exact `url`, status `captured`, a complete response and a verified origin, whose response has the hash `original_sha256`; for a `url:` work, the text after `url:` equals `url`; a full-text capture of the work names this source and this original. The reading itself must still be valid (its own codes). Retained bytes that fail their integrity check are `artifact_corrupt`. The reading, its bundle and the work stay unchanged, and no new reading is needed. The latest record of a reading by `(recorded_revision, id)` is selected and revalidated at every projection; a selected record whose reading or source record changed after it was made is refused with `problem_citation_locator_unbound`. A correction is a new id; a changed payload under an existing id is `record_conflict`. |
 | `problem-assessment` | `{id, statement_id, grades, items, primary}` | `problem_assessment/<id>` binds the rubric self-assessment to the current statement, adding `recorded_revision`. Each item has evidence and a note; `primary` names its significance ground and criterion. |
@@ -6050,7 +6055,12 @@ Its scope must have `kind: "named"`; `case_ids` and `integer_interval` return
 `problem_attempt_scope_restricted` with `{native_attempt_digest, scope}`.
 Bind the native snapshot named by this succession's current pointer in this
 store. Native delivery preserves its first common-store `recorded_revision`
-outside the summary digest; record order does not determine succession.
+outside the summary digest; record order does not determine succession. Since
+0.91.2 the first delivery of a snapshot also writes `recorded_at`, the UTC
+time of that delivery, outside the summary digest. A repeat keeps it, and a
+snapshot that an earlier release delivered stays without it. The accounts
+read it as the date of a result
+([The accounts of a value record](#the-accounts-of-a-value-record)).
 Binding another snapshot returns `problem_attempt_superseded`
 with `{native_attempt_digest, latest_native_attempt_digest}`. At the gate it is
 `problem_attempt_stale`, also naming `attempt_id` and `statement_id`, with the
@@ -6402,8 +6412,10 @@ with the claim, attempt, accepted results, openness, value, assessment, resolved
 admissions/executions/assessments/output validations and bound native closures.
 For a value record with accounts, the value part carries the accounts with
 `derived_accounts`, the packet carries `account_records`, and the prompt carries
-the accounts paragraph, and the replacement paragraph when the accounts hold a
-replacement part ([The accounts of a value record](#the-accounts-of-a-value-record)).
+the accounts paragraph, the probes paragraph when a value record of version 2
+delivers a probe record of this store, and the replacement paragraph when the
+accounts hold a replacement part
+([The accounts of a value record](#the-accounts-of-a-value-record)).
 Each record that a problem packet projects carries the stored record's `id` and
 `digest` (the claim, openness, value, assessment, attempt, readings and formal
 checks), and a projection that carries further records (the attempt's native
@@ -7637,7 +7649,11 @@ artifact store as the `proof`, in the form of a carry proof
   declaration; for a solver snapshot, its acceptances; and `exploratory` for a
   probe. `availability` gives, for an outcome, a run, a reading and a solver
   snapshot, the revision and the date at which the evidence became available
-  in its source.
+  in its source. A row holds null where the source records none. A reading
+  has neither a revision nor a date. A run has a revision and no date. The
+  row of a result has a date only where the earliest delivered snapshot that
+  holds its acceptance holds a recording time, which `search deliver-attempt`
+  writes since 0.91.2.
 - `history`, `checks` and `counts`: the forms from which the named candidates
   descend, with their outcomes; the runs on the texts of the statements that
   formulate those candidates; and the counts for that lineage and for the
@@ -7691,9 +7707,13 @@ The history rule of a gain claim and of a passed test
 imported forming call or outcome that the candidate cites. For evidence of
 this store and for the plan of a test, the import was recorded before that
 evidence or that plan. For imported evidence, the forming call of the form
-precedes the evidence in its source, by revision and by date. The correction
-chain that the replacement part and the derived `history` read holds forms of
-this store only.
+precedes the evidence in its source, by revision and by date. An imported
+reading is not ordered, as a reading of this store is not. An imported
+outcome is ordered by each row of its `availability`, and a row without a
+revision and without a date gives no order. A gain whose establishing
+evidence is an imported outcome that cites a reading or a probe is therefore
+refused. The correction chain that the replacement part and the derived
+`history` read holds forms of this store only.
 
 What the harness derives and delivers. For a value record with accounts,
 `derived_accounts` gains `inherited`: for each origin, `{origin,
@@ -7708,7 +7728,9 @@ result coverage check requires the request of a review to carry them
 (`problem_evidence_unassessed`). A slate packet carries
 `problem_forming_imports`, with the same records. The reviewer paragraphs of
 0.84.0 do not describe these parts; a reviewer reads the origin, the date and
-the standing from each delivered record.
+the standing from each delivered record. The probes paragraph says that an
+entry whose `cite` holds an `origin` is an imported record, and that it stays
+a separate entry when a probe of this store has the same id.
 
 Freshness. The record stays linked to each source. `gate post`, `status`,
 `export --kind problem` and `problem-decision` with `post` open every linked
@@ -7791,6 +7813,21 @@ current_state}`. `statement_id` names the current statement
 (`problem_statement_missing` otherwise). `exactory-research example
 problem-value` prints a payload of the first tier.
 
+The version of the accounts. Since 0.91.2 `problem-value` writes
+`accounts_version: 2` into each new value record. The member names the rules
+under which the harness validates the accounts of that record and delivers
+their records, when the record is written and at each later assessment. A
+payload that holds the member is refused with `invalid_input`. A value record
+without the member has version 1, and three things stay for it as they were
+in 0.91.1. The history rule chooses the earliest evidence date by the order of
+the date strings. The refusal `problem_accounts_history_missing` has one
+message and no details. `account_records` holds none of the records that
+version 2 adds for the probes of this store. For version 2 the earliest date
+is chosen by instant, the refusal carries details and has a second message,
+and `account_records` holds the records of the probes of this store that the
+accounts name (the history rule and Delivery, below). The rules for the date
+of an entry and for the readings of the history rule hold for both versions.
+
 The accounts have two tiers. Every problem holds the first tier: `answer`,
 `answer_evidence`, `boundaries`, `explanatory_use`, `alternatives`, `strength`,
 `relations` and `refuted_conjectures`. The second tier, `checks`, `gain` and a
@@ -7820,11 +7857,32 @@ Rules that hold for the entries of every part:
   `relations`, is nonempty text: the scope within which the fact holds.
 - `date`, in those four parts and in `checks`, is the day on which the fact
   became available: `unknown`, `YYYY`, `YYYY-MM`, `YYYY-MM-DD` or a timestamp
-  with a timezone. A reading gives the year of its work, and a result gives the
-  day of its acceptance. When every reference that the entry rests on gives a
-  date, the harness records the latest of them as `date`, also in place of a
-  value that the payload gives. Otherwise the payload gives `date`
-  (`problem_account_date_missing`). A computation reference gives no date.
+  with a timezone. When every reference that the entry rests on gives a date,
+  the harness records the latest of them as `date`, also in place of a value
+  that the payload gives. Otherwise the payload gives `date`. A payload
+  without it is refused with `problem_account_date_missing`, and the details
+  list under `undated` each reference that gave no date. A reference gives a
+  date as follows:
+  - A full reading of an arXiv version gives the day on which that version
+    was submitted. The harness reads it from the date assertions of the work
+    record. It leaves out each assertion that carries the diagnostic
+    `nonmonotone_version_dates` and takes the day of the latest `updated`
+    instant among the others. The fact was available no later than that day.
+    The harness does not take the date of the first version (`published`)
+    for a later version. The reading gives no date when no assertion with an
+    `updated` date is left, or when an `updated` instant that is left also
+    stands in an assertion that was left out or lies before a `published`
+    instant of the work record.
+  - A full reading of a work with another id gives no date.
+  - A result gives the UTC day on which the earliest delivered snapshot that
+    holds its acceptance entered this store: the day of `recorded_at` of that
+    snapshot ([Problem creation](#problem-creation)). A snapshot that a
+    release before 0.91.2 delivered holds no `recorded_at`, and a result whose
+    earliest snapshot is such a snapshot gives no date.
+  - A computation and a probe give no date.
+  - An imported record gives the day of the latest date among the rows of its
+    `availability`, when every row holds a date
+    ([Imported forming history](#imported-forming-history)).
 
 The first tier:
 
@@ -7876,9 +7934,41 @@ formulates cites, in `source.evidence`, a forming call or a form outcome
 ([Forming records](#forming-records)). A cited forming call counts with its
 forms of the purpose `expected_statement`, and a cited outcome with its form.
 One of these forms was recorded before the plan of the test, or before the
-evidence that establishes the gain: before the recorded revision of a result, a
-computation or a reading of this store, and before the date of that evidence
-where it gives one (`problem_accounts_history_missing` otherwise).
+evidence that establishes the gain (`problem_accounts_history_missing`
+otherwise). The harness checks this order where the store records it:
+
+- For a test, the form was recorded at an earlier revision than the plan of
+  each run that the check rests on.
+- For a gain, the evidence is every reference that the entries of
+  `establishing_ids` rest on. A result counts with the earliest delivered
+  snapshot that holds its acceptance: the recorded revision of that snapshot
+  and, where the snapshot holds one, its recording time `recorded_at`. A
+  computation counts with the recorded revision of its execution. The form
+  was recorded at an earlier revision than each of these, and before the
+  earliest of the recording times. An imported record among the evidence is
+  ordered in its source ([Imported forming history](#imported-forming-history)).
+- A reading among that evidence is not ordered, because the store keeps no
+  time at which a reading was made. When a result or a computation stands
+  beside it, they decide the order. A gain that only readings establish is
+  accepted when the candidate cites a form. This is an exception to the
+  order. The check shows that a forming record of the statement is older than
+  the candidate, the statement and the value record. It does not show that
+  the form was recorded before the record read the establishing works.
+
+A result whose earliest snapshot holds no recorded revision has no place in
+the order of the store. The harness then takes the earliest `date`, other
+than `unknown`, among the entries that cite the result directly, and it
+refuses the gain when no such entry gives one. A date that is a day, a month
+or a year counts as that whole period: a form precedes it only when the form
+was recorded before the period began. A timestamp is compared as an instant.
+For a value record of version 2, the earliest of several dates is the one
+whose period begins first in UTC, and the refusal has a message of its own
+when a form was recorded within the period of that date. When that date is
+the `date` of an entry, which the refusal names in `evidence.entry_id`, enter
+it as a timestamp with a timezone, which decides the order. When it is the
+date of an imported record, which the refusal names in `evidence.reference`,
+no `date` of this record changes it. Without an earlier form, record `gain`
+as null.
 
 `replacement` is a list of `{id, refuted_id, form_id, evidence_ids, account}`.
 An entry names exactly one refuted statement and sets the other field to null:
@@ -7993,20 +8083,42 @@ sources of `refuted_conjectures`; the forming calls and the outcomes of the
 forms that the alternatives, the replacement entries, a check lineage and the
 history name; for each listed run its plan, its execution and its assessment;
 the earlier computations beside a test; and the source records of the
-delivered searches. In a review delivered in fresh parts, the value part
-travels whole in every frame. The result coverage check requires the request
-of a review to carry `value` and `account_records` with their current values
+delivered searches. For a value record of version 2, the value part states
+`accounts_version: 2`, and `account_records` also holds the records of the
+probes of this store that the accounts name. These are the `probe` record of
+each probe that an entry cites as `{kind: "probe", id}`, that a listed
+forming call names in `probes` or in the evidence of a place, an input or a
+ground, or that a listed form outcome cites. For every `probe` record of this
+store in the list, the list also holds the `probe_intent` record of the same
+id where the store holds one. A record of this store is listed once, by kind
+and id. An imported record keeps its `origin` in `cite` and stays a separate
+entry, also when its kind and its id equal those of a record of this store or
+of another source. Each entry of such a list shows a sealed artifact of its
+record as `{sealed_path, sha256, size, media_type}`, and `cite.digest` stays
+the digest of the stored record. The list delivers no bytes of the program,
+the inputs or the outputs of a probe. A value record of version 1 keeps the
+rules of 0.91.1. For a probe of this store, its list holds the `probe` record
+that a record source of `refuted_conjectures` cites or that stands as an
+earlier computation beside a test, and the harness adds no intent to it. A
+`probe_intent` record that such a source cites itself is delivered as that
+source. The imported records, probes and intents among them, are delivered
+under both versions ([Imported forming history](#imported-forming-history)).
+In a review delivered in fresh parts, the value part travels whole in every
+frame. The result coverage check requires the request of a review to carry
+`value` and `account_records` with their current values
 (`problem_evidence_unassessed` with the keys under `missing`).
 
 Reviewer paragraphs. A prompt carries an optional paragraph only when its
-packet carries the material. The registry is `PARAGRAPHS` in
+packet carries the material or continues a packet that carried it. The
+registry is `PARAGRAPHS` in
 `research_harness/review_prompt_paragraphs.py`, and the order is fixed: the
-carry paragraph, the accounts paragraph, the slate paragraph, the
-replacement paragraph and the areas paragraph.
+carry paragraph, the accounts paragraph, the probes paragraph, the slate
+paragraph, the replacement paragraph and the areas paragraph.
 
 | Paragraph | Roles | Present when |
 | --- | --- | --- |
 | `exactory-problem-accounts-v1` | Result, in every turn of a series; adjudicator of `A3`, `priority`, `calibration` or `significance`, with the definition of the item | The delivered value record holds accounts. |
+| `exactory-problem-account-probes-v1` | Result, in every turn of a series; adjudicator of `A3`, `priority`, `calibration` or `significance`, with the definition of the item | The accounts paragraph is present, the delivered value record states `accounts_version: 2`, and `account_records` holds a `probe` record of this store. |
 | `exactory-problem-slate-forming-v1` | Slate | A current candidate has the source kind `phenomenon`, or its `source.evidence` cites a forming call or a form outcome. The slate packet then keeps those references in the candidate's `source.evidence`. |
 | `exactory-problem-replacement-v1` | Result; adjudicator of `A7`, with the definition of the item | The accounts hold a nonempty `replacement`. |
 | `exactory-problem-areas-v1` | Bar; result | The record names a further area, so the packet carries `problem_areas` ([Further areas](#further-areas)). |
@@ -8015,7 +8127,20 @@ The accounts paragraph gives the reading of the rubric with the accounts, which
 governs where it is stricter than an anchor, the questions on the gain, what
 stays unestablished about a test, and where each judgment goes. The response
 shapes are unchanged: the assurance `problem_value` covers the accounts, and
-the grades and evidence texts of the rubric carry the judgments. A prompt with
+the grades and evidence texts of the rubric carry the judgments. The probes
+paragraph says which probes `account_records` delivers and what the
+`probe_intent` record and the `probe` record of a probe hold. It says that
+the intent names the program and the inputs, and the probe record the
+outputs, by descriptor, that the records hold none of their bytes, and that
+a probe has exploratory standing. It leaves the response shapes and the
+source rules as they are. The conditions of this table are evaluated on the
+packet of the assignment. Two kinds of packet leave the delivered value out:
+a continuation that names the evidence of an earlier turn, and a task of a
+staged review. Such a packet carries, in `problem_prompt_conditions`, the
+names of the paragraphs that were selected on its source packet, which is
+the packet of the turn that it continues or the frame of its staged review.
+A packet with these names and without a delivered value keeps the named
+paragraphs of this table and no other. A prompt with
 paragraphs has the template id of its base template with one suffix for each
 paragraph, for example `/accounts-v1/replacement-v1`, and its
 `parameters.problem_paragraphs` lists the version ids in order. The frozen
@@ -8033,7 +8158,7 @@ evidence:
 | `problem_account_id_conflict` | Two entries have the same id, or an entry has the id `statement` (`id`). Give each entry an id of its own. |
 | `problem_account_reference_missing` | An entry or a paragraph cites an id that no entry holds (`id`), or `refuted_id` names no `refuted_conjectures` entry. Cite an entry of the accounts, or add it. |
 | `problem_account_reference_cycle` | The references of an entry lead back to the entry (`id`). Remove one reference of the cycle. |
-| `problem_account_date_missing` | The harness cannot derive the date of an entry from its evidence (`id`). Enter `date`, or `unknown`. |
+| `problem_account_date_missing` | An entry gives no `date`, and the harness cannot derive one from its evidence (`id`). `undated` lists each reference of the entry that gives no date, and it is empty for an entry without evidence. Enter `date`, or `unknown`. |
 | `problem_account_search_missing` | A named search is not in the store (`id`). Record the search first. |
 | `problem_answer_evidence_missing` | A conjectured answer names no `answer_evidence` entry with the direction `for`, or an `answer_evidence` entry rests on no admissible reference (`id`). Cite the evidence, or record the answer as `none` or `forecast`. |
 | `problem_answer_alternative_missing` | An `answer_evidence` entry names no nearest alternative (`id`). Set `alternative_id` to an `alternatives` entry with a role other than `no_alternative`. |
@@ -8048,7 +8173,7 @@ evidence:
 | `problem_strength_incomplete` | `strength` does not hold exactly one entry for each of the four heads, or an entry names no relaxing alternative and gives no reason (`id`). |
 | `problem_consequence_comparison_missing` | A consequence that is credited to the statement does not hold exactly one `weaker_derivations` entry for each weaker alternative (`id`). Add the entries; `not_attempted` is a valid status. |
 | `problem_accounts_tier_two_missing` | The accounts claim a gain or enter a passed test, and `checks`, `gain` or a nonempty `search_coverage` is absent. Add the second tier. |
-| `problem_accounts_history_missing` | The candidate of the statement cites no form that was recorded before the evidence of the gain or the plan of the test. Record `gain` as null, and enter the check as an observation. |
+| `problem_accounts_history_missing` | The candidate of the statement cites no form that was recorded before the plan of the test or before the ordered evidence of the gain. For a gain that only readings establish, the candidate cites no form. For a value record of version 2 the details hold `evidence` and `forms`. `evidence` holds `revision` and `date`, the two values that a form had to precede, each null where the evidence gives none. For a gain on evidence of this store, a reference that has no recorded revision, no recording time and no `date` other than `unknown` from an entry that cites it directly is refused by itself, before the smallest revision and the earliest date are chosen: `reference` names it and both values are null, whatever the other references give. Otherwise the two values are the smallest recorded revision and the earliest date among that evidence, each chosen by itself. For an imported record they are the revision and the date of one row of its `availability`, and both are null for a record without a row. For a test, `revision` is the revision of the plan. `evidence` also holds one source field: `entry_id` or `reference` for the source of the date, or, without a date, `reference` for the evidence that was compared. The revision can therefore belong to another reference than that source. For a gain that only readings establish, both values are null and no source field is present. `forms` has one row `{forming_call_id, form_ids, recorded_revision, recorded_at}` for each forming call that holds a form of the candidate, with `origin` for an imported call. Record `gain` as null, and enter the check as an observation. When the message says that the date names a period and `evidence` names an entry in `entry_id`, enter the `date` of that entry as a timestamp with a timezone. When `evidence` names an imported record in `reference`, the date is that of the import, and no `date` of this record changes the comparison. |
 | `problem_test_run_invalid` | A check with the standing `test`, or an `answer_evidence` entry of the kind `passed_test`, does not meet the rule of a test. The message names the failed condition. Enter the check with the standing `observation` or `origin`. |
 | `problem_gain_relations_invalid` | The gain gathers a relation that is not established, gathers no consequence that is credited to the statement, or a `separate_grounds` entry names a relation that the gain does not gather. |
 | `problem_gain_conjunction_evidence_missing` | The relation to the conjunction has a proved status and rests on no evidence. Cite the proof, or record `not_known`. |
@@ -8502,9 +8627,9 @@ SQLite is authoritative for the managed records. Workspace JSON, decision logs, 
 
 `final/` and `intermediate/` are generated views of the records, in the workspace root: the directory of the store, or, for a store at a math-solver controller root, that root's parent. `final/` holds the current step results and `final/history/` the superseded and historical ones, in the same layout: `reviews/incomplete/<id>.json` for an incomplete assessment of a staged review (current while its epoch is the slot head); `reviews/<role>/<record id>.json` for the recorded reviews and adjudications (a `value_review` under the role of its assignment, `review_adjudication` under `adjudicator`, `manuscript_review` under `manuscript`, `manuscript_prediction` under `prediction`, `readiness_review` under `readiness`, `scoped_readiness_review` under `scoped-readiness`, `round_review` under `round`); `reviews/<role>/<series assignment id>/<NN>-<assignment id>.<run id>.json` for the selected final output of a complete parts v2 series, or `<NN>-<assignment id>.<correction id>.corrected.json` for a corrected final ([Reviews in fresh parts](#reviews-in-fresh-parts)); `overrides/<record id>.json` for every recorded override (`gate_override`), user and automatic ([Stops and overrides](research-workflow.md#stops-and-overrides)); `problem/<kind>/<record id>.json` for the current statement and the latest slate, attempt, openness finding, value, assessment, decision, formal checks and post (`statements/`, `slates/`, `attempts/`, `openness/`, `values/`, `assessments/`, `decisions/`, `formal-checks/`, `posts/`); `problem/exports/<export digest>/` for the problem exports of the current records, which the export commands write and which move to `final/history/problem/exports/` when their source records change (the current export and the earlier ones, in [Problem creation](#problem-creation)); `study/<kind>/<record id>.json` for the current round admissions, round decisions, round assessments, round factual assessments, research decisions, cycle assessments, contribution analyses, checkpoints and receipts (`round-admissions/`, `round-decisions/`, `round-assessments/`, `round-factual-assessments/`, `decisions/`, `cycle-assessments/`, `contribution-analyses/`, `checkpoints/`, `receipts/`); `study/manuscripts/<bundle id>/bundle.json` with the pinned files under `files/`, for the selected bundle and the bundle of the latest deposit receipt; `study/deposits/<intent id>/receipt.json`, `read-back.json` and the uploaded files under `files/`; `verification/verdicts/` and `verification/tasks/`; `math/deliveries/attempts/` and `math/deliveries/closures/`; and `math/<rel>/`, which the math-solver controller renders (its `SEARCH.md`, "Locked command construction and recoverable projections"). A record whose canonical JSON exceeds 1 MiB is shown as a summary, `{summary: true, kind, id, recorded_revision, status, bytes, sha256, fields}`, in which a field over 64 KiB is `{omitted: true, bytes, sha256}`. An id or a role in a file name that is not a portable file name (`[A-Za-z0-9][A-Za-z0-9._-]{0,127}`), for example an automatic override id with `:`, is rendered as `id-<the first 32 hexadecimal digits of the SHA-256 of the id>`; `index.json` maps each file to its record id.
 
-`intermediate/` holds every other output. `reviews/<role>/<root assignment id>/series.json` and `<NN>-<assignment id>.<run id>.json` show each reviewer series, the turns of one lineage (an adjudicator's turns are grouped by session): `series.json` lists each turn with its link, slot, packet reference, runs, their status, error, usage, refusal and correction, the selected run and the record that adopted the turn, and the file of a run holds its output; a correction's output is `<NN>-<assignment id>.<correction id>.json`. The turns of a parts v2 series are grouped under the series id, each with a `review_parts` progress object (`protocol`, `adapter`, `series_assignment_id`, `kind`, `turn`, the allowances, the estimates, the evaluated progress and the next actions) and each run with `output_path`: the outputs of read, combine and check turns and the request form of a final stay here, and the selected final output of a complete series is written under `final/reviews/<role>/<series assignment id>/`, an ordinary final as `<NN>-<assignment id>.<run id>.json` and a corrected final as `<NN>-<assignment id>.<correction id>.corrected.json` (`corrected_output_path`); the index entries of both carry `series_assignment_id`, `turn`, `adapter` and `review_parts_kind`. When the assignment of a turn is of a posted statement, the `next` list of its `review_parts` object is `[]` ([Problem creation](#problem-creation)). A controller's turn of a staged review adds `raw_output_digest` and `effective`, with its effective output in `<NN>-<assignment id>.effective.json`, and a child's turn names its `task_id`; `reviews/staged/<kind>/<id>.json` holds the records of the staged reviews (epochs, tasks, execution plans, task executions, reservations, observations, acceptance receipts, pool memberships, the capacity policy, slot heads, dispatch records and composition plans) and, under `review_call_observation`, the captured answers of the ordinary reviewer calls. The other entries are `reviews/routes/<route id>/route.json` and `probes/<probe id>.json`; `reviews/usage.json`, the review call usage with the allowance, the charged calls and the remaining calls under `review_budget`; `reviews/packets/<assignment id>/` and `reviews/packets/<kind>-r<revision>/`, the default destinations of the packet exports, with a numeric suffix when the directory exists; `problem/candidates/<record id>.json`; `problem/forming/<record id>.json` for each forming call and `problem/form-outcomes/<record id>.json` for each outcome of a form, where the index entry of an outcome that a later outcome of the same item supersedes names it under `superseded_by`; `lab/probes/<probe id>/probe.json`, `lab/artifacts/<id>.json` for a local artifact that no pin ties to a probe, `lab/runs/<admission id>/run.json`, `result.json` and `log.txt`, and `lab/executions/<id>.json` for an execution that no outcome names; `study/bundles/<bundle id>.json` for the bundles that were neither selected nor deposited, `study/score-history.json` (every recorded manuscript review in recorded order), `study/remote-intents/` and `study/remote-observations/`; `checks/citation-check.json` and `checks/derivation-check.json`, copies of the reports in `.exactory/`; `literature/exports/`, the destination of `export --kind foundation`; `legacy/<original path>/`, the copies that a session moved there once; and `math/<rel>/`, rendered by the controller. A run output of at most 1 MiB is copied; a larger, sealed, missing or corrupt one is listed in `series.json` with `output_listed` set to `over_1_mib`, `sealed`, `artifact_missing` or `artifact_corrupt`.
+`intermediate/` holds every other output. `reviews/<role>/<root assignment id>/series.json` and `<NN>-<assignment id>.<run id>.json` show each reviewer series, the turns of one lineage (an adjudicator's turns are grouped by session): `series.json` lists each turn with its link, slot, packet reference, runs, their status, error, usage, refusal and correction, the selected run and the record that adopted the turn, and the file of a run holds its output; a correction's output is `<NN>-<assignment id>.<correction id>.json`. A run of an ordinary call that has started and has no recorded attempt has the status `pending`, and so has a correction whose call has no recorded result. The turns of a parts v2 series are grouped under the series id, each with a `review_parts` progress object (`protocol`, `adapter`, `series_assignment_id`, `kind`, `turn`, the allowances, the estimates, the evaluated progress and the next actions) and each run with `output_path`: the outputs of read, combine and check turns and the request form of a final stay here, and the selected final output of a complete series is written under `final/reviews/<role>/<series assignment id>/`, an ordinary final as `<NN>-<assignment id>.<run id>.json` and a corrected final as `<NN>-<assignment id>.<correction id>.corrected.json` (`corrected_output_path`); the index entries of both carry `series_assignment_id`, `turn`, `adapter` and `review_parts_kind`. When the assignment of a turn is of a posted statement, the `next` list of its `review_parts` object is `[]` ([Problem creation](#problem-creation)). A controller's turn of a staged review adds `raw_output_digest` and `effective`, with its effective output in `<NN>-<assignment id>.effective.json`, and a child's turn names its `task_id`; `reviews/staged/<kind>/<id>.json` holds the records of the staged reviews (epochs, tasks, execution plans, task executions, reservations, observations, acceptance receipts, pool memberships, the capacity policy, slot heads, dispatch records and composition plans) and, under `review_call_observation`, the captured answers of the ordinary reviewer calls. The other entries are `reviews/routes/<route id>/route.json` and `probes/<probe id>.json`; `reviews/usage.json`, the review call usage with the allowance, the charged calls and the remaining calls under `review_budget`; `reviews/packets/<assignment id>/` and `reviews/packets/<kind>-r<revision>/`, the default destinations of the packet exports, with a numeric suffix when the directory exists; `problem/candidates/<record id>.json`; `problem/forming/<record id>.json` for each forming call and `problem/form-outcomes/<record id>.json` for each outcome of a form, where the index entry of an outcome that a later outcome of the same item supersedes names it under `superseded_by`; `lab/probes/<probe id>/probe.json`, `lab/artifacts/<id>.json` for a local artifact that no pin ties to a probe, `lab/runs/<admission id>/run.json`, `result.json` and `log.txt`, and `lab/executions/<id>.json` for an execution that no outcome names; `study/bundles/<bundle id>.json` for the bundles that were neither selected nor deposited, `study/score-history.json` (every recorded manuscript review in recorded order), `study/remote-intents/` and `study/remote-observations/`; `checks/citation-check.json` and `checks/derivation-check.json`, copies of the reports in `.exactory/`; `literature/exports/`, the destination of `export --kind foundation`; `legacy/<original path>/`, the copies that a session moved there once; and `math/<rel>/`, rendered by the controller. A run output of at most 1 MiB is copied; a larger, sealed, missing or corrupt one is listed in `series.json` with `output_listed` set to `over_1_mib`, `sealed`, `artifact_missing` or `artifact_corrupt`.
 
-Each folder has `README.md` and `index.json`. The index lists every file with its `type` (`view`, `controller`, `export`, `legacy`), the `kind`, `id`, `recorded_revision` and `status` of its record (`current`, `superseded`, `historical`, `not_selected`), an `error` when the file could not be written, and every other file under `unowned`. The marker `.exactory/output-views.json` records the rendered revision, the digest of the event at that revision, the plugin version and the size, modification time and digest of every owned file. Each recording command of `exactory-research`, `exactory-lab`, `exactory-draft`, `exactory-cohort` and `exactory` (`submit`, `verify`, `reconcile`) renders once after its last commit, outside every store lock, under its own lock `.exactory/output-views.lock`; read commands and `--check` render nothing. `review-series` also renders after each action that it executes and at a terminal stop ([Review chains and `review-series`](#review-chains-and-review-series)), and a problem export renders every view before it returns. This automatic render builds no model when nothing needs an update: the marker shows a complete render under the installed plugin version with the current inputs, no dirty marker is pending, and no record of a view kind changed since the marker's revision; the marker then takes the current revision. Otherwise, and on every `export --kind outputs`, the render builds the whole model from the records and writes it: a file whose bytes are unchanged and that has no write bits stays in place, a writable owned file is published again even when its bytes match, a file whose bytes differ is written, and the owned files that the model no longer produces are removed; the render never overwrites a file that it does not own (`output_view_conflict` on the entry). The read-only mode is not a condition for reading a view. A failed render prints one warning line on stderr and leaves the command's result and exit status unchanged. `export --kind outputs` renders every view again and returns `{revision, files: {final, intermediate}, errors}`. `status` and `next` carry `advisories` with one `output_views_stale` entry while the views may not show the current records; its `reason` is `shared_workspace_root` (a store at a controller root whose parent also holds a store renders nothing), `marker_unreadable`, `render_failed` (with `path` and `error`), `file_errors` (the first path with an error), `not_rendered`, `plugin_changed`, `history_changed`, `behind` or `render_deferred` (a render waited more than one second for the renderer lock, so it left the dirty marker `.exactory/output-views-dirty.json`, named in `path`; the next recording command or `export --kind outputs` renders every view again); a field that does not apply to the reason is null. `status --summary` and `next --summary` add `advisories: [{code, reason}]` only when the list is not empty. The advisory never changes `ready`, `obligations`, `counts` or `next`, and no gate reads it. The guard hook refuses `Write`, `Edit` and `NotebookEdit` into `<workspace root>/final/` and `<workspace root>/intermediate/` (only these two direct children, so `draft/final/` is not guarded), except `intermediate/legacy/`, when the workspace root holds `.exactory/output-views.json`, or a folder in it holds `.search/output-views.json` (a controller root), or a controller root in it (`.search/tree.json`) holds `.exactory/output-views.json` (a research store located at the controller root); shell commands are not inspected, and each render checks the files it owns.
+Each folder has `README.md` and `index.json`. The index lists every file with its `type` (`view`, `controller`, `export`, `legacy`), the `kind`, `id`, `recorded_revision` and `status` of its record (`current`, `superseded`, `historical`, `not_selected`), an `error` when the file could not be written, and every other file under `unowned`. The marker `.exactory/output-views.json` records the rendered revision, the digest of the event at that revision, the plugin version and the size, modification time and digest of every owned file. Each recording command of `exactory-research`, `exactory-lab`, `exactory-draft`, `exactory-cohort` and `exactory` (`submit`, `verify`, `reconcile`) renders once after its last commit, outside every store lock, under its own lock `.exactory/output-views.lock`; read commands and `--check` render nothing. `review-series` also renders after each action that it executes and at a terminal stop ([Review chains and `review-series`](#review-chains-and-review-series)), and a problem export renders every view before it returns. A command that starts an ordinary reviewer call renders once more, after the start record of the new call is committed and before the request is sent: `review-run` of an assignment that is no task of a staged review, `review-probe` and `review-output-correction`. This also holds when `review-series` executes such a `review-run`. When this render gets the renderer lock, the views show the call while it runs: `series.json` lists its run with the status `pending`, and `reviews/routes/<route id>/probes/<probe id>.json` holds the `invocation` of a route probe with `probe` null. The render at the start of a call does not wait for the lock. When another renderer holds it, the request is sent at once, and the views show the call after a later render. A replay, a call that resumes a committed start and a task of a staged review render nothing at their start. A render that does not get the lock writes the dirty marker `.exactory/output-views-dirty.json` and tries the lock once more without a wait. The render at the end of a command waits up to one second for the lock first. A render that holds the lock looks for the dirty marker after its pass. When it finds one, it runs one more pass, which reads the records again, and it runs no third pass. A marker that is left is consumed by the next render that takes the lock, which renders every view again. This automatic render builds no model when nothing needs an update: the marker shows a complete render under the installed plugin version with the current inputs, no dirty marker is pending, and no record of a view kind changed since the marker's revision; the marker then takes the current revision. Otherwise, and on every `export --kind outputs`, the render builds the whole model from the records and writes it: a file whose bytes are unchanged and that has no write bits stays in place, a writable owned file is published again even when its bytes match, a file whose bytes differ is written, and the owned files that the model no longer produces are removed; the render never overwrites a file that it does not own (`output_view_conflict` on the entry). The read-only mode is not a condition for reading a view. A failed render prints one warning line on stderr and leaves the command's result and exit status unchanged. `export --kind outputs` renders every view again and returns `{revision, files: {final, intermediate}, errors}`. `status` and `next` carry `advisories` with one `output_views_stale` entry while the views may not show the current records; its `reason` is `shared_workspace_root` (a store at a controller root whose parent also holds a store renders nothing), `marker_unreadable`, `render_failed` (with `path` and `error`), `file_errors` (the first path with an error), `render_deferred` (a render did not get the renderer lock and left the dirty marker, named in `path`, and no later render has finished that work; the next recording command or `export --kind outputs` renders every view again), `not_rendered`, `plugin_changed`, `history_changed` or `behind`. When several of these hold, the entry has the first of them in this order, so a failure of the last render is reported before a deferred render. A field that does not apply to the reason is null. `status --summary` and `next --summary` add `advisories: [{code, reason}]` only when the list is not empty. The advisory never changes `ready`, `obligations`, `counts` or `next`, and no gate reads it. The guard hook refuses `Write`, `Edit` and `NotebookEdit` into `<workspace root>/final/` and `<workspace root>/intermediate/` (only these two direct children, so `draft/final/` is not guarded), except `intermediate/legacy/`, when the workspace root holds `.exactory/output-views.json`, or a folder in it holds `.search/output-views.json` (a controller root), or a controller root in it (`.search/tree.json`) holds `.exactory/output-views.json` (a research store located at the controller root); shell commands are not inspected, and each render checks the files it owns.
 
 A genuine hot SQLite rollback journal makes default reads return `store_recovery_required`. Use `exactory-research recover`, optionally with `--expected-revision`, to request native SQLite rollback recovery after path checks. This preserves committed history, migrates no schema, resets no accounts, and satisfies no research gate.
 

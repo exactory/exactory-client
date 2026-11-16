@@ -16,8 +16,6 @@ class ProblemAccountsTests(ProblemCase):
         self.initialize_problem()
         self.statement = self.select_statement(neighbours=["A weaker bound."])
         self.reading = self.record_full_reading()
-        work = self.store.snapshot()["records"]["work"][self.reading["version_id"]]
-        self.put("work", work["id"], dict(work, year=2026))
         self.value = build_account_value([self.reading], neighbours=self.statement["neighbours"])
 
     def record(self, value=None):
@@ -52,9 +50,8 @@ class ProblemAccountsTests(ProblemCase):
             "evidence": [], "evidence_ids": ["use"], "argument": None}]
         accounts["relations"][0].update(standing="established", evidence_ids=["use"])
         saved = self.record()
-        year = str(self.store.snapshot()["records"]["work"][self.reading["version_id"]]["year"])
-        self.assertEqual(saved["accounts"]["answer_evidence"][0]["date"], year)
-        self.assertEqual(saved["accounts"]["boundaries"][0]["date"], year)
+        self.assertEqual(saved["accounts"]["answer_evidence"][0]["date"], "2026-02-01")
+        self.assertEqual(saved["accounts"]["boundaries"][0]["date"], "2026-02-01")
         records = self.store.snapshot()["records"]
         projected = problem_evidence.describe_evidence(records, self.artifacts)
         self.assertEqual(projected["value"]["accounts"], saved["accounts"])
@@ -383,7 +380,11 @@ class ProblemAccountsTests(ProblemCase):
         self.value.update(statement_id=selected["id"])
         self.value["accounts"]["explanatory_use"][0]["evidence"] = [{"kind": "result", "attempt_id": "attempt-1", "acceptance_id": "acceptance-1"}]
         self.add_gain()
-        self.assert_refused("problem_accounts_history_missing", lambda v: None)
+        error = self.assert_history_refusal()
+        self.assertEqual(error.message, self.build_legacy_history_message())
+        self.assertEqual(error.details["evidence"], {"revision": self.store.snapshot()["records"]["native_attempt"][identifier]["recorded_revision"],
+            "date": None, "reference": self.value["accounts"]["explanatory_use"][0]["evidence"][0]})
+        self.assertEqual(error.details["forms"][0]["forming_call_id"], call["id"])
 
     def test_supported_and_used_surplus_keeps_both_grounds(self):
         self.add_weaker()
@@ -432,7 +433,7 @@ class ProblemAccountsTests(ProblemCase):
             "evidence": [], "evidence_ids": ["use"], "independence": None}]
         self.assert_refused("problem_account_reference_missing", lambda v: None)
 
-    def test_gain_from_a_full_reading_uses_its_year_for_the_form_history(self):
+    def test_gain_from_a_full_reading_requires_its_candidate_form(self):
         from datetime import datetime, timezone
         from unittest.mock import patch
         from research_harness import problem_candidates, problem_forming
@@ -451,25 +452,175 @@ class ProblemAccountsTests(ProblemCase):
         self.assertEqual(self.record()["accounts"]["gain"]["id"], "gain")
 
     def test_gain_history_compares_timestamp_offsets_as_instants(self):
-        from datetime import datetime, timezone
+        self.prepare_dated_gain("2026-11-09T12:00:00+00:00")
+        self.value["accounts"]["explanatory_use"][0]["date"] = "2026-11-09T05:00:00-08:00"
+        self.assertEqual(self.record()["accounts"]["gain"]["id"], "gain")
+
+    def prepare_dated_gain(self, recorded_at="2026-11-14T12:00:00.250000+00:00"):
+        from datetime import datetime
         from unittest.mock import patch
         from research_harness import problem_candidates, problem_forming
         from research_harness.evidence import digest
         from test_research_problem_candidates import build_candidate
         from test_research_problem_forming import build_forming
         with patch("research_harness.problem_forming.datetime") as clock:
-            clock.now.return_value = datetime(2026, 11, 9, 12, tzinfo=timezone.utc)
+            clock.now.return_value = datetime.fromisoformat(recorded_at)
             call = self.mutate(problem_forming.record_forming, build_forming())["result"]
-        candidate = build_candidate("dated-gain-candidate")
+        candidate = build_candidate("dated-candidate")
         candidate["source"]["evidence"] = [{"kind": "record", "record_kind": "forming_call", "id": call["id"], "digest": digest(call)}]
         self.mutate(problem_candidates.record_candidate, candidate)
-        selected = self.select_statement(identifier="dated-gain", candidate_id=candidate["id"], neighbours=self.statement["neighbours"])
-        self.value["statement_id"] = selected["id"]
-        work = self.store.snapshot()["records"]["work"][self.reading["version_id"]]
-        self.put("work", work["id"], dict(work, year=None))
-        self.value["accounts"]["explanatory_use"][0]["date"] = "2026-11-09T05:00:00-08:00"
+        self.statement = self.select_statement(identifier="dated-statement", candidate_id=candidate["id"], neighbours=self.statement["neighbours"])
+        self.value["statement_id"] = self.statement["id"]
+        self.value["accounts"]["explanatory_use"][0]["evidence"] = [ReadingDateCase.record_snapshot_result(self, "unknown")]
         self.add_gain()
-        self.assertEqual(self.record()["accounts"]["gain"]["id"], "gain")
+        return call
+
+    def assert_history_refusal(self, value=None):
+        before = self.store.snapshot()
+        with self.assertRaises(ResearchError) as caught:
+            self.record(value)
+        self.assertEqual(caught.exception.code, "problem_accounts_history_missing")
+        self.assertEqual(self.store.snapshot(), before)
+        return caught.exception
+
+    def test_new_values_store_accounts_version_and_payload_cannot_supply_it(self):
+        saved = self.record()
+        self.assertEqual(saved["accounts_version"], 2)
+        self.assertEqual(self.store.snapshot()["records"]["problem_value"][saved["id"]], saved)
+        self.assert_refused("invalid_input", lambda value: value.update(id="supplied-version", accounts_version=2))
+
+    def test_period_dates_explain_ambiguous_form_history(self):
+        call = self.prepare_dated_gain()
+        for date in ("2026", "2026-11", "2026-11-14"):
+            with self.subTest(date=date):
+                self.value["accounts"]["explanatory_use"][0]["date"] = date
+                error = self.assert_history_refusal()
+                self.assertIn("period", error.message)
+                self.assertIn("timestamp with a timezone", error.message)
+                self.assertEqual(error.details["evidence"], {"revision": None, "date": date, "entry_id": "use"})
+                self.assertEqual(error.details["forms"], [{"forming_call_id": call["id"], "form_ids": ["form-1"],
+                    "recorded_revision": call["recorded_revision"], "recorded_at": call["recorded_at"]}])
+
+    def test_precise_and_adjacent_dates_keep_strict_form_order(self):
+        self.prepare_dated_gain()
+        for index, date in enumerate(("2026-11-14T12:00:00.500000+00:00", "2026-11-15", "2027", "2026-12")):
+            with self.subTest(date=date):
+                value = copy.deepcopy(self.value)
+                value["id"] = "later-" + str(index)
+                value["accounts"]["explanatory_use"][0]["date"] = date
+                self.assertEqual(self.record(value)["accounts_version"], 2)
+        for date in ("2026-11-14T12:00:00Z", "2026-11-13", "2025", "2026-10"):
+            with self.subTest(date=date):
+                self.value["accounts"]["explanatory_use"][0]["date"] = date
+                error = self.assert_history_refusal()
+                self.assertEqual(error.message, self.build_legacy_history_message())
+                self.assertEqual(error.details["evidence"]["date"], date)
+                self.assertEqual(error.details["forms"][0]["recorded_at"], "2026-11-14T12:00:00.250000+00:00")
+
+    def build_legacy_history_message(self):
+        return ("A gain claim and a passed test need a history. The candidate of the "
+                "statement must cite, in source.evidence, a forming call or a form outcome whose form was "
+                "recorded before the evidence of the gain or the plan of the test. Without such a form, record "
+                "gain as null, and record the check as an observation")
+
+    def assert_date_selection_compatibility(self, dates, distinct):
+        from research_harness import problem_delivery
+        self.prepare_dated_gain()
+        first = self.value["accounts"]["explanatory_use"][0]
+        first["date"] = dates[0]
+        second = copy.deepcopy(first)
+        second.update(id="second-use", date=dates[1])
+        if distinct:
+            second["evidence"] = [ReadingDateCase.record_snapshot_result(self, "unknown", objective_id="second-objective")]
+        self.value["accounts"]["explanatory_use"].append(second)
+        self.value["accounts"]["gain"]["establishing_ids"] = ["use", "second-use"]
+        error = self.assert_history_refusal()
+        self.assertEqual(error.message, self.build_legacy_history_message())
+        self.assertEqual(error.details["evidence"], {"revision": None, "date": dates[0], "entry_id": "use"})
+        legacy = copy.deepcopy(self.value)
+        legacy["recorded_revision"] = self.store.revision + 1
+        validated = problem_evidence.validate_value(self.store.snapshot()["records"], self.artifacts, legacy)
+        self.assertNotIn("accounts_version", validated)
+        self.put("problem_value", legacy["id"], validated)
+        pending = problem_delivery.assess_minimum(self.store.snapshot()["records"], self.artifacts)
+        self.assertFalse([row for row in pending if row["code"].startswith("problem_accounts") or row["code"] == "problem_value_stale"], pending)
+
+    def test_utc_date_selection_shared_reference_preserves_v1(self):
+        self.assert_date_selection_compatibility(("2026-11-14T12:00:00Z", "2026-11-14T12:00:00.500000+00:00"), False)
+
+    def test_utc_date_selection_distinct_references_preserves_v1(self):
+        self.assert_date_selection_compatibility(("2026-11-14T12:00:00Z", "2026-11-14T12:00:00.500000+00:00"), True)
+
+    def test_offset_date_selection_shared_reference_preserves_v1(self):
+        self.assert_date_selection_compatibility(("2026-11-14T11:30:00+00:00", "2026-11-14T05:30:00-07:00"), False)
+
+    def test_offset_date_selection_distinct_references_preserves_v1(self):
+        self.assert_date_selection_compatibility(("2026-11-14T11:30:00+00:00", "2026-11-14T05:30:00-07:00"), True)
+
+    def test_legacy_history_refusal_keeps_message_and_obligation_bytes(self):
+        from research_harness import problem_delivery
+        self.prepare_dated_gain()
+        self.value["accounts"]["explanatory_use"][0]["date"] = "2026-11-14"
+        legacy = dict(copy.deepcopy(self.value), recorded_revision=self.store.revision + 1)
+        records = self.store.snapshot()["records"]
+        with self.assertRaises(ResearchError) as caught:
+            problem_evidence.validate_value(records, self.artifacts, legacy)
+        self.assertEqual(caught.exception.as_dict(), {"code": "problem_accounts_history_missing", "message": self.build_legacy_history_message()})
+        self.put("problem_value", legacy["id"], legacy)
+        pending = problem_delivery.assess_minimum(self.store.snapshot()["records"], self.artifacts)
+        self.assertEqual([row for row in pending if row["code"] == "problem_accounts_history_missing"], [{"code": "problem_accounts_history_missing", "explanation": self.build_legacy_history_message()}])
+        current = self.assert_history_refusal()
+        self.assertIn("period", current.message)
+        self.assertEqual(current.details["evidence"], {"revision": None, "date": "2026-11-14", "entry_id": "use"})
+
+    def test_result_date_uses_earliest_matching_snapshot(self):
+        from research_harness.problem_accounts import find_evidence_availability, find_result_revision
+        from test_research_problem_attempt import build_acceptance, build_native_attempt, put_native_attempt
+        native = build_native_attempt(self.statement["statement"], [build_acceptance()], {})
+        first = put_native_attempt(self, native, recorded_at="2026-11-14T13:00:00+00:00")
+        later = copy.deepcopy(native)
+        later["state"]["execution_status"] = "paused"
+        last = put_native_attempt(self, later, recorded_at="2026-11-15T14:00:00+00:00")
+        reference = {"kind": "result", "native_attempt_digest": last, "acceptance_id": "acceptance-1"}
+        records = self.store.snapshot()["records"]
+        self.assertEqual(find_result_revision(records, reference), records["native_attempt"][first]["recorded_revision"])
+        self.assertEqual(find_evidence_availability(records, reference), "2026-11-14T13:00:00+00:00")
+        for mismatch in ("objective", "acceptance", "claim"):
+            with self.subTest(mismatch=mismatch):
+                other = copy.deepcopy(records)
+                row = other["native_attempt"][first]
+                if mismatch == "objective":
+                    row["objective_id"] = "other-objective"
+                elif mismatch == "acceptance":
+                    row["acceptances"][0]["outcome"] = "proof"
+                else:
+                    row["checkpoints"][0]["claim"]["statement"] = "A different claim."
+                self.assertEqual(find_evidence_availability(other, reference), "2026-11-15T14:00:00+00:00")
+        for identifier in (first, last):
+            with self.subTest(missing_revision=identifier):
+                other = copy.deepcopy(records)
+                del other["native_attempt"][identifier]["recorded_revision"]
+                self.assertIsNone(find_result_revision(other, reference))
+                self.assertIsNone(find_evidence_availability(other, reference))
+
+    def test_unstamped_earliest_result_reports_undated_reference(self):
+        from research_harness import problem_attempt
+        from research_harness.problem_accounts import find_evidence_availability
+        from test_research_problem_attempt import build_acceptance, build_attempt, build_native_attempt, put_native_attempt
+        native = build_native_attempt(self.statement["statement"], [build_acceptance()], {})
+        put_native_attempt(self, native)
+        native["state"]["execution_status"] = "paused"
+        latest = put_native_attempt(self, native, recorded_at="2026-11-15T14:00:00+00:00")
+        self.mutate(problem_attempt.record_attempt, build_attempt(native_attempt_digest=latest))
+        reference = {"kind": "result", "attempt_id": "attempt-1", "acceptance_id": "acceptance-1"}
+        self.assertIsNone(find_evidence_availability(self.store.snapshot()["records"], reference))
+        entry = self.value["accounts"]["explanatory_use"][0]
+        entry["evidence"] = [reference]
+        del entry["date"]
+        with self.assertRaises(ResearchError) as caught:
+            self.record()
+        self.assertEqual(caught.exception.code, "problem_account_date_missing")
+        self.assertEqual(caught.exception.details, {"id": "use", "undated": [reference]})
 
     def test_a_result_date_is_derived_but_history_keeps_its_precise_time(self):
         from datetime import datetime, timezone
@@ -486,12 +637,22 @@ class ProblemAccountsTests(ProblemCase):
         candidate["source"]["evidence"] = [{"kind": "record", "record_kind": "forming_call", "id": call["id"], "digest": digest(call)}]
         self.mutate(problem_candidates.record_candidate, candidate)
         selected = self.select_statement(identifier="dated-result", candidate_id=candidate["id"], neighbours=self.statement["neighbours"])
-        native = build_native_attempt(selected["statement"], [build_acceptance(accepted_at="2026-11-09T13:00:00Z")], {})
-        identifier = put_native_attempt(self, native)
+        native = build_native_attempt(selected["statement"], [build_acceptance()], {})
+        identifier = put_native_attempt(self, native, recorded_at="2026-11-09T13:00:00+00:00")
         self.mutate(problem_attempt.record_attempt, build_attempt(native_attempt_digest=identifier, statement_id=selected["id"]))
         self.value["statement_id"] = selected["id"]
         self.value["accounts"]["explanatory_use"][0]["evidence"] = [{"kind": "result", "attempt_id": "attempt-1", "acceptance_id": "acceptance-1"}]
         self.add_gain()
+        del self.value["accounts"]["explanatory_use"][0]["date"]
+        from test_research_check_mode import CheckCommandMixin
+        payload_path = self.root.parent / "result-value-check.json"
+        payload_path.write_text(json.dumps(self.value))
+        before = self.store.snapshot()
+        response = CheckCommandMixin.invoke_arguments(self, ["problem-value", "--workspace", str(self.root),
+            "--file", str(payload_path), "--expected-revision", str(self.store.revision),
+            "--request-id", "result-value-check", "--check"])
+        CheckCommandMixin.assert_accepted_check(self, response, before["revision"])
+        self.assertEqual(self.store.snapshot(), before)
         saved = self.record()
         self.assertEqual(saved["accounts"]["explanatory_use"][0]["date"], "2026-11-09")
 
@@ -515,3 +676,243 @@ class ProblemAccountsTests(ProblemCase):
         self.value["accounts"]["relations"] = [build_relation()]
         self.assert_refused("problem_value_expected_only", lambda v: v["motivation"][0].update(field_fact=True,
             evidence=[{"kind": "account", "id": "relation"}, self.reading]))
+
+
+class ReadingDateCase(ProblemCase):
+    """Acquired works and command-written readings for RD1--RD7."""
+
+    def setUp(self):
+        super().setUp()
+        self.initialize_problem()
+        self.statement = self.select_statement()
+        self.reading = self.record_full_reading(version=2, published="2024-01-03T12:00:00Z",
+                                                updated="2025-01-23T10:00:00Z")
+        self.value = self.build_value([self.reading])
+
+    record = ProblemAccountsTests.record
+    add_gain = ProblemAccountsTests.add_gain
+    assert_history_refusal = ProblemAccountsTests.assert_history_refusal
+
+    def record_form_candidate(self, cite_reading=False, forms=None, recorded_at="2026-11-14T12:00:00+00:00"):
+        from datetime import datetime
+        from unittest.mock import patch
+        from research_harness import problem_candidates, problem_forming
+        from research_harness.evidence import digest
+        from test_research_problem_candidates import build_candidate
+        from test_research_problem_forming import build_forming
+        payload = build_forming(forms=forms)
+        if cite_reading:
+            reading = self.store.snapshot()["records"]["reading"][self.reading["reading_id"]]
+            payload["forms"][0]["grounds"][0]["evidence"] = [
+                dict(kind="record", record_kind="reading", id=reading["id"], digest=digest(reading))]
+        with patch("research_harness.problem_forming.datetime") as clock:
+            clock.now.return_value = datetime.fromisoformat(recorded_at)
+            call = self.mutate(problem_forming.record_forming, payload)["result"]
+        candidate = build_candidate()
+        candidate["source"]["evidence"] = [{"kind": "record", "record_kind": "forming_call", "id": call["id"], "digest": digest(call)}]
+        self.mutate(problem_candidates.record_candidate, candidate)
+        self.statement = self.select_statement(identifier="formed-statement", candidate_id=candidate["id"])
+        self.value["statement_id"] = self.statement["id"]
+        return call
+
+    def record_snapshot_result(self, shape="revision", recorded_at="2026-11-14T13:00:00+00:00",
+                               objective_id="objective-000001"):
+        from research_harness.evidence import digest
+        from test_research_problem_attempt import build_acceptance, build_native_attempt, put_native_attempt
+        native = build_native_attempt(self.statement["statement"], [build_acceptance()], {})
+        native["objective_id"] = objective_id
+        if shape == "unknown":
+            identifier = digest({key: value for key, value in native.items()
+                                 if key not in ("provenance", "recorded_revision", "recorded_at")})
+            self.put("native_attempt", identifier, native)
+            key = {name: native[name] for name in ("attack_root", "objective_id")}
+            self.put("native_attempt_current", digest(key), dict(key, native_attempt_digest=identifier,
+                     recorded_revision=self.store.revision + 1))
+        else:
+            identifier = put_native_attempt(self, native, recorded_at=recorded_at if shape == "stamped" else None)
+        from test_research_problem_objective_results import build_objective_result
+        return build_objective_result(identifier)
+
+    def import_undated_work(self, identifier="arxiv:2601.00999v2", publication_date="2024-01-03"):
+        from research_harness.acquisition import import_response
+        raw = json.dumps(dict(id=identifier, title="Synthetic undated text", date=publication_date)).encode()
+        self.sequence += 1
+        import_response(self.store, "mcp", raw, source_url="https://example.org/metadata", media_type="application/json",
+            captured_at="2026-09-07T12:00:00Z", mappings=[dict(id="/id", title="/title", publication_date="/date")],
+            expected_revision=self.store.revision, request_id="undated-" + str(self.sequence))
+        return identifier
+
+
+class ReadingDateTests(ReadingDateCase):
+    def build_case(self):
+        case = ReadingDateCase()
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        return case
+
+    def test_c1_later_version_without_typed_date_saves_version_day(self):
+        self.value["accounts"]["explanatory_use"][0].pop("date")
+        self.assertEqual(self.record()["accounts"]["explanatory_use"][0]["date"], "2025-01-23")
+
+    def test_c1_latest_version_assertion_is_selected_by_instant(self):
+        from research_harness.acquisition import import_response
+        from research_fixtures import atom, entry
+        for index, updated in enumerate(("2025-01-25T00:30:00+02:00", "2025-01-24T23:00:00Z")):
+            import_response(self.store, "arxiv", atom([entry(self.reading["version_id"][6:],
+                published="2024-01-03T12:00:00Z", updated=updated)], total=1),
+                source_url="https://export.arxiv.org/api/query", captured_at="2026-09-07T12:00:00Z",
+                expected_revision=self.store.revision, request_id="later-assertion-" + str(index))
+        self.value["accounts"]["explanatory_use"][0].pop("date")
+        # The latest instant is on Jan 24, although the other assertion says Jan 25 locally.
+        self.assertEqual(self.record()["accounts"]["explanatory_use"][0]["date"], "2025-01-24")
+
+    def test_c2_later_version_replaces_first_submission_dates(self):
+        for index, date in enumerate(("2024", "2024-01-03")):
+            with self.subTest(date=date):
+                value = copy.deepcopy(self.value)
+                value["id"] = "version-" + str(index)
+                value["accounts"]["explanatory_use"][0].update(date=date, fact="The later version introduces the finite construction.")
+                self.assertEqual(self.record(value)["accounts"]["explanatory_use"][0]["date"], "2025-01-23")
+
+    def test_c3_reading_and_stamped_result_derive_latest_day(self):
+        result = self.record_snapshot_result("stamped")
+        self.value["accounts"]["explanatory_use"][0].update(evidence=[self.reading, result], date="2024")
+        self.assertEqual(self.record()["accounts"]["explanatory_use"][0]["date"], "2026-11-14")
+
+    def test_c4_gain_orders_result_and_leaves_declared_reading_unordered(self):
+        for shape in ("revision", "stamped", "unknown"):
+            with self.subTest(shape=shape):
+                case = self.build_case()
+                case.record_form_candidate(cite_reading=True)
+                result = case.record_snapshot_result(shape)
+                case.value["accounts"]["explanatory_use"][0]["date"] = "2025-01-23"
+                entry = copy.deepcopy(case.value["accounts"]["explanatory_use"][0])
+                entry.update(id="result-use", evidence=[result], date="2026-11-15")
+                case.value["accounts"]["explanatory_use"].append(entry)
+                case.add_gain()
+                case.value["accounts"]["gain"]["establishing_ids"] = ["use", "result-use"]
+                self.assertEqual(case.record()["accounts"]["gain"]["id"], "gain")
+
+    def test_c5_reading_only_gain_is_accepted_by_rd4_exception(self):
+        """RD4 accepts a cited form as an exception; it proves no form/reading order."""
+        for cite_reading in (True, False):
+            with self.subTest(cite_reading=cite_reading):
+                case = self.build_case()
+                case.record_form_candidate(cite_reading=cite_reading)
+                case.value["accounts"]["explanatory_use"][0]["date"] = "2025-01-23"
+                case.add_gain()
+                self.assertEqual(case.record()["accounts"]["gain"]["id"], "gain")
+
+    def test_c7_command_written_incident_derives_date_without_invented_members(self):
+        records = self.store.snapshot()["records"]
+        self.assertNotIn("year", records["work"][self.reading["version_id"]])
+        self.assertNotIn("recorded_revision", records["reading"][self.reading["reading_id"]])
+        self.value["accounts"]["explanatory_use"][0].pop("date")
+        self.assertEqual(self.record()["accounts"]["explanatory_use"][0]["date"], "2025-01-23")
+
+    def assert_undated_reading(self, reading):
+        from research_harness.problem_accounts import derive_evidence_date
+        self.assertIsNone(derive_evidence_date(self.store.snapshot()["records"], reading))
+        value = self.build_value([reading], identifier="typed-" + reading["reading_id"])
+        value["accounts"]["explanatory_use"][0]["date"] = "2026-08-09"
+        self.assertEqual(self.record(value)["accounts"]["explanatory_use"][0]["date"], "2026-08-09")
+        value["id"] = "no-date-" + reading["reading_id"]
+        value["accounts"]["explanatory_use"][0].pop("date")
+        with self.assertRaises(ResearchError) as caught:
+            self.record(value)
+        self.assertEqual(caught.exception.code, "problem_account_date_missing")
+        self.assertEqual(caught.exception.details["undated"], [reading])
+
+    def test_p1_missing_version_dates_preserve_typed_date_and_undated_details(self):
+        from research_harness.acquisition import import_response
+        from test_research_arxiv_oai import record
+        from test_research_oai_cohort import ENDPOINT
+        # Mapped imports supply DOI and arXiv metadata without an updated assertion.
+        for index, identifier in enumerate(("doi:10.1234/undated", "arxiv:2601.00999v2")):
+            with self.subTest(identifier=identifier):
+                version = self.import_undated_work(identifier)
+                self.assert_undated_reading(self.record_full_reading(version_id=version, note_id="undated-" + str(index)))
+        raw = record().replace(b'2608.28914', b'math-ph/0302016').replace(
+            b'Fri, 28 Aug 2026 22:22:10 GMT', b'Fri, 07 Feb 2003 16:15:27 GMT').replace(
+            b'Sun, 30 Aug 2026 10:00:00 GMT', b'Sun, 01 Dec 2002 00:00:00 GMT')
+        import_response(self.store, "arxiv", raw, source_url=ENDPOINT + "?verb=GetRecord",
+            captured_at="2026-09-14T02:00:00Z", request_id="inversion", expected_revision=self.store.revision)
+        inverted = "arxiv:math-ph/0302016v2"
+        self.assert_undated_reading(self.record_full_reading(version_id=inverted, note_id="flagged"))
+        # The same reversed date in an independent unflagged Atom assertion is still unreliable.
+        from research_fixtures import atom, entry
+        import_response(self.store, "arxiv", atom([entry(inverted[6:], published="2003-02-07T16:15:27Z",
+            updated="2002-12-01T00:00:00Z")], total=1), source_url="https://export.arxiv.org/api/query",
+            captured_at="2026-09-14T02:00:00Z", request_id="repeat-inversion", expected_revision=self.store.revision)
+        self.assert_undated_reading(self.record_full_reading(version_id=inverted, note_id="repeated"))
+        reading = self.record_full_reading(number=998, note_id="unflagged", published="2026-03-01T00:00:00Z",
+                                            updated="2026-02-01T00:00:00Z")
+        self.assert_undated_reading(reading)
+
+    def test_p2_reading_and_computation_keep_typed_date(self):
+        from test_research_problem_computations import ProblemComputationTests
+        case = ProblemComputationTests()
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        plan, observed = case.run_problem()
+        case.assess_support(plan, observed)
+        reading = case.record_full_reading()
+        value = case.build_value([reading, case.build_computation_evidence(observed)])
+        value["accounts"]["explanatory_use"][0]["date"] = "2026-08"
+        saved = case.mutate(problem_claims.record_value, value)["result"]
+        self.assertEqual(saved["accounts"]["explanatory_use"][0]["date"], "2026-08")
+
+    def test_p3_reading_or_result_gain_without_cited_form_is_refused(self):
+        for kind in ("reading", "result"):
+            with self.subTest(kind=kind):
+                case = self.build_case()
+                if kind == "result":
+                    case.value["accounts"]["explanatory_use"][0]["evidence"] = [case.record_snapshot_result()]
+                case.value["accounts"]["explanatory_use"][0]["date"] = "2026-11-15"
+                case.add_gain()
+                error = case.assert_history_refusal()
+                self.assertEqual(error.details["forms"], [])
+
+    def test_p4_older_result_alone_or_beside_reading_is_refused(self):
+        for shape in ("revision", "stamped", "unknown"):
+            for with_reading in (True, False):
+                with self.subTest(shape=shape, with_reading=with_reading):
+                    case = self.build_case()
+                    result = case.record_snapshot_result(shape, recorded_at="2026-11-14T11:00:00+00:00")
+                    case.record_form_candidate()
+                    evidence = [result, case.reading] if with_reading else [result]
+                    case.value["accounts"]["explanatory_use"][0].update(evidence=evidence, date="2026-11-13")
+                    case.add_gain()
+                    case.assert_history_refusal()
+
+    def test_p5_newer_result_without_reading_is_accepted(self):
+        for shape in ("revision", "stamped", "unknown"):
+            with self.subTest(shape=shape):
+                case = self.build_case()
+                case.record_form_candidate()
+                result = case.record_snapshot_result(shape)
+                case.value["accounts"]["explanatory_use"][0].update(evidence=[result], date="2026-11-15")
+                case.add_gain()
+                self.assertEqual(case.record()["accounts"]["gain"]["id"], "gain")
+
+    def test_p6_offset_example_keeps_t21_refusal_of_old_release_acceptance(self):
+        """The previous release accepts this value; T2.1 makes its refusal the intended difference."""
+        version = self.import_undated_work()
+        reading = self.record_full_reading(version_id=version, note_id="offset-reading")
+        self.record_form_candidate()
+        result = self.record_snapshot_result("unknown")
+        first = self.value["accounts"]["explanatory_use"][0]
+        first.update(evidence=[result], date="2026-11-14T11:30:00+00:00")
+        second = copy.deepcopy(first)
+        second.update(id="reading-use", evidence=[reading], date="2026-11-14T05:30:00-07:00")
+        self.value["accounts"]["explanatory_use"].append(second)
+        self.add_gain()
+        self.value["accounts"]["gain"]["establishing_ids"] = ["use", "reading-use"]
+        self.assertEqual(self.assert_history_refusal().details["evidence"]["date"], "2026-11-14T11:30:00+00:00")
+
+
+    def test_reading_only_missing_form_reports_unordered_evidence(self):
+        self.add_gain()
+        error = self.assert_history_refusal()
+        self.assertEqual(error.message, ProblemAccountsTests.build_legacy_history_message(self))
+        self.assertEqual(error.details, {"evidence": {"revision": None, "date": None}, "forms": []})

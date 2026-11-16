@@ -1812,8 +1812,14 @@ and every refusal, and `exactory-research example problem-value` prints a payloa
 Enter each fact once, in the part where it belongs, with its `scope` and its `date`. The date
 is the day on which the fact became available: `unknown`, `YYYY`, `YYYY-MM`, `YYYY-MM-DD` or a
 timestamp with a timezone. The harness derives the date when every evidence reference of the
-entry carries one (the year of a read work, the day of an accepted result). Enter it otherwise
-(`problem_account_date_missing`). Every entry has an `id` of its own
+entry gives one, and it records the latest of them, also in place of a date that you enter. A
+full reading of an arXiv version gives the day on which that version was submitted, where the
+work record holds a reliable date for it. The fact was then available no later than that day.
+An accepted result gives the UTC day on which its objective was first delivered into this
+record with that acceptance, for a delivery since 0.91.2. A full reading of a work with
+another id, a result of an earlier delivery, a computation and a probe give no date. For an
+entry that rests on such a reference, enter the date (`problem_account_date_missing`, which
+lists under `undated` the references that gave no date). Every entry has an `id` of its own
 (`problem_account_id_conflict`). Where a fact bears on a second part, the second entry cites
 the first by its id in `evidence_ids` and does not repeat the evidence
 (`problem_account_reference_missing` for an unknown id, `problem_account_reference_cycle` for
@@ -1930,11 +1936,35 @@ A gain claim and a passed test need a history. The candidate of the statement ci
 `source.evidence`, a forming call or a form outcome whose form was recorded before the evidence
 of the gain or the plan of the test (`problem_accounts_history_missing`). A statement whose
 candidate cites no forming record can therefore claim no gain and enter no passed test. Record
-the forming work with the Ideate tool when it happens, before the evidence. An imported
-forming call or outcome that the candidate cites supplies the history in two cases. For
-evidence of this record and for the plan of a test, the import was recorded before that
-evidence or that plan. For imported evidence, the form was recorded in the source before that
-evidence.
+the forming work with the Ideate tool when it happens, before the evidence.
+
+The harness checks this order where the store records it. For a test, the form was recorded
+at an earlier revision than the plan. For a gain, the form was recorded at an earlier revision
+than each accepted result and each computation among the evidence of `establishing_ids`, and
+before the time at which a result was first delivered into this record (a delivery since
+0.91.2 records that time). A reading is not ordered, because the store keeps no time at which
+a reading was made. For a gain that only readings establish, the harness checks that the
+candidate cites a form, and it does not check when that form was recorded. Cite in the forming
+call, as a place, an input or a ground, each reading that the statement was formed from. Cite
+under `separate_grounds` the works that state a gathered statement for reasons of their own.
+The reviewers receive the forming calls with their recording times, and they judge the gain.
+
+For a value record that you record now, the refusal gives two details. `evidence` holds the
+revision and the date that a form had to precede, each null where the evidence gives none.
+Where it holds a date, `entry_id` or `reference` names the source of that date, and the
+revision can come from another reference. `forms` lists the forming calls of the candidate
+with their recording revisions and times. When the message says that the date names a period,
+a form was recorded within that day, month or year. When `evidence` names an entry in
+`entry_id`, enter the `date` of that entry as a timestamp with a timezone. When it names an
+imported record in `reference`, the date is the one that the import stores, and a `date` of
+your entry does not change the comparison. Without a form that precedes the evidence, record
+`gain` as null.
+
+An imported forming call or outcome that the candidate cites supplies the history in two
+cases. For evidence of this record and for the plan of a test, the import was recorded before
+that evidence or that plan. For imported evidence, the form was recorded in the source before
+that evidence. An imported reading is not ordered either. An imported outcome whose evidence
+holds a reading or a probe gives no order, so a gain that rests on such an outcome is refused.
 
 The replacement part, `replacement`, is required in two cases (`problem_replacement_missing`).
 The first is a form in the correction chain of the statement that the record held as its
@@ -2260,11 +2290,22 @@ accounts with the parts that the harness derives, and the records that their ent
    their outcomes, and the counts for the lineage and for the whole exploration. The packet
    also delivers, as records, what the entries cite: the plan of each run with its test
    declaration, the cited searches, the forming calls and their outcomes; and it gives the
-   claim of the objective beside each cited result. The result prompt then carries the accounts
-   paragraph (`exactory-problem-accounts-v1`), which gives the reviewer the reading of "The
-   rubric" and the questions on the gain, and, when the accounts hold a replacement part, the
-   replacement paragraph (`exactory-problem-replacement-v1`) with the three conditions of
-   "Exploration". When the record names a further area, the prompt carries the areas
+   claim of the objective beside each cited result. For a value record of 0.91.2 or later, the
+   packet also delivers the records of each probe of this record that an entry, a delivered
+   forming call or a delivered outcome names: the probe record with its command, its exit
+   status and its observation, and its probe intent with its question and its program where
+   the record holds one. A probe without a recorded intent is delivered alone, and its probe
+   record then holds the question. The intent names the program and the probe record its
+   outputs by descriptor, and neither holds their bytes. The reviewer reads in them what the
+   probe asked and what was recorded about its execution and its outcome. The result prompt
+   then carries the accounts paragraph
+   (`exactory-problem-accounts-v1`), which gives the reviewer the reading of "The rubric" and
+   the questions on the gain. For such a value record, the prompt also carries the probes
+   paragraph (`exactory-problem-account-probes-v1`) when the packet delivers a probe of this
+   record. That paragraph says what these records hold and that a probe has exploratory
+   standing. When the accounts hold a replacement part, the prompt carries the replacement
+   paragraph (`exactory-problem-replacement-v1`) with the three conditions of "Exploration".
+   When the record names a further area, the prompt carries the areas
    paragraph (`exactory-problem-areas-v1`): the reviewer judges each relation, each earlier
    statement and each alternative by the standard of the area that it belongs to, and gives
    every grade by the standard of the record's subject class. In a record that holds a forming

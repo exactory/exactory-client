@@ -2666,7 +2666,8 @@ def _finish_call(store, payload, operation, finish, *, request_id):
                              codes=('store_busy', 'stale_revision', 'review_task_dependency_changed'))
 
 
-def _invoke_once(store, payload, operation, start, finish, *, expected_revision, request_id, credential):
+def _invoke_once(store, payload, operation, start, finish, *, expected_revision, request_id, credential,
+                 after_start=None):
     """Admit once, capture through live ownership, and finish from authenticated committed observations."""
     text(request_id, 'Request ID')
     fields(payload, (), None)
@@ -2713,6 +2714,8 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
                 _snapshot=current, scoped=True,
                 validate_commit=lambda tx, result, revision: start_call(tx, operation, result, authority, revision))['result']
         invocation = wait_for_admission(store, attempt_start)
+        if after_start is not None:
+            after_start()
         artifacts = store.build_artifact_store()
         request = _read_json(artifacts, invocation['request'])
         packet = _read_json(artifacts, assignment['packet']) if operation == 'review.invoke' else None
@@ -2752,7 +2755,7 @@ def build_probe_prompt(route):
               'Use only supplied evidence. This is an operational input-boundary probe.')
 
 
-def probe_route(store, payload, *, expected_revision, request_id, credential=None):
+def probe_route(store, payload, *, expected_revision, request_id, credential=None, after_start=None):
     store_artifacts = store.build_artifact_store()
     def start(records, value):
         from .evaluation import Evaluation
@@ -2807,7 +2810,8 @@ def probe_route(store, payload, *, expected_revision, request_id, credential=Non
             result['capacity_verified'] = witness is not None
         return [immutable_record(records, 'review_route_probe', value['id'], result)], result
     return _invoke_once(store, payload, 'review.route_probe', start, finish,
-                        expected_revision=expected_revision, request_id=request_id, credential=credential)
+                        expected_revision=expected_revision, request_id=request_id, credential=credential,
+                        after_start=after_start)
 
 
 def describe_route_report(records, route_id, artifacts=None):
@@ -4154,7 +4158,7 @@ def require_verified_assignment(records, artifacts, assignment):
                  next=plan_next(records, artifacts, assignment['id'])))
 
 
-def invoke_assignment(store, payload, *, expected_revision, request_id, credential=None):
+def invoke_assignment(store, payload, *, expected_revision, request_id, credential=None, after_start=None):
     store_artifacts = store.build_artifact_store()
     def start(records, value):
         from .evaluation import Evaluation
@@ -4267,7 +4271,8 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
                       recorded_revision=revision)
         return [immutable_record(records, 'review_attempt', value['id'], result)], result
     result = _invoke_once(store, payload, 'review.invoke', start, finish,
-                          expected_revision=expected_revision, request_id=request_id, credential=credential)
+                          expected_revision=expected_revision, request_id=request_id, credential=credential,
+                          after_start=after_start)
     assignment = store.snapshot()['records']['review_assignment'][payload['assignment_id']]
     if 'preflight' in result.get('result', {}):
         result = dict(result, preflight=result['result']['preflight'])

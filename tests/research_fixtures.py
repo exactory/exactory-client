@@ -61,13 +61,13 @@ def client(responses, **kwargs):
 
 
 def entry(identifier="2601.00001v1", category="cs.LG", abstract="A short original abstract.",
-          published="2026-01-03T12:00:00Z", doi=None):
+          published="2026-01-03T12:00:00Z", updated="2026-02-01T10:00:00Z", doi=None):
     summary = "" if abstract is None else "<summary>" + escape(abstract) + "</summary>"
     primary = "" if category is None else '<arxiv:primary_category term="' + category + '"/>'
     alias = "" if doi is None else "<arxiv:doi>" + escape(doi) + "</arxiv:doi>"
     return ('<entry><id>http://arxiv.org/abs/' + identifier + '</id>'
             '<title>An authored example</title><author><name>A. Researcher</name></author>'
-            '<published>' + published + '</published><updated>2026-02-01T10:00:00Z</updated>'
+            '<published>' + published + '</published><updated>' + updated + '</updated>'
             + summary + primary + alias + '<category term="cs.LG"/>'
             '<link rel="related" type="application/pdf" href="http://arxiv.org/pdf/'
             + identifier + '"/></entry>')

@@ -37,6 +37,7 @@ class OverrideExportHistoryTests(override_fixtures.OverrideCommandMixin, Problem
     def change_value(self, text=None, identifier='value-after-export'):
         value = copy.deepcopy(problem_claims.find_value(self.store.snapshot()['records']))
         value.pop('recorded_revision')
+        value.pop('accounts_version')
         value['id'] = identifier
         if text is not None:
             value['current_state'][0]['text'] = text
@@ -138,6 +139,7 @@ class OverrideExportHistoryTests(override_fixtures.OverrideCommandMixin, Problem
         (self.root / 'final/problem').symlink_to(outside, target_is_directory=True)
         value = copy.deepcopy(problem_claims.find_value(self.store.snapshot()['records']))
         value.pop('recorded_revision')
+        value.pop('accounts_version')
         value['id'] = 'later-value'
         value['current_state'][0]['text'] = 'The source record has changed.'
         self.mutate(problem_claims.record_value, value)
@@ -340,6 +342,7 @@ class ReviewedExportHistoryTests(ProblemDeliveryCase):
         self.assertEqual({path.name: path.read_bytes() for path in current.iterdir()}, current_files)
         value = copy.deepcopy(problem_claims.find_value(records))
         value.pop('recorded_revision')
+        value.pop('accounts_version')
         value['id'] = 'later-value'
         value['current_state'][0]['text'] = 'A later source changes the current state.'
         self.mutate(problem_claims.record_value, value)
@@ -356,6 +359,7 @@ class ReviewedExportHistoryTests(ProblemDeliveryCase):
         original = {path.name: path.read_bytes() for path in first.iterdir()}
         value = copy.deepcopy(problem_claims.find_value(self.store.snapshot()['records']))
         value.pop('recorded_revision')
+        value.pop('accounts_version')
         value['id'] = 'revised-value'
         value['current_state'][0]['text'] = 'A later source changes the current state.'
         self.mutate(problem_claims.record_value, value)

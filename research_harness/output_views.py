@@ -4,8 +4,9 @@ historical ones, and intermediate/ every other output of the process.
 This module is the only owner of their placement rules. PLACEMENT_BY_KIND names the view group of every record kind
 that the harness writes, or none, and each group in VIEW_GROUPS builds its files from the current records. The status of
 a record (current, superseded, historical or not_selected) follows the harness's own rules and decides its folder.
-An automatic render (render_workspace_views) runs once per command, at its boundary, after its last commit, outside
-the store's locks and under its own render lock. It builds no model when nothing needs an update: the marker shows a
+An automatic render (render_workspace_views) runs at a command's boundary and after a reviewer call's start commit,
+outside the store's locks and under its own render lock. Each render runs at most two passes, leaving further dirty
+work for the next successful render. It builds no model when nothing needs an update: the marker shows a
 complete render under the installed plugin version with the current inputs, no dirty marker is pending, and no record
 of a view kind changed since the marker's revision. Otherwise, and on every export --kind outputs (render_all), the
 render builds the whole view model from the records and writes it: a file whose bytes are unchanged and that has no
@@ -14,7 +15,7 @@ differ is written, and the owned files that the model no longer produces are rem
 read-only (write_projection, mode 0400); the read-only mode is not a condition for reading a view.
 """
 
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack, nullcontext
 import fcntl
 import hashlib
 import json
@@ -1093,12 +1094,12 @@ def _read_inputs(store_root, workspace_root):
 
 
 @contextmanager
-def _hold_lock(store_root):
+def _hold_lock(store_root, *, wait=None):
     """Serialize renderers with a bounded wait outside the authoritative store lock."""
     with _Workspace(store_root).directory(".exactory") as directory:
         descriptor = os.open(_LOCK_FILE_NAME, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=directory)
     try:
-        deadline = time.monotonic() + _RENDER_LOCK_SECONDS
+        deadline = time.monotonic() + (_RENDER_LOCK_SECONDS if wait is None else wait)
         while True:
             try:
                 fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -1139,13 +1140,13 @@ def find_view_advisories(store, revision):
     except ResearchError as error:
         return advise("marker_unreadable", path=MARKER_PATH, error=error.code)
     rendered = marker["revision"]
-    if any(find_entry_kind(store.root, path) != "absent" for path in (DIRTY_PATH, _RENDERING_PATH)):
-        return advise("render_deferred", rendered, DIRTY_PATH)
     if marker["failure"] is not None:
         return advise("render_failed", rendered, marker["failure"]["path"], marker["failure"]["error"])
     if marker["errors"]:
         path = sorted(marker["errors"])[0]
         return advise("file_errors", rendered, path, marker["errors"][path])
+    if any(find_entry_kind(store.root, path) != "absent" for path in (DIRTY_PATH, _RENDERING_PATH)):
+        return advise("render_deferred", rendered, DIRTY_PATH)
     if rendered == 0:
         return advise("not_rendered", rendered) if revision > 0 else []
     if marker["plugin_version"] != plugin_version():
@@ -1156,13 +1157,14 @@ def find_view_advisories(store, revision):
     return advise("behind", rendered) if rendered < revision else []
 
 
-def render_workspace_views(store_root, *, full=False):
-    """Render the views of the research store at store_root after a command, once its last commit is made and every
+def render_workspace_views(store_root, *, full=False, lock_wait=None):
+    """Render the views of the research store at store_root after a commit, once every
     store and controller lock is released. store_root is the directory that holds .exactory/research.sqlite3; None,
     or a directory without a store, renders nothing. A failure prints one warning line on stderr, records the failing
     path and error in the marker and never raises, so the command's response and exit status stay as they are.
-    Returns the summary of the render, or None when nothing was rendered."""
-    return _render_safely(lambda: store_root, full=full)
+    lock_wait is the render lock wait in seconds, or None for the usual wait. Returns the summary of the render,
+    or None when nothing was rendered."""
+    return _render_safely(lambda: store_root, full=full, lock_wait=lock_wait)
 
 
 def render_views_after_command(start):
@@ -1172,19 +1174,23 @@ def render_views_after_command(start):
     return _render_safely(lambda: find_workspace(start, required=False))
 
 
-def _render_safely(find_store_root, *, full=False):
+def _render_safely(find_store_root, *, full=False, lock_wait=None):
     store_root = None
+    rendering = False
     try:
         store_root = find_store_root()
         if store_root is None or find_entry_kind(store_root, ".exactory/research.sqlite3") != "regular":
             return None
-        return (render_all if full else render_pending)(Store(store_root))
+        store = Store(store_root)
+        rendering = True
+        return (render_all if full else render_pending)(store, lock_wait=lock_wait)
     except Exception as error:  # The command's own result stands whatever its views do.
         failure = _describe_failure(error)
         place = " at " + failure["path"] if failure["path"] else ""
         print("Output views were not rendered (" + failure["error"] + place + "): " + " ".join(str(error).split())
               + " Run " + STALE_VIEWS_ACTION + " after fixing the cause.", file=sys.stderr)
-        if store_root is not None:
+        # Pass failures were recorded before releasing the render lock. Do not reacquire it here.
+        if store_root is not None and not rendering:
             _record_failure(store_root, failure)
         return None
 
@@ -1195,15 +1201,17 @@ def _describe_failure(error):
     return {"path": getattr(error, "filename", None), "error": type(error).__name__}
 
 
-def _record_failure(store_root, failure):
+def _record_failure(store_root, failure, *, lock_held=False):
     """Keep the failure in the marker, without advancing its revision, so that status and next report it."""
     try:
-        with _hold_lock(store_root):
+        with nullcontext() if lock_held else _hold_lock(store_root, wait=0):
             write_projection(store_root, MARKER_PATH, _encode(dict(_read_marker(store_root), failure=failure)))
     except (ResearchError, OSError):
         # A store whose marker cannot be written still reports its views as behind.
         try:
-            _mark_dirty(store_root)
+            if (find_entry_kind(store_root, DIRTY_PATH) == "absent"
+                    and (not lock_held or find_entry_kind(store_root, _RENDERING_PATH) == "absent")):
+                _mark_dirty(store_root)
         except (ResearchError, OSError):
             pass
 
@@ -1231,29 +1239,45 @@ def _finish_dirty(store_root):
             pass
 
 
-def render_pending(store):
+def render_pending(store, *, lock_wait=None):
     """Render the views unless no event after the marker wrote a kind that they show and nothing else they show
     changed; the marker then only advances."""
-    return _render(store, full=False)
+    return _render(store, full=False, lock_wait=lock_wait)
 
 
-def render_all(store):
+def render_all(store, *, lock_wait=None):
     """Render every view from the current records, for export --kind outputs."""
-    return _render(store, full=True)
+    return _render(store, full=True, lock_wait=lock_wait)
 
 
-def _render(store, *, full):
+def _render(store, *, full, lock_wait=None):
     if _is_shared_workspace_root(store.root):
         return {"revision": None, "rendered": False, "reason": "shared_workspace_root"}
-    try:
-        with _hold_lock(store.root):
-            return _render_locked(store, full=full)
-    except ResearchError as error:
-        if error.code != "output_view_render_deferred":
-            raise
-        _mark_dirty(store.root)
-        return {"revision": None, "rendered": False, "deferred": True,
-                "reason": "render_lock_timeout", "dirty_marker": DIRTY_PATH}
+    for attempt, wait in enumerate((lock_wait, 0)):
+        with ExitStack() as lock:
+            try:
+                lock.enter_context(_hold_lock(store.root, wait=wait))
+            except (ResearchError, OSError) as error:
+                if isinstance(error, ResearchError) and error.code == "output_view_render_deferred":
+                    if attempt == 0:
+                        _mark_dirty(store.root)
+                    continue
+                if attempt == 0:
+                    try:
+                        _mark_dirty(store.root)
+                    except (ResearchError, OSError):
+                        pass
+                raise
+            try:
+                summary = _render_locked(store, full=full)
+                if find_entry_kind(store.root, DIRTY_PATH) != "absent":
+                    summary = _render_locked(store, full=full)
+                return summary
+            except Exception as error:
+                _record_failure(store.root, _describe_failure(error), lock_held=True)
+                raise
+    return {"revision": None, "rendered": False, "deferred": True,
+            "reason": "render_lock_timeout", "dirty_marker": DIRTY_PATH}
 
 
 def _render_locked(store, *, full):

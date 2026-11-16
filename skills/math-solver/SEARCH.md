@@ -2712,10 +2712,13 @@ keeps its bytes and its digest.
 
 The record is `native_attempt/<digest(summary)>`, containing `summary` plus
 `provenance: {source: "operator", actor_id: "search-controller",
-attestation_id: "filesystem-audit:deliver-attempt"}` and `recorded_revision`,
-the common-store revision at first delivery. The digest excludes
-provenance and `recorded_revision` and uses the controller's canonical digest, identical to
-`research_harness.evidence.digest`. The operation is `native_math.deliver_attempt`
+attestation_id: "filesystem-audit:deliver-attempt"}`, `recorded_revision`,
+the common-store revision at first delivery, and `recorded_at`, the UTC time
+of that first delivery as a timestamp with an offset. The digest excludes
+provenance, `recorded_revision` and `recorded_at` and uses the controller's canonical digest, identical to
+`research_harness.evidence.digest`. A record that a release before 0.91.2
+delivered has no `recorded_at`, and a repeat of its delivery keeps its bytes.
+The operation is `native_math.deliver_attempt`
 with common request ID `native-attempt:<digest(summary)>`. Output has exactly
 `{objective_id, attack_root, native_attempt_digest, workspace, state}`, where
 `state` is the summary's state record.
@@ -2732,8 +2735,8 @@ native_attempt_current/<digest({attack_root, objective_id})> = {
 
 The pointer changes through the same prepared mutation as delivery whenever it
 does not already name that digest. An exact repeat of an earlier snapshot moves
-the pointer back while preserving the snapshot's first `recorded_revision`.
-Pointer-only mutations use common request ID
+the pointer back while preserving the snapshot's first `recorded_revision` and
+`recorded_at`. Pointer-only mutations use common request ID
 `native-attempt:<digest(summary)>:current:<next-common-revision>` so an earlier
 delivery receipt cannot replay a later pointer update. Record order never
 declares the current snapshot, and different attack roots have separate

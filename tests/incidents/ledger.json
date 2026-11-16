@@ -7354,6 +7354,108 @@
         "test_openness_carried_math.MathCarriedSelectionTests.test_g8_changed_neighbour_keeps_credit_and_filters_entries_and_notes",
         "test_openness_carried_math.MathPartialRangeTests.test_g8_two_of_three_parts_credit_exact_ranges_and_report_remainder"
       ]
+    },
+    {
+      "id": "phenomenon-account-probe-delivery",
+      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
+      "class": "account probe provenance undelivered",
+      "summary": "Result reviewers received checks that cited probes without the probe questions, programs and observations.",
+      "expected": "Version 2 values deliver every native probe cited by accounts, delivered forming calls or outcomes, with its intent when held. Binding, delivery and size reports agree; stored version 1 reviews keep their records, digests and prompts.",
+      "fixed_in": "0.91.2",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_probe_delivery.ProbeDeliveryTests.test_eight_independent_routes_deliver_both_records_once_with_original_digests",
+        "test_problem_probe_delivery.ProbeDeliveryTests.test_base_assignment_with_native_probes_keeps_records_digest_prompt_and_state",
+        "test_problem_probe_delivery.ProbeDeliveryTests.test_native_and_imported_probe_of_one_id_keep_four_distinct_entries",
+        "test_problem_probe_delivery.ProbeDeliveryTests.test_public_value_check_and_record_count_both_probe_records"
+      ]
+    },
+    {
+      "id": "phenomenon-result-delivery-date",
+      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
+      "class": "accepted result date unavailable",
+      "summary": "A result-only account could not derive a date because native acceptances carry no timestamp.",
+      "expected": "New native snapshots carry the store delivery time outside their summary digest. The earliest matching snapshot supplies the result date; an older unstamped snapshot stays undated and the refusal names the reference.",
+      "fixed_in": "0.91.2",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_accounts.ProblemAccountsTests.test_a_result_date_is_derived_but_history_keeps_its_precise_time",
+        "test_problem_accounts.ProblemAccountsTests.test_result_date_uses_earliest_matching_snapshot",
+        "test_problem_accounts.ProblemAccountsTests.test_unstamped_earliest_result_reports_undated_reference"
+      ]
+    },
+    {
+      "id": "phenomenon-account-period-history",
+      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
+      "class": "coarse evidence date and lexical date order",
+      "summary": "A date on the forming day gave no explanation of its precision, and string minima could accept evidence that preceded the form.",
+      "expected": "Version 2 values select both date minima by UTC instant and explain a period containing the form time with evidence and form provenance. Stored values without accounts_version retain their original validation and obligations.",
+      "fixed_in": "0.91.2",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_accounts.ProblemAccountsTests.test_period_dates_explain_ambiguous_form_history",
+        "test_problem_accounts.ProblemAccountsTests.test_utc_date_selection_shared_reference_preserves_v1",
+        "test_problem_accounts.ProblemAccountsTests.test_utc_date_selection_distinct_references_preserves_v1",
+        "test_problem_accounts.ProblemAccountsTests.test_offset_date_selection_shared_reference_preserves_v1",
+        "test_problem_accounts.ProblemAccountsTests.test_offset_date_selection_distinct_references_preserves_v1",
+        "test_problem_accounts.ProblemAccountsTests.test_legacy_history_refusal_keeps_message_and_obligation_bytes"
+      ]
+    },
+    {
+      "id": "reading-date-version-and-unordered-history",
+      "record": "20261115000626-reading-date-reads-a-year-the-store-never-writes",
+      "class": "reading dates and gain history",
+      "summary": "Accounts read a work year and reading revision that production never writes.",
+      "expected": "Command-written readings date facts by reliable arXiv version assertions and remain unordered in gain history.",
+      "fixed_in": "0.91.2",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_accounts.ReadingDateTests.test_c7_command_written_incident_derives_date_without_invented_members"
+      ]
+    },
+    {
+      "id": "phenomenon-review-run-pending-views",
+      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
+      "class": "review start visibility and bounded render takeover",
+      "summary": "A running reviewer call had a committed invocation while series.json still showed no run. Concurrent renders and failed claimed passes also need durable catch-up and accurate failure advisories.",
+      "expected": "A new call requests a zero-wait render before transport, with at most two lock attempts and two passes including failure recording. Busy or failed renders preserve the call, retain work and failure details, and the next successful lock-holding render consumes the retained marker.",
+      "fixed_in": "0.91.2",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_pending_views.PendingViewTests.test_transport_reads_pending_run_from_series_before_answering",
+        "test_review_pending_views.PendingViewTests.test_two_turn_series_publishes_each_pending_run_before_transport",
+        "test_review_pending_views.PendingViewTests.test_resumed_committed_start_does_not_call_after_start",
+        "test_review_pending_views.PendingViewTests.test_direct_invocation_without_callback_preserves_views_and_stored_request",
+        "test_review_pending_views.PendingViewTests.test_probe_transport_reads_committed_invocation_from_views",
+        "test_review_pending_views.PendingViewTests.test_busy_builder_allows_transport_then_added_pass_publishes_pending",
+        "test_review_pending_views.PendingViewTests.test_call_finishes_before_added_pass_and_never_publishes_pending",
+        "test_review_pending_views.PendingViewTests.test_markers_in_both_passes_bound_work_before_transport",
+        "test_review_pending_views.PendingViewTests.test_marker_after_other_renderers_added_snapshot_survives_both_commands",
+        "test_review_pending_views.PendingViewTests.test_second_acquisition_builder_failure_enters_transport_with_two_zero_wait_attempts",
+        "test_review_pending_views.PendingViewTests.test_failure_recording_without_a_held_lock_never_waits",
+        "test_review_pending_views.PendingViewTests.test_series_write_failure_preserves_call_and_repairs",
+        "test_review_pending_views.PendingViewTests.test_other_view_write_failure_preserves_pending_series_and_repairs",
+        "test_review_pending_views.PendingViewTests.test_builder_failure_preserves_published_files_and_repairs",
+        "test_review_pending_views.PendingViewTests.test_claimed_marker_series_failure_reports_file_errors_until_repair",
+        "test_review_pending_views.PendingViewTests.test_claimed_marker_other_view_failure_reports_file_errors_until_repair",
+        "test_review_pending_views.PendingViewTests.test_claimed_marker_builder_failure_reports_render_failed_until_repair",
+        "test_review_output_correction.CorrectionTests.test_correction_transport_reads_pending_correction_from_series",
+        "test_review_pending_views.PendingViewTests.test_lock_acquisition_failure_keeps_stale_advisory_until_successful_repair",
+        "test_review_pending_views.PendingViewTests.test_failure_before_lock_marks_new_work_beside_another_renderers_claimed_marker"
+      ]
+    },
+    {
+      "id": "foreground-write-stale-during-review-call",
+      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
+      "class": "explicit whole-store optimistic revision check during reviewer completion",
+      "summary": "T7: a foreground problem-value expected revision 698 while a review route probe completed at 699. The measurement retained stale_revision without retrying.",
+      "expected": "Reviewer completion between the foreground revision read and preparation or commit refuses stale_revision without a value or request receipt. The registry says to continue and the message says to read the current revision; retrying the same payload and request ID at that revision succeeds and replays without another mutation. This is the documented whole-store optimistic check, not a change to revision protection.",
+      "fixed_in": "0.91.2",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_foreground_write_stale_during_review_call.ForegroundWriteStaleDuringReviewCallTests.test_refuse_revision_read_before_review_completion_and_retry",
+        "test_foreground_write_stale_during_review_call.ForegroundWriteStaleDuringReviewCallTests.test_refuse_prepared_value_after_review_completion_and_retry"
+      ]
     }
   ]
 }

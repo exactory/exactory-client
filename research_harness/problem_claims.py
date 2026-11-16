@@ -199,7 +199,7 @@ def record_value(store, payload, *, expected_revision, request_id):
         if statement is None or value["statement_id"] != statement["id"]:
             raise ResearchError("problem_statement_missing", "Select the exact current problem statement")
         from .problem_evidence import validate_value
-        validated = validate_value(records, artifacts, value)
+        validated = validate_value(records, artifacts, dict(value, accounts_version=2))
         record = dict(validated, recorded_revision=expected_revision + 1)
         changes = [immutable_record(records, "problem_value", value["id"], record)]
         size_report = describe_value_size(records, artifacts, record)
@@ -215,7 +215,8 @@ def describe_value_size(records, artifacts, value):
     from .problem_accounts import describe_account_records
     from .problem_account_derivations import describe_account_derivations
     from .review_route_capacity import describe_material_size, SIZE_REPORT_VALUE_LABEL
-    material = describe_account_records(records, value['accounts'], describe_account_derivations(records, value))
+    material = describe_account_records(records, value['accounts'], describe_account_derivations(records, value),
+                                        accounts_version=value.get('accounts_version', 1))
     return describe_material_size(records, artifacts, material, label=SIZE_REPORT_VALUE_LABEL,
                                   records_field='account_records_characters')
 

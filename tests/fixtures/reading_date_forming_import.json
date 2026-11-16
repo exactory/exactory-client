@@ -1,0 +1,117 @@
+{
+  "producer": {
+    "commit": "c2423d3f",
+    "source": "20261115000626-reading-date-reads-a-year-the-store-never-writes",
+    "steps": "freeze_recording_clocks; record_reading_import",
+    "path_slot": "SOURCE is replaced by the temporary source workspace",
+    "content": "synthetic"
+  },
+  "members": [
+    {
+      "availability": [
+        {
+          "date": null,
+          "origin": "ac8af74520001d8c973547e7cee742c3b3e39bb80242a19cac2c79fc01e51b52",
+          "revision": null
+        }
+      ],
+      "date": "2026-11-14T14:00:00+00:00",
+      "digest": "be53ada82a4103aed8aeef13af5552d6cf7610706278f324da1556ec037bf6f3",
+      "form_ids": [
+        "form-1"
+      ],
+      "forming_call_id": "forming-1",
+      "id": "outcome-1",
+      "origin": "ac8af74520001d8c973547e7cee742c3b3e39bb80242a19cac2c79fc01e51b52",
+      "record_kind": "form_outcome",
+      "revision": 10,
+      "standing": {
+        "claim": "found_in_literature",
+        "disposition": {
+          "candidate_id": null,
+          "form_id": null,
+          "reason": "Further work is needed.",
+          "status": "open"
+        },
+        "evidence": [
+          "admissible"
+        ]
+      }
+    },
+    {
+      "availability": [],
+      "date": "2026-11-14T14:00:00+00:00",
+      "digest": "8df3fb3290cc61acae54666d68ba0358529988da7a9b9c5c4dd859dc52571eef",
+      "form_ids": [
+        "form-1"
+      ],
+      "forming_call_id": "forming-1",
+      "id": "forming-1",
+      "origin": "ac8af74520001d8c973547e7cee742c3b3e39bb80242a19cac2c79fc01e51b52",
+      "record_kind": "forming_call",
+      "revision": 8,
+      "standing": {
+        "kind": "forming_call"
+      }
+    },
+    {
+      "availability": [
+        {
+          "date": null,
+          "origin": "ac8af74520001d8c973547e7cee742c3b3e39bb80242a19cac2c79fc01e51b52",
+          "revision": null
+        }
+      ],
+      "date": "unknown",
+      "digest": "761ddb8ac89d2d589dff26ee5dc69e7825ada5a20e02574d73da635e5263c58d",
+      "form_ids": [],
+      "forming_call_id": null,
+      "id": "read-full",
+      "origin": "ac8af74520001d8c973547e7cee742c3b3e39bb80242a19cac2c79fc01e51b52",
+      "record_kind": "reading",
+      "revision": null,
+      "standing": {
+        "kind": "reading"
+      }
+    },
+    {
+      "availability": [],
+      "date": "unknown",
+      "digest": "0ad49b22554558c47847f6e7b718e71bebda2bdf7e9fcc5ff9602ce69878bd76",
+      "form_ids": [],
+      "forming_call_id": null,
+      "id": "bundle",
+      "origin": "ac8af74520001d8c973547e7cee742c3b3e39bb80242a19cac2c79fc01e51b52",
+      "record_kind": "source_bundle",
+      "revision": null,
+      "standing": {
+        "kind": "source_bundle"
+      }
+    },
+    {
+      "availability": [],
+      "date": "unknown",
+      "digest": "8d6214eb3f5e293ecea6e48435fb44e365be29fa5ff0ffa0e092134065378184",
+      "form_ids": [],
+      "forming_call_id": null,
+      "id": "arxiv:2601.00001v1",
+      "origin": "ac8af74520001d8c973547e7cee742c3b3e39bb80242a19cac2c79fc01e51b52",
+      "record_kind": "work",
+      "revision": null,
+      "standing": {
+        "kind": "work"
+      }
+    }
+  ],
+  "sources": [
+    {
+      "candidate_ids": [
+        "candidate-1"
+      ],
+      "cut": "729098e2567f1f1384621c13b1d2342278554ab89812c4fff99a46a59a4285da",
+      "origin": "ac8af74520001d8c973547e7cee742c3b3e39bb80242a19cac2c79fc01e51b52",
+      "source_revision": 10,
+      "workspace": "SOURCE"
+    }
+  ]
+}
