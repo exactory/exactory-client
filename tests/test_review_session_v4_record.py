@@ -584,19 +584,20 @@ class SessionAllowancePlanTests(unittest.TestCase):
     def test_v7_fixture_admission_plan_artifacts_keep_their_base_digests(self):
         from research_harness import openness_reading_v7 as v7
         from test_openness_reading_v7_turns import MemoryArtifacts, build_native
+        # Pin the released 0.91.1 admission frames, including the unread-final reserve.
         cases = [
             ('claude_cli_v1', 'claude-opus-5-5', 1,
-             '6023808e45cc15c32e4d2df35bf01977a6817ba3a81dc54389fda4be2f226fd9',
-             '35cae188e99b9034977c0485d875c23585fac4090622292b0e643dac438827c4'),
+             'ce94d0a2fafca7081d272932aa9aab60ee0640dd4b94b70c9956f3a52f457a40',
+             'e0222dd632578e5d0f518019ed8f240993a1d7bc77b3b0e227e15d72f1bf14d2'),
             ('claude_cli_v1', 'claude-opus-5-5', 2,
-             '2f5100c6bae013b91553f594aa087386a4e3d226305d440dab7c4010c2cd29e3',
-             'd01129cc38f734ead4f8e4bcd0d23bfceb730aa060bddb2c327ed79000110c63'),
+             '963f6a28b756cd796eaa96a5b3f7d2f84997664dbf342affda7034b017f6c8b4',
+             '38e5e6e2ab82ea47ab026b7974c6e0d90b7047c1efb1d7b7779721fa7954f1c0'),
             ('codex_cli_v1', 'gpt-6-astra', 1,
-             '30cfb4f3e30cea2766ea5a3dda90cd6247fb1c9fcb54bb7c570332e3ad632152',
-             'dd515142d8dfc97f422e315e54d637abe240fc7362a1b063d8893e55711a7e83'),
+             '2b3c51eac6d2236b9764640f1eaed65df19043dd0afc522fed0da04b7f57e3a4',
+             '41bf28fc7056e35fd13b4e411dd970595ff53ff284613eb39c7562f71f14e2bc'),
             ('codex_cli_v1', 'gpt-6-astra', 8,
-             '9c1e4e8e34949a6a8226008a8bd6a1627fde10786efa7c2dfe669d5bba167595',
-             'd6787406e9242e67ff26d81521cc76da7cd5b5f006d575affcee88bd485ed898')]
+             '2bb30a5266a46b32b6431072980c9f12c5af5ce82c021537665f066f46d31589',
+             '8ecf27b684fee6e503fc9d9b19c4295706a1fb615e64d7abc1acf347859b8bfc')]
         for adapter, model, targets, expected, expected_artifact in cases:
             with self.subTest(adapter=adapter, targets=targets), patch.object(v7, 'build_inventory',
                     return_value=v7.plan_inventory([], {})):
