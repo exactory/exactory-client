@@ -4,6 +4,7 @@ Planning does not publish artifacts. Delivery verification consumes only bodies 
 derived from authenticated requests of one chain. A manifest or an artifact on disk supplies no delivery credit.
 """
 
+import copy
 import hashlib
 import json
 
@@ -13,6 +14,94 @@ from .problem_openness import serialize_record
 
 SHARED_FIELDS = ('dispositions', 'queries', 'responses', 'scope')
 MEDIA_TYPE = 'application/json'
+FINDING_INDEX_FIELDS = ('queries', 'scope', 'dispositions', 'resolved', 'row_dispositions')
+FINDING_INDEX_MESSAGE = 'The finding index differs from its bound search or reading originals.'
+
+
+def build_finding_index(records, artifacts, native, *, formulations=None):
+    """Freeze bound search fields and the identities of every bound reading's work."""
+    from .evidence import digest
+    minimum = native['scientific_context']['openness_minimum']
+    evidence = {row['artifact']['sha256']: row['artifact'] for row in native.get('evidence', [])}
+
+    def read_original(sha256):
+        reference = evidence.get(sha256)
+        if reference is None:
+            raise ResearchError('openness_reading_incomplete', FINDING_INDEX_MESSAGE)
+        content = artifacts.read(reference)
+        if hashlib.sha256(content).hexdigest() != sha256:
+            raise ResearchError('openness_reading_incomplete', FINDING_INDEX_MESSAGE)
+        return json.loads(content)
+
+    searches, values = {}, {}
+    for binding in minimum['searches']:
+        formulation, sha256 = binding['formulation'], binding['search_digest']
+        if formulations is not None and formulation not in formulations:
+            continue
+        if sha256 not in searches:
+            search = read_original(sha256)
+            entry = dict(record_id=search['id'], search_digest=sha256, formulations=[])
+            for field in FINDING_INDEX_FIELDS:
+                if field in search:
+                    key = digest(search[field])
+                    entry[field] = key
+                    values[key] = copy.deepcopy(search[field])
+            searches[sha256] = entry
+        if formulation not in searches[sha256]['formulations']:
+            searches[sha256]['formulations'].append(formulation)
+    reading_digests = list(dict.fromkeys(minimum['reading_digests'] + minimum.get('supporting_reading_digests', [])))
+    readings = [(read_original(sha256), sha256) for sha256 in reading_digests]
+    read_works = []
+    for reading, sha256 in sorted(readings, key=lambda row: row[0]['id']):
+        version = reading['version_id']
+        work = records.get('work', {}).get(version, {})
+        identifiers = list(dict.fromkeys([version] + ([work['work_id']] if 'work_id' in work else [])
+                                        + work.get('aliases', [])))
+        read_works.append(dict(reading_id=reading['id'], reading_digest=sha256,
+            version_id=version, identifiers=identifiers, title=work.get('title', '')))
+    return dict(searches=list(searches.values()), fields=values, read_works=read_works)
+
+
+def validate_finding_index(index):
+    """Authenticate every field body before any finding rule reads its value."""
+    from .evidence import digest
+    valid = (isinstance(index, dict) and set(index) == {'searches', 'fields', 'read_works'}
+        and isinstance(index['fields'], dict) and isinstance(index['searches'], list)
+        and isinstance(index['read_works'], list)
+        and all(digest(value) == key for key, value in index['fields'].items())
+        and all(isinstance(row, dict) and {'record_id', 'search_digest', 'formulations'} <= set(row)
+            and set(row) <= {'record_id', 'search_digest', 'formulations'} | set(FINDING_INDEX_FIELDS)
+            and isinstance(row['formulations'], list)
+            and all(isinstance(row[field], str) and row[field] in index['fields']
+                    for field in FINDING_INDEX_FIELDS if field in row)
+            for row in index['searches'])
+        and all(isinstance(row, dict) and set(row) == {
+            'reading_id', 'reading_digest', 'version_id', 'identifiers', 'title'}
+            and all(isinstance(row[key], str) for key in ('reading_id', 'reading_digest', 'version_id', 'title'))
+            and isinstance(row['identifiers'], list) and all(isinstance(value, str) for value in row['identifiers'])
+            for row in index['read_works']))
+    if not valid:
+        raise ResearchError('openness_reading_incomplete', FINDING_INDEX_MESSAGE)
+
+
+def select_finding_index(index, formulations):
+    """Keep the search entries of the formulations judged by one final page."""
+    searches = [dict(copy.deepcopy(row), formulations=[value for value in row['formulations'] if value in formulations])
+                for row in index['searches'] if any(value in formulations for value in row['formulations'])]
+    keys = {row[field] for row in searches for field in FINDING_INDEX_FIELDS if field in row}
+    return dict(searches=searches, fields={key: copy.deepcopy(value) for key, value in index['fields'].items()
+                                        if key in keys}, read_works=copy.deepcopy(index['read_works']))
+
+
+def verify_finding_index(records, artifacts, native, index, *, formulations=None):
+    """Rebuild scientific bindings; work titles and aliases remain fixed at assignment."""
+    validate_finding_index(index)
+    expected = build_finding_index(records, artifacts, native, formulations=formulations)
+    reading_keys = ('reading_id', 'reading_digest', 'version_id')
+    if (index['searches'] != expected['searches'] or index['fields'] != expected['fields']
+            or [{key: row.get(key) for key in reading_keys} for row in index['read_works']]
+            != [{key: row[key] for key in reading_keys} for row in expected['read_works']]):
+        raise ResearchError('openness_reading_incomplete', FINDING_INDEX_MESSAGE)
 
 
 def plan_search_delivery(bindings, *, share_all_fields=False):

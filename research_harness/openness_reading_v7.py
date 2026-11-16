@@ -538,7 +538,7 @@ def compute_allowance_rows_bound(route, handles):
             passages=dict(characters=100000, used=100000))) + 512)
 
 
-def measure_turn_frames(route, native, *, fixed_bounds=None):
+def measure_turn_frames(route, native, *, fixed_bounds=None, finding_index=None):
     """Measure each fixed field independently; growing bodies are inventory units."""
     from .review_protocol import canonical_prompt
     labels = list_target_labels(native)
@@ -571,6 +571,8 @@ def measure_turn_frames(route, native, *, fixed_bounds=None):
                     route, native['scientific_context'].get('decisive_work_ids', [])) <= fixed_bounds['decisive_work_ids']
                 else dict(count=len(native['scientific_context'].get('decisive_work_ids', [])), unit='u999999999'))
             fields['minimum.gaps_unit'] = capacity.measure_capacity_value(route, dict(gaps_unit='u999999999'))
+            if finding_index is not None:
+                fields['finding_index'] = capacity.measure_capacity_value(route, finding_index)
             fields['material_envelope'] = capacity.measure_capacity_value(route, {
                 key: '' if key == 'notes' else [] for key in FINAL_MATERIAL_FIELDS})
             handles = [row['handle'] for row in labels]
@@ -582,14 +584,16 @@ def measure_turn_frames(route, native, *, fixed_bounds=None):
         # Bound envelope keys, capacity/allowance scalars, handles and counters;
         # evidence rows and plan.now are charged as material with their text.
         fields.update(envelope=3000, instructions=len(canonical_prompt(
-            'native_math', reading_stage=kind, reading_protocol=PROTOCOL)['text']))
+            'native_math', reading_stage=kind, reading_protocol=PROTOCOL,
+            finding_version=2 if finding_index is not None else 1)['text']))
         result[kind] = fields
     return result
 
 
-def check_v7_admission(records, artifacts, route, native):
+def check_v7_admission(records, artifacts, route, native, *, finding_version=2):
     """Compute precisely the first assignment's plan without publishing anything."""
-    return _check_v7_admission(records, artifacts, route, native, include_largest=True)
+    return _check_v7_admission(records, artifacts, route, native, include_largest=True,
+                               finding_version=finding_version)
 
 
 def describe_visual_text_stop(records, route, assignment=None):
@@ -636,7 +640,7 @@ def require_text_reading_route(records, route, assignment):
         raise ResearchError(VISUAL_TEXT_ROUTE_CODE, VISUAL_TEXT_ROUTE_MESSAGE, stop['details'])
 
 
-def _find_largest_one_request_targets(records, artifacts, route, native):
+def _find_largest_one_request_targets(records, artifacts, route, native, *, finding_version=2):
     minimum = native['scientific_context']['openness_minimum']
     maximum = min(1 + len(minimum['neighbours']), max(capacity.describe_material_levels('final')) // (
         capacity.EXCERPT_TEXT_CHARACTERS + capacity.EXCERPT_FIELDS_CHARACTERS) + 1)
@@ -644,19 +648,22 @@ def _find_largest_one_request_targets(records, artifacts, route, native):
     for count in range(1, maximum + 1):
         smaller = copy.deepcopy(native)
         smaller['scientific_context']['openness_minimum']['neighbours'] = minimum['neighbours'][:count - 1]
-        admitted = _check_v7_admission(records, artifacts, route, smaller, include_largest=False)
+        admitted = _check_v7_admission(records, artifacts, route, smaller, include_largest=False,
+                                      finding_version=finding_version)
         if admitted['state'] != 'record':
             break
         largest = count
     return largest
 
 
-def _check_v7_admission(records, artifacts, route, native, *, include_largest):
+def _check_v7_admission(records, artifacts, route, native, *, include_largest, finding_version=2):
     if route['adapter'] == 'codex_cli_visual_v1':
         stop = describe_visual_text_stop(records, route)
         return dict(state='stop', protocol=PROTOCOL, reason='text_route_required',
                     code=VISUAL_TEXT_ROUTE_CODE, details=stop['details'])
     overlay = _PlanningArtifacts(artifacts)
+    from .review_search_delivery import build_finding_index
+    finding_index = build_finding_index(records, artifacts, native) if finding_version == 2 else None
     if has_binary_native_evidence(artifacts, native):
         return dict(state='stop', protocol=PROTOCOL, reason='binary_required_evidence',
                     largest_one_request_targets=0)
@@ -680,7 +687,7 @@ def _check_v7_admission(records, artifacts, route, native, *, include_largest):
                 source_rows=0)
                 for index, row in enumerate(labels)]
             measure = _describe_plan_measure(records, overlay, native, route, inventory)
-            frames = measure_turn_frames(route, native, fixed_bounds=fixed_bounds)
+            frames = measure_turn_frames(route, native, fixed_bounds=fixed_bounds, finding_index=finding_index)
             declaration = dict(kind='reading', frames=frames,
                 inventory=[{key: row[key] for key in ('handle', 'kind', 'characters', 'sha256')}
                            for row in inventory['material']], targets=targets, measure=measure,
@@ -688,6 +695,11 @@ def _check_v7_admission(records, artifacts, route, native, *, include_largest):
                 final_pages='pages' in V7_FINAL_FORMS)
             members = capacity.prepare_assignment_capacity(records, overlay, route, declaration)
             plan = capacity.read_chain_capacity_plan(overlay, members)
+            if finding_index is not None:
+                from .review_protocol import _put_json
+                plan['finding_index'] = copy.deepcopy(finding_index)
+                members['capacity_plan'] = dict(protocol=capacity.CAPACITY_PLAN_PROTOCOL, digest=digest(plan),
+                    artifact=_put_json(overlay, plan))
             if not any(row['unit_fields'] for row in plan['frame'].values()):
                 break
             movable = [field for field in fixed_bounds if fixed_bounds[field] > 0
@@ -700,7 +712,8 @@ def _check_v7_admission(records, artifacts, route, native, *, include_largest):
     except ResearchError as error:
         if error.code != 'review_route_capacity_below_floor':
             raise
-        largest = _find_largest_one_request_targets(records, artifacts, route, native) if include_largest else 0
+        largest = _find_largest_one_request_targets(records, artifacts, route, native,
+            finding_version=finding_version) if include_largest else 0
         return dict(state='stop', protocol=PROTOCOL, reason='below_floor', code=error.code,
                     details=error.details, measure=measure, targets=len(targets), largest_one_request_targets=largest)
     final = plan['task']['final']
@@ -717,7 +730,7 @@ def _check_v7_admission(records, artifacts, route, native, *, include_largest):
         largest = max(0, (room - capacity.NOTES_MINIMUM_CHARACTERS) // (minimum + overhead))
     if pages > 1 and 'pages' not in V7_FINAL_FORMS:
         if include_largest:
-            largest = _find_largest_one_request_targets(records, artifacts, route, native)
+            largest = _find_largest_one_request_targets(records, artifacts, route, native, finding_version=finding_version)
         return dict(state='stop', protocol=PROTOCOL, reason='final_needs_pages', pages=pages,
                     targets=len(targets), largest_one_request_targets=largest, measure=plan['measure'])
     return dict(state='record', protocol=PROTOCOL, **(dict(final_form=plan['allocation'].get('final_form', 'request'))
@@ -1325,9 +1338,12 @@ def _pack_deliveries(artifacts, route, inventory, state, allowance, requests, *,
 
 
 def build_turn_packet(artifacts, route, logical, chain, number, inventory, state, plan, limits, kind,
-                      *, requests=(), notice=None):
+                      *, requests=(), notice=None, finding_version=None):
     """Render a bounded v7 turn from its pinned artifacts and current allowance."""
     native = logical['native']
+    finding_index = logical.get('finding_index', plan.get('finding_index'))
+    if finding_version == 1:
+        finding_index = None
     binding = _describe_binding(native, chain, number, inventory, state, plan)
     packet = {key: logical[key] for key in ('protocol', 'role', 'reviewer_id', 'dossier_id')}
     bounds = dict(output_tokens=plan['limits']['output_tokens']['value'], answer_bound=limits['answer_bound'],
@@ -1438,6 +1454,8 @@ def build_turn_packet(artifacts, route, logical, chain, number, inventory, state
                     {key: binding[key] for key in FINAL_MATERIAL_FIELDS})), requests, include_remaining=False)
             binding['plan'] = dict(now=now)
         packet.update(native=frame, reading_final=binding, evidence=evidence)
+        if finding_index is not None:
+            packet['finding_index'] = copy.deepcopy(finding_index)
     packet['digest'] = digest(packet)
     return packet
 
@@ -1608,20 +1626,23 @@ def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
         return validate_material(packet, output, artifacts=artifacts, assignment=assignment)
     if output.get('stage') != 'reading' and 'page_plan_digest' in binding:
         from . import review_composition
+        from .native_review import find_finding_version
         from .openness_final_pages import build_validation_envelope
         envelope = build_validation_envelope(artifacts, assignment, packet)
         rule = review_composition.find_rule('native_math', envelope)
         if 'closing' in binding:
-            review_composition.validate_closing_output(rule, envelope, binding['closing']['rows'], output)
+            review_composition.validate_closing_output(rule, envelope, binding['closing']['rows'], output,
+                finding_version=find_finding_version(assignment))
         else:
-            review_composition.validate_page_output(rule, envelope, binding['page']['targets'], output)
+            review_composition.validate_page_output(rule, envelope, binding['page']['targets'], output,
+                finding_version=find_finding_version(assignment))
         return
     if output.get('stage') != 'reading' and 'reading_final' in packet:
-        from .native_review import validate_finding
+        from .native_review import validate_finding, find_finding_version
         if artifacts is not None:
             native = json.loads(artifacts.read(assignment['context']['native_packet']))
             packet = dict(packet, native=native)
-        validate_finding(packet, output, artifacts=artifacts)
+        validate_finding(packet, output, finding_version=find_finding_version(assignment), artifacts=artifacts)
         return
     required = {'schema_version', 'stage', 'subject_digest', 'claim_digest', 'reviewer',
                 'notes', 'excerpts', 'gaps', 'passage_requests'}
@@ -2020,6 +2041,11 @@ def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_
     if handoff is not None:
         raise ResearchError(reading.PROJECTION_STOP, RATIO_EXPORT_MESSAGE, handoff['details'])
     plan, inventory, before = read_bound_state(artifacts, prior, frozen)
+    if plan.get('finding_index') is not None:
+        logical = dict(logical, finding_index=copy.deepcopy(plan['finding_index']))
+    elif 'finding_index' not in logical and reading.is_openness_packet(logical['native']):
+        from .review_search_delivery import build_finding_index
+        logical = dict(logical, finding_index=build_finding_index(records, artifacts, logical['native']))
     if replacement:
         state = before
         kind = 'reading' if 'reading_turn' in frozen else 'final'
@@ -2088,6 +2114,10 @@ def prepare_refusal_assignment(records, artifacts, value, revision, prior, froze
     logical = dict(protocol=protocol.PROTOCOL, role=prior['role'], reviewer_id=prior['reviewer_id'],
                    dossier_id=prior['dossier_id'], native=load_packet(
                        artifacts, prior['context']['native_packet'], prior['reviewer_id']))
+    if kind in ('final', 'page', 'closing'):
+        from .review_search_delivery import build_finding_index
+        logical['finding_index'] = (copy.deepcopy(plan['finding_index']) if 'finding_index' in plan
+            else build_finding_index(records, artifacts, logical['native']))
     parameters = paragraphs.read_paragraph_parameters(prior['prompt'])
     versions = [version for version in parameters.get(paragraphs.PARAMETER, [])
                 if version not in paragraphs.REFUSAL_PARAGRAPH_VERSIONS.values()]
@@ -2102,7 +2132,8 @@ def prepare_refusal_assignment(records, artifacts, value, revision, prior, froze
                 raise
             raise ResearchError('review_input_too_large', notices.NOTICE_DELIVERY_MSG, error.details)
         base = protocol.canonical_prompt(prior['role'], reading_stage=kind, reading_protocol=PROTOCOL,
-            common_version=protocol.find_common_prompt_version(prior['prompt']))
+            common_version=protocol.find_common_prompt_version(prior['prompt']),
+            finding_version=2 if 'finding_index' in packet else 1)
         prompt = paragraphs.append_prompt_paragraphs(base, prior['role'],
             parameters.get(paragraphs.CARRY_PARAMETER), versions + [paragraphs.REFUSAL_PARAGRAPH_VERSIONS[notice['form']]])
         prompt['parameters']['capacity'] = packet.get('reading_turn', packet.get('reading_final', packet.get('reading_combine')))['capacity']
@@ -2137,7 +2168,8 @@ def prepare_notice_capacity_assignment(records, artifacts, value, revision, prio
     packet, chain = prepare_next_assignment(records, artifacts, value, route, logical)
     kind = reading.find_stage(packet)
     base = protocol.canonical_prompt(prior['role'], reading_stage=kind, reading_protocol=PROTOCOL,
-        common_version=protocol.find_common_prompt_version(prior['prompt']))
+        common_version=protocol.find_common_prompt_version(prior['prompt']),
+        finding_version=2 if 'finding_index' in packet else 1)
     versions = paragraphs.read_paragraph_parameters(prior['prompt']).get(paragraphs.PARAMETER, [])
     prompt = paragraphs.append_prompt_paragraphs(base, prior['role'], versions=versions)
     prompt['parameters']['capacity'] = packet.get('reading_turn', packet.get('reading_final', packet.get('reading_combine')))['capacity']
@@ -2261,7 +2293,7 @@ def describe_admission_stop(records, artifacts, assignment, route, packet, selec
     smaller = copy.deepcopy(export)
     smaller['prerequisites'].insert(0, dict(condition='Record a statement with fewer neighbours, then bind that record in a new export.'))
     route_step = describe_step(records, artifacts, assignment, 7)
-    prompt = canonical_prompt('native_math', version=7)['text']
+    prompt = canonical_prompt('native_math', version=7, finding_version=2)['text']
     serving = capacity.find_serving_routes(records, 'native_math', packet, artifacts=artifacts,
                                            assignment=assignment, prompt=prompt)
     refusal = selection['admissions'][0]
@@ -2304,7 +2336,8 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
     overlay = _PlanningArtifacts(artifacts)
     packet, chain = prepare_next_assignment(records, overlay, value, route, logical, prove_replacement=False)
     prompt = review_protocol.canonical_prompt('native_math', reading_stage=kind, reading_protocol=PROTOCOL,
-        capacity=packet.get('reading_turn', packet.get('reading_final'))['capacity'])
+        capacity=packet.get('reading_turn', packet.get('reading_final'))['capacity'],
+        finding_version=2 if 'finding_index' in packet else 1)
     if packet.get('output_refusal'):
         from . import review_prompt_paragraphs as paragraphs
         prompt['parameters'].pop('capacity', None)
@@ -2425,6 +2458,22 @@ def _verify_turn_binding(records, artifacts, first, assignment, packet, native, 
                                         frozen['reading_final']['capacity']['answer_bound'] // 2)
     logical = dict(protocol=protocol.PROTOCOL, role=first['role'], reviewer_id=first['reviewer_id'],
                    dossier_id=first['dossier_id'], native=native)
+    from .native_review import find_finding_version
+    finding_version = find_finding_version(assignment)
+    if finding_version == 2:
+        from .review_search_delivery import build_finding_index, verify_finding_index
+        formulations = None
+        if stage in ('page', 'final') and 'page_plan_digest' in binding:
+            labels = {row['handle']: row['formulation'] for row in list_target_labels(native)}
+            formulations = [labels[handle] for handle in binding['page']['targets']]
+        verify_finding_index(records, artifacts, native, packet.get('finding_index'), formulations=formulations)
+        finding_index = copy.deepcopy(plan.get('finding_index'))
+        if finding_index is None:
+            finding_index = build_finding_index(records, artifacts, native)
+            # A legacy plan did not freeze these display identities. The new
+            # assignment did; scientific ids/digests are checked above.
+            finding_index['read_works'] = copy.deepcopy(packet['finding_index']['read_works'])
+        logical['finding_index'] = finding_index
     if 'page_plan_digest' in binding:
         from .openness_final_pages import verify_final_turn_binding
         verify_final_turn_binding(records, artifacts, assignment, packet, logical, inventory, state, plan, limits)
@@ -2432,7 +2481,8 @@ def _verify_turn_binding(records, artifacts, first, assignment, packet, native, 
     else:
         expected = build_turn_packet(artifacts, route, logical, first['id'], number, inventory, state, plan,
                                      limits, kind, requests=state.get('pending_requests', []),
-                                     notice=packet['output_refusal'] if refusal else None)
+                                     notice=packet['output_refusal'] if refusal else None,
+                                     finding_version=finding_version)
     if refusal:
         from .review_refusal_notice import attach_refusal_notice
         expected = attach_refusal_notice(expected, packet['output_refusal'])
@@ -2462,6 +2512,7 @@ def _verify_required_coverage(artifacts, inventory, state, plan, selection, *,
     searches = _collect_completed_searches(artifacts, inventory, state, [])
     expected = {row['search_digest'] for row in inventory['search_delivery']['searches']}
     if 'unread' in state:
+        from .native_review import accepts_unread_ground, find_finding_version
         records = _read_unread_history(records, state['unread'])
         origin = records['review_assignment'][state['unread']['assignment_id']]
         before = json.loads(artifacts.read(origin['reading_chain']['state']))
@@ -2473,7 +2524,7 @@ def _verify_required_coverage(artifacts, inventory, state, plan, selection, *,
         _require_verification(rebuilt == stored and digest(rebuilt) == unread.get('digest')
             and reference == unread.get('artifact') == state['unread']['artifact']
             and finding.get('outcome') == 'unresolved'
-            and any(ground.get('kind') == 'reviewer_gap' and reference in ground.get('refs', [])
+            and any(accepts_unread_ground(ground, find_finding_version(assignment)) and reference in ground.get('refs', [])
                     for ground in finding.get('grounds', [])), COVERAGE_VERIFICATION_MESSAGE)
         recorded = records.get('problem_openness', {}).get(assignment['id']) if assignment is not None else None
         if recorded is not None:
@@ -2681,4 +2732,5 @@ def matches_turn_prompt(assignment, packet=None):
             return False
     return kind in ('reading', 'final', 'page', 'closing', 'combine') and base == protocol.canonical_prompt('native_math',
         reading_stage=kind, reading_protocol=PROTOCOL,
-        common_version=protocol.find_common_prompt_version(envelope))
+        common_version=protocol.find_common_prompt_version(envelope),
+        finding_version=base['parameters'].get('finding_version', 1))

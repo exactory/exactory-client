@@ -259,7 +259,7 @@ class PacketFreshnessTests(OpennessReadingCase):
         native = self.export()
         self.assign('turn-1', native)
         answer = build_answer(self.read_packet('turn-1'), 'unresolved',
-                              [dict(kind='reviewer_gap', text='The reviewer identifies an additional gap.')])
+                              [dict(kind='own_argument', text='The reviewer has an additional argument to check.')])
         self.invoke('turn-1', answer)
         minimum_fixtures.ProblemOpennessMinimumTests.search(self, self.versions, query='A search after the answer')
         records = self.store.snapshot()['records']

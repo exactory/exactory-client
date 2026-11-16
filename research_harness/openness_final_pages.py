@@ -203,6 +203,10 @@ def build_validation_envelope(artifacts, assignment, packet, targets=None):
     binding = copy.deepcopy(packet.get('reading_final', {}))
     if targets is not None:
         binding['page'] = dict(targets=list(targets))
+    if 'finding_index' in packet:
+        state = json.loads(artifacts.read(assignment['reading_chain']['state']))
+        binding['entries'] = [copy.deepcopy(row) for row in state['entries']
+                              if row['status'] in ('verified', 'delivered')]
     envelope['reading_final'] = binding
     return envelope
 
@@ -326,6 +330,10 @@ def build_final_packet(records, artifacts, route, logical, chain, number, invent
         binding['plan'] = dict(now=now)
         packet['evidence'] = evidence
     packet.pop('digest', None)
+    if 'finding_index' in packet and turn['kind'] in ('page', 'final'):
+        from .review_search_delivery import select_finding_index
+        labels = {row['handle']: row['formulation'] for row in v7.list_target_labels(logical['native'])}
+        packet['finding_index'] = select_finding_index(packet['finding_index'], [labels[key] for key in turn['targets']])
     packet['digest'] = digest(packet)
     return packet
 
@@ -398,8 +406,8 @@ def read_composite_currency(records, artifacts, assignment):
 
 
 def validate_composite_output(records, artifacts, assignment, packet, output):
-    from .native_review import validate_finding
-    validate_finding(packet, output, artifacts=artifacts)
+    from .native_review import validate_finding, find_finding_version
+    validate_finding(packet, output, finding_version=find_finding_version(assignment), artifacts=artifacts)
 
 
 def prepare_closing_composite(records, artifacts, assignment, attempt, output):

@@ -129,15 +129,26 @@ def prepare_openness(records, artifacts, value, revision):
     require_problem(records)
     fields(value, ("assignment_id",))
     from .review_protocol import assignment_state
-    state = assignment_state(records, artifacts, value["assignment_id"])
     assignment = records.get("review_assignment", {}).get(value["assignment_id"])
+    from .native_review import find_finding_version
+    from .openness_reading import find_stage
+    packet, supplied = None, None
+    if assignment is not None and assignment['role'] == 'native_math' and find_finding_version(assignment) == 2:
+        packet = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
+        supplied = json.loads(artifacts.read(assignment["packet"]))
+        if find_stage(supplied) in (None, 'final', 'closing'):
+            from .review_search_delivery import verify_finding_index
+            verify_finding_index(records, artifacts, packet, supplied.get('finding_index'))
+    state = assignment_state(records, artifacts, value["assignment_id"])
     if not state["ready"] or assignment is None or assignment["role"] != "native_math":
         raise ResearchError("review_context_unverified", "Obtain the observed native_math openness result", {"obligations": state["obligations"]})
-    packet = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
+    if packet is None:
+        packet = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
     from .review_composite import read_final_output
     output, composite = read_final_output(records, artifacts, assignment)
     from .openness_reading import PROTOCOL_V5, PROTOCOL_V6, PROTOCOL_V7, find_protocol, find_stage, verify_chain, verify_problem_coverage
-    supplied = json.loads(artifacts.read(assignment["packet"]))
+    if supplied is None:
+        supplied = json.loads(artifacts.read(assignment["packet"]))
     stage = find_stage(supplied)
     if stage in ("reading", "page", "combine") or (stage in ("final", "closing") and output.get("stage") in ("reading", "material")):
         raise ResearchError("openness_reading_incomplete", "This turn of the reading chain returned no native result; "

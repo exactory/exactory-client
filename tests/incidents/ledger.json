@@ -7471,6 +7471,19 @@
         "test_foreground_write_stale_during_review_call.ForegroundWriteStaleDuringReviewCallTests.test_refuse_revision_read_before_review_completion_and_retry",
         "test_foreground_write_stale_during_review_call.ForegroundWriteStaleDuringReviewCallTests.test_refuse_prepared_value_after_review_completion_and_retry"
       ]
+    },
+    {
+      "id": "phenomenon-named-openness-gaps",
+      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
+      "class": "versioned named literature gaps and bound finding index",
+      "summary": "T6: identical unreached literature could be treated as a coverage limit or a blocking gap by different final reviews.",
+      "expected": "Finding version 2 requires a delivered basis, an exact formulation, a need and an unsettled question. Bound-query tokens and read-work identities come from an authenticated finding index. Invalid answers retain the first failing rule; pages compose and record every ground member. Version 1 prompts and packets retain their bytes.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_named_gaps.NamedGapRecordingTests.test_unread_work_is_validated_and_preserved_through_every_real_recording_path",
+        "test_openness_named_gaps.NamedGapRecordingTests.test_refused_variant_search_is_replaced_with_its_notice_and_recorded"
+      ]
     }
   ]
 }

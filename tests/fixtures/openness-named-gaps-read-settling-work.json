@@ -1,0 +1,247 @@
+{
+  "answers": {
+    "accepted": {
+      "claim_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "findings": {
+        "assumptions": "The delivered evidence supports this assessment.",
+        "dependencies": "The delivered evidence supports this assessment.",
+        "openness": {
+          "coverage": "The exact formulation was searched.",
+          "grounds": [],
+          "outcome": "already_solved",
+          "reason": "The delivered evidence establishes this finding."
+        },
+        "policy": "The delivered evidence supports this assessment.",
+        "scope": "The delivered evidence supports this assessment.",
+        "statement": "The delivered evidence supports this assessment."
+      },
+      "reviewer": {
+        "actor_id": "reviewer",
+        "attestation_id": "assignment:first",
+        "source": "host"
+      },
+      "schema_version": 3,
+      "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "gap_work_read_doi": {
+      "claim_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "findings": {
+        "assumptions": "The delivered evidence supports this assessment.",
+        "dependencies": "The delivered evidence supports this assessment.",
+        "openness": {
+          "coverage": "The exact formulation was searched.",
+          "grounds": [
+            {
+              "basis": [
+                {
+                  "text": "The authored work Read minor settlement claims a proof of the complete minor inequality for all finite simple graphs; this synthetic case supplies its declared settling reading.",
+                  "text_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                  "version_id": "arxiv:2601.00001v1"
+                }
+              ],
+              "formulation": "Does every finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?",
+              "kind": "reviewer_gap",
+              "need": "Whether this source or term settles the finite connected case.",
+              "text": "A named gap remains in the delivered evidence.",
+              "unsettled": "The bound searches and the read partial example do not answer that question.",
+              "work": {
+                "identifiers": [
+                  "https://doi.org/10.5555/SYNTHETIC.SETTLEMENT"
+                ],
+                "title": "Another label"
+              }
+            }
+          ],
+          "outcome": "unresolved",
+          "reason": "The delivered evidence establishes this finding."
+        },
+        "policy": "The delivered evidence supports this assessment.",
+        "scope": "The delivered evidence supports this assessment.",
+        "statement": "The delivered evidence supports this assessment."
+      },
+      "reviewer": {
+        "actor_id": "reviewer",
+        "attestation_id": "assignment:first",
+        "source": "host"
+      },
+      "schema_version": 3,
+      "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "gap_work_read_title": {
+      "claim_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "findings": {
+        "assumptions": "The delivered evidence supports this assessment.",
+        "dependencies": "The delivered evidence supports this assessment.",
+        "openness": {
+          "coverage": "The exact formulation was searched.",
+          "grounds": [
+            {
+              "basis": [
+                {
+                  "text": "The authored work Read minor settlement claims a proof of the complete minor inequality for all finite simple graphs; this synthetic case supplies its declared settling reading.",
+                  "text_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                  "version_id": "arxiv:2601.00001v1"
+                }
+              ],
+              "formulation": "Does every finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?",
+              "kind": "reviewer_gap",
+              "need": "Whether this source or term settles the finite connected case.",
+              "text": "A named gap remains in the delivered evidence.",
+              "unsettled": "The bound searches and the read partial example do not answer that question.",
+              "work": {
+                "title": "Read minor settlement"
+              }
+            }
+          ],
+          "outcome": "unresolved",
+          "reason": "The delivered evidence establishes this finding."
+        },
+        "policy": "The delivered evidence supports this assessment.",
+        "scope": "The delivered evidence supports this assessment.",
+        "statement": "The delivered evidence supports this assessment."
+      },
+      "reviewer": {
+        "actor_id": "reviewer",
+        "attestation_id": "assignment:first",
+        "source": "host"
+      },
+      "schema_version": 3,
+      "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "dispositions": [
+    {
+      "disposition": "relevant",
+      "reason": "The planar partial case bears on both formulations.",
+      "work_id": "work-read"
+    }
+  ],
+  "expected_outcome": "already_solved",
+  "missing_term": "graph spectral radius",
+  "name": "read-settling-work",
+  "neighbour": "Does every connected finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?",
+  "packet": {
+    "finding_index": {
+      "fields": {
+        "10c620fd2ee8e64bc9f1e3dd139c061a0634c1566be4edff28d2434185baced3": [
+          "spectral radius graph",
+          "Hadwiger graph colouring clique minor"
+        ],
+        "e76f0c34e495069d695c514e15d96ed60d39e15fc393a51a3de53303316cde80": [
+          {
+            "disposition": "relevant",
+            "reason": "The planar partial case bears on both formulations.",
+            "work_id": "work-read"
+          }
+        ],
+        "fba00e23caa2a5f43e6691d7d66d6e4b8084f0bbb89990761a1eebd04f0080b3": "Finite simple graph colouring and clique minors; complete captured results."
+      },
+      "read_works": [
+        {
+          "identifiers": [
+            "arxiv:2601.00001v1",
+            "work-read",
+            "doi:10.5555/synthetic.settlement"
+          ],
+          "reading_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "reading_id": "read-1",
+          "title": "Read minor settlement",
+          "version_id": "arxiv:2601.00001v1"
+        }
+      ],
+      "searches": [
+        {
+          "dispositions": "e76f0c34e495069d695c514e15d96ed60d39e15fc393a51a3de53303316cde80",
+          "formulations": [
+            "Does every finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?"
+          ],
+          "queries": "10c620fd2ee8e64bc9f1e3dd139c061a0634c1566be4edff28d2434185baced3",
+          "record_id": "search-1",
+          "scope": "fba00e23caa2a5f43e6691d7d66d6e4b8084f0bbb89990761a1eebd04f0080b3",
+          "search_digest": "1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        {
+          "dispositions": "e76f0c34e495069d695c514e15d96ed60d39e15fc393a51a3de53303316cde80",
+          "formulations": [
+            "Does every connected finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?"
+          ],
+          "queries": "10c620fd2ee8e64bc9f1e3dd139c061a0634c1566be4edff28d2434185baced3",
+          "record_id": "search-2",
+          "scope": "fba00e23caa2a5f43e6691d7d66d6e4b8084f0bbb89990761a1eebd04f0080b3",
+          "search_digest": "2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      ]
+    },
+    "native": {
+      "claim_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "kind": "result",
+      "reviewer": {
+        "actor_id": "reviewer",
+        "attestation_id": "assignment:first",
+        "source": "host"
+      },
+      "scientific_context": {
+        "audit_forecast": {
+          "outcomes": {
+            "already_solved": "possible",
+            "supported_open": "blocked"
+          },
+          "searched_through": "2026-11-14"
+        },
+        "decisive_work_ids": [
+          "work-1"
+        ],
+        "openness_minimum": {
+          "neighbours": [
+            "Does every connected finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?"
+          ],
+          "reading_digests": [
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          ],
+          "schema_version": 2,
+          "searches": [
+            {
+              "formulation": "Does every finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?",
+              "search_digest": "1111111111111111111111111111111111111111111111111111111111111111"
+            },
+            {
+              "formulation": "Does every connected finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?",
+              "search_digest": "2222222222222222222222222222222222222222222222222222222222222222"
+            }
+          ],
+          "settling_work_id": "work-read",
+          "statement": "Does every finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?",
+          "supporting_reading_digests": []
+        }
+      },
+      "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "reading_record": {
+      "excerpts": [
+        {
+          "purpose": "The exact delivered gap basis.",
+          "status": "verified",
+          "text": "The authored work Read minor settlement claims a proof of the complete minor inequality for all finite simple graphs; this synthetic case supplies its declared settling reading.",
+          "text_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "version_id": "arxiv:2601.00001v1"
+        }
+      ],
+      "passages": [],
+      "protocol": "exactory-openness-reading-v6",
+      "turns": [
+        {
+          "assignment_id": "reading-1"
+        }
+      ]
+    }
+  },
+  "queries": [
+    "spectral radius graph",
+    "Hadwiger graph colouring clique minor"
+  ],
+  "read_identifier": "doi:10.5555/synthetic.settlement",
+  "read_title": "Read minor settlement",
+  "scope": "Finite simple graph colouring and clique minors; complete captured results.",
+  "sentence": "The authored work Read minor settlement claims a proof of the complete minor inequality for all finite simple graphs; this synthetic case supplies its declared settling reading.",
+  "statement": "Does every finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?"
+}

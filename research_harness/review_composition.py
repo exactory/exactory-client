@@ -969,6 +969,8 @@ def find_rule(role, packet):
                             row=PAGE_ROW_CHARACTERS, envelope=PAGE_ENVELOPE_CHARACTERS,
                             closing=CLOSING_FIELDS_CHARACTERS, coverage=COVERAGE_CHARACTERS,
                             ground_text=GROUND_TEXT_CHARACTERS, reason=FINDING_REASON_CHARACTERS))
+    if rule['id'].endswith('/problem-openness') and 'finding_index' in packet:
+        rule['finding_version'] = 2
     return _attach_answer_schemas(rule)
 
 
@@ -1461,7 +1463,7 @@ def _validate_native_fields(packet, fields, required=None):
         native_review.validate_output(packet.get('native', packet), output)
 
 
-def _validate_finding_fields(packet, rows=None, closing=None):
+def _validate_finding_fields(packet, rows=None, closing=None, *, finding_version=1):
     from . import native_review
     # The full finding validator is the only home of these checks. A blocked
     # neutral forecast admits either ground presence for a page or no grounds.
@@ -1476,7 +1478,10 @@ def _validate_finding_fields(packet, rows=None, closing=None):
     native['scientific_context']['audit_forecast']['outcomes'] = dict(supported_open='blocked', already_solved='blocked')
     count = len(rows) if rows is not None else 1
     if packet.get('reading_final', {}).get('protocol') == 'exactory-openness-reading-v7':
-        neutral['reading_final'] = dict(protocol='exactory-openness-reading-v7', page=dict(targets=list(range(count))))
+        neutral['reading_final'] = dict(neutral['reading_final'], page=dict(targets=list(range(count))))
+        # Unread-set relations concern the complete composed answer. Keep the
+        # checked excerpts here for named gaps, without running that final check.
+        neutral['reading_final'].pop('unread', None)
     else:
         native['scientific_context']['openness_minimum']['neighbours'] = list(
             native['scientific_context']['openness_minimum']['neighbours'][:max(0, count - 1)])
@@ -1493,7 +1498,7 @@ def _validate_finding_fields(packet, rows=None, closing=None):
             native['scientific_context']['audit_forecast']['outcomes'] = dict(supported_open='blocked', already_solved='blocked')
     findings['openness'] = openness
     output = dict(schema_version=3, findings=findings, **{key: native[key] for key in ('subject_digest', 'claim_digest', 'reviewer')})
-    native_review.validate_finding(neutral, output)
+    native_review.validate_finding(neutral, output, finding_version=finding_version)
 
 
 def _validate_readiness_fields(packet, output, required=None):
@@ -1591,7 +1596,7 @@ def _compact_page_lists(value):
     return value
 
 
-def validate_page_output(rule, packet, targets, output):
+def validate_page_output(rule, packet, targets, output, *, finding_version=1):
     """Refuse page-owned fields here under the original role's check name."""
     from .review_refusal import contract_check
     definitions = list_targets(rule, packet)
@@ -1614,7 +1619,7 @@ def validate_page_output(rule, packet, targets, output):
         if actual != expected or len(set(actual)) != len(actual):
             raise ResearchError('review_composition_conflict', FINAL_PAGE_INVALID_MESSAGE)
     if finding:
-        _validate_finding_fields(packet, output['targets'])
+        _validate_finding_fields(packet, output['targets'], finding_version=finding_version)
     elif math:
         from . import native_review
         with contract_check('native.output'):
@@ -1724,7 +1729,7 @@ def build_decision_rows(rule, packet, page_outputs, *, measure=None):
     return result
 
 
-def validate_closing_output(rule, packet, rows, output):
+def validate_closing_output(rule, packet, rows, output, *, finding_version=1):
     """Check closing fields; cross-page scientific checks run on composition."""
     from . import native_review
     from .operations import strings
@@ -1735,7 +1740,7 @@ def validate_closing_output(rule, packet, rows, output):
     if rule['id'].endswith('/problem-openness'):
         check_fields(output, native_review.RESULT_FINDINGS + ('outcome', 'reason', 'grounds'), ('coverage_format',),
                      code='review_composition_conflict')
-        _validate_finding_fields(packet, closing=output)
+        _validate_finding_fields(packet, closing=output, finding_version=finding_version)
         if _measure_final_value(output) > CLOSING_FIELDS_CHARACTERS:
             raise ResearchError('review_composition_conflict', FINAL_PAGE_BOUND_MESSAGE)
         with contract_check('review.shape'):
@@ -1855,6 +1860,11 @@ def _attach_answer_schemas(rule):
             # Stored v6 findings keep the reference spelling of their protocol.
             turns=dict(type='array', items=_make_text_schema(256), max_items=GROUND_REFERENCES,
                        max_serialized_characters=6000)), required=('kind', 'text'), bound=8000)
+        if rule.get('finding_version') == 2:
+            ground['properties'].update(formulation=_make_text_schema(6000),
+                basis=dict(type='array', items=_make_json_schema(6000), max_items=GROUND_REFERENCES,
+                           max_serialized_characters=6000), need=_make_text_schema(6000),
+                unsettled=_make_text_schema(6000), work=_make_json_schema(6000), search=_make_json_schema(6000))
         grounds = dict(type='array', items=ground, max_items=GROUND_ITEMS, max_serialized_characters=8000)
         properties = dict(formulation=identity, coverage=_make_json_schema(COVERAGE_CHARACTERS),
                           grounds=grounds, sentence=sentence)
@@ -2020,12 +2030,25 @@ def _describe_validator_contracts(rule):
     repair = 'base_adapter' in rule
     kind = rule.get('native_kind')
     if rule['id'].endswith('/problem-openness'):
+        named = rule.get('finding_version') == 2
+        ground_fields = ('kind', 'text', 'work_id', 'refs', 'turns')
+        if named:
+            ground_fields += ('formulation', 'basis', 'need', 'unsettled', 'work', 'search')
         for subject, path, names in (
                 ('output', '', ('schema_version', 'subject_digest', 'claim_digest', 'reviewer', 'findings')),
                 ('findings', '/findings', native_review.RESULT_FINDINGS + ('openness',)),
                 ('openness', '/findings/openness', ('outcome', 'coverage', 'reason', 'grounds')),
-                ('ground', '/findings/openness/grounds/*', ('kind', 'text', 'work_id', 'refs', 'turns'))):
-            contracts.append(declare('native_review.validate_finding', subject, path, names))
+                ('ground', '/findings/openness/grounds/*', ground_fields)):
+            contracts.append(declare('native_review.validate_finding', subject, path, names,
+                                     bindings=dict(gap=named) if subject == 'ground' else None))
+        if named:
+            contracts.extend((
+                declare('native_review._validate_named_gap', 'ground', '/findings/openness/grounds/*',
+                    ('kind', 'text', 'formulation', 'basis', 'need', 'unsettled', 'turns', 'refs', 'work', 'search')),
+                declare('native_review._validate_named_gap', 'work', '/findings/openness/grounds/*/work',
+                    ('title', 'identifiers')),
+                declare('native_review._validate_named_gap', 'search', '/findings/openness/grounds/*/search',
+                    ('terms', 'missing_term'))))
     elif kind:
         root = ('schema_version', 'subject_digest', 'reviewer', 'decision', 'findings')
         if kind != 'recovery':

@@ -49,7 +49,8 @@ def describe_input_handoff(records, artifacts, assignment, *, continuation=None)
                                            continuation['reviewer_id'], **continuation['context'])
             packet, _ = reading.prepare_packet(records, overlay, continuation, route, logical)
             prompt = protocol.canonical_prompt(assignment['role'], reading_stage=reading.find_stage(packet),
-                reading_protocol=reading.find_protocol(packet), common_version=protocol.find_common_prompt_version(assignment['prompt']))
+                reading_protocol=reading.find_protocol(packet), common_version=protocol.find_common_prompt_version(assignment['prompt']),
+                finding_version=2 if 'finding_index' in packet else 1)
             request = protocol.transport.request_body(route, prompt['text'], packet)
         measured = capacity.measure_request(route, request, records=records, artifacts=artifacts)
         if measured['fits']:

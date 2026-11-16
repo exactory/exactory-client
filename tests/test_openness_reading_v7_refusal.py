@@ -1253,7 +1253,7 @@ class NoticeRoomTests(unittest.TestCase):
         fixture.setUp()
         self.assertEqual(digest(v7.measure_turn_frames(fixture.route, fixture.native)['reading']),
                          '5d2b6f8d1bf5363349635ebc453371fddbd97c88a142ef9484894aae0756b00e')
-        packet, chain = fixture.prepare()
+        packet, chain = fixture.prepare(finding_version=1)
         plan = capacity.read_chain_capacity_plan(fixture.artifacts, chain)
         inventory = json.loads(fixture.artifacts.read(chain['inventory']))
         before = json.loads(fixture.artifacts.read(chain['state']))

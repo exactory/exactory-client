@@ -3,6 +3,7 @@
 from datetime import date
 import json
 import re
+import unicodedata
 
 from .artifacts import validate_reference
 from .errors import ResearchError, describe_error_at
@@ -165,9 +166,59 @@ def render_finding_rule(row):
         text=FINDING_GROUNDS_TEXT[row["grounds"]], **row)
 
 
-def render_finding_prompt():
+FINDING_V2_TEXT = (
+    '\n\nFinding rules version 2. A reviewer_gap is one unread work or one search that was not run. '
+    'It holds kind, text, formulation, basis, need, unsettled, and exactly one of work or search. '
+    'formulation is the exact statement or a declared neighbour. basis is a nonempty list of quotations '
+    '{the identity fields of an excerpt, text}, each at least 20 normalized characters, copied from a verified '
+    'excerpt or delivered passage, or from delivered evidence in a review of one request. '
+    'need states the question about this formulation that the judgment needs answered. unsettled states why '
+    'no bound reading, query or recorded search judgment answers it; explain why any exclusion reason fails. '
+    'work is {title, identifiers?}; it names a work in the basis and no work already read. '
+    'search is {terms, missing_term}; missing_term occurs in order in a quotation and has a content token '
+    'that occurs in no bound query of this formulation. Reordering, case and punctuation do not make a gap. '
+    'Tokens use NFKC, case folding and splitting at every nonletter and nondigit. '
+    'finding_index.searches gives record_id, search_digest, formulations and digest references to queries, scope, '
+    'dispositions, resolved and row_dispositions where present; finding_index.fields holds each value once. '
+    'finding_index.read_works lists reading_id, reading_digest, version_id, identifiers and title. '
+    'A matching normalized identifier or tokenized title means that the work is already read. '
+    'The checks run in this order: gap_fields, gap_formulation, gap_basis, gap_work_read, '
+    'gap_term_delivered, gap_term_bound. An index, database, language, period or unpublished literature '
+    'that was not reached is a coverage limit unless delivered text supplies the named work or term and need. '
+    'State limits in coverage. With supported_open possible and no ground, return supported_open. '
+    'For a final over provider-refused unread ranges, cite the complete unread set in a packet_defect ground; '
+    'a reviewer_gap still needs every named-gap field and check. '
+    'Other kinds of ground and the three outcome rules keep their fields and meaning.')
+# Function words and query operators are one fixed vocabulary for every term and query.
+GAP_FUNCTION_WORDS = frozenset(('a an and are as at be been being by for from has have in into is it its '
+    'of on or that the their then there these this those to was were which with without not all any '
+    'title abstract author authors doi arxiv site intitle inurl filetype').split())
+
+
+def find_finding_version(assignment):
+    """Select the contract recorded by the immutable assignment prompt."""
+    return (assignment or {}).get('prompt', {}).get('parameters', {}).get('finding_version', 1)
+
+
+def tokenize_gap_text(value):
+    """Reduce a title, query or term to ordered Unicode letter/digit tokens."""
+    value = unicodedata.normalize('NFKC', value).casefold()
+    return ''.join(character if character.isalpha() or character.isdigit() else ' '
+                   for character in value).split()
+
+
+def normalize_gap_identifier(value):
+    """Compare DOI and arXiv spellings independently of prefixes and arXiv versions."""
+    value = unicodedata.normalize('NFKC', value).strip().casefold()
+    value = re.sub(r'^(?:https?://)?(?:dx\.)?doi\.org/|^doi:\s*', '', value)
+    value = re.sub(r'^(?:https?://)?arxiv\.org/(?:abs|pdf)/|^arxiv:\s*', '', value)
+    value = re.sub(r'\.pdf$', '', value)
+    return re.sub(r'v\d+$', '', value) if re.fullmatch(r'(?:\d{4}\.\d{4,5}|[a-z.-]+/\d{7})v?\d*', value) else value
+
+
+def render_finding_prompt(finding_version=1):
     """Render X1 from the same ordered rules and ground vocabulary used for validation."""
-    return (
+    rendered = (
         "This review answers one question: what does the delivered evidence establish about whether the exact "
         "statement in native.subject is open? Your answer is a finding. It is no judgment of the worth of the "
         "problem, and it gives no permission to post it. An unresolved finding that states its grounds is a "
@@ -203,6 +254,7 @@ def render_finding_prompt():
         "them. An argument that you form in the final turn stands in text. A review of one turn has no reading "
         "turns, so its grounds hold no turns."
     )
+    return rendered + (FINDING_V2_TEXT if finding_version == 2 else '')
 
 
 PROBLEM_OPENNESS_PROMPT = render_finding_prompt()
@@ -212,7 +264,8 @@ def uses_finding_contract(assignment):
     """The saved prompt, rather than today's packet shape, selects the answer contract."""
     template = assignment.get("prompt", {}).get("template_id", "")
     return template in ("exactory-openness-reading-v6/final", "exactory-openness-reading-v7/final",
-                        "exactory-review-v7/native_math", "exactory-openness-reading-v7/closing")
+                        "exactory-review-v7/native_math", "exactory-openness-reading-v7/closing",
+                        "exactory-openness-reading-v7/page")
 
 
 def _require_finding(condition, rule, path, forecast):
@@ -229,6 +282,9 @@ UNREAD_OUTCOME_MESSAGE = (
 UNREAD_SET_REFERENCE_MESSAGE = (
     'A finding over unread ranges needs a ground of the kind reviewer_gap whose refs holds {ref:"x1"}, the citation '
     'of the complete set of unread ranges. Add that ground.')
+UNREAD_SET_V2_MESSAGE = (
+    'A finding over unread ranges needs a packet_defect ground citing the complete unread set in refs. '
+    'A named reviewer_gap with that citation is also valid when it passes all six gap rules.')
 UNREAD_UNIT_REFERENCE_MESSAGE = (
     'A ground of this finding cites a unit that does not match a row of the unread set: its u handle is not the unit '
     'of a row, or its artifact is not the artifact of that row. In a '
@@ -236,12 +292,103 @@ UNREAD_UNIT_REFERENCE_MESSAGE = (
     'reading_final.unread or of a page of the list unread, or remove the citation.')
 
 
-def validate_finding(packet, output, *, artifacts=None):
+def _list_gap_basis(packet):
+    """List only quotations whose delivery or excerpt check the packet records."""
+    record = packet.get('reading_record', {})
+    result = [row for key, status in (('excerpts', 'verified'), ('passages', 'delivered'))
+              for row in record.get(key, []) if row.get('status') == status]
+    result.extend(row for row in packet.get('reading_final', {}).get('entries', [])
+                  if row.get('status') in ('verified', 'delivered'))
+    if not record and 'reading_final' not in packet:
+        from . import review_excerpts
+        for row in packet.get('evidence', []):
+            if row.get('encoding') != 'utf-8' or not isinstance(row.get('content'), str):
+                continue
+            identity = row.get('identity', {})
+            if not identity and isinstance(row.get('label'), dict):
+                identity = row['label']
+            # Evidence metadata names full texts and store records in ordinary native packets.
+            identities = [identity] if identity else []
+            for field in ('version_id', 'source_id', 'record_id', 'native_attempt_digest'):
+                if field in row:
+                    identities.append(dict(review_excerpts.find_identity(row)[1:]))
+                    break
+            for value in identities:
+                result.append(dict(value, text=row['content']))
+    return result
+
+
+def accepts_unread_ground(ground, finding_version):
+    """Keep a provider delivery defect separate from an unsupported literature gap."""
+    return ground.get('kind') in (('reviewer_gap', 'packet_defect') if finding_version == 2 else ('reviewer_gap',))
+
+
+def _matches_gap_basis(quotation, delivered):
+    from . import review_excerpts
+    if 'unit' in quotation:
+        return set(quotation) == {'unit', 'text'} and quotation['unit'] == delivered.get('unit')
+    required, optional = review_excerpts.find_identity_fields(quotation, review_excerpts.IDENTITY_FIELDS)
+    return (set(required) <= set(quotation) and set(quotation) <= set(required + optional) | {'text'}
+        and all(quotation[key] == delivered.get(key) for key in required + optional if key in quotation))
+
+
+def _validate_named_gap(packet, ground, path, require):
+    """Apply the six mechanical named-gap rules in their specified order."""
+    from .review_excerpts import normalize_with_offsets
+    required = {'kind', 'text', 'formulation', 'basis', 'need', 'unsettled'}
+    allowed = required | {'turns', 'refs', 'work', 'search'}
+    work, search = ground.get('work'), ground.get('search')
+    valid = (required <= set(ground) <= allowed and ('work' in ground) != ('search' in ground)
+        and all(_nonempty(ground[key]) for key in ('text', 'formulation', 'need', 'unsettled')))
+    if work is not None:
+        valid = valid and (isinstance(work, dict) and {'title'} <= set(work) <= {'title', 'identifiers'}
+            and _nonempty(work['title']) and ('identifiers' not in work or isinstance(work['identifiers'], list)
+                and all(_nonempty(value) for value in work['identifiers'])))
+    elif search is not None:
+        valid = valid and (isinstance(search, dict) and set(search) == {'terms', 'missing_term'}
+            and _nonempty(search['missing_term']) and (_nonempty(search['terms'])
+                or isinstance(search['terms'], list) and bool(search['terms'])
+                and all(_nonempty(value) for value in search['terms'])))
+    else:
+        valid = False
+    require(valid, 'gap_fields', path)
+    minimum = packet['native']['scientific_context']['openness_minimum']
+    require(ground['formulation'] in [minimum['statement']] + minimum['neighbours'], 'gap_formulation', path + '/formulation')
+    basis = ground['basis']
+    sources = _list_gap_basis(packet)
+    require(isinstance(basis, list) and bool(basis) and all(isinstance(quote, dict)
+        and _nonempty(quote.get('text')) and len(normalize_with_offsets(quote['text'])[0]) >= 20
+        and any(_matches_gap_basis(quote, row) and isinstance(row.get('text'), str)
+            and normalize_with_offsets(quote['text'])[0] in normalize_with_offsets(row['text'])[0]
+            for row in sources) for quote in basis), 'gap_basis', path + '/basis')
+    index = packet['finding_index']
+    if work is not None:
+        identifiers = {normalize_gap_identifier(value) for value in work.get('identifiers', [])}
+        title = tokenize_gap_text(work['title'])
+        require(not any(title == tokenize_gap_text(row['title']) or identifiers.intersection(
+            normalize_gap_identifier(value) for value in row['identifiers']) for row in index['read_works']),
+            'gap_work_read', path + '/work')
+    if search is not None:
+        term = tokenize_gap_text(search['missing_term'])
+        quotes = [tokenize_gap_text(row['text']) for row in basis]
+        require(bool(term) and any(any(tokens[start:start + len(term)] == term
+            for start in range(len(tokens) - len(term) + 1)) for tokens in quotes),
+            'gap_term_delivered', path + '/search/missing_term')
+        queries = [query for row in index['searches'] if ground['formulation'] in row['formulations']
+                   for query in index['fields'].get(row.get('queries'), [])]
+        tokens = {token for query in queries for token in tokenize_gap_text(query)}
+        require(bool(set(term) - GAP_FUNCTION_WORDS - tokens), 'gap_term_bound', path + '/search/missing_term')
+
+
+def validate_finding(packet, output, *, finding_version=1, artifacts=None):
     """Check a v3 answer using only its immutable assignment packet and output."""
     from .review_refusal import contract_check
     native = packet.get("native", packet)
     context = native["scientific_context"]
     forecast = context["audit_forecast"]
+    if finding_version == 2:
+        from .review_search_delivery import validate_finding_index
+        validate_finding_index(packet.get('finding_index'))
     v7 = packet.get('reading_final', {}).get('protocol') == 'exactory-openness-reading-v7'
     with contract_check("openness.finding"):
         def require(condition, rule, path):
@@ -279,9 +426,14 @@ def validate_finding(packet, output, *, artifacts=None):
                  if row.get("stage") != "final"}
         for index, ground in enumerate(grounds):
             path = base + "/grounds/" + str(index)
+            gap = finding_version == 2 and isinstance(ground, dict) and ground.get('kind') == 'reviewer_gap'
+            if gap:
+                _validate_named_gap(packet, ground, path, require)
             require(isinstance(ground, dict) and {"kind", "text"} <= set(ground)
                     and set(ground) <= ({"kind", "text", "work_id", "refs"} if v7
-                                        else {"kind", "text", "work_id", "turns"}), "ground_fields", path)
+                                        else {"kind", "text", "work_id", "turns"}) | (
+                        {'formulation', 'basis', 'need', 'unsettled', 'work', 'search', 'turns'} if gap else set()),
+                    "ground_fields", path)
             require(isinstance(ground["kind"], str) and ground["kind"] in GROUND_NEXT_STEPS, "ground_kind", path + "/kind")
             require(_nonempty(ground["text"]), "nonempty_text", path + "/text")
             if v7:
@@ -308,9 +460,10 @@ def validate_finding(packet, output, *, artifacts=None):
                                         dict(rule=rule, path=path, forecast=forecast))
             require_unread(openness['outcome'] == 'unresolved', 'unread_outcome',
                            UNREAD_OUTCOME_MESSAGE, base + '/outcome')
-            require_unread(any(ground['kind'] == 'reviewer_gap'
+            require_unread(any(accepts_unread_ground(ground, finding_version)
                 and unread['artifact'] in ground.get('refs', []) for ground in grounds),
-                'unread_set_reference', UNREAD_SET_REFERENCE_MESSAGE, base + '/grounds')
+                'unread_set_reference', UNREAD_SET_V2_MESSAGE if finding_version == 2 else UNREAD_SET_REFERENCE_MESSAGE,
+                base + '/grounds')
             rows = json.loads(artifacts.read(unread['artifact']))['rows']
             units = {row['unit']: row['artifact'] for row in rows}
             require_unread(all(reference['unit'] in units and
