@@ -15,6 +15,7 @@ from .evidence import digest
 from .operations import fields
 
 PROTOCOL = 'exactory-review-parts-v2'
+NEW_SERIES_PROTOCOLS = (PROTOCOL,)
 KEY = 'review_parts'
 KINDS = ('read', 'combine', 'check', 'final')
 STATE_KEY = 'review_parts_state'
@@ -34,7 +35,7 @@ def render_json(value):
 
 def find_kind(packet):
     header = packet.get(KEY) or {}
-    if header.get('protocol') == PROTOCOL and header.get('kind') in KINDS:
+    if header.get('protocol') in (PROTOCOL, 'exactory-review-parts-v3') and header.get('kind') in KINDS:
         return header['kind']
     return None
 
@@ -77,8 +78,11 @@ def _find_unit_rule(adapter, previous):
     return rule
 
 
-def enumerate_units(packet, adapter, previous=None):
+def enumerate_units(packet, adapter, previous=None, *, protocol=None):
     """Deduplicate canonical items, retaining every list index or object key."""
+    if protocol == 'exactory-review-parts-v3':
+        from .review_parts_v3 import enumerate_packet_units
+        return enumerate_packet_units(packet, adapter, previous)
     from .review_parts_roles import get_adapter
 
     units = []
@@ -594,6 +598,8 @@ def describe_plan(value):
     if 'review_parts_plan' in value:
         return copy.deepcopy(value['review_parts_plan'])
     header = value[KEY]
+    if header.get('protocol') == 'exactory-review-parts-v3':
+        return dict(header['capacity'], unit_allowance_floor=None)
     plan = copy.deepcopy(header['plan'])
     floor = 0
     if header['kind'] == 'read':
@@ -1047,6 +1053,9 @@ def _validate_original(request, inventory, *, requested=False):
 
 
 def validate_deliveries(packet, inventory):
+    if packet.get(KEY, {}).get('protocol') == 'exactory-review-parts-v3':
+        from .review_parts_v3 import validate_deliveries as validate_v3
+        return validate_v3(packet, inventory)
     by_handle = {row['handle']: row for row in inventory['units']}
     delivered = packet[KEY]['delivered_units']
     _require(isinstance(delivered, list) and len(delivered) == len(set(delivered))
@@ -1422,6 +1431,9 @@ def _rebuild_occurrences(items, inventory):
 
 
 def covers_items(packets, expected, key, inventory=None, *, path=None):
+    if inventory and inventory.get('protocol') == 'exactory-review-parts-v3':
+        from .review_parts_v3 import covers_items as covers_v3
+        return covers_v3(packets, expected, key, inventory, path=path)
     """Credit each frozen occurrence, including item segments and equal duplicates."""
     reads = [packet for packet in packets if find_kind(packet) == 'read']
     if inventory is None:
@@ -1442,6 +1454,9 @@ def covers_items(packets, expected, key, inventory=None, *, path=None):
 
 def has_series_attachment(artifacts, packets, reference):
     """Credit exact full bytes or a complete union of exact UTF-8 segments, including aliases."""
+    if any(packet.get(KEY, {}).get('protocol') == 'exactory-review-parts-v3' for packet in packets):
+        from .review_parts_v3 import has_series_attachment as has_v3
+        return has_v3(artifacts, packets, reference)
     for packet in packets:
         for entry in packet.get('evidence', []):
             if (entry.get('artifact', {}).get('sha256') == reference['sha256']
@@ -1461,6 +1476,9 @@ def has_series_attachment(artifacts, packets, reference):
 
 def has_series_reference(artifacts, packets, reference):
     """Credit a complete original or a source locator covered by exact body segments."""
+    if any(packet.get(KEY, {}).get('protocol') == 'exactory-review-parts-v3' for packet in packets):
+        from .review_parts_v3 import has_series_reference as has_v3
+        return has_v3(artifacts, packets, reference)
     artifact = reference['link']['artifact'] if reference.get('kind') == 'source' else reference
     if has_series_attachment(artifacts, packets, artifact):
         return True
@@ -1498,7 +1516,7 @@ def store_inventory(artifacts, inventory):
 def read_inventory(artifacts, reference, expected_digest=None):
     from .workspace import strict_json
     inventory = strict_json(artifacts.read(reference))
-    _require(isinstance(inventory, dict) and inventory.get('protocol') == PROTOCOL
+    _require(isinstance(inventory, dict) and inventory.get('protocol') in (PROTOCOL, 'exactory-review-parts-v3')
              and isinstance(inventory.get('units'), list), 'The inventory is not a parts inventory',
              'review_parts_inventory_changed')
     _require(expected_digest is None or digest(inventory) == expected_digest,
@@ -1614,6 +1632,10 @@ def observe_series(records, artifacts, assignment_id):
     """Read each selected turn once in this evaluation, independently of series readiness."""
     from .evaluation import Evaluation
     evaluation = Evaluation.of(records, artifacts)
+    latest = records.get('review_assignment', {}).get(assignment_id)
+    if latest and latest.get(KEY, {}).get('protocol') == 'exactory-review-parts-v3':
+        from .review_parts_v3 import observe_series as observe_v3
+        return observe_v3(records, evaluation, assignment_id)
     observations = []
     for assignment, frozen in _list_series(records, evaluation, assignment_id):
         observation = evaluation.once(('review_parts_turn', assignment['id']),
@@ -1654,6 +1676,10 @@ def collect_contract_packets(records, artifacts, assignment):
     prior = assignment.get('context', {}).get('prior_assignment_id')
     earlier = collect_series_packets(records, artifacts, prior) if prior else []
     series_id = frozen[KEY]['series_assignment_id']
+    if frozen.get(KEY, {}).get('protocol') == 'exactory-review-parts-v3':
+        from .review_parts_v3 import read_series_delivery as read_v3
+        delivered = read_v3(records, artifacts, packets=earlier + [frozen])
+        return delivered['packets']
     return [frozen] + list(reversed([packet for packet in earlier
                                     if packet[KEY]['series_assignment_id'] == series_id]))
 
@@ -1671,6 +1697,9 @@ def read_series_delivery(records, artifacts, assignment_id=None, *, packets=None
     if packets is None:
         packets = collect_series_packets(records, artifacts, assignment_id)
     actual = list(packets)
+    if any(packet.get(KEY, {}).get('protocol') == 'exactory-review-parts-v3' for packet in actual):
+        from .review_parts_v3 import read_series_delivery as read_v3
+        return read_v3(records, artifacts, packets=actual, inventory=inventory)
     fresh_packets = [packet for packet in actual if find_kind(packet) is not None]
     if not fresh_packets:
         return project_delivery_view(records, artifacts, actual)
@@ -1728,6 +1757,10 @@ def read_series_delivery(records, artifacts, assignment_id=None, *, packets=None
 
 
 def verify_series(records, artifacts, final_assignment_id):
+    latest = records.get('review_assignment', {}).get(final_assignment_id, {})
+    if latest.get(KEY, {}).get('protocol') == 'exactory-review-parts-v3':
+        from .review_parts_v3 import verify_series as verify_v3
+        return verify_v3(records, artifacts, final_assignment_id)
     issues = []
     issue_count = 0
 
@@ -1846,12 +1879,17 @@ def build_turn_prompt(role, base_parameters, header):
     from .review_protocol import canonical_prompt
     return canonical_prompt(role, **base_parameters,
         review_parts=dict(adapter=header['adapter'], kind=header['kind'],
+                          **(dict(protocol=header['protocol'], capacity=header['capacity'])
+                             if header.get('protocol') == 'exactory-review-parts-v3' else {}),
                           answer=bool(header.get('request')),
                           **(dict(entry=header['entry']) if 'entry' in header else {})))
 
 
 def validate_turn_output(records, artifacts, assignment, packet, output, *, attempt=None):
     """Validate this explicit invocation without asking for the series' readiness."""
+    if packet.get(KEY, {}).get('protocol') == 'exactory-review-parts-v3':
+        from .review_parts_v3 import validate_turn_output as validate_v3
+        return validate_v3(records, artifacts, assignment, packet, output, attempt=attempt)
     inventory = read_inventory(artifacts, packet[KEY]['inventory'], packet[KEY]['inventory_digest'])
     delta = validate_output(packet, output, inventory)
     if find_kind(packet) != 'combine':
@@ -1880,7 +1918,7 @@ def validate_turn_output(records, artifacts, assignment, packet, output, *, atte
     return delta
 
 
-def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
+def _prepare_v2_packet(records, artifacts, value, route, packet, prompt, history, *,
                    base_prompt_parameters=None, slot_id=None, legacy_refusal=None,
                    entry=None, read_allowance=None, replaces_assignment_id=None, refusal_notice=None,
                    capacity_replacement=None):
@@ -2035,3 +2073,21 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
             _require(reference == entry['artifact'], 'The stored segment differs from its descriptor',
                      'review_parts_delivery_invalid')
     return planned
+
+
+def prepare_packet(records, artifacts, value, route, packet, prompt, history, **options):
+    """New admission is ordered; recorded series always keep their protocol."""
+    from .review_protocol import _read_json
+    prior = records.get('review_assignment', {}).get(value.get('context', {}).get('prior_assignment_id'))
+    recorded = (_read_json(artifacts, prior['packet']).get(KEY, {}).get('protocol')
+                if prior and prior.get('packet') else None)
+    protocols = (recorded,) if recorded in (PROTOCOL, 'exactory-review-parts-v3') else NEW_SERIES_PROTOCOLS
+    for protocol in protocols:
+        if protocol == PROTOCOL:
+            return _prepare_v2_packet(records, artifacts, value, route, packet, prompt, history, **options)
+        if protocol == 'exactory-review-parts-v3':
+            from .review_parts_v3 import prepare_packet as prepare_v3
+            prepared = prepare_v3(records, artifacts, value, route, packet, prompt, history, **options)
+            if prepared is not None:
+                return prepared
+    return packet

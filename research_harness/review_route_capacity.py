@@ -2058,8 +2058,9 @@ def describe_plan_preflight(records, route, request, plan, kind, *, observations
     measured['characters_per_token'] = rule['characters_per_token'] if calibrated else None
     from .review_excerpts import read_sent_packet
     sent = read_sent_packet(request) or {}
-    binding = sent.get('reading_turn', sent.get('reading_final', sent.get('reading_combine', {})))
-    if binding.get('protocol') == 'exactory-openness-reading-v7':
+    binding = sent.get('reading_turn', sent.get('reading_final', sent.get('reading_combine',
+                                                                       sent.get('review_parts', {}))))
+    if binding.get('protocol') in ('exactory-openness-reading-v7', 'exactory-review-parts-v3'):
         bounds = binding['capacity']
         observations = [dict(material_allowance=bounds.get('level_material_allowance', bounds['material_allowance']))]
     bounds = derive_plan_task_limits(plan, kind, observations)['request_bound']
@@ -2196,6 +2197,9 @@ def derive_turn_task_limits(records, artifacts, assignment, *, kind=None, notice
     """Read the chain's attempts against its stored plan; later profiles cannot change an allowance."""
     from . import openness_reading, review_failure_class as failures
 
+    if assignment.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+        from .review_parts_v3 import derive_series_task_limits
+        return derive_series_task_limits(records, artifacts, assignment, kind=kind, notice_characters=notice_characters)
     plan = read_chain_capacity_plan(artifacts, assignment)
     kind = kind or assignment.get('capacity_plan_kind') or describe_assignment_kind(assignment)
     identifiers = set()
@@ -2285,6 +2289,8 @@ def list_capacity_recovery_rows():
     for kind in review_parts.KINDS:
         rows.append(dict(kind=kind, protocol=review_parts.PROTOCOL,
                          handler='parts_v2_read' if kind == 'read' else 'nothing'))
+    for kind in review_parts.KINDS:
+        rows.append(dict(kind=kind, protocol='exactory-review-parts-v3', handler='parts_v3'))
     # Its frozen final also carries reviewer_excerpts, so its measured kind is request.
     for kind in ('read', 'request'):
         rows.append(dict(kind=kind, protocol=review_problem_parts.PROTOCOL, handler='nothing'))
@@ -2399,6 +2405,13 @@ def plan_capacity_recovery(records, artifacts, assignment, outcome) -> 'Recovery
     details = dict(row, route_id=assignment['route_id'], effort=describe_route_class(route)['effort'],
                    effort_message=CAPACITY_EFFORT_MESSAGE,
                    at_or_over_limit_share=share, profile_rows=profile_rows, attempts=attempts)
+    if row['handler'] == 'parts_v3':
+        from .review_parts_v3 import plan_turn_recovery
+        replacement = plan_turn_recovery(records, artifacts, assignment, outcome)
+        if replacement is not None:
+            replacement['details'].update(details)
+            return replacement
+        return describe_capacity_decision(records, artifacts, assignment, outcome, details)
     if row['handler'] in ('reading_v7', 'final_v7'):
         from .openness_reading_v7 import plan_turn_recovery, FINAL_PAGES_STATEMENT, FINAL_PAGE_FLOOR_STATEMENT, V7_FINAL_FORMS
         replacement = plan_turn_recovery(records, artifacts, assignment, outcome)
@@ -2477,7 +2490,12 @@ def measure_capacity_value(route, value):
     """Measure a serialized value inside native packet framing, including its escaped field quotes."""
     request = transport._build_local_request(route, '', {'carried': value}, [])
     empty = transport._build_local_request(route, '', {'carried': None}, [])
-    return measure_request(route, request)['text_characters'] - measure_request(route, empty)['text_characters'] + len('null')
+    adapter = transport._local_adapter(route)
+    if adapter is None:
+        return measure_request(route, request)['text_characters'] - measure_request(route, empty)['text_characters'] + len('null')
+    def measure_text_characters(value):
+        return len(value.get('instructions', '') + adapter.packet_text(value))
+    return measure_text_characters(request) - measure_text_characters(empty) + len('null')
 # Allow the recorded 22-part capture and the seven-turn healthy delivery;
 # the four padded texts require about 216 parts and need a decision.
 SESSION_PENDING_TURN_LIMIT = 32

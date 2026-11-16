@@ -18,6 +18,16 @@
     "research_harness.review_parts_repair.build_continuation_packet": {
       "parameters": []
     },
+    "research_harness.review_parts_v3.plan_series_turn": {
+      "parameters": [
+        "logical"
+      ]
+    },
+    "research_harness.review_parts_v3.prepare_packet": {
+      "parameters": [
+        "packet"
+      ]
+    },
     "research_harness.review_protocol._evidence": {
       "parameters": [
         "value"
@@ -4138,7 +4148,7 @@
       "classification": "listed module",
       "reason": "The planner measure parameter is supplied by these local closures; their source and the caller edges are certified.",
       "targets": [
-        "research_harness.review_parts.prepare_packet.measure",
+        "research_harness.review_parts._prepare_v2_packet.measure",
         "research_harness.review_parts_repair.prepare_packet.measure",
         "research_harness.review_route_capacity.describe_task.measure"
       ]
@@ -5859,7 +5869,7 @@
       "classification": "listed module",
       "reason": "The planner measure parameter is supplied by these local closures; their source and the caller edges are certified.",
       "targets": [
-        "research_harness.review_parts.prepare_packet.measure",
+        "research_harness.review_parts._prepare_v2_packet.measure",
         "research_harness.review_parts_repair.prepare_packet.measure",
         "research_harness.review_route_capacity.describe_task.measure"
       ]
@@ -6098,7 +6108,7 @@
       "classification": "listed module",
       "reason": "The planner measure parameter is supplied by these local closures; their source and the caller edges are certified.",
       "targets": [
-        "research_harness.review_parts.prepare_packet.measure",
+        "research_harness.review_parts._prepare_v2_packet.measure",
         "research_harness.review_parts_repair.prepare_packet.measure",
         "research_harness.review_route_capacity.describe_task.measure"
       ]
@@ -7745,7 +7755,7 @@
       "classification": "listed module",
       "reason": "The planner measure parameter is supplied by these local closures; their source and the caller edges are certified.",
       "targets": [
-        "research_harness.review_parts.prepare_packet.measure",
+        "research_harness.review_parts._prepare_v2_packet.measure",
         "research_harness.review_parts_repair.prepare_packet.measure",
         "research_harness.review_route_capacity.describe_task.measure"
       ]
@@ -7766,7 +7776,7 @@
       "classification": "listed module",
       "reason": "The planner measure parameter is supplied by these local closures; their source and the caller edges are certified.",
       "targets": [
-        "research_harness.review_parts.prepare_packet.measure",
+        "research_harness.review_parts._prepare_v2_packet.measure",
         "research_harness.review_parts_repair.prepare_packet.measure",
         "research_harness.review_route_capacity.describe_task.measure"
       ]
@@ -7787,7 +7797,7 @@
       "classification": "listed module",
       "reason": "The planner measure parameter is supplied by these local closures; their source and the caller edges are certified.",
       "targets": [
-        "research_harness.review_parts.prepare_packet.measure",
+        "research_harness.review_parts._prepare_v2_packet.measure",
         "research_harness.review_parts_repair.prepare_packet.measure",
         "research_harness.review_route_capacity.describe_task.measure"
       ]
@@ -14826,7 +14836,7 @@
       "classification": "listed module",
       "reason": "Reviewed local helper closure, pinned together with its enclosing source.",
       "targets": [
-        "research_harness.review_parts.prepare_packet.attach_notice"
+        "research_harness.review_parts._prepare_v2_packet.attach_notice"
       ]
     },
     {
@@ -14855,7 +14865,7 @@
       "classification": "listed module",
       "reason": "Reviewed local helper closure, pinned together with its enclosing source.",
       "targets": [
-        "research_harness.review_parts.prepare_packet.attach_notice"
+        "research_harness.review_parts._prepare_v2_packet.attach_notice"
       ]
     },
     {
@@ -17890,464 +17900,464 @@
       ]
     },
     {
-      "caller": "research_harness.openness_carried._describe_chain",
-      "callee": "research_harness.openness_reading.is_math_openness_packet",
       "ast_sha256": "8abd5c8f7c71aaad62af5b519d86f42314fc4ba41084d3e80d64edcc91f72b78",
+      "callee": "research_harness.openness_reading.is_math_openness_packet",
+      "caller": "research_harness.openness_carried._describe_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading.is_math_openness_packet"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried._verify_math_prefix",
-      "callee": "research_harness.openness_reading._create_record",
       "ast_sha256": "0c20efc55cb044d48cdf40b97520bac3dcf9acf7094a43bc296d44b401e4427f",
+      "callee": "research_harness.openness_reading._create_record",
+      "caller": "research_harness.openness_carried._verify_math_prefix",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading._create_record"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried._verify_math_prefix",
-      "callee": "research_harness.openness_reading_v7._require_selected",
       "ast_sha256": "c4974f7a6fb0a4e4209df40a1db79559092dbad07438d5e41016f190a307b4d2",
+      "callee": "research_harness.openness_reading_v7._require_selected",
+      "caller": "research_harness.openness_carried._verify_math_prefix",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading_v7._require_selected"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried._verify_math_prefix",
-      "callee": "research_harness.openness_reading.validate_turn_output",
       "ast_sha256": "2c00844fe23ec84ac0bc969a934dcc11b054d6c8181de69cf248564fb0ed927d",
+      "callee": "research_harness.openness_reading.validate_turn_output",
+      "caller": "research_harness.openness_carried._verify_math_prefix",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading.validate_turn_output"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried._verify_math_prefix",
-      "callee": "research_harness.openness_reading._require",
       "ast_sha256": "8c0f786b2a33a7f9ad9a550f341a0297d769c0dd15e2a26de0273d0c545dfb4f",
+      "callee": "research_harness.openness_reading._require",
+      "caller": "research_harness.openness_carried._verify_math_prefix",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading._require"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried._verify_math_prefix",
-      "callee": "research_harness.openness_reading._extend_record",
       "ast_sha256": "ebff761eca279532cd40f04a85c712add56ac17490d6718629e99421bf8999f1",
+      "callee": "research_harness.openness_reading._extend_record",
+      "caller": "research_harness.openness_carried._verify_math_prefix",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading._extend_record"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried._verify_math_prefix",
-      "callee": "research_harness.openness_reading.has_deliverable_passage",
       "ast_sha256": "cbf5c217140ca06d2b8e8a9eb598d1995d75e93d5950919d7060339ea5f4ad1e",
+      "callee": "research_harness.openness_reading.has_deliverable_passage",
+      "caller": "research_harness.openness_carried._verify_math_prefix",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading.has_deliverable_passage"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried._verify_math_prefix",
-      "callee": "research_harness.openness_reading._find_record",
       "ast_sha256": "d464ebcd095089eb939af777b65f6b3da8e15e5c07e44d45049a51d95683bd7c",
+      "callee": "research_harness.openness_reading._find_record",
+      "caller": "research_harness.openness_carried._verify_math_prefix",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading._find_record"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried._verify_math_prefix",
-      "callee": "research_harness.openness_reading.find_stage",
       "ast_sha256": "6989219798af030df8aaec089bf7cf3d9591064432a02637c42abd4b18fa4bbc",
+      "callee": "research_harness.openness_reading.find_stage",
+      "caller": "research_harness.openness_carried._verify_math_prefix",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading.find_stage"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried._verify_math_prefix",
-      "callee": "research_harness.openness_reading.find_protocol",
       "ast_sha256": "6f5c84ec3155190253aaf517039337940819bd5428742f0cd2c53a4c7085e387",
+      "callee": "research_harness.openness_reading.find_protocol",
+      "caller": "research_harness.openness_carried._verify_math_prefix",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading.find_protocol"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried._verify_math_prefix",
-      "callee": "research_harness.operations.normalized_text",
       "ast_sha256": "dc8d8179ccdd7b5a36f7642714b3b48c7b07f80ccd4ec82ba4671b27de200ecd",
+      "callee": "research_harness.operations.normalized_text",
+      "caller": "research_harness.openness_carried._verify_math_prefix",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.operations.normalized_text"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried._verify_math_prefix",
-      "callee": "research_harness.operations.normalized_text",
       "ast_sha256": "d81f1bd517b980c1c96fe0b9746c622d88fe4b7ea58bb5796aeb108b591a66d5",
+      "callee": "research_harness.operations.normalized_text",
+      "caller": "research_harness.openness_carried._verify_math_prefix",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.operations.normalized_text"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried._verify_math_prefix",
-      "callee": "research_harness.operations.normalized_text",
       "ast_sha256": "bf52391ffdb1dcb664745fa3db97284b0e26e9c6ac6907c6db1cb6fe43984fbf",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.operations.normalized_text"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
-    },
-    {
-      "caller": "research_harness.openness_carried._verify_math_prefix",
       "callee": "research_harness.operations.normalized_text",
-      "ast_sha256": "348537d4c5bae86b08a6be26f6897f42447073aaaa8f2d0c216999799ae44ede",
+      "caller": "research_harness.openness_carried._verify_math_prefix",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.operations.normalized_text"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
+      "ast_sha256": "348537d4c5bae86b08a6be26f6897f42447073aaaa8f2d0c216999799ae44ede",
+      "callee": "research_harness.operations.normalized_text",
       "caller": "research_harness.openness_carried._verify_math_prefix",
-      "callee": "research_harness.review_protocol.canonical_prompt",
-      "ast_sha256": "444a4059d29791a25ddd038f49c90de61b30ce6c621286ae036c84aee71138a2",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
+      "targets": [
+        "research_harness.operations.normalized_text"
+      ]
+    },
+    {
+      "ast_sha256": "444a4059d29791a25ddd038f49c90de61b30ce6c621286ae036c84aee71138a2",
+      "callee": "research_harness.review_protocol.canonical_prompt",
+      "caller": "research_harness.openness_carried._verify_math_prefix",
+      "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.review_protocol.canonical_prompt"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried._verify_math_prefix",
-      "callee": "research_harness.openness_reading._project_withheld_notes",
       "ast_sha256": "495d6f460947d5116a55b81a61e471b4a81b2e0477e20b91a20f55296faa9aed",
+      "callee": "research_harness.openness_reading._project_withheld_notes",
+      "caller": "research_harness.openness_carried._verify_math_prefix",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading._project_withheld_notes"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried._verify_math_prefix",
-      "callee": "research_harness.openness_reading._find_record",
       "ast_sha256": "c071b1c78f26b314bf0c935e87d749f73e9e1d1013c7d2ef002b48ae992a9c45",
+      "callee": "research_harness.openness_reading._find_record",
+      "caller": "research_harness.openness_carried._verify_math_prefix",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading._find_record"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried._verify_math_prefix",
-      "callee": "research_harness.review_protocol.find_common_prompt_version",
       "ast_sha256": "c381932a0e0f23fc75b0eeee9513fc665255f51b1b8525c29d5cc05904a2adb6",
+      "callee": "research_harness.review_protocol.find_common_prompt_version",
+      "caller": "research_harness.openness_carried._verify_math_prefix",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.review_protocol.find_common_prompt_version"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.openness_reading._list_chain",
       "ast_sha256": "87f8a10fab1bf31fbc023dbaf40c811120dc488bd25262ce8fe54819b502da49",
+      "callee": "research_harness.openness_reading._list_chain",
+      "caller": "research_harness.openness_carried.observe_math_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading._list_chain"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.native_review.load_packet",
       "ast_sha256": "becd3381ed13fa870bcb610e104de3ae362f82398d343daceb5a05d361b3168b",
+      "callee": "research_harness.native_review.load_packet",
+      "caller": "research_harness.openness_carried.observe_math_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.native_review.load_packet"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.openness_reading_v7._require_selected",
       "ast_sha256": "3d427b2953de34a71eb12413227c6ca4024ac62decd2ddfbb7bfc0a9752241d7",
+      "callee": "research_harness.openness_reading_v7._require_selected",
+      "caller": "research_harness.openness_carried.observe_math_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading_v7._require_selected"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.openness_reading.list_reading_rows",
       "ast_sha256": "0573a60af17179545f831997670dcc6007b4718b116885b46adb291240c84c82",
+      "callee": "research_harness.openness_reading.list_reading_rows",
+      "caller": "research_harness.openness_carried.observe_math_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading.list_reading_rows"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.openness_reading._compute_spans",
       "ast_sha256": "6e79c781811491213dbe4c3aa23196f5726cd76500bb474c6e0bfe2254391aca",
+      "callee": "research_harness.openness_reading._compute_spans",
+      "caller": "research_harness.openness_carried.observe_math_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading._compute_spans"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.openness_reading._observe_turns",
       "ast_sha256": "95e20a2454430f340f030a6f91980e6cf6fd99724fc85b3d4253520b3355d81b",
+      "callee": "research_harness.openness_reading._observe_turns",
+      "caller": "research_harness.openness_carried.observe_math_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading._observe_turns"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.openness_carried._verify_math_prefix",
       "ast_sha256": "8c318074d2dd9a93e71d6ebbb0a6ac6a5a9730915c0eae02520d75c0e2125465",
+      "callee": "research_harness.openness_carried._verify_math_prefix",
+      "caller": "research_harness.openness_carried.observe_math_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_carried._verify_math_prefix"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.openness_reading.is_math_openness_packet",
       "ast_sha256": "8abd5c8f7c71aaad62af5b519d86f42314fc4ba41084d3e80d64edcc91f72b78",
+      "callee": "research_harness.openness_reading.is_math_openness_packet",
+      "caller": "research_harness.openness_carried.observe_math_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading.is_math_openness_packet"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.review_excerpts.find_identity",
       "ast_sha256": "ed1bfa1b22080d9a4f2c273896e5a11d1008ca1deef302ed136d68603f1e6e4b",
+      "callee": "research_harness.review_excerpts.find_identity",
+      "caller": "research_harness.openness_carried.observe_math_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.review_excerpts.find_identity"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.openness_reading._find_record",
       "ast_sha256": "c071b1c78f26b314bf0c935e87d749f73e9e1d1013c7d2ef002b48ae992a9c45",
+      "callee": "research_harness.openness_reading._find_record",
+      "caller": "research_harness.openness_carried.observe_math_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading._find_record"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.openness_reading._extend_record",
       "ast_sha256": "9ce918bb2120a475a91e2b53649fa2aac502fa212022b0287d1de8552b7b027d",
+      "callee": "research_harness.openness_reading._extend_record",
+      "caller": "research_harness.openness_carried.observe_math_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading._extend_record"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.openness_reading._collect_coverage",
       "ast_sha256": "7fac504c15db68133b9e11cb84c04b8553503f8aed986077057cb5b57c4a002a",
+      "callee": "research_harness.openness_reading._collect_coverage",
+      "caller": "research_harness.openness_carried.observe_math_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading._collect_coverage"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.openness_reading.find_stage",
       "ast_sha256": "cc553e313bff8d164856a8fcf7e405684e60ae41efbc60e7487df5e06eb13004",
+      "callee": "research_harness.openness_reading.find_stage",
+      "caller": "research_harness.openness_carried.observe_math_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading.find_stage"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.review_excerpts.find_identity",
       "ast_sha256": "3ab219f0d8d5b1c92e9a00d52b4e43d465c2f793e21bfc96610d1b9adc961168",
+      "callee": "research_harness.review_excerpts.find_identity",
+      "caller": "research_harness.openness_carried.observe_math_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.review_excerpts.find_identity"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.openness_reading._is_complete",
       "ast_sha256": "9ccdacc09b7f207732b39ba7078f87642d2524ace5395ea97ea7b6170ed10495",
+      "callee": "research_harness.openness_reading._is_complete",
+      "caller": "research_harness.openness_carried.observe_math_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading._is_complete"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.openness_reading_v7._describe_checked_entries",
       "ast_sha256": "08e0fc3dd560487d7abf6c757db1bacff9128d1ceb867e95bc252f55fdf2b109",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.openness_reading_v7._describe_checked_entries"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
-    },
-    {
-      "caller": "research_harness.openness_carried.observe_math_chain",
       "callee": "research_harness.openness_reading_v7._describe_checked_entries",
-      "ast_sha256": "69879821d6958cbde7a159e4b2496588fee8ea7f8870660f6ef454522b4150fe",
+      "caller": "research_harness.openness_carried.observe_math_chain",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading_v7._describe_checked_entries"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
+      "ast_sha256": "69879821d6958cbde7a159e4b2496588fee8ea7f8870660f6ef454522b4150fe",
+      "callee": "research_harness.openness_reading_v7._describe_checked_entries",
       "caller": "research_harness.openness_carried.observe_math_chain",
-      "callee": "research_harness.openness_reading_v7._describe_identity",
-      "ast_sha256": "dc859ef706df40a42e7cb84f0b054310cadabf9feaeadaf0c4023d2137cb971f",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
+      "targets": [
+        "research_harness.openness_reading_v7._describe_checked_entries"
+      ]
+    },
+    {
+      "ast_sha256": "dc859ef706df40a42e7cb84f0b054310cadabf9feaeadaf0c4023d2137cb971f",
+      "callee": "research_harness.openness_reading_v7._describe_identity",
+      "caller": "research_harness.openness_carried.observe_math_chain",
+      "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_reading_v7._describe_identity"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.select_carried_readings",
-      "callee": "research_harness.openness_carried.classify_carried_notes",
       "ast_sha256": "372cdf7796d6fb48b4543136cb8bd56266458cba6b87a37f4e15a7a95d10ad8a",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.openness_carried.classify_carried_notes"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
-    },
-    {
-      "caller": "research_harness.openness_carried.select_carried_readings",
-      "callee": "research_harness.openness_carried._list_search_dependencies",
-      "ast_sha256": "8a72b51fde7504697e30f524bfce6dce8ffd2b6ca7e4bc2af0d4c09ba3af7ef7",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.openness_carried._list_search_dependencies"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
-    },
-    {
-      "caller": "research_harness.openness_carried.verify_carried_selection",
       "callee": "research_harness.openness_carried.classify_carried_notes",
-      "ast_sha256": "03eb6782efd756a45b0752a7bbda4876bf11975af10bede02f2c2b06eb5158bb",
+      "caller": "research_harness.openness_carried.select_carried_readings",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_carried.classify_carried_notes"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.openness_carried.verify_carried_selection",
-      "callee": "research_harness.openness_carried._list_search_dependencies",
       "ast_sha256": "8a72b51fde7504697e30f524bfce6dce8ffd2b6ca7e4bc2af0d4c09ba3af7ef7",
+      "callee": "research_harness.openness_carried._list_search_dependencies",
+      "caller": "research_harness.openness_carried.select_carried_readings",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.openness_carried._list_search_dependencies"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
-      "callee": "research_harness.errors.ResearchError",
-      "ast_sha256": "6c5ad0c6484e9359975e1de763072cb623a16502af2a26b27eda5d91ab6fc42d",
+      "ast_sha256": "03eb6782efd756a45b0752a7bbda4876bf11975af10bede02f2c2b06eb5158bb",
+      "callee": "research_harness.openness_carried.classify_carried_notes",
+      "caller": "research_harness.openness_carried.verify_carried_selection",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
+      "targets": [
+        "research_harness.openness_carried.classify_carried_notes"
+      ]
+    },
+    {
+      "ast_sha256": "8a72b51fde7504697e30f524bfce6dce8ffd2b6ca7e4bc2af0d4c09ba3af7ef7",
+      "callee": "research_harness.openness_carried._list_search_dependencies",
+      "caller": "research_harness.openness_carried.verify_carried_selection",
+      "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
+      "targets": [
+        "research_harness.openness_carried._list_search_dependencies"
+      ]
+    },
+    {
+      "ast_sha256": "6c5ad0c6484e9359975e1de763072cb623a16502af2a26b27eda5d91ab6fc42d",
+      "callee": "research_harness.errors.ResearchError",
+      "caller": "research_harness.review_route_capacity.plan_chain_capacity",
+      "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.errors.ResearchError"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.review_route_capacity.prepare_assignment_capacity",
-      "callee": "research_harness.operations.fields",
       "ast_sha256": "ec2fd4bdd668111c71f7c964ba05d9bba1da91c3196a82d13a5d19c37bdbacbf",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.operations.fields"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
-    },
-    {
-      "caller": "research_harness.review_route_capacity.prepare_assignment_capacity",
       "callee": "research_harness.operations.fields",
-      "ast_sha256": "8bf1cd334eb2ec675e52ecc33621cbe28050226953de1a8f2ffcd8042736eaef",
+      "caller": "research_harness.review_route_capacity.prepare_assignment_capacity",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.operations.fields"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
+      "ast_sha256": "8bf1cd334eb2ec675e52ecc33621cbe28050226953de1a8f2ffcd8042736eaef",
+      "callee": "research_harness.operations.fields",
       "caller": "research_harness.review_route_capacity.prepare_assignment_capacity",
-      "callee": "research_harness.review_route_capacity.plan_chain_capacity",
-      "ast_sha256": "3c12430db97d9c70cb55ccf9a897a72b894735da8edc32bcb0f7f680b40dc162",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
+      "targets": [
+        "research_harness.operations.fields"
+      ]
+    },
+    {
+      "ast_sha256": "3c12430db97d9c70cb55ccf9a897a72b894735da8edc32bcb0f7f680b40dc162",
+      "callee": "research_harness.review_route_capacity.plan_chain_capacity",
+      "caller": "research_harness.review_route_capacity.prepare_assignment_capacity",
+      "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.review_route_capacity.plan_chain_capacity"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.review_route_capacity.prepare_assignment_capacity",
-      "callee": "research_harness.errors.ResearchError",
       "ast_sha256": "eacfe953595f0bef976cb92663ad552c2e2c45db6c3b3eb4c30b3898143eeb0b",
+      "callee": "research_harness.errors.ResearchError",
+      "caller": "research_harness.review_route_capacity.prepare_assignment_capacity",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.errors.ResearchError"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
-      "caller": "research_harness.review_route_capacity.prepare_assignment_capacity",
-      "callee": "research_harness.errors.ResearchError",
       "ast_sha256": "ceaadfd1bb6b9cd63e0115e6d52d758cbb5eab2a9a5dd8d9bca7c8adbf895edb",
+      "callee": "research_harness.errors.ResearchError",
+      "caller": "research_harness.review_route_capacity.prepare_assignment_capacity",
       "classification": "listed module",
+      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata.",
       "targets": [
         "research_harness.errors.ResearchError"
-      ],
-      "reason": "Reviewed Step A packet-source call against 493461ef; the complete caller certificate pins its arguments, internal observations and planner metadata."
+      ]
     },
     {
       "ast_sha256": "2ace3d717dcaff4a923e4f9fca036cfbb35a4736aa737d11a173fe9dd9dc2866",
@@ -19365,16 +19375,16 @@
         "_require_shape": "7b32d6377df0083d97e1511ea57ea9cb303633215668e28d4968fc57f00c828a",
         "_select_recorded_attempts": "1f34e795b3ba9e8d8d453fa5784ffecd6cf226492c146d5ac985c3e552d36f79",
         "_verify_entry_spans": "ab6d528d341dba7237ddf91788a54d7a5d3bdae2dcdcce51aae3be1e6d33260a",
+        "_verify_math_prefix": "756a9b0e11d289023f5fd04f0d8908b09b9998217ac106a1dcb3558704d59913",
         "build_carried_selection": "affaaaaecda8942422209ce8244affbcd9ecc53a52cf60ebcb8fb55cfa37e496",
         "classify_carried_notes": "9e180cf2c1f14caa28754531b470abf05fe3aa821e64801a7f1b1a4ba844dd6d",
         "credit_carried_turn": "6be211ff3069c5e68aa726fc407b1c04566499c355c76f95971a02e6f7f41bad",
         "describe_carried_selection": "e5a75c3e7a0002722ca4c2f1b604aceb611e4b15b65933cd1d969640869db964",
         "list_qualifying_chains": "e8d7e624c9f3c66abe107438121cd9810b116e79bae7bb442aff03db0a1095ac",
+        "observe_math_chain": "256aebc696b215d646a7eebb5502974bf657b1f4d82eb03cb4e38c7331cbb859",
         "observe_qualifying_chain": "f93665f40415d7d97f3570650c9c1a0a248af76ba8b2aba87671af67e829ad11",
         "select_carried_readings": "ad3adafb806e744e0888adf7f9c0f3de6739a9a3e0b7971935e306d8b00ad3a0",
-        "verify_carried_selection": "6661cf55534324b3d3683cc555123d608b5bbd63c89e258758913ad38bf61514",
-        "_verify_math_prefix": "756a9b0e11d289023f5fd04f0d8908b09b9998217ac106a1dcb3558704d59913",
-        "observe_math_chain": "256aebc696b215d646a7eebb5502974bf657b1f4d82eb03cb4e38c7331cbb859"
+        "verify_carried_selection": "6661cf55534324b3d3683cc555123d608b5bbd63c89e258758913ad38bf61514"
       },
       "packet_call_digests": [
         "03eb6782efd756a45b0752a7bbda4876bf11975af10bede02f2c2b06eb5158bb",
@@ -21090,7 +21100,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.report_views": {
-      "ast_sha256": "4e9e491287738b16fa61f56bc788b1698bb77e73b7372b8fffb1341e57e430dc",
+      "ast_sha256": "287f72335a2552ced6a8cb7cb48d73ef2e4634157ee9add8183afa999faa2ac4",
       "functions": {
         "_hint": "a4b26ac7178c61f5d948fe67149e026f4e305ba20a642c9821fc7e934f3bcc28",
         "_obligations": "a728d3498a4ca0966e5d5307fc8d70f53860e2bb85cb074725f261e3889059e5",
@@ -21100,7 +21110,7 @@
         "annotate_parts_obligations": "76507ba2f15d6817e99288376a66b3805c78b427c42653a6d96746c37d5ccc6d",
         "bound_override_summaries": "7bf00db69ad487a98703d0b289acaf839f90c7308161350e4846e6faa72ece70",
         "current_obligations": "9a3d0de13eb26d581cac02bb7194cc0286311549353f8225ec2e72693e35830e",
-        "describe_parts_turn": "723dc68a5af51172ea222a1262a563fdc1b741f4f4c51b1667e638ac821de8c8",
+        "describe_parts_turn": "110ac0632f2987b8c29b0c1cbb922a54ef86c59323d1839ed2c0929ce93460dc",
         "next_summary": "e2699702540cda5b7a3858052246367692c795976d9098743441e660760e3625",
         "obligations_page": "4fba1f63d3f3ea3f041b68625add2f6626bc605dbe8471a944dbac25b85cf622",
         "order_obligations": "2718ed6192a804e35771cefa63139652ff6e20a08429d34b61de4cc2c5b5cc71",
@@ -21110,10 +21120,10 @@
         "summarize_overrides": "cc4204d01df8f4c6e4ec58ca530f11d798a15f1fc41fd43aa033033c21d065a7"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed conservative unresolved-refusal projection without inferring exhaustion from raw attempt counts; independent blockers take precedence and posted views suppress actions. Changed AST requires declaration review."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.research_decisions": {
-      "ast_sha256": "2ab358fae0e3cebf9e31fd8e3839d8d706a3841cf73db93f9586d56e3a938279",
+      "ast_sha256": "fb4bee2fd2ce01e6d0d91872fe0cefcef8e8d9d59a7fa6299ec9fb26d89c7f75",
       "functions": {
         "_accept_support_digests": "420d7e37980f2ff3f96d01bf8a8444a24c3070e2dfbc7c2b1ffa79a6c6999aba",
         "_all_objections": "4afbf09db02d0799095d8052b6dac4239aa34b9ed355127d0910e67a049b94ef",
@@ -21150,7 +21160,7 @@
         "collect_problem_post_objections": "8e94f16854827d0a3bdb564dc12aa82cd5670639c404c2062247015487e43d15",
         "collect_problem_slot_outcomes": "4b8d177648efb5067175abc4d9805b1974c6bac50da53036515e06947d412930",
         "decision_state": "55b293a62b41a29f33bb97757ce30c68408b3e4f6622843d0deb42450e6efa45",
-        "find_review_undelivered_references": "a8bd5e86a960862c650ceb4868b85be46a6c3f9ffdc7353bc4042d7449583c7f",
+        "find_review_undelivered_references": "058dad7c8ef6e36de4ff29fee67cda365178ade452784128b762ce6ff4fb3bd5",
         "find_undelivered_adjudication_keys": "a9863dddf14e584dcd43c2ae8421eb493f2e47a835425c44982abb1ef50b5147",
         "find_undelivered_bar_ids": "c932033c6d29e43f47cfc687d55720d71ed5b3808b34b688b3da00796aeb4742",
         "find_undelivered_review_references": "0bc94efa31a5f33036245285cd376f0e1df3deefe9838e804e71d88db07a2653",
@@ -21177,7 +21187,7 @@
         "8dbc1ae5d8479e8303fac6815b2f01e99924d2523cc83a73a3a251c1078cf784",
         "ebe38f71323c64b1948e633f1400bc74b184e3de2a3fcf8cd4804aaff7e05b82"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.resources": {
       "ast_sha256": "cbf6abca66cbb22dcf068e86951c6437ca5b4e765568a6e92cb50fe6462eea85",
@@ -21816,7 +21826,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_failure_class": {
-      "ast_sha256": "a95e75652f935db14e8050ee5fcaeae7693ea91c0e05b40240be89fe3f936ee5",
+      "ast_sha256": "f37cb5d53fb381ae9052f27a2462ad0dc0214febc7803795725f35a17b54fba9",
       "functions": {
         "_describe_sequence_counts": "1903571802ceebaa2e6413b445ccec82fa398d7cf4b738a57b18c5747957e01c",
         "_is_scheduled_unknown": "18dbfaffb3993eab30b42d6bf376556828c162d79bcca21ce050df0f51cd2f2e",
@@ -21827,12 +21837,12 @@
         "find_capacity_signal": "b870ffda8a65d0565029aa5348be128646a06aec6702e64c3bf30de5888cf037",
         "find_output_cap_signal": "6f59f04a865cce942c17d9c6d81c771009d0ea962b72c3e6b92116e43dafca5b",
         "find_safeguard_notice": "f7009c2ad7f4d22a276386c1374d2309091fc5e5d2bcc2cd081f1c31bd3b9e13",
-        "has_smaller_task": "80bb5eb8bff91f61b78800f3e2cfb25880612ce57a386086340680468439f7b4",
+        "has_smaller_task": "71b90fca6de881e74ca9c238815dcb3a150f2120c147215cbdcc420dbcdeafa9",
         "list_turn_assignments": "c459557d60564eb8ea2566a13ec5f25f000a927b439c8cbb7bc928347f7d7413",
         "parse_observation_time": "a45e9741d77a027bf18518e09c8b1a262125934f0d6cecd3ac63c3c30df7f367",
         "parse_reset_time": "329cd60d6bb86719c819441543f5e9aae44305bd754318af2996e51f1dc23488",
         "plan_after_failure": "c5bbade2d3cf33f16c4007d949bf30b29f0ff2abdcd2e854220072faf1c1b53d",
-        "plan_output_replacement": "4ffcc61f5bc883f9f888739c941db2e21b0b85ce1933c124f6fd10d304fc5fbf",
+        "plan_output_replacement": "51bc8be84e6a37bcf09b3cca6531b2b4b26e6b154e6c0257104deb19dc0aa330",
         "plan_refusal_recovery": "fc11b4b1d6915e3ac237cebd8ad53507dee9206e32ba650d2208191ce5c83f7e",
         "plan_scheduled_retry": "d9de465ba74c6d4fc57df8aa62eee4c4073cad20d97b2a126860705d1ff0748e",
         "read_attempt_evidence": "7e3c10495f9111dae700adde8d8f342a79bcf2c58725057b7f88bc0d9efb5d9b",
@@ -21842,22 +21852,26 @@
         "970177577bb835b5c5ac97a0d64163966e523d06e418589e16eca0c8b79f9e11",
         "cbe54a67fb69e0e1fe1dc5085d4b2e4fcc27a2019eee930193876a86c72fa49d"
       ],
-      "reason": "Reviewed explicit capacity replacement command context and frozen refusal notice forwarding into both real parts fitters, with exact candidate preflight and strict smaller-request checks. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_handles": {
-      "ast_sha256": "0c539e1886dd6d9dcb6e791b3e8a18f9287054a38b709af0226404503af1d636",
+      "ast_sha256": "66ab156efb9eec1901c204066f8216c1e641293acb43c9f0949d8f2aa216520e",
       "functions": {
-        "_expand_value": "3d9624a1411cd821bd3fdcbe417072a07a432c8099b2d7dfa53c46fae504cfaa",
+        "_build_parts_v3_handle_packet": "ad2bacc455713a39c325530791eb6029d5e4fe9ec56f29dbcbb098ac7a3b5777",
+        "_build_v7_handle_table": "32797911a38f358cdd655abba9fc823e400af4a95c19b8a348ff8fe2f3d14237",
+        "_expand_value": "86889659458e121b55950554fb3ecb25e5590d6265ec37969a3e5671fce38208",
         "_refuse_handle": "915d5b47f24ddee7a7a3492784adfdd8386f9db2b8bfb1470e2770bc84c650ab",
+        "_resolve_packet": "d436bf46b75722ee9462be9259741638af283d3e1e83a7c4f994b3a48bf3fbab",
+        "_validate_v7_refs": "db12058c858f0eabae9e0390162d14b242511e44574d9cf923bec35a61dab62d",
         "advance_material": "be1b31db99c34369a64c27c9f5c6d9401559247047da2bb97cc6df5df8fa4e84",
         "authenticate_material": "5ba05cca7552c9a8e8c330fdccb463e459556f5b2f0e84a2132f8945a8ac5e4a",
         "build_gap_handles": "99761be4d98e910cd45de3f6d5c1b9761f4e9570ba4bb970cc28b244a2bd9a50",
         "derive_expanded_output": "4e0b6863beadf48979dc759d8c473600622c9c567a7801975bace6ceef27da2e",
-        "describe_expansion": "f2421dc4660a52231689a02bf487c679cdb4ae2aefd84ff0c0a69333fe46b4ba",
-        "expand_handles": "9fac95ac7876a6df00fa2f4de4fa53282c35c117771a55b147bfc64162bb0729",
-        "is_material_output": "8ab06ac48e4a0683f6f62ce067cd2952f4d14341b89c5c69fe9d9203dd99ed39",
-        "record_handle_output": "8b81b25a6e5885db6d40dcbed842f0a3526f9e343f28d0f261e9a5a222733551",
-        "validate_material": "c1abeb7ad05adfb3867df880b0904272fe894074d25cedf194937aae7f603b4d"
+        "describe_expansion": "c1a978e1f287d84dd95ce30271ae0ec0b342be07102709dd1e7351dc1616fec4",
+        "expand_handles": "853ad98cffdbedd4c7c1415c7f7d4c801b822a53cfd4602df6deddd5cb78d04b",
+        "is_material_output": "f2cf963a128a870f553a4af931307fdb8cec96fa600cf9cf5a21e61ed6ead569",
+        "record_handle_output": "d5d26876a50254eab70457c2903210a424d352725a8edafd48d34cc3ab547d5e",
+        "validate_material": "a4c38bc7db629e4e16732a05bf1569d09afbe5913e996f29f79cbc88a813a77a"
       },
       "packet_call_digests": [
         "08a3801a5dc278a4fa3ec3959db6d5254e5c484656c412791dbd2ee5f4e0babc",
@@ -21888,13 +21902,13 @@
         "e6073a699e918e9e62f101144415463a598070ca270e8c69118b271085873789",
         "f71df93e3effb278f474cea48473ab543f2e3e9f35807725d57775c354ddc1d9"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_input_projection": {
-      "ast_sha256": "d80dcb0e2f1b7985130cf94a1b023a143725fe366dd627a6ee8091236bd355f2",
+      "ast_sha256": "fd33c76373759331e158d9fe5458ab097bcd9f8330139d170c0fbdede593e119",
       "functions": {
-        "_has_parts_binding": "f6a9a4f6a56255cd7f553ff75d093af4748f6e6afa4ae9b226d22bcb6b99f326",
-        "_require_review_packet": "6952231f0210304e439f495cf00c2b1064e46fb2a06198af0e921f6f6f1638ba",
+        "_has_parts_binding": "b16cceeda1ada67a14441ae47e61364ccb25aeb12055196a49468a97c50425c9",
+        "_require_review_packet": "f60013f35c1f54c0040e2cfa33cd82cbdc9332f3922915e6859e67afd6f10493",
         "collect_attachments": "a7fbe365cc45168beb4182240d52fd02647415fdadd2e0c3f4f5396dacbd5eba",
         "find_attachment": "abefe0778bed5aa8dabd77667adfa011f00a18daa554ae63dd9df533d2fdd8ec",
         "packets_from_request": "5efd22fbee4faae7695ec082713ffce52927cdcfd4978a0d942c6cf0e34da4a1",
@@ -21943,7 +21957,7 @@
         "f78d80912504231a8c0b90620db48de3be1bae20444ff3dda37a4b7946e2d4be",
         "f951294f24d7e4a993130fc87009341e35e61ed80e51e23a832e4d3a7985e439"
       ],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_objection_evidence": {
       "ast_sha256": "19078137703f6e76f33fc5cc16a3589fb0fb65186f436e8fcd96d5859f9c8500",
@@ -22000,7 +22014,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_parts": {
-      "ast_sha256": "36d219229a8638bc5d7cc0fca3d7e57dbe47cf50717737ab4b80365c4fb45473",
+      "ast_sha256": "62be3adec97e9112ddcc4578adc1bc64233bd40c68958703f0717400fb53a5d0",
       "functions": {
         "_count_content": "c25e6d5d66bffc953d116e616287a25d6736b3efe6d742762cb95bf3e132e719",
         "_describe_unit": "ab1d1db4be19c42aafe09f942532f14048db0453e54e47de0fe9bf647237ca18",
@@ -22022,6 +22036,7 @@
         "_merge_spans": "99704b9021fea6a5f621286d57abbb7d7e00f4c6b7ac2ced434e420d7b3f2e6f",
         "_pack_card_weights": "47ffc924f71ada76da259b5fca460b40073e050c852f20ec87d708fe520a4b7e",
         "_partition_cards": "eb9842986e94c8da40580b2fa5290613b36da6beeac78537986122226e0b923c",
+        "_prepare_v2_packet": "f6f505f35092e970a7c5b89ce0eef9ea976f13cf3d0178e4e09317c7ea8dec4d",
         "_read_entry_bytes": "2e0d6d34a24655892a01964c1405e7f895c3ee678ca5a16c770dfd24b2e659d5",
         "_read_observed_turn": "4f3b194506f688caad232402428604da462019185fbdd9bfe3ef2e90dfd77b01",
         "_rebuild_occurrences": "ec94242f35476e9877d5d6bf01626af260d863326e797fcddb3d7715f9c53fe1",
@@ -22040,43 +22055,43 @@
         "build_frame": "be548debe26f80043d63de577c32c183ac00fb65241db6b33da7b28d59180c39",
         "build_inventory": "8ac908979c3997fff5d6ab4e9e163f8f5d0d1b6eb07aa0cbf67399d7bb57edda",
         "build_state": "574e7b5d7d9dce29bdc003de6586b2863ad4f759dd1d4b465e039bba1e4480c0",
-        "build_turn_prompt": "56a1179dd3bf0fcf1a64067305cd096df423d5f6db8cc285379dbc4a4c69eceb",
-        "collect_contract_packets": "161361f46c799bc7e512b3c1a72af1ebd695910c4abeb8c1b33c3873636e11fa",
+        "build_turn_prompt": "0d409c1c8e3ed69d48b65b75364e175cfd7c935a9cba6dae5258400c8c52f66a",
+        "collect_contract_packets": "304128b218ff8ec899fb59870b147b4298d4505acdc1390d2d093dc79d16ff2b",
         "collect_series_packets": "dea6ef18552df45891251524471fc7804ce07c6f779532d5c3c0dd339b17d6f6",
         "compute_read_budget": "ab7295c0fd2eca2849112fcacb6f235ee2c25107b8bc95354092038d3b2635c3",
-        "covers_items": "556b8f395ece6b09c751e64563f7d2271af2394bed31a4fc4ccae1f3ec5fc9a0",
+        "covers_items": "843a3b64ea63c0f86fcc2ea8d8af094952d42dfcf60892606664d79429c7baa3",
         "covers_original": "3476a9a69f72763e0076bb717f591605276298745d635ccd5884e5b174d0b4e7",
-        "describe_plan": "c501aa9f1d7914a4e424ba31555af08252c5b5a293c3f729e2878250f50ad595",
+        "describe_plan": "f8fedcaf04efc43d4feb0d18ab5db68c0fdec7baa22b176f324943913eb8888d",
         "describe_selections": "b3b099b6714c0f07983b817b349e700214a2c1568d4aa0eb4703eb04866006ce",
-        "enumerate_units": "52b862d0191f96db03189cf48461df63f2d27b69e03b96761b87e6b4d1706aef",
+        "enumerate_units": "318d54a56b395b4c7bdbcf806ac4d843af1a0746f7c3c31c368a41d89931291d",
         "find_failed_replacement": "edca0967552f2f37d1832f63bdd6afe636263e979a09acdc2add7208110823a0",
-        "find_kind": "92c626c6b997606479eb319855cfdfb339cadc7040cfe9b112f6380e086268f8",
-        "has_series_attachment": "ffe8a4ba9b2b566d6c3b166a0e0022a98a4ec35d0317ec197559822e34d67e79",
-        "has_series_reference": "3ab6ac5e832d1c3bec4a2ce5b26b0aa27254f4e38727e8eb399803058c6410a8",
+        "find_kind": "b931b6c08d6c8267ce3079c577c49c76adb57dca792547cecc63826159f987f2",
+        "has_series_attachment": "d7cac71b45c62965fb4504e24b0ba1ac09cb95757fdf77f975f8d6f7c6b3b621",
+        "has_series_reference": "9109ae12cb6864d228000c9709e470fada6c46d0addf0aac3894bce24f8004e7",
         "is_unit_complete": "9ba7138df58a419a7c4e00c27a04433c7eb978fab0d4abff5207bb87200248bf",
-        "observe_series": "fbdc42c91edf32b73629ef8915455b650cef0a0d1496673979cbb41c33e30125",
+        "observe_series": "f56e0f23244b0acc4a1db20db44d50abc3274230a5867291e3c2c1dc3cc8f10c",
         "partition_card_weights": "7c05aef219bdfceab7a2601bb3b100a8fbb8a041724e95b651071921bfc8881b",
         "plan_check": "13149e112cc97b79ddcbefb00e1ea43398fef8b54561eef767195200bcd97b2a",
         "plan_combine": "373e80a8b7fabd375561e42035e9de6a1614e27b327684ee45688333f5f13693",
         "plan_final": "16a897ac4f38eeeda02cfcd0016696c5bff85ec700e0e9bf560f20d11c8f7c99",
         "plan_read": "c86bda9208e49583cabdd36dd6c0caa0c78db4716c375e547bb2fc83e9f7438e",
         "plan_turn": "b48c82f25df96150cb88c4a4255995336578a0856ee9b272b30c0cd6861f5089",
-        "prepare_packet": "06b182aeed0bb26398b77e8d641c2c67f9d4ee902865020a900d19bd9ae8ff99",
+        "prepare_packet": "7ff7e2f55f56b6d48ee6106c69bab6914c3a1606a6e27e1f0cf0010606560689",
         "prepare_plan": "b394f1537e190a5c2013de721e066a4170e1063ad68d38d5eb1201523f229589",
         "project_packet": "7b3d1a666515eee9dcb3033ddea26a6e7f2acfbfa5cb4fc22cc07d3b5caac4a3",
         "project_source_output": "d26db4067622b5be4475e2e134d4d840809a42beaa70de56165e5cc55d3fa602",
         "read_delivered_items": "ab607759dd432964a6412cc539767573c7680eedeace6fd2c8dc1d2134f65e98",
-        "read_inventory": "cb48354eddc4870f4ed135ef7ca11d3bd31def13bfe8a3e666e9c8bb8406b595",
+        "read_inventory": "5259e24b31db785eaa7f001d17c82e4651b64747fbebe45337ec646df209bd24",
         "read_logical_packet": "cd04b56f06ccb1fa04e95a1b686e730b18800c97640129bde8ad249d2bbbce0e",
-        "read_series_delivery": "63be6f4447d7a0ddfe73e38c22918b3ee35d4cf109d569a5b7915d25b375609d",
+        "read_series_delivery": "899a31123d44f030bf535c0ac1fe2383663d838acf36296dd240053423546f6f",
         "render_json": "6e44b16866b53ceb551ba15bf9980e757ce997b4e264913758ab24c27edaae35",
         "select_kind": "8d02f95b1a20e20bea04bfab27b3d0e07c116312e1252d138e192c890391b426",
         "select_originals": "ffec412ec36d6b825430a6d38784fe1c3e2f0264407e3fe0dad3d49b6780b49e",
         "store_inventory": "99ab533f584b7d54e5bbe7436a571c07adaed07be74b57484ff466641bed9cc4",
-        "validate_deliveries": "1b2c97256a0aaa6b9d347a9635bee3f9b9351ec1fef8ec38a5eab4e01a23a956",
+        "validate_deliveries": "b0dbe50b4a8857d652bfad208de19d19deddb3463cec1341ceea77023d837f43",
         "validate_output": "8b79c9523b6358dd1a2f563f1295782e25ff482c18ec275232c42c1b759e3fba",
-        "validate_turn_output": "3964ebda8235c890e557d8305a84adf94699c7a6a028f5b701265eb659a62983",
-        "verify_series": "8a59df887be21446db440ab76280cda74a9f7278f6d53ad6ac336e980b5693f0"
+        "validate_turn_output": "331fa047becf3c4a9afa9c490fb2f11a1550d501d64a0d79d8251aa6c7ccb707",
+        "verify_series": "e13d6c8c06847ecc489111b289230733d9bb5dbbb5157b6d3854c8a3be483b17"
       },
       "packet_call_digests": [
         "004a23c85487f6054ab9058abe6762f472aa7bbc3b9bc92a1c28d23164b8cdc9",
@@ -22302,7 +22317,7 @@
         "ff1fa696affd5ae8387a2f966267283cd2fe63fd164ca3ca155ee1adf5488690",
         "ff4fd5fd685c75ddbcbdfac138c5b7f9b214f1ef1df0e3e4b0fe083a165c470f"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_parts_adjudicator": {
       "ast_sha256": "5fb4c81c48c90e0dd0462e2b703f4eb26607664f2bf5b5b5320728c7b0822594",
@@ -22334,7 +22349,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_parts_native": {
-      "ast_sha256": "7fd5d5bc54e4e4c4c1d7344d0fd7767629fd2f8afcf5d61343ce29a1b41b1afb",
+      "ast_sha256": "145fa82a6b9a17ed0893f48f70aafa33dd3f4d8aa0a9c556544448206fc37225",
       "functions": {
         "applies": "f88c5a813aff3da28bf5990920e6f7788a3f1b420615e0d932994970d405c9c6",
         "compute_replacement_key": "573e7e8e65df9fdac96327cb1fbad9c3142261896d37fe0a3b601876a044a66f",
@@ -22344,7 +22359,7 @@
         "list_context_units": "5923cda828bca7a0860a4da02cce14ad7cef84b3af15092c2d1e7f771ea4fbb5",
         "list_targets": "9eb0bd169b58e9c4f1e9353bfc27d6da67ec31cfb4553224060824ca6772ac54",
         "list_units": "e85f7c748d42c27e5c58688ac9c726e4da1c9f51db0ac632073eecdc5c49b793",
-        "read_prior_assignment": "665e00ebc64fc87a1f4c77d29b9ee363f58a754a71d215a9f4ea0fb587124b32",
+        "read_prior_assignment": "99b40979317c51beaa2842cccd949d62cc8ce06ae153660afff40d7029a5c058",
         "validate_final": "409bcaa9ebd5852e8fa31e9e374558490c449b485cc33115aab1da719c739603"
       },
       "packet_call_digests": [
@@ -22359,7 +22374,7 @@
         "edf9033be8006c71071149926d06e3c244d2d2d2d94e219d93e05d5d03c28a77",
         "fd596e3f1be4698ee026e4eb38e63872bcbadd98b8f62b2ef22d26c8f2568d6a"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_parts_problem_result": {
       "ast_sha256": "70ea6bc59c5bf13e3a052b4addd6c28e7e7406300e0a9ce48b12d54b9a5b44aa",
@@ -22398,13 +22413,13 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_parts_prompts": {
-      "ast_sha256": "b0086d438f84a267617a6715e956fd315e9b349a263ba10dcc0b909b0134bc9f",
+      "ast_sha256": "5c03802edbbdbfd402a15e9eafda22cd1432fc4219bf1f98ab9336c134eba3a8",
       "functions": {},
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_parts_repair": {
-      "ast_sha256": "79389931768b5a6f62eeb88e8755a1c5edf5905e7b9be73e435a1d8b91e1bb25",
+      "ast_sha256": "c2ac8ae1465b1b35d9fb0903f53360004ee6fe8810fe03817d3d5145f31e528a",
       "functions": {
         "_supports_parts_route": "17b3d2fb506080f05f3524da3f13fb62186d7d99def90c39677ee56ed6995cbc",
         "applies": "222d6c02e3fc78446e1f34ef7a32179c7c4d995a965f9f037bbc408fed089f5b",
@@ -22419,7 +22434,7 @@
         "list_targets": "210ea9e3e62b40b793d8c94c516ad50fac8b7503b00cba91854f2ff25a6e5b11",
         "list_units": "9a37d2c45152963c9d4d81260b0cae36af87af2529af6128d4da58ea0f9927a8",
         "prepare_history": "1f65371d1d3bea37b22c8f9dba46f2dd6e6c7667b009a465917772e7b8254fe4",
-        "prepare_packet": "f2f5b665c3b5b6c81bf692ccb840a42be5be991001a9289bd7645fa7677d83be",
+        "prepare_packet": "3560451f82341214df626a27192d6a0275bf40027e6c88ec4c8bd5eec1b0ba7f",
         "prioritize_fill": "4c5b4df9c8366ebf8796c2ce4ae63d451f9cf163947c66c329444237e2bd020c",
         "requires_parts": "572d9bc67e47ef55f2859ac45335ec6cde0f326896529b2fcbffdf47cb01a9b2",
         "validate_final": "95fb304c8cd5b977247734a303180e7ecbcf4fa894928454bb8c93a675541efe"
@@ -22519,7 +22534,7 @@
         "fcc884bd67ae74873bdd99e654d0761c03b436b5ac83583bf0823c8a497bd98c",
         "fe145f79a161fcc35b54de1115f8aa43b040f089d8116037519793e92c6c8c76"
       ],
-      "reason": "Reviewed optional frozen refusal notice attachment before every actual fit and after prioritize_fill; omitted/None path restores the previous exact AST and stored behavior. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_parts_roles": {
       "ast_sha256": "caddb9050c81ca90fd3763ec0b1155f6ee65974de61403e3c9b3d5c4c5400586",
@@ -22534,14 +22549,14 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_parts_study": {
-      "ast_sha256": "285bf6d9999b03ec2f29629e46f3959a716663ca60101c74cdc8f3a2bd06bd0e",
+      "ast_sha256": "162b325de010d0539279e9ef3788e9487f45f62f01bbe4edeb8a85ce3995e476",
       "functions": {
         "applies_readiness": "004058601f155e1bfda14a818b3aa77ea963d73b0b4b2448037bd7ababbc1c14",
         "applies_verification": "edf073cba7afa509dea5e55d39f4a935f71c2a65fc0d8083a2ddde9b29e7ddb2",
         "compute_frame_key": "be88383a736cf0d1f763a6bb1a9d96acb935c7e8a1ced38ce7614a37ba906aa4",
         "compute_readiness_key": "a80ae50d09a2d77501d2f41b79039220a049d337af3a97e76e478969eca10299",
         "compute_verification_key": "934a12d68f01f2c1c98f9d4b1447de1267c20f4f188ad01223f723359ac3a819",
-        "list_bearing_references": "9dc52fde87ce619f7f1bb5261298b956cb9e8aa09b4afdfba9381505653fd0ad",
+        "list_bearing_references": "9385acaf77b8cdfbec81cc0d0461b29a334e937f59f196f54f3097173f2dce04",
         "list_collection_units": "c44f2724314aeeaab3a8cd15154d7e976db33eeb4f6fa4af9292fa29aa6ae9e8",
         "list_deliverable_citations": "aab4fb45fd028954c6417d93658ad3ba60afafeb12b204ee70eeb97c1ef93588",
         "list_readiness_citations": "b97a550a400c4d242eabe6c4feb3f445b68791d387fcb3deaed57801a3ae6b1e",
@@ -22574,7 +22589,96 @@
         "dd2e3acded43876ba6d3edfc810436b51bae70dbd951688ca27bd7f32e45fc8c",
         "f36c95011fb910deaf4975ad9106a915ba9ded719ad82671f9e7a502ceeb1818"
       ],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
+    },
+    "research_harness.review_parts_v3": {
+      "ast_sha256": "0130202204233ff5357708e81b239f44760776ec6334a565e07f8413db35f1a7",
+      "functions": {
+        "_advance_group": "c2a09676e335c9fa314f690d454f9660c1af77273d094f796173780e526b33f9",
+        "_advance_requested_ranges": "b4e4f338dc5d496e021e1caff2ea7c3eeb2d7fed8984d47f8db85cc5b4a25810",
+        "_allocate_content": "0de9765ba31642af682106d73fb6b28ace07e76a3b077d28e67ffe619b9d72ba",
+        "_balance_groups": "65496099410a55b90a90cb607102b2c3c0d47faed42f836139cdcf6292c70d50",
+        "_build_frame": "8df9330f9881743bb2dfa6f5dd53c1fd6248f8016e78cb48db940838c14074a4",
+        "_charge_late_card": "78ead8357f2bc3305f342b0a49e4b1330e187b9f5f04196949f7d88e435bc970",
+        "_choose_groups": "e4a1545d4ca630d52e505c92e6fc6874cdff509619d8fc4d60b2a489b5192491",
+        "_deliver_requested_units": "7545793a3f8b2bed9771fc37db78f486165a64e8d7ffd254c49df723053096eb",
+        "_derive_observations": "ee1723edff0fa6d1f6de027d84ad2ba6d0907d69f6b897489ff95ea729459b7b",
+        "_describe_capacity": "d60dea95e435360a504db73875f18c54ddc14f1e6aaaa600e7c8a3f545459efb",
+        "_describe_card_allowance": "beeaaf1ddfce0061571a057dea0f42af49018a45a540055168641021d78bfd37",
+        "_describe_entry_rows": "a31750e40edc73a9a51749b8a55da36adde120fe1aacc21cb559e1a6246bb18c",
+        "_describe_inventory_unit": "f2615ad11399ec17a871bf20251c34e8acfe922a98f618797b9f43f6c18e18d2",
+        "_describe_read_window": "0cdd9a8abad742f35f48d7ee494ae64516e5397910f19e5aaad5a39406e4ede4",
+        "_describe_reference_units": "bbd51ae8c1933a06378665c2a59502c6f46804104ad20db753a2a6181a1a9b17",
+        "_describe_series_frames": "49d401913d4edfac8d40afc3c5ee04d43e2f17a545682093522b28639211624e",
+        "_describe_text_charge": "81fe6b85ea9c4d30a07a06dd898a477de7777ad5709bf10fb27cf82c3312ec84",
+        "_find_path": "f9c5445a83765df3c26ab0679a751dfc2a854b86291201d0963ae8ab6cf9a745",
+        "_find_stored_entry_unit": "f2f0c58003045a7e093890955772a4a08df8ef6a4bc702a6329aa3b24ffc1022",
+        "_find_text_offset": "1a39bc0f6031a4d611e135937abaee6e1d1ded2e1b623e2b2469122dd715f9eb",
+        "_limit_content_characters": "6081d2fdd143e63ae77c615ec18bd9131135532e9e657b6000b555fe8c54f870",
+        "_list_actual_segments": "f493dba1aa636772d6ee341379d5df3d9f7730ec2fa17095c24fc4910b4617f5",
+        "_list_binary_entries": "bbb39a45da5f5c3083aa0c79653b484113dc06b5cb7ede0352919043b43d0600",
+        "_list_interval_units": "b4bdb512c7dc11ddb367d2820f7b7ad0c27f651da8777fd211731f3d6061d187",
+        "_list_packet_fragments": "133de21abdc7cb9c36a38632810da7b0b3bf12fe9014c734e0f0ced6fc7bf430",
+        "_list_state_entries": "85371334f93cc773967847950f04e541ef538fed0fbb097aea7ab0a6acdbf157",
+        "_put_value": "1d999548fd6fd61a6c29e28d9264fbb5eacf88645856a8afd62f2f689a046f74",
+        "_read_block_room": "e9ee9e366f703886aeaa9e7d65a49e42f30b06ca44c3f657893788e5321721eb",
+        "_read_floor": "565f5940f4f7ef811714de5556f0ad3470ead50d8c5566e6d10915ed9129b37e",
+        "_read_interval": "344bd0378b958d439da61c8b1c3cbaacc3378d929c7f6c00b88c24c2d1c12d83",
+        "_read_series_inventory": "819f8b9e7df70281116e45681425f78bc76dcad42731c2d4a8941e7f97c5d3aa",
+        "_read_turn_bound": "5aef6e7b625f82235b4c2ccf2b15770559f7c6cfd25634793b50d9ddb10f9a42",
+        "_read_value": "b946b1092189df038a71a984b80a0e6666e5e0ce3ff157219aaa0c5c64dc5048",
+        "_resolve_requests": "2c6a39476797b81e06136abbc2a7a71e6aa4920a5ee54abf37dbf61a39dbe018",
+        "_restore_collection_shapes": "c7b27948fd2156ee51e347530de3117fe4ef26f6de0993adb7be17ce5ef41d15",
+        "_select_check_work": "097cc84efae4c4b28c2fae07d82715b9fff3b9af33e520556d6f076cc871f089",
+        "_select_condensing_block": "6e94e8cd25d464bcf59ee1121d30bb568772a2354c3ede1459ff750605ebcf23",
+        "_store_context_entries": "b4cf57f9cd1d34aa5ca55c3c18778dc908b20577f843f583ab550d58f90d6ca5",
+        "_store_delivery_fragments": "4f7b4ea229298f6a7a110398956a3e419ae9d1bcc3d6a7527a699f0b9c9f21ee",
+        "_validate_frozen_inventory": "4b07b6a9486a647389e1e3d056f6255b9bde56c69dcf3f2a3d2e09bc808c7e80",
+        "_validate_read": "d782008c63f08bed97f13fa079f008c34666c735b75b05585c02fe1655fefdb4",
+        "_validate_replayed_turn": "254bcddf1079a5c401adb1d7182f7a85cd03511c9f4877ad48e4f1d17e0455dc",
+        "_verify_group_statements": "6750c0c59906f6d7c593f23c4ccecf1533dd93d392fcccfb8cd85ad12634563e",
+        "_verify_requested_statements": "dd551806cc309b0c261e2ba73e60245f2f9e3d0fd03c41cf8be1a3201adee2e3",
+        "admit_packet": "011fb30e70aa79853bcd617821c7c705e64605ec1d680b39ff51e173b0727b6f",
+        "advance_series_state": "0d307fed1edbb326dd77142b7af8c4c0a114e24cb54672bdff0ed207a69d2f92",
+        "build_handle_packet": "505131313b1e109b4dc9ff12f1b4567746aa0f67e7ac9c597dba33aa9481b105",
+        "build_replacement": "3ad3ac8215dcb4f579fc5a2315e1cfb3879ebbd5cbef5ec416a4dd1a725223c7",
+        "build_series_inventory": "7666bfd3c44f73826ecc4d2f68af498a74dfc8e6dbe45896eb4b70ba37f33de3",
+        "build_series_state": "a6d7a1093bf136948048057159699790390b8b2065e8760f591f32306f129975",
+        "compute_card_allowance": "086cd7f983a989c8de949370135ee62dd5abd0d25e708c3d3109e025b9eabc3d",
+        "compute_content_allocation": "0162e42fe60fa5109519e1813efaa6ba551190dc042f7c3f6434554cb08aabaa",
+        "count_series_turns": "0b88aca20e11ade2f65d82e9a769f5067cb8aac58ea34497e4b754787ef3c855",
+        "covers_items": "51afe11015825ea16bd5358a185b85f31dc31ca8b3d9471fcf92dc3fe628ab51",
+        "deliver_read_interval": "2bd5ce3f28852ba6ddc53f5f6554a73403d3b84e65d09700b31ac71afaedb34c",
+        "derive_series_task_limits": "24186dbbb6c147bf3d4c3e22d6b2d4ad668cc51601e46f3026ee772c4acfc80f",
+        "describe_card_bounds": "b7fff96b31a4dd6dd2b9a26e210cb152b4474bd9e240c85146183f1f7f8abd2b",
+        "enumerate_packet_units": "ea042bb5f9963e3f9465700176738356119c076522cbfb154df1d117856a16f7",
+        "has_packet_binding": "eedbe8117c77f7b000f7000e7e069e6e6f30775e8e0cf7a5208ad6b02f03bd7d",
+        "has_series_attachment": "9a801d2703c820718e849821f30677a51f6d25c3c8882b7377d5955261b8d452",
+        "has_series_reference": "bb95aff102c52640cb6da42cd9d3dfc2a7ea02b6ce9537cd4da595e387d8c102",
+        "is_span_reference": "c499ca41e21f455b963d68b2406e8778aa57fecd15169394df202b30f3689da6",
+        "list_bearing_references": "49f7e951bbd267f2f0a93656696ee05ef198b442f773fdc853fc197f010a329a",
+        "list_native_citation_digests": "d4e0b471005e1f4233cc3a77eaa16f9e567d829c180d824b23366c34f57ba458",
+        "list_series": "456386ff43252338b02a0c2f2930a6058a3b9f70ec5988a9027f6dd394aacddb",
+        "observe_series": "15ebdb61c731301424999f4ee4bbf8e35973e985729e5bd3e288902b983555ea",
+        "plan_card_condensing": "2bd7c92912660bb102d83bfd4f4ec4ef998a7d4e8b2683f767339acae9cdb0df",
+        "plan_read_turns": "d08b732286853c208c38ceabcf01f8d17797eeb9d4bd3b3a030c5816444434b8",
+        "plan_series_turn": "ab2d0742b2e64df8db3f89534dea15078cbbbde64e54508f65517a24c4012fac",
+        "plan_target_condensing": "85d4eaeee0b7da702d4e712681f578d8ca7e6b3931ca05102ceb4822c56a9fdf",
+        "plan_turn_recovery": "6deb5ecd0b818830719d71b46a36e8cdfa971705d8fbec82b787659222fcfa68",
+        "prepare_capacity_assignment": "db043e2f6633b606eb7b0a9080bcea36a768200e2ff3cfa8ae67c55187e7f6f0",
+        "prepare_packet": "e8a4a8a369524e15a55d9a503011f8235d31cbe86240e82fe697fc7e49ab3507",
+        "prepare_refusal_assignment": "bc2ace97f2ff131d2a0aa0ee727b26a328351d6e17bce2c6acb112686059fc97",
+        "read_content_rate": "1df09ad3ca42e2549bf372ef224faedaa2a92185d0e834edbc50a7469aecbb4c",
+        "read_material_texts": "a5625a3aee2f3528dc99d8ef135269b782e8ab06e7532fb7c26765d7895ec987",
+        "read_series_delivery": "1156f28d3a615179e8a005ea0f08fe24f67b635f16a94bea3519984b4b3914ce",
+        "size_read_turn": "a3fb05011f972ca49c43ccd6fee48946c427cf0d6386ce2a40f4ddd88be90e96",
+        "validate_deliveries": "d612cff82072c777e726e594314a26be85b1733b291e70c7c40f629bda837e1f",
+        "validate_planned_output": "f42098fc0b26ba78c5591bb4092ffb0e6e0f9d4b87b8b1b6d848bff5b12f4134",
+        "validate_turn_output": "ddef72c11a14c75d72f49cf4dd825869febd531b29359bc3205fe2f5d9558050",
+        "verify_series": "231c12415415b76bea50e4e77d4c5b3d138a544ea0d8db11f84dca600e3db712"
+      },
+      "packet_call_digests": [],
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_pdf_pages": {
       "ast_sha256": "eb4d7c5214145932bd6034bfa51b678849eb47e2f7fae1a8c500c2f5ead9d1ce",
@@ -22819,7 +22923,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "d5b24aa59728618a71adb157c383de65329a776135498e2300fb521648ed0fb6",
+      "ast_sha256": "03955d1e9b6967283323c2d1099b529769884c18c24fc094f667e68eb3b88322",
       "functions": {
         "_assignment_state": "805eca7b4483852dbee0f8e05928cde22acbc7c7be8ec46ba127c3e71a0ddcbc",
         "_bars": "fd41a7b94078e8e0761696db4a7cc67b063cbb5787f76d6d3dae65fcc7fe5f9f",
@@ -22845,7 +22949,7 @@
         "_payload": "c526bb2f57889470221ebb4e0bfe3b3ac0f4218f5a89615a1dd28c4744bf29eb",
         "_prepare_review_mutation": "2385be60d23b526de9f5574449784387944603ad8060cba6b95193bb17775c42",
         "_project_scoped_result": "c2a9b83a0c4760d56232bbf6de7ed4ef74c50d5ad4f6b1e1e4dc502f33c61ebe",
-        "_prompt_matches": "1f4d4abb685d7311050d7e32aea93eafc0d3d44ad87c83e72bfc31645151c493",
+        "_prompt_matches": "4db0c6762e9100129470287b43e84a73d3b167391af8a229ee874740500ba706",
         "_put_json": "fae2721f42a5483694e38ac7a3a6006092ae8cefdf894fa21447ad2fd2070ad0",
         "_read_adjudication_review": "fcd04105dbc2473eacdbe01f05d5c23484a337f9c0afe0dcdb0fb12f5c6a144f",
         "_read_context_records": "85765f3f4614191373498fcca61846681cf30770af351b7458e03d6555400796",
@@ -22862,7 +22966,7 @@
         "_save_derivatives": "ec152af73c108934e2f0456ef182a91580f8f24b0d5f9b2bfa0f76504a343f97",
         "_select_common_prompt": "fcebe555799aee9c524fed96f36c4d8868ad4d113d9da7ee08a6475f8812b099",
         "_selected_attempt": "d60a7dabed46051257194d40752e60b08d403713bb0ca8746c9315b7bc720750",
-        "_source_parent": "c82856d8b5e5c0f90a2b1fa019c495a1eb1a81787104ab2f41d73e5e6def5651",
+        "_source_parent": "550cea9a8d105971f7cf5e0de533f4ec6b5ed186e436501a5c208ff752659e43",
         "_strip_source_rules": "0ce22729051040c17d31751a9d686f001ded0c0ac85587200adbf75b7e35b844",
         "_uses_previous_repair_suffix": "3a3a046ec8c3a62b016d8065a7f9b229418f56c46dabea0e66bf4cdbd8ae42d3",
         "_validate_staged_adjudication_scope": "0524b62da04da3bbfd354782320baf2bb938413201445572de2b7b4dedafa696",
@@ -22878,11 +22982,11 @@
         "authenticate_provenance": "023afe3f58b3810906b30ca9cf07e79c32313a8a727c78403c6a76efe5c5147e",
         "build_assignment_request": "ee048f3d4f549dad3ceb3bb7048a02bbf255cf23f25d4909915f05313cf02f88",
         "build_direction_evidence": "d36fbb4c4c32504a80d6b8b40994f45ee17ae018197aa6cea66c82bd20f54632",
-        "build_packet": "62319198819bd5e71b376ebe3a19e635cf24ceb3db9fd8f01014dfd1d1c888bf",
+        "build_packet": "2d8063941e34fe8cd6eafb3f39007f5b9f7adda2d6890b302ce37619de9cf0cf",
         "build_probe_prompt": "54844f87f0fe366a9faa59c946d9ead80149d0b62d047c288579b11bafc1579e",
         "build_problem_subject": "e96122a41158bfff642fd370cbd33d7f54ee259af8fbc6521565a58df4fc7005",
         "build_rubric_objection": "b90e9c2ef1e913c48efb2bd743ff95efa254b2da574a4fea211248c864bc7707",
-        "canonical_prompt": "d53b24972379614bd04e615dfeed75201baa70776cf98b3ec45b0f09ccc7f1ad",
+        "canonical_prompt": "af19e0dcc585d40b197be040265141be696db588ab82ffcde9b55d7843a34743",
         "collect_adjudication_evidence": "8ef3c2bb7ebcd0bfe25dcd84a272ae0f9824a51137616936f28ce481999ddcaa",
         "collect_carried_records": "f9962ad55bb34a6a6a01507c872b4cfb771413ba3fd73d38e9f37c6ad4ac0f6f",
         "collect_historical_bar_objections": "0cce846dc00f86534e2bba1197859c3395e7ca521046af8d1bd8cae6f5a6d35e",
@@ -22913,7 +23017,7 @@
         "is_dead_assignment": "0e87b884f14015390061ab33a6f17a4a95770ae46620127610f25244a62fcd85",
         "is_previous_prompt": "6a89da49434d83987b303155068983a6499cb140a6eb0b906a4e6c1043537f42",
         "is_version_2_problem_result": "b12d8be5451fd095516bf97d562c067466acb6d216815b6fe20a93f9e3520a0d",
-        "prepare_capacity_notice": "d81cbdd6b4f35b94be5d1b78a51b14de536895c22e83bacc0ac2ac4ebeb62e8c",
+        "prepare_capacity_notice": "9a6783e4420deeae66d517364c2619c26d477a8721ed6b2cd16c4f0e975b3f3e",
         "previous_problem_result_prompt": "949b2f4a70472ac4ab16f554d88f070cddee79d2d8005e93ad1d08c287e8cc90",
         "probe_route": "5d3a8b4ec9c0c024323f38feec31423ea29f0034fda16e08899de275048107e8",
         "read_assignment_output": "11a6d3cf0cf63b32e9a776db3cfb3e41b0d2a85e191e7c5e2d610ca33307c9da",
@@ -22921,7 +23025,7 @@
         "read_raw_observation": "14e6b6c7ca97a4e3992d908f1d94f3add3a92bee7561ace63d220fb8cbf06834",
         "read_route_runtime": "e60df76fe94a9b3f2b98373e22d2c1bc846ca050d50044e4744a7e60fe71bca2",
         "record_adjudication": "f65c72f2a1d78c38ccc43754e518ff050beb086db56d42f3b81322be2297d5db",
-        "record_assignment": "a0d64882a55fd1a60f08eec1540444f3a8cee55e868cca8fab50c4ee6f8891df",
+        "record_assignment": "0b7904c2bebbacbb40f64601017c26a0080f31732d9105b2c831afa26623cb49",
         "record_attempt": "7145b51d5cdbea1477432a5cce61efb366e8dd94540e082fde33066063c4b8f3",
         "record_context_event": "725358847e29626ae330f19fe7a2b1530b762238e0893f3021cebbe0c70e49eb",
         "record_route": "eaa1d126f04ed9ff04f92ff38836725f9ba40802efcda880e2c6adc7b94d874e",
@@ -22997,7 +23101,7 @@
         "f71df93e3effb278f474cea48473ab543f2e3e9f35807725d57775c354ddc1d9",
         "f9de906674de2fc03fd882f06649fc77f3536e68a95d398f173553e2a01ce4df"
       ],
-      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback after the committed invocation admission, plus invoke_assignment and probe_route forwarding: it renders derived views without changing authenticated packets, requests or their closed shapes."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_provider_usage": {
       "ast_sha256": "8b45cdd4c5b5a98325852d3040a320283c876c25fc99d358556999417a76c986",
@@ -23115,10 +23219,10 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_refusal_replacement": {
-      "ast_sha256": "c17dcdeffc2f15202cbec9c5e4f43bc39c931111cc6ea6dc1fa44819c25e9af4",
+      "ast_sha256": "7c57c1619ce1cb24c3f5b15a07c99445fc8b6b530d8d2769ae772a9f08d62a52",
       "functions": {
         "find_output_successor": "f9aa987eea6760e2a7fd3e29888f5e43903e4365d1e50938ea4b17c429b79967",
-        "prepare_replacement": "a7ddbaa90806583c3dde8eb3d95f2ab761970823c1a4b66aca47a5dae2efe6fc",
+        "prepare_replacement": "e056fbeae5eadb047a0e0c1f79872d58e5f1ff38c960a5ffc8fa705508e1a0f5",
         "read_position_context": "cdede8c28f9431efad8671676884d4e166ee1d9ad3e3728ac4414cc53cf87d32",
         "read_replacement_link": "c532b998f7ab3e173deea48b4d2b41ab8df7bcba6534694b9be6e35a17e27160",
         "require_selected_output": "c51358ab7d4eb8e8c97d27385ff001226126fdd7bf36960bf619db74ec1e1211",
@@ -23144,7 +23248,7 @@
         "f39814fa03694fc06afd107a8e76d88a1044a005183edc72cd8ea55b0d57508f",
         "f94bff00439cfb92fe19efa32bf359ad60d305548b0148aaad4243cb4d2ea818"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless successor ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_request_evaluation": {
       "ast_sha256": "0907cb21fc2c40c98f294d1c49ce2f9712aee0ecaa3f8401ad9d201a9c81179b",
@@ -23230,7 +23334,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_route_capacity": {
-      "ast_sha256": "1589c88047b7b9fcf7caccb2fbacdc0177fdcd9eaea12fdbb2c51bb0367afc2c",
+      "ast_sha256": "420426b4d4eaf3b8c26cd13044f70b13c1b5cd38e73794d476f4c41b9d43157c",
       "functions": {
         "_build_serving_parts": "8f2f7be1d7e1d4cc20fa124af779a48e77d41ab31cb6c7aed1fe3ed6a3de3afe",
         "_build_serving_repair": "c50aaef3ccfcccf6064f9a4cdaa0a0f52111886dd9b185936b6d1e5a38ab47ca",
@@ -23253,11 +23357,12 @@
         "_read_text_parts": "ecee21b54688006bfaccadbf1f8d3c62719b085178d0cd58f62fa1e4f29f8a86",
         "_sort_profile_row": "65664711f6a3dcff4563a79f29420042ef25561e6d906ee25b514fc48faa8388",
         "_summarize_capacity_inventory": "60dc409bb8bedae375b5805a318f8774bd75bdacc67659f588d03d83c3ed6095",
+        "apply_token_ratio_margin": "f4ef5c8ed9f5b27de0f13321a70274dfc744823bf21667119aff48ea567374d9",
         "build_capacity_probe_request": "8c0f9f71af443599d46c7df6045c4d8bfb87feae19f3d95372ed2e3eda67d619",
         "build_profile_rows": "c13bc9fb5b0d397640ab6240a162da9c94657f578c48d6e07c72c4b69b759fa8",
         "derive_material_allowance": "75731028db3042a3152e644117cc546d780ceed4683de58c8f51f9642587b9e1",
         "derive_plan_task_limits": "0acf843326aadd0c9c146f587ae50629ae7f65217869cb9a51b47a6326d2a6c2",
-        "derive_turn_task_limits": "dc3641c6ae1b8474f3c824220ab18a8268959be724cb6e9354bd2121a301f3e6",
+        "derive_turn_task_limits": "6c38913e44b65e008aa32dc085ac9464667bea6bda7c408285c8d6179ec7d568",
         "describe_assignment_capacity": "eb2c92c7ff7184e20c1df0ca440768bc8b0e54f1753f39bcd20de5d232e7f669",
         "describe_assignment_kind": "1dbb5ca7228dac98907ad67e1a310df9e5aafe3f5c0eae851abb4ebf7de8879a",
         "describe_assignment_limits": "7d463bd8c8479f7a8f0b3874cb734df1acd143601602ed3a83c90530145c2443",
@@ -23277,7 +23382,7 @@
         "describe_next_capacity_call": "ce1e087a414cac013c6e7862582c8ca6df7a1ff580dab2a3b3494901710c8bea",
         "describe_open_route_reports": "22d125513bd35b87825efbcd1c45894cd152084a73413e5dde760f1d27aba2b4",
         "describe_output_warning": "21de96d5af49fd055650e94897fadd5ab1bc0e52f6b62e24ade24413a0e1538f",
-        "describe_plan_preflight": "346aa1f1fdd478a2d9412378f361a34c1f90399fa45de639d19bb6bf90385ac5",
+        "describe_plan_preflight": "6d59813fe55f73bea00b712c69c4933d439eba5431d34f552443e0e3f4fbbdb3",
         "describe_route_capacity": "dc8c5c7fccc98f9fdaf056b80bbc9f508349b701d8981f39f27e2d819d94e024",
         "describe_route_class": "8c2e5fea846a7893c0a6d377dd0dbd77fa08d04cdb5b5dcd89b77cf8dae6cc92",
         "describe_route_report": "9b863e3edc15702489089729a9d56a67815a6b58bf38dcbd91810daee9f78f0f",
@@ -23291,12 +23396,13 @@
         "describe_work_units": "468b91882eec9e12c79f14d7204231f94f8692d48afe20770440099acb5d84a7",
         "divide_room": "479df84167dc68c68051cf92f213230c797c15f1ac495e77fdb4b451d82ca270",
         "find_serving_routes": "18ca735abee774034b5023e33a7181caba87437212369e5ed2b131726f85f776",
-        "list_capacity_recovery_rows": "0771a2174c7842a7d6c0f6b3968e34de22096ee3480aeea71ec7e2d59338ff4e",
-        "measure_capacity_value": "24609ddec40349650469c624e2e8d9a807d7415e78a862b95afaf55d1297914b",
+        "list_capacity_recovery_rows": "d6144f4038a58bdd4ced93d864f82320ae6b43ef6c87a6486c45b608734364e3",
+        "measure_attempt_ratio": "7af1e6a8803c023ba2c482a852bba7c298840b4fec53d5ae45a7153f1bc4c509",
+        "measure_capacity_value": "8a7a11792a66562ef24886b2129d2371de334d55c392b2b3505e366698564b50",
         "measure_request": "1615879024ec19d63e6243105beb627438f6d407aa9cc8fb5f7dcad5ce6b6abb",
         "merge_profile_rows": "be408c3437ff8b29f6436f534c5c9d273232ad182c39cc7068eb587fb2648b3b",
         "pack_profile_prior": "cf2f899f6e103c3086dc749c6ad02492e7cb9d493c94d904c9e468847b82f22d",
-        "plan_capacity_recovery": "cc965b98ec02ca0cbadb98eecd49678402ecc04fe6545c64bf1ade154e7a65fb",
+        "plan_capacity_recovery": "8baa3d2180bc5c0f00c7e93809970f9371926d15f5f0e8167c79abb0987b219e",
         "plan_chain_capacity": "0e62c9a62e26d129185e2cb9ddd21ce71e3b7d5064e74e2540f59e80dc9750dc",
         "prepare_assignment_capacity": "4906f06a32317971f5989c12fd9f31976a7af6ee96f89c2ca0679e42fdd7bbc1",
         "qualifies_for_output_profile": "0b6dc9c47e30814e0677cf564d8471f1242e0b88c51e852b32df6b03846c08fd",
@@ -23446,7 +23552,7 @@
         "fc5b7c32b023357b2fb7c9a8d9d5624677a2845dd5a2e022120779e13eb9cbda",
         "ffdfc783a549c42578e6236ef07694427415cee2147068c18cd11ab6d1bd4c94"
       ],
-      "reason": "Reviewed task-kind precedence: explicit staged/parts markers, then session request marker, then native reading markers; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed Step A against 493461ef: zero-size frame tags and descriptor minima affect planner accounting only. Request turns reserve notes, allowance rows and pending request sizes; carried_components is numeric metadata inside the digest-bound plan artifact, not a reviewer packet member. prepare_assignment_capacity validates and forwards the pending bound; the existing plan reference and packet schemas are unchanged."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_search_delivery": {
       "ast_sha256": "a38342246d0a658b81d42fcadbee55b2c23fe5a1056dd7c3e340a6bde7d786da",
@@ -23495,14 +23601,14 @@
       "reason": "Reviewed requested-stop signals bypassing the diagnostic boundary handler while every other BaseException preserves the original operation refusal and retained boundary omission; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_single_request": {
-      "ast_sha256": "ab05f30662deab8518abed569f5c124ff8e78ebe75ab7e535c0e44c730417613",
+      "ast_sha256": "3730ee0fe6087179f91a447b87339f54430a065c4f1a431f79a70f847e8f6fc2",
       "functions": {
-        "build_output_replacement": "091972586fce9538d5a10f2d0bcc09d8279ed88bf9406547966bcef5ec7e53c9",
+        "build_output_replacement": "a8b74a2ade438528099d53b17e5abec0df67f259444846b63188140d007c3192",
         "describe_assignment_delivery": "daa9992f6b45c81e0ec0beb5caa4de4fc31900c96c2f26a967821cd5c8288578",
         "describe_task_entry": "ee0203adff876ab6b8b90ce3ec0601e2c2eb4fbe54fcdd5ca590f162bd8bec3d",
         "is_first_output_read": "ba74c7dcaf06ae95ce24819ebc115e6c67856e95fbb0448b46c70f1bb1e7dcff",
         "measure_parts_request": "bc026076944ba6a4d1364042309a329c8cd3cee286acac7dd7830d190781a84d",
-        "prepare_replacement": "6fe4eab583d7524d150d38d4e653cb0c8dc4c7838498b40be70363f6f4ffc059"
+        "prepare_replacement": "e8066b614c81337fb100e35b7c6ff5b9377d7bedf54a576404fcf808634f87ac"
       },
       "packet_call_digests": [
         "052ddce82202b9f6b851551cdce2b938792299dd434848e29854105877acc815",
@@ -23515,7 +23621,7 @@
         "e09ba18d76ae841e1ae960a595667ec5bab2ff6cb16feef5fa01915dd1ede907",
         "f7c5e26f154df98af490aa8dff6fe99a10a29ecebf94f9cd88a27dc6688ea13e"
       ],
-      "reason": "Reviewed exact current recovery/outcome authorization, reconstruction of that candidate, direct capacity parent and original-slot retention, plus optional frozen header identity fields. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_source_batches": {
       "ast_sha256": "849662404fac84e85d63937dceb00baf75d6bb23f8c30b5fac6b5daacd2aad09",
@@ -24089,7 +24195,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_supplied_evidence": {
-      "ast_sha256": "4ac927f21a87ecab9b4f0dcdd6abfa10bb45caf347c2392c547fdd74ba06c372",
+      "ast_sha256": "a0c3e8a4f6a28488727b54ab04d3a3edfe5e8317d3e504d661c3425c9e8e05a3",
       "functions": {
         "_inline_passage_received": "da6c7e1a54a1607716e6d3418488c69542c8dd4cf3aa18c6db535a631f709102",
         "_is_staged_original_received": "896db957c4e4e79f0bcb4b24b48334b101035556c026b090e72565a401ccc944",
@@ -24100,7 +24206,7 @@
         "collect_qualified_objections": "38872525428a9c9034dfe37692d7c30e6e4ba9f0f732dcd74a26d237485f9df1",
         "deliver_passage": "ddf00cedfca3bb4a6e3dce5c9731a858d2301a9b7fa7617ece751415bf7df0bc",
         "find_scientific_predecessor": "6c918131d48a93b7d85158d9540c67cdf320b990f14ad45400217be0cb32d10d",
-        "is_received": "6b31b34e55386329e9e4d8887199ab4623e25a4dddc69d05c6e504cfaa47c95c",
+        "is_received": "c8aacf7c8c26df262db2ef73048feb15856a47388d7bfe55e2569030e67ad8f0",
         "lineage_packets": "bee19a1d07672951ef05ca50a3d232a6a1823af508452143cc2b5e68f272a584",
         "list_delivered_objections": "c5dfea42735f0c458c8940b3bd839e4804ca045d13c48e6a761e029f1fb24f14",
         "list_delivered_parts": "10b26df55bdbd883b6c935141c141da859cd431e4be70d3c931c4a0ce24d3de0",
@@ -24123,7 +24229,7 @@
         "daaeb5e95c6ca07770258affd79698b751c3c27684fcd5166d02401d6ed58fe1",
         "ebd84f33d51820e68d1458e44057303d66f6ac4b9b3351c0b3002cec0e55dd8d"
       ],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_task_execution": {
       "ast_sha256": "ff996e051ba3673d23eda66c2cfe410ee1aec47195f25bbdbeca150a425a2de0",
@@ -25096,6 +25202,9 @@
     "research_harness.native_review._validate_openness": [
       "research_harness.native_review.validate_output"
     ],
+    "research_harness.native_review.load_packet": [
+      "research_harness.openness_carried.observe_math_chain"
+    ],
     "research_harness.native_review.require_assignment_identity": [
       "research_harness.review_input_projection._require_review_packet"
     ],
@@ -25107,6 +25216,21 @@
     ],
     "research_harness.native_review.validate_output": [
       "research_harness.openness_reading.validate_turn_output"
+    ],
+    "research_harness.openness_carried._list_search_dependencies": [
+      "research_harness.openness_carried.select_carried_readings",
+      "research_harness.openness_carried.verify_carried_selection"
+    ],
+    "research_harness.openness_carried._verify_math_prefix": [
+      "research_harness.openness_carried.observe_math_chain"
+    ],
+    "research_harness.openness_carried.classify_carried_notes": [
+      "research_harness.openness_carried.select_carried_readings",
+      "research_harness.openness_carried.verify_carried_selection"
+    ],
+    "research_harness.openness_carried.observe_math_chain": [
+      "research_harness.openness_carried.observe_qualifying_chain",
+      "research_harness.openness_carried.verify_carried_selection"
     ],
     "research_harness.openness_minimum.list_minimum_gaps": [
       "research_harness.problem_openness.assess_packet_freshness"
@@ -25131,6 +25255,9 @@
       "research_harness.openness_reading._require_problem_continuity",
       "research_harness.openness_reading.describe_reading_receipt",
       "research_harness.openness_reading.prepare_packet"
+    ],
+    "research_harness.openness_reading._collect_coverage": [
+      "research_harness.openness_carried.observe_math_chain"
     ],
     "research_harness.openness_reading._collect_delivered_bodies": [
       "research_harness.openness_reading.prepare_packet"
@@ -25179,6 +25306,9 @@
     ],
     "research_harness.openness_reading._fits": [
       "research_harness.openness_reading.prepare_packet"
+    ],
+    "research_harness.openness_reading._is_complete": [
+      "research_harness.openness_carried.observe_math_chain"
     ],
     "research_harness.openness_reading._list_chain": [
       "research_harness.openness_carried.observe_math_chain",
@@ -25302,6 +25432,9 @@
     "research_harness.openness_reading.forecast_reading_chain": [
       "research_harness.openness_reading.describe_reading_receipt"
     ],
+    "research_harness.openness_reading.has_deliverable_passage": [
+      "research_harness.openness_carried._verify_math_prefix"
+    ],
     "research_harness.openness_reading.is_math_openness_packet": [
       "research_harness.openness_carried._describe_chain",
       "research_harness.openness_carried.observe_math_chain",
@@ -25368,6 +25501,9 @@
     "research_harness.openness_reading.select_delivered_bodies": [
       "research_harness.openness_reading.prepare_packet"
     ],
+    "research_harness.openness_reading.validate_turn_output": [
+      "research_harness.openness_carried._verify_math_prefix"
+    ],
     "research_harness.openness_reading_v7._append_carried_reading": [
       "research_harness.openness_reading_v7.build_chain_state"
     ],
@@ -25377,6 +25513,9 @@
     "research_harness.openness_reading_v7._bind_body": [
       "research_harness.openness_reading_v7._append_carried_reading",
       "research_harness.openness_reading_v7.plan_inventory"
+    ],
+    "research_harness.openness_reading_v7._describe_checked_entries": [
+      "research_harness.openness_carried.observe_math_chain"
     ],
     "research_harness.openness_reading_v7._describe_identity": [
       "research_harness.openness_carried.observe_math_chain",
@@ -25408,6 +25547,9 @@
     ],
     "research_harness.operations.immutable_record": [
       "research_harness.review_staged_protocol.prepare_controller"
+    ],
+    "research_harness.operations.normalized_text": [
+      "research_harness.openness_carried._verify_math_prefix"
     ],
     "research_harness.operations.strings": [
       "research_harness.problem_openness_reviews.required_evidence"
@@ -26328,6 +26470,9 @@
     "research_harness.review_protocol.describe_version_evidence": [
       "research_harness.review_protocol.add_focused_adjudication"
     ],
+    "research_harness.review_protocol.find_common_prompt_version": [
+      "research_harness.openness_carried._verify_math_prefix"
+    ],
     "research_harness.review_protocol.has_verified_history": [
       "research_harness.review_protocol._assignment_state",
       "research_harness.review_protocol.invoke_assignment"
@@ -26493,6 +26638,9 @@
       "research_harness.review_route_capacity.build_capacity_probe_request",
       "research_harness.review_route_capacity.find_serving_routes",
       "research_harness.review_route_capacity.require_covered_assignment"
+    ],
+    "research_harness.review_route_capacity.plan_chain_capacity": [
+      "research_harness.review_route_capacity.prepare_assignment_capacity"
     ],
     "research_harness.review_route_capacity.render_profile_json": [
       "research_harness.review_route_capacity._project_request"
@@ -26899,48 +27047,6 @@
     ],
     "research_harness.workspace.write_projection": [
       "research_harness.review_delivery.deliver_packet"
-    ],
-    "research_harness.openness_reading.validate_turn_output": [
-      "research_harness.openness_carried._verify_math_prefix"
-    ],
-    "research_harness.openness_reading.has_deliverable_passage": [
-      "research_harness.openness_carried._verify_math_prefix"
-    ],
-    "research_harness.operations.normalized_text": [
-      "research_harness.openness_carried._verify_math_prefix"
-    ],
-    "research_harness.review_protocol.find_common_prompt_version": [
-      "research_harness.openness_carried._verify_math_prefix"
-    ],
-    "research_harness.native_review.load_packet": [
-      "research_harness.openness_carried.observe_math_chain"
-    ],
-    "research_harness.openness_carried._verify_math_prefix": [
-      "research_harness.openness_carried.observe_math_chain"
-    ],
-    "research_harness.openness_reading._collect_coverage": [
-      "research_harness.openness_carried.observe_math_chain"
-    ],
-    "research_harness.openness_reading._is_complete": [
-      "research_harness.openness_carried.observe_math_chain"
-    ],
-    "research_harness.openness_reading_v7._describe_checked_entries": [
-      "research_harness.openness_carried.observe_math_chain"
-    ],
-    "research_harness.openness_carried.classify_carried_notes": [
-      "research_harness.openness_carried.select_carried_readings",
-      "research_harness.openness_carried.verify_carried_selection"
-    ],
-    "research_harness.openness_carried._list_search_dependencies": [
-      "research_harness.openness_carried.select_carried_readings",
-      "research_harness.openness_carried.verify_carried_selection"
-    ],
-    "research_harness.review_route_capacity.plan_chain_capacity": [
-      "research_harness.review_route_capacity.prepare_assignment_capacity"
-    ],
-    "research_harness.openness_carried.observe_math_chain": [
-      "research_harness.openness_carried.observe_qualifying_chain",
-      "research_harness.openness_carried.verify_carried_selection"
     ]
   },
   "computed_sites": {},
@@ -37526,6 +37632,213 @@
       "quantity": "citations",
       "sample": "x"
     },
+    "parts_v3_header": {
+      "members": {
+        "adapter": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "block": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "block_artifact": {
+          "class": "reference",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "block_characters": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "capacity": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "card_allowance": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "check_combinations": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "counts": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "entries_artifact": {
+          "class": "reference",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "entry": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "entry_count": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "interval": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "inventory": {
+          "class": "reference",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "inventory_digest": {
+          "class": "reference",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "kind": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "logical_packet": {
+          "class": "reference",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "logical_packet_digest": {
+          "class": "reference",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "mode": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "plan_digest": {
+          "class": "reference",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "protocol": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "replaces_assignment_id": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "round": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "series_assignment_id": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "series_key": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "state": {
+          "class": "reference",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "state_digest": {
+          "class": "reference",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "targets": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "turn": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        },
+        "unit_characters": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 18000,
+            "provenance": "research_harness.review_parts_v3.plan_series_turn"
+          }
+        }
+      }
+    },
     "q6_012137fbb314": {
       "class": "fixed",
       "members": {
@@ -44296,6 +44609,7 @@
     "research_harness.review_parts_repair",
     "research_harness.review_parts_roles",
     "research_harness.review_parts_study",
+    "research_harness.review_parts_v3",
     "research_harness.review_pdf_pages",
     "research_harness.review_plan_steps",
     "research_harness.review_preflight",
@@ -44356,6 +44670,11 @@
     "research_harness.openness_final_pages"
   ],
   "non_packet_names": {
+    "$continued_unit": "Parts v3 store-only inventory/state arithmetic or frame reservation key; not a wire packet member.",
+    "$groups": "Parts v3 store-only inventory/state arithmetic or frame reservation key; not a wire packet member.",
+    "$protocol": "Parts v3 store-only inventory/state arithmetic or frame reservation key; not a wire packet member.",
+    "$seam": "Parts v3 store-only inventory/state arithmetic or frame reservation key; not a wire packet member.",
+    "/findings/openness": "A JSON pointer key in a final-page output projection. It is not a reviewer packet member.",
     "context.output_refusal.assignment_id": "An allowlisted scoped-storage equality selector over an existing assignment context. It is query metadata, not a reviewer packet field.",
     "context.unread.assignment_id": "Nested storage membership predicate used by find_replacement to select unread successors of one origin; read_filtered_records consumes the dotted name, which is not a serialized packet member.",
     "entry_id": "Reviewed 0.91.2: problem_accounts.validate_tier_two writes entry_id only in local evidence-date provenance, passed to require_prior_form for ResearchError.details. validate_value propagates it to record_value command refusals or problem_delivery._assess_minimum gate/status obligations; reviewer problem_evidence.obligations comes from collect_results/assess_account_currency instead. No reviewer packet builder receives this metadata.",
@@ -44364,7 +44683,6 @@
     "exactory-openness-reading-v7": "Key of the source-owned CHAIN_OBSERVERS dispatch table in openness_carried; a protocol value selects an observer, never a packet member. The complete table AST and its two observer call sites are pinned.",
     "present_or_both_blocked": "prompt text lookup keyed by the grounds selectors of FINDING_RULES; read only by render_finding_rule",
     "series_stop_id": "Driver ending/receipt metadata only: review_series._bind_ending_receipt retains a requested review_stop identifier in stop_id and binds its distinct review_series_stop receipt in series_stop_id. It is not a reviewer packet member.",
-    "/findings/openness": "A JSON pointer key in a final-page output projection. It is not a reviewer packet member.",
     "undated": "Reviewed 0.91.2: problem_accounts.validate_fact writes undated only in problem_account_date_missing ResearchError.details. Its validate_value callers are record_value (command refusal) and problem_delivery._assess_minimum (gate/status obligations), not reviewer packet construction. Native openness assessment_error gaps capture reading/deferral errors and never these account validators."
   },
   "non_packet_sites": [
@@ -88973,6 +89291,362 @@
             }
           }
         }
+      },
+      "wire_variants": {
+        "parts-v3": {
+          "equals": "exactory-review-parts-v3",
+          "marker": "review_parts_protocol",
+          "schema": {
+            "members": {
+              "assessments": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "assignment_policy": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "bar_calibrations": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "capacity_request": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 2000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "complete_source_delivery": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "context_repair": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "correction": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "current_bar_calibrations": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "current_evidence": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "current_source_delivery": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "digest": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "dossier_id": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "evidence": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "focused_refresh": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "held_sources": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "historical_reviews": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "history_delivery": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "intent": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "objection": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "original_evidence": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "output_refusal": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 45000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "pending_source_requests": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "previously_supplied_evidence": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "prior_context": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "problem_areas": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "problem_evidence": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "problem_evidence_digest": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "protocol": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "review_parts": {
+                "$ref": "parts_v3_header"
+              },
+              "review_parts_context": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 5000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_groups": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 32402,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_material": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_material_request": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 512,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_protocol": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 100,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_requests": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_state": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "reviewer_excerpts": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "reviewer_id": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "role": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "rubric_definition": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "rubric_grades": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "scientific_history": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "source_deliveries": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "staged_review": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "subject": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "supplied_source_mappings": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "version_evidence": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "version_review": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "version_source_mappings": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "visual_source_delivery": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "bar": {
@@ -89796,6 +90470,285 @@
                 },
                 "statement_id": {
                   "$ref": "field_a6a6f692ba11"
+                }
+              }
+            }
+          }
+        }
+      },
+      "wire_variants": {
+        "parts-v3": {
+          "equals": "exactory-review-parts-v3",
+          "marker": "review_parts_protocol",
+          "schema": {
+            "members": {
+              "area": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "capacity_request": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 2000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "context_repair": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "continuation": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "digest": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "dossier_id": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "evidence": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "field": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "forming_records": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "historical_reviews": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "history_delivery": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "intent": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "output_refusal": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 45000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "pending_source_requests": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "previously_supplied_evidence": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "prior_context": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "problem_areas": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "problem_forming_imports": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "problem_refresh": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "protocol": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "review_parts": {
+                "$ref": "parts_v3_header"
+              },
+              "review_parts_context": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 5000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_groups": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 32402,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_material": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_material_request": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 512,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_protocol": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 100,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_requests": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_state": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "reviewer_excerpts": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "reviewer_id": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "role": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "route_capacity": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "scientific_history": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "source_artifacts": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "source_deliveries": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "source_inventory": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "source_reply_batch": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "source_rules": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "subject": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
                 }
               }
             }
@@ -97035,6 +97988,285 @@
             }
           }
         }
+      },
+      "wire_variants": {
+        "parts-v3": {
+          "equals": "exactory-review-parts-v3",
+          "marker": "review_parts_protocol",
+          "schema": {
+            "members": {
+              "analysis_grand_challenge": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "bundle_digest": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "capacity_request": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 2000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "claim_evidence": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "contribution_analysis": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "decision": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "development": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "digest": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "dossier_id": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "evidence": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "files": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "grand_challenge": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "kind": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "manuscript": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "measurement": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "output_refusal": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 45000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "paper": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "prediction_context": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "predictions": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "protocol": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "resources": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "results": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "review_parts": {
+                "$ref": "parts_v3_header"
+              },
+              "review_parts_context": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 5000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_groups": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 32402,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_material": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_material_request": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 512,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_protocol": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 100,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_requests": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_state": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "reviewer_id": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "reviews": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "role": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "rounds": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "scientific_scope": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "searches": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "source_gaps": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "standards": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "synthesis": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "native_math": {
@@ -103008,6 +104240,229 @@
             }
           }
         }
+      },
+      "wire_variants": {
+        "parts-v3": {
+          "equals": "exactory-review-parts-v3",
+          "marker": "review_parts_protocol",
+          "schema": {
+            "members": {
+              "capacity_request": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 2000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "claim_digest": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "contract": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "digest": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "dossier_id": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "evidence": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "execution_provenance": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "kind": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "native": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "objective_id": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "output_refusal": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 45000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "protocol": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "reading_final": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "reading_record": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "reading_turn": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "review_parts": {
+                "$ref": "parts_v3_header"
+              },
+              "review_parts_context": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 5000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_groups": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 32402,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_material": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_material_request": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 512,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_protocol": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 100,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_requests": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_state": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "reviewer": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "reviewer_id": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "role": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "root": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "scientific_context": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 32000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "subject": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 80000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "subject_digest": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "unmaterialized_digests": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "probe": {
@@ -104680,6 +106135,103 @@
             },
             "kind": {
               "class": "fixed"
+            }
+          }
+        }
+      },
+      "wire_variants": {
+        "parts-v3": {
+          "equals": "exactory-review-parts-v3",
+          "marker": "review_parts_protocol",
+          "schema": {
+            "members": {
+              "capacity_request": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 2000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "execution_observations": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "inputs": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 32000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "kind": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "output_refusal": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 45000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts": {
+                "$ref": "parts_v3_header"
+              },
+              "review_parts_context": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 5000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_groups": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 32402,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_material": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_material_request": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 512,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_protocol": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 100,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_requests": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_state": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              }
             }
           }
         }
@@ -110272,6 +111824,467 @@
             }
           }
         }
+      },
+      "wire_variants": {
+        "parts-v3": {
+          "equals": "exactory-review-parts-v3",
+          "marker": "review_parts_protocol",
+          "schema": {
+            "members": {
+              "area": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "assessor": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "bar_ids": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "bars": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "capacity_request": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 2000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "commitments": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "complete_source_delivery": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "context_repair": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "continuation": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "digest": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "direction_evidence": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "dossier": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "dossier_id": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "evidence": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "execution_observations": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "field": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "forming_records": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "historical_bars": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "historical_reviews": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "history_delivery": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "inputs": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 32000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "intent": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "kind": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "lead_records": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "material_objections": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "objection_bodies": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "output_refusal": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 45000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "own_bars": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "pending_source_requests": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "previously_supplied_evidence": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "prior_context": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "problem_areas": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "problem_evidence": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "problem_evidence_digest": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "problem_evidence_parts": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "problem_forming_imports": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "problem_refresh": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "problem_review_currency": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "protocol": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "readiness": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "review_parts": {
+                "$ref": "parts_v3_header"
+              },
+              "review_parts_context": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 5000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_groups": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 32402,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_material": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_material_request": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 512,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_protocol": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 100,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_requests": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_state": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "reviewer_excerpts": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "reviewer_id": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "role": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "route_capacity": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "scientific_history": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "source_artifacts": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "source_deliveries": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "source_inventory": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "source_reply_batch": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "source_rules": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "staged_review": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "subject": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "support_contract": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "visual_context_repair": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "visual_route_transition": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "visual_source_delivery": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "work_item_records": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "round": {
@@ -113871,6 +115884,131 @@
             },
             "role": {
               "class": "fixed"
+            }
+          }
+        }
+      },
+      "wire_variants": {
+        "parts-v3": {
+          "equals": "exactory-review-parts-v3",
+          "marker": "review_parts_protocol",
+          "schema": {
+            "members": {
+              "capacity_request": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 2000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "digest": {
+                "class": "reference",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "dossier_id": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "evidence": {
+                "class": "collection",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "output_refusal": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 45000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "paper": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "protocol": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "review_parts": {
+                "$ref": "parts_v3_header"
+              },
+              "review_parts_context": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 5000,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_groups": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 32402,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_material": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_material_request": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 512,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_protocol": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 100,
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_requests": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "review_parts_state": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": "request_limit",
+                  "provenance": "research_harness.review_parts_v3.plan_series_turn"
+                }
+              },
+              "reviewer_id": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              },
+              "role": {
+                "class": "fixed",
+                "opaque_json": {
+                  "limit_characters": 20000,
+                  "provenance": "research_harness.review_field_classes.classify_packet"
+                }
+              }
             }
           }
         }

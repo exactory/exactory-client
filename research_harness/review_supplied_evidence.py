@@ -204,6 +204,10 @@ def is_received(records, reference, references, mappings, *, artifacts, frozen=F
     by offsets; another kind equal to the passage's). A raw descriptor of an artifact delivered only as passages names
     those passages, without widening their bounds."""
     artifact = reference['link']['artifact'] if reference.get('kind') == 'source' else reference
+    from .review_parts_v3 import is_span_reference, has_series_attachment
+    if is_span_reference(artifact) and any(packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3'
+                                         for packet in packets):
+        return has_series_attachment(artifacts, packets, artifact)
     if packets and _is_staged_original_received(artifacts, artifact, reference, packets):
         return True
     if (reference.get('kind') == 'source' and packets

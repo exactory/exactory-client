@@ -58,11 +58,11 @@ def _refuse_handle(path, handle):
                         {'path': path, 'ref': handle})
 
 
-def _expand_value(table, value, path):
+def _expand_value(table, value, path, artifacts=None):
     if isinstance(value, list):
         expanded, count = [], 0
         for index, item in enumerate(value):
-            item, references = _expand_value(table, item, path + '/' + str(index))
+            item, references = _expand_value(table, item, path + '/' + str(index), artifacts)
             expanded.append(item)
             count += references
         return expanded, count
@@ -82,18 +82,43 @@ def _expand_value(table, value, path):
             if entry is None:
                 _refuse_handle(path, handle)
         reference = copy.deepcopy(entry['reference'])
-        if 'start' in value:
-            start, end = value['start'], value['end']
+        if 'start' in value or entry.get('cite_part_span'):
+            reference = copy.deepcopy(entry.get('span_reference', reference))
             content = entry.get('text')
+            start, end = value.get('start', 0), value.get('end', len(content) if isinstance(content, str) else 0)
             if (type(start) is not int or type(end) is not int or not isinstance(content, str)
-                    or not 0 <= start < end <= len(content) or reference.get('kind') != 'source'):
+                    or not 0 <= start < end <= len(content)):
                 _refuse_handle(path, handle)
-            reference['link']['locator'] = span_locator(content, start, end, excerpt_length=0)
+            unit_start = entry.get('unit_offset', 0)
+            component = next((component for component in entry.get('span_components', [])
+                              if component['start'] <= unit_start + start < unit_start + end <= component['end']), None)
+            if component is not None and not entry.get('native_digest'):
+                reference = copy.deepcopy(component['reference'])
+                reference['link']['locator'] = span_locator(component['text'],
+                    unit_start + start - component['start'], unit_start + end - component['start'], excerpt_length=0)
+                if entry.get('bare_source_link'):
+                    reference = reference['link']
+            elif entry.get('artifact_spans'):
+                data = content[start:end].encode('utf-8')
+                media = 'text/plain; profile=exactory-review-parts-span-v3'
+                reference = describe_artifact(data, media)
+                if artifacts is not None:
+                    artifacts.put(data, media)
+                if entry.get('native_digest'):
+                    reference = reference['sha256']
+            else:
+                if reference.get('kind') != 'source':
+                    _refuse_handle(path, handle)
+                offset = entry.get('source_start', 0)
+                reference['link']['locator'] = span_locator(entry.get('source_text', content),
+                                                           offset + start, offset + end, excerpt_length=0)
+        if artifacts is not None and entry.get('store_text'):
+            artifacts.put(entry.get('source_text', entry['text']).encode('utf-8'), 'application/json')
         return reference, 1
     expanded, count = {}, 0
     for name, item in value.items():
         item_path = path + '/' + name.replace('~', '~0').replace('/', '~1')
-        expanded[name], references = _expand_value(table, item, item_path)
+        expanded[name], references = _expand_value(table, item, item_path, artifacts)
         count += references
     return expanded, count
 
@@ -106,18 +131,31 @@ def _build_v7_handle_table(packet, artifacts, assignment):
     return build_handle_packet(packet, artifacts, assignment)
 
 
+def _build_parts_v3_handle_packet(packet, artifacts, assignment):
+    from .review_parts_v3 import build_handle_packet, PROTOCOL
+    if packet.get('review_parts', {}).get('protocol') != PROTOCOL:
+        return packet
+    return build_handle_packet(packet, artifacts, assignment)
+
+
 # Rows of later planned chain families use this same (packet, artifacts,
 # assignment) -> transient handle packet interface. Tables never travel.
-HANDLE_TABLE_BUILDERS = {key: _build_v7_handle_table for key in
-                         ('reading_turn', 'reading_final', 'reading_combine')}
+HANDLE_TABLE_BUILDERS = {
+    'reading_turn': _build_v7_handle_table,
+    'reading_final': _build_v7_handle_table,
+    'reading_combine': _build_v7_handle_table,
+    'review_parts': _build_parts_v3_handle_packet,
+}
 
 
 def _resolve_packet(packet, artifacts=None, assignment=None):
     if HANDLE_TABLE in packet:
         return packet
-    for member, build in HANDLE_TABLE_BUILDERS.items():
+    for member, builder in HANDLE_TABLE_BUILDERS.items():
         if member in packet:
-            return build(packet, artifacts, assignment)
+            resolved = builder(packet, artifacts, assignment)
+            if HANDLE_TABLE in resolved:
+                return resolved
     return packet
 
 
@@ -158,7 +196,7 @@ def expand_handles(packet, output, *, artifacts=None, assignment=None, raw=False
         if packet.get('material_state', {}).get('pending') and not is_material_output(packet, output):
             raise ResearchError('invalid_review_material', INVALID_MATERIAL_MESSAGE,
                                 {'path': '/stage', 'pending': packet['material_state']['pending']})
-        return _expand_value(packet[HANDLE_TABLE], output, '')[0]
+        return _expand_value(packet[HANDLE_TABLE], output, '', artifacts)[0]
 
 
 def describe_expansion(packet, output, response, *, artifacts=None, assignment=None):
@@ -168,7 +206,7 @@ def describe_expansion(packet, output, response, *, artifacts=None, assignment=N
         return output, None
     with contract_check('review.shape'):
         _validate_v7_refs(packet, output, raw=True)
-        expanded, count = _expand_value(packet[HANDLE_TABLE], output, '')
+        expanded, count = _expand_value(packet[HANDLE_TABLE], output, '', artifacts)
     answer = extract_answer_text(response)
     certificate = dict(protocol=EXPANSION_PROTOCOL, references=count,
                        answer_sha256=hashlib.sha256(answer.encode('utf-8')).hexdigest(),
@@ -184,7 +222,8 @@ def record_handle_output(packet, observation, artifacts, *, assignment=None):
     from .review_protocol import _put_json, _read_json
     output = _read_json(artifacts, observation['output'])
     try:
-        expanded, certificate = describe_expansion(packet, output, _read_json(artifacts, observation['response']))
+        expanded, certificate = describe_expansion(packet, output, _read_json(artifacts, observation['response']),
+                                                  artifacts=artifacts, assignment=assignment)
     except ResearchError as error:
         if error.code != 'invalid_reference_handle':
             raise
@@ -232,20 +271,23 @@ def build_gap_handles(minimum_gaps, artifacts):
 
 def is_material_output(packet, output):
     from .openness_reading import find_protocol, PROTOCOL_V7
-    return (HANDLE_TABLE in packet or find_protocol(packet) == PROTOCOL_V7) and isinstance(output, dict) and output.get('stage') == 'material'
+    return (HANDLE_TABLE in packet or find_protocol(packet) == PROTOCOL_V7
+            or packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3') and isinstance(output, dict) and output.get('stage') == 'material'
 
 
 def validate_material(packet, output, *, artifacts=None, assignment=None):
     """Check a material part once at the output-contract boundary."""
     packet = _resolve_packet(packet, artifacts, assignment) if HANDLE_TABLE not in packet else packet
     with contract_check('review.shape'):
-        if packet.get('reading_turn', {}).get('protocol') == 'exactory-openness-reading-v7':
+        if (packet.get('reading_turn', {}).get('protocol') == 'exactory-openness-reading-v7'
+                or packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3'
+                and packet['review_parts']['kind'] != 'final'):
             raise ResearchError('invalid_review_material', MATERIAL_READING_TURN_MESSAGE, dict(path='/stage'))
         fields(output, ('stage', 'title', 'part', 'text', 'more'), code='invalid_review_material', path='')
         for name in ('title', 'text'):
             text(output[name], 'Material ' + name, code='invalid_review_material')
         if any(packet.get(key, {}).get('protocol') == 'exactory-openness-reading-v7'
-               for key in ('reading_turn', 'reading_final')):
+               for key in ('reading_turn', 'reading_final')) or packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
             if len(output['title']) > 120:
                 raise ResearchError('invalid_review_material', INVALID_MATERIAL_MESSAGE,
                                     dict(path='/title', maximum_characters=120))

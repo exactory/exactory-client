@@ -157,6 +157,9 @@ def list_bearing_references(series, references):
     """Credit exact inventory citations of units assessed against readiness targets."""
     from .development import _REVIEW_CHECKS
 
+    if series['packets'][-1].get(parts.KEY, {}).get('protocol') == 'exactory-review-parts-v3':
+        from .review_parts_v3 import list_bearing_references as list_v3
+        return list_v3(series, references)
     candidates = {digest(reference): reference for reference in references}
     credited = set()
     final = series['packets'][-1]

@@ -425,6 +425,16 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
         else:
             history = None
         packet = prepare_history(records, artifacts, packet, history)
+    recorded_protocol = prior.get(parts.KEY, {}).get('protocol') if continuing else None
+    if (recorded_protocol == 'exactory-review-parts-v3' or not continuing
+            and next(iter(parts.NEW_SERIES_PROTOCOLS), None) == 'exactory-review-parts-v3'):
+        from .review_parts_v3 import prepare_packet as prepare_v3
+        planned = prepare_v3(records, artifacts, value, route, packet, prompt, [],
+            base_prompt_parameters=base_prompt_parameters, slot_id=slot_id, entry=entry,
+            capacity_replacement=capacity_replacement if capacity_replacement is not None else {},
+            refusal_notice=refusal_notice)
+        if planned is not None:
+            return planned
     # Normalized history may itself fit. Entry was already decided using the
     # ordinary request, so plan directly rather than asking the entry test again.
     series_key = compute_series_key(packet)
