@@ -89,6 +89,8 @@ def _expand_value(table, value, path):
                     or not 0 <= start < end <= len(content) or reference.get('kind') != 'source'):
                 _refuse_handle(path, handle)
             reference['link']['locator'] = span_locator(content, start, end, excerpt_length=0)
+            if entry.get('offset'):
+                reference['link']['locator'].update(start=start + entry['offset'], end=end + entry['offset'])
         return reference, 1
     expanded, count = {}, 0
     for name, item in value.items():
@@ -98,13 +100,33 @@ def _expand_value(table, value, path):
     return expanded, count
 
 
+def _build_v7_handles(packet, artifacts, assignment):
+    from .openness_reading_v7 import build_handle_packet, PROTOCOL
+    if not any(packet.get(key, {}).get('protocol') == PROTOCOL for key in ('reading_turn', 'reading_final')):
+        return packet
+    return build_handle_packet(packet, artifacts, assignment)
+
+
+def _build_session_handles(packet, artifacts, assignment):
+    from .review_session_v4 import build_handle_packet
+    return build_handle_packet(packet, artifacts, assignment)
+
+
+# Each planned family builds from its frozen artifacts; no table travels in a request.
+HANDLE_TABLE_BUILDERS = {
+    'reading_turn': _build_v7_handles,
+    'reading_final': _build_v7_handles,
+    'session_turn': _build_session_handles,
+    'session_final': _build_session_handles,
+}
+
+
 def _resolve_packet(packet, artifacts=None, assignment=None):
     if HANDLE_TABLE in packet:
         return packet
-    from .openness_reading import find_protocol, PROTOCOL_V7
-    if find_protocol(packet) == PROTOCOL_V7:
-        from .openness_reading_v7 import build_handle_packet
-        return build_handle_packet(packet, artifacts, assignment)
+    for member, builder in HANDLE_TABLE_BUILDERS.items():
+        if member in packet:
+            return builder(packet, artifacts, assignment)
     return packet
 
 
@@ -213,20 +235,20 @@ def build_gap_handles(minimum_gaps, artifacts):
 
 def is_material_output(packet, output):
     from .openness_reading import find_protocol, PROTOCOL_V7
-    return (HANDLE_TABLE in packet or find_protocol(packet) == PROTOCOL_V7) and isinstance(output, dict) and output.get('stage') == 'material'
+    return (HANDLE_TABLE in packet or find_protocol(packet) == PROTOCOL_V7 or 'session_final' in packet or 'session_turn' in packet) and isinstance(output, dict) and output.get('stage') == 'material'
 
 
 def validate_material(packet, output, *, artifacts=None, assignment=None):
     """Check a material part once at the output-contract boundary."""
     packet = _resolve_packet(packet, artifacts, assignment) if HANDLE_TABLE not in packet else packet
     with contract_check('review.shape'):
-        if packet.get('reading_turn', {}).get('protocol') == 'exactory-openness-reading-v7':
+        if ('session_turn' in packet or packet.get('reading_turn', {}).get('protocol') == 'exactory-openness-reading-v7'):
             raise ResearchError('invalid_review_material', MATERIAL_READING_TURN_MESSAGE, dict(path='/stage'))
         fields(output, ('stage', 'title', 'part', 'text', 'more'), code='invalid_review_material', path='')
         for name in ('title', 'text'):
             text(output[name], 'Material ' + name, code='invalid_review_material')
-        if any(packet.get(key, {}).get('protocol') == 'exactory-openness-reading-v7'
-               for key in ('reading_turn', 'reading_final')):
+        if ('session_final' in packet or any(packet.get(key, {}).get('protocol') == 'exactory-openness-reading-v7'
+               for key in ('reading_turn', 'reading_final'))):
             if len(output['title']) > 120:
                 raise ResearchError('invalid_review_material', INVALID_MATERIAL_MESSAGE,
                                     dict(path='/title', maximum_characters=120))

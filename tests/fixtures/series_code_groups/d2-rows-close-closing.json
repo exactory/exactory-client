@@ -839,6 +839,25 @@
         "research_harness/review_output_correction.py:validate_output#1": [
           "record"
         ],
+        "research_harness/review_session_v4.py:_authenticate_session_binding#1": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:_authenticate_session_binding#2": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:_authenticate_session_binding#3": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:_authenticate_session_binding#4": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:_authenticate_session_binding#5": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:rebuild_session_state#1": [
+          "content",
+          "record"
+        ],
         "research_harness/review_staged_protocol.py:_collect_successor_findings#1": [
           "content",
           "record"

@@ -29,6 +29,8 @@ from .finishing import retry_store_write
 from . import review_transport as transport
 from .review_answer_recovery import derive_output, extract_answer_text, recover_answer
 from . import bar_sources
+from . import review_session_v4
+
 from . import openness_reading
 from .openness_reading_v7 import (PROTOCOL as READING_V7_PROTOCOL, TARGET_PAGE_SENTENCE,
                                   LIST_PAGE_SENTENCE, NOTES_COST_TEXT, CARRIED_READINGS_TEXT,
@@ -330,6 +332,8 @@ from . import problem_rubric
 from . import review_prompt_paragraphs as prompt_paragraphs
 from .review_refusal import record_refusal_on_error
 from .storage import _canonical, read_filtered_records, select_record_groups
+
+NEW_SESSION_RULES = (bar_sources.PROTOCOL_V3,)
 
 ROLES = ('bar', 'slate', 'result', 'adjudicator', 'manuscript', 'standalone', 'verification', 'native_math')
 PAPER_ROLES = ('manuscript', 'standalone')
@@ -1407,6 +1411,8 @@ def validate_problem_bars(records, artifacts, bars):
     for review in bars:
         assignment = _get(records, 'review_assignment', review['assignment_id'])
         packet = _read_json(artifacts, assignment['packet'])
+        if assignment.get('session_chain'):
+            packet = _read_json(artifacts, assignment['session_chain']['logical'])
         if any(packet.get(key) != marker[key] for key in ('area', 'field')):
             raise ResearchError('review_bar_mismatch', 'Use problem bars for the current area and field',
                                 {'review_id': review['id']})
@@ -2963,6 +2969,8 @@ def is_version_2_problem_result(assignment):
 
 def has_problem_result_rubric(assignment):
     """Whether the problem result template requires rubric grades; authentication is checked separately."""
+    if assignment.get('prompt', {}).get('parameters', {}).get('source_rules') == review_session_v4.PROTOCOL:
+        return True
     prompt = prompt_paragraphs.strip_prompt_paragraphs(assignment['prompt'], assignment['role'])
     if (prompt is not None and prompt.get('parameters', {}).get('source_rules') == bar_sources.PROTOCOL_V3
             and prompt['template_id'].endswith(bar_sources.SESSION_TEMPLATE_SUFFIX)):
@@ -3026,6 +3034,8 @@ def _strip_source_rules(envelope):
 
 def _prompt_matches(assignment, packet=None):
     envelope = assignment['prompt']
+    if envelope.get('parameters', {}).get('source_rules') == review_session_v4.PROTOCOL:
+        return review_session_v4.matches_turn_prompt(assignment, packet)
     source_rules = envelope.get('parameters', {}).get('source_rules')
     if source_rules is not None and packet is not None and packet.get('source_rules') != source_rules:
         return False
@@ -3318,6 +3328,10 @@ def _source_parent(records, artifacts, identifier, dossier_id, reviewer_id, role
     if not state['ready']:
         raise ResearchError('review_source_continuation_unverified', 'Source requests require an observed uncontaminated parent response')
     previous = source_delivery_packet(records, artifacts, prior)
+    if prior.get('session_chain'):
+        if state['output'].get('stage') not in ('request', 'material'):
+            raise ResearchError('review_resampling_forbidden', 'A final phase assessment cannot be continued or sampled again')
+        return prior, state
     if prior.get('subject', {}).get('kind') == 'problem':
         if role == 'result' and prior['subject'] != build_problem_subject(records):
             raise ResearchError('review_source_continuation_mismatch', 'Continue the exact problem statement')
@@ -3578,6 +3592,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             if normalized_text(value['reviewer_id']) in {normalized_text(a) for a in intent.get('authors', [])}:
                 raise ResearchError('review_not_independent', 'An intent author cannot provide an independent assessment')
         if 'capacity_replacement' in value['context']:
+            previous = _get(records, 'review_assignment', value['context']['capacity_replacement'])
+            if previous.get('session_chain'):
+                return review_session_v4.prepare_capacity_assignment(records, artifacts, value, expected_revision + 1, previous)
             from .review_single_request import prepare_replacement as prepare_capacity_replacement
             return prepare_capacity_replacement(records, artifacts, value, expected_revision + 1)
         if 'output_refusal' in value['context']:
@@ -3695,6 +3712,21 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 key=lambda prior: prior['recorded_revision'], default=None)
             if latest is not None and is_dead_assignment(records, latest):
                 slot_identifier = context_repair.slot_id(records, latest)
+        session_admission = None
+        if parent is not None and parent.get('session_chain'):
+            return review_session_v4.prepare_session_assignment(records, artifacts, value, route,
+                expected_revision + 1, parent=parent, slot=slot_identifier)
+        if (parent is None and repair is None and upgrade is None and value['role'] in bar_sources.ROLES
+                and review_session_v4.PROTOCOL in NEW_SESSION_RULES):
+            logical = build_packet(records, artifacts, value['dossier_id'], value['role'], value['reviewer_id'], **value['context'])
+            for rules in NEW_SESSION_RULES:
+                if rules != review_session_v4.PROTOCOL:
+                    break
+                admission = review_session_v4.check_v4_admission(records, artifacts, route, value['role'], logical)
+                session_admission = {key: value for key, value in admission.items() if key not in ('inventory', 'bodies', 'capacity_members')}
+                if admission['state'] == 'record':
+                    return review_session_v4.prepare_session_assignment(records, artifacts, value, route,
+                        expected_revision + 1, logical=logical, admission=admission, slot=slot_identifier)
         diagnostics = {}
         reading_logical = None
         carried_report = None
@@ -4065,6 +4097,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             return changes + [immutable_record(records, 'review_assignment', value['id'], record)], dict(
                 record, next=[describe_planning_command(record['id'])])
         receipt = dict(record, diagnostics=diagnostics) if diagnostics else record
+        if session_admission is not None:
+            receipt = dict(receipt, session_admission=session_admission)
         if reading_logical is not None and carried_report is not None:
             receipt = dict(receipt, carried_readings=carried_report)
         if value.get('reading_chain') and reading_logical is not None:
@@ -4224,6 +4258,8 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
                 raise ResearchError(openness_reading.PROJECTION_STOP, RATIO_EXPORT_MESSAGE, handoff['details'])
         from .review_source_complete import validate
         validate(records, artifacts, assignment, packet)
+        if assignment.get('session_chain'):
+            review_session_v4.authenticate_session_binding(records, artifacts, assignment, packet)
         validate_assignment_inventories(records, artifacts, assignment['id'])
         repair_records = _read_context_records(records, assignment)
         context_repair.validate_repair_binding(repair_records, Evaluation.of(repair_records, artifacts), assignment)
@@ -4276,7 +4312,7 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
     assignment = store.snapshot()['records']['review_assignment'][payload['assignment_id']]
     if 'preflight' in result.get('result', {}):
         result = dict(result, preflight=result['result']['preflight'])
-    if (review_handles.HANDLE_TABLE in _read_json(store_artifacts, assignment['packet'])
+    if (assignment.get('session_chain') or review_handles.HANDLE_TABLE in _read_json(store_artifacts, assignment['packet'])
             or review_parts.KEY in assignment or assignment['role'] == 'native_math' or assignment['prompt'].get('parameters', {}).get('evidence_parts')
             == review_problem_parts.PROTOCOL + '/part'):
         from .review_refusal import record_native_refusal
@@ -4303,6 +4339,8 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
         validate_replacement_origin(records, artifacts, assignment, packet)
         from .review_source_complete import validate
         validate(records, artifacts, assignment, packet)
+        if assignment.get('session_chain'):
+            review_session_v4.authenticate_session_binding(records, artifacts, assignment, packet)
         if review_parts.KEY in assignment:
             if (review_parts.find_kind(packet) is None or read_history(artifacts, assignment) != []
                     or any(assignment[review_parts.KEY].get(key) != packet[review_parts.KEY].get(key)
@@ -4544,21 +4582,33 @@ def _assignment_state(records, artifacts, assignment_id):
             try:
                 packet = source_delivery_packet(records, artifacts, assignment)
                 source_output = review_parts.project_source_output(state['output'], assignment['role'])
-                state['source_requests'] = bar_sources.requests(source_output, passages=review_excerpts.KEY in packet,
-                                                                 source_rules=packet.get('source_rules'))
-                state['pending_source_requests'] = bar_sources.pending(packet, source_output)
-                state['source_request_status'] = ('pending' if state['pending_source_requests']
-                    or source_output.get('settled_requests') else 'settled')
+                if assignment.get('session_chain'):
+                    kind = review_session_v4.find_session_kind(packet)
+                    state['source_requests'] = source_output.get('requests', [])
+                    state['pending_source_requests'] = ([dict(kind='session_turn')] if kind == 'request'
+                        or source_output.get('stage') == 'material' else [])
+                    state['source_request_status'] = 'pending' if state['pending_source_requests'] else 'settled'
+                else:
+                    state['source_requests'] = bar_sources.requests(source_output, passages=review_excerpts.KEY in packet,
+                                                                     source_rules=packet.get('source_rules'))
+                    state['pending_source_requests'] = bar_sources.pending(packet, source_output)
+                    state['source_request_status'] = ('pending' if state['pending_source_requests']
+                        or source_output.get('settled_requests') else 'settled')
             except (ResearchError, ValueError, TypeError, KeyError) as error:
                 state['source_request_status'] = 'invalid'
                 state['source_request_obligations'].append(obligation('invalid_review_source_request', str(error)))
     history_parent = assignment.get('history_assignment_id') or assignment.get('context', {}).get('prior_assignment_id')
-    if history_parent is not None and (assignment['role'] in bar_sources.ROLES
+    inherited_status = None
+    if history_parent is not None and not assignment.get('session_chain') and (assignment['role'] in bar_sources.ROLES
             or (assignment['role'] == 'adjudicator' and assignment.get('subject', {}).get('kind') == 'problem')):
         parent_state = assignment_state(records, artifacts, history_parent)
         if not has_verified_history(parent_state):
-            state['context_status'] = 'contaminated' if parent_state['context_status'] == 'contaminated' else 'unverified'
-            state['obligations'].append(obligation('review_source_parent_unverified', 'The complete scientific and source-request history must remain independently verified.'))
+            inherited_status = 'contaminated' if parent_state['context_status'] == 'contaminated' else 'unverified'
+    if history_parent is not None and assignment.get('session_chain'):
+        inherited_status = review_session_v4.describe_history_status(records, assignment)
+    if inherited_status is not None:
+        state['context_status'] = inherited_status
+        state['obligations'].append(obligation('review_source_parent_unverified', 'The complete scientific and source-request history must remain independently verified.'))
     if state['output'] is not None and state['raw_output'] is None:
         raw = read_raw_observation(records, artifacts, state['attempt_id'])
         state.update(raw_output=raw['raw_output'], raw_output_digest=raw['raw_output_digest'])

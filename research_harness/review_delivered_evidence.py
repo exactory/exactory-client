@@ -52,7 +52,7 @@ def project_delivery_view(records, artifacts, packets):
     carried = protocol.collect_carried_records(records, evaluation, None, packets=packets)
     delivery = dict(packets=packets, artifacts=references, source_mappings=mappings, carried_records=carried)
     from .bar_sources import PROTOCOL_V3
-    segments = [entry for packet in packets if packet.get('source_rules') == PROTOCOL_V3
+    segments = [entry for packet in packets if packet.get('source_rules') in (PROTOCOL_V3, 'exactory-independent-review-sources-v4')
                 for entry in packet.get('evidence', []) if entry.get('segment') and not entry.get('item')]
     if segments:
         delivery.update(segments=segments, actual_packets=packets)
@@ -238,7 +238,11 @@ def _read_session_delivery(records, artifacts, assignment, delivery):
     for packet in packets:
         if packet not in unique:
             unique.append(packet)
-    return fresh.read_series_delivery(records, artifacts, packets=unique)
+    result = fresh.read_series_delivery(records, artifacts, packets=unique)
+    if assignment.get('session_chain'):
+        from .review_session_v4 import project_scientific_delivery
+        result = project_scientific_delivery(artifacts, assignment, result)
+    return result
 
 
 def read_chain_delivery(records, artifacts, assignment, *, attempt=None):
@@ -248,7 +252,11 @@ def read_chain_delivery(records, artifacts, assignment, *, attempt=None):
         return read_selected_delivery(records, evaluation, assignment['id'], require_ready=False)['citation_history']
     delivery = read_attempt_delivery(records, evaluation, assignment, attempt)['citation_history']
     delivery = _read_session_delivery(records, evaluation, assignment, delivery)
-    return _read_replaced_delivery(records, evaluation, assignment, delivery)
+    delivery = _read_replaced_delivery(records, evaluation, assignment, delivery)
+    if assignment.get('session_chain'):
+        from .review_session_v4 import project_scientific_delivery
+        delivery = project_scientific_delivery(evaluation, assignment, delivery)
+    return delivery
 
 
 def _read_replaced_delivery(records, artifacts, assignment, delivery):

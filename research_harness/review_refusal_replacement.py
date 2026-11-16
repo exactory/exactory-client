@@ -130,6 +130,9 @@ def prepare_replacement(records, artifacts, value, revision):
                    or not protocol.authenticate_attempt(records, artifacts, prior, attempt)
                    or diagnoses.get(attempt['id']) is None for attempt in completed)):
         raise ResearchError('review_refusal_replacement_ineligible', INELIGIBLE_REPLACEMENT_MSG)
+    if prior.get('session_chain'):
+        from .review_session_v4 import prepare_refusal_assignment
+        return prepare_refusal_assignment(records, artifacts, value, revision, prior, packet, refused_ids, diagnoses)
     if is_v7:
         return v7.prepare_refusal_assignment(records, artifacts, value, revision, prior, packet,
                                              refused_ids, diagnoses)

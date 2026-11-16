@@ -2,6 +2,33 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "session-v4-fresh-input-and-final-once",
+      "record": "20261114053500-bar-chain-delivers-two-full-texts-per-turn-and-store-runs-one-reviewer",
+      "class": "bounded source session request and one final assessment",
+      "summary": "Replayed source deliveries and repeated assessments made each later request grow with the session history.",
+      "expected": "Fresh v4 request inputs carry only their frame, current deliveries and bounded latest state. Six texts are delivered in fitted parts, request outputs contain no assessment, and a final records the bar once.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_turns.SessionTurnsTests.test_n3_six_large_texts_deliver_bounded_parts_and_assessment_once",
+        "test_review_session_v4_turns.SessionTurnsTests.test_forty_source_turns_are_bounded_and_turn_three_handle_records_bar"
+      ]
+    },
+    {
+      "id": "session-v4-capacity-levels-and-authenticated-handles",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "session capacity recovery with authenticated frozen state",
+      "summary": "A session request at effort max exceeded its output limit without a smaller admissible task.",
+      "expected": "V4 uses request profile rows at reading material levels, replaces the request on its route at the next lower level, retries the floor once and stops for a decision. Final handles authenticate delivered evidence, refusals and multipart arguments.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_turns.SessionTurnsTests.test_request_rows_at_480000_control_c1_with_qualifying_reading_rows",
+        "test_review_session_v4_turns.SessionTurnsTests.test_capacity_at_every_request_level_lowers_then_retries_floor_and_stops",
+        "test_review_session_v4_turns.SessionTurnsTests.test_pending_argument_capacity_reduces_answer_bound_and_keeps_final_material"
+      ]
+    },
+    {
       "id": "final-page-plan-bounds-each-target-and-closing",
       "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
       "class": "review capacity (pure final page allocation and replay)",

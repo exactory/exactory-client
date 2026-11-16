@@ -28,6 +28,14 @@
     },
     "research_harness.review_staged_protocol.build_packet": {
       "parameters": []
+    },
+    "research_harness.review_session_v4.build_session_packet": {
+      "parameters": [
+        "logical",
+        "inventory",
+        "state",
+        "plan"
+      ]
     }
   },
   "callee_inventory": [
@@ -18566,7 +18574,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.check_mode": {
-      "ast_sha256": "4d0d51a0ae0655f3b3811f41e6fc63039152166e4b33a358859a3fa2f616c4f6",
+      "ast_sha256": "0473315a2cf6a7b96c286fe3fdc52c27d686b13b39722e3ce68798f3102ee084",
       "functions": {
         "check_mutation": "61f257e0ad6895ddf89f68e7248697df340edc323fee96b2b14e22173f7adaa6"
       },
@@ -21104,7 +21112,7 @@
       "reason": "Reviewed conservative unresolved-refusal projection without inferring exhaustion from raw attempt counts; independent blockers take precedence and posted views suppress actions. Changed AST requires declaration review."
     },
     "research_harness.research_decisions": {
-      "ast_sha256": "2ab358fae0e3cebf9e31fd8e3839d8d706a3841cf73db93f9586d56e3a938279",
+      "ast_sha256": "3746b2dd0b3c024eb6fe427923cbdca9067eb8442d476f99f1e30089579cf76b",
       "functions": {
         "_accept_support_digests": "420d7e37980f2ff3f96d01bf8a8444a24c3070e2dfbc7c2b1ffa79a6c6999aba",
         "_all_objections": "4afbf09db02d0799095d8052b6dac4239aa34b9ed355127d0910e67a049b94ef",
@@ -21152,11 +21160,11 @@
         "read_review_citation_delivery": "d31eaefc45dfb2d5a1fa1b52d78a6e5228724e291a2f9d3d8a1b1385f2da044c",
         "record_research_decision": "d9c2a4bcf3334c1b9245b8d5ad32bd3406c17cd98ad7c1cf234075415328957a",
         "record_source_impact": "f3215f37638b3797cec945c99ae3e4ba37e8fc1b5a3519fc84f307f29cd2df3d",
-        "record_value_review": "3a7ce151cca84104b005c532f8208b203eaedfd01bd1357eaf13d5e83cec4e2a",
+        "record_value_review": "b2f9c696664aca828771ad8aac856ff3f1bc0214b10a8d46cd270f294771305a",
         "select_problem_slot_assignments": "610a5cec1d39c1293898c6ae41c51d9683ed622316b24ebe53101e1352cc4004",
         "state_objection": "2d1eaa8a024ba69d821df278ba51499535c610ccc9d080fc70b1c115838b5c04",
         "validate_cycle_decision": "1728a877d7503c453a9596667e25b2136f4957244d7c4c894dd8db30eafc567c",
-        "validate_review_contract": "48297f24dbc20b6517676b6ef210fc7c02a6285f5287d198b579a81331159cb5",
+        "validate_review_contract": "3b506bb77c58c756eafa86c3decff4db8823aac1213fabf1821a2b4ce9a44847",
         "validate_source_impact": "36386d4ad7bd4989973a5eb089a2558964834305c6cf2d87c96b160e641b1107"
       },
       "packet_call_digests": [
@@ -21592,16 +21600,16 @@
       "reason": "Reviewed initial/native guard exception only for an already-proved replace recovery whose capacity_replacement names this exact assignment; existing handoff protections remain. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_delivered_evidence": {
-      "ast_sha256": "532ac96cd4ab5d939c27d4444291d809ccc4571f693221c146c1c37a847f88e0",
+      "ast_sha256": "c28f520bbbd51cbfcb6bf0df631d9517c32682ecf09c9dc9196656082cff144c",
       "functions": {
         "_read_authenticated_delivery": "fd36f276005fc89a7b072cddff5fc74945f80a527077e7a2fc5d3c574ce50690",
         "_read_replaced_delivery": "44a7a3eec395941089a3989a62cc4e6b4fddd841d80a981599e198f3a49147df",
-        "_read_session_delivery": "d3c28321d7a0668d8fa8bf568b739e991674fe1611e910fc5d96168d64b2737e",
+        "_read_session_delivery": "aeb0d630638a55e83f8e5d7ef0b68b24ba2341a7194d7a864aad566225345d96",
         "collect_exhaustion_predecessor_turns": "11f7f0db0236e5308ec39b3e4ef258930456ad00d86145179ecee77545813792",
         "collect_prior_session_turns": "08f5e1bcf79de83359d92a7457f46a6d512e6c01492ccf4c2b0f7e9898f0e8ab",
-        "project_delivery_view": "d1aa1b3c877d99c50c12fe1b5e90e589743659b468b0a80f611d30bee90f61a4",
+        "project_delivery_view": "5e8fbdaf03eef63251c0195be42df29d03d4c30bc24f6007a3e9a5f27cc43c96",
         "read_attempt_delivery": "d39dbf2e968bae7b4c836c0b5907ceda98d56d275aa1264a0681a40752d39dcf",
-        "read_chain_delivery": "599154839d8db6e5775e23c67801947331dec5301659efdf4ee144afcee1d041",
+        "read_chain_delivery": "bd126a11779e17e105a647fd80e063440223821a745e3c0c50f3fc629a4e368b",
         "read_selected_delivery": "b002e7315d630f180efabc245142c8979005a336c9d1ed79a0e444c289298205",
         "resolve_part_source_link": "f1bc3a30ccc0772ffd419ed0ce67678604ce645ca89f2476fe88b4e5cf5e4fba",
         "validate_review_readings": "327493475c24ffa200380a153feaefa0076c2bfe26f25a20f60ea3ff5b755b0c"
@@ -21807,7 +21815,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_failure_class": {
-      "ast_sha256": "a95e75652f935db14e8050ee5fcaeae7693ea91c0e05b40240be89fe3f936ee5",
+      "ast_sha256": "dc4191029c642be76d9f2174bfa88dc39bb4134388d4f038d8ddaa0ed8353569",
       "functions": {
         "_describe_sequence_counts": "1903571802ceebaa2e6413b445ccec82fa398d7cf4b738a57b18c5747957e01c",
         "_is_scheduled_unknown": "18dbfaffb3993eab30b42d6bf376556828c162d79bcca21ce050df0f51cd2f2e",
@@ -21818,13 +21826,13 @@
         "find_capacity_signal": "b870ffda8a65d0565029aa5348be128646a06aec6702e64c3bf30de5888cf037",
         "find_output_cap_signal": "6f59f04a865cce942c17d9c6d81c771009d0ea962b72c3e6b92116e43dafca5b",
         "find_safeguard_notice": "f7009c2ad7f4d22a276386c1374d2309091fc5e5d2bcc2cd081f1c31bd3b9e13",
-        "has_smaller_task": "80bb5eb8bff91f61b78800f3e2cfb25880612ce57a386086340680468439f7b4",
-        "list_turn_assignments": "c459557d60564eb8ea2566a13ec5f25f000a927b439c8cbb7bc928347f7d7413",
+        "has_smaller_task": "0eb9e2aaef6f152e779f87e31ed8bb37fff811db4f35e18931895307b8d7635e",
+        "list_turn_assignments": "d846d70b9832a9cd8d73585e1a2788f5aa2bdec43bc21468de844a6a8e4d3e73",
         "parse_observation_time": "a45e9741d77a027bf18518e09c8b1a262125934f0d6cecd3ac63c3c30df7f367",
         "parse_reset_time": "329cd60d6bb86719c819441543f5e9aae44305bd754318af2996e51f1dc23488",
-        "plan_after_failure": "c5bbade2d3cf33f16c4007d949bf30b29f0ff2abdcd2e854220072faf1c1b53d",
+        "plan_after_failure": "c18c83fc1f9aedecdfcff1df8735ec538170868c785e388d89413d8abad55f72",
         "plan_output_replacement": "4ffcc61f5bc883f9f888739c941db2e21b0b85ce1933c124f6fd10d304fc5fbf",
-        "plan_refusal_recovery": "fc11b4b1d6915e3ac237cebd8ad53507dee9206e32ba650d2208191ce5c83f7e",
+        "plan_refusal_recovery": "9d06821d97f8c3e6d27b480b336e6eb618830434d9e4e6a2c5ac787fd8117489",
         "plan_scheduled_retry": "d9de465ba74c6d4fc57df8aa62eee4c4073cad20d97b2a126860705d1ff0748e",
         "read_attempt_evidence": "7e3c10495f9111dae700adde8d8f342a79bcf2c58725057b7f88bc0d9efb5d9b",
         "should_reduce_capacity_task": "d34f992090c27feb219d958c982de4ef824cb589b734765a95819c45bd8167ff"
@@ -21836,9 +21844,9 @@
       "reason": "Reviewed explicit capacity replacement command context and frozen refusal notice forwarding into both real parts fitters, with exact candidate preflight and strict smaller-request checks. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_handles": {
-      "ast_sha256": "7257d93f0eccad48edf5fef1587f80cad93ebfba8e1b1c5fe5e51b2c7481d91e",
+      "ast_sha256": "ffb5b626fd4118340e66c9001aaf431c2f75c095bea3c898b1f03268f743d0e6",
       "functions": {
-        "_expand_value": "3d9624a1411cd821bd3fdcbe417072a07a432c8099b2d7dfa53c46fae504cfaa",
+        "_expand_value": "e7bdc67036a0904027a750930c63e01b93940f32e1ee97610b044a170e8ef43f",
         "_refuse_handle": "915d5b47f24ddee7a7a3492784adfdd8386f9db2b8bfb1470e2770bc84c650ab",
         "advance_material": "be1b31db99c34369a64c27c9f5c6d9401559247047da2bb97cc6df5df8fa4e84",
         "authenticate_material": "5ba05cca7552c9a8e8c330fdccb463e459556f5b2f0e84a2132f8945a8ac5e4a",
@@ -21846,9 +21854,9 @@
         "derive_expanded_output": "4e0b6863beadf48979dc759d8c473600622c9c567a7801975bace6ceef27da2e",
         "describe_expansion": "f2421dc4660a52231689a02bf487c679cdb4ae2aefd84ff0c0a69333fe46b4ba",
         "expand_handles": "9fac95ac7876a6df00fa2f4de4fa53282c35c117771a55b147bfc64162bb0729",
-        "is_material_output": "8ab06ac48e4a0683f6f62ce067cd2952f4d14341b89c5c69fe9d9203dd99ed39",
+        "is_material_output": "734a515ec834045739601a85fd4c51317836de226dacd7fcd7977259c2661162",
         "record_handle_output": "8b81b25a6e5885db6d40dcbed842f0a3526f9e343f28d0f261e9a5a222733551",
-        "validate_material": "c1abeb7ad05adfb3867df880b0904272fe894074d25cedf194937aae7f603b4d"
+        "validate_material": "1050524dbb2344a7ac14024769bacf9fd44c0df04398a89f501dd5f245066397"
       },
       "packet_call_digests": [
         "08a3801a5dc278a4fa3ec3959db6d5254e5c484656c412791dbd2ee5f4e0babc",
@@ -22810,9 +22818,9 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "b7788a3a3d7368b3373a19cc593bbc61bdf2662a87cc221c4862a72e8162a027",
+      "ast_sha256": "c5b28bccdafee2ac838c51ab630d20767c30897673acd41449f67802575f6bb4",
       "functions": {
-        "_assignment_state": "805eca7b4483852dbee0f8e05928cde22acbc7c7be8ec46ba127c3e71a0ddcbc",
+        "_assignment_state": "ec040afdf84a21cf562af459543004970a62858ccfbbe249dc3b292320de3c21",
         "_bars": "fd41a7b94078e8e0761696db4a7cc67b063cbb5787f76d6d3dae65fcc7fe5f9f",
         "_build_prompt": "fed24ab4acff270fa5f67d8875c3afa05e1e89829a813c1b0629faf558ccaeba",
         "_context_observed": "706588f918f9418a213ffad4175220255e9b1eda12193cf0c4aa200208736e68",
@@ -22836,7 +22844,7 @@
         "_payload": "c526bb2f57889470221ebb4e0bfe3b3ac0f4218f5a89615a1dd28c4744bf29eb",
         "_prepare_review_mutation": "2385be60d23b526de9f5574449784387944603ad8060cba6b95193bb17775c42",
         "_project_scoped_result": "c2a9b83a0c4760d56232bbf6de7ed4ef74c50d5ad4f6b1e1e4dc502f33c61ebe",
-        "_prompt_matches": "1f4d4abb685d7311050d7e32aea93eafc0d3d44ad87c83e72bfc31645151c493",
+        "_prompt_matches": "a19f1997a63408b77b66e6e3aa774897a33b18492b1324fdc1dfd094ba8f2cd1",
         "_put_json": "fae2721f42a5483694e38ac7a3a6006092ae8cefdf894fa21447ad2fd2070ad0",
         "_read_adjudication_review": "fcd04105dbc2473eacdbe01f05d5c23484a337f9c0afe0dcdb0fb12f5c6a144f",
         "_read_context_records": "85765f3f4614191373498fcca61846681cf30770af351b7458e03d6555400796",
@@ -22853,7 +22861,7 @@
         "_save_derivatives": "ec152af73c108934e2f0456ef182a91580f8f24b0d5f9b2bfa0f76504a343f97",
         "_select_common_prompt": "fcebe555799aee9c524fed96f36c4d8868ad4d113d9da7ee08a6475f8812b099",
         "_selected_attempt": "d60a7dabed46051257194d40752e60b08d403713bb0ca8746c9315b7bc720750",
-        "_source_parent": "c82856d8b5e5c0f90a2b1fa019c495a1eb1a81787104ab2f41d73e5e6def5651",
+        "_source_parent": "4a441c58a271666398fff567268454faace624f484a1c7049ecffacce59a80bd",
         "_strip_source_rules": "0ce22729051040c17d31751a9d686f001ded0c0ac85587200adbf75b7e35b844",
         "_uses_previous_repair_suffix": "3a3a046ec8c3a62b016d8065a7f9b229418f56c46dabea0e66bf4cdbd8ae42d3",
         "_validate_staged_adjudication_scope": "0524b62da04da3bbfd354782320baf2bb938413201445572de2b7b4dedafa696",
@@ -22866,7 +22874,7 @@
         "adjudication_state": "bcde641f88d1381f17a6db4337387644c332de3cc1a11f92841831d6061528e5",
         "assignment_state": "17a13d99847baed913e864239a7741d8a80cc7e485fac86ac7914ab4fd4c1bf8",
         "authenticate_attempt": "d252e3abaf0670e3eb03594daf1f561c97375433df7407521df73750d399b2f8",
-        "authenticate_provenance": "023afe3f58b3810906b30ca9cf07e79c32313a8a727c78403c6a76efe5c5147e",
+        "authenticate_provenance": "70059b4acf7203a3fb39e788ace2c93a6baa15b5e79b09085a6628ddf2b729db",
         "build_assignment_request": "ee048f3d4f549dad3ceb3bb7048a02bbf255cf23f25d4909915f05313cf02f88",
         "build_direction_evidence": "d36fbb4c4c32504a80d6b8b40994f45ee17ae018197aa6cea66c82bd20f54632",
         "build_packet": "62319198819bd5e71b376ebe3a19e635cf24ceb3db9fd8f01014dfd1d1c888bf",
@@ -22898,9 +22906,9 @@
         "has_ended_without_output": "f21d60ceabff57cdfa464f0a0b05ddd53ba4358dc46fd5b541060fceeec9d057",
         "has_exhausted_position": "a6a36d007af0c26245e0fdb1edb9a4e261a1fb5c301586ba7ea56d2f4665e141",
         "has_pending_invocation": "1100f816ca4769d642bcb040f697439bfd738a2a00c832bbbf9b153965e9ac76",
-        "has_problem_result_rubric": "f7dcd7d5cc3c12342b63edfe47e3608e43d7c23902b5f02f268d9d5ef6767a8e",
+        "has_problem_result_rubric": "a25172c08931f9069a1d5d8535639c9a043c1cfb4fe8aa1bc4ddf71ed252458c",
         "has_verified_history": "80bcffdb051ef2a341dc4bd4a86f1dff05304d863526c75525803e349074c3bc",
-        "invoke_assignment": "e3d47a744d920c6e5593f2cb7839cc712ba5e84d5c11dbcdab115c0e2a46792b",
+        "invoke_assignment": "7c2dc0ba1384f92a74e089897d3a520775f03294a990b6b5e7f0c834924a7ca2",
         "is_dead_assignment": "0e87b884f14015390061ab33a6f17a4a95770ae46620127610f25244a62fcd85",
         "is_previous_prompt": "6a89da49434d83987b303155068983a6499cb140a6eb0b906a4e6c1043537f42",
         "is_version_2_problem_result": "b12d8be5451fd095516bf97d562c067466acb6d216815b6fe20a93f9e3520a0d",
@@ -22912,7 +22920,7 @@
         "read_raw_observation": "14e6b6c7ca97a4e3992d908f1d94f3add3a92bee7561ace63d220fb8cbf06834",
         "read_route_runtime": "e60df76fe94a9b3f2b98373e22d2c1bc846ca050d50044e4744a7e60fe71bca2",
         "record_adjudication": "f65c72f2a1d78c38ccc43754e518ff050beb086db56d42f3b81322be2297d5db",
-        "record_assignment": "17af460848d614510cc75c2bc879b77d44269dbcc1366ef7719202d2cf92c062",
+        "record_assignment": "06f85d037a300f20c31a8339df3f5e10a32624f45892f9e6aa248595564b790b",
         "record_attempt": "7145b51d5cdbea1477432a5cce61efb366e8dd94540e082fde33066063c4b8f3",
         "record_context_event": "725358847e29626ae330f19fe7a2b1530b762238e0893f3021cebbe0c70e49eb",
         "record_route": "eaa1d126f04ed9ff04f92ff38836725f9ba40802efcda880e2c6adc7b94d874e",
@@ -22928,7 +22936,7 @@
         "validate_adjudication_contract": "7ebec65adbede358b6d1b2189a3b8ce1f7fe8a8adeeddb02de72e5fb1fc64fa0",
         "validate_assignment_inventories": "f73054328a6e1cd28f4c62afa267e8c8d3f25a0b5d72f46a4b285c545e087893",
         "validate_observation_fields": "196ef273f6fa01aa1966f19aeb02b75a9e34d76ef489cd9e0bc4ee5ebf176b99",
-        "validate_problem_bars": "4d7f0a59a432880fbbc451aeeb8e2b1317874041c6b74f131fa7a35adf2a1dbe",
+        "validate_problem_bars": "08566bc5f8da8ab4eb3537bfcc3bc7e6a1a8012cb2e0782c79f249e9c12f438b",
         "verify_route_context": "a684e5bd0adea26b05db374e79d76ca748a379a1746a595739e35643166090f1"
       },
       "packet_call_digests": [
@@ -23106,10 +23114,10 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_refusal_replacement": {
-      "ast_sha256": "c17dcdeffc2f15202cbec9c5e4f43bc39c931111cc6ea6dc1fa44819c25e9af4",
+      "ast_sha256": "336a3d5f52b83895fcae6c56bac6bfc7a0bdad0caa817aad46a3bfe7ead8315e",
       "functions": {
         "find_output_successor": "f9aa987eea6760e2a7fd3e29888f5e43903e4365d1e50938ea4b17c429b79967",
-        "prepare_replacement": "a7ddbaa90806583c3dde8eb3d95f2ab761970823c1a4b66aca47a5dae2efe6fc",
+        "prepare_replacement": "096bf7db176ccfff0476454bba9ce10dcdae6203d11c8fcfb3b4d811bd72924a",
         "read_position_context": "cdede8c28f9431efad8671676884d4e166ee1d9ad3e3728ac4414cc53cf87d32",
         "read_replacement_link": "c532b998f7ab3e173deea48b4d2b41ab8df7bcba6534694b9be6e35a17e27160",
         "require_selected_output": "c51358ab7d4eb8e8c97d27385ff001226126fdd7bf36960bf619db74ec1e1211",
@@ -23221,12 +23229,12 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_route_capacity": {
-      "ast_sha256": "e1578f8439864658846cb0411ff6b4fdf2fb7f385ab74391daae56603c8fe98b",
+      "ast_sha256": "664cbd7d3b53b01cb704181785248e6a25a8e922cda01eba211bf6804cb29e16",
       "functions": {
         "_build_serving_parts": "8f2f7be1d7e1d4cc20fa124af779a48e77d41ab31cb6c7aed1fe3ed6a3de3afe",
         "_build_serving_repair": "c50aaef3ccfcccf6064f9a4cdaa0a0f52111886dd9b185936b6d1e5a38ab47ca",
         "_can_deliver_parts": "4cbd7d56f2a739fef566405d73c495a14fe05a16e5289d3b5092a2c8aa6935f2",
-        "_clear_carried_answers": "ec3247ebd2ea6832479c9633ad6cb8228221315e54d452f0af42120032ad328d",
+        "_clear_carried_answers": "2ae1ccd61a03e54937f43bd5f4954960c4b63c1c837ea0036329e446daef3afc",
         "_clear_material": "90e10993e38c73281ba419d352e38cc8dcc44979c5fd71f6c4b530cb6bb0545a",
         "_collect_strings": "ec0518deeb23b8da9b1eacd1634dc2e018c3e69fcae3c5de317a52cb49823629",
         "_count_capacity_pages": "cae4c2e03e90999bbd175c22935974afc10b57818474e0647c093c8c65ff1d52",
@@ -23249,17 +23257,17 @@
         "build_profile_rows": "c13bc9fb5b0d397640ab6240a162da9c94657f578c48d6e07c72c4b69b759fa8",
         "derive_material_allowance": "75731028db3042a3152e644117cc546d780ceed4683de58c8f51f9642587b9e1",
         "derive_plan_task_limits": "0acf843326aadd0c9c146f587ae50629ae7f65217869cb9a51b47a6326d2a6c2",
-        "derive_turn_task_limits": "dc3641c6ae1b8474f3c824220ab18a8268959be724cb6e9354bd2121a301f3e6",
+        "derive_turn_task_limits": "6968559436d7d8b038eec803d1e22fd5dc89ec37516602317d4a2b398e396c2f",
         "describe_assignment_capacity": "eb2c92c7ff7184e20c1df0ca440768bc8b0e54f1753f39bcd20de5d232e7f669",
-        "describe_assignment_kind": "7feb00e09fe70fa10c53592a1178eeee0c4b5eee590258ff59bcd3dbdc1f7602",
+        "describe_assignment_kind": "7d4823903337d50654f4272dd1e7cc5beacf759244f649135055fbd7efe499aa",
         "describe_assignment_limits": "7d463bd8c8479f7a8f0b3874cb734df1acd143601602ed3a83c90530145c2443",
         "describe_assignment_task": "2b71c68cb791cd1175e1fa915606d94a502782dd6e154690bde3cd3720a7c349",
         "describe_assignment_warning": "7b4cf02e9d3aeaf2314a64c6af65361dca797dfb4a5288ffe4d83edf851e69fe",
-        "describe_attempt": "87d4342569dcc3b1fb98c6cd04cb3442a338b723d1624e86c4f85e3124f0457e",
+        "describe_attempt": "1022729198c33af535f3c488c48407d18a4f393a4f3c84a174b26e9589070b79",
         "describe_binary_rules": "10dba71afb020afb5ccb28e84a6d0cb06bfb3d4b2a91d74ce4e0702d67b56b5e",
         "describe_capacity_decision": "963e313d4c944dac5960bd529faa50927ac7fa23a0b6adb2c3c5c27000727706",
-        "describe_capacity_forecast": "b6ff4e4c28af669d1f4381bbd35d18f8292efece677df6bd4ac650b4c823217e",
-        "describe_capacity_recovery_row": "18d1b563addad3079dd9ee5d96a20f9dc4372525839cc588f46a75f5a500c906",
+        "describe_capacity_forecast": "fca817e5be28a59e7aa8e0e700784d4e2cc2e634032034fb185671333ffb5539",
+        "describe_capacity_recovery_row": "eeb0d9df9a3d4230d7ee83a2e21ec36ea99f627afa8c0829a31567a09ce57ee3",
         "describe_cli_version_status": "dd5d2885bce348ca26f78808bf2394ec24236d47ade407ef2f261853f4333a04",
         "describe_final_projection": "819899b335505b41409f8a284bc81c441a785d38cd472df54c318c62f8f07201",
         "describe_frame_policy": "9a3c3090f7209138d892dfd32145788af016ae61902cb325f29dc7e1398fd5eb",
@@ -23269,26 +23277,26 @@
         "describe_next_capacity_call": "ce1e087a414cac013c6e7862582c8ca6df7a1ff580dab2a3b3494901710c8bea",
         "describe_open_route_reports": "22d125513bd35b87825efbcd1c45894cd152084a73413e5dde760f1d27aba2b4",
         "describe_output_warning": "21de96d5af49fd055650e94897fadd5ab1bc0e52f6b62e24ade24413a0e1538f",
-        "describe_plan_preflight": "465cdd6f10a1bda16b379b5aa7ababac95c4e0dd3bb297c7674787b0c1be7dd2",
+        "describe_plan_preflight": "7918acaf4a5972b0ed36f85a244b4659b772a8dc382f3a5a4df67a4cfebd80b7",
         "describe_route_capacity": "dc8c5c7fccc98f9fdaf056b80bbc9f508349b701d8981f39f27e2d819d94e024",
         "describe_route_class": "8c2e5fea846a7893c0a6d377dd0dbd77fa08d04cdb5b5dcd89b77cf8dae6cc92",
         "describe_route_report": "9b863e3edc15702489089729a9d56a67815a6b58bf38dcbd91810daee9f78f0f",
         "describe_session_forecast": "5f805fcd2f7eb89ac21c5e0ac4024b6a2711846ab5caa0b6aac58836327b1ba0",
         "describe_session_stop": "65cfe3b9fb9d3f1bf3d0506b7f01594166971485799cafe4497a32b995166af5",
         "describe_size_report": "7be62632b8c2997350e0fa36cc9e504b9c594f0b8744b9236c1a5574f63ed7e0",
-        "describe_task": "3eaaccea9d8ff817ee7cb4d4c8027cf810d60617dd511d85f6fd8dd6d63a1cc4",
-        "describe_task_kind": "899dbb55839bc249bc5d1670c0141ced1ac9e9b159a27ba9ce19a55f6e928fb1",
+        "describe_task": "79931981ba722adf7885ae2bb388ccb061af012b147f57ae910e301fc7f28e1e",
+        "describe_task_kind": "7285fb2dc69640162408bca41835517d32c317f2595e803d3777e28f2550a5de",
         "describe_text_room": "32432cfaa36ebb629ce9cbb6ce7441821d37da4b4284dd5fd2d769748a113169",
         "describe_unsolved_reviews": "b10c5662b5a0d27327b1b6e1a3145ad94acfab170899c5fe0fc1a0b0cdd12fd1",
         "describe_work_units": "468b91882eec9e12c79f14d7204231f94f8692d48afe20770440099acb5d84a7",
         "divide_room": "479df84167dc68c68051cf92f213230c797c15f1ac495e77fdb4b451d82ca270",
         "find_serving_routes": "18ca735abee774034b5023e33a7181caba87437212369e5ed2b131726f85f776",
-        "list_capacity_recovery_rows": "f7eb46440b7c38d38b47078dae1c6ecaa59472ca7381ebdb59a2c37863b86e34",
+        "list_capacity_recovery_rows": "c5649fdcf1afb8ed085982859a43258d852d3bc079f8738cd53bd642094ab646",
         "measure_capacity_value": "24609ddec40349650469c624e2e8d9a807d7415e78a862b95afaf55d1297914b",
         "measure_request": "1615879024ec19d63e6243105beb627438f6d407aa9cc8fb5f7dcad5ce6b6abb",
         "merge_profile_rows": "be408c3437ff8b29f6436f534c5c9d273232ad182c39cc7068eb587fb2648b3b",
         "pack_profile_prior": "cf2f899f6e103c3086dc749c6ad02492e7cb9d493c94d904c9e468847b82f22d",
-        "plan_capacity_recovery": "3410862b70e8e3391102986923ceee2711b015c54c7554c4d74f1d9faf8156b6",
+        "plan_capacity_recovery": "ebe1bc04dcaf3b20d2c3a417f82b434769a25c4b27f1dacf9365ce297687e9e0",
         "plan_chain_capacity": "d8810b055fe9d42f2bb2a41bbc1b8a8c32b3a083053f660fc7a398c59e096fb1",
         "prepare_assignment_capacity": "d50174f1332566ca52a1ad62dfa14d9effb434d8347bd244ec90492af63a99c3",
         "qualifies_for_output_profile": "0b6dc9c47e30814e0677cf564d8471f1242e0b88c51e852b32df6b03846c08fd",
@@ -24810,6 +24818,53 @@
       },
       "packet_call_digests": [],
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+    },
+    "research_harness.review_session_v4": {
+      "ast_sha256": "a9e59384de44cc1843a79232734e96d8e48e138b892a8b1c3f4de09d8ce88112",
+      "functions": {
+        "_describe_json": "7c6004e53039a80228d53341ea102c68af46e1cc51855d15c96893ebef98c919",
+        "build_session_inventory": "9514775d4e1c011f8dea0af478fb2c40095dc8f0c414a3edaa4c71a6f59631c3",
+        "project_session_turn": "45c3cd66d9f324bf71176966efb1e233e0c41fb89e4504477de6ca5a5cd6599e",
+        "build_session_state": "03c92d8f37a3fff4906a596b8ae60bcffa8fd148cd83b1bb8a59d86f71d60d03",
+        "describe_session_plan": "ac9df149a77454973daed8d683c986895697803c830113e3e6080024c3030e78",
+        "_describe_pending_request": "024f8fa85062c089f5927ecdda2d597550d97d961c1789d87b1ba26fe4dce915",
+        "describe_session_allowances": "ed90c4cd013bfb2b87cc64a77c75b4f70be2630aebf9c24bd52766d5ceee0ebf",
+        "describe_session_final_entries": "6085fc5e2b6a7d1edbb26852103750f809b6266291c307b32d9306892ef899fe",
+        "build_session_allowance_page": "7157f57c66fef40fc66f398fc63a2c077554c27a071e304922bf6fd99f26adcb",
+        "find_session_kind": "ec0391026e061bb9868d21c12569b8a1b178681037feb87b2a97c7b8543b8d09",
+        "_require_turn": "705a6293e68d2e0f7b360ca75707ada74c77def1f128b8cf5bbadd7fc452ac23",
+        "build_turn_prompt": "f597583b3dc52c76862c8b3af338868378b1fa8a2f73ceceda30f1d3741dfc8e",
+        "matches_turn_prompt": "937c2606219754eba2ce9a3b196f368b5f02d484dd2ce8896e4c2bb565fd8e2c",
+        "_describe_logical_fields": "844c9d9e4097556d1e4c12a5baf1e37c6d85c23e67a0b1e942fb70f272d893e1",
+        "_list_frame_values": "092ad6ffa04b799669c30c2e6895760f76a144de90111efe4c6ef64c568f77c7",
+        "check_v4_admission": "6b8f6276b3e06d33332c620380571d68588095bd0861a16aea88c59c5b3a16a0",
+        "read_bound_session": "5287425e13ee465c10c2ae1c0004bad2653c3f6957a40aaab3f6b70ec986f18e",
+        "_find_covered_end": "3c51d880c8def4a7f9cc6e3e2099a98c0b59cce28ae2acfe452bc5ce20ee4807",
+        "_list_remaining_units": "51465c6d3108bbb85c1f8af1c52df4ba6be08f247a0c86d29b84a31b50219dcb",
+        "_resolve_requested_units": "c84061c9351b9d24e40fb1d417cb4971beac30271868dc6eb16c3025e6f83a3e",
+        "_build_delivery": "8c8d245ba415f823a919af732cd1d6a56ade804b9eb3c9b4d410b6950974cd49",
+        "_pack_session_deliveries": "93cee82fdf29d2b5ac670c6c4e1104290336b341041352ac6f4950a19d3a5f2c",
+        "_replace_frame_handles": "253d8f9b89711c7836e762e53643784477821c7d2229c4b80cddf7673955204a",
+        "build_session_packet": "db4bd0463758813f90bb474dd86a3a1da45dd0e2d8bcb849f6a7320772651c88",
+        "validate_request_output": "08b8479d5ed3c42d1cd48d4ca7460700eedaad2a497b057350346fa41e948dad",
+        "_project_completed_turn": "6b107bdad6fd1c8da67730c2e1772aa3f62ed3a564d8467702ebce0dc1b44018",
+        "build_handle_packet": "fdf65c67b967bb6d32e2a974ecdfdfd3fb5e60a26f56069c135ed874491cc030",
+        "prepare_session_assignment": "fc61393e1d27ef439bd9688b990355fb91fb4747c38af79accae874b1d584991",
+        "rebuild_session_state": "782a0631106c0be2a5745da1d6501b2b42dffa664c8033674f933a8a033657b5",
+        "_authenticate_session_binding": "b2c010fb2af752fb29a758ad04295d6794aa478344483a3e0a77a8cd4f04f056",
+        "plan_turn_recovery": "4d75a4e66ca63a99e98a7de27781497f89183f2e16e5261d6f9105aed3192d0a",
+        "prepare_capacity_assignment": "c54dd204ee4c20f99db2fc0d96391f0b97f0ad15db1e76485e508a411ec180e3",
+        "_derive_refusal_limits": "194aa4c8c9ee9fcacb52653de41fc990729e428b2fc9bbd2ed312317b8fd1399",
+        "prepare_refusal_assignment": "5ed4368fdfa060a4d879ad2e631304a7aef3de758a0c250eb7a1b16973b469b8",
+        "authenticate_session_binding": "6df1b721a44b6bb247cffd51c62b59d3f45d7403c3660b73e38e1922d9304b80",
+        "project_scientific_delivery": "2459d9b4d2af9db18536506fa1d9df39108b7176fc78f17ebab94fe24ba52c90",
+        "derive_session_task_limits": "641237adb93186b9c7e8561b8b39a833089204b6cbf73b0d4bfae596aa305da1",
+        "describe_session_forecast": "125bb564ddcf9509866f575404270f96565d454005174d3e18fa7e19d0d62c46",
+        "describe_history_status": "174e79d57d9421dcf2895eb4dd9f8d423766321524d62405391edaf82c83ac02",
+        "describe_target_labels": "ecd62c1fdc3ff01378d41be75344673d0ccfb9df7fba64e10200a09a8401e1bb"
+      },
+      "packet_call_digests": [],
+      "reason": "Reviewed frozen session inventory, bounded packet construction and authenticated chain projection; changed AST requires declaration review."
     }
   },
   "certified_callers": {
@@ -41244,6 +41299,189 @@
         }
       },
       "quantity": "targets"
+    },
+    "session_v4_binding": {
+      "class": "carried",
+      "members": {
+        "protocol": {
+          "class": "fixed"
+        },
+        "chain": {
+          "class": "fixed"
+        },
+        "turn": {
+          "class": "fixed"
+        },
+        "plan_digest": {
+          "class": "reference"
+        },
+        "inventory_digest": {
+          "class": "reference"
+        },
+        "state_digest": {
+          "class": "reference"
+        },
+        "frame": {
+          "class": "fixed",
+          "opaque_json": {
+            "limit_characters": 200000,
+            "provenance": "research_harness.review_session_v4.build_session_packet"
+          }
+        },
+        "capacity": {
+          "class": "fixed",
+          "members": {
+            "output_tokens": {
+              "class": "fixed"
+            },
+            "answer_bound": {
+              "class": "fixed"
+            },
+            "material_allowance": {
+              "class": "fixed"
+            },
+            "level_material_allowance": {
+              "class": "fixed"
+            },
+            "request_bound": {
+              "class": "fixed"
+            }
+          }
+        },
+        "notes": {
+          "class": "carried",
+          "quantity": "notes",
+          "bound": {
+            "characters": 20000
+          },
+          "entry": "Q5",
+          "fixture": "session-v4/bounded-turns"
+        },
+        "targets": {
+          "class": "carried",
+          "quantity": "targets",
+          "bound": {
+            "characters": 100000
+          },
+          "entry": "Q10",
+          "fixture": "session-v4/bounded-turns",
+          "items": {
+            "class": "fixed",
+            "opaque_json": {
+              "limit_characters": 1000,
+              "provenance": "research_harness.review_session_v4.build_session_packet"
+            }
+          },
+          "members": {
+            "count": {
+              "class": "fixed"
+            },
+            "first": {
+              "class": "fixed"
+            },
+            "last": {
+              "class": "fixed"
+            }
+          }
+        },
+        "allowances": {
+          "class": "carried",
+          "opaque_json": {
+            "limit_characters": 91000,
+            "provenance": "research_harness.review_session_v4.build_session_packet"
+          }
+        },
+        "plan": {
+          "class": "carried",
+          "members": {
+            "now": {
+              "class": "body",
+              "quantity": "units",
+              "bound": {
+                "characters": 120000
+              },
+              "entry": "A2",
+              "fixture": "session-v4/bounded-turns",
+              "items": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": 120000,
+                  "provenance": "research_harness.review_session_v4.build_session_packet"
+                }
+              }
+            },
+            "delivered": {
+              "class": "fixed",
+              "opaque_json": {
+                "limit_characters": 1000,
+                "provenance": "research_harness.review_session_v4.build_session_packet"
+              }
+            },
+            "pending": {
+              "class": "fixed",
+              "opaque_json": {
+                "limit_characters": 1000,
+                "provenance": "research_harness.review_session_v4.build_session_packet"
+              }
+            }
+          }
+        },
+        "entries": {
+          "class": "carried",
+          "quantity": "excerpts",
+          "bound": {
+            "characters": 480000
+          },
+          "entry": "Q4",
+          "fixture": "session-v4/bounded-turns",
+          "items": {
+            "class": "carried",
+            "opaque_json": {
+              "limit_characters": 480000,
+              "provenance": "research_harness.review_session_v4.build_session_packet"
+            }
+          }
+        },
+        "sources": {
+          "class": "carried",
+          "quantity": "sources",
+          "bound": {
+            "characters": 480000
+          },
+          "entry": "Q13",
+          "fixture": "session-v4/bounded-turns",
+          "items": {
+            "class": "carried",
+            "opaque_json": {
+              "limit_characters": 600,
+              "provenance": "research_harness.review_session_v4.build_session_packet"
+            }
+          }
+        },
+        "fill": {
+          "class": "carried",
+          "quantity": "notes",
+          "bound": {
+            "characters": 480000
+          },
+          "entry": "Q5",
+          "fixture": "session-v4/bounded-turns",
+          "items": {
+            "class": "carried",
+            "opaque_json": {
+              "limit_characters": 21000,
+              "provenance": "research_harness.review_session_v4.build_session_packet"
+            }
+          }
+        },
+        "material_request": {
+          "class": "carried",
+          "opaque_json": {
+            "limit_characters": 2000,
+            "provenance": "research_harness.review_session_v4.build_session_packet"
+          }
+        }
+      }
     }
   },
   "fixtures": {
@@ -41376,6 +41614,11 @@
       "builder": "research_harness.review_protocol.build_packet",
       "source": "synthetic production-builder fixtures",
       "test": "tests.test_capacity_packet_inventory.ProductionPacketInventoryTests.test_every_growing_variant_reaches_the_production_wire_builder"
+    },
+    "session-v4/bounded-turns": {
+      "builder": "research_harness.review_session_v4.build_session_packet",
+      "test": "tests.test_review_session_v4_turns.SessionTurnsTests.test_n3_six_large_texts_deliver_bounded_parts_and_assessment_once",
+      "source": "synthetic production builder; six source bodies and bounded session state"
     }
   },
   "mapping_sites": [
@@ -42866,7 +43109,8 @@
     "research_harness.verification",
     "research_harness.visual_assets",
     "research_harness.workspace",
-    "research_harness.zenodo"
+    "research_harness.zenodo",
+    "research_harness.review_session_v4"
   ],
   "non_packet_names": {
     "context.output_refusal.assignment_id": "An allowlisted scoped-storage equality selector over an existing assignment context. It is query metadata, not a reviewer packet field.",
@@ -88078,7 +88322,13 @@
               }
             },
             "source_rules": {
-              "$ref": "field_242b460eb337"
+              "class": "fixed"
+            },
+            "session_turn": {
+              "$ref": "session_v4_binding"
+            },
+            "session_final": {
+              "$ref": "session_v4_binding"
             }
           }
         },
@@ -88293,7 +88543,7 @@
               }
             },
             "source_rules": {
-              "$ref": "field_a6a6f692ba11"
+              "class": "fixed"
             },
             "subject": {
               "class": "fixed",
@@ -88305,6 +88555,12 @@
                   "$ref": "field_a6a6f692ba11"
                 }
               }
+            },
+            "session_turn": {
+              "$ref": "session_v4_binding"
+            },
+            "session_final": {
+              "$ref": "session_v4_binding"
             }
           }
         }
@@ -105243,6 +105499,15 @@
                   "$ref": "field_3ada9d0ce5ff"
                 }
               }
+            },
+            "session_turn": {
+              "$ref": "session_v4_binding"
+            },
+            "session_final": {
+              "$ref": "session_v4_binding"
+            },
+            "source_rules": {
+              "class": "fixed"
             }
           }
         },
@@ -108187,7 +108452,7 @@
               }
             },
             "source_rules": {
-              "$ref": "q6_d5e12cc512c3"
+              "class": "fixed"
             },
             "staged_review": {
               "$ref": "q6_52c9417c97f8"
@@ -108367,6 +108632,12 @@
                   "sample": "x"
                 }
               }
+            },
+            "session_turn": {
+              "$ref": "session_v4_binding"
+            },
+            "session_final": {
+              "$ref": "session_v4_binding"
             }
           }
         },
@@ -109012,6 +109283,15 @@
                   "$ref": "field_7b3109ff7830"
                 }
               }
+            },
+            "session_turn": {
+              "$ref": "session_v4_binding"
+            },
+            "session_final": {
+              "$ref": "session_v4_binding"
+            },
+            "source_rules": {
+              "class": "fixed"
             }
           }
         }
@@ -111705,7 +111985,7 @@
               }
             },
             "source_rules": {
-              "$ref": "field_30c380fdd647"
+              "class": "fixed"
             },
             "work_item_records": {
               "bound": "open",
@@ -111732,6 +112012,12 @@
               },
               "quantity": "units",
               "sample": "x"
+            },
+            "session_turn": {
+              "$ref": "session_v4_binding"
+            },
+            "session_final": {
+              "$ref": "session_v4_binding"
             }
           }
         }

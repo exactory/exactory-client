@@ -291,6 +291,14 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
     if is_material_output(packet, output):
         validate_material(packet, output, artifacts=artifacts, assignment=assignment)
         return
+    from . import review_session_v4
+    if review_session_v4.find_session_kind(packet) == 'final':
+        with contract_check('review.shape'):
+            review_session_v4._require_turn(isinstance(output, dict) and not set(output).intersection(
+                ('source_requests', 'settled_requests', 'excerpts')))
+    if review_session_v4.find_session_kind(packet) == 'request':
+        review_session_v4.validate_request_output(artifacts, assignment, packet, output)
+        return
     from . import bar_sources, review_context_repair, review_excerpts, review_supplied_evidence
     from .review_protocol import has_problem_result_rubric, is_previous_prompt
     from . import review_problem_parts
@@ -352,6 +360,10 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
         packets = list(reversed(packets_from_visual_request(request)))
     else:
         packets = review_supplied_evidence.lineage_packets(records, artifacts, [assignment["id"]])
+    if assignment.get('session_chain'):
+        logical = json.loads(artifacts.read(assignment['session_chain']['logical']))
+        logical['evidence'] = []
+        packets = [logical] + packets
     if staged_binding is None:
         packet = packets[0]
     if "excerpts" in output:
@@ -448,6 +460,7 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
     if source_only:
         evidence_rows = [(path, [reference for reference in evidence if reference.get('kind') == 'source'])
                          for path, evidence in evidence_rows]
+    if source_only or assignment.get('session_chain'):
         support = output['support'] if stage == 'result' else None
         if isinstance(support, dict) and isinstance(support.get('checks'), list):
             for index, check in enumerate(support['checks']):
@@ -460,7 +473,7 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
                     with describe_error_at(path):
                         contract_evidence(records, artifacts, sources)
                     evidence_rows.append((path, sources))
-    if problem or readiness_parts or source_only and any(evidence for _, evidence in evidence_rows):
+    if assignment.get('session_chain') or problem or readiness_parts or source_only and any(evidence for _, evidence in evidence_rows):
         from .review_delivered_evidence import project_delivery_view
         if staged_binding is not None:
             delivery = project_delivery_view(records, artifacts, packets)
@@ -602,6 +615,8 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                 raise ResearchError("value_review_phase_mismatch", "A result review requires a result dossier")
             recorded_assignment = records["review_assignment"][value["assignment_id"]]
             packet = read_assignment_packet(records, artifacts, recorded_assignment["id"])
+            if recorded_assignment.get("session_chain"):
+                packet = json.loads(artifacts.read(recorded_assignment["session_chain"]["logical"]))
             if value["support"].get("assessor") != packet.get("assessor") or normalized_text(value["support"]["assessor"]["id"]) != reviewer:
                 raise ResearchError("value_review_support_identity", "Use the assigned native assessor and its actual provenance")
             from .publication_scope import has_publication_scope, prepare_combined_scoped_support
