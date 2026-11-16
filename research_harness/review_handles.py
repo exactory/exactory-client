@@ -152,6 +152,7 @@ HANDLE_TABLE_BUILDERS = {
     'review_parts': _build_parts_v3_handle_packet,
     'session_turn': _build_session_handles,
     'session_final': _build_session_handles,
+    'session_combine': _build_session_handles,
 }
 
 

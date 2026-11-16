@@ -339,6 +339,21 @@ V7_FINAL_PROMPT = (
     'it is another final turn. The harness refuses a reading response in which no request can deliver anything. '
     'When no text can help you judge, return the finding.'
     + V7_LIMITS_TEXT + V7_HANDLES_TEXT + V7_MATERIAL_TEXT)
+# Plain placeholders; each role/form is owned by the writer's pass.
+BAR_SESSION_PAGE_PROMPT = 'Assess only this bar page targets. Return the composition rule page answer with handle citations, or a request or material part.'
+BAR_SESSION_CLOSING_PROMPT = 'Read the bar decision rows and return the composition rule closing answer with handle citations.'
+BAR_SESSION_COMBINE_PROMPT = 'Condense this bar block into {block, summary, refs} within the complete combination bound.'
+SLATE_SESSION_PAGE_PROMPT = 'Assess only this slate page targets. Return the composition rule page answer with handle citations, or a request or material part.'
+SLATE_SESSION_CLOSING_PROMPT = 'Read the slate decision rows and return the composition rule closing answer with handle citations.'
+SLATE_SESSION_COMBINE_PROMPT = 'Condense this slate block into {block, summary, refs} within the complete combination bound.'
+RESULT_SESSION_PAGE_PROMPT = 'Assess only this result page targets. Return the composition rule page answer with handle citations, or a request or material part.'
+RESULT_SESSION_CLOSING_PROMPT = 'Read the result decision rows and return the composition rule closing answer with handle citations.'
+RESULT_SESSION_COMBINE_PROMPT = 'Condense this result block into {block, summary, refs} within the complete combination bound.'
+SESSION_PAGE_REQUESTS_PROMPT = ' A list_page request can name a recorded block handle in list. A unit request can name an original entry handle from that block; its entries remain available after further condensation.'
+SESSION_FINAL_PROMPTS = dict(
+    bar=dict(page=BAR_SESSION_PAGE_PROMPT, closing=BAR_SESSION_CLOSING_PROMPT, combine=BAR_SESSION_COMBINE_PROMPT),
+    slate=dict(page=SLATE_SESSION_PAGE_PROMPT, closing=SLATE_SESSION_CLOSING_PROMPT, combine=SLATE_SESSION_COMBINE_PROMPT),
+    result=dict(page=RESULT_SESSION_PAGE_PROMPT, closing=RESULT_SESSION_CLOSING_PROMPT, combine=RESULT_SESSION_COMBINE_PROMPT))
 from . import review_excerpts
 from . import review_problem_parts, review_parts
 from . import review_handles
@@ -3380,7 +3395,8 @@ def _source_parent(records, artifacts, identifier, dossier_id, reviewer_id, role
         raise ResearchError('review_source_continuation_unverified', 'Source requests require an observed uncontaminated parent response')
     previous = source_delivery_packet(records, artifacts, prior)
     if prior.get('session_chain'):
-        if state['output'].get('stage') not in ('request', 'material'):
+        if (state['output'].get('stage') not in ('request', 'material')
+                and not prior['session_chain'].get('final_page_plan')):
             raise ResearchError('review_resampling_forbidden', 'A final phase assessment cannot be continued or sampled again')
         return prior, state
     if prior.get('subject', {}).get('kind') == 'problem':
@@ -4377,6 +4393,13 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
                 if getattr(error, 'contract_check', None) is None:
                     raise
                 # Keep the exact observation; its scientific refusal is recorded below.
+        if observation.get('status') == 'completed' and assignment.get('session_chain', {}).get('final_page_plan'):
+            try:
+                changes.extend(review_session_v4.prepare_closing_composite(records, artifacts, assignment, result,
+                    _read_json(artifacts, result['output'])))
+            except ResearchError as error:
+                if getattr(error, 'contract_check', None) is None:
+                    raise
         return changes, result
     result = _invoke_once(store, payload, 'review.invoke', start, finish,
                           expected_revision=expected_revision, request_id=request_id, credential=credential,
@@ -4620,6 +4643,11 @@ def _assignment_state(records, artifacts, assignment_id):
             state['output'] = _read_json(artifacts, attempt['output'])
             state['output_digest'] = digest(state['output'])
             state.update(raw_output=state['output'], raw_output_digest=state['output_digest'])
+            if assignment.get('session_chain'):
+                try:
+                    review_session_v4.require_final_capacity(records, artifacts, assignment, attempt)
+                except ResearchError as error:
+                    state['obligations'].append(obligation(error.code, error.message))
             # Retain the existing availability diagnostic separately from the boolean authentication.
             if attempt.get('request'):
                 _read_json(artifacts, attempt['request'])
@@ -4658,7 +4686,8 @@ def _assignment_state(records, artifacts, assignment_id):
                     kind = review_session_v4.find_session_kind(packet)
                     state['source_requests'] = source_output.get('requests', [])
                     state['pending_source_requests'] = ([dict(kind='session_turn')] if kind == 'request'
-                        or source_output.get('stage') == 'material' else [])
+                        or source_output.get('stage') in ('request', 'material')
+                        or assignment['session_chain'].get('final_page_plan') and 'closing' not in packet.get('session_final', {}) else [])
                     state['source_request_status'] = 'pending' if state['pending_source_requests'] else 'settled'
                 else:
                     state['source_requests'] = bar_sources.requests(source_output, passages=review_excerpts.KEY in packet,

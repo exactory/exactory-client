@@ -284,7 +284,7 @@ def find_review_undelivered_references(records, artifacts, evidence, delivery, *
     return missing
 
 
-def validate_review_contract(records, artifacts, assignment, output, *, attempt=None):
+def validate_review_contract(records, artifacts, assignment, output, *, attempt=None, composed=False):
     """Check the frozen scientific contract and the exact attempt's permitted delivery."""
     from .review_handles import expand_handles, is_material_output, validate_material
     packet = read_assignment_packet(records, artifacts, assignment['id'])
@@ -293,6 +293,9 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
         validate_material(packet, output, artifacts=artifacts, assignment=assignment)
         return
     from . import review_session_v4
+    if not composed and (packet.get('session_combine') or packet.get('session_final', {}).get('page_plan_digest')):
+        review_session_v4.validate_final_turn_output(records, artifacts, assignment, packet, output)
+        return
     if review_session_v4.find_session_kind(packet) == 'final':
         with contract_check('review.shape'):
             review_session_v4._require_turn(isinstance(output, dict) and not set(output).intersection(
@@ -544,6 +547,9 @@ def record_value_review(store, payload, *, expected_revision, request_id):
         final_output, composite = read_final_output(records, artifacts, records['review_assignment'][value['assignment_id']])
         if composite is not None:
             effective_output, effective_digest = final_output, digest(final_output)
+        if saved is not None and saved.get('session_chain') and assignment.get('attempt_id'):
+            from .review_session_v4 import require_final_capacity
+            require_final_capacity(records, artifacts, saved, records['review_attempt'][assignment['attempt_id']])
         if assignment.get('effective', {}).get('kind') == 'incomplete':
             raise ResearchError('assessment_incomplete', 'An incomplete assessment occupies its slot without a scientific review.')
         if effective_output is None:
@@ -566,7 +572,7 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                 if not assignment['ready'] or not verified['complete']:
                     raise ResearchError('review_parts_pending', _PARTS_RESULT_PENDING_NOTE,
                                         dict(assignment_id=saved_assignment['id'], issues=verified['issues']))
-        validate_review_contract(records, artifacts, saved_assignment, effective_output)
+        validate_review_contract(records, artifacts, saved_assignment, effective_output, composed=composite is not None)
         if value["stage"] in ("bar", "slate", "result"):
             if assignment.get("pending_source_requests") or value.get('settled_requests'):
                 raise ResearchError("review_sources_pending", "Retain the observed request turn; resolve its source deliveries before recording a final phase assessment")

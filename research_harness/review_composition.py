@@ -1014,6 +1014,11 @@ def list_targets(rule, packet):
             review = review.get('payload', review)
             ids.extend(row['id'] for row in review.get('objections', []))
         targets = [dict(id=key, label=key) for key in dict.fromkeys(ids or ['bar'])]
+    if packet.get('session_targets'):
+        by_id = {row['id']: row['handle'] for row in packet['session_targets']}
+        for row in targets:
+            row['handle'] = by_id[row['id']]
+            row['session_handle'] = True
     return targets
 
 
@@ -1168,7 +1173,8 @@ def split_output(rule, packet, output, pages):
         return _split_native_assessment(rule, packet, output, pages)
     targets = list_targets(rule, packet)
     ids = [row['id'] for row in targets]
-    rows = {key: dict(target='t' + str(index), fields={}, sentence='') for index, key in enumerate(ids)}
+    rows = {key: dict(target=targets[index].get('handle', 't' + str(index)), fields={}, sentence='')
+            for index, key in enumerate(ids)}
     closing = dict(fields={}, bindings=[])
     harness = _build_harness_fields(rule, packet)
     for path, value in _list_rule_values(rule, output):
@@ -1185,7 +1191,8 @@ def split_output(rule, packet, output, pages):
         elif field['owner'] == 'closing':
             closing['fields'][path] = copy.deepcopy(value)
         else:
-            target = (ids[0] if isinstance(value, (dict, list)) and not value else
+            target = (ids[0] if isinstance(value, (dict, list)) and not value
+                      and (not packet.get('session_targets') or path.count('/') <= 2) else
                       _find_target_id(rule, packet, output, field, path))
             if target not in rows:
                 raise ResearchError('review_composition_conflict', FINAL_OWNER_INVALID_MESSAGE, dict(path=path, target=target))
@@ -1198,6 +1205,10 @@ def split_output(rule, packet, output, pages):
 
 def _resolve_target_id(targets, value):
     key = value.get('id') if isinstance(value, dict) else value
+    if not isinstance(value, dict):
+        for row in targets:
+            if row.get('session_handle') and row['handle'] == key:
+                return row['id']
     ids = [row['id'] for row in targets]
     if key in ids:
         return key

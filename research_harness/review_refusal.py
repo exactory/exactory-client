@@ -331,6 +331,16 @@ def classify_observed_output(records, artifacts, attempt_id):
                 review_parts.validate_turn_output(records, artifacts, assignment, packet, output, attempt=attempt)
         elif assignment['role'] in ('bar', 'slate', 'result'):
             validate_review_contract(records, artifacts, assignment, output, attempt=attempt)
+            if 'closing' in packet.get('session_final', {}) and output.get('stage') not in ('request', 'material'):
+                from .review_composite import build_composite
+                from .review_session_v4 import list_composite_turns, validate_composite_output
+                observed = dict(records, review_attempt={key: row for key, row in records['review_attempt'].items()
+                    if row['assignment_id'] != assignment['id'] or key == attempt_id},
+                    review_output_refusal={key: row for key, row in records.get('review_output_refusal', {}).items()
+                        if key != attempt_id})
+                composite, artifact = build_composite(observed, artifacts, assignment)
+                envelope = list_composite_turns(observed, artifacts, assignment)['packet']
+                validate_composite_output(observed, artifacts, assignment, envelope, json.loads(artifact[1]))
         elif assignment['role'] == 'adjudicator':
             packet = json.loads(artifacts.read(assignment['packet']))
             validate_adjudication_contract(records, artifacts, assignment, packet, output, attempt=attempt)

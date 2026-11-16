@@ -477,22 +477,21 @@ class SessionTurnsTests(unittest.TestCase):
         self.assertEqual(result['result']['status'], 'failed')
         self.assertFalse(protocol.assignment_state(self.case.read_records(), self.case.artifacts, final['id'])['ready'])
 
-    def test_actual_final_needs_pages_falls_back_to_identical_v3_packet_and_check_reports_reason(self):
+    def test_actual_final_needs_pages_is_admitted_and_check_reports_allocation(self):
         from research_harness import review_composition
         from research_harness.check_mode import check_mutation
         payload = dict(id='check', role='bar', route_id='route', dossier_id=None, reviewer_id='first',
                        author_id='author', context={})
-        with patch.object(protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,)):
-            original = protocol.build_packet(self.case.read_records(), self.case.artifacts, None, 'bar', 'first')
         with patch.object(review_composition, 'list_targets', return_value=[dict(id='target-%d' % n, label='Target') for n in range(10)]):
             checked = check_mutation(self.case.store, protocol.record_assignment, payload,
                 expected_revision=self.case.store.revision, request_id='admission-check', bounded_payload=payload)
             actual = self.case.assign('bar', 'first', identifier='check')
-        self.assertEqual(checked['session_admission']['reason'], 'final_needs_pages')
-        original = protocol.prepare_capacity_notice(self.case.read_records(),
-            self.case.read_records()['review_route']['route'], 'bar', original)
-        self.assertEqual(self.read_packet(actual), original)
-        self.assertNotIn('session_chain', actual)
+        self.assertEqual(checked['session_admission']['state'], 'record')
+        forecast = checked['session_admission']['forecast']['by_kind']['final']
+        self.assertGreater(forecast['pages'], 1)
+        self.assertEqual(forecast['closing_pages'], 1)
+        self.assertIn('session_chain', actual)
+        self.assertIn('session_turn', self.read_packet(actual))
 
     def test_rejected_final_after_material_keeps_argument_credit_on_replacement(self):
         from research_harness.review_failure_class import plan_after_failure

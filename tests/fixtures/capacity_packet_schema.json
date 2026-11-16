@@ -65,6 +65,12 @@
       "parameters": [
         "index"
       ]
+    },
+    "research_harness.review_session_v4.build_paged_packet": {
+      "parameters": []
+    },
+    "research_harness.review_session_v4.build_composition_packet": {
+      "parameters": []
     }
   },
   "callee_inventory": [
@@ -23106,7 +23112,7 @@
       "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.research_decisions": {
-      "ast_sha256": "1d561aa023725b869d3dde718589d5f69b55cd901570a2b40120942178942a4d",
+      "ast_sha256": "07c8e11e27c7a3c5d932c01191d2dd1016657983611259a3a509568e6bbe8c1a",
       "functions": {
         "_accept_support_digests": "420d7e37980f2ff3f96d01bf8a8444a24c3070e2dfbc7c2b1ffa79a6c6999aba",
         "_all_objections": "4afbf09db02d0799095d8052b6dac4239aa34b9ed355127d0910e67a049b94ef",
@@ -23154,11 +23160,11 @@
         "read_review_citation_delivery": "d31eaefc45dfb2d5a1fa1b52d78a6e5228724e291a2f9d3d8a1b1385f2da044c",
         "record_research_decision": "d9c2a4bcf3334c1b9245b8d5ad32bd3406c17cd98ad7c1cf234075415328957a",
         "record_source_impact": "f3215f37638b3797cec945c99ae3e4ba37e8fc1b5a3519fc84f307f29cd2df3d",
-        "record_value_review": "b2f9c696664aca828771ad8aac856ff3f1bc0214b10a8d46cd270f294771305a",
+        "record_value_review": "b1251a866d41e181df8e4f5a8e63f670610bd8796580eefd8e8d38bbde1a0393",
         "select_problem_slot_assignments": "610a5cec1d39c1293898c6ae41c51d9683ed622316b24ebe53101e1352cc4004",
         "state_objection": "2d1eaa8a024ba69d821df278ba51499535c610ccc9d080fc70b1c115838b5c04",
         "validate_cycle_decision": "1728a877d7503c453a9596667e25b2136f4957244d7c4c894dd8db30eafc567c",
-        "validate_review_contract": "3b506bb77c58c756eafa86c3decff4db8823aac1213fabf1821a2b4ce9a44847",
+        "validate_review_contract": "6895d7866ba8e16d0eabad01e894b54f5251740912092a633e78f03bd5139753",
         "validate_source_impact": "36386d4ad7bd4989973a5eb089a2558964834305c6cf2d87c96b160e641b1107"
       },
       "packet_call_digests": [
@@ -23417,7 +23423,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_composition": {
-      "ast_sha256": "380a8d51805f3c15739086618e8776298b1e92d9a74dd7f2b7443ab8c0ea6442",
+      "ast_sha256": "ef7b9069358aa6dde48d7ed50a0676f45e04c646f59d9964046cfc8b1a24e648",
       "functions": {
         "_attach_answer_schemas": "7e739e51780ad4675987225496c298eb912be8c06a11f5277cde2f56acd17e8c",
         "_build_harness_fields": "76a404b204a7b182d785eefc7cf83b8b3091fd4c938b207ac3846d174a845217",
@@ -23468,7 +23474,7 @@
         "_reject": "8a1be411c619ada493fe42e138ef97bcedf1cdb07b45ee93a9b6ebb5f8b694bf",
         "_render_formulation_label": "3eab56c016f28d78c4eaaaf938d51443dec2bf04fa2e865e397513746c8a8699",
         "_require_array": "39bba1b2f9f355bec98247b48b11906ac5f72491b4380ca5cf1c54cf11770422",
-        "_resolve_target_id": "bf5a57dc614631a39073ac9399d9e8aee4a307d54a69b6864ef86edec343306c",
+        "_resolve_target_id": "3872feb821763d45c6667cf888df766f4a74767e8572e4462ebe149b1d16886f",
         "_select_pages": "d4a48422f5f5699fcb39f4bcae15b5a5f6a54e2d273c80ae14956c9e8cc454eb",
         "_split_finding": "aa498937e607739d85cde2a664009e252247c0101628fd47931385405d9bef06",
         "_split_math_output": "b86c23374b0ceda4b85efdd16b45ed1f82e84eba8463ffe48a83f92e9df76eda",
@@ -23501,9 +23507,9 @@
         "find_rule": "64388c425c884849848bbb09deefa13b829aa3f05c22e4003aee3ada7575a55a",
         "list_page_fields": "fc4c3fb6a41c7cefa154d9ddb196b3f1cac2166bb7641774783f89fe3cb402b5",
         "list_scalar_fields": "fb2d25fa78c42423850c2bddd12091985ee36133dd96ef608c5e745e7d301924",
-        "list_targets": "a33d534544b7e27deb57e31892ff1c8fce495c8b562d8c8283abd20c982625dd",
+        "list_targets": "82785a7582f9a26e3c65f8606c139055fc593f184ee6b48fb4668bfae9ab9f05",
         "plan_incomplete_composition": "81a39319879ee7bac5de037e550b26c8c78c6767a6e892ce61c6415085daf8f3",
-        "split_output": "15ee6ad17f00337fde6c16cda6dacc35f19ab6bbf2afc6f65df51e24dd36dcb5",
+        "split_output": "1e3c46e4a1bf5d1fc2bf14e217dd27d081a79e603444cdaecfc7a00f833b2bef",
         "validate_closing_output": "3fb5009da797cfb820fd4b905b3e71606c70a005add6378f80858f056765ed91",
         "validate_output_owners": "b547608739819756c8fa4f865cb0945fb38e63d168aace96f08f9e018da45f99",
         "validate_page": "17dfb8e63754165c96676c5227272fdd296bc29b710246883029390aaf039f5f",
@@ -23828,7 +23834,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_failure_class": {
-      "ast_sha256": "ea0b06306fea663f3ae6efae4b4df871b094203985d8802755fd1e63f4ea4a40",
+      "ast_sha256": "b0a8be010bfdcb5102281563dd537a355d768cc2450a4e5b90dee05f45d3d7be",
       "functions": {
         "_describe_sequence_counts": "1903571802ceebaa2e6413b445ccec82fa398d7cf4b738a57b18c5747957e01c",
         "_is_scheduled_unknown": "18dbfaffb3993eab30b42d6bf376556828c162d79bcca21ce050df0f51cd2f2e",
@@ -23839,7 +23845,7 @@
         "find_capacity_signal": "b870ffda8a65d0565029aa5348be128646a06aec6702e64c3bf30de5888cf037",
         "find_output_cap_signal": "6f59f04a865cce942c17d9c6d81c771009d0ea962b72c3e6b92116e43dafca5b",
         "find_safeguard_notice": "f7009c2ad7f4d22a276386c1374d2309091fc5e5d2bcc2cd081f1c31bd3b9e13",
-        "has_smaller_task": "6c1889599fc28b774ad825dcc064d3756cb5366135e031ddb5f42643d8c024a6",
+        "has_smaller_task": "bd0272d6406e863017244126df59263ac7bc48e97bfdb89c4b27246c8c5af678",
         "list_turn_assignments": "b0e2095c96e01990494770fec7198ee3143bf531f73e437a60576ae5abb58247",
         "parse_observation_time": "a45e9741d77a027bf18518e09c8b1a262125934f0d6cecd3ac63c3c30df7f367",
         "parse_reset_time": "329cd60d6bb86719c819441543f5e9aae44305bd754318af2996e51f1dc23488",
@@ -23857,7 +23863,7 @@
       "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_handles": {
-      "ast_sha256": "5f93cbca32bdfe41e966f0d0a6486c0b7103529f7edca2cdff1dcf8a9e67bf7a",
+      "ast_sha256": "45f99e6deae81a82419ea2936dee677c1902dab8025676b0cbd23fa5a5ba6309",
       "functions": {
         "_build_parts_v3_handle_packet": "ad2bacc455713a39c325530791eb6029d5e4fe9ec56f29dbcbb098ac7a3b5777",
         "_build_v7_handle_table": "32797911a38f358cdd655abba9fc823e400af4a95c19b8a348ff8fe2f3d14237",
@@ -24925,9 +24931,9 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "f3644e072d971ef6c041fc58b8f76551a685d8d7ea211483c2eeb46641f60f21",
+      "ast_sha256": "079c377be45be103be6bef1c97329a0b359b6db1567b9b1f9c6217fc7d987970",
       "functions": {
-        "_assignment_state": "ec040afdf84a21cf562af459543004970a62858ccfbbe249dc3b292320de3c21",
+        "_assignment_state": "62dc47fa3c29e71002de10cd8cb10eec878b4d929cfa8806d69eb6f757bc7d01",
         "_bars": "fd41a7b94078e8e0761696db4a7cc67b063cbb5787f76d6d3dae65fcc7fe5f9f",
         "_build_prompt": "fed24ab4acff270fa5f67d8875c3afa05e1e89829a813c1b0629faf558ccaeba",
         "_context_observed": "706588f918f9418a213ffad4175220255e9b1eda12193cf0c4aa200208736e68",
@@ -24968,7 +24974,7 @@
         "_save_derivatives": "ec152af73c108934e2f0456ef182a91580f8f24b0d5f9b2bfa0f76504a343f97",
         "_select_common_prompt": "fcebe555799aee9c524fed96f36c4d8868ad4d113d9da7ee08a6475f8812b099",
         "_selected_attempt": "d60a7dabed46051257194d40752e60b08d403713bb0ca8746c9315b7bc720750",
-        "_source_parent": "d0651336979c4d827731e9fd74b49c47a950ab64a15f79230dd2e41a646a6ad9",
+        "_source_parent": "6d84e57fea5cfd337e5a54b5a36d1502d1efe5c346f78637b2e3d40d221c8b67",
         "_strip_source_rules": "0ce22729051040c17d31751a9d686f001ded0c0ac85587200adbf75b7e35b844",
         "_uses_previous_repair_suffix": "3a3a046ec8c3a62b016d8065a7f9b229418f56c46dabea0e66bf4cdbd8ae42d3",
         "_validate_staged_adjudication_scope": "0524b62da04da3bbfd354782320baf2bb938413201445572de2b7b4dedafa696",
@@ -25015,7 +25021,7 @@
         "has_pending_invocation": "1100f816ca4769d642bcb040f697439bfd738a2a00c832bbbf9b153965e9ac76",
         "has_problem_result_rubric": "a25172c08931f9069a1d5d8535639c9a043c1cfb4fe8aa1bc4ddf71ed252458c",
         "has_verified_history": "80bcffdb051ef2a341dc4bd4a86f1dff05304d863526c75525803e349074c3bc",
-        "invoke_assignment": "31aacadd8ee8064ebcab4510209a4dfb51657f6a6507e62938bffb5775baba51",
+        "invoke_assignment": "04acab5cd393fb2993f7db31b9806313f52c16efe30252ce8cf7cc912dc47a1f",
         "is_dead_assignment": "0e87b884f14015390061ab33a6f17a4a95770ae46620127610f25244a62fcd85",
         "is_previous_prompt": "6a89da49434d83987b303155068983a6499cb140a6eb0b906a4e6c1043537f42",
         "is_version_2_problem_result": "b12d8be5451fd095516bf97d562c067466acb6d216815b6fe20a93f9e3520a0d",
@@ -25143,7 +25149,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.review_refusal": {
-      "ast_sha256": "12333dd45bcce452835463861fedf0281fabd9ebcf96e19461cfc51c85941e88",
+      "ast_sha256": "ef4ca752fa0edece9e0a6c20d127b05a3568f59148d92d6a5a46b20d2dcbea4a",
       "functions": {
         "_find_delivered_part": "6fb04e71028feef3ef7ec90682db4f645b14889b69352c9a73a86a0bd5c82bac",
         "_frozen_pdf_capture": "d720f1747e180c4fc1efc6a9923a1691e1b4e554f52a1f3f1879fba5c6589f9b",
@@ -25152,7 +25158,7 @@
         "_validate_staged_final": "d4504365f23b3da1c22d18bafeea71f7360ee5f7b6265fb511f154c37e327fe0",
         "_validate_staged_objections": "76830b97bc4f81164c2bb4a0aeb7f66ffd873e9dcf40c1de644d6e0f9eda180d",
         "_validate_staged_pages": "4179cca8a7d476662b3ca834aecf2d9b38c61cda5a09e4afc9a9a94dac6533bb",
-        "classify_observed_output": "7b2de639688a0906b6f54b731fa437b3273482c0320234169b6860a8c5ae1066",
+        "classify_observed_output": "7be14b8e6cf6633aa5de2bb92c459da475ba93a7b0a749f4369ffa93b3a9c791",
         "contract_check": "0d40814fe91e0e1eb703c09e1f4643a73138d0da3f0860ab5e8026680b2dee5f",
         "evidence_arrays": "71556454ae0296cc56ad3abfa9313c7d76146dd4c74e327a0a7dca415d9a422c",
         "record_native_refusal": "d40201c986ad03e7127377e2282355b8f77565f15ff77487e69ccb70786b53bf",
@@ -25182,7 +25188,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned."
     },
     "research_harness.review_refusal_notice": {
-      "ast_sha256": "837a41170302cb7fe8a51c110a897fa8a831f861c110f1234ca7cec6f2bc4505",
+      "ast_sha256": "597cdd70e4c712d09433297d83fb634d3f49957bf6eda3516ea6b809972c84ee",
       "functions": {
         "_build_refused_entry": "3f83c63a139e506a9700f94259ce4353c10392f97c11b2367a92835af7acdfed",
         "_check_entry_bound": "a4fbb9550c41a60dbf422b328efaed2067f9cc9a3fa25dd6f1b10b82dbcecaee",
@@ -25191,7 +25197,7 @@
         "_retain_value": "75cfad9afa482a158393e739e5e20e8289e2553bf967919bf0fa415a223aa297",
         "_serialize_value": "bf81ec558c4e462f8e1a915b1468cd47edc3b2bbd5e10e5282fb731599e15689",
         "attach_refusal_notice": "189c81cb5a42f2f2b28dc28714140dd1420294baaea574a6817bcdb85aa035ca",
-        "build_refusal_notice": "1666b22396835629cf71e9d857d137a2a9fa40cec559990b263ed5f077e66209",
+        "build_refusal_notice": "4491cfd607d8054658399c51bd6f392e64c79df0ca32f0518e550cad31beaf59",
         "select_refusal_notice": "2054333f5325e4d541db9a564cc3bce4c6e8b994af585a9c01686c1a03861dc6"
       },
       "packet_call_digests": [
@@ -25353,12 +25359,12 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_route_capacity": {
-      "ast_sha256": "78fea774ae3290076b5a6e1f630bf06d5432356e00cf140f4222dc4b12e7b77e",
+      "ast_sha256": "5e5a76ac1f2b9508a97be0c5b3e3f9ca2736bba3d1f929f1a24e82069d642546",
       "functions": {
         "_build_serving_parts": "8f2f7be1d7e1d4cc20fa124af779a48e77d41ab31cb6c7aed1fe3ed6a3de3afe",
         "_build_serving_repair": "c50aaef3ccfcccf6064f9a4cdaa0a0f52111886dd9b185936b6d1e5a38ab47ca",
         "_can_deliver_parts": "4cbd7d56f2a739fef566405d73c495a14fe05a16e5289d3b5092a2c8aa6935f2",
-        "_clear_carried_answers": "2ae1ccd61a03e54937f43bd5f4954960c4b63c1c837ea0036329e446daef3afc",
+        "_clear_carried_answers": "b995116ba00e68fd0f74d6cfe00eead0c442ef22b69482bc146bfcb52e374ea2",
         "_clear_material": "90e10993e38c73281ba419d352e38cc8dcc44979c5fd71f6c4b530cb6bb0545a",
         "_collect_strings": "ec0518deeb23b8da9b1eacd1634dc2e018c3e69fcae3c5de317a52cb49823629",
         "_create_profile_row": "656620b16bfdb3289c0add9eac47656157a710ac05bf768a93ce8fa8d4c9d31c",
@@ -25383,15 +25389,15 @@
         "derive_plan_task_limits": "0acf843326aadd0c9c146f587ae50629ae7f65217869cb9a51b47a6326d2a6c2",
         "derive_turn_task_limits": "4e45077490d6d7ffc0d11e7c8b0d007c649d70fade148e41b42cd4e843211727",
         "describe_assignment_capacity": "eb2c92c7ff7184e20c1df0ca440768bc8b0e54f1753f39bcd20de5d232e7f669",
-        "describe_assignment_kind": "7cbc086469e057b2c932fdfc57d1ddea8406a25e98fffd36277ede1c3afcdf5a",
+        "describe_assignment_kind": "81bd141869012816b803b6ce8466bac8b48515a265902150a1cc4541ce2b1154",
         "describe_assignment_limits": "7d463bd8c8479f7a8f0b3874cb734df1acd143601602ed3a83c90530145c2443",
         "describe_assignment_task": "2b71c68cb791cd1175e1fa915606d94a502782dd6e154690bde3cd3720a7c349",
         "describe_assignment_warning": "7b4cf02e9d3aeaf2314a64c6af65361dca797dfb4a5288ffe4d83edf851e69fe",
-        "describe_attempt": "1d5c7f5b240c16923171e7b8b88bba675db3eb0f0d5a23a9103af5548ba8ed7e",
+        "describe_attempt": "8b8da7393f3c3dcb37732bd852465d6d7fe2daa118face05e553a9726370cfa0",
         "describe_binary_rules": "10dba71afb020afb5ccb28e84a6d0cb06bfb3d4b2a91d74ce4e0702d67b56b5e",
         "describe_capacity_decision": "8bf62b6a6eff48cc031f228800a96c8a43c3928db3c34169a5696afb449e78b5",
         "describe_capacity_forecast": "d7377b70814020792f0a7f43ecd1c057f8decd9a461064622cbf6b1f29209519",
-        "describe_capacity_recovery_row": "eeb0d9df9a3d4230d7ee83a2e21ec36ea99f627afa8c0829a31567a09ce57ee3",
+        "describe_capacity_recovery_row": "7618bdee4271794170bcc4f05658e69a5f3f3b36afc5a112ca6ab4418bbfeabf",
         "describe_cli_version_status": "dd5d2885bce348ca26f78808bf2394ec24236d47ade407ef2f261853f4333a04",
         "describe_final_projection": "819899b335505b41409f8a284bc81c441a785d38cd472df54c318c62f8f07201",
         "describe_frame_policy": "9a3c3090f7209138d892dfd32145788af016ae61902cb325f29dc7e1398fd5eb",
@@ -25401,21 +25407,21 @@
         "describe_next_capacity_call": "ce1e087a414cac013c6e7862582c8ca6df7a1ff580dab2a3b3494901710c8bea",
         "describe_open_route_reports": "22d125513bd35b87825efbcd1c45894cd152084a73413e5dde760f1d27aba2b4",
         "describe_output_warning": "21de96d5af49fd055650e94897fadd5ab1bc0e52f6b62e24ade24413a0e1538f",
-        "describe_plan_preflight": "5c0734860b937b37b7f8a22a868da8feda20ae0bd965b234a5836a127e8dd8cf",
+        "describe_plan_preflight": "28893006635746c89ce6767eb1042e3b0076ca97f47f2e8efacdc1c89ce99f82",
         "describe_route_capacity": "dc8c5c7fccc98f9fdaf056b80bbc9f508349b701d8981f39f27e2d819d94e024",
         "describe_route_class": "8c2e5fea846a7893c0a6d377dd0dbd77fa08d04cdb5b5dcd89b77cf8dae6cc92",
         "describe_route_report": "9b863e3edc15702489089729a9d56a67815a6b58bf38dcbd91810daee9f78f0f",
         "describe_session_forecast": "5f805fcd2f7eb89ac21c5e0ac4024b6a2711846ab5caa0b6aac58836327b1ba0",
         "describe_session_stop": "65cfe3b9fb9d3f1bf3d0506b7f01594166971485799cafe4497a32b995166af5",
         "describe_size_report": "7be62632b8c2997350e0fa36cc9e504b9c594f0b8744b9236c1a5574f63ed7e0",
-        "describe_task": "39fc8f8ddbd346ce72315d02947b59752b20c2d7bd59a52db5929a219160ffd7",
-        "describe_task_kind": "be74c62b6d0ba96e939aa72f23fcbd1d02d8ed1e33f28988b9a60b869fa85008",
+        "describe_task": "5d2239cd322d5841dde77727d9d364183eb047e64abc37a54fc417d91f19e190",
+        "describe_task_kind": "57b29766ce276404a4f2267a58cd366242f1ebb1312798ac11dbd17913633c4d",
         "describe_text_room": "32432cfaa36ebb629ce9cbb6ce7441821d37da4b4284dd5fd2d769748a113169",
         "describe_unsolved_reviews": "b10c5662b5a0d27327b1b6e1a3145ad94acfab170899c5fe0fc1a0b0cdd12fd1",
         "describe_work_units": "468b91882eec9e12c79f14d7204231f94f8692d48afe20770440099acb5d84a7",
         "divide_room": "479df84167dc68c68051cf92f213230c797c15f1ac495e77fdb4b451d82ca270",
         "find_serving_routes": "18ca735abee774034b5023e33a7181caba87437212369e5ed2b131726f85f776",
-        "list_capacity_recovery_rows": "6b403e970c5f7adaa20e93ac9be8a5c7df66c4d61d1128f32f2cc91551f88d84",
+        "list_capacity_recovery_rows": "39ffe852172ba30f3f271c7194af3483a441e313f4e394509671320ab6ed5eb6",
         "measure_attempt_ratio": "7af1e6a8803c023ba2c482a852bba7c298840b4fec53d5ae45a7153f1bc4c509",
         "measure_capacity_value": "8a7a11792a66562ef24886b2129d2371de334d55c392b2b3505e366698564b50",
         "measure_request": "1615879024ec19d63e6243105beb627438f6d407aa9cc8fb5f7dcad5ce6b6abb",
@@ -27043,48 +27049,63 @@
       "reason": "Reviewed v7 page-plan integration: bounded packet selection from immutable plan, inventory and state artifacts; complete native validation stays transient. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned."
     },
     "research_harness.review_session_v4": {
-      "ast_sha256": "425d81761b10cff517d99a3c642935c8c01493a731ad491851dffd5feb4526c0",
+      "ast_sha256": "119821dc2613146b37afd492733bb6ef213d0ba846b9f15d2fd3c34c4adbdce3",
       "functions": {
         "_describe_json": "7c6004e53039a80228d53341ea102c68af46e1cc51855d15c96893ebef98c919",
         "build_session_inventory": "9514775d4e1c011f8dea0af478fb2c40095dc8f0c414a3edaa4c71a6f59631c3",
-        "project_session_turn": "45c3cd66d9f324bf71176966efb1e233e0c41fb89e4504477de6ca5a5cd6599e",
-        "build_session_state": "03c92d8f37a3fff4906a596b8ae60bcffa8fd148cd83b1bb8a59d86f71d60d03",
-        "describe_session_plan": "ac9df149a77454973daed8d683c986895697803c830113e3e6080024c3030e78",
+        "project_session_turn": "0ce9b386771a49863f404e55e93e47cba73b54caa13b92dba27b2ab79b686054",
+        "build_session_state": "b6bad4e35421ea5c7e467fc354ac929c9da9ece49738ba2ceeba5a3af2180c0d",
+        "describe_session_plan": "e7367821a0a7320ce2a4ceb3ae4f51e75123f82ca7159658beed354623d14135",
         "_describe_pending_request": "024f8fa85062c089f5927ecdda2d597550d97d961c1789d87b1ba26fe4dce915",
         "describe_session_allowances": "ed90c4cd013bfb2b87cc64a77c75b4f70be2630aebf9c24bd52766d5ceee0ebf",
         "describe_session_final_entries": "6085fc5e2b6a7d1edbb26852103750f809b6266291c307b32d9306892ef899fe",
         "build_session_allowance_page": "7157f57c66fef40fc66f398fc63a2c077554c27a071e304922bf6fd99f26adcb",
-        "find_session_kind": "ec0391026e061bb9868d21c12569b8a1b178681037feb87b2a97c7b8543b8d09",
+        "find_session_kind": "55defa93c8402c2a8f85781179e6668132cbe7437ece12859158d5e5e72d77bf",
         "_require_turn": "705a6293e68d2e0f7b360ca75707ada74c77def1f128b8cf5bbadd7fc452ac23",
-        "build_turn_prompt": "f597583b3dc52c76862c8b3af338868378b1fa8a2f73ceceda30f1d3741dfc8e",
-        "matches_turn_prompt": "937c2606219754eba2ce9a3b196f368b5f02d484dd2ce8896e4c2bb565fd8e2c",
+        "build_turn_prompt": "36de30ea08f7238a6da7c282bab8ec07f14fdcfe3c1754c35a1905222ab54995",
+        "matches_turn_prompt": "da40e2d5ba852481af9e68f52e263d7017f037a4bec06465dc3306fd0da68211",
         "_describe_logical_fields": "844c9d9e4097556d1e4c12a5baf1e37c6d85c23e67a0b1e942fb70f272d893e1",
         "_list_frame_values": "092ad6ffa04b799669c30c2e6895760f76a144de90111efe4c6ef64c568f77c7",
-        "check_v4_admission": "f16ec0dca6ebd1e4ff123eb03cf63a58b30a6219db7051811930feba56ccec23",
+        "check_v4_admission": "d5dd672c1d99e4f667294d08ea17ebbad02a8ef5f899c1b240e2d990df7d95d5",
         "read_bound_session": "5287425e13ee465c10c2ae1c0004bad2653c3f6957a40aaab3f6b70ec986f18e",
         "_find_covered_end": "3c51d880c8def4a7f9cc6e3e2099a98c0b59cce28ae2acfe452bc5ce20ee4807",
         "_list_remaining_units": "51465c6d3108bbb85c1f8af1c52df4ba6be08f247a0c86d29b84a31b50219dcb",
         "_resolve_requested_units": "c84061c9351b9d24e40fb1d417cb4971beac30271868dc6eb16c3025e6f83a3e",
         "_build_delivery": "8c8d245ba415f823a919af732cd1d6a56ade804b9eb3c9b4d410b6950974cd49",
-        "_pack_session_deliveries": "93cee82fdf29d2b5ac670c6c4e1104290336b341041352ac6f4950a19d3a5f2c",
+        "_pack_session_deliveries": "c2d9eb6b583e18154d8b0e833a953fa600756892489e1e31e5d87ddfa5f4817c",
         "_replace_frame_handles": "253d8f9b89711c7836e762e53643784477821c7d2229c4b80cddf7673955204a",
         "build_session_packet": "db4bd0463758813f90bb474dd86a3a1da45dd0e2d8bcb849f6a7320772651c88",
-        "validate_request_output": "08b8479d5ed3c42d1cd48d4ca7460700eedaad2a497b057350346fa41e948dad",
-        "_project_completed_turn": "6b107bdad6fd1c8da67730c2e1772aa3f62ed3a564d8467702ebce0dc1b44018",
-        "build_handle_packet": "68a064162447cf292174509694482e2067d553236759414d9054cb3fbad57472",
-        "prepare_session_assignment": "fc61393e1d27ef439bd9688b990355fb91fb4747c38af79accae874b1d584991",
-        "rebuild_session_state": "782a0631106c0be2a5745da1d6501b2b42dffa664c8033674f933a8a033657b5",
-        "_authenticate_session_binding": "b2c010fb2af752fb29a758ad04295d6794aa478344483a3e0a77a8cd4f04f056",
-        "plan_turn_recovery": "4d75a4e66ca63a99e98a7de27781497f89183f2e16e5261d6f9105aed3192d0a",
+        "validate_request_output": "1f9ed79b614c5497ba85230f381f47ac7703822ab575468f6c32e49cb6be9e6e",
+        "_project_completed_turn": "e8e1a1106b07096248b46e480ed38af1f59bba6f8420338f7e206793ee3c2727",
+        "build_handle_packet": "f1255930f1482ca5b379272985fe921406322d60a4202cb12c4e229be93477b9",
+        "prepare_session_assignment": "50093495583319d22b6bedb1ba8072254f66cdbeb578ba314fa03869ba34a28f",
+        "rebuild_session_state": "7e5f23743373ab8e4fdfbfba9bba9c602b216c26933d824532b7c1241e4c3030",
+        "_authenticate_session_binding": "42402fb74db086214f84f7aa70bdff6cc7cd7fa31d473e81e994b520b1289909",
+        "plan_turn_recovery": "b2903255ae43cce291b30eefc1e6b312d1f373ece72d3a27aa9767468b496b16",
         "prepare_capacity_assignment": "c54dd204ee4c20f99db2fc0d96391f0b97f0ad15db1e76485e508a411ec180e3",
-        "_derive_refusal_limits": "194aa4c8c9ee9fcacb52653de41fc990729e428b2fc9bbd2ed312317b8fd1399",
-        "prepare_refusal_assignment": "5ed4368fdfa060a4d879ad2e631304a7aef3de758a0c250eb7a1b16973b469b8",
+        "_derive_refusal_limits": "e608d4344825a56a8b1585366745755e3d489d3eb2322c08b1b68fa16598f799",
+        "prepare_refusal_assignment": "29e27ee45c05e4ec69e9f69dd1b5f8487c7e21b040a2bd79c01b02eef979d9bd",
         "authenticate_session_binding": "6df1b721a44b6bb247cffd51c62b59d3f45d7403c3660b73e38e1922d9304b80",
-        "project_scientific_delivery": "2459d9b4d2af9db18536506fa1d9df39108b7176fc78f17ebab94fe24ba52c90",
-        "derive_session_task_limits": "641237adb93186b9c7e8561b8b39a833089204b6cbf73b0d4bfae596aa305da1",
+        "project_scientific_delivery": "84bb9c914fe0d39138af7af8f8e6570ee93cb113cccab7201c312d1a6d8d7afe",
+        "derive_session_task_limits": "a6a15df03cf9adcc68ddb03c2570c57bef2f2d479bbceac52b95df11a4f7e64d",
         "describe_session_forecast": "125bb564ddcf9509866f575404270f96565d454005174d3e18fa7e19d0d62c46",
         "describe_history_status": "174e79d57d9421dcf2895eb4dd9f8d423766321524d62405391edaf82c83ac02",
-        "describe_target_labels": "ecd62c1fdc3ff01378d41be75344673d0ccfb9df7fba64e10200a09a8401e1bb"
+        "describe_target_labels": "ecd62c1fdc3ff01378d41be75344673d0ccfb9df7fba64e10200a09a8401e1bb",
+        "read_session_binding": "05a0c31aefbbcb33230139d0dcb15c4192a3e15026d8c022919342e5767c2fb1",
+        "build_composition_packet": "8d17a9de0f3d07790bdfdd2be6c03aa9577f8f01c9f10c987c79a6929b2c575f",
+        "build_final_inputs": "593c84047e7ef15138c2207ec3024aa7c08e7ecc8a607205fc3769a47711d60f",
+        "prepare_final_packet": "2c8e5de12337f811426a6290ed900b70db0f7bba968ab8bde4c21b5f0fe97c8c",
+        "build_paged_packet": "60a97d05c39c61b78da3eb606448d9f2437cb3e508a57338bde891b4b30c9431",
+        "measure_final_material": "8d4f115c664f75c52a572535e21706f1d0626ac25f0eeb0e467e0eebc5813cfc",
+        "validate_final_turn_output": "29bdc7133b6f83859b199032ad4701ec5bc0575bd738d2e85b9ec3405dfb65df",
+        "list_composite_turns": "e4ed77ccc3f6ebd810a5aadff26714cdff9646028ade47b6948f6a870c48b928",
+        "read_composite_currency": "a6eed6755405738338b617aa4fab282637a12cd2d9493bad1109216d80b800c0",
+        "validate_composite_output": "e0b47caed5f2db381c942f61b8baf3f137aaf3dc5815fe2fc4888562652f7c12",
+        "prepare_closing_composite": "e25c27a6b17e5633bb5320e0b7a43c43f82833d8b11f26c4162d628b58c363d3",
+        "find_session_form": "4409ac67809312941c4c2130f1de0c4513e90a5eed9c8bc7ecaa1e416beb1bf2",
+        "authenticate_final_binding": "89600a80206a12ae0e1fb957946cc7f3bd651ade7f4a13a3df52bbfa71910888",
+        "describe_composed_refusal": "cd39ae1d63606c7081ff66ff1ac22c53eaca2e356257e20abb34d82c74c6f03a",
+        "require_final_capacity": "745c90167ffc5e25ed045c936569f142d871457714eaf563a04650f9e3c2976d"
       },
       "packet_call_digests": [],
       "reason": "Reviewed frozen session inventory, bounded packet construction and authenticated chain projection; changed AST requires declaration review."
@@ -45572,6 +45593,114 @@
             "limit_characters": 2000,
             "provenance": "research_harness.review_session_v4.build_session_packet"
           }
+        },
+        "page_plan_digest": {
+          "class": "reference"
+        },
+        "final_turn": {
+          "class": "fixed"
+        },
+        "page": {
+          "class": "fixed",
+          "members": {
+            "number": {
+              "class": "fixed"
+            },
+            "pages": {
+              "class": "fixed"
+            },
+            "targets": {
+              "class": "carried",
+              "quantity": "targets",
+              "bound": {
+                "characters": 6000
+              },
+              "entry": "Q10",
+              "fixture": "session-v4/final-pages"
+            }
+          }
+        },
+        "closing": {
+          "class": "carried",
+          "members": {
+            "rows": {
+              "class": "carried",
+              "quantity": "targets",
+              "bound": {
+                "characters": 480000
+              },
+              "entry": "A14",
+              "fixture": "session-v4/final-pages",
+              "items": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 480000,
+                  "provenance": "research_harness.review_session_v4.build_paged_packet"
+                }
+              }
+            }
+          }
+        },
+        "request_allowances": {
+          "class": "carried",
+          "members": {
+            "notes": {
+              "class": "fixed"
+            },
+            "excerpts": {
+              "class": "fixed"
+            },
+            "targets": {
+              "class": "carried",
+              "quantity": "targets",
+              "bound": {
+                "characters": 30000
+              },
+              "entry": "Q10",
+              "fixture": "session-v4/final-pages",
+              "items": {
+                "class": "carried",
+                "opaque_json": {
+                  "limit_characters": 1000,
+                  "provenance": "research_harness.review_session_v4.build_paged_packet"
+                }
+              }
+            }
+          }
+        },
+        "block": {
+          "class": "body",
+          "members": {
+            "handle": {
+              "class": "fixed"
+            },
+            "characters": {
+              "class": "fixed"
+            },
+            "artifact": {
+              "class": "reference",
+              "opaque_json": {
+                "limit_characters": 1024,
+                "provenance": "research_harness.review_session_v4.build_paged_packet"
+              }
+            },
+            "entries": {
+              "class": "body",
+              "quantity": "units",
+              "bound": {
+                "characters": 480000
+              },
+              "entry": "A5",
+              "fixture": "session-v4/final-pages",
+              "items": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": 480000,
+                  "provenance": "research_harness.review_session_v4.build_paged_packet"
+                }
+              }
+            }
+          }
         }
       }
     },
@@ -46878,6 +47007,11 @@
       "builder": "research_harness.openness_reading.prepare_packet",
       "test": "tests.test_openness_named_gaps.NamedGapCapacitySchemaTests.test_real_packet_forms_have_closed_named_gap_members",
       "source": "Authored Hadwiger partial-case stores; T6 finding-version 2 single, v6, v7 and page packets."
+    },
+    "session-v4/final-pages": {
+      "builder": "research_harness.review_session_v4.build_paged_packet",
+      "test": "tests.test_review_session_v4_pages.SessionPagesTests.test_a5_a14_bar_pages_reach_recorded_review",
+      "source": "Synthetic session page, closing and condensing turns from the production builders"
     }
   },
   "mapping_sites": [
@@ -93964,6 +94098,27 @@
                   },
                   "encoding": {
                     "class": "fixed"
+                  },
+                  "original_artifact": {
+                    "class": "reference",
+                    "opaque_json": {
+                      "limit_characters": 1024,
+                      "provenance": "research_harness.review_session_v4.build_paged_packet"
+                    }
+                  },
+                  "segment": {
+                    "class": "fixed",
+                    "members": {
+                      "start": {
+                        "class": "fixed"
+                      },
+                      "end": {
+                        "class": "fixed"
+                      },
+                      "length": {
+                        "class": "fixed"
+                      }
+                    }
                   }
                 }
               },
@@ -94493,6 +94648,9 @@
             },
             "session_final": {
               "$ref": "session_v4_binding"
+            },
+            "session_combine": {
+              "$ref": "session_v4_binding"
             }
           }
         },
@@ -94525,6 +94683,27 @@
                   },
                   "encoding": {
                     "class": "fixed"
+                  },
+                  "original_artifact": {
+                    "class": "reference",
+                    "opaque_json": {
+                      "limit_characters": 1024,
+                      "provenance": "research_harness.review_session_v4.build_paged_packet"
+                    }
+                  },
+                  "segment": {
+                    "class": "fixed",
+                    "members": {
+                      "start": {
+                        "class": "fixed"
+                      },
+                      "end": {
+                        "class": "fixed"
+                      },
+                      "length": {
+                        "class": "fixed"
+                      }
+                    }
                   }
                 }
               },
@@ -94724,6 +94903,9 @@
               "$ref": "session_v4_binding"
             },
             "session_final": {
+              "$ref": "session_v4_binding"
+            },
+            "session_combine": {
               "$ref": "session_v4_binding"
             }
           }
@@ -110578,6 +110760,27 @@
                   },
                   "encoding": {
                     "class": "fixed"
+                  },
+                  "original_artifact": {
+                    "class": "reference",
+                    "opaque_json": {
+                      "limit_characters": 1024,
+                      "provenance": "research_harness.review_session_v4.build_paged_packet"
+                    }
+                  },
+                  "segment": {
+                    "class": "fixed",
+                    "members": {
+                      "start": {
+                        "class": "fixed"
+                      },
+                      "end": {
+                        "class": "fixed"
+                      },
+                      "length": {
+                        "class": "fixed"
+                      }
+                    }
                   }
                 }
               },
@@ -112326,6 +112529,9 @@
             },
             "source_rules": {
               "class": "fixed"
+            },
+            "session_combine": {
+              "$ref": "session_v4_binding"
             }
           }
         },
@@ -112567,18 +112773,22 @@
                     "$ref": "q6_d5e12cc512c3"
                   },
                   "original_artifact": {
-                    "$ref": "q6_4de9529b59bc"
+                    "class": "reference",
+                    "opaque_json": {
+                      "limit_characters": 1024,
+                      "provenance": "research_harness.review_session_v4.build_paged_packet"
+                    }
                   },
                   "segment": {
                     "class": "fixed",
                     "members": {
+                      "start": {
+                        "class": "fixed"
+                      },
                       "end": {
                         "class": "fixed"
                       },
                       "length": {
-                        "class": "fixed"
-                      },
-                      "start": {
                         "class": "fixed"
                       }
                     }
@@ -115456,6 +115666,9 @@
             },
             "session_final": {
               "$ref": "session_v4_binding"
+            },
+            "session_combine": {
+              "$ref": "session_v4_binding"
             }
           }
         },
@@ -116110,6 +116323,9 @@
             },
             "source_rules": {
               "class": "fixed"
+            },
+            "session_combine": {
+              "$ref": "session_v4_binding"
             }
           }
         }
@@ -118653,6 +118869,27 @@
                   },
                   "encoding": {
                     "class": "fixed"
+                  },
+                  "original_artifact": {
+                    "class": "reference",
+                    "opaque_json": {
+                      "limit_characters": 1024,
+                      "provenance": "research_harness.review_session_v4.build_paged_packet"
+                    }
+                  },
+                  "segment": {
+                    "class": "fixed",
+                    "members": {
+                      "start": {
+                        "class": "fixed"
+                      },
+                      "end": {
+                        "class": "fixed"
+                      },
+                      "length": {
+                        "class": "fixed"
+                      }
+                    }
                   }
                 }
               },
@@ -119296,6 +119533,71 @@
               "$ref": "session_v4_binding"
             },
             "session_final": {
+              "$ref": "session_v4_binding"
+            },
+            "session_combine": {
+              "$ref": "session_v4_binding"
+            }
+          }
+        },
+        "exactory-problem-review-v2": {
+          "class": "fixed",
+          "members": {
+            "protocol": {
+              "class": "fixed"
+            },
+            "role": {
+              "class": "fixed"
+            },
+            "reviewer_id": {
+              "class": "fixed"
+            },
+            "dossier_id": {
+              "class": "fixed"
+            },
+            "digest": {
+              "class": "fixed"
+            },
+            "source_rules": {
+              "class": "fixed"
+            },
+            "subject": {
+              "class": "fixed",
+              "opaque_json": {
+                "limit_characters": 1000,
+                "provenance": "research_harness.review_session_v4.build_paged_packet"
+              }
+            },
+            "evidence": {
+              "class": "body",
+              "quantity": "units",
+              "bound": {
+                "characters": 480000
+              },
+              "entry": "A5",
+              "fixture": "session-v4/final-pages",
+              "items": {
+                "class": "body",
+                "opaque_json": {
+                  "limit_characters": 480000,
+                  "provenance": "research_harness.review_session_v4.build_paged_packet"
+                }
+              }
+            },
+            "output_refusal": {
+              "class": "carried",
+              "opaque_json": {
+                "limit_characters": 45000,
+                "provenance": "research_harness.review_session_v4.build_paged_packet"
+              }
+            },
+            "session_turn": {
+              "$ref": "session_v4_binding"
+            },
+            "session_final": {
+              "$ref": "session_v4_binding"
+            },
+            "session_combine": {
               "$ref": "session_v4_binding"
             }
           }

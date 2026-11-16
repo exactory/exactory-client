@@ -2,6 +2,20 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "session-v4-final-pages-record-review",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "D1 v4 session final pages, capacity recovery and composite authentication",
+      "summary": "A source session final exceeded the Opus output cap and had no smaller admissible final.",
+      "expected": "The fixed-inventory session records bounded target pages, condenses entries when necessary, and records one authenticated review at the same route and effort.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_pages.SessionPagesTests.test_incident_opus_max_five_sources_records_bar_and_reports_final_turns",
+        "test_review_session_v4_pages.SessionPagesTests.test_a12_page_at_output_limit_splits_and_records",
+        "test_review_session_v4_pages.SessionPagesTests.test_a5_a14_result_200_objections_reach_recorded_review"
+      ]
+    },
+    {
       "id": "v7-final-pages-record-one-finding",
       "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
       "class": "D1 v7 final pages and composite authentication",
