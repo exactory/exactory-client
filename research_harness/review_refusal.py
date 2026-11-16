@@ -339,14 +339,14 @@ def classify_observed_output(records, artifacts, attempt_id):
             with contract_check('verification.parts'):
                 validate_verification_final(records, artifacts, assignment, output, attempt=attempt)
         elif assignment['role'] == 'native_math':
-            from .native_review import uses_finding_contract, validate_finding, validate_output
+            from .native_review import uses_finding_contract, validate_finding, validate_output, find_finding_version
             from .openness_reading import (INVALID_RESPONSE, PASSAGE_PROGRESS_ERR_MSG, find_stage,
                                            has_deliverable_passage, validate_turn_output)
             with contract_check('native.output'):
                 packet = json.loads(artifacts.read(assignment['packet']))
                 if find_stage(packet) is None:
                     if uses_finding_contract(assignment):
-                        validate_finding(packet, output)
+                        validate_finding(packet, output, finding_version=find_finding_version(assignment), artifacts=artifacts)
                     else:
                         validate_output(packet['native'], output)
                 else:

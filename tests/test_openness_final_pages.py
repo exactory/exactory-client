@@ -131,7 +131,7 @@ class FinalPagesSupport(OpennessReadingCase):
                     outcome='unresolved', reason='A remaining gap.', grounds=[])
             else:
                 output = dict(targets=[dict(formulation=target, coverage='Required sources were read.',
-                    grounds=[dict(kind='reviewer_gap', text='A remaining scientific gap.')], sentence='The target remains unresolved.')
+                    grounds=[dict(kind='own_argument', text='The recorded argument requires further checking.')], sentence='The target remains unresolved.')
                     for target in packet['reading_final']['page']['targets']])
             if override is not None:
                 output = override
@@ -536,7 +536,7 @@ class UnreadPagesTests(FinalPagesSupport):
                 self.assertEqual(refused['output_refusal']['check'], 'openness.finding')
                 self.assertEqual(refused['output_refusal']['details']['rule'], 'unread_outcome')
                 return dict({key: 'Assessed.' for key in ('statement', 'assumptions', 'scope', 'dependencies', 'policy')},
-                    outcome='unresolved', reason='Required ranges remain unread.', grounds=[dict(kind='reviewer_gap',
+                    outcome='unresolved', reason='Required ranges remain unread.', grounds=[dict(kind='packet_defect',
                         text='The unread set prevents a resolved finding.', refs=[dict(ref='x1')])])
             return None
         final, _ = self.finish_pages(native, first=assigned['id'], before_answer=answer, assign=False)

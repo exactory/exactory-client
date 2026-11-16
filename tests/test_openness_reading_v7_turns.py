@@ -136,8 +136,8 @@ class RatioAndAdmissionTests(unittest.TestCase):
                 capacity, 'read_profile_priors', return_value=[]), patch.object(capacity, 'NOTES_MAXIMUM_CHARACTERS', 6000), patch.object(v7, 'derive_inherited_ratio',
                 return_value=dict(characters_per_token=.55, source=dict(chain='old', attempt='measured'))):
             with patch.object(v7, 'UNREAD_CORE_CHARACTERS', 0):
-                before = v7.check_v7_admission({}, self.artifacts, route, native)
-            after = v7.check_v7_admission({}, self.artifacts, route, native)
+                before = v7.check_v7_admission({}, self.artifacts, route, native, finding_version=1)
+            after = v7.check_v7_admission({}, self.artifacts, route, native, finding_version=1)
         self.assertEqual(before['state'], 'record')
         self.assertEqual(before['capacity_plan']['task']['final']['request_bound']['text_characters'], 126325)
         self.assertEqual((after['state'], after['code']), ('stop', 'review_route_capacity_below_floor'))
@@ -250,9 +250,10 @@ class TurnPacketTests(unittest.TestCase):
         self.packet = dict(protocol='fixture-native', role='native_math', reviewer_id='fixture-reviewer',
                            dossier_id=None, native=self.native, evidence=[], digest='unused')
 
-    def prepare(self):
+    def prepare(self, finding_version=2):
         with patch.object(v7, 'build_inventory', return_value=self.built):
-            return v7.prepare_first_assignment({}, self.artifacts, self.value, self.route, self.packet, [])
+            admission = v7.check_v7_admission({}, self.artifacts, self.route, self.native, finding_version=finding_version)
+            return v7.prepare_first_assignment({}, self.artifacts, self.value, self.route, self.packet, [], admission=admission)
 
     def answer(self, packet, text='A retained note.'):
         binding = packet['reading_turn']
@@ -643,11 +644,12 @@ class V7CommandTests(OpennessReadingCase):
 
     def build_v7_finding(self, packet, handle='n1'):
         binding = packet['reading_final']
+        kind = ('packet_defect' if 'unread' in binding else 'own_argument') if 'finding_index' in packet else 'reviewer_gap'
         return dict(schema_version=3, **{key: binding[key] for key in ('subject_digest', 'claim_digest', 'reviewer')},
             findings=dict({key: 'Assessed the supplied subject.' for key in
                 ('statement', 'assumptions', 'scope', 'dependencies', 'policy')},
                 openness=dict(outcome='unresolved', coverage='Reviewed every required unit.', reason='A remaining gap.',
-                    grounds=[dict(kind='reviewer_gap', text='The recorded material holds the detail.', refs=[dict(ref=handle)])])))
+                    grounds=[dict(kind=kind, text='The recorded material holds the detail.', refs=[dict(ref=handle)])])))
 
     def test_material_parts_finish_and_unknown_handles_are_retained_as_refusals(self):
         from research_harness import review_protocol as protocol
@@ -688,7 +690,7 @@ class V7CommandTests(OpennessReadingCase):
             findings=dict({key: 'Assessed the supplied subject.' for key in
                 ('statement', 'assumptions', 'scope', 'dependencies', 'policy')},
                 openness=dict(outcome='unresolved', coverage='Reviewed every required unit.', reason='A remaining gap.',
-                    grounds=[dict(kind='reviewer_gap', text='A gap recorded in notes.', refs=[dict(ref='n1')])])))
+                    grounds=[dict(kind='own_argument', text='An argument recorded in notes.', refs=[dict(ref='n1')])])))
         answer['findings']['openness']['coverage'] = [dict(target=target, searches='all supplied searches')
             for target in packet['reading_final']['page']['targets']]
         self.invoke(current, answer)

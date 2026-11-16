@@ -1213,7 +1213,7 @@ def project_reading_chain(route, packet, rows, record, *, artifacts, records=Non
     from .review_protocol import canonical_prompt
     prompt_protocol = protocol if protocol in PROMPTS else PROTOCOL_V5
     prompts = prompts or {stage: canonical_prompt('native_math', reading_stage=stage,
-        reading_protocol=prompt_protocol)['text'] for stage in STAGES}
+        reading_protocol=prompt_protocol, finding_version=2 if 'finding_index' in packet else 1)['text'] for stage in STAGES}
     delivery_rows = list_delivery_rows(rows, record['search_delivery']) if 'search_delivery' in record else rows
     units = list_reading_units(artifacts, delivery_rows)
     projected = _build_projection_record(artifacts, delivery_rows, record, units,
@@ -1376,7 +1376,8 @@ def measure_final_input(route, packet, rows, record, *, eligible_texts=(), readi
                  -lengths.get(sha256, row['artifact']['size'])))
         ranked.append((rank, review_excerpts.find_identity(row), sha256, identifiers or ['']))
     bodies = [(sha256, identifiers) for _, _, sha256, identifiers in sorted(ranked)]
-    prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'])['text']
+    prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'],
+        finding_version=2 if 'finding_index' in packet else 1)['text']
     candidate, request = _fit_turn(route, prompt, candidate, bodies, refuse=False)
     report = _measure_parts(route, prompt, candidate)
     from .review_route_capacity import measure_request
@@ -1625,10 +1626,12 @@ def _build_reading_turn(artifacts, route, packet, record, delivered, candidates,
     reading budget and whose request, with the earliest notes withheld as far as needed, fits the route and delivers
     each of them complete."""
     from .review_protocol import canonical_prompt
-    prompt = canonical_prompt('native_math', reading_stage='reading', reading_protocol=record['protocol'])['text']
+    prompt = canonical_prompt('native_math', reading_stage='reading', reading_protocol=record['protocol'],
+        finding_version=2 if 'finding_index' in packet else 1)['text']
     if not candidates:
         final = dict(packet, **{RECORD_KEY: record})
-        final_prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'])['text']
+        final_prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'],
+        finding_version=2 if 'finding_index' in packet else 1)['text']
         _raise_projection_stop(record, _measure_parts(route, final_prompt, final))
     chosen, characters = None, 0
     for count, unit in enumerate(candidates, 1):
@@ -1702,7 +1705,8 @@ def preflight_final_input(route, input_limit, packet, rows, record, *, eligible_
     candidate[RECORD_KEY] = {key: copy.deepcopy(record[key]) for key in ('protocol', 'excerpts', 'passages')}
     if record['protocol'] in (PROTOCOL_V5, PROTOCOL_V6):
         candidate[RECORD_KEY]['search_delivery'] = copy.deepcopy(record['search_delivery'])
-    prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'])['text']
+    prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'],
+        finding_version=2 if 'finding_index' in packet else 1)['text']
     request = _render(route, prompt, candidate)
     # Inspect construction's actual alternative/contained and binary projections for the component inventory.
     supplied = review_excerpts.read_sent_packet(request)
@@ -1722,6 +1726,8 @@ def preflight_final_input(route, input_limit, packet, rows, record, *, eligible_
                 'encoding': entry.get('encoding'), 'delivery': entry.get('delivery')})
     components = [('final_prompt', prompt), ('native_context', json.dumps(candidate['native'], sort_keys=True,
                                                                          ensure_ascii=False))]
+    if 'finding_index' in candidate:
+        components.append(('finding_index', json.dumps(candidate['finding_index'], sort_keys=True, ensure_ascii=False)))
     if v5:
         components.append(('search_manifest', json.dumps(record['search_delivery'], sort_keys=True,
                                                         ensure_ascii=False)))
@@ -1791,7 +1797,8 @@ def _build_final_turn(route, packet, record, rows, spans, observations, eligible
         value = copy.deepcopy(value)
         _project_search_delivery(value, record)
     bodies = _list_withholdable_bodies(value, rows, spans, observations, eligible_texts)
-    prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'])['text']
+    prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'],
+        finding_version=2 if 'finding_index' in packet else 1)['text']
     return _fit_turn(route, prompt, value, bodies)[0]
 
 
@@ -1836,7 +1843,7 @@ def _read_prior(records, artifacts, value, prior_id):
                             'The earlier turn needs an observed, authenticated output in a verified context',
                             {'obligations': state['obligations']})
     prior_packet = json.loads(artifacts.read(prior['packet']))
-    validate_turn_output(prior_packet, state['output'])
+    validate_turn_output(prior_packet, state['output'], artifacts=artifacts, assignment=prior)
     _require(has_deliverable_passage(records, artifacts, prior_packet, state['output'],
                                       assignment=prior, attempt=records['review_attempt'][state['attempt_id']]), PASSAGE_PROGRESS_ERR_MSG,
              path='/passage_requests')
@@ -2161,6 +2168,20 @@ def prepare_packet(records, artifacts, value, route, packet):
     saving the chain and returns them separately from the scientific packet."""
     native = packet['native']
     prior_id = value['context'].get('prior_assignment_id')
+    prior = records.get('review_assignment', {}).get(prior_id)
+    prior_protocol = find_protocol(json.loads(artifacts.read(prior['packet']))) if prior is not None else None
+    if (is_openness_packet(native) and native['scientific_context']['openness_minimum'].get('schema_version') == 2
+            and prior_protocol in (None, PROTOCOL_V6, PROTOCOL_V7)):
+        from .review_search_delivery import build_finding_index
+        packet = dict(packet, finding_index=build_finding_index(records, artifacts, native))
+        # A one-request finding has no reading record. Name the delivered units
+        # using the same identities as excerpts of a chain.
+        identities = {row['artifact']['sha256']: _describe_identity(row)
+                      for row in list_reading_rows(records, artifacts, native)}
+        packet['evidence'] = [dict(row, identity=identities[row['artifact']['sha256']])
+            if row['artifact']['sha256'] in identities else row for row in packet['evidence']]
+        packet.pop('digest', None)
+        packet['digest'] = digest(packet)
     if prior_id is None and is_openness_packet(native):
         context = native['scientific_context']
         if (context['openness_minimum'].get('schema_version') != 2
@@ -2189,7 +2210,8 @@ def prepare_packet(records, artifacts, value, route, packet):
         characters = sum(len(artifacts.read(row['artifact']).decode('utf-8')) for row in rows)
         if ((PROTOCOL_V7 not in NEW_PROBLEM_CHAIN_PROTOCOLS or is_math_openness_packet(native))
                 and characters <= review_excerpts.TURN_FULLTEXT_CHARACTERS
-                and _fits(route, canonical_prompt('native_math', version=7 if is_openness_packet(native) else 6)['text'],
+                and _fits(route, canonical_prompt('native_math', version=7 if is_openness_packet(native) else 6,
+                    finding_version=2 if 'finding_index' in packet else 1)['text'],
                           packet, [row['artifact'] for row in rows])):
             return packet, None
         protocol = find_chain_protocol(native)
@@ -2214,6 +2236,9 @@ def prepare_packet(records, artifacts, value, route, packet):
                 artifacts.put(content, 'application/json')
         record = _create_record(protocol, plan['manifest'] if plan is not None else None,
                                 excerpt_protocol=review_excerpts.SESSION_PROTOCOL)
+        if protocol == PROTOCOL_V6 and 'finding_index' in packet:
+            from .problem_openness import serialize_record
+            record['finding_index'] = artifacts.put(serialize_record(packet['finding_index']), 'application/json')
         chain = {'first_assignment_id': value['id'], 'turn': 1}
         if selection is not None:
             chain['protocol_selection'] = {key: item for key, item in selection.items() if key != 'result'}
@@ -2260,6 +2285,9 @@ def prepare_packet(records, artifacts, value, route, packet):
                 error.details = dict(error.details or {}, handoff='export')
             raise
     record = _extend_record(records, artifacts, prior_packet, state, rows, observations, protocol)
+    if 'finding_index' in _find_record(prior_packet):
+        record['finding_index'] = _find_record(prior_packet)['finding_index']
+        packet['finding_index'] = json.loads(artifacts.read(record['finding_index']))
     chain = dict(prior['reading_chain'], turn=prior['reading_chain']['turn'] + 1)
     selected = _classify_final_texts(records, artifacts, native, rows, protocol)
     delivered_bodies = (select_delivered_bodies(_collect_delivered_bodies(delivery_rows, spans, observations).values())
@@ -2362,7 +2390,8 @@ def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
     if final and not (isinstance(output, dict) and output.get('stage') == 'reading'):
         if find_protocol(packet) == PROTOCOL_V6:
             from .native_review import validate_finding
-            validate_finding(packet, output)
+            from .native_review import find_finding_version
+            validate_finding(packet, output, finding_version=find_finding_version(assignment), artifacts=artifacts)
         else:
             validate_output(packet['native'], output)
         return
@@ -2549,6 +2578,10 @@ def _require_math_continuity(records, artifacts, native, chain, rows, spans, obs
         packet, output = json.loads(artifacts.read(assignment['packet'])), observation['output']
         stage = find_stage(packet)
         if stage == 'final':
+            from .native_review import find_finding_version
+            if find_finding_version(assignment) == 2:
+                from .review_search_delivery import verify_finding_index
+                verify_finding_index(records, artifacts, native, packet.get('finding_index'))
             bound = packet['native'] == native
         else:
             turn = packet[TURN_KEY]
@@ -2562,7 +2595,8 @@ def _require_math_continuity(records, artifacts, native, chain, rows, spans, obs
                 or assignment.get('reading_chain') != {'first_assignment_id': first['id'], 'turn': index + 1}
                 or assignment['prompt'] != canonical_prompt(
                     'native_math', reading_stage=stage, reading_protocol=MATH_PROTOCOL,
-                    common_version=find_common_prompt_version(assignment['prompt']))):
+                    common_version=find_common_prompt_version(assignment['prompt']),
+                    finding_version=assignment['prompt'].get('parameters', {}).get('finding_version', 1))):
             raise ResearchError('openness_reading_incomplete', 'Every turn of a math reading chain keeps the binding, '
                                 'protocol and prompt of its first turn', {'assignment_id': assignment['id']})
         carried = _find_record(packet)
@@ -2571,7 +2605,7 @@ def _require_math_continuity(records, artifacts, native, chain, rows, spans, obs
                                 'outputs of the earlier turns do not give', {'assignment_id': assignment['id']})
         if stage == 'final':
             _require_withheld_bodies(packet, rows, spans, observations[:index])
-        validate_turn_output(packet, output)
+        validate_turn_output(packet, output, artifacts=artifacts, assignment=assignment)
         last = index + 1 == len(chain)
         if last != (stage == 'final' and output.get('stage') != 'reading'):
             raise ResearchError('openness_reading_incomplete', 'A math reading chain ends at its first final turn that '
@@ -2625,6 +2659,8 @@ def _require_problem_continuity(records, artifacts, native, chain, rows, observa
     protocol = find_protocol(first_packet)
     record = _create_record(protocol, manifest,
                             excerpt_protocol=_find_record(first_packet).get('excerpt_protocol'))
+    if 'finding_index' in _find_record(first_packet):
+        record['finding_index'] = _find_record(first_packet)['finding_index']
     if protocol == PROTOCOL_V6:
         record['allowances']['record'] = dict(
             characters=_find_record(first_packet)['allowances']['record']['characters'], used=0, not_retained={})
@@ -2639,6 +2675,10 @@ def _require_problem_continuity(records, artifacts, native, chain, rows, observa
         packet, output = json.loads(artifacts.read(assignment['packet'])), observation['output']
         stage = find_stage(packet)
         if stage == 'final':
+            from .native_review import find_finding_version
+            if find_finding_version(assignment) == 2:
+                from .review_search_delivery import verify_finding_index
+                verify_finding_index(records, artifacts, native, packet.get('finding_index'))
             bound = packet['native'] == native
         else:
             turn = packet[TURN_KEY]
@@ -2654,7 +2694,8 @@ def _require_problem_continuity(records, artifacts, native, chain, rows, observa
                 or assignment.get('reading_chain') != {'first_assignment_id': first['id'], 'turn': index + 1}
                 or assignment['prompt'] != canonical_prompt(
                     'native_math', reading_stage=stage, reading_protocol=protocol,
-                    common_version=find_common_prompt_version(assignment['prompt']))):
+                    common_version=find_common_prompt_version(assignment['prompt']),
+                    finding_version=assignment['prompt'].get('parameters', {}).get('finding_version', 1))):
             raise ResearchError('openness_reading_incomplete', 'Every turn of a v5 problem chain keeps the binding, '
                                 'protocol and prompt of its first turn', {'assignment_id': assignment['id']})
         carried = _find_record(packet)
@@ -2676,7 +2717,7 @@ def _require_problem_continuity(records, artifacts, native, chain, rows, observa
                                     'frozen manifest exactly')
             selected = _classify_final_texts(records, artifacts, native, rows, protocol)
             _require_withheld_bodies(packet, rows, spans, observations[:index], selected)
-        validate_turn_output(packet, output)
+        validate_turn_output(packet, output, artifacts=artifacts, assignment=assignment)
         terminal = stage == 'final' and output.get('stage') != 'reading'
         if terminal != (final and index + 1 == len(chain)):
             raise ResearchError('openness_reading_incomplete', 'A v5 problem chain ends at its first native final result')
@@ -2698,8 +2739,12 @@ def verify_problem_coverage(records, artifacts, assignment, *, final=False):
     if find_protocol(json.loads(artifacts.read(assignment['packet']))) == PROTOCOL_V7:
         from .openness_reading_v7 import verify_problem_coverage as verify_v7_coverage
         return verify_v7_coverage(records, artifacts, assignment, final=final)
-    from .native_review import load_packet
+    from .native_review import load_packet, find_finding_version
     native = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
+    if find_finding_version(assignment) == 2:
+        from .review_search_delivery import verify_finding_index
+        verify_finding_index(records, artifacts, native,
+                             json.loads(artifacts.read(assignment['packet'])).get('finding_index'))
     rows = list_reading_rows(records, artifacts, native, review=assignment)
     manifest = _plan_search_delivery(artifacts, native)['manifest']
     delivery_rows = list_delivery_rows(rows, manifest)

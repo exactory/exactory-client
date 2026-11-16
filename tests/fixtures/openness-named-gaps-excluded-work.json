@@ -1,0 +1,172 @@
+{
+  "answers": {
+    "accepted": {
+      "claim_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "findings": {
+        "assumptions": "The delivered evidence supports this assessment.",
+        "dependencies": "The delivered evidence supports this assessment.",
+        "openness": {
+          "coverage": "The exact formulation was searched.",
+          "grounds": [],
+          "outcome": "supported_open",
+          "reason": "The delivered evidence establishes this finding."
+        },
+        "policy": "The delivered evidence supports this assessment.",
+        "scope": "The delivered evidence supports this assessment.",
+        "statement": "The delivered evidence supports this assessment."
+      },
+      "reviewer": {
+        "actor_id": "reviewer",
+        "attestation_id": "assignment:first",
+        "source": "host"
+      },
+      "schema_version": 3,
+      "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "dispositions": [
+    {
+      "disposition": "relevant",
+      "reason": "The planar partial case bears on both formulations.",
+      "work_id": "work-read"
+    },
+    {
+      "disposition": "out_of_scope",
+      "reason": "The delivered row concerns infinite graphs only.",
+      "work_id": "work-excluded"
+    }
+  ],
+  "expected_outcome": "supported_open",
+  "missing_term": "graph spectral radius",
+  "name": "excluded-work",
+  "neighbour": "Does every connected finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?",
+  "packet": {
+    "finding_index": {
+      "fields": {
+        "10c620fd2ee8e64bc9f1e3dd139c061a0634c1566be4edff28d2434185baced3": [
+          "spectral radius graph",
+          "Hadwiger graph colouring clique minor"
+        ],
+        "f3f45e798ae64bb408797c207f19ce56128fab72ac28002c73813cd5015fd94b": [
+          {
+            "disposition": "relevant",
+            "reason": "The planar partial case bears on both formulations.",
+            "work_id": "work-read"
+          },
+          {
+            "disposition": "out_of_scope",
+            "reason": "The delivered row concerns infinite graphs only.",
+            "work_id": "work-excluded"
+          }
+        ],
+        "fba00e23caa2a5f43e6691d7d66d6e4b8084f0bbb89990761a1eebd04f0080b3": "Finite simple graph colouring and clique minors; complete captured results."
+      },
+      "read_works": [
+        {
+          "identifiers": [
+            "arxiv:2601.00001v1",
+            "work-read",
+            "doi:10.5555/synthetic.partial"
+          ],
+          "reading_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "reading_id": "read-1",
+          "title": "A planar partial case of the minor inequality",
+          "version_id": "arxiv:2601.00001v1"
+        }
+      ],
+      "searches": [
+        {
+          "dispositions": "f3f45e798ae64bb408797c207f19ce56128fab72ac28002c73813cd5015fd94b",
+          "formulations": [
+            "Does every finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?"
+          ],
+          "queries": "10c620fd2ee8e64bc9f1e3dd139c061a0634c1566be4edff28d2434185baced3",
+          "record_id": "search-1",
+          "scope": "fba00e23caa2a5f43e6691d7d66d6e4b8084f0bbb89990761a1eebd04f0080b3",
+          "search_digest": "1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        {
+          "dispositions": "f3f45e798ae64bb408797c207f19ce56128fab72ac28002c73813cd5015fd94b",
+          "formulations": [
+            "Does every connected finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?"
+          ],
+          "queries": "10c620fd2ee8e64bc9f1e3dd139c061a0634c1566be4edff28d2434185baced3",
+          "record_id": "search-2",
+          "scope": "fba00e23caa2a5f43e6691d7d66d6e4b8084f0bbb89990761a1eebd04f0080b3",
+          "search_digest": "2222222222222222222222222222222222222222222222222222222222222222"
+        }
+      ]
+    },
+    "native": {
+      "claim_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "kind": "result",
+      "reviewer": {
+        "actor_id": "reviewer",
+        "attestation_id": "assignment:first",
+        "source": "host"
+      },
+      "scientific_context": {
+        "audit_forecast": {
+          "outcomes": {
+            "already_solved": "blocked",
+            "supported_open": "possible"
+          },
+          "searched_through": "2026-11-14"
+        },
+        "decisive_work_ids": [
+          "work-1"
+        ],
+        "openness_minimum": {
+          "neighbours": [
+            "Does every connected finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?"
+          ],
+          "reading_digests": [
+            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          ],
+          "schema_version": 2,
+          "searches": [
+            {
+              "formulation": "Does every finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?",
+              "search_digest": "1111111111111111111111111111111111111111111111111111111111111111"
+            },
+            {
+              "formulation": "Does every connected finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?",
+              "search_digest": "2222222222222222222222222222222222222222222222222222222222222222"
+            }
+          ],
+          "settling_work_id": null,
+          "statement": "Does every finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?",
+          "supporting_reading_digests": []
+        }
+      },
+      "subject_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "reading_record": {
+      "excerpts": [
+        {
+          "purpose": "The exact delivered gap basis.",
+          "status": "verified",
+          "text": "The cited Infinite minor models concerns infinite graphs only and makes no assertion about the finite simple graphs of the statement.",
+          "text_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "version_id": "arxiv:2601.00001v1"
+        }
+      ],
+      "passages": [],
+      "protocol": "exactory-openness-reading-v6",
+      "turns": [
+        {
+          "assignment_id": "reading-1"
+        }
+      ]
+    }
+  },
+  "queries": [
+    "spectral radius graph",
+    "Hadwiger graph colouring clique minor"
+  ],
+  "read_identifier": "doi:10.5555/synthetic.partial",
+  "read_title": "A planar partial case of the minor inequality",
+  "scope": "Finite simple graph colouring and clique minors; complete captured results.",
+  "sentence": "The cited Infinite minor models concerns infinite graphs only and makes no assertion about the finite simple graphs of the statement.",
+  "statement": "Does every finite simple graph G satisfy chi(G) <= h(G), where chi(G) is the least number of colours in a proper vertex colouring and h(G) is the largest t such that the complete graph K_t is a minor obtained by vertex or edge deletions and edge contractions?"
+}

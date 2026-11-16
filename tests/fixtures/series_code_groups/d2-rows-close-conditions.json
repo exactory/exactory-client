@@ -695,6 +695,9 @@
         "research_harness/review_protocol.py:canonical_prompt#8": [
           "form"
         ],
+        "research_harness/review_protocol.py:canonical_prompt#9": [
+          "form"
+        ],
         "research_harness/review_protocol.py:record_assignment.prepare#1": [
           "form"
         ],

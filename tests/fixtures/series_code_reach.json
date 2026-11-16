@@ -1273,6 +1273,7 @@
           "research_harness/review_protocol.py:canonical_prompt#6": ["form"],
           "research_harness/review_protocol.py:canonical_prompt#7": ["form"],
           "research_harness/review_protocol.py:canonical_prompt#8": ["form"],
+          "research_harness/review_protocol.py:canonical_prompt#9": ["form"],
           "research_harness/review_protocol.py:record_assignment.prepare#1": ["form"],
           "research_harness/review_refusal_replacement.py:prepare_replacement#1": ["payload"],
           "research_harness/review_refusal_replacement.py:prepare_replacement#2": ["payload"],
@@ -1565,8 +1566,12 @@
           "research_harness/openness_reading_v7.py:_require_verification#1": ["content","record"],
           "research_harness/problem_openness.py:assess_openness#1": ["record"],
           "research_harness/problem_openness.py:prepare_openness#1": ["content"],
+          "research_harness/review_search_delivery.py:build_finding_index.read_original#1": ["content"],
+          "research_harness/review_search_delivery.py:build_finding_index.read_original#2": ["content"],
           "research_harness/review_search_delivery.py:rebuild_search_record#1": ["content"],
           "research_harness/review_search_delivery.py:rebuild_search_record#2": ["content"],
+          "research_harness/review_search_delivery.py:validate_finding_index#1": ["content"],
+          "research_harness/review_search_delivery.py:verify_finding_index#1": ["content"],
           "research_harness/review_search_delivery.py:verify_search_deliveries#1": ["content"]
         },
         "openness_screening_evidence_mismatch": {

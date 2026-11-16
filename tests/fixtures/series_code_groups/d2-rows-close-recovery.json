@@ -414,10 +414,22 @@
         "research_harness/problem_openness.py:prepare_openness#1": [
           "content"
         ],
+        "research_harness/review_search_delivery.py:build_finding_index.read_original#1": [
+          "content"
+        ],
+        "research_harness/review_search_delivery.py:build_finding_index.read_original#2": [
+          "content"
+        ],
         "research_harness/review_search_delivery.py:rebuild_search_record#1": [
           "content"
         ],
         "research_harness/review_search_delivery.py:rebuild_search_record#2": [
+          "content"
+        ],
+        "research_harness/review_search_delivery.py:validate_finding_index#1": [
+          "content"
+        ],
+        "research_harness/review_search_delivery.py:verify_finding_index#1": [
           "content"
         ],
         "research_harness/review_search_delivery.py:verify_search_deliveries#1": [

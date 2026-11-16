@@ -1171,7 +1171,7 @@ def find_common_prompt_version(prompt):
 
 def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestration=None, repair_prompt=None,
                      adjudicator_prompt=None, excerpts=False, reading_stage=None, excerpt_rules=None,
-                     reading_protocol=None, common_version=None, evidence_parts=None, part_suffix=None,
+                     reading_protocol=None, common_version=None, finding_version=1, evidence_parts=None, part_suffix=None,
                      staged_task=None, composed=False, claim_range=False, review_parts=None,
                      problem_objection_carry=None, problem_paragraphs=None, capacity=None, source_rules=None):
     """The canonical prompt of a role. A previous version (version 1) keeps the context-repair suffix it was recorded
@@ -1185,7 +1185,7 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
     by default the current one; it is independent of version, which names the scientific contract."""
     if reading_protocol == READING_V7_PROTOCOL and capacity is not None:
         result = canonical_prompt(role, reading_stage=reading_stage, reading_protocol=reading_protocol,
-                                  common_version=common_version, problem_paragraphs=problem_paragraphs)
+                                  common_version=common_version, finding_version=finding_version, problem_paragraphs=problem_paragraphs)
         result['parameters']['capacity'] = copy.deepcopy(capacity)
         return result
     if problem_objection_carry is not None or problem_paragraphs is not None or capacity is not None:
@@ -1195,7 +1195,7 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
         base = canonical_prompt(role, legacy=legacy, repair=repair, version=version, orchestration=orchestration,
             repair_prompt=repair_prompt, adjudicator_prompt=adjudicator_prompt, excerpts=excerpts,
             reading_stage=reading_stage, excerpt_rules=excerpt_rules, reading_protocol=reading_protocol,
-            common_version=common_version, evidence_parts=evidence_parts, part_suffix=part_suffix,
+            common_version=common_version, finding_version=finding_version, evidence_parts=evidence_parts, part_suffix=part_suffix,
             staged_task=staged_task, composed=composed, claim_range=claim_range, review_parts=review_parts,
             source_rules=source_rules)
         return prompt_paragraphs.append_prompt_paragraphs(base, role, problem_objection_carry, problem_paragraphs, capacity)
@@ -1205,13 +1205,29 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
         base = canonical_prompt(role, legacy=legacy, repair=repair, version=version, orchestration=orchestration,
             repair_prompt=repair_prompt, adjudicator_prompt=adjudicator_prompt, excerpts=excerpts,
             reading_stage=reading_stage, excerpt_rules=excerpt_rules, reading_protocol=reading_protocol,
-            common_version=common_version, evidence_parts=evidence_parts, part_suffix=part_suffix,
+            common_version=common_version, finding_version=finding_version, evidence_parts=evidence_parts, part_suffix=part_suffix,
             staged_task=staged_task, composed=composed, claim_range=claim_range, review_parts=review_parts)
         rendered = base['text'].replace(bar_sources.PROMPT, bar_sources.SESSION_PROMPT)
         return dict(base, template_id=base['template_id'] + bar_sources.SESSION_TEMPLATE_SUFFIX,
                     template_hash=digest(rendered),
                     rendered_prompt_hash=digest(rendered), text=rendered,
                     parameters=dict(base['parameters'], source_rules=source_rules))
+    if finding_version != 1:
+        if type(finding_version) is not int or finding_version != 2:
+            raise ResearchError('invalid_review_context', 'Use finding version 1 or 2.')
+        base = canonical_prompt(role, legacy=legacy, repair=repair, version=version, orchestration=orchestration,
+            repair_prompt=repair_prompt, adjudicator_prompt=adjudicator_prompt, excerpts=excerpts,
+            reading_stage=reading_stage, excerpt_rules=excerpt_rules, reading_protocol=reading_protocol,
+            common_version=common_version, evidence_parts=evidence_parts, part_suffix=part_suffix,
+            staged_task=staged_task, composed=composed, claim_range=claim_range, review_parts=review_parts,
+            problem_objection_carry=problem_objection_carry, problem_paragraphs=problem_paragraphs,
+            capacity=capacity, source_rules=source_rules)
+        from .native_review import uses_finding_contract, FINDING_V2_TEXT
+        if uses_finding_contract(dict(prompt=base)):
+            rendered = base['text'] + FINDING_V2_TEXT
+            return dict(base, text=rendered, template_hash=digest(rendered), rendered_prompt_hash=digest(rendered),
+                        parameters=dict(base['parameters'], finding_version=2))
+        return base
     if version is None:
         version = 7 if role == 'verification' else 6
     if review_parts is not None:
@@ -3136,8 +3152,10 @@ def _prompt_matches(assignment, packet=None):
                    for suffix in ((None, review_problem_parts.PART_PROMPT_0691) if stage == 'part' else (None,)))
     stage = assignment['prompt'].get('parameters', {}).get('reading_stage')
     if assignment['role'] == 'native_math' and stage in openness_reading.STAGES:
+        from .native_review import find_finding_version
         return any(assignment['prompt'] == canonical_prompt('native_math', reading_stage=stage, reading_protocol=rules,
-                                                            common_version=common_version)
+                                                            common_version=common_version,
+                                                            finding_version=find_finding_version(assignment))
                    for rules in openness_reading.PROMPTS)
     context = assignment.get('context', {})
     problem = assignment.get('subject', {}).get('kind') == 'problem'
@@ -3168,8 +3186,10 @@ def _prompt_matches(assignment, packet=None):
             or is_previous_prompt(assignment) or _uses_previous_repair_suffix(assignment)):
         return True
     # The problem finding contract and older native result contracts remain independently verifiable.
+    from .native_review import find_finding_version
     return assignment['role'] == 'native_math' and any(assignment['prompt'] == canonical_prompt(
-        'native_math', common_version=common_version, **parameters) for parameters in (dict(version=7), dict(legacy=True)))
+        'native_math', common_version=common_version, finding_version=find_finding_version(assignment),
+        **parameters) for parameters in (dict(version=7), dict(legacy=True)))
 
 
 def _repair_packet(records, artifacts, value, repair):
@@ -3968,6 +3988,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 and openness_reading.is_openness_packet(packet['native'])
                 and packet['native']['scientific_context']['openness_minimum']['schema_version'] == 2):
             base_prompt_parameters['version'] = 7
+        if value['role'] == 'native_math' and 'finding_index' in packet:
+            base_prompt_parameters['finding_version'] = 2
         prompt = canonical_prompt(value['role'], **base_prompt_parameters)
         history = []
         session_id = value['id']
