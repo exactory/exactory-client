@@ -927,20 +927,24 @@ def record_search(store, payload, *, expected_revision, request_id):
     return prepared_mutation(store, "literature.search", payload, prepare, expected_revision=expected_revision, request_id=request_id)
 
 
+def collect_version_dates(work):
+    """Return arXiv text-version dates without flagged chronology assertions."""
+    if not work["id"].startswith("arxiv:"):
+        return []
+    return [assertion["values"]["updated"] for assertion in work["date_assertions"]
+            if assertion["values"].get("updated")
+            and not any(item.get("code") == "nonmonotone_version_dates"
+                        for item in assertion["values"].get("diagnostics", []))]
+
+
 def _historical_status(work, cutoff):
     if cutoff is None:
         return "not_requested"
     cutoff = iso_date(cutoff)
-    assertions = [a["values"] for a in work["date_assertions"]]
     # arXiv explicitly distinguishes original submission from this capture's
     # update date. A first submission inside the cohort does not date later text.
-    if work["id"].startswith("arxiv:"):
-        # Official OAI version histories can contain reversed original dates.
-        # Their current-version date alone cannot establish temporal priority.
-        updates = [a.get("updated") for a in assertions if a.get("updated")
-                   and not any(d.get("code") == "nonmonotone_version_dates" for d in a.get("diagnostics", []))]
-        if not updates:
-            return "unknown"
+    updates = collect_version_dates(work)
+    if updates:
         return "known_before" if all(timestamp(d).date() <= cutoff for d in updates) else "later_capture"
     # Registry publication dates date an event, not the captured article's text.
     # Without an explicit exact content version, preserve the temporal question.

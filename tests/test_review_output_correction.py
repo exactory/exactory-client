@@ -5,7 +5,7 @@ import json
 import unittest
 from unittest.mock import patch
 
-from research_harness import research_decisions as decisions, review_protocol as protocol
+from research_harness import cli, research_decisions as decisions, review_protocol as protocol
 from research_harness import review_output_correction as correction
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
@@ -81,6 +81,21 @@ class CorrectionTests(unittest.TestCase):
         with self.assertRaises(ResearchError) as caught:
             self.case.observe(expected, 'third-scientific-call')
         self.assertEqual(caught.exception.code, 'review_slot_exhausted')
+
+    def test_correction_transport_reads_pending_correction_from_series(self):
+        self.prepare_refused()
+        def send(*args):
+            paths = (self.fixture.root / 'intermediate/reviews/result').rglob('series.json')
+            runs = [run for path in paths for turn in json.loads(path.read_bytes())['turns'] for run in turn['runs']]
+            pending = [run['correction'] for run in runs if (run.get('correction') or {}).get('run_id') == 'correction']
+            self.assertEqual(len(pending), 1)
+            self.assertEqual(pending[0]['status'], 'pending')
+            return self.fixture.build_provider_response(self.delta())
+        with patch.object(protocol.transport, 'send_request', side_effect=send):
+            result = cli.OPERATIONS['review-output-correction'](self.fixture.store,
+                dict(id='correction', assignment_id=self.case.assignment['id'], route_id='route'),
+                expected_revision=self.fixture.store.revision, request_id='pending-correction')
+        self.assertEqual(result['result']['correction_status'], 'accepted')
 
 
 if __name__ == '__main__':

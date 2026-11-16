@@ -524,7 +524,7 @@ class SeriesEndingTests(unittest.TestCase):
         self.assertEqual(rows[-1]['details']['receipt']['place'], 'workspace')
 
     def test_renderers_retained_failure_marker_is_in_the_line(self):
-        with patch('research_harness.output_views.render_pending', side_effect=self.build_error()), \
+        with patch('research_harness.output_views.compute_view_model', side_effect=self.build_error()), \
                 patch('sys.stderr', io.StringIO()):
             line = self.run_refusal()
         self.assert_unlisted(line)

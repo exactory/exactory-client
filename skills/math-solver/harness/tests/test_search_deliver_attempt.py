@@ -1,6 +1,7 @@
 """Attempt delivery preserves native findings without deciding proof credit."""
 
 import json
+from datetime import datetime, timezone
 import subprocess
 import sys
 import unittest
@@ -60,7 +61,7 @@ class DeliverAttemptTests(SearchCLIWorkspace, unittest.TestCase):
     def delivered_record(self, controller, result):
         common = CommonStore(common_root(self.root, controller.status()))
         record = common.snapshot()["records"]["native_attempt"][result["native_attempt_digest"]]
-        summary = {key: value for key, value in record.items() if key not in ("provenance", "recorded_revision")}
+        summary = {key: value for key, value in record.items() if key not in ("provenance", "recorded_revision", "recorded_at")}
         self.assertEqual(result["native_attempt_digest"], digest(summary))
         self.assertEqual(result["native_attempt_digest"], common_digest(summary))
         self.assertEqual(result, {"objective_id": "objective-000001", "attack_root": str(self.root.resolve()),
@@ -77,7 +78,7 @@ class DeliverAttemptTests(SearchCLIWorkspace, unittest.TestCase):
         self.assertEqual(record["recorded_revision"], CommonStore(self.root).revision)
         self.assertEqual(set(record), {"schema_version", "objective_id", "attack_root", "contract", "state",
                                        "obligations", "checkpoints", "acceptances", "retreats",
-                                       "failed_strategies", "nodes", "totals", "provenance", "recorded_revision"})
+                                       "failed_strategies", "nodes", "totals", "provenance", "recorded_revision", "recorded_at"})
         self.assertEqual(record["schema_version"], 1)
         self.assertEqual(record["contract"], state["contract"])
         self.assertEqual(record["provenance"], {"source": "operator", "actor_id": "search-controller",
@@ -171,6 +172,50 @@ class DeliverAttemptTests(SearchCLIWorkspace, unittest.TestCase):
         before = common.snapshot()
         self.search("deliver-attempt", {}, revision=9)
         self.assertEqual(common.snapshot(), before)
+
+    def test_delivery_stamps_once_and_reuses_the_summary_digest(self):
+        from search_controller.attempt_delivery import build_attempt_summary
+        from tests.search_fixtures import provenance
+        controller = self.unresolved_objective()
+        summary = build_attempt_summary(controller, controller.status())
+        with patch("search_controller.attempt_delivery.datetime") as clock:
+            clock.now.return_value = datetime(2026, 11, 14, 13, tzinfo=timezone.utc)
+            first = controller.command("deliver-attempt", {}, 7, "first-stamped")
+            record = self.delivered_record(controller, first)
+            self.assertEqual(record["recorded_at"], "2026-11-14T13:00:00+00:00")
+            self.assertEqual(first["native_attempt_digest"], digest(summary))
+            clock.now.assert_called_once_with(timezone.utc)
+            before = CommonStore(self.root).snapshot()
+            clock.now.return_value = datetime(2026, 11, 15, 13, tzinfo=timezone.utc)
+            self.assertEqual(controller.command("deliver-attempt", {}, 7, "repeat-stamped"), first)
+            self.assertEqual(CommonStore(self.root).snapshot(), before)
+            self.search("pause", {"reason": "User requested a pause"}, revision=7)
+            controller.command("deliver-attempt", {}, 8, "paused-stamped")
+            self.search("resume", {"objective_id": "objective-000001", "message_id": "resume-stamped",
+                "session_id": "codex:fixture-resume", "instruction": "Continue the original objective",
+                "provenance": provenance("operator")}, revision=8)
+            self.assertEqual(controller.command("deliver-attempt", {}, 9, "resume-stamped"), first)
+            records = CommonStore(self.root).snapshot()["records"]["native_attempt"]
+            self.assertEqual(records[first["native_attempt_digest"]], record)
+            self.assertEqual(len(records), 2)
+
+    def test_legacy_delivery_repeat_preserves_unstamped_bytes(self):
+        from search_controller.attempt_delivery import build_attempt_summary
+        controller = self.unresolved_objective()
+        summary = build_attempt_summary(controller, controller.status())
+        identity = digest(summary)
+        record = dict(summary, provenance=controller.provenance("deliver-attempt"), recorded_revision=1)
+        common = CommonStore(self.root)
+        common.mutate("test.legacy", {}, lambda tx: tx.put("native_attempt", identity, record),
+                      expected_revision=common.revision, request_id="legacy-snapshot")
+        with patch("search_controller.attempt_delivery.datetime") as clock:
+            clock.now.return_value = datetime(2026, 11, 15, tzinfo=timezone.utc)
+            result = controller.command("deliver-attempt", {}, 7, "legacy-repeat")
+            self.assertEqual(self.delivered_record(controller, result), record)
+            before = common.snapshot()
+            self.assertEqual(controller.command("deliver-attempt", {}, 7, "legacy-current"), result)
+            self.assertEqual(common.snapshot(), before)
+            clock.now.assert_not_called()
 
     def test_refuses_a_non_empty_spec_and_a_stale_revision(self):
         controller = self.unresolved_objective()

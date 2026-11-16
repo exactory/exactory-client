@@ -1,6 +1,7 @@
 """Deliver native attempt findings as immutable evidence in their common store."""
 
 import copy
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from research_harness.errors import ResearchError
@@ -126,13 +127,14 @@ def deliver_snapshot(controller, state, common, kind, identity, value, result, a
         while True:
             snapshot = store.snapshot()
             existing = snapshot["records"].get(kind, {}).get(identity)
+            recorded = {name: existing[name] for name in ("recorded_revision", "recorded_at")
+                        if existing is not None and name in existing}
             current = snapshot["records"].get("native_attempt_current", {}).get(pointer_id)
             pointer_current = current is not None and current["native_attempt_digest"] == identity
             # A current repeat freshly audits and recovers only missing acceptance links.
             if existing is not None and (kind != "native_attempt" or pointer_current):
                 links = audit_snapshot(snapshot["records"])
-                expected = (dict(value, recorded_revision=existing["recorded_revision"])
-                            if kind == "native_attempt" and "recorded_revision" in existing else value)
+                expected = dict(value, **recorded) if kind == "native_attempt" else value
                 immutable_record(snapshot["records"], kind, identity, expected)
                 if all(key in snapshot["records"].get(link_kind, {}) for link_kind, key, _ in links):
                     return result
@@ -141,9 +143,9 @@ def deliver_snapshot(controller, state, common, kind, identity, value, result, a
                 links = audit_snapshot(records)
                 record = payload
                 if kind == "native_attempt":
-                    revision = snapshot["revision"] + 1 if existing is None else existing.get("recorded_revision")
-                    if revision is not None:
-                        record = dict(payload, recorded_revision=revision)
+                    record = (dict(payload, recorded_revision=snapshot["revision"] + 1,
+                                   recorded_at=datetime.now(timezone.utc).isoformat())
+                              if existing is None else dict(payload, **recorded))
                 checked = immutable_record(records, kind, identity, record)
                 changes = [checked] if existing is None else []
                 changes.extend(link for link in links if link[1] not in records.get(link[0], {}))

@@ -415,6 +415,34 @@ class FormingImportTests(unittest.TestCase):
         self.destination.assert_error('problem_accounts_history_missing', lambda: problem_accounts.require_prior_form(
             records, statement, self.destination.store.revision + 1))
 
+    def test_period_refusal_names_imported_form_and_keeps_legacy_details_absent(self):
+        from research_harness.errors import ResearchError
+        imported = self.import_history()
+        candidate = build_candidate()
+        candidate["source"]["evidence"] = [self.reference("forming_call", self.call, imported["source_origin"])]
+        self.destination.mutate(cli.OPERATIONS["problem-candidate"], candidate)
+        statement = self.destination.select_statement(candidate_id=candidate["id"])
+        records = self.destination.store.snapshot()["records"]
+        date = self.call["recorded_at"][:10]
+        before_revision = self.destination.store.revision + 1
+        with self.assertRaises(ResearchError) as caught:
+            problem_accounts.require_prior_form(records, statement, before_revision, date,
+                accounts_version=2, evidence_source={"entry_id": "use"})
+        self.assertEqual(caught.exception.code, "problem_accounts_history_missing")
+        self.assertIn("period", caught.exception.message)
+        self.assertEqual(caught.exception.details, {
+            "evidence": {"entry_id": "use", "revision": before_revision, "date": date},
+            "forms": [{"origin": imported["source_origin"], "forming_call_id": self.call["id"],
+                "form_ids": ["form-1"],
+                "recorded_revision": self.call["recorded_revision"], "recorded_at": self.call["recorded_at"]}]})
+        with self.assertRaises(ResearchError) as legacy:
+            problem_accounts.require_prior_form(records, statement, before_revision, date)
+        self.assertNotIn("details", legacy.exception.as_dict())
+        with self.assertRaises(ResearchError) as too_late:
+            problem_accounts.require_prior_form(records, statement, imported["recorded_revision"], date,
+                accounts_version=2, evidence_source={"entry_id": "use"})
+        self.assertEqual(too_late.exception.message, legacy.exception.message)
+
     def test_imported_gain_uses_original_form_and_result_ordering(self):
         from test_research_problem_objective_results import build_objective_native, build_objective_result
         from test_research_problem_attempt import put_native_attempt
@@ -663,3 +691,40 @@ class FormingImportTests(unittest.TestCase):
         from research_harness.problem_forming_import import describe_imports
         delivered = describe_imports(self.destination.store.snapshot()['records'], self.destination.artifacts)
         self.assertEqual(next(row['record'] for row in delivered[0]['records'] if row['cite']['id'] == identifier), native)
+
+
+    def prepare_reading_gain(self, *, outcome=False, empty_form=False):
+        from test_problem_accounts import ReadingDateCase
+        from test_problem_forming_evidence import build_evidence
+        reading = self.source.record_full_reading()
+        established = self.source.mutate(problem_forming.record_form_outcome, build_outcome(
+            "reading-outcome", standing="found_in_literature", evidence=[build_evidence(reading)]))["result"]
+        call = self.call
+        if empty_form:
+            call = self.source.mutate(problem_forming.record_forming, build_forming("empty", forms=[]))["result"]
+        imported = self.import_history()
+        candidate = build_candidate()
+        candidate["source"]["evidence"] = [self.reference("forming_call", call, imported["source_origin"])]
+        self.destination.mutate(cli.OPERATIONS["problem-candidate"], candidate)
+        self.destination.select_statement(candidate_id=candidate["id"])
+        source_record = established if outcome else self.source.store.snapshot()["records"]["reading"][reading["reading_id"]]
+        reference = self.reference("form_outcome" if outcome else "reading", source_record, imported["source_origin"])
+        self.destination.value = self.destination.build_value([reference])
+        self.destination.value["accounts"]["explanatory_use"][0]["date"] = "2026-02-01"
+        ReadingDateCase.add_gain(self.destination)
+        return imported
+
+    def test_c6_gain_on_direct_imported_reading_leaves_it_unordered(self):
+        self.prepare_reading_gain()
+        saved = self.destination.mutate(problem_claims.record_value, self.destination.value)["result"]
+        self.assertEqual(saved["accounts"]["gain"]["id"], "gain")
+
+    def test_p3_imported_call_without_forms_cannot_support_reading_only_gain(self):
+        self.prepare_reading_gain(empty_form=True)
+        self.destination.assert_error("problem_accounts_history_missing", lambda:
+            self.destination.mutate(problem_claims.record_value, self.destination.value))
+
+    def test_p7_imported_outcome_on_reading_keeps_history_refusal(self):
+        self.prepare_reading_gain(outcome=True)
+        self.destination.assert_error("problem_accounts_history_missing", lambda:
+            self.destination.mutate(problem_claims.record_value, self.destination.value))

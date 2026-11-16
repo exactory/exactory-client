@@ -153,6 +153,7 @@ class AccountValueRefreshTests(unittest.TestCase):
         before = problem_claims.compute_problem_evidence_digest(records, case.artifacts)
         value = copy.deepcopy(records['problem_value']['value-1'])
         value.pop('recorded_revision')
+        value.pop('accounts_version')
         value['id'] = 'value-refreshed'
         case.mutate(problem_claims.record_value, value)
         records = case.store.snapshot()['records']

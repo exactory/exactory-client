@@ -27,6 +27,12 @@ class StoredAccountCompatibilityTests(ProblemCase):
         frozen = json.loads((directory / "problem_accounts_0820.json").read_text())
         records = fixture["records"]
         value = records["problem_value"]["value-1"]
+        native_id, native = next(iter(records["native_attempt"].items()))
+        native_before = copy.deepcopy(native)
+        self.assertNotIn("recorded_at", native)
+        self.assertNotIn("accounts_version", value)
+        self.assertEqual(digest({key: item for key, item in native.items()
+                                 if key not in ("provenance", "recorded_revision")}), native_id)
         before = copy.deepcopy(records)
         self.assertIsNone(problem_evidence.validate_value(records, self.artifacts, value))
         self.assertNotIn("accounts", value)
@@ -36,6 +42,7 @@ class StoredAccountCompatibilityTests(ProblemCase):
             self.assertEqual(actual.encode(), fixture[key + "_bytes"].encode())
         self.assertEqual(problem_claims.compute_problem_evidence_digest(records, self.artifacts), fixture["evidence_digest"])
         self.assertEqual(records, before)
+        self.assertEqual(records["native_attempt"][native_id], native_before)
         records["workspace"] = json.loads((directory / "problem_forming_0820.json").read_text())["records"]["workspace"]
         before = copy.deepcopy(records)
         self.assertEqual(problem_delivery.assess_minimum(records, self.artifacts), frozen["minimum"])

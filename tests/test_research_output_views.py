@@ -1268,22 +1268,26 @@ class EntryPointTests(ViewCase):
                                       "--request-id", "checked"), [])
         self.assertEqual(self.run_cli("status"), [])
 
-    def test_no_render_runs_between_a_review_run_start_commit_and_its_reviewer_call(self):
+    def test_review_run_requests_a_zero_wait_render_after_start_before_the_reviewer_call(self):
         events = []
 
-        def invoke(store, payload, *, expected_revision, request_id, credential=None):
+        def invoke(store, payload, *, expected_revision, request_id, credential=None, after_start=None):
             store.mutate("review.run_start", payload, lambda tx: tx.put("review_invocation", "run-1", {
                 "id": "run-1", "assignment_id": "assignment-1", "recorded_revision": expected_revision + 1}) or {},
                 expected_revision=expected_revision, request_id=request_id + ":start")
+            after_start()
             events.append(("reviewer call", store.revision))
             store.mutate("review.run", payload, lambda tx: {}, expected_revision=store.revision, request_id=request_id)
             return {"invoked": True}
 
         payload = self.write_payload({"id": "run-1", "assignment_id": "assignment-1"})
-        with mock.patch.object(cli.review_protocol, "invoke_assignment", side_effect=invoke):
+        with mock.patch.object(cli.review_protocol, "invoke_assignment", side_effect=invoke), mock.patch.object(
+                cli, "render_workspace_views", side_effect=lambda root, **options:
+                events.append(("start render", str(root), options["lock_wait"]))):
             calls = self.run_cli("review-run", "--file", payload, "--expected-revision", "0", "--request-id", "run")
         events.extend(("render", start) for start in calls)
-        self.assertEqual(events, [("reviewer call", 1), ("render", str(self.root))])
+        self.assertEqual(events, [("start render", str(self.root.resolve()), 0), ("reviewer call", 1),
+                                  ("render", str(self.root))])
         self.assertFalse((self.root / "final").exists())
 
     def test_the_lab_entry_point_renders_once(self):

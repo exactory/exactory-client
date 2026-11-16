@@ -24,7 +24,7 @@ from .integration import (adopt_workspace, current_store, export_workspace, matc
 from .limits import describe_depth, limits_report
 from .operations import fields, text
 from .output_views import (PROBLEM_EXPORTS_FOLDER, find_view_advisories, find_workspace_root, render_all,
-                           render_views_after_command)
+                           render_views_after_command, render_workspace_views)
 from .report_views import (annotate_parts_obligations, current_obligations, next_summary, obligations_page,
                            order_obligations, status_summary)
 from .storage import Store, check_command_bounds
@@ -137,7 +137,8 @@ OPERATIONS = {
 
 
 def _review_probe(store, payload, **identity):
-    return review_protocol.probe_route(store, payload, credential=os.environ.get("OPENAI_API_KEY"), **identity)
+    return review_protocol.probe_route(store, payload, credential=os.environ.get("OPENAI_API_KEY"),
+        after_start=lambda: render_workspace_views(store.root, lock_wait=0), **identity)
 
 
 def _review_run(store, payload, **identity):
@@ -185,7 +186,8 @@ def _review_run(store, payload, **identity):
             if isinstance(previous, dict) and previous.get("operation") == "review.invoke":
                 original = previous["payload"]
                 if original.get("assignment_id") == child["id"] and payload.get("id", original["id"]) == original["id"]:
-                    return review_protocol.invoke_assignment(store, original, credential=os.environ.get("OPENAI_API_KEY"), **identity)
+                    return review_protocol.invoke_assignment(store, original, credential=os.environ.get("OPENAI_API_KEY"),
+                        after_start=lambda: render_workspace_views(store.root, lock_wait=0), **identity)
             accepted = records.get("review_task_acceptance", {}).get(reservation_id, {}).get("receipt", {}).get("attempt", {})
             owner = {}
             reservation = records.get("review_reservation", {}).get(reservation_id, {})
@@ -210,12 +212,14 @@ def _review_run(store, payload, **identity):
                           "task-run:" + digest([epoch["id"], payload["task_id"], identity["request_id"]]))
             payload = {"id": identifier, "assignment_id": child["id"]}
     # Capture, acceptance and output authentication stay in the protocol layer.
-    return review_protocol.invoke_assignment(store, payload, credential=os.environ.get("OPENAI_API_KEY"), **identity)
+    return review_protocol.invoke_assignment(store, payload, credential=os.environ.get("OPENAI_API_KEY"),
+        after_start=lambda: render_workspace_views(store.root, lock_wait=0), **identity)
 
 
 def _review_output_correction(store, payload, **identity):
     from .review_output_correction import invoke_correction
-    return invoke_correction(store, payload, credential=os.environ.get("OPENAI_API_KEY"), **identity)
+    return invoke_correction(store, payload, credential=os.environ.get("OPENAI_API_KEY"),
+        after_start=lambda: render_workspace_views(store.root, lock_wait=0), **identity)
 
 
 from .review_stop import stop_review
@@ -1281,7 +1285,8 @@ def _is_recording_command(args):
 
 def main(argv=None, render_views=render_views_after_command):
     """Run one command. After a command that can commit a record, whether it succeeded, failed or replayed a committed
-    request, render_views(--workspace) renders the output views once, outside every store lock."""
+    request, render_views(--workspace) renders the output views outside every store lock. Reviewer commands also
+    request a render after committing a new call's start, before sending it, without waiting for the render lock."""
     args = build_parser().parse_args(argv)
     try:
         with describe_tool_timeout():
