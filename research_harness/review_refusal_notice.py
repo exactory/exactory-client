@@ -21,6 +21,8 @@ REFUSAL_DETAILS_CHARACTERS = 4_000
 REFUSED_PART_CHARACTERS = 20_000
 BOUNDED_NOTICE_CHARACTERS = 45_000
 NOTICE_PARAGRAPH_CHARACTERS = 2_000
+COMPOSED_CLOSING_ANSWER_CHARACTERS = 2_000
+COMPOSED_REFUSAL_CHARACTERS = 10_000
 INVALID_NOTICE_ARGUMENTS_MSG = ('These arguments build no refusal notice. Set form to whole or bounded, and give one to '
                                 'four distinct ids of refused attempts.')
 NOTICE_METADATA_TOO_LARGE_MSG = (
@@ -136,6 +138,14 @@ def build_refusal_notice(records, artifacts, attempt_ids, *, form='whole', diagn
     artifact = records['review_attempt'][latest['attempt_id']]['output']
     text = artifacts.read(artifact).decode('utf-8')
     output = json.loads(text)
+    if enforce_bounded_limit:
+        from .openness_final_pages import describe_composed_refusal
+        entry = notice['refused'][-1]
+        context = describe_composed_refusal(records, artifacts, records['review_attempt'][latest['attempt_id']],
+                                           entry.get('check'), entry.get('path', ''))
+        if context is not None:
+            notice['composed_finding'] = dict(context, closing_answer=_retain_value(
+                context['closing_answer'], COMPOSED_CLOSING_ANSWER_CHARACTERS, measure))
     if form == 'whole':
         notice['output'] = output
     else:
@@ -147,6 +157,10 @@ def build_refusal_notice(records, artifacts, attempt_ids, *, form='whole', diagn
         part['complete'] = found and measure(value) <= allowance
         notice.update(output_ref={'artifact': copy.deepcopy(artifact), 'characters': len(text)}, refused_part=part)
         if enforce_bounded_limit:
+            if 'composed_finding' in notice:
+                allowance = min(allowance, BOUNDED_NOTICE_CHARACTERS - measure(notice) + measure(part['value']))
+                part['value'] = _retain_value(value, max(0, allowance), measure)
+                part['complete'] = found and measure(value) <= allowance
             characters = measure(notice)
             if characters > BOUNDED_NOTICE_CHARACTERS:
                 raise ResearchError('review_refusal_notice_metadata_too_large', BOUNDED_NOTICE_METADATA_TOO_LARGE_MSG,

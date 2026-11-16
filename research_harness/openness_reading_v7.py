@@ -374,6 +374,8 @@ def prepare_unread_assignment(records, artifacts, value, route, logical):
         capacity_plan=prior['capacity_plan'], capacity_plan_kind='final')
     if final_page_plan is not None:
         chain['final_page_plan'] = final_page_plan
+        from .openness_final_pages import read_binding, read_final_position
+        chain['final_position'] = read_final_position(artifacts, final_page_plan, read_binding(packet)['final_turn'])
     return packet, chain
 
 
@@ -2047,10 +2049,23 @@ def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_
         limits['answer_bound'] = max(plan['task']['final']['smallest_answer_bound'],
                                     frozen['reading_final']['capacity']['answer_bound'] // 2)
     final_page_plan = None
-    if kind == 'final' and not replacement and ('pages' in V7_FINAL_FORMS or plan['allocation'].get('final_form') == 'pages' or prior['reading_chain'].get('final_page_plan')):
-        from .openness_final_pages import prepare_final_packet
-        packet, final_page_plan = prepare_final_packet(records, artifacts, prior, route, logical,
-            number, inventory, state, plan, limits)
+    if kind == 'final' and ('pages' in V7_FINAL_FORMS or plan['allocation'].get('final_form') == 'pages' or prior['reading_chain'].get('final_page_plan')):
+        from .openness_final_pages import prepare_final_packet, prepare_capacity_packet, build_final_packet, read_page_plan, read_binding
+        if replacement and not state.get('material_state', {}).get('pending'):
+            prepared = prepare_capacity_packet(records, artifacts, prior, route, logical,
+                number, inventory, state, plan, limits)
+            if prepared is None:
+                raise ResearchError('review_route_capacity_below_floor', capacity.BELOW_FLOOR_MESSAGE)
+            packet, final_page_plan = prepared
+        elif replacement and prior['reading_chain'].get('final_page_plan'):
+            final_page_plan = prior['reading_chain']['final_page_plan']
+            page_plan = read_page_plan(artifacts, final_page_plan)
+            selected = next(turn for turn in page_plan['turns'] if turn['number'] == read_binding(frozen)['final_turn'])
+            packet = build_final_packet(records, artifacts, route, logical, prior['reading_chain']['first_assignment_id'],
+                number, inventory, state, plan, limits, page_plan, selected)
+        else:
+            packet, final_page_plan = prepare_final_packet(records, artifacts, prior, route, logical,
+                number, inventory, state, plan, limits)
     else:
         packet = build_turn_packet(artifacts, route, logical, prior['reading_chain']['first_assignment_id'],
                                    number, inventory, state, plan, limits, kind, requests=requests, notice=notice)
@@ -2064,6 +2079,8 @@ def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_
                  capacity_plan=prior['capacity_plan'], capacity_plan_kind=kind)
     if final_page_plan is not None:
         chain['final_page_plan'] = final_page_plan
+        from .openness_final_pages import read_binding, read_final_position
+        chain['final_position'] = read_final_position(artifacts, final_page_plan, read_binding(packet)['final_turn'])
     if replacement:
         chain.update(capacity_replacement_of=prior['id'], slot_id=prior.get('slot_id', prior['id']))
     return packet, chain
@@ -2082,7 +2099,8 @@ def prepare_refusal_assignment(records, artifacts, value, revision, prior, froze
     reading.require_reserved_identifier(value['id'], PROTOCOL)
     plan, inventory, state = read_bound_state(artifacts, prior, frozen)
     route = records['review_route'][prior['route_id']]
-    kind = reading.find_stage(frozen)
+    stage = reading.find_stage(frozen)
+    kind = 'reading' if stage == 'reading' else 'final'
     chain = prior['reading_chain']
     from .native_review import load_packet
     logical = dict(protocol=protocol.PROTOCOL, role=prior['role'], reviewer_id=prior['reviewer_id'],
@@ -2095,13 +2113,20 @@ def prepare_refusal_assignment(records, artifacts, value, revision, prior, froze
         limits = capacity.derive_turn_task_limits(records, artifacts, prior, kind=kind,
                                                  notice_characters=compute_notice_material_charge(kind, notice))
         try:
-            packet = build_turn_packet(artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
-                inventory, state, plan, limits, kind, requests=state.get('pending_requests', []), notice=notice)
+            if chain.get('final_page_plan'):
+                from .openness_final_pages import build_final_packet, read_page_plan, read_binding
+                page_plan = read_page_plan(artifacts, chain['final_page_plan'])
+                selected = next(turn for turn in page_plan['turns'] if turn['number'] == read_binding(frozen)['final_turn'])
+                packet = build_final_packet(records, artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
+                    inventory, state, plan, limits, page_plan, selected)
+            else:
+                packet = build_turn_packet(artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
+                    inventory, state, plan, limits, kind, requests=state.get('pending_requests', []), notice=notice)
         except ResearchError as error:
             if error.code != 'review_route_capacity_plan_violated' or error.details.get('kind') != 'final':
                 raise
             raise ResearchError('review_input_too_large', notices.NOTICE_DELIVERY_MSG, error.details)
-        base = protocol.canonical_prompt(prior['role'], reading_stage=kind, reading_protocol=PROTOCOL,
+        base = protocol.canonical_prompt(prior['role'], reading_stage=stage, reading_protocol=PROTOCOL,
             common_version=protocol.find_common_prompt_version(prior['prompt']))
         prompt = paragraphs.append_prompt_paragraphs(base, prior['role'],
             parameters.get(paragraphs.CARRY_PARAMETER), versions + [paragraphs.REFUSAL_PARAGRAPH_VERSIONS[notice['form']]])
@@ -2135,8 +2160,8 @@ def prepare_notice_capacity_assignment(records, artifacts, value, revision, prio
     logical = dict(protocol=protocol.PROTOCOL, role=prior['role'], dossier_id=prior['dossier_id'],
                    reviewer_id=prior['reviewer_id'], native=native)
     packet, chain = prepare_next_assignment(records, artifacts, value, route, logical)
-    kind = reading.find_stage(packet)
-    base = protocol.canonical_prompt(prior['role'], reading_stage=kind, reading_protocol=PROTOCOL,
+    stage = reading.find_stage(packet)
+    base = protocol.canonical_prompt(prior['role'], reading_stage=stage, reading_protocol=PROTOCOL,
         common_version=protocol.find_common_prompt_version(prior['prompt']))
     versions = paragraphs.read_paragraph_parameters(prior['prompt']).get(paragraphs.PARAMETER, [])
     prompt = paragraphs.append_prompt_paragraphs(base, prior['role'], versions=versions)
@@ -2171,9 +2196,8 @@ def describe_ratio_handoff(records, artifacts, assignment):
     if reading.find_protocol(frozen) != PROTOCOL:
         return None
     plan = capacity.read_chain_capacity_plan(artifacts, assignment)
-    from .review_failure_class import list_turn_assignments
-    identifiers = {identifier for member in reading._list_chain(records, assignment)
-                   for identifier in list_turn_assignments(records, member)}
+    from .review_failure_class import list_capacity_chain_assignments
+    identifiers = list_capacity_chain_assignments(records, assignment)
     measured = []
     for attempt in sorted(records.get('review_attempt', {}).values(), key=lambda row: (row.get('recorded_revision', 0), row['id'])):
         if attempt['assignment_id'] in identifiers:
@@ -2280,14 +2304,14 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
     frozen = json.loads(artifacts.read(assignment['packet']))
     route = records['review_route'][assignment['route_id']]
     kind = assignment['capacity_plan_kind']
-    binding = frozen.get('reading_turn', frozen.get('reading_final'))
+    binding = frozen.get('reading_turn', frozen.get('reading_final', frozen.get('reading_combine')))
     plan = capacity.read_chain_capacity_plan(artifacts, assignment)
     if kind == 'final':
         _, _, state = read_bound_state(artifacts, assignment, frozen)
-        if not state.get('material_state', {}).get('pending'):
-            return None
-        floor = plan['task']['final']['smallest_answer_bound']
-        if binding['capacity']['answer_bound'] <= floor:
+        if state.get('material_state', {}).get('pending'):
+            if binding['capacity']['answer_bound'] <= plan['task']['final']['smallest_answer_bound']:
+                return None
+        elif 'pages' not in V7_FINAL_FORMS and not assignment['reading_chain'].get('final_page_plan'):
             return None
     limits = capacity.derive_turn_task_limits(records, artifacts, assignment, kind=kind,
         response_replacement=assignment['id'] if outcome == 'response_over_limit' else None)
@@ -2302,21 +2326,27 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
     logical = review_protocol.build_packet(records, artifacts, value['dossier_id'], value['role'], value['reviewer_id'],
                                            **read_position_context(value))
     overlay = _PlanningArtifacts(artifacts)
-    packet, chain = prepare_next_assignment(records, overlay, value, route, logical, prove_replacement=False)
-    prompt = review_protocol.canonical_prompt('native_math', reading_stage=kind, reading_protocol=PROTOCOL,
-        capacity=packet.get('reading_turn', packet.get('reading_final'))['capacity'])
+    try:
+        packet, chain = prepare_next_assignment(records, overlay, value, route, logical, prove_replacement=False)
+    except ResearchError as error:
+        if error.code == 'review_route_capacity_below_floor':
+            return None
+        raise
+    from .openness_final_pages import read_binding
+    prompt = review_protocol.canonical_prompt('native_math', reading_stage=reading.find_stage(packet), reading_protocol=PROTOCOL,
+        capacity=read_binding(packet)['capacity'])
     if packet.get('output_refusal'):
         from . import review_prompt_paragraphs as paragraphs
         prompt['parameters'].pop('capacity', None)
         versions = paragraphs.read_paragraph_parameters(assignment['prompt']).get(paragraphs.PARAMETER, [])
         prompt = paragraphs.append_prompt_paragraphs(prompt, 'native_math', versions=versions)
-        prompt['parameters']['capacity'] = packet.get('reading_turn', packet.get('reading_final'))['capacity']
+        prompt['parameters']['capacity'] = read_binding(packet)['capacity']
     candidate = dict(value, prompt=prompt, packet=overlay.put(serialize_record(packet), 'application/json'),
                      reading_chain=chain, capacity_plan=assignment['capacity_plan'], capacity_plan_kind=kind)
     request = review_protocol.transport.request_body(route, prompt['text'], packet)
     preflight = review_preflight.check_request(review_preflight.build_assignment_report(
         records, overlay, candidate, request), request, packet=packet, artifacts=overlay)
-    bounds = packet.get('reading_turn', packet.get('reading_final'))['capacity']
+    bounds = read_binding(packet)['capacity']
     return dict(kind='replace', reason='capacity', payload=value, preflight=preflight,
                 details=dict(material_allowance=bounds['material_allowance'], answer_bound=bounds['answer_bound']))
 

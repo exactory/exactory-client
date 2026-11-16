@@ -371,8 +371,9 @@ def split_final_turn(turns, number, floor, condense, *, pending=None):
                 selected['targets'] if scope != 'rows' else [], selected['component'], condense)
         except ResearchError as error:
             if error.code == 'invalid_input' and (error.details or {}).get('minimum') is not None:
-                return None
-            raise
+                planned, outputs = [], []
+            else:
+                raise
         expected = [[entry['handle'] for entry in block] for block in halves]
         if len(planned) == 2 and [turn['block']['entries'] for turn in planned] == expected:
             replacement = planned

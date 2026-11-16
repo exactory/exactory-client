@@ -444,6 +444,82 @@
         ],
         "research_harness/storage.py:_text#1": [
           "form"
+        ],
+        "research_harness/review_condensing.py:_validate_size#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_condensing.py:cut_condensing_blocks#1": [
+          "limit"
+        ],
+        "research_harness/review_condensing.py:plan_condensing#1": [
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:_build_page#1": [
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:_forecast_final_turns#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:_plan_condensing#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_plan_condensing#2": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_read_forecast#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_replace_blocks#1": [
+          "content",
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_completed#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_entries#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_entries#2": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_final_inputs#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:_validate_final_inputs#2": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_final_inputs#3": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_progress#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_replacement_cause#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_replacement_cause#2": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:allocate_final_targets#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:prepare_final_turn#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:prepare_final_turn#2": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:split_final_turn#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:split_final_turn#2": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:split_final_turn#3": [
+          "form"
         ]
       },
       "invalid_native_review_packet": {

@@ -184,6 +184,12 @@
         "research_harness/development.py:_text#1": [
           "content",
           "form"
+        ],
+        "research_harness/review_composition.py:_validate_readiness_fields#1": [
+          "form"
+        ],
+        "research_harness/review_composition.py:_validate_readiness_fields#2": [
+          "form"
         ]
       },
       "invalid_import": {

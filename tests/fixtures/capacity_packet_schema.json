@@ -19812,7 +19812,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the activation of 0.91.0 (ruling 37): NEW_PROBLEM_CHAIN_PROTOCOLS becomes (PROTOCOL_V7, PROTOCOL_V6); no packet member, call, write or closed shape changes. Reviewed 0.91.1: a math openness packet that fits one turn stays a single native turn under (v7, v6); the condition reads the packet kind only, and no packet member, call, write or closed shape changes."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "d0d6654bdcdc388530a9b5a7e59aa603141336a68d4592f915764538f9931524",
+      "ast_sha256": "de431579265c6f0f8af19e55da98ef12470a4a72f9a029749d9b12e4288e2d75",
       "functions": {
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
         "_append_unit": "f6cb4ac11ffc0db1bbc01ecf87ec1ca4e26a2ccc64a24c9aebe0b2c8d2ce16a7",
@@ -21562,7 +21562,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_continuation": {
-      "ast_sha256": "87136fc418848f7711d6a268926d97481e324fd28a0770dc9f320af7a236de13",
+      "ast_sha256": "c38e5ce524df2d99533a46d8d520019db45579b88c15832b484e35c38a931617",
       "functions": {
         "_build_assignment_payload": "852d5d1d923e2a76803f72f49e0dd9aab3c6cb448cfa7a8807a80b5a87cd7f4e",
         "_build_run_payload": "d74332719fa5e822c1bdc1f4e8feb83fb6b76a964f1106185956b9670b2497fa",
@@ -21576,7 +21576,7 @@
         "_list_lineage": "82418b850a1f1352896e4fb7eb86c376099e02cf7639c35189226c2a983224fa",
         "_list_recorded_finals": "56efee52bfddd11cd39b68c9290b8c653a6bdaf8e893ef5f564de7507bc54f56",
         "_plan_capacity": "3028023c9278ac1ed39d35cfea830bd951fb0cdc91299a1cfd074cd6341d0c08",
-        "_plan_head": "2e3cb552359aba61f1851d9f39621854b302e2bdceb2f763005b18802b817a30",
+        "_plan_head": "df5ff8b43e957512700686fa10304b64cdec8668d526fa60e44698b32cf84ac1",
         "_plan_openness_freshness": "15a0d5d09881f3417683d0778265b3031c782a784fc2ad195dbe74a36a61500c",
         "_plan_pending_call": "4fb7347433b3599c8e4fdbaddefb307d2de0ed714e14e93141bae3eb2dde94c4",
         "_plan_recording": "3dab2e4318a5924715b81e71d381f4fdc44d59bec1dc2125fec69456bb2e1bc4",
@@ -21816,19 +21816,19 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_failure_class": {
-      "ast_sha256": "a95e75652f935db14e8050ee5fcaeae7693ea91c0e05b40240be89fe3f936ee5",
+      "ast_sha256": "197138f3eab47305246e6b6bd7eccfe52f7807ab055bef4f25a8231270242e81",
       "functions": {
         "_describe_sequence_counts": "1903571802ceebaa2e6413b445ccec82fa398d7cf4b738a57b18c5747957e01c",
         "_is_scheduled_unknown": "18dbfaffb3993eab30b42d6bf376556828c162d79bcca21ce050df0f51cd2f2e",
         "_plan_sequence_end": "690d7f1e80cf09b469e922af21fb3a7afca0a8494124ebe9e0ccb3b4af93dce5",
         "calculate_over_cap_allowance": "02725e6e72fa52388488302235060fb06e5074f0d913e6347df335cd64865f9b",
-        "classify_attempt": "588c8e2032c7356d9cc7a28539b4ec3d12a7a4e10844f907161af865e7836661",
-        "count_position": "b1c5f1595c1ff766295215fe649b2262bd942f0c5981e7ed43c5af846d887d49",
+        "classify_attempt": "52c9948b6d410c00bb138e067daab1edbcf9410b028409d90b764bf7a9baac63",
+        "count_position": "877a4070f6ffe5834150b3cf1bf5b54f9c0a131150137c62009f39338b8a8cca",
         "find_capacity_signal": "b870ffda8a65d0565029aa5348be128646a06aec6702e64c3bf30de5888cf037",
         "find_output_cap_signal": "6f59f04a865cce942c17d9c6d81c771009d0ea962b72c3e6b92116e43dafca5b",
         "find_safeguard_notice": "f7009c2ad7f4d22a276386c1374d2309091fc5e5d2bcc2cd081f1c31bd3b9e13",
-        "has_smaller_task": "80bb5eb8bff91f61b78800f3e2cfb25880612ce57a386086340680468439f7b4",
-        "list_turn_assignments": "c459557d60564eb8ea2566a13ec5f25f000a927b439c8cbb7bc928347f7d7413",
+        "has_smaller_task": "e9d7150e55a58aa77a5d2261061fb1ed0aa5e23ab04c127b921cfb73f34156c1",
+        "list_turn_assignments": "946d50b6f0cd2e5d9eccf179520a7b808399abf92813fc767a4ddca3209f8d34",
         "parse_observation_time": "a45e9741d77a027bf18518e09c8b1a262125934f0d6cecd3ac63c3c30df7f367",
         "parse_reset_time": "329cd60d6bb86719c819441543f5e9aae44305bd754318af2996e51f1dc23488",
         "plan_after_failure": "c5bbade2d3cf33f16c4007d949bf30b29f0ff2abdcd2e854220072faf1c1b53d",
@@ -23059,7 +23059,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.review_refusal_notice": {
-      "ast_sha256": "3819f43b1cfd5e1cd24138088280ad3e7ccf8e7bef69ec514bc2917832088234",
+      "ast_sha256": "837a41170302cb7fe8a51c110a897fa8a831f861c110f1234ca7cec6f2bc4505",
       "functions": {
         "_build_refused_entry": "3f83c63a139e506a9700f94259ce4353c10392f97c11b2367a92835af7acdfed",
         "_check_entry_bound": "a4fbb9550c41a60dbf422b328efaed2067f9cc9a3fa25dd6f1b10b82dbcecaee",
@@ -23068,7 +23068,7 @@
         "_retain_value": "75cfad9afa482a158393e739e5e20e8289e2553bf967919bf0fa415a223aa297",
         "_serialize_value": "bf81ec558c4e462f8e1a915b1468cd47edc3b2bbd5e10e5282fb731599e15689",
         "attach_refusal_notice": "189c81cb5a42f2f2b28dc28714140dd1420294baaea574a6817bcdb85aa035ca",
-        "build_refusal_notice": "3791e3babd61fe31dc394711e0c5eb6da293a771c7b28b1e6c36e5832b54435c",
+        "build_refusal_notice": "1666b22396835629cf71e9d857d137a2a9fa40cec559990b263ed5f077e66209",
         "select_refusal_notice": "2054333f5325e4d541db9a564cc3bce4c6e8b994af585a9c01686c1a03861dc6"
       },
       "packet_call_digests": [
@@ -23115,14 +23115,14 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_refusal_replacement": {
-      "ast_sha256": "c17dcdeffc2f15202cbec9c5e4f43bc39c931111cc6ea6dc1fa44819c25e9af4",
+      "ast_sha256": "17cfc6892889a507043875abbb19de65807d3b66ab8b4a456c06a1d2116e3aa7",
       "functions": {
         "find_output_successor": "f9aa987eea6760e2a7fd3e29888f5e43903e4365d1e50938ea4b17c429b79967",
         "prepare_replacement": "a7ddbaa90806583c3dde8eb3d95f2ab761970823c1a4b66aca47a5dae2efe6fc",
         "read_position_context": "cdede8c28f9431efad8671676884d4e166ee1d9ad3e3728ac4414cc53cf87d32",
         "read_replacement_link": "c532b998f7ab3e173deea48b4d2b41ab8df7bcba6534694b9be6e35a17e27160",
         "require_selected_output": "c51358ab7d4eb8e8c97d27385ff001226126fdd7bf36960bf619db74ec1e1211",
-        "validate_replacement_origin": "01175d76bd46ef6121aab22491baea32a5163484860688a1cad0fa60790bf0da"
+        "validate_replacement_origin": "fb8b204aaf3c1bb8b1b998db52d203f2b4c326742f724dd8d7464d492ef1c3ee"
       },
       "packet_call_digests": [
         "37c72ed8cb3bd9e5d0586c05e133a41bac51681db8997de8284002ebced91962",
@@ -23230,7 +23230,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_route_capacity": {
-      "ast_sha256": "1589c88047b7b9fcf7caccb2fbacdc0177fdcd9eaea12fdbb2c51bb0367afc2c",
+      "ast_sha256": "ebb106c609ca0e99940360d841f00262f4557b32cd5444a26d5080bc340c1b5c",
       "functions": {
         "_build_serving_parts": "8f2f7be1d7e1d4cc20fa124af779a48e77d41ab31cb6c7aed1fe3ed6a3de3afe",
         "_build_serving_repair": "c50aaef3ccfcccf6064f9a4cdaa0a0f52111886dd9b185936b6d1e5a38ab47ca",
@@ -23257,7 +23257,7 @@
         "build_profile_rows": "c13bc9fb5b0d397640ab6240a162da9c94657f578c48d6e07c72c4b69b759fa8",
         "derive_material_allowance": "75731028db3042a3152e644117cc546d780ceed4683de58c8f51f9642587b9e1",
         "derive_plan_task_limits": "0acf843326aadd0c9c146f587ae50629ae7f65217869cb9a51b47a6326d2a6c2",
-        "derive_turn_task_limits": "dc3641c6ae1b8474f3c824220ab18a8268959be724cb6e9354bd2121a301f3e6",
+        "derive_turn_task_limits": "daa2d15119f3d05f71f676cc65319ad4b9479cdd98ce60b32e7c00db3cc0c2ac",
         "describe_assignment_capacity": "eb2c92c7ff7184e20c1df0ca440768bc8b0e54f1753f39bcd20de5d232e7f669",
         "describe_assignment_kind": "1dbb5ca7228dac98907ad67e1a310df9e5aafe3f5c0eae851abb4ebf7de8879a",
         "describe_assignment_limits": "7d463bd8c8479f7a8f0b3874cb734df1acd143601602ed3a83c90530145c2443",
@@ -23265,7 +23265,7 @@
         "describe_assignment_warning": "7b4cf02e9d3aeaf2314a64c6af65361dca797dfb4a5288ffe4d83edf851e69fe",
         "describe_attempt": "eab7bcf01663bfe5c5017b0f0a1bc2c2268793b9dd4d95e56564d0cbee322e44",
         "describe_binary_rules": "10dba71afb020afb5ccb28e84a6d0cb06bfb3d4b2a91d74ce4e0702d67b56b5e",
-        "describe_capacity_decision": "963e313d4c944dac5960bd529faa50927ac7fa23a0b6adb2c3c5c27000727706",
+        "describe_capacity_decision": "8bf62b6a6eff48cc031f228800a96c8a43c3928db3c34169a5696afb449e78b5",
         "describe_capacity_forecast": "19966e69c993d0661f1cf3aff1405380315e9d605f85a3ff21914f3505f85f7a",
         "describe_capacity_recovery_row": "18d1b563addad3079dd9ee5d96a20f9dc4372525839cc588f46a75f5a500c906",
         "describe_cli_version_status": "dd5d2885bce348ca26f78808bf2394ec24236d47ade407ef2f261853f4333a04",
@@ -23291,7 +23291,7 @@
         "describe_work_units": "468b91882eec9e12c79f14d7204231f94f8692d48afe20770440099acb5d84a7",
         "divide_room": "479df84167dc68c68051cf92f213230c797c15f1ac495e77fdb4b451d82ca270",
         "find_serving_routes": "18ca735abee774034b5023e33a7181caba87437212369e5ed2b131726f85f776",
-        "list_capacity_recovery_rows": "0771a2174c7842a7d6c0f6b3968e34de22096ee3480aeea71ec7e2d59338ff4e",
+        "list_capacity_recovery_rows": "68fac00411b05f47eaa42053f647c005f7009eb01a7015371079d594babb3ecd",
         "measure_capacity_value": "24609ddec40349650469c624e2e8d9a807d7415e78a862b95afaf55d1297914b",
         "measure_request": "1615879024ec19d63e6243105beb627438f6d407aa9cc8fb5f7dcad5ce6b6abb",
         "merge_profile_rows": "be408c3437ff8b29f6436f534c5c9d273232ad182c39cc7068eb587fb2648b3b",
@@ -24821,16 +24821,16 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.openness_final_pages": {
-      "ast_sha256": "6ce18389bca2cef8869ba6164e5b7023e03950f2fc378f38d1010da292a37a39",
+      "ast_sha256": "97a1c7443f01dbfe6c4e263b858ea2c9892d5b6e712aef069680d074353bb917",
       "functions": {
         "read_binding": "2da24aa0945dc4a3857c77349290b841384ef906fff06f5393184d39aac5d679",
         "read_page_plan": "edcd39f87509ab69c60c42f8c20a25f9cf0f5e7d311845411344fcf964fe32f7",
         "read_final_currency": "5f1449fdbdfd0bc9550c61381498c4a926e56b893a83811609e26f9ffaacb907",
-        "measure_page_room": "9007c819098edbc3bab75f8aad9d768f5c8e115dc2070bad1681629ffa8c48b5",
+        "measure_page_room": "d950660fdbbb8cc1a166529be486c077e35322c67e066fd5d6f027195ca74b45",
         "build_full_final": "b6acb1355e4742baa41bf322b316ca7595bf07274aaf40313a01ee19e5eaa531",
         "build_final_inputs": "1b5e01642db2519e14b5454de3a2e59eaa6d1ab5ad8524ad40cbe2e7e656023f",
         "list_final_progress": "7f408a109e7bbf99406e6dd85d354aa073fde6e60db54e226506d1c50db6dea1",
-        "prepare_final_packet": "fb9cd4e485f54f1aacdbc9b547ec8ddf97701e5836035c0d2c95fd66f3b48d86",
+        "prepare_final_packet": "042d81dc5b9bfaeb6bdccc9c170f6170bfdba1a885d54a001fe924e7d08db9c5",
         "publish_page_plan": "ba2ade2d94b18ebde66d4e82e843d7845bee8d192304b30556c61fc33f909ab1",
         "build_validation_envelope": "c5da8a7878502c672cea8214a46541e7d64ea1a14f8ff5871a487cb226f0342a",
         "list_page_outputs": "18373aa1334deb468cfb8a94555dfc70ec0f48242ce36d2ae1582914dd122e39",
@@ -24838,10 +24838,10 @@
         "project_final_output": "8d4784bfaf92326b28b835e66c2b3ad17e760f3c5ed875916387f3e08976a65d",
         "list_composite_turns": "d5bb3db6ad6173c90067328e1b340795aa81cf7e3d03a35cd02138de47ccc38e",
         "read_composite_currency": "4bbc0254f15e8a36c4b1970c0a776a1a4103a1e34f3bbf380decbdedd5ff23e9",
-        "validate_composite_output": "0dd5efef37643163addedb37e4819b75d5385a9dc516f495577ffb2f70c89053",
-        "prepare_closing_composite": "bdac20df20ad370d370d0f1c815b02f073ddcc095947c675346bbc44cfe8c224",
-        "verify_final_page_plans": "a405a42eb775e44a94882b89f94d6526d90686b0024e7a3cd4cdfb62192235f7",
-        "verify_final_turn_binding": "2419d5e4b76cf4fbda5e4354aa96f2ce14764eaa0fc38341af8f83eff45190ba",
+        "validate_composite_output": "f429eb23b408fbd70dbf987ee949c01819c579542f1891afba4f2fcfac1cc7e9",
+        "prepare_closing_composite": "c1ab75fe508e983b38fbb8d2a29c13bef93f0d3517b1b41b068afda54eaafd41",
+        "verify_final_page_plans": "822e243cd0414acb6eafad8b9135ed739afb67d9f9f4e8356d962783a9e32b92",
+        "verify_final_turn_binding": "ac6708b02f65571fd6847cdff8c2730df841b6c5ce075a534b0cdd315f6e233c",
         "supply_block_rows": "55c079bec8c67b1f87ad10412157e98c6e50fcf44d2f66d694a55fb8c5b72795",
         "resolve_entry_request": "e4cb88aaf2be4e418b1f7b9451dd8dc21b47eb7e5ed3567e86b45c4bda0a5e50"
       },
@@ -38534,6 +38534,71 @@
                 "limit_characters": 20000,
                 "provenance": "research_harness.review_refusal_notice.build_refusal_notice"
               },
+              "quantity": "refusals"
+            }
+          },
+          "quantity": "refusals"
+        },
+        "composed_finding": {
+          "bound": {
+            "serialized_characters": 10000
+          },
+          "class": "fixed",
+          "entry": "A13",
+          "fixture": "native_math/v7-bounded-turns",
+          "ground": "The exact check and path come from the authenticated composed refusal. The reviewer closing answer is retained within 2000 wire characters and its target decision row within 360; this context shares the existing 45000-character bounded notice.",
+          "members": {
+            "check": {
+              "bound": {
+                "serialized_characters": 100
+              },
+              "class": "fixed",
+              "entry": "A13",
+              "fixture": "native_math/v7-bounded-turns",
+              "quantity": "refusals"
+            },
+            "closing_answer": {
+              "bound": {
+                "serialized_characters": 2000
+              },
+              "class": "fixed",
+              "entry": "A13",
+              "fixture": "native_math/v7-bounded-turns",
+              "opaque_json": {
+                "limit_characters": 2000,
+                "provenance": "research_harness.review_refusal_notice.build_refusal_notice"
+              },
+              "quantity": "refusals"
+            },
+            "decision_row": {
+              "bound": {
+                "serialized_characters": 360
+              },
+              "class": "fixed",
+              "entry": "A13",
+              "fixture": "native_math/v7-bounded-turns",
+              "opaque_json": {
+                "limit_characters": 360,
+                "provenance": "research_harness.review_composition.build_decision_rows"
+              },
+              "quantity": "refusals"
+            },
+            "message": {
+              "bound": {
+                "serialized_characters": 2000
+              },
+              "class": "fixed",
+              "entry": "A13",
+              "fixture": "native_math/v7-bounded-turns",
+              "quantity": "refusals"
+            },
+            "path": {
+              "bound": {
+                "serialized_characters": 6000
+              },
+              "class": "fixed",
+              "entry": "A13",
+              "fixture": "native_math/v7-bounded-turns",
               "quantity": "refusals"
             }
           },
