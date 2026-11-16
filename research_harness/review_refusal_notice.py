@@ -143,6 +143,10 @@ def build_refusal_notice(records, artifacts, attempt_ids, *, form='whole', diagn
         entry = notice['refused'][-1]
         context = describe_composed_refusal(records, artifacts, records['review_attempt'][latest['attempt_id']],
                                            entry.get('check'), entry.get('path', ''))
+        if context is None:
+            from .review_parts_v3 import describe_composed_refusal as describe_parts_refusal
+            context = describe_parts_refusal(records, artifacts, records['review_attempt'][latest['attempt_id']],
+                                             entry.get('check'), entry.get('path', ''))
         if context is not None:
             notice['composed_finding'] = dict(context, closing_answer=_retain_value(
                 context['closing_answer'], COMPOSED_CLOSING_ANSWER_CHARACTERS, measure))

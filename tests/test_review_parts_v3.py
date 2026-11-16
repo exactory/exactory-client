@@ -180,6 +180,13 @@ class InventoryTests(unittest.TestCase):
 
 class AdapterJourneyTests(unittest.TestCase):
     def setUp(self):
+        original = capacity.plan_chain_capacity
+        def build_request_plan(*args, **kwargs):
+            kwargs['final_pages'] = False
+            return original(*args, **kwargs)
+        pinned = patch.object(capacity, 'plan_chain_capacity', side_effect=build_request_plan)
+        pinned.start()
+        self.addCleanup(pinned.stop)
         from test_review_output_profile import build_row
         for patcher in (
             patch.object(legacy, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL, legacy.PROTOCOL)),
@@ -528,6 +535,15 @@ class RecordedSeriesTests(PartsResultCase):
 
     def setUp(self):
         super().setUp()
+        # Keep these existing journeys on the stored request-plan shape. The
+        # page module exercises prospective admission with final_pages=True.
+        original = capacity.plan_chain_capacity
+        def build_request_plan(*args, **kwargs):
+            kwargs['final_pages'] = False
+            return original(*args, **kwargs)
+        pinned = patch.object(capacity, 'plan_chain_capacity', side_effect=build_request_plan)
+        pinned.start()
+        self.addCleanup(pinned.stop)
         patcher = patch.object(legacy, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL, legacy.PROTOCOL), create=True)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -1171,24 +1187,16 @@ class PlanProtocolTests(unittest.TestCase):
         self.assertEqual(state['cursor']['card_budget'], 180)
         self.assertEqual(state['cursor']['card_reserve'], 2200)
 
-    def test_final_needs_pages_refuses_and_falls_back_to_identical_v2_packet(self):
-        from research_harness import review_parts_roles as roles, review_transport as transport
+    def test_final_needs_pages_is_admitted_with_the_page_allocation(self):
+        from research_harness import review_parts_roles as roles
         packet = make_packet(3, 100000)
-        value = dict(id='compatibility', role='result', context={})
-        prompt = protocol.canonical_prompt('result', orchestration='problem_creation', excerpts=True)
-        options = dict(capacity_replacement={})
         adapter = roles.get_adapter('problem_result')
         with patch.object(roles, 'get_adapter', return_value=dict(adapter,
                 targets=lambda packet: [dict(id='target-' + str(index)) for index in range(40)])):
             admission = parts.admit_packet({}, self.artifacts, build_route(output=32000), packet, 'problem_result')
-        self.assertEqual(admission['reason'], 'final_needs_pages')
-        with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 1300000):
-            expected = legacy._prepare_v2_packet({}, self.artifacts, value, self.route, packet, prompt, [], **options)
-            for protocols in ((legacy.PROTOCOL,), (parts.PROTOCOL, legacy.PROTOCOL), (legacy.PROTOCOL, parts.PROTOCOL)):
-                with patch.object(legacy, 'NEW_SERIES_PROTOCOLS', protocols), \
-                        patch.object(parts, 'admit_packet', return_value=admission):
-                    actual = legacy.prepare_packet({}, self.artifacts, value, self.route, packet, prompt, [], **options)
-                self.assertEqual(legacy.render_json(actual), legacy.render_json(expected))
+        self.assertEqual(admission['state'], 'accept')
+        self.assertEqual(admission['plan']['allocation']['final_form'], 'pages')
+        self.assertLess(admission['plan']['task']['final']['target_allowance'], 40)
 
     def test_turn_header_two_and_two_hundred_only_grow_with_counters(self):
         packet = make_packet(2, 100000)

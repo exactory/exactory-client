@@ -599,7 +599,7 @@ def describe_plan(value):
         return copy.deepcopy(value['review_parts_plan'])
     header = value[KEY]
     if header.get('protocol') == 'exactory-review-parts-v3':
-        return dict(header['capacity'], unit_allowance_floor=None)
+        return dict(header['capacity'], unit_allowance_floor=None, **header.get('final_forecast', {}))
     plan = copy.deepcopy(header['plan'])
     floor = 0
     if header['kind'] == 'read':
@@ -1879,6 +1879,7 @@ def build_turn_prompt(role, base_parameters, header):
     from .review_protocol import canonical_prompt
     return canonical_prompt(role, **base_parameters,
         review_parts=dict(adapter=header['adapter'], kind=header['kind'],
+                          **(dict(final_form=header['final_form']) if 'final_form' in header else {}),
                           **(dict(protocol=header['protocol'], capacity=header['capacity'])
                              if header.get('protocol') == 'exactory-review-parts-v3' else {}),
                           answer=bool(header.get('request')),

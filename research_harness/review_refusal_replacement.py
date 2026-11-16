@@ -270,3 +270,13 @@ def validate_replacement_origin(records, artifacts, assignment, packet=None):
             context['closing_answer'] = notices._retain_value(context['closing_answer'], notices.COMPOSED_CLOSING_ANSWER_CHARACTERS,
                 lambda value: measure_capacity_value(route, value))
         require(notice.get('composed_finding') == context)
+    if assignment.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+        from .review_parts_v3 import describe_composed_refusal
+        from .review_route_capacity import measure_capacity_value
+        route = records['review_route'][assignment['route_id']]
+        context = describe_composed_refusal(records, artifacts, records['review_attempt'][entries[-1]['attempt_id']],
+                                           entries[-1]['check'], entries[-1]['path'])
+        if context is not None:
+            context['closing_answer'] = notices._retain_value(context['closing_answer'], notices.COMPOSED_CLOSING_ANSWER_CHARACTERS,
+                lambda value: measure_capacity_value(route, value))
+        require(notice.get('composed_finding') == context)

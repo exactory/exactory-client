@@ -625,6 +625,9 @@ def _plan_head(records, artifacts, assignment):
     packet = protocol._read_json(artifacts, assignment['packet'])
     is_parts = review_parts.KEY in assignment
     continuing = (is_parts and (assignment[review_parts.KEY]['kind'] != 'final'
+                                or packet[review_parts.KEY].get('final_form') == 'page'
+                                or (packet[review_parts.KEY].get('page_plan_digest') and
+                                    state['output'].get('stage') == 'material')
                                 or state['output'].get('kind') == 'requests')
                   or review_problem_parts.find_stage(packet) == 'part'
                   or openness_reading.find_stage(packet) is not None and state['output'].get('stage') in ('reading', 'material')

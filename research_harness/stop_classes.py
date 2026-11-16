@@ -678,6 +678,7 @@ _NAMED_CAUSE_CODES_RECOVERY = (
     'xml_timeout',
 )
 _NAMED_CAUSE_CODES_CLOSING = (
+    'composite_missing',
     'final_pending',
     'requested_range_not_delivered',
     'series_invalid',

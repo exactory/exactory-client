@@ -324,6 +324,18 @@ def classify_observed_output(records, artifacts, attempt_id):
                 scientific = _project_staged_final(assignment['role'], output)
                 if scientific is not None:
                     _validate_staged_final(records, artifacts, assignment, packet, epoch, scientific)
+        elif packet.get('review_parts', {}).get('page_plan_digest'):
+            with contract_check('review.shape'):
+                review_parts.validate_turn_output(records, artifacts, assignment, packet, output, attempt=attempt)
+            if packet['review_parts']['final_form'] == 'closing' and output.get('kind') != 'requests':
+                from .review_composite import build_composite
+                from .review_parts_v3 import list_composite_turns, validate_composite_output
+                observed = dict(records, review_attempt={key: row for key, row in records['review_attempt'].items()
+                    if row['assignment_id'] != assignment['id'] or key == attempt_id},
+                    review_output_refusal={key: row for key, row in records.get('review_output_refusal', {}).items() if key != attempt_id})
+                composite, artifact = build_composite(observed, artifacts, assignment)
+                validate_composite_output(observed, artifacts, assignment,
+                    list_composite_turns(observed, artifacts, assignment)['packet'], json.loads(artifact[1]))
         elif (review_parts.find_kind(packet) is not None
               and (review_parts.find_kind(packet) != 'final'
                    or isinstance(output, dict) and output.get('kind') == 'requests')):

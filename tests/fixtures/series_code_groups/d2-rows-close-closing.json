@@ -27,6 +27,11 @@
           "environment"
         ]
       },
+      "composite_missing": {
+        "research_harness/review_parts_v3.py:verify_series#1": [
+          "entry"
+        ]
+      },
       "final_pending": {
         "research_harness/review_parts_v3.py:verify_series#1": [
           "entry"

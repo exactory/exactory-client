@@ -308,7 +308,8 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
     parts_kind = review_parts.find_kind(parts_packet)
     readiness_parts = (parts_kind is not None
                        and parts_packet[review_parts.KEY]['adapter'] == 'study_readiness')
-    if parts_kind is not None:
+    if parts_kind is not None and not (parts_packet[review_parts.KEY].get('page_plan_digest')
+                                       and output.get('stage') == assignment['role']):
         with contract_check('review.shape'):
             review_parts.validate_turn_output(records, artifacts, assignment, parts_packet, output, attempt=attempt)
         if parts_kind != 'final' or output.get('kind') == 'requests':

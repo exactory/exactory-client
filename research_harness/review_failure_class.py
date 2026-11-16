@@ -366,6 +366,9 @@ def classify_attempt(records, artifacts, attempt):
 def classify_final_capacity_attempt(records, artifacts, attempt):
     """A final at capacity needs reduction even when its returned JSON is valid."""
     assignment = records['review_assignment'][attempt['assignment_id']]
+    if assignment.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+        signal = find_output_cap_signal(records, artifacts, assignment, attempt)
+        return dict(outcome='output_over_cap', signal=signal, reset_at=None) if signal is not None else None
     if assignment.get('capacity_plan_kind') != 'final' or not assignment.get('reading_chain'):
         return None
     from . import openness_reading_v7 as v7
@@ -620,6 +623,13 @@ def has_smaller_task(artifacts, previous, assignment):
     if (assignment.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3'
             and old.get(parts.KEY, {}).get('protocol') == 'exactory-review-parts-v3'):
         old_header, new_header = old[parts.KEY], new[parts.KEY]
+        if old_header['kind'] == 'final' and new_header.get('page_plan_digest'):
+            if new_header['kind'] == 'combine':
+                return True
+            before = old_header.get('page', {}).get('targets', old_header['targets'])
+            after = new_header.get('page', {}).get('targets', new_header['targets'])
+            if len(after) < len(before):
+                return True
         if old_header['kind'] in ('combine', 'check'):
             before = old_header.get('block', {}).get('characters', old_header.get('block_characters'))
             after = new_header.get('block', {}).get('characters', new_header.get('block_characters'))
@@ -869,7 +879,7 @@ def plan_after_failure(records, artifacts, assignment_id):
             allowance = calculate_over_cap_allowance(recovery['details']['at_or_over_limit_share'])
             if recovery['kind'] == 'replace' and (position['failed_attempts'] >= TURN_FAILURE_LIMIT
                     or outcome == 'output_over_cap' and len(position['over_cap_by_level']) >= allowance
-                    and recovery['details']['handler'] not in ('reading_v7', 'final_v7', 'request_session_v4', 'final_session_v4')):
+                    and recovery['details']['handler'] not in ('reading_v7', 'final_v7', 'request_session_v4', 'final_session_v4', 'parts_v3')):
                 from .review_route_capacity import describe_capacity_decision
                 recovery = describe_capacity_decision(records, artifacts, assignment, outcome,
                     dict(recovery['details'], over_cap_allowance=allowance,
@@ -900,7 +910,7 @@ def plan_after_failure(records, artifacts, assignment_id):
                     details['decision'] = {key: recovery[key] for key in ('owner_decides', 'then')}
                 details.update(recovery['details'], recovery=recovery)
                 return result
-            if recovery['details']['handler'] in ('request_session_v4', 'final_session_v4'):
+            if recovery['details']['handler'] in ('request_session_v4', 'final_session_v4', 'parts_v3'):
                 # Earlier reductions do not spend the identical retry at this floor.
                 details.update(recovery['details'], recovery=recovery)
                 return result

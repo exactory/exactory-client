@@ -493,11 +493,18 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
             # Native parts have no openness reading units; the verified series supplies their coverage.
             current = dict(current, reading_turns=[dict(assignment_id=receipt['assignment_id'],
                 attempt_id=receipt['attempt_id'], delivered_units=[]) for receipt in receipts])
+            from research_harness.review_composite import read_final_output
+            output, composite = read_final_output(records, artifacts, assignment)
+            if composite is not None:
+                current = dict(current, output=output, output_digest=s.digest(output),
+                               composite=dict(id=composite['id'], digest=s.digest(composite)))
         s.require(current["output"] == value, "Use the observed native review without author changes", "review_output_mismatch")
         if record is not None:
             s.require(record.get("reading_turns") == current.get("reading_turns"),
                       "The recorded reading turns changed",
                       "review_parts_incomplete" if review_parts.KEY in assignment else "openness_reading_incomplete")
+            s.require(record.get('composite') == current.get('composite'),
+                      'The recorded composite changed', 'review_parts_incomplete')
         supplied = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
         if review_parts.KEY in assignment:
             logical = review_parts.read_logical_packet(artifacts, header)
@@ -624,6 +631,8 @@ def validate_submitted(controller, state, spec, candidate, content, locks):
                 key = {"result_accepted": "acceptance", "objective_completed": "closure"}.get(operation["kind"])
                 if key is not None and operation["payload"][key]["review"] == value:
                     operation["payload"][key]["reading_turns"] = checked["reading_turns"]
+                    if 'composite' in checked:
+                        operation['payload'][key]['composite'] = checked['composite']
                     operation["payload"]["digest"] = content.put_blob(operation["payload"][key])
         if command == "review" and checked.get("context_drift"):
             for operation in candidate["operations"]:

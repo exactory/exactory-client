@@ -481,5 +481,8 @@ PARTS_V3_FINAL = (
     'then request an entry by its handle. Long originals arrive in parts of subsequent final turns. '
     'An argument may be recorded as {stage:"material",title,part,text,more}, at most eight parts, then cited as mN.'
 )
+PARTS_V3_PAGE = 'PLACEHOLDER: Review the assigned target page and return its composition-rule page answer; requests and material may precede that answer.'
+PARTS_V3_CLOSING = 'PLACEHOLDER: Review the decision rows and return the composition-rule closing answer; requests and material may precede that answer.'
+PARTS_V3_CONDENSE = 'PLACEHOLDER: Condense this final block as {block,summary,refs} within its combination bound; retain the handles of its original entries.'
 PARTS_V3_PROMPTS = dict(read=PARTS_V3_READ, combine=PARTS_V3_COMBINE,
                         check=PARTS_V3_CHECK, final=PARTS_V3_FINAL)
