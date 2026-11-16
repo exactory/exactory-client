@@ -144,7 +144,11 @@ class SuppliedEligibilityTests(unittest.TestCase):
                 prior, delivered = None, False
                 for number in range(1, 8):
                     identifier = 'turn-' + str(number)
-                    assigned = case.assign(identifier, native_ref, prior)
+                    # This journey reads a v6 chain; test_supplied_reading_in_a_v7_chain covers the v7 default.
+                    with patch.object(openness_reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (openness_reading.PROTOCOL_V6,)):
+                        assigned = case.assign(identifier, native_ref, prior)
+                    self.assertEqual(openness_reading.find_protocol(case.read_packet(identifier)),
+                                     openness_reading.PROTOCOL_V6)
                     self.assertIn(openness_reading.SUPPLIED_ORIGIN_SENTENCE, assigned['prompt']['text'])
                     packet = case.read_packet(identifier)
                     if openness_reading.find_stage(packet) == 'final':
@@ -229,6 +233,64 @@ class SuppliedEligibilityTests(unittest.TestCase):
                     export_digest=directory.name, reason='An external post was observed.',
                     evidence='The server accepted the post.'))['result']
                 self.assertEqual(external['supplied_texts'], labels)
+                check_integrity(case.store)
+
+    def test_supplied_reading_in_a_v7_chain_reaches_the_reviewer_and_the_finding(self):
+        # A new chain starts under v7. The reviewer learns the reported origin from the audit notices record.
+        from research_harness import openness_reading_v7 as v7, review_protocol as protocol
+        reading_paragraph = next(paragraph for paragraph in protocol.V7_READING_PROMPT.split('\n\n')
+                                 if paragraph.startswith('A full text can be a file that a person saved'))
+        final_sentence = next(sentence for sentence in protocol.V7_FINAL_PROMPT.split('. ')
+                              if 'a text that a person supplied' in sentence)
+        for shape in ('pdf', 'markdown', 'question'):
+            with self.subTest(shape=shape):
+                case, version, capture, _ = self.create_case(shape, route=True)
+                origin = case.store.snapshot()['records']['source'][capture['source_id']]['supplied']
+                self.bind_search(case, version)
+                native_ref = case.export()
+                prior, delivered = None, False
+                for number in range(1, 40):
+                    identifier = 'turn-' + str(number)
+                    assigned = case.assign(identifier, native_ref, prior)
+                    packet = case.read_packet(identifier)
+                    self.assertEqual(openness_reading.find_protocol(packet), v7.PROTOCOL)
+                    if 'reading_final' in packet:
+                        self.assertIn(final_sentence, assigned['prompt']['text'])
+                        break
+                    self.assertIn(reading_paragraph, assigned['prompt']['text'])
+                    for entry in packet['evidence']:
+                        try:
+                            rows = json.loads(entry['content'])
+                        except ValueError:
+                            continue
+                        for row in rows if isinstance(rows, list) else ():
+                            if isinstance(row, dict) and row.get('kind') == 'supplied_text':
+                                self.assertEqual((row['source_id'], row['supplied']), (capture['source_id'], origin))
+                                delivered = True
+                    binding = packet['reading_turn']
+                    case.invoke(identifier, dict(schema_version=2, stage='reading',
+                        notes='The supplied survey was read. A decisive judgment rests on this supplied text.',
+                        excerpts=[], gaps=[], passage_requests=[],
+                        **{key: binding[key] for key in ('subject_digest', 'claim_digest', 'reviewer')}))
+                    prior = identifier
+                else:
+                    self.fail('The supplied-source v7 chain must reach its final')
+                self.assertTrue(delivered)
+                binding = packet['reading_final']
+                case.invoke(identifier, dict(schema_version=3,
+                    **{key: binding[key] for key in ('subject_digest', 'claim_digest', 'reviewer')},
+                    findings=dict({key: 'Assessed the supplied subject.' for key in
+                                   ('statement', 'assumptions', 'scope', 'dependencies', 'policy')},
+                        openness=dict(outcome='unresolved',
+                            coverage=[dict(target=target, searches='The bound search.')
+                                      for target in binding['page']['targets']],
+                            reason='A decisive judgment rests on the supplied text of ' + version + '.',
+                            grounds=[dict(kind='reviewer_gap', text='The supplied text is not verified.',
+                                          refs=[dict(ref='n1')])]))))
+                records = case.store.snapshot()['records']
+                state = protocol.assignment_state(records, case.artifacts, identifier)
+                self.assertTrue(state['ready'], state['obligations'])
+                case.mutate(problem_claims.record_openness, dict(assignment_id=identifier))
                 check_integrity(case.store)
 
     def test_post_without_an_export_labels_used_readings_and_leaves_unused_captures_out(self):

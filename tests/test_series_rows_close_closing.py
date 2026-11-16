@@ -350,9 +350,15 @@ def execute(payload):
         self.assertEqual(sites['research_harness/review_protocol.py:record_adjudication.prepare#1'],
                          ['payload'])
         for code, (group, sites) in members.items():
-            stored = all(set(conditions) <= {'store', 'content', 'payload'}
-                         for conditions in sites.values())
-            self.assertEqual(group, 'stored_state' if stored else 'named_cause')
+            with self.subTest(code=code):
+                if group not in ('stored_state', 'named_cause'):
+                    # A group with its own next step, such as visual_text_reading, admits only its own conditions.
+                    allowed = set(stop_classes.STOP_GROUPS[group]['conditions'])
+                    self.assertTrue(all(set(conditions) <= allowed for conditions in sites.values()))
+                    continue
+                stored = all(set(conditions) <= {'store', 'content', 'payload'}
+                             for conditions in sites.values())
+                self.assertEqual(group, 'stored_state' if stored else 'named_cause')
 
     def test_an_external_unsupported_route_keeps_form_and_named_cause(self):
         group, sites = self.read_members()['invalid_review_route']

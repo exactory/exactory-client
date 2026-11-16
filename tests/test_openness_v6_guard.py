@@ -38,8 +38,14 @@ MATERIAL_PATHS = (
 )
 
 
-@patch.object(reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (reading.PROTOCOL_V6,))
 class V6GuardTests(unittest.TestCase):
+    def setUp(self):
+        # Registered first, this cleanup runs after the cleanups of every case that a test sets up, so the
+        # released order is restored last. A class decorator would restore it before those cleanups.
+        protocols = patch.object(reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (reading.PROTOCOL_V6,))
+        protocols.start()
+        self.addCleanup(protocols.stop)
+
     def run_material_paths(self, paths):
         self.assertEqual(len({kind for kind, _ in paths}), len(paths))
         self.assertTrue(all(identifiers for _, identifiers in paths), 'Every material kind needs an executed path')

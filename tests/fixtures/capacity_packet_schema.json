@@ -18954,7 +18954,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.openness_reading": {
-      "ast_sha256": "754afb6fcbd69e2e756b245c0a829c68df03a0270022f6cb1e3218f1ec7581d0",
+      "ast_sha256": "752356d1c709a33b05855f533e14bcd09ce769fbe1d3aed6cb5f57af805eb785",
       "functions": {
         "_add_source": "bf750a7009979c804b515fe2fa49795c9649ea87dcafa53f80cef1045aeb2340",
         "_assemble_reading_turn": "9c44a6537d6d1fae1af0dc44b726cd7059da1ee593c0d2f800617c0c1655160a",
@@ -19035,7 +19035,7 @@
         "measure_record_entries": "f835bc235c5a6516fdc22f1898b1c0a5f440718e42c46b8c6ad2d0e9ab7ff716",
         "measure_retained_entries": "480b1668a5724d25f65f260ea68fdd3e097f00cbb5df5074d4db051f6d7cbb03",
         "preflight_final_input": "b5c82070e11ea6cd94e81610a4671bc9ff36ee12beda8d18d3f1b8a0826beb7d",
-        "prepare_packet": "ab0fcf9bfc38bd4b0561e980d39e41423555eb78c5fd5e33495c6ebad8846a51",
+        "prepare_packet": "b8cf9a4a5d71adfad78dd5d3c8ef7f0272b299bc78cc20bac77a409ec554d3b0",
         "project_reading_chain": "14fbc62d0285cb441ba84884e4bf52a1d39786e3e1c8fdc7b52013661c05112f",
         "require_reserved_identifier": "920907e14f682ca584804fa4498b345652d56a93c73763cddbfd6a4351f51c41",
         "select_delivered_bodies": "4fdbd56f8443be78f2cc1f00f09bd56ae642ce916b6e7fcaa9edceea59acda4c",
@@ -19282,7 +19282,7 @@
         "fea13f3f3eb313dbba88920c4e985bc6072537317e9c171926f9799667bda45f",
         "ff922eec603ceb40b5f28cbaba83b776ac8ef3a6e101849ac7c4fd5a774ff9cb"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the activation of 0.91.0 (ruling 37): NEW_PROBLEM_CHAIN_PROTOCOLS becomes (PROTOCOL_V7, PROTOCOL_V6); no packet member, call, write or closed shape changes."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the activation of 0.91.0 (ruling 37): NEW_PROBLEM_CHAIN_PROTOCOLS becomes (PROTOCOL_V7, PROTOCOL_V6); no packet member, call, write or closed shape changes. Reviewed 0.91.1: a math openness packet that fits one turn stays a single native turn under (v7, v6); the condition reads the packet kind only, and no packet member, call, write or closed shape changes."
     },
     "research_harness.openness_reading_v7": {
       "ast_sha256": "39a6d5b1e56b959d887bc750346640d66b36f1ccd7a6e10f95da56fd2de9f7f3",

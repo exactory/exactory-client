@@ -2180,7 +2180,8 @@ def prepare_packet(records, artifacts, value, route, packet):
         from .review_protocol import canonical_prompt
         rows = list_reading_rows(records, artifacts, native, review=value)
         characters = sum(len(artifacts.read(row['artifact']).decode('utf-8')) for row in rows)
-        if (PROTOCOL_V7 not in NEW_PROBLEM_CHAIN_PROTOCOLS and characters <= review_excerpts.TURN_FULLTEXT_CHARACTERS
+        if ((PROTOCOL_V7 not in NEW_PROBLEM_CHAIN_PROTOCOLS or is_math_openness_packet(native))
+                and characters <= review_excerpts.TURN_FULLTEXT_CHARACTERS
                 and _fits(route, canonical_prompt('native_math', version=7 if is_openness_packet(native) else 6)['text'],
                           packet, [row['artifact'] for row in rows])):
             return packet, None

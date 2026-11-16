@@ -7155,6 +7155,44 @@
         "test_series_rows_close_entry.EntryRowTests.test_entry_evidence_passes_writing_place_and_condition_group_guards",
         "test_search_receipts.SearchReceiptTests.test_check_reports_each_page_group_captured_more_than_fifteen_minutes_apart_without_writing"
       ]
+    },
+    {
+      "id": "release-0910-math-openness-single-turn",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "openness single-turn admission",
+      "summary": "The activation of the order (v7, v6) in 0.91.0 made the single-turn branch of prepare_packet refuse every openness packet, so a math-solver openness review that fits one input became a reading chain.",
+      "expected": "A math openness packet that one input of its route holds stays one native turn under exactory-openness-reading-math-v1; a new problem openness review starts a chain under the first protocol of the order whose admission accepts it.",
+      "fixed_in": "0.91.1",
+      "test_kind": "real_shape",
+      "tests": [
+        "tests.test_openness_reading_chain.MathOpennessReadingTests.test_a_small_math_minimum_stays_a_single_native_turn"
+      ]
+    },
+    {
+      "id": "release-0910-v6-guard-order-leak",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "CI shared test process state",
+      "summary": "A class decorator patched the order of new problem chains for the v6 guard tests and restored it when a test method returned; the cleanup of a nested openness case ran after that and wrote (v6,) back, so the later tests of the same CI shard ran under (v6,).",
+      "expected": "The v6 guard tests start their patch of the order in setUp with the first cleanup, so the released order (v7, v6) is restored after the cleanups of every nested case.",
+      "fixed_in": "0.91.1",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_fixture_isolation.FixtureIsolationTests.test_a_v6_guard_test_with_a_nested_case_restores_the_released_chain_order"
+      ]
+    },
+    {
+      "id": "release-0910-tests-of-the-earlier-default",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "tests of a replaced default",
+      "summary": "Three tests still assumed what 0.91.0 replaced: the supplied reading journey matched the v6 prompt sentence in a chain that now starts under v7, the closing test of the series code groups admitted only the groups stored_state and named_cause, and the alternate representation test expected a v6 single turn.",
+      "expected": "The supplied journey pins its chain to v6 and a v7 journey delivers the reported origin and records the finding; a group with its own next step admits only its declared conditions; a v7 chain reads only the selected representation, and a v6 packet keeps its single turn.",
+      "fixed_in": "0.91.1",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_supplied_eligibility.SuppliedEligibilityTests.test_supplied_reading_in_a_v7_chain_reaches_the_reviewer_and_the_finding",
+        "test_series_rows_close_closing.ClosingConditionTests.test_actual_planner_built_payload_checks_keep_payload_before_form",
+        "test_openness_final_turn.AlternateRepresentationTests.test_an_omitted_alternate_representation_is_not_a_reading_unit"
+      ]
     }
   ]
 }

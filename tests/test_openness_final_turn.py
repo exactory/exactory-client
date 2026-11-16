@@ -514,7 +514,8 @@ class KmpShapedChainTests(FinalTurnCase):
 
 class AlternateRepresentationTests(unittest.TestCase):
     """An openness packet with native reviews selects one main representation of each read version. The alternate
-    that its openness_delivery contract omits is not a reading unit, so a small packet stays a single turn."""
+    that its openness_delivery contract omits is not a reading unit: a v7 chain reads only the selected text, and a
+    small packet under v6 stays a single turn."""
 
     def setUp(self):
         import test_problem_openness_native_reviews as native_fixtures
@@ -549,7 +550,7 @@ class AlternateRepresentationTests(unittest.TestCase):
             for item in value:
                 self.use_span_locators(item)
 
-    def test_an_omitted_alternate_representation_is_not_a_reading_unit(self):
+    def assign_openness(self):
         case = self.case
         native = case.export(assignment='openness-codex')
         delivery = native['scientific_context']['openness_delivery']
@@ -558,10 +559,25 @@ class AlternateRepresentationTests(unittest.TestCase):
         records = case.store.snapshot()['records']
         self.assertEqual([row['text_sha256'] for row in openness_reading.list_reading_texts(records, native)],
                          [self.pdf['text']['sha256']])
-        assignment = case.mutate(protocol.record_assignment, {
+        return case.mutate(protocol.record_assignment, {
             'id': 'openness-codex', 'route_id': 'codex-route', 'dossier_id': None, 'role': 'native_math',
             'reviewer_id': native['reviewer']['actor_id'], 'author_id': 'problem-author',
             'context': {'native_packet': case.pin_json(native)}})['result']
+
+    def test_an_omitted_alternate_representation_is_not_a_reading_unit(self):
+        # Under the default (v7, v6), a new problem openness review is a v7 chain, and its inventory reads
+        # only the selected representation.
+        from research_harness import openness_reading_v7 as v7
+        assignment = self.assign_openness()
+        packet = json.loads(self.case.artifacts.read(assignment['packet']))
+        self.assertEqual(openness_reading.find_protocol(packet), v7.PROTOCOL)
+        inventory = json.loads(self.case.artifacts.read(assignment['reading_chain']['inventory']))
+        self.assertEqual([unit['identity']['text_sha256'] for unit in inventory['units']
+                          if unit.get('identity', {}).get('kind') == 'fulltext'], [self.pdf['text']['sha256']])
+
+    def test_an_omitted_alternate_representation_keeps_a_small_v6_packet_a_single_turn(self):
+        with patch.object(openness_reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (openness_reading.PROTOCOL_V6,)):
+            assignment = self.assign_openness()
         self.assertNotIn('reading_chain', assignment)
 
 
