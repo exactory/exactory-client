@@ -783,6 +783,8 @@ def describe_task_kind(role, packet, operation='review.invoke'):
         return 'request'
     if 'session_final' in packet:
         return 'final'
+    if 'session_combine' in packet:
+        return 'combine'
     header = packet.get('review_parts', {})
     if header.get('kind') in ('read', 'combine', 'check', 'final'):
         return header['kind']
@@ -876,6 +878,10 @@ def _clear_carried_answers(packet, kind):
     if 'session_final' in packet:
         for key in ('notes', 'entries', 'sources', 'fill'):
             packet['session_final'][key] = None if key == 'notes' else []
+    if 'session_combine' in packet:
+        packet['session_combine']['block']['entries'] = []
+    if 'session_final' in packet and 'closing' in packet['session_final']:
+        packet['session_final']['closing']['rows'] = []
     if 'reading_final' in packet:
         for key in ('notes', 'entries', 'gaps', 'material', 'sources', 'fill'):
             packet['reading_final'][key] = None if key == 'notes' else []
@@ -958,7 +964,7 @@ def describe_task(role, packet, *, route, request, operation='review.invoke', co
         targets = len(actual['reading_final'].get('page', {}).get('targets', []))
     if actual.get('review_parts', {}).get('page_plan_digest'):
         targets = len(actual['review_parts'].get('page', {}).get('targets', []))
-    session = actual.get('session_turn', actual.get('session_final'))
+    session = actual.get('session_turn', actual.get('session_final', actual.get('session_combine')))
     if session is not None:
         notice_fields.update({key: session['capacity'][key] for key in ('material_allowance', 'level_material_allowance')})
         labels = session.get('targets', [])
@@ -1061,8 +1067,8 @@ def describe_attempt(route, role, packet, request, response, *, operation='revie
              and transport.context_verified(route, request, response) and 'previous_response_id' not in request)
         and sends == 1 and type(usage.get('input_tokens')) is int and usage['input_tokens'] >= 0 else None,
     )
-    binding = packet.get('session_turn', packet.get('session_final', packet.get('reading_turn',
-        packet.get('reading_final', packet.get('reading_combine', {})))))
+    binding = packet.get('session_turn', packet.get('session_final', packet.get('session_combine', packet.get('reading_turn',
+        packet.get('reading_final', packet.get('reading_combine', {}))))))
     if binding.get('protocol') in ('exactory-openness-reading-v7', 'exactory-independent-review-sources-v4'):
         bound = binding['capacity']
         result['task'].update(material_allowance=bound['material_allowance'],
@@ -1529,8 +1535,8 @@ def describe_assignment_kind(assignment):
     if header.get('kind') in TURN_KINDS:
         return header['kind']
     parameters = assignment.get('prompt', {}).get('parameters', {})
-    if parameters.get('session_stage') in ('request', 'final'):
-        return parameters['session_stage']
+    if parameters.get('session_stage') in ('request', 'final', 'page', 'closing', 'combine'):
+        return 'final' if parameters['session_stage'] in ('page', 'closing') else parameters['session_stage']
     if parameters.get('reading_stage') == 'reading':
         return 'reading'
     if parameters.get('reading_stage') in ('final', 'page', 'closing'):
@@ -2076,13 +2082,13 @@ def describe_plan_preflight(records, route, request, plan, kind, *, observations
     measured['characters_per_token'] = rule['characters_per_token'] if calibrated else None
     from .review_excerpts import read_sent_packet
     sent = read_sent_packet(request) or {}
-    binding = sent.get('session_turn', sent.get('session_final', sent.get('reading_turn', sent.get('reading_final',
-        sent.get('reading_combine', sent.get('review_parts', {}))))))
+    binding = sent.get('session_turn', sent.get('session_final', sent.get('session_combine', sent.get('reading_turn', sent.get('reading_final',
+        sent.get('reading_combine', sent.get('review_parts', {})))))))
     if binding.get('protocol') in ('exactory-openness-reading-v7', 'exactory-review-parts-v3',
                                   'exactory-independent-review-sources-v4'):
         bounds = binding['capacity']
         observations = [dict(material_allowance=bounds.get('level_material_allowance', bounds['material_allowance']))]
-    bounds = derive_plan_task_limits(plan, kind, observations)['request_bound']
+    bounds = derive_plan_task_limits(plan, ('final' if kind == 'combine' and 'combine' not in plan['task'] else kind), observations)['request_bound']
     comparisons = {name: dict(value=measured[name], bound=value,
                               fits=value is None or measured[name] <= value)
                    for name, value in bounds.items()}
@@ -2328,8 +2334,11 @@ def list_capacity_recovery_rows():
                          handler='final_v7' if kind == 'combine' else kind + '_v7'))
         if kind == 'final':
             rows[-1]['forms'] = ['request', 'page', 'closing']
-    for kind in ('request', 'final'):
-        rows.append(dict(kind=kind, protocol='exactory-independent-review-sources-v4', handler=kind + '_session_v4'))
+    for kind in ('request', 'final', 'combine'):
+        rows.append(dict(kind=kind, protocol='exactory-independent-review-sources-v4',
+                         handler=('final' if kind == 'combine' else kind) + '_session_v4'))
+        if kind == 'final':
+            rows[-1]['forms'] = ['request', 'page', 'closing']
     for kind in review_parts.KINDS:
         rows.append(dict(kind=kind, protocol=review_parts.PROTOCOL,
                          handler='parts_v2_read' if kind == 'read' else 'nothing'))
@@ -2362,7 +2371,7 @@ def describe_capacity_recovery_row(assignment, packet, route):
     from .review_protocol import PROTOCOL
 
     kind = describe_task_kind(assignment['role'], packet)
-    version = (packet.get('source_rules') if 'session_turn' in packet or 'session_final' in packet
+    version = (packet.get('source_rules') if 'session_turn' in packet or 'session_final' in packet or 'session_combine' in packet
                else openness_reading.find_protocol(packet))
     if version is None:
         if kind in review_parts.KINDS and review_parts.KEY in packet:

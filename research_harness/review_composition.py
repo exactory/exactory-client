@@ -1017,6 +1017,11 @@ def list_targets(rule, packet):
     if packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3' and 'page_plan_digest' in packet['review_parts']:
         for index, target in enumerate(targets, 1):
             target['handle'] = 't%d' % index
+    if packet.get('session_targets'):
+        by_id = {row['id']: row['handle'] for row in packet['session_targets']}
+        for row in targets:
+            row['handle'] = by_id[row['id']]
+            row['session_handle'] = True
     return targets
 
 
@@ -1189,7 +1194,8 @@ def split_output(rule, packet, output, pages):
         elif field['owner'] == 'closing':
             closing['fields'][path] = copy.deepcopy(value)
         else:
-            target = (ids[0] if isinstance(value, (dict, list)) and not value else
+            target = (ids[0] if isinstance(value, (dict, list)) and not value
+                      and (not packet.get('session_targets') or path.count('/') <= 2) else
                       _find_target_id(rule, packet, output, field, path))
             if target not in rows:
                 raise ResearchError('review_composition_conflict', FINAL_OWNER_INVALID_MESSAGE, dict(path=path, target=target))
@@ -1202,6 +1208,10 @@ def split_output(rule, packet, output, pages):
 
 def _resolve_target_id(targets, value):
     key = value.get('id') if isinstance(value, dict) else value
+    if not isinstance(value, dict):
+        for row in targets:
+            if row.get('session_handle') and row['handle'] == key:
+                return row['id']
     ids = [row['id'] for row in targets]
     if key in ids:
         return key

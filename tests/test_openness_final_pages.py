@@ -946,6 +946,32 @@ class ByteAnswerCountTests(unittest.TestCase):
         self.assertEqual(plan['task']['final']['target_allowance'],5)
 
 
+class PageRoomMeasureTests(unittest.TestCase):
+    def build_inputs(self, ratio):
+        prior = dict(id='turn', context={}, role='bar', route_id='route', dossier_id=None,
+                     author_id='author', reviewer_id='reviewer')
+        records = dict(review_assignment=dict(turn=prior), review_attempt=dict(attempt=dict(
+            assignment_id='turn', usage=dict(sends=1, input_tokens=100000, request_characters=80000))))
+        plan = dict(measure=dict(characters_per_token=ratio, ratio_margin=0),
+            allocation=dict(page_room=60000), limits=dict(input_tokens=dict(value=100000)),
+            frame=dict(final=dict(bound=10000)), task=dict(final=dict(notice_characters=45000)))
+        return records, prior, plan
+
+    def test_byte_measured_room_keeps_the_pinned_room_and_current_level(self):
+        from research_harness.openness_final_pages import measure_page_room
+        records, prior, plan = self.build_inputs(None)
+        for level, expected in ((30000, 30000), (120000, 60000)):
+            with self.subTest(level=level):
+                self.assertEqual(measure_page_room(records, None, prior, plan,
+                    dict(material_allowance=level)), expected)
+
+    def test_calibrated_room_still_shrinks_from_recorded_input_ratio(self):
+        from research_harness.openness_final_pages import measure_page_room
+        records, prior, plan = self.build_inputs(2)
+        self.assertEqual(measure_page_room(records, None, prior, plan,
+            dict(material_allowance=60000)), 25000)
+
+
 class FinalLevelSuccessorTests(FinalPagesSupport):
     def test_completed_pages_replay_high_low_and_ratio_successors(self):
         from codex_route_fixtures import build_codex_response

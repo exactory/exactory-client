@@ -120,7 +120,7 @@ class RecoveryRowsTests(unittest.TestCase):
         from research_harness.review_parts_v3 import PROTOCOL as PARTS_V3
         expected.update((kind, PARTS_V3) for kind in parts.KINDS)
         from research_harness.review_session_v4 import PROTOCOL as SESSION_V4
-        expected.update((kind, SESSION_V4) for kind in ('request', 'final'))
+        expected.update((kind, SESSION_V4) for kind in ('request', 'final', 'combine'))
         expected.update((kind, parts.PROTOCOL) for kind in parts.KINDS)
         expected.update((kind, review_problem_parts.PROTOCOL) for kind in ('read', 'request'))
         expected.update(('request', value) for value in

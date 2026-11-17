@@ -130,7 +130,8 @@ class PlannedFamilyIntegrationTests(unittest.TestCase):
 
     def test_condensing_series_and_session_capture_record_and_fresh_authenticate_without_inline_tables(self):
         self.assertEqual(set(handles.HANDLE_TABLE_BUILDERS),
-            {'reading_turn', 'reading_final', 'reading_combine', 'review_parts', 'session_turn', 'session_final'})
+            {'reading_turn', 'reading_final', 'reading_combine', 'review_parts', 'session_turn', 'session_final',
+             'session_combine'})
         for family, run in (('v7 condensing', self.run_condensing_family),
                             ('v3 series', self.run_series_family), ('v4 session', self.run_session_family)):
             with self.subTest(family=family):

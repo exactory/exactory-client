@@ -40,6 +40,9 @@ def measure_page_room(records, artifacts, prior, plan, limits):
     """Use only pinned limits and earlier measurements, including ratio-only changes."""
     from .review_failure_class import list_capacity_chain_assignments
     ratio = plan['measure']['characters_per_token']
+    if ratio is None:
+        # Byte-measured plans already pin a conservative input room.
+        return min(plan['allocation']['page_room'], limits['material_allowance'])
     identifiers = list_capacity_chain_assignments(records, prior)
     for attempt in records.get('review_attempt', {}).values():
         if attempt['assignment_id'] in identifiers:

@@ -33,7 +33,7 @@
     "research_harness/review_protocol.py:_observed": "896e10fd17b469f2f469fe89b8f07113b9dec3ec9e829e146e300a516bcf5765",
     "research_harness/review_call_admission.py:admit_review_call": "91bbea98b04dd72715df943eebf3cf1f498a614109b0ba4df2130ba4900177c2",
     "research_harness/review_route_capacity.py:describe_session_stop": "65cfe3b9fb9d3f1bf3d0506b7f01594166971485799cafe4497a32b995166af5",
-    "research_harness/review_protocol.py:invoke_assignment": "31aacadd8ee8064ebcab4510209a4dfb51657f6a6507e62938bffb5775baba51"
+    "research_harness/review_protocol.py:invoke_assignment": "ee91fa26447e42c4e0dee7ef0238ad15b532def5e3731aad2f43a9cc800963d8"
   },
   "limit_readers": [
     "research_harness/batches.py",

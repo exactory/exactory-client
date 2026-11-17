@@ -369,6 +369,9 @@ def classify_final_capacity_attempt(records, artifacts, attempt):
     if assignment.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
         signal = find_output_cap_signal(records, artifacts, assignment, attempt)
         return dict(outcome='output_over_cap', signal=signal, reset_at=None) if signal is not None else None
+    if assignment.get('session_chain') and assignment.get('capacity_plan_kind') == 'final':
+        signal = find_output_cap_signal(records, artifacts, assignment, attempt)
+        return dict(outcome='output_over_cap', signal=signal, reset_at=None) if signal is not None else None
     if assignment.get('capacity_plan_kind') != 'final' or not assignment.get('reading_chain'):
         return None
     from . import openness_reading_v7 as v7
@@ -638,6 +641,15 @@ def has_smaller_task(artifacts, previous, assignment):
         if old_header['kind'] == 'final':
             return after['answer_bound'] < before['answer_bound']
         return after['material_allowance'] < before['material_allowance']
+    if assignment.get('session_chain'):
+        from .review_session_v4 import read_session_binding
+        before, after = read_session_binding(old), read_session_binding(new)
+        if 'page' in after and len(after['page']['targets']) < len(before.get('page', {}).get('targets', [])):
+            return True
+        if 'block' in before and 'block' in after and after['block']['characters'] < before['block']['characters']:
+            return True
+        return (after['capacity']['material_allowance'] < before['capacity']['material_allowance']
+                or after['capacity']['answer_bound'] < before['capacity']['answer_bound'])
     if assignment.get('capacity_plan') and (assignment.get('reading_chain') or assignment.get('session_chain')):
         before = old.get('session_turn', old.get('session_final', old.get('reading_turn', old.get('reading_final', old.get('reading_combine', {}))))).get('capacity', {})
         after = new.get('session_turn', new.get('session_final', new.get('reading_turn', new.get('reading_final', new.get('reading_combine', {}))))).get('capacity', {})

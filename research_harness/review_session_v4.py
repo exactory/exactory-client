@@ -121,7 +121,7 @@ def project_session_turn(inventory, observation):
     units = {row['handle']: row for row in inventory['units']}
     deliveries = []
     for row in observation['deliveries']:
-        unit = units[row['unit']]
+        unit = units.get(row['unit'], dict(handle=row['unit']))
         deliveries.append(dict(unit=unit['handle'], part=row['part'], start=row['start'], end=row['end'],
             sha256=hashlib.sha256(row['text'].encode('utf-8')).hexdigest(),
             **{key: row[key] for key in ('request_id', 'request_complete') if key in row}))
@@ -174,7 +174,7 @@ def build_session_state(inventory, turns, route, plan, *, initial_state=None):
     allowances = {row['handle']: row for row in state['allowances']['targets']}
     units = {row['handle']: row for row in inventory['units']}
     delivered_sources = {units[row['unit']]['identity']['version_id'] for row in state['deliveries']
-                         if units[row['unit']]['kind'] in ('abstract', 'fulltext')}
+                         if row['unit'] in units and units[row['unit']]['kind'] in ('abstract', 'fulltext')}
     pending = {row['id']: row for row in state['requests'] if row['id'] in
                {pending['id'] for pending in state['pending_requests']}}
     for observation in turns:
@@ -183,11 +183,12 @@ def build_session_state(inventory, turns, route, plan, *, initial_state=None):
         state['turns'].append(projected['turn'])
         state['deliveries'].extend(dict(row, turn=number) for row in projected['deliveries'])
         for row in projected['deliveries']:
-            unit = units[row['unit']]
-            if unit['kind'] in ('abstract', 'fulltext'):
+            unit = units.get(row['unit'])
+            if unit is not None and unit['kind'] in ('abstract', 'fulltext'):
                 delivered_sources.add(unit['identity']['version_id'])
-        state['notes'].append(projected['notes'])
-        state['latest_notes'] = projected['notes']['text']
+        if not observation.get('delivery_only'):
+            state['notes'].append(projected['notes'])
+            state['latest_notes'] = projected['notes']['text']
         turn_used = 0
         for entry in projected['excerpts']:
             if entry['status'] == 'verified':
@@ -231,7 +232,7 @@ def build_session_state(inventory, turns, route, plan, *, initial_state=None):
     return dict(state=state, artifact=_describe_json(state))
 
 
-def describe_session_plan(route, frames, units, targets):
+def describe_session_plan(route, frames, units, targets, *, final_pages=False):
     """Declare request/final sizing for prepare_assignment_capacity, without writes.
 
     Frames are measured role fields; units are the immutable inventory rows and
@@ -245,7 +246,7 @@ def describe_session_plan(route, frames, units, targets):
     return dict(kind='request', frames={kind: copy.deepcopy(frames[kind]) for kind in ('request', 'final')},
         inventory=[{key: row[key] for key in ('handle', 'kind', 'characters', 'sha256') if key in row}
                    for row in units], targets=copy.deepcopy(targets), allowance_rows_bound=ALLOWANCES_CHARACTERS,
-        pending_requests_bound=PENDING_REQUESTS_CHARACTERS + STATE_FIELDS_CHARACTERS)
+        pending_requests_bound=PENDING_REQUESTS_CHARACTERS + STATE_FIELDS_CHARACTERS, **(dict(final_pages=True) if final_pages else {}))
 
 
 def _describe_pending_request(request):
@@ -309,6 +310,7 @@ RESULT_REQUEST_PROMPT = 'Read this result request turn. Return notes, targeted e
 BAR_FINAL_PROMPT = 'Return the complete bar assessment once, grounded in the supplied frame and recorded evidence.'
 SLATE_FINAL_PROMPT = 'Return the complete slate assessment once, grounded in the supplied frame and recorded evidence.'
 RESULT_FINAL_PROMPT = 'Return the complete result assessment once, grounded in the supplied frame and recorded evidence.'
+FINAL_CAPACITY_MESSAGE = 'This final response reached the output limit. Apply its capacity replacement before continuing or recording the review.'
 FINAL_NEEDS_PAGES_MESSAGE = 'This session final needs pages. Start this slot under the next admitted source rules until session final pages are installed.'
 TURN_CONTRACT_MESSAGE = 'Return the request form of this session turn, with bounded notes, exact excerpts naming target handles, requests and settled request IDs; no assessment.'
 TURN_BINDING_MESSAGE = 'The session packet must reproduce its frozen inventory, plan, state and authenticated earlier turns.'
@@ -331,7 +333,7 @@ FRAME_ENVELOPE_CHARACTERS = 20000
 
 def find_session_kind(packet):
     if packet.get('source_rules') == PROTOCOL:
-        return 'request' if 'session_turn' in packet else 'final' if 'session_final' in packet else None
+        return 'request' if 'session_turn' in packet else 'combine' if 'session_combine' in packet else 'final' if 'session_final' in packet else None
     return None
 
 
@@ -346,8 +348,12 @@ def build_turn_prompt(role, kind, bounds, *, common_version=None):
     prompts = dict(bar=dict(request=BAR_REQUEST_PROMPT, final=BAR_FINAL_PROMPT),
                    slate=dict(request=SLATE_REQUEST_PROMPT, final=SLATE_FINAL_PROMPT),
                    result=dict(request=RESULT_REQUEST_PROMPT, final=RESULT_FINAL_PROMPT))
-    return protocol._build_prompt(PROTOCOL + '/' + role + '/' + kind,
-        protocol._select_common_prompt(common_version or protocol.COMMON_VERSION) + '\n\n' + prompts[role][kind] + TURN_LIMITS_PROMPT,
+    for name in prompts:
+        prompts[name].update(protocol.SESSION_FINAL_PROMPTS[name])
+    text = protocol._select_common_prompt(common_version or protocol.COMMON_VERSION) + '\n\n' + prompts[role][kind] + TURN_LIMITS_PROMPT
+    if kind in ('page', 'closing'):
+        text += protocol.SESSION_PAGE_REQUESTS_PROMPT
+    return protocol._build_prompt(PROTOCOL + '/' + role + '/' + kind, text,
         dict(source_rules=PROTOCOL, session_stage=kind, capacity=copy.deepcopy(bounds)), common_version or protocol.COMMON_VERSION)
 
 
@@ -360,10 +366,10 @@ def matches_turn_prompt(assignment, packet=None):
         return False
     kind = base['parameters'].get('session_stage')
     if packet is not None:
-        binding = packet.get('session_turn', packet.get('session_final', {}))
-        if kind != find_session_kind(packet) or bounds != binding.get('capacity'):
+        binding = read_session_binding(packet)
+        if kind != find_session_form(packet) or bounds != binding.get('capacity'):
             return False
-    if kind not in ('request', 'final'):
+    if kind not in ('request', 'final', 'page', 'closing', 'combine'):
         return False
     expected = build_turn_prompt(assignment['role'], kind, bounds, common_version=protocol.find_common_prompt_version(base))
     expected['parameters'].pop('capacity')
@@ -424,20 +430,13 @@ def check_v4_admission(records, artifacts, route, role, packet):
             inventory.update(targets=targets, logical_fields=logical)
             for row in inventory['units']:
                 row['required'] = row['kind'] in ('frame', 'artifact')
-            declaration = describe_session_plan(route, frames, inventory['units'], [row['handle'] for row in targets])
+            declaration = describe_session_plan(route, frames, inventory['units'], [row['handle'] for row in targets], final_pages=True)
             members = capacity.prepare_assignment_capacity(records, overlay, route, declaration)
             plan = capacity.read_chain_capacity_plan(overlay, members)
             if not any(row['unit_fields'] for row in plan['frame'].values()):
                 break
             for kind in frames:
                 moved[kind].update(plan['frame'][kind]['unit_fields'])
-        room = min(plan['allocation']['page_room'], plan['task']['final']['material_allowance'])
-        final_turns = capacity.count_capacity_final_turns(room, plan['allocation']['targets'],
-            plan['allocation']['notes'], len(targets))
-        pages = sum(final_turns[key] for key in ('pages', 'closing_pages', 'condensing_turns'))
-        if pages > 1:
-            return dict(state='stop', protocol=PROTOCOL, reason='final_needs_pages', message=FINAL_NEEDS_PAGES_MESSAGE,
-                        pages=pages, room=room, targets=len(targets), capacity_plan=plan)
     except UnicodeDecodeError:
         return dict(state='stop', protocol=PROTOCOL, reason='binary_required_evidence')
     except ResearchError as error:
@@ -509,7 +508,7 @@ def _pack_session_deliveries(artifacts, route, inventory, state, plan, allowance
                 break
             if request['kind'] == 'list_page':
                 page = build_list_page(request['list'], request['after'], plan, state, route,
-                                       allowance - occupied - 500)
+                                       allowance - occupied - 500, artifacts=artifacts)
             else:
                 units = inventory['units']
                 start = request['page'] * bar_sources.PAGE_SIZE
@@ -530,6 +529,10 @@ def _pack_session_deliveries(artifacts, route, inventory, state, plan, allowance
                 pages.append({key: page[key] for key in ('list', 'after', 'next')})
             continue
         requested = _resolve_requested_units(inventory, request)
+        if not requested and request['kind'] in ('unit', 'passage'):
+            from .openness_final_pages import resolve_entry_request
+            entry = resolve_entry_request(state, artifacts, request)
+            requested = [entry] if entry is not None else []
         if (requested and request['kind'] != 'passage' and all(
                 _find_covered_end(state, unit['handle']) >= unit['characters'] for unit in requested)):
             row = dict(kind='request_status', request_id=request['id'], status='already_delivered', request_complete=True)
@@ -702,6 +705,11 @@ def validate_request_output(artifacts, assignment, packet, output):
             elif kind in ('unit', 'passage'):
                 fields(row, ('id', 'kind', 'unit') + (('anchor', 'characters') if kind == 'passage' else ()),
                        code='invalid_review_session_turn')
+                if isinstance(row['unit'], str) and row['unit'] not in units:
+                    from .openness_final_pages import resolve_entry_request
+                    archived = resolve_entry_request(state, artifacts, row)
+                    if archived is not None:
+                        units[row['unit']] = archived
                 _require_turn(isinstance(row['unit'], str) and row['unit'] in units)
                 if kind == 'passage':
                     _require_turn(type(row['characters']) is int and 0 < row['characters'] <= 100000)
@@ -723,27 +731,39 @@ def validate_request_output(artifacts, assignment, packet, output):
                 _require_turn(type(row['page']) is int and 0 <= row['page'] < max(1, (len(units) + 9) // 10))
             elif kind == 'list_page':
                 fields(row, ('id', 'kind', 'list', 'after'), code='invalid_review_session_turn')
-                _require_turn(row['list'] == 'allowances' and (row['after'] is None or isinstance(row['after'], str)))
+                _require_turn((row['list'] == 'allowances' or row['list'] in state.get('final_blocks', {}))
+                              and (row['after'] is None or isinstance(row['after'], str)))
                 from .openness_reading_v7 import _validate_list_cursor
                 after = copy.deepcopy(state)
                 for delivery in binding['plan']['now']:
                     if delivery['kind'] == 'list_page' and 'list' in delivery['page']:
                         page = delivery['page']
                         after.setdefault('list_pages', {})[page['list']] = dict(next=page['next'], ended=page['next'] is None)
-                _validate_list_cursor(row['list'], row['after'], plan, after)
+                _validate_list_cursor(row['list'], row['after'], plan, after, artifacts=artifacts)
             else:
                 _require_turn(False, kind=kind)
 
 
 def _project_completed_turn(artifacts, assignment, packet, attempt, output):
-    binding = packet.get('session_turn', packet.get('session_final'))
-    if find_session_kind(packet) == 'final':
-        return None
+    binding = read_session_binding(packet)
+    delivery_only = find_session_kind(packet) != 'request' and output.get('stage') != 'request'
+    if delivery_only:
+        if not binding.get('page_plan_digest') or not binding.get('plan', {}).get('now'):
+            return None
+        output = dict(stage=find_session_form(packet), notes='', excerpts=[], requests=[], settled_requests=[])
+    if find_session_kind(packet) != 'request':
+        binding = dict(binding, plan=binding.get('plan', dict(now=[])), allowances=binding['request_allowances'])
     rows = binding['plan']['now']
+    if 'page_plan_digest' in binding:
+        plan = capacity.read_chain_capacity_plan(artifacts, assignment)
+        route = dict(adapter=plan['route_class']['adapter'], model=plan['route_class']['model'], endpoint='',
+            configuration=dict(max_output_tokens=plan['limits']['output_tokens']['value']))
+        binding['excerpt_room'] = min(binding['allowances']['excerpts'], max(0,
+            binding['capacity']['material_allowance'] - measure_final_material(route, dict(binding, notes=output['notes']))))
     deliveries = [dict(row, text=entry['content']) for row, entry in zip(rows, packet['evidence']) if 'unit' in row]
     observation = dict(number=binding['turn'], assignment_id=assignment['id'], attempt_id=attempt['id'],
-        deliveries=deliveries, output=output,
-        excerpt_allowance=binding['allowances']['excerpts'],
+        deliveries=deliveries, output=output, delivery_only=delivery_only,
+        excerpt_allowance=(binding.get('excerpt_room', binding['allowances']['excerpts'])),
         list_pages=[{key: row['page'][key] for key in ('list', 'after', 'next')}
                     for row in rows if row['kind'] == 'list_page' and 'list' in row['page']])
     # Inventory/list requests have no text unit but settle at the same projection boundary.
@@ -756,7 +776,7 @@ def build_handle_packet(packet, artifacts, assignment):
     from .source_links import span_locator
     plan, inventory, state = read_bound_session(artifacts, assignment)
     table = {}
-    delivered = state['deliveries'] + packet.get('session_turn', {}).get('plan', {}).get('now', [])
+    delivered = state['deliveries'] + read_session_binding(packet).get('plan', {}).get('now', [])
     for unit in inventory['units']:
         reference = unit['artifact']
         text = artifacts.read(reference).decode('utf-8')
@@ -781,14 +801,16 @@ def build_handle_packet(packet, artifacts, assignment):
                 citation['link']['locator'] = span_locator(artifacts.read(unit['artifact']).decode('utf-8'),
                                                           entry['start'], entry['end'], excerpt_length=0)
             table[entry['handle']] = dict(reference=citation)
+    for handle, value in state.get('combinations', {}).items():
+        table[handle] = dict(reference=artifacts.put(serialize_record(value), 'application/json'))
     table.update(state.get('material_handles', {}))
-    result = dict(packet, handle_table=table, capacity=packet.get('session_turn', packet.get('session_final'))['capacity'],
+    result = dict(packet, handle_table=table, capacity=read_session_binding(packet)['capacity'],
                   material_state=state.get('material_state', dict(arguments={}, pending=None)))
     return result
 
 
 def prepare_session_assignment(records, artifacts, value, route, revision, *, logical=None, parent=None,
-                               admission=None, slot=None, replacement=False, notice=None, refused_ids=(), diagnoses=None):
+                               admission=None, slot=None, replacement=False, notice=None, refused_ids=(), diagnoses=None, replay=False, replay_state=None):
     """Publish one deterministic request and its immutable bindings in the command mutation."""
     from . import review_protocol as protocol
     from .operations import immutable_record
@@ -816,10 +838,14 @@ def prepare_session_assignment(records, artifacts, value, route, revision, *, lo
         members = dict(capacity_plan=parent['capacity_plan'])
         before = protocol._read_json(artifacts, parent['packet'])
         if not replacement:
-            state = rebuild_session_state(records, artifacts, parent, inventory, plan, route)
+            state = (copy.deepcopy(replay_state) if replay_state is not None else
+                     rebuild_session_state(records, artifacts, parent, inventory, plan, route))
             chain['turn'] += 1
         kind = (find_session_kind(before) if replacement else
+                'final' if chain.get('final_page_plan') else
                 'request' if _list_remaining_units(inventory, state) or state['pending_requests'] else 'final')
+        if kind == 'combine':
+            kind = 'final'
         limits = derive_session_task_limits(records, artifacts, parent, kind, replacement=replacement)
         if replacement and kind == 'final' and state.get('material_state', {}).get('pending'):
             limits['answer_bound'] = max(plan['task']['final']['smallest_answer_bound'],
@@ -829,9 +855,29 @@ def prepare_session_assignment(records, artifacts, value, route, revision, *, lo
             limits.get('level_material_allowance', limits['material_allowance']))],
             notice_characters=capacity.measure_capacity_value(route, notice))
     chain['state'] = protocol._put_json(artifacts, state)
-    packet = build_session_packet(artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
-                                  inventory, state, plan, limits, kind, notice=notice)
-    prompt = build_turn_prompt(value['role'], kind, packet.get('session_turn', packet.get('session_final'))['capacity'],
+    if kind == 'final' and not (replacement and state.get('material_state', {}).get('pending')):
+        packet, reference = prepare_final_packet(records, artifacts, parent, route, logical, chain['turn'],
+            inventory, state, plan, limits, replacement=replacement)
+        if packet is None:
+            return None, None
+        if reference is not None:
+            chain['final_page_plan'] = reference
+        if notice is not None:
+            from .review_refusal_notice import attach_refusal_notice
+            packet = attach_refusal_notice(packet, notice)
+    elif kind == 'final' and chain.get('final_page_plan'):
+        from .openness_final_pages import read_page_plan
+        page_plan = read_page_plan(artifacts, chain['final_page_plan'])
+        binding = read_session_binding(before)
+        turn = next(row for row in page_plan['turns'] if row['number'] == binding['final_turn'])
+        _, catalog, full = build_final_inputs(artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
+            inventory, state, plan, limits, turn['context']['page_room'])
+        packet = build_paged_packet(artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
+            inventory, state, plan, limits, page_plan, turn, catalog, full)
+    else:
+        packet = build_session_packet(artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
+                                      inventory, state, plan, limits, kind, notice=notice)
+    prompt = build_turn_prompt(value['role'], find_session_form(packet), read_session_binding(packet)['capacity'],
         common_version=protocol.find_common_prompt_version(parent['prompt']) if parent else None)
     for entry in packet['evidence']:
         artifacts.put(entry['content'].encode('utf-8'), entry['artifact']['media_type'])
@@ -847,10 +893,12 @@ def prepare_session_assignment(records, artifacts, value, route, revision, *, lo
     from .review_codex_invocation import supports_route, KEY as INVOCATION_KEY, PROTOCOL as INVOCATION_PROTOCOL
     if supports_route(route):
         record[INVOCATION_KEY] = INVOCATION_PROTOCOL
+    if replay:
+        return [], record
     request = protocol.transport.request_body(route, prompt['text'], packet, [], order=())
     from .review_preflight import build_report, check_request
     preflight = check_request(build_report(records, artifacts, route, value['role'], prompt, packet, request,
-        capacity_plan=plan, turn_kind=kind), request, packet=packet, artifacts=artifacts)
+        capacity_plan=plan, turn_kind='final' if kind == 'combine' else kind), request, packet=packet, artifacts=artifacts)
     forecast = describe_session_forecast(artifacts, route, inventory, plan, capacity.read_output_profile(records, route))
     return [immutable_record(records, 'review_assignment', value['id'], record)], dict(record, preflight=preflight,
         capacity_forecast=forecast, session_admission=dict(state='record', protocol=PROTOCOL,
@@ -865,11 +913,25 @@ def rebuild_session_state(records, artifacts, assignment, inventory, plan, route
     attempt, output = protocol.read_assignment_output(records, artifacts, assignment['id'])
     if attempt is None or not protocol.authenticate_attempt(records, artifacts, assignment, attempt):
         raise ResearchError('review_invocation_unverified', TURN_BINDING_MESSAGE)
+    require_final_capacity(records, artifacts, assignment, attempt)
     _, _, state = read_bound_session(artifacts, assignment)
     observation = _project_completed_turn(artifacts, assignment, packet, attempt, output)
-    if observation is not None:
-        return build_session_state(inventory, [observation], route, plan, initial_state=state)['state']
-    state = copy.deepcopy(state)
+    state = (build_session_state(inventory, [observation], route, plan, initial_state=state)['state']
+             if observation is not None else copy.deepcopy(state))
+    binding = read_session_binding(packet)
+    if binding.get('page_plan_digest'):
+        kind = find_session_form(packet)
+        terminal = output.get('stage') not in ('request', 'material')
+        state.setdefault('final_progress', {})[str(binding['final_turn'])] = dict(assignment_id=assignment['id'],
+            attempt_id=attempt['id'], kind=kind, targets=binding.get('page', {}).get('targets', []),
+            terminal=terminal, output=copy.deepcopy(output))
+        if kind == 'combine' and terminal:
+            state.setdefault('combinations', {})[output['block']] = copy.deepcopy(output)
+            state.setdefault('final_blocks', {})[output['block']] = binding['block']['artifact']
+            block = protocol._read_json(artifacts, binding['block']['artifact'])
+            state.setdefault('final_catalog', {}).update((row['handle'], copy.deepcopy(row['value'])) for row in block['entries'])
+        if observation is None:
+            state['turns'].append(dict(number=binding['turn'], assignment_id=assignment['id'], attempt_id=attempt['id'], kind=kind))
     if output.get('stage') == 'material':
         material = protocol._read_json(artifacts, attempt['material'])
         state.update(material_state=material['material_state'],
@@ -884,7 +946,7 @@ def _authenticate_session_binding(records, artifacts, assignment, packet):
     from .errors import ResearchError
     plan, inventory, state = read_bound_session(artifacts, assignment)
     chain = assignment['session_chain']
-    binding = packet.get('session_turn', packet.get('session_final', {}))
+    binding = read_session_binding(packet)
     logical = protocol._read_json(artifacts, chain['logical'])
     root = records['review_assignment'][chain['first_assignment_id']]
     if (_describe_logical_fields(logical) != inventory['logical_fields']
@@ -903,6 +965,8 @@ def _authenticate_session_binding(records, artifacts, assignment, packet):
             or binding.get('inventory_digest') != digest(inventory) or binding.get('state_digest') != digest(state)
             or binding.get('chain') != chain['first_assignment_id'] or binding.get('turn') != chain['turn']):
         raise ResearchError('review_invocation_unverified', TURN_BINDING_MESSAGE)
+    if chain.get('final_page_plan'):
+        return authenticate_final_binding(records, artifacts, assignment, packet)
     kind = find_session_kind(packet)
     same_position = assignment.get('capacity_replacement_of') or assignment.get('context', {}).get('output_refusal', {}).get('assignment_id')
     prior = records['review_assignment'].get(same_position or parent_id)
@@ -945,19 +1009,18 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
     from .openness_reading_v7 import _PlanningArtifacts
     packet = protocol._read_json(artifacts, assignment['packet'])
     kind = find_session_kind(packet)
-    binding = packet.get('session_turn', packet.get('session_final'))
+    binding = read_session_binding(packet)
     plan, inventory, state = read_bound_session(artifacts, assignment)
     material = kind == 'final' and state.get('material_state', {}).get('pending')
-    if kind == 'final' and not material:
-        return None
     if material:
         if binding['capacity']['answer_bound'] <= plan['task']['final']['smallest_answer_bound']:
             return None
-    elif binding['capacity']['level_material_allowance'] <= plan['task']['request']['levels'][-1]['material_allowance']:
+    elif kind == 'request' and binding['capacity']['level_material_allowance'] <= plan['task']['request']['levels'][-1]['material_allowance']:
         return None
     value = {key: copy.deepcopy(assignment[key]) for key in
              ('id', 'route_id', 'dossier_id', 'role', 'reviewer_id', 'author_id', 'context')}
-    value['id'] += '-replacement'
+    from .review_continuation import _find_unused_id
+    value['id'] = _find_unused_id(records, value['id'] + '-replacement', maximum=120)
     if 'subject' in assignment:
         value['subject'] = assignment['subject']
     route = records['review_route'][assignment['route_id']]
@@ -965,10 +1028,12 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
     _, candidate = prepare_session_assignment(records, overlay, value, route,
         max(row['recorded_revision'] for row in records['review_assignment'].values()) + 1,
         parent=assignment, replacement=True, notice=packet.get('output_refusal'))
+    if candidate is None:
+        return None
     new = protocol._read_json(overlay, candidate['packet'])
-    smaller = new.get('session_turn', new.get('session_final'))['capacity']
+    smaller = read_session_binding(new)['capacity']
     if (smaller['answer_bound'] >= binding['capacity']['answer_bound'] if material else
-            smaller['level_material_allowance'] >= binding['capacity']['level_material_allowance']):
+            kind == 'request' and smaller['level_material_allowance'] >= binding['capacity']['level_material_allowance']):
         return None
     payload = {key: value[key] for key in ('id', 'route_id', 'dossier_id', 'role', 'reviewer_id', 'author_id')}
     payload['context'] = dict(capacity_replacement=assignment['id'])
@@ -989,7 +1054,7 @@ def prepare_capacity_assignment(records, artifacts, value, revision, parent):
 
 
 def _derive_refusal_limits(plan, kind, frozen, notice, route):
-    binding = frozen.get('session_turn', frozen.get('session_final'))
+    binding = read_session_binding(frozen)
     current = binding['capacity']
     limits = capacity.derive_plan_task_limits(plan, kind, [dict(material_allowance=current['level_material_allowance'])],
         notice_characters=capacity.measure_capacity_value(route, notice) if kind == 'request' else 0)
@@ -1002,14 +1067,21 @@ def prepare_refusal_assignment(records, artifacts, value, revision, prior, froze
     from .operations import immutable_record
     plan, inventory, state = read_bound_session(artifacts, prior)
     kind = find_session_kind(frozen)
+    plan_kind = 'final' if kind == 'combine' else kind
     route = records['review_route'][prior['route_id']]
     logical = protocol._read_json(artifacts, prior['session_chain']['logical'])
     chain = prior['session_chain']
     def prepare_turn(notice):
-        limits = _derive_refusal_limits(plan, kind, frozen, notice, route)
-        packet = build_session_packet(artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
+        limits = _derive_refusal_limits(plan, plan_kind, frozen, notice, route)
+        if prior['session_chain'].get('final_page_plan'):
+            packet = copy.deepcopy(frozen)
+            packet.pop('output_refusal', None)
+            from .review_refusal_notice import attach_refusal_notice
+            packet = attach_refusal_notice(packet, notice)
+        else:
+            packet = build_session_packet(artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
                                        inventory, state, plan, limits, kind, notice=notice)
-        prompt = build_turn_prompt(prior['role'], kind, packet.get('session_turn', packet.get('session_final'))['capacity'],
+        prompt = build_turn_prompt(prior['role'], find_session_form(packet), read_session_binding(packet)['capacity'],
                                     common_version=protocol.find_common_prompt_version(prior['prompt']))
         bounds = prompt['parameters'].pop('capacity')
         prompt = paragraphs.append_prompt_paragraphs(prompt, prior['role'], None,
@@ -1018,8 +1090,8 @@ def prepare_refusal_assignment(records, artifacts, value, revision, prior, froze
         return packet, prompt
     selected = notices.select_refusal_notice(records, artifacts, attempt_ids, diagnoses=diagnoses, route=route,
         role=prior['role'], prompt=None, packet=None, prepare_turn=prepare_turn, task_characters=None,
-        task_limit_characters=frozen.get('session_turn', frozen.get('session_final'))['capacity']['request_bound'],
-        capacity_plan=plan, turn_kind=kind, forms=('bounded',))
+        task_limit_characters=read_session_binding(frozen)['capacity']['request_bound'],
+        capacity_plan=plan, turn_kind=plan_kind, forms=('bounded',))
     if selected['notice'] is None:
         from .errors import ResearchError
         raise ResearchError('review_input_too_large', notices.NOTICE_DELIVERY_MSG, dict(trials=selected['trials']))
@@ -1056,6 +1128,8 @@ def project_scientific_delivery(artifacts, assignment, delivery):
     from .review_supplied_evidence import register_supplied_artifact
     for row in state.get('material_handles', {}).values():
         register_supplied_artifact(result['artifacts'], row['reference'])
+    for value in state.get('combinations', {}).values():
+        register_supplied_artifact(result['artifacts'], artifacts.put(serialize_record(value), 'application/json'))
     return result
 
 
@@ -1074,7 +1148,7 @@ def derive_session_task_limits(records, artifacts, assignment, kind, *, before_r
                 or before_revision is not None and attempt['recorded_revision'] >= before_revision):
             continue
         packet = protocol._read_json(artifacts, member['packet'])
-        binding = packet.get('session_turn', packet.get('session_final'))
+        binding = read_session_binding(packet)
         if kind == 'final' and binding.get('material_request'):
             continue
         outcome = failures.classify_attempt(records, artifacts, attempt)
@@ -1158,3 +1232,396 @@ def describe_target_labels(route, targets):
         else:
             high = middle - 1
     return describe(low)
+
+
+def read_session_binding(packet):
+    return packet.get('session_turn', packet.get('session_final', packet.get('session_combine', {})))
+
+
+def build_composition_packet(artifacts, assignment, packet):
+    """The full frozen scientific context is a validation view, never a request."""
+    from . import review_protocol as protocol
+    _, inventory, _ = read_bound_session(artifacts, assignment)
+    logical = protocol._read_json(artifacts, assignment['session_chain']['logical'])
+    return dict(logical, session_targets=inventory['targets'],
+                handle_table=build_handle_packet(packet, artifacts, assignment)['handle_table'])
+
+
+def build_final_inputs(artifacts, route, logical, chain, number, inventory, state, plan, limits, room):
+    """Charge an excerpt and its source row to every target that it names."""
+    from . import review_condensing as condensing
+    full = build_session_packet(artifacts, route, logical, chain, number, inventory, state, plan,
+                                dict(limits, material_allowance=10 ** 18), 'final')
+    binding = full['session_final']
+    catalog = {}
+    def describe(handle, value):
+        catalog[handle] = copy.deepcopy(value)
+        return dict(handle=handle, characters=capacity.measure_capacity_value(route, value) + 1)
+    targets = []
+    for target in plan['targets']['handles']:
+        entries = describe_session_final_entries(state, [target])
+        units = {row['unit'] for row in entries}
+        targets.append(dict(handle=target, entries=[describe(row['handle'], row) for row in entries],
+            rows=[describe('source:' + row['handle'], row) for row in binding['sources'] if row['handle'] in units]))
+    notes = max(0, capacity.measure_capacity_value(route, binding['notes']) - capacity.measure_capacity_value(route, None))
+    minimum = capacity.EXCERPT_TEXT_CHARACTERS + capacity.EXCERPT_FIELDS_CHARACTERS
+    pool = []
+    if notes + minimum > room:
+        # Notes are bounded text but can exceed a ratio-reduced page. Segment
+        # them at whole serialized entries before the shared condensing policy.
+        text = binding['notes'] or ''
+        offset = 0
+        while offset < len(text):
+            low, high = offset, len(text)
+            while low < high:
+                end = (low + high + 1) // 2
+                value = dict(handle='notes:' + digest(text) + '@' + str(offset), text=text[offset:end])
+                if capacity.measure_capacity_value(route, value) + 1 <= room - minimum:
+                    low = end
+                else:
+                    high = end - 1
+            if low == offset:
+                from .errors import ResearchError
+                raise ResearchError('review_route_capacity_below_floor', capacity.BELOW_FLOOR_MESSAGE)
+            value = dict(handle='notes:' + digest(text) + '@' + str(offset), text=text[offset:low])
+            pool.append(describe(value['handle'], value))
+            offset = low
+        notes = 0
+    return dict(page_room=room, target_allowance=limits['target_allowance'], target_minimum=minimum,
+                notes=notes, pool=pool, targets=targets, closing_room=room,
+                row_characters=capacity.DECISION_ROW_CHARACTERS, condense=condensing.plan_condensing), catalog, full
+
+
+def prepare_final_packet(records, artifacts, prior, route, logical, number, inventory, state, plan, limits,
+                         *, replacement=False):
+    """Freeze or replay successors using shared page packing and progress rules."""
+    from . import review_final_pages as pages, review_condensing as condensing
+    from .openness_final_pages import (measure_page_room, read_page_plan, publish_page_plan,
+                                      list_final_progress)
+    from .errors import ResearchError
+    chain = prior['session_chain']['first_assignment_id']
+    reference = prior['session_chain'].get('final_page_plan')
+    room = measure_page_room(records, artifacts, prior, plan, limits)
+    inputs, catalog, full = build_final_inputs(artifacts, route, logical, chain, number, inventory, state, plan, limits, room)
+    floor = min(row['material_allowance'] for row in plan['task']['final']['levels'])
+    currency = dict(packet_digest=digest(logical), inventory_digest=digest(inventory))
+    attempt_id = state['turns'][-1]['attempt_id'] if state['turns'] else None
+    if reference is None:
+        initial_inputs = inputs
+        if replacement:
+            historical = dict(records, review_attempt={key: row for key, row in records['review_attempt'].items()
+                if row['recorded_revision'] < prior['recorded_revision']})
+            old_limits = derive_session_task_limits(historical, artifacts, prior, 'final')
+            old_room = measure_page_room(historical, artifacts, prior, plan, old_limits)
+            initial_inputs, _, _ = build_final_inputs(artifacts, route, logical, chain, number, inventory, state, plan, old_limits, old_room)
+        turns = pages.plan_final_turns(**initial_inputs)
+        if not replacement and len(turns) == 1 and turns[0]['kind'] == 'final':
+            return build_session_packet(artifacts, route, logical, chain, number, inventory, state, plan, limits, 'final'), None
+        page_plan = pages.build_page_plan(chain, digest(plan), digest(state), currency, turns)
+        reference = publish_page_plan(artifacts, page_plan)
+    else:
+        page_plan = read_page_plan(artifacts, reference)
+    completed, pending = list_final_progress(state, page_plan)
+    if replacement:
+        frozen = json.loads(artifacts.read(prior['packet']))
+        selected = read_session_binding(frozen).get('final_turn', page_plan['turns'][0]['number'])
+        turns = pages.split_final_turn(page_plan['turns'], selected, floor, condensing.plan_condensing, pending=pending)
+        if turns is None:
+            return None, None
+        attempt = max((row for row in records['review_attempt'].values() if row['assignment_id'] == prior['id']),
+                      key=lambda row: row['recorded_revision'])
+        attempt_id = attempt['id']
+        cause = dict(kind='split', turn=selected, attempt_id=attempt_id, completed=completed, pending=pending)
+        page_plan = pages.build_page_plan(chain, digest(plan), digest(state), currency, turns, digest(page_plan), cause)
+        reference = publish_page_plan(artifacts, page_plan, previous=reference)
+    previous = page_plan['turns'][-1]['context']
+    old = read_session_binding(json.loads(artifacts.read(prior['packet'])))['capacity']
+    cause_kind = ('level' if limits['target_allowance'] != previous['target_allowance']
+                  or limits['material_allowance'] != old['level_material_allowance'] else
+                  'ratio' if room < previous['page_room'] else None)
+    if cause_kind is not None:
+        completed, pending = list_final_progress(state, page_plan)
+        cause = dict(kind=cause_kind, attempt_id=attempt_id, page_room=room, completed=completed, pending=pending)
+        if cause_kind == 'level':
+            cause['target_allowance'] = limits['target_allowance']
+        turns = pages.repack_final_turns(page_plan['turns'], completed, pending, room, limits['target_allowance'],
+            **{key: value for key, value in inputs.items() if key not in ('page_room', 'target_allowance')})
+        page_plan = pages.build_page_plan(chain, digest(plan), digest(state), currency, turns, digest(page_plan), cause)
+        reference = publish_page_plan(artifacts, page_plan, previous=reference)
+    while True:
+        completed, pending = list_final_progress(state, page_plan)
+        selected = next((turn for turn in page_plan['turns'] if turn['number'] not in completed), None)
+        if selected is None:
+            raise ResearchError('review_resampling_forbidden', 'This session already has its closing answer.')
+        turns = pages.prepare_final_turn(page_plan['turns'], selected['number'], room, limits['target_allowance'],
+            floor, condensing.plan_condensing, pending=pending, completed=completed, inputs=inputs)
+        if turns == page_plan['turns']:
+            break
+        if turns is None:
+            raise ResearchError('review_route_capacity_below_floor', capacity.BELOW_FLOOR_MESSAGE)
+        cause = dict(kind='split', turn=selected['number'], attempt_id=attempt_id, completed=completed, pending=pending)
+        page_plan = pages.build_page_plan(chain, digest(plan), digest(state), currency, turns, digest(page_plan), cause)
+        reference = publish_page_plan(artifacts, page_plan, previous=reference)
+    return build_paged_packet(artifacts, route, logical, chain, number, inventory, state, plan, limits,
+                              page_plan, selected, catalog, full, inputs=inputs), reference
+
+
+def build_paged_packet(artifacts, route, logical, chain, number, inventory, state, plan, limits,
+                       page_plan, turn, catalog, full, *, inputs=None):
+    from . import review_composition as composition, review_condensing as condensing
+    from .openness_final_pages import list_page_outputs
+    from .review_final_pages import _apply_completed
+    if inputs is None:
+        inputs, _, _ = build_final_inputs(artifacts, route, logical, chain, number, inventory, state, plan, limits,
+                                           turn['context']['page_room'])
+    temporary = dict(capacity_plan=dict(protocol=capacity.CAPACITY_PLAN_PROTOCOL, digest=digest(plan),
+        artifact=artifacts.put(serialize_record(plan), 'application/json')), session_chain=dict(
+        logical=artifacts.put(serialize_record(logical), 'application/json'),
+        inventory=artifacts.put(serialize_record(inventory), 'application/json'),
+        state=artifacts.put(serialize_record(state), 'application/json')))
+    envelope = build_composition_packet(artifacts, temporary, full)
+    rows = composition.build_decision_rows(composition.find_rule(logical['role'], envelope), envelope, list_page_outputs(state),
+        measure=lambda row: capacity.measure_capacity_value(route, dict(handle='decision:' + row[0], value=row)) + 1)
+    catalog.update(('decision:' + row[0], dict(handle='decision:' + row[0], value=row)) for row in rows)
+    catalog.update(state.get('combinations', {}))
+    def values(entries):
+        return [copy.deepcopy(catalog[row['handle']]) for row in entries]
+    binding = full['session_final']
+    binding.update(page_plan_digest=digest(page_plan), final_turn=turn['number'])
+    binding['capacity']['material_allowance'] = min(turn['context']['page_room'], limits['material_allowance'])
+    binding['capacity']['level_material_allowance'] = limits['material_allowance']
+    binding['fill'] = []
+    if turn['kind'] == 'combine':
+        binding = {key: binding[key] for key in ('protocol', 'chain', 'turn', 'plan_digest', 'inventory_digest',
+                    'state_digest', 'capacity', 'page_plan_digest', 'final_turn')}
+        block = copy.deepcopy(turn['block'])
+        block['artifact'] = artifacts.put(serialize_record(dict(block=turn['block'], entries=[dict(handle=row['handle'], value=value)
+            for row, value in zip(turn['entry_sizes'], values(turn['entry_sizes']))])), 'application/json')
+        binding['block'] = dict(block, entries=values(turn['entry_sizes']))
+        binding['capacity']['answer_bound'] = condensing.describe_combination_bound(turn['block'], limits['answer_bound'])
+        packet = {key: full[key] for key in ('protocol', 'role', 'reviewer_id', 'dossier_id', 'source_rules')}
+        packet.update(session_combine=binding, evidence=[])
+        if 'subject' in full:
+            packet['subject'] = copy.deepcopy(full['subject'])
+    else:
+        completed = [row for row in page_plan['turns'] if state.get('final_progress', {}).get(str(row['number']), {}).get('terminal')]
+        pool = _apply_completed(inputs['pool'], completed, 'pool')
+        binding.update(notes=binding['notes'] if not inputs['pool'] else None,
+                       entries=values(pool), sources=[])
+        if turn['kind'] in ('page', 'final'):
+            paged = [row for row in page_plan['turns'] if row['kind'] in ('page', 'final')]
+            binding['page'] = dict(number=paged.index(turn) + 1, pages=len(paged), targets=turn['targets'])
+            binding['targets'] = describe_target_labels(route, [row for row in inventory['targets'] if row['handle'] in turn['targets']])
+            for part in turn['parts']:
+                binding['entries'].extend(values(part['entries']))
+                binding['sources'].extend(values(part['rows']))
+            original = {row['handle'] for item in page_plan['turns'] for target in item['inputs'] for row in target['entries']}
+            original.update(state.get('final_catalog', {}))
+            binding['entries'].extend(row for row in describe_session_final_entries(state, turn['targets']) if row['handle'] not in original)
+            sources = {row.get('unit') for row in binding['entries']}
+            binding['sources'].extend(dict(handle=row['handle'], kind=row['kind'], label=row['label'])
+                for row in inventory['units'] if row['handle'] in sources and not any(source['handle'] == row['handle'] for source in binding['sources']))
+        else:
+            binding = {key: binding[key] for key in ('protocol', 'chain', 'turn', 'plan_digest', 'inventory_digest',
+                        'state_digest', 'capacity', 'page_plan_digest', 'final_turn', 'frame')}
+            binding['closing'] = dict(rows=[row['value'] if isinstance(row, dict) and row.get('handle', '').startswith('decision:') else row for row in values(turn['rows'])])
+        if state.get('material_request'):
+            binding['material_request'] = copy.deepcopy(state['material_request'])
+        full['session_final'] = binding
+        packet = full
+        if state['pending_requests']:
+            used = measure_final_material(route, binding)
+            now, evidence, _ = _pack_session_deliveries(artifacts, route, inventory, state, plan,
+                max(0, binding['capacity']['material_allowance'] - used - 256))
+            binding['plan'] = dict(now=now)
+            packet['evidence'] = evidence
+        allowances = describe_session_allowances(route, state, plan, limits)
+        binding['request_allowances'] = {key: allowances[key] for key in ('notes', 'excerpts', 'targets')}
+        # The full allowance history stays in the state artifact. A page exposes
+        # only its own target grants, within the pre-existing allowance reserve.
+        binding['request_allowances']['targets'] = [dict(row, remaining=max(0, row['characters'] - row['used']))
+            for row in state['allowances']['targets']
+            if turn['kind'] in ('page', 'final') and row['handle'] in turn['targets']]
+        binding['request_allowances']['notes'] = min(binding['request_allowances']['notes'],
+            max(1, binding['capacity']['material_allowance'] - measure_final_material(route, binding)))
+    packet.pop('digest', None)
+    packet['digest'] = digest(packet)
+    return packet
+
+
+def measure_final_material(route, binding):
+    return capacity.measure_capacity_value(route, {key: binding.get(key) for key in
+        (('closing',) if 'closing' in binding else ('notes', 'entries', 'sources', 'fill'))})
+
+
+def validate_final_turn_output(records, artifacts, assignment, packet, output):
+    """Validate page-owned fields before cross-page validation at the closing turn."""
+    from . import review_composition as composition, review_condensing as condensing
+    binding = read_session_binding(packet)
+    route = records['review_route'][assignment['route_id']]
+    if 'session_combine' in packet:
+        block = dict(binding['block'], entries=[row.get('handle', row.get('block')) for row in binding['block']['entries']])
+        condensing.validate_combination(block, output, lambda value: capacity.measure_capacity_value(route, value),
+                                       binding['capacity']['answer_bound'])
+    elif output.get('stage') == 'request':
+        adapted = copy.deepcopy(packet)
+        adapted['session_turn'] = dict(binding, allowances=binding['request_allowances'],
+                                       plan=binding.get('plan', dict(now=[])))
+        validate_request_output(artifacts, assignment, adapted, output)
+        _require_turn(all(set(row['targets']) <= set(binding.get('page', {}).get('targets', [])) for row in output['excerpts']))
+    else:
+        from .review_refusal import contract_check
+        _, _, state = read_bound_session(artifacts, assignment)
+        completed = {row['request_id'] for row in binding.get('plan', {}).get('now', [])
+                     if row.get('request_complete')}
+        with contract_check('review.shape'):
+            _require_turn(all(row['id'] in completed for row in state['pending_requests']),
+                          pending_requests=[row['id'] for row in state['pending_requests'] if row['id'] not in completed])
+        envelope = build_composition_packet(artifacts, assignment, packet)
+        rule = composition.find_rule(assignment['role'], envelope)
+        if 'closing' in binding:
+            composition.validate_closing_output(rule, envelope, binding['closing']['rows'], output)
+        else:
+            composition.validate_page_output(rule, envelope, binding['page']['targets'], output)
+
+
+def list_composite_turns(records, artifacts, assignment):
+    from . import review_protocol as protocol
+    from .openness_final_pages import read_page_plan
+    if not assignment.get('session_chain', {}).get('final_page_plan'):
+        return None
+    first = assignment['session_chain']['first_assignment_id']
+    members = sorted((row for row in records['review_assignment'].values()
+        if row.get('session_chain', {}).get('first_assignment_id') == first), key=lambda row: row['recorded_revision'])
+    latest = members[-1]
+    plan = read_page_plan(artifacts, latest['session_chain']['final_page_plan'])
+    selected = {}
+    for row in members:
+        binding = read_session_binding(protocol._read_json(artifacts, row['packet']))
+        attempt, output = protocol.read_assignment_output(records, artifacts, row['id'])
+        if 'final_turn' in binding and output is not None and output.get('stage') not in ('request', 'material'):
+            selected[binding['final_turn']] = row['id']
+    turns = dict(chain=first, pages=[], condensing=[], closing=None)
+    for turn in plan['turns']:
+        row = dict(assignment_id=selected.get(turn['number'], latest['id']), targets=turn['targets'])
+        if turn['kind'] in ('page', 'final'):
+            turns['pages'].append(row)
+        elif turn['kind'] == 'combine':
+            turns['condensing'].append(row)
+        else:
+            turns['closing'] = row
+    turns['packet'] = build_composition_packet(artifacts, latest, protocol._read_json(artifacts, latest['packet']))
+    return turns
+
+
+def read_composite_currency(records, artifacts, assignment):
+    from . import review_protocol as protocol
+    from .openness_final_pages import read_page_plan
+    plan, inventory, state = read_bound_session(artifacts, assignment)
+    logical = protocol._read_json(artifacts, assignment['session_chain']['logical'])
+    page_plan = read_page_plan(artifacts, assignment['session_chain']['final_page_plan'])
+    currency = dict(packet_digest=digest(logical), inventory_digest=digest(inventory))
+    _require_turn(currency == page_plan['currency'] and read_session_binding(protocol._read_json(
+        artifacts, assignment['packet']))['page_plan_digest'] == digest(page_plan))
+    return currency
+
+
+def validate_composite_output(records, artifacts, assignment, packet, output):
+    from .research_decisions import validate_review_contract
+    from .errors import ResearchError
+    try:
+        validate_review_contract(records, artifacts, assignment, output, composed=True)
+    except ResearchError as error:
+        error.details = dict(error.details or {}, composed_review=True)
+        raise
+
+
+def prepare_closing_composite(records, artifacts, assignment, attempt, output):
+    from . import review_composite, review_protocol as protocol
+    from .operations import immutable_record
+    packet = protocol._read_json(artifacts, assignment['packet'])
+    if 'closing' not in packet.get('session_final', {}) or output.get('stage') in ('request', 'material'):
+        return []
+    from .review_failure_class import find_output_cap_signal
+    if find_output_cap_signal(records, artifacts, assignment, attempt) is not None:
+        return []
+    validate_final_turn_output(records, artifacts, assignment, packet, output)
+    composite, (reference, content) = review_composite.prepare_composite(records, artifacts, assignment, attempt, output)
+    artifacts.put(content, reference['media_type'])
+    return [immutable_record(records, 'review_composite', composite['id'], composite)]
+
+
+def find_session_form(packet):
+    binding = read_session_binding(packet)
+    return ('combine' if 'session_combine' in packet else 'closing' if 'closing' in binding else
+            'page' if 'page' in binding else find_session_kind(packet))
+
+
+def authenticate_final_binding(records, artifacts, assignment, packet):
+    """Reproduce the page plan and request at this assignment's immutable edge."""
+    from . import review_protocol as protocol
+    from .openness_reading_v7 import _PlanningArtifacts
+    from .evidence import digest
+    historical = {kind: {key: row for key, row in rows.items()
+                        if row.get('recorded_revision', 0) < assignment['recorded_revision']}
+                  for kind, rows in records.items()}
+    origin = assignment.get('capacity_replacement_of') or assignment.get('context', {}).get('output_refusal', {}).get('assignment_id') or assignment.get('history_assignment_id')
+    prior = historical['review_assignment'][origin]
+    frozen = protocol._read_json(artifacts, prior['packet'])
+    if assignment.get('context', {}).get('output_refusal') and not assignment.get('capacity_replacement_of'):
+        expected = copy.deepcopy(frozen)
+        expected.pop('output_refusal', None)
+        from .review_refusal_notice import attach_refusal_notice
+        expected = attach_refusal_notice(expected, packet['output_refusal'])
+        _require_turn(expected == packet and assignment['session_chain'] == prior['session_chain']
+                      and matches_turn_prompt(assignment, packet))
+        return True
+    value = {key: copy.deepcopy(assignment[key]) for key in
+             ('id', 'route_id', 'dossier_id', 'role', 'reviewer_id', 'author_id', 'context')}
+    if 'subject' in assignment:
+        value['subject'] = assignment['subject']
+    # Preparation consults no current priors for its packet or page plan. The
+    # report is intentionally skipped during verification.
+    _, rebuilt = prepare_session_assignment(historical, _PlanningArtifacts(artifacts), value,
+        historical['review_route'][prior['route_id']], assignment['recorded_revision'], parent=prior,
+        replacement=bool(assignment.get('capacity_replacement_of')), replay=True,
+        replay_state=json.loads(artifacts.read(assignment['session_chain']['state'])),
+        notice=frozen.get('output_refusal') if assignment.get('capacity_replacement_of') else None)
+    _require_turn(rebuilt is not None and rebuilt['packet'] == assignment['packet']
+                  and rebuilt['session_chain'] == assignment['session_chain'] and rebuilt['prompt'] == assignment['prompt'])
+    return True
+
+
+COMPOSED_REFUSAL_TEXT = 'The composed review was refused; correct the closing answer using this check and composed path.'
+
+
+def describe_composed_refusal(records, artifacts, attempt, check, path):
+    from . import review_protocol as protocol, review_composition as composition
+    from .openness_final_pages import list_page_outputs
+    certificate = records.get('review_output_refusal', {}).get(attempt['id'], {})
+    if not certificate.get('details', {}).get('composed_review'):
+        return None
+    assignment = records['review_assignment'][attempt['assignment_id']]
+    packet = protocol._read_json(artifacts, assignment['packet'])
+    if 'closing' not in packet.get('session_final', {}):
+        return None
+    result = dict(check=check, path=path, closing_answer=protocol._read_json(artifacts, attempt['output']),
+                  message=COMPOSED_REFUSAL_TEXT)
+    _, _, state = read_bound_session(artifacts, assignment)
+    outputs = list_page_outputs(state)
+    envelope = build_composition_packet(artifacts, assignment, packet)
+    rule = composition.find_rule(assignment['role'], envelope)
+    rows = composition.build_decision_rows(rule, envelope, outputs)
+    for row, item in zip(rows, [item for page in outputs for item in page['output']['targets']]):
+        if any(path == field or path.startswith(field + '/') for field in item['fields']):
+            result['decision_row'] = row
+            break
+    return result
+
+
+
+def require_final_capacity(records, artifacts, assignment, attempt):
+    from .review_failure_class import classify_final_capacity_attempt
+    from .errors import ResearchError
+    if assignment.get('session_chain') and classify_final_capacity_attempt(records, artifacts, attempt) is not None:
+        raise ResearchError('review_output_over_cap', FINAL_CAPACITY_MESSAGE)

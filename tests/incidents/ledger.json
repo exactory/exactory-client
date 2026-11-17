@@ -7563,6 +7563,20 @@
         "test_openness_named_gaps.NamedGapRecordingTests.test_unread_work_is_validated_and_preserved_through_every_real_recording_path",
         "test_openness_named_gaps.NamedGapRecordingTests.test_refused_variant_search_is_replaced_with_its_notice_and_recorded"
       ]
+    },
+    {
+      "id": "session-v4-final-pages-record-review",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "D1 v4 session final pages, capacity recovery and composite authentication",
+      "summary": "A source session final exceeded the Opus output cap and had no smaller admissible final.",
+      "expected": "The fixed-inventory session records bounded target pages, condenses entries when necessary, and records one authenticated review at the same route and effort.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_pages.SessionPagesTests.test_incident_opus_max_five_sources_records_bar_and_reports_final_turns",
+        "test_review_session_v4_pages.SessionPagesTests.test_a12_page_at_output_limit_splits_and_records",
+        "test_review_session_v4_pages.SessionPagesTests.test_a5_a14_result_200_objections_reach_recorded_review"
+      ]
     }
   ]
 }
