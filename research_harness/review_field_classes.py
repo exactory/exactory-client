@@ -821,6 +821,7 @@ FIELD_CLASSES = {
             'protocol': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'reviewer_id': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'role': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
+            'route_capacity': {'class': 'fixed', 'characters': 4000, 'overflow_unit': True},
             'source_artifacts': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_deliveries': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_inventory': {'class': 'reference', 'characters': 256, 'unit_rule': 'bound_digest'},

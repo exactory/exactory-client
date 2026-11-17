@@ -869,13 +869,14 @@ def find_rule(role, packet):
     if role in ROLES_WITHOUT_RULES:
         return None
     if 'context_repair' in packet:
+        from .review_parts_repair import find_role_adapter
         ordinary = dict(packet)
         ordinary.pop('context_repair')
         rule = find_rule(role, ordinary)
         if rule is None:
             return None
         rule['id'] = FINAL_RULE_PREFIX + 'context-repair-' + rule['id'][len(FINAL_RULE_PREFIX):]
-        rule['base_adapter'] = rule['adapter']
+        rule['base_adapter'] = rule['adapter'] if find_role_adapter(packet) is not None else None
         rule['adapter'] = 'context_repair'
         rule['fields'].append(_make_field('/reassessment/assignment_id', 'harness'))
         rule['fields'].extend(_make_field('/reassessment/findings/*/' + key + ('/**' if key == 'evidence' else ''),

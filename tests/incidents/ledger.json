@@ -7577,6 +7577,22 @@
         "test_review_session_v4_pages.SessionPagesTests.test_a12_page_at_output_limit_splits_and_records",
         "test_review_session_v4_pages.SessionPagesTests.test_a5_a14_result_200_objections_reach_recorded_review"
       ]
+    },
+    {
+      "id": "slate-series-reviews-oversized-forming-import",
+      "record": "20261112012956-slate-review-cannot-carry-a-forming-import",
+      "class": "D1 slate packet delivery through parts v3",
+      "summary": "A 28,600,000-character slate packet carries 106 imported forming artifact bodies totaling about 24,500,000 characters, exceeding one local text input.",
+      "expected": "The new slate slot plans bounded parts v3 turns and the reviewer stub finishes a slate review recorded by value-review, including a verified imported-record citation. Ordinary assignments and recorded source sessions retain their bytes.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_slate.SlateSeriesTests.test_A1_incident_28600000_character_slate_reaches_value_review",
+        "test_review_parts_slate.SlateSeriesTests.test_A1_imported_record_cite_verifies_in_recorded_slate_final",
+        "test_review_parts_slate.SlateSeriesTests.test_ordinary_assignment_keeps_packet_prompt_and_request_bytes",
+        "test_review_parts_slate.SlateSeriesTests.test_recorded_v2_and_v3_slate_sessions_keep_their_bytes",
+        "test_review_parts_slate.SlateSeriesTests.test_v4_session_admission_precedes_the_slate_adapter"
+      ]
     }
   ]
 }
