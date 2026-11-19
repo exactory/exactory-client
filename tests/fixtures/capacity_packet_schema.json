@@ -18334,11 +18334,11 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.direction_reviews": {
-      "ast_sha256": "a21fbccb3d182d4ccae3f58f9187bacff6aa752e803647bdad3b7d7fd04d2199",
+      "ast_sha256": "75d3a953c40645f031b7e0a1c391abab944cbbe2de4038c802f7cbea5c3df218",
       "functions": {
         "_collect_historical_task_graph": "761da8ff0432e1d83592a66e1630829f19f767409da07e3246fb90264bc10b34",
         "_collect_selected_task_graph": "17a36ffdc4bbe5e0b18532f54cb42d8503369e59e56f55ab2e83a104895d44e7",
-        "_collect_task_graph": "5dfb0239b9c113dee15a6fc8ac8cb15efd99af63c5adf39592ea5f9a01c9add5",
+        "_collect_task_graph": "7a720ae96e100ce84a498391b99b93be8a94a9e7f8aaf61ac718d240d93d459b",
         "_matches_bound_input_ancestry": "43a0852594a4de27ce080662ebf16cdebf06df6384126d219b53fd4693bd8fe9",
         "assess_direction_reviews": "bc77fc39f059371b924f9936a672269ebf4eb5d62180d00cc9f4d1d019671d2a",
         "collect_actual_input_packets": "f9fa3fcd4aaecda00c98f9fea5c08a83c848377ed717c38f96d2485d064f3f90",

@@ -420,12 +420,14 @@ class EffectiveConsumerTests(unittest.TestCase):
                 graph = direction_reviews.collect_selected_task_graph(self.records, self.artifacts, controller['id'])
                 self.assertTrue(graph['completion']['complete'], status)
             accepted = dict(invocation, correction_status='accepted', recorded_revision=2)
-            for status, stored in (('pending', {}), ('accepted', {'correction': accepted})):
+            for stored, next_step in (({}, 'Reconcile it'), ({'correction': accepted}, 'authorize a new root')):
                 self.records['review_output_correction'] = stored
-                with self.assertRaises(ResearchError, msg=status) as corrected:
+                with self.assertRaises(ResearchError, msg=next_step) as corrected:
                     direction_reviews.collect_selected_task_graph(self.records, self.artifacts, controller['id'])
                 self.assertEqual(corrected.exception.code, 'review_composition_pending')
                 self.assertEqual(corrected.exception.details['output_correction_id'], 'correction')
+                # A pending call can still fail, so only the accepted correction asks for a new root.
+                self.assertIn(next_step, str(corrected.exception))
             for kind in ('review_output_correction_invocation', 'review_output_correction'):
                 self.records.pop(kind)
             next(iter(raw.values()))['raw_output_digest'] = digest('altered capture')

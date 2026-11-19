@@ -66,15 +66,19 @@ def _collect_task_graph(records, artifacts, assignment_id, *, historical):
             continue
         child = records['review_assignment'][attempt['assignment_id']]
         raw = protocol.read_raw_observation(records, evaluation, attempt['id'])
-        # A correction of the child that is pending or accepted supersedes its raw output, as the exhaustion binding
-        # of a context repair reads it.
+        # A correction of the child that is pending or accepted withholds the composition that rests on its raw
+        # output, as the exhaustion binding of a context repair reads the same two states.
         for invocation in read_filtered_records(
                 records, 'review_output_correction_invocation', assignment_id=child['id']).values():
             correction = records.get('review_output_correction', {}).get(invocation['id'])
-            if correction is None or correction['correction_status'] == 'accepted':
+            details = {'attempt_id': attempt['id'], 'output_correction_id': invocation['id']}
+            if correction is None:
                 raise ResearchError('review_composition_pending',
-                    'A raw task correction invalidates its dependent composition; authorize a new root.',
-                    {'attempt_id': attempt['id'], 'output_correction_id': invocation['id']})
+                    'A raw task correction is pending. Reconcile it before you read its dependent composition.',
+                    details)
+            if correction['correction_status'] == 'accepted':
+                raise ResearchError('review_composition_pending',
+                    'A raw task correction invalidates its dependent composition; authorize a new root.', details)
         binder = getattr(staged, 'bind_quotations', None)
         bound, _ = (binder(raw['raw_output'], epoch=epoch, sources=epoch['manifest']['sources'])
                     if binder is not None else (raw['raw_output'], []))
