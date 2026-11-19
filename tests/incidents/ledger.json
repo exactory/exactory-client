@@ -7593,6 +7593,23 @@
         "test_review_parts_slate.SlateSeriesTests.test_recorded_v2_and_v3_slate_sessions_keep_their_bytes",
         "test_review_parts_slate.SlateSeriesTests.test_v4_session_admission_precedes_the_slate_adapter"
       ]
+    },
+    {
+      "id": "math-v2-reading-chain-carries-stopped-v1",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "A25 math result review chain under a stored capacity plan",
+      "summary": "A reading chain of exactory-openness-reading-math-v1 has no finite projection; ruling 24.2 stops it at the exact measure of a request or at the estimate of its final, and its verified turns had no protocol to carry them.",
+      "expected": "With exactory-openness-reading-math-v2 first in NEW_MATH_CHAIN_PROTOCOLS, a math review chain has a stored capacity plan, delivers the proof artifacts and supplementary inputs as units, and records the native result review in one request or in pages. Each stop of a v1 chain names its admitted successor, which carries the verified v1 turns without delivering their units again; the estimate stop keeps its answer continue, and v1 chains keep their bytes.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_math_successor.MathSuccessorTests.test_a25_exact_final_stop_names_the_successor_and_its_steps_reach_a_recorded_review",
+        "test_openness_reading_math_v2.MathV2CarriedTests.test_a25_stopped_v1_turns_are_carried_without_repeating_units_to_a_recorded_review",
+        "test_openness_reading_math_v2.MathV2ChainTests.test_a25_request_final_delivers_native_evidence_with_its_binding_and_records_the_review",
+        "test_openness_reading_math_v2.MathV2ChainTests.test_a25_forty_neighbours_reach_a_recorded_composite_at_the_final_floor",
+        "test_openness_math_successor.MathEstimateStopTests.test_finding5_estimate_stop_keeps_continue_and_the_continued_chain_ends_under_v1",
+        "tests.test_reading_math_v2_controller.MathReadingControllerTests.test_a25_real_controller_two_pages_and_closing_accept_native_review"
+      ]
     }
   ]
 }

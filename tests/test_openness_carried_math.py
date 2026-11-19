@@ -257,7 +257,9 @@ class MathPassageDependencyTests(MathCarriedCase):
         first = self.run_turn(native)
         records, _, identity = self.build_selection_inputs(native, first)
         self.assertTrue(carried.list_qualifying_chains(records, self.artifacts, identity)['chains'])
-        successor = 'exactory-openness-reading-math-v2'
+        self.assertIn(reading.MATH_PROTOCOL_V2, carried.CHAIN_OBSERVERS)
+        # A later math protocol qualifies once its row is registered, as math v2 is.
+        successor = 'exactory-openness-reading-math-v3'
         records = copy.deepcopy(records)
         packet = self.read_packet('math-1')
         reading._find_record(packet)['protocol'] = successor

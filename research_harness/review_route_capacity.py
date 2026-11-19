@@ -412,13 +412,15 @@ UNSOLVED_REVIEW_ITEMS = (
 
 def describe_unsolved_reviews():
     from .review_protocol import ROLES
+    from . import openness_reading as reading
     result = {role: [dict(reason=reason, unit=unit, message=message)
                      for reason, unit, message in UNSOLVED_REVIEW_ITEMS] for role in ROLES}
     for role in ('manuscript', 'standalone'):
         result[role].append(dict(reason='no_parts_delivery', unit='paper-series',
                                  message='This role has no delivery in parts.'))
-    result['native_math'].append(dict(reason='math_reading_v1', unit='reading-math-v2',
-                                      message='The math reading protocol v1 can outgrow the input limit of the route on its final turn.'))
+    if reading.MATH_PROTOCOL_V2 not in reading.NEW_MATH_CHAIN_PROTOCOLS:
+        result['native_math'].append(dict(reason='math_reading_v1', unit='reading-math-v2',
+                                          message='The math reading protocol v1 can outgrow the input limit of the route on its final turn.'))
     return result
 
 
@@ -881,7 +883,8 @@ def _project_request(request, packet):
 
 
 def _clear_carried_answers(packet, kind):
-    if packet.get('reading_turn', {}).get('protocol') == 'exactory-openness-reading-v7':
+    from .openness_reading import BOUNDED_CHAIN_PROTOCOLS
+    if packet.get('reading_turn', {}).get('protocol') in BOUNDED_CHAIN_PROTOCOLS:
         packet['reading_turn']['notes'] = None
     if 'session_final' in packet:
         for key in ('notes', 'entries', 'sources', 'fill'):
@@ -1077,7 +1080,8 @@ def describe_attempt(route, role, packet, request, response, *, operation='revie
     )
     binding = packet.get('session_turn', packet.get('session_final', packet.get('session_combine', packet.get('reading_turn',
         packet.get('reading_final', packet.get('reading_combine', {}))))))
-    if binding.get('protocol') in ('exactory-openness-reading-v7', 'exactory-independent-review-sources-v4'):
+    from .openness_reading import BOUNDED_CHAIN_PROTOCOLS
+    if binding.get('protocol') in BOUNDED_CHAIN_PROTOCOLS + ('exactory-independent-review-sources-v4',):
         bound = binding['capacity']
         result['task'].update(material_allowance=bound['material_allowance'],
                               level_material_allowance=bound.get('level_material_allowance', bound['material_allowance']),
@@ -1703,7 +1707,7 @@ def describe_work_units(role, packet):
         return {
             'type': 'openness_reading',
             'unit': 'reading_unit',
-            'count': len(turn['plan']['now'] if turn.get('protocol') == openness_reading.PROTOCOL_V7
+            'count': len(turn['plan']['now'] if turn.get('protocol') in openness_reading.BOUNDED_CHAIN_PROTOCOLS
                          else turn['reading_plan']['delivered_now']),
         }
     kind = 'result_final' if plan else 'openness_final' if openness_reading.RECORD_KEY in packet else 'probe' if role == 'probe' else 'ordinary'
@@ -2092,8 +2096,9 @@ def describe_plan_preflight(records, route, request, plan, kind, *, observations
     sent = read_sent_packet(request) or {}
     binding = sent.get('session_turn', sent.get('session_final', sent.get('session_combine', sent.get('reading_turn', sent.get('reading_final',
         sent.get('reading_combine', sent.get('review_parts', {})))))))
-    if binding.get('protocol') in ('exactory-openness-reading-v7', 'exactory-review-parts-v3',
-                                  'exactory-independent-review-sources-v4'):
+    from .openness_reading import BOUNDED_CHAIN_PROTOCOLS
+    if binding.get('protocol') in BOUNDED_CHAIN_PROTOCOLS + ('exactory-review-parts-v3',
+                                                           'exactory-independent-review-sources-v4'):
         bounds = binding['capacity']
         observations = [dict(material_allowance=bounds.get('level_material_allowance', bounds['material_allowance']))]
     bounds = derive_plan_task_limits(plan, ('final' if kind == 'combine' and 'combine' not in plan['task'] else kind), observations)['request_bound']
@@ -2334,14 +2339,17 @@ def list_capacity_recovery_rows():
     for version in (openness_reading.PROTOCOL_V1, openness_reading.PROTOCOL_V2, openness_reading.PROTOCOL,
                     openness_reading.PROTOCOL_V4, openness_reading.PROTOCOL_V5, openness_reading.PROTOCOL_V6,
                     openness_reading.MATH_PROTOCOL):
-        unit = 'reading-math-v2' if version == openness_reading.MATH_PROTOCOL else 'reading-v7-turns'
         for kind in ('reading', 'final'):
-            rows.append(dict(kind=kind, protocol=version, handler='nothing', required_unit=unit))
-    for kind in ('reading', 'final', 'combine'):
-        rows.append(dict(kind=kind, protocol=openness_reading.PROTOCOL_V7,
-                         handler='final_v7' if kind == 'combine' else kind + '_v7'))
-        if kind == 'final':
-            rows[-1]['forms'] = ['request', 'page', 'closing']
+            row = dict(kind=kind, protocol=version, handler='nothing')
+            if version != openness_reading.MATH_PROTOCOL:
+                row['required_unit'] = 'reading-v7-turns'
+            rows.append(row)
+    for version in openness_reading.BOUNDED_CHAIN_PROTOCOLS:
+        for kind in ('reading', 'final', 'combine'):
+            rows.append(dict(kind=kind, protocol=version,
+                             handler='final_v7' if kind == 'combine' else kind + '_v7'))
+            if kind == 'final':
+                rows[-1]['forms'] = ['request', 'page', 'closing']
     for kind in ('request', 'final', 'combine'):
         rows.append(dict(kind=kind, protocol='exactory-independent-review-sources-v4',
                          handler=('final' if kind == 'combine' else kind) + '_session_v4'))
@@ -2407,8 +2415,12 @@ def describe_capacity_decision(records, artifacts, assignment, outcome, details)
     """Use D2's role-specific route steps for the decision member of R52."""
     from .review_failure_class import OUTCOME_CODES, ROUTE_DECISION_QUESTION
     from .review_plan_steps import select_route_steps, describe_step
-    from .openness_reading_v7 import V7_FINAL_FORMS
-    final_pages = 'pages' in V7_FINAL_FORMS or bool(assignment.get('reading_chain', {}).get('final_page_plan'))
+    from . import openness_reading as reading, openness_reading_v7 as v7, review_protocol as protocol
+    packet = (protocol._read_json(artifacts, assignment['packet'])
+              if outcome == 'output_over_cap' and assignment.get('reading_chain') else {})
+    version = reading.find_protocol(packet)
+    final_pages = ('pages' in v7.PROTOCOL_DESCRIPTIONS.get(version, v7.PROTOCOL_DESCRIPTIONS[v7.PROTOCOL])['list_final_forms']()
+                   or bool(assignment.get('reading_chain', {}).get('final_page_plan')))
 
     # Diagnostics without a native packet can name route setup, but cannot fill an attestation.
     numbers = (select_route_steps(records, artifacts, assignment)
@@ -2423,21 +2435,26 @@ def describe_capacity_decision(records, artifacts, assignment, outcome, details)
                 step['prerequisites'].insert(0, dict(condition='The installed release holds ' + details['required_unit'] + '.'))
     details = dict(details, message=(OUTPUT_OVER_CAP_DECISION_MESSAGE if outcome == 'output_over_cap'
                                     else CAPACITY_DECISION_MESSAGE))
-    if (final_pages and outcome == 'output_over_cap' and details.get('protocol') == 'exactory-openness-reading-v7'
+    if (final_pages and outcome == 'output_over_cap' and details.get('protocol') in v7.PROTOCOL_DESCRIPTIONS
             and details.get('kind') in ('final', 'combine')):
         details['message'] = FINAL_FLOOR_DECISION_TEXT
     answers = [dict(answer='Move to another route', steps=steps)]
     if outcome == 'output_over_cap' and assignment.get('reading_chain'):
-        from . import openness_reading as reading, review_protocol as protocol
-        packet = protocol._read_json(artifacts, assignment['packet'])
-        version = reading.find_protocol(packet)
-        if version in (reading.PROTOCOL_V5, reading.PROTOCOL_V6) or version == reading.PROTOCOL_V7 and final_pages:
-            from .openness_successor import describe_successor_handoff, OUTPUT_CAP_EXPORT_MESSAGE
+        from .openness_successor import (describe_successor_handoff, describe_math_successor_answer,
+                                         is_math_successor_installed, MATH_PROTOCOLS, MATH_SUCCESSOR_ANSWER,
+                                         OUTPUT_CAP_EXPORT_MESSAGE)
+        if version == reading.MATH_PROTOCOL:
+            # A math v1 turn without a smaller task gains the admitted successor once it is installed.
+            if is_math_successor_installed(packet):
+                successor, details['successor'] = describe_math_successor_answer(records, artifacts, assignment)
+                if successor is not None:
+                    answers.insert(0, successor)
+        elif version in (reading.PROTOCOL_V5, reading.PROTOCOL_V6) or version in v7.PROTOCOL_DESCRIPTIONS and final_pages:
             handoff = describe_successor_handoff(records, artifacts, assignment, OUTCOME_CODES[outcome])
             if handoff is not None and handoff['state'] == 'handoff':
                 details['successor'] = handoff['details']['successor']
-                details['export_message'] = OUTPUT_CAP_EXPORT_MESSAGE
-                answers.insert(0, dict(answer=OUTPUT_CAP_EXPORT_MESSAGE, steps=[handoff['details']['step']]))
+                details['export_message'] = MATH_SUCCESSOR_ANSWER if version in MATH_PROTOCOLS else OUTPUT_CAP_EXPORT_MESSAGE
+                answers.insert(0, dict(answer=details['export_message'], steps=[handoff['details']['step']]))
     return dict(kind='decision', code=details.get('code', OUTCOME_CODES[outcome]),
                 owner_decides=ROUTE_DECISION_QUESTION, then=answers, details=details)
 

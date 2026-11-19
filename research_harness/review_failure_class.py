@@ -375,8 +375,11 @@ def classify_final_capacity_attempt(records, artifacts, attempt):
     if assignment.get('capacity_plan_kind') != 'final' or not assignment.get('reading_chain'):
         return None
     from . import openness_reading_v7 as v7
-    if ('pages' not in v7.V7_FINAL_FORMS and not assignment['reading_chain'].get('final_page_plan')
-            or protocol.openness_reading.find_protocol(protocol._read_json(artifacts, assignment['packet'])) != v7.PROTOCOL):
+    packet = protocol._read_json(artifacts, assignment['packet'])
+    version = protocol.openness_reading.find_protocol(packet)
+    if (version not in v7.PROTOCOL_DESCRIPTIONS
+            or 'pages' not in v7.describe_protocol(packet=packet)['list_final_forms']()
+            and not assignment['reading_chain'].get('final_page_plan')):
         return None
     signal = find_output_cap_signal(records, artifacts, assignment, attempt)
     if signal is not None:

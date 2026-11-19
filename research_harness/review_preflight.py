@@ -96,7 +96,7 @@ def build_assignment_report(records, artifacts, assignment, request=None, *, obs
     report = build_report(records, artifacts, route, assignment['role'], assignment['prompt'], packet, request,
                           capacity_plan=plan, turn_kind=assignment.get('capacity_plan_kind'), observations=observations)
     if (assignment['role'] == 'native_math' and reading.find_stage(packet) is not None
-            and reading.find_protocol(packet) != reading.PROTOCOL_V7
+            and reading.find_protocol(packet) not in reading.BOUNDED_CHAIN_PROTOCOLS
             and assignment.get('context', {}).get('native_packet')):
         # This native branch only loads artifacts. Other build_packet branches can publish derivatives and must
         # never be used for diagnostic reconstruction.

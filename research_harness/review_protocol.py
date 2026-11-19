@@ -32,6 +32,7 @@ from . import bar_sources
 from . import review_session_v4
 
 from . import openness_reading
+from .openness_reading import BOUNDED_CHAIN_PROTOCOLS
 from .openness_reading_v7 import (PROTOCOL as READING_V7_PROTOCOL, TARGET_PAGE_SENTENCE,
                                   LIST_PAGE_SENTENCE, NOTES_COST_TEXT, CARRIED_READINGS_TEXT,
                                   CARRIED_KEEP_TEXT, AFFECTED_NOTES_TEXT)
@@ -65,6 +66,27 @@ V7_MATERIAL_TEXT = (
     'final turn lists a completed argument under reading_final.material, where a ground can cite it. A '
     'row for the argument is charged to the allowance of every target, and an argument that an allowance '
     'cannot hold is not listed and cannot be cited.')
+# The stage templates of exactory-openness-reading-math-v2. Each is a placeholder for the writer's pass.
+MATH_V2_READING_PROMPT = (
+    'This is one reading turn of a math-solver result review under exactory-openness-reading-math-v2. Read what '
+    'this turn delivers and return {schema_version:2,stage:"reading",subject_digest,claim_digest,reviewer,notes,'
+    'excerpts,gaps,passage_requests} within the allowances of reading_turn.')
+MATH_V2_FINAL_PROMPT = (
+    'This is the final turn of a math-solver result review under exactory-openness-reading-math-v2. Return the '
+    'native result review. In findings.openness.evidence, cite each delivered unit that the review rests on as '
+    '{ref:<handle>}. The harness supplies findings.openness.minimum.')
+MATH_V2_PAGE_PROMPT = (
+    'Read this page of the final of exactory-openness-reading-math-v2. Return {targets:[{formulation,coverage,sentence}]} '
+    'for exactly reading_final.page.targets in order: coverage is one line of at most 800 characters, sentence has at '
+    'most 300 characters.')
+MATH_V2_CLOSING_PROMPT = (
+    'Read the decision rows of the final of exactory-openness-reading-math-v2. For an approval, return {decision,'
+    'findings:{statement,assumptions,scope,dependencies,policy,openness:{outcome,reason,searched_at,evidence}}}, with '
+    'evidence as {ref:<handle>} citations. Otherwise return {decision,reason,objections}.')
+MATH_V2_COMBINE_PROMPT = (
+    'Read reading_combine.block and return {block,summary,refs} within capacity.answer_bound and one quarter of the '
+    'block.')
+
 V7_READING_PROMPT = (
     'This is one reading turn of an openness review under exactory-openness-reading-v7, a fresh input without '
     'earlier conversation. The review asks what the evidence establishes about whether the exact statement of '
@@ -1184,6 +1206,14 @@ def find_common_prompt_version(prompt):
     return value if type(value) is int and value != 1 and value in _COMMON_PROMPTS else None
 
 
+# The stage templates of each bounded reading protocol, by protocol (openness_reading_v7.PROTOCOL_DESCRIPTIONS).
+BOUNDED_STAGE_PROMPTS = {
+    READING_V7_PROTOCOL: dict(reading=V7_READING_PROMPT, final=V7_FINAL_PROMPT, page=V7_PAGE_PROMPT,
+                              closing=V7_CLOSING_PROMPT, combine=V7_COMBINE_PROMPT),
+    openness_reading.MATH_PROTOCOL_V2: dict(reading=MATH_V2_READING_PROMPT, final=MATH_V2_FINAL_PROMPT,
+        page=MATH_V2_PAGE_PROMPT, closing=MATH_V2_CLOSING_PROMPT, combine=MATH_V2_COMBINE_PROMPT)}
+
+
 def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestration=None, repair_prompt=None,
                      adjudicator_prompt=None, excerpts=False, reading_stage=None, excerpt_rules=None,
                      reading_protocol=None, common_version=None, finding_version=1, evidence_parts=None, part_suffix=None,
@@ -1198,7 +1228,7 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
     reading or final turn of a native openness reading chain, and reading_protocol the
     protocol of its prompts, by default the current one. common_version names the common text that opens the prompt,
     by default the current one; it is independent of version, which names the scientific contract."""
-    if reading_protocol == READING_V7_PROTOCOL and capacity is not None:
+    if reading_protocol in BOUNDED_CHAIN_PROTOCOLS and capacity is not None:
         result = canonical_prompt(role, reading_stage=reading_stage, reading_protocol=reading_protocol,
                                   common_version=common_version, finding_version=finding_version, problem_paragraphs=problem_paragraphs)
         result['parameters']['capacity'] = copy.deepcopy(capacity)
@@ -1320,13 +1350,12 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
             or not excerpts or repair or evidence_parts not in review_problem_parts.STAGES):
         raise ResearchError('invalid_review_context', 'Problem evidence parts require a result session with excerpt rules')
     if reading_stage is not None:
-        if role != 'native_math' or reading_stage not in openness_reading.STAGES + (('page', 'closing', 'combine') if reading_protocol == READING_V7_PROTOCOL else ()):
+        if role != 'native_math' or reading_stage not in openness_reading.STAGES + (('page', 'closing', 'combine') if reading_protocol in BOUNDED_CHAIN_PROTOCOLS else ()):
             raise ResearchError('invalid_review_context', 'A reading stage belongs to a native openness reading chain')
         from .native_review import PROMPT
         reading_protocol = reading_protocol or openness_reading.PROTOCOL
-        if reading_protocol == 'exactory-openness-reading-v7':
-            prompt = common + dict(reading=V7_READING_PROMPT, final=V7_FINAL_PROMPT, page=V7_PAGE_PROMPT,
-                                   closing=V7_CLOSING_PROMPT, combine=V7_COMBINE_PROMPT)[reading_stage]
+        if reading_protocol in BOUNDED_CHAIN_PROTOCOLS:
+            prompt = common + BOUNDED_STAGE_PROMPTS[reading_protocol][reading_stage]
             return _build_prompt(reading_protocol + '/' + reading_stage, prompt,
                                  {'role': role, 'reading_stage': reading_stage}, common_version)
         texts = openness_reading.PROMPTS[reading_protocol]
@@ -3111,7 +3140,7 @@ def _prompt_matches(assignment, packet=None):
     source_rules = envelope.get('parameters', {}).get('source_rules')
     if source_rules is not None and packet is not None and packet.get('source_rules') != source_rules:
         return False
-    if envelope.get('template_id', '').startswith(READING_V7_PROTOCOL + '/'):
+    if any(envelope.get('template_id', '').startswith(value + '/') for value in BOUNDED_CHAIN_PROTOCOLS):
         from .openness_reading_v7 import matches_turn_prompt
         return matches_turn_prompt(assignment, packet)
     base = prompt_paragraphs.strip_prompt_paragraphs(envelope, assignment['role'])
@@ -3849,8 +3878,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                     except ResearchError as error:
                         if error.code == reading_capacity.PROJECTION_STOP:
                             protocol = reading_capacity.find_chain_protocol(reading_logical['native'])
-                            error.details['decision'] = reading_capacity.describe_projection_decision(
-                                protocol, records=records, artifacts=artifacts, assignment=prior or value)
+                            error.details['decision'] = reading_capacity.describe_stop_decision(protocol, error.details,
+                                records=records, artifacts=artifacts, assignment=prior or value)
                             error.details['units'] = reading_capacity.describe_reading_units(artifacts,
                                 reading_capacity.list_reading_rows(records, artifacts, reading_logical['native']))
                         raise
@@ -4018,7 +4047,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         if prompt_parent is not None:
             base_prompt_parameters['common_version'] = find_common_prompt_version(prompt_parent['prompt'])
         base_prompt_parameters.update(prompt_paragraphs.select_prompt_parameters(value['role'], packet))
-        if openness_reading.find_protocol(packet) == READING_V7_PROTOCOL:
+        if openness_reading.find_protocol(packet) in BOUNDED_CHAIN_PROTOCOLS:
             binding = packet.get('reading_turn', packet.get('reading_final', packet.get('reading_combine')))
             base_prompt_parameters['capacity'] = binding['capacity']
         if (value['role'] == 'native_math' and openness_reading.find_stage(packet) is None
@@ -4123,7 +4152,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         # that turn's bound without changing the recorded paragraphs of ancestors.
         packet = prepare_capacity_notice(records, route, value['role'], packet)
         parameters = prompt_paragraphs.select_prompt_parameters(value['role'], packet)
-        if (openness_reading.find_protocol(packet) != READING_V7_PROTOCOL
+        if (openness_reading.find_protocol(packet) not in BOUNDED_CHAIN_PROTOCOLS
                 and (prompt_paragraphs.CAPACITY_PARAMETER in parameters
                      or prompt_paragraphs.CAPACITY_PARAMETER in prompt['parameters'])):
             base = prompt_paragraphs.strip_prompt_paragraphs(prompt, value['role'])
@@ -4353,7 +4382,7 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         packet = _read_json(artifacts, assignment['packet'])
         if not _prompt_matches(assignment, packet=packet):
             raise ResearchError('review_prompt_mismatch', 'Invoke the recorded canonical reviewer prompt')
-        if openness_reading.find_protocol(packet) == READING_V7_PROTOCOL:
+        if openness_reading.find_protocol(packet) in BOUNDED_CHAIN_PROTOCOLS:
             from .openness_reading_v7 import describe_ratio_handoff, RATIO_EXPORT_MESSAGE
             handoff = describe_ratio_handoff(records, artifacts, assignment)
             if handoff is not None:

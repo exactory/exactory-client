@@ -21303,7 +21303,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.openness_carried": {
-      "ast_sha256": "d8fc4a50a7c3103a8424d195074365b73dd76331b018ef103e18d971578c4d0a",
+      "ast_sha256": "70335b7a2fbe9e42230b467c21bddc2906858f7a0e67290190ed615e0e425335",
       "functions": {
         "_count_characters": "e2a2bd30a7064019751f71e6460089f6113944250985699cc26032e713767abf",
         "_describe_chain": "81e2b697903eee6bb2162b26daa92a7c194d88fb0b3658d71f6cdafa8a84e831",
@@ -21430,7 +21430,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.openness_reading": {
-      "ast_sha256": "d8e9efc73cf7f497383f25cdf3b004ed2759b4fb9f7e84278f5c3406a018910b",
+      "ast_sha256": "b3433669a76c381b81893fb4d338a2ac110dafcf257aafabec01b17987d52dfe",
       "functions": {
         "_add_source": "bf750a7009979c804b515fe2fa49795c9649ea87dcafa53f80cef1045aeb2340",
         "_assemble_reading_turn": "9c44a6537d6d1fae1af0dc44b726cd7059da1ee593c0d2f800617c0c1655160a",
@@ -21467,7 +21467,7 @@
         "_plan_search_delivery": "685434c69a3f19cf3ef34b0faf04b5608df41859e79154032cf9749e7325f116",
         "_project_search_delivery": "3a1fcbaad96c966c6162c004c8e7f853082d1f73fdc6e22843389c7a52c16c4b",
         "_project_withheld_notes": "f35a556817dadc91a5db4723d8243a5a02e66be60224bcc53d7effd2870f4593",
-        "_raise_projection_stop": "3ec670dd3c3ce578d95fa23b6d47156900d0c8b5ab3c85555f9ae497497b321f",
+        "_raise_projection_stop": "64ce364a7c9e09cbd1fb251cb08a353c67956e0dde57db808ea7bb41e962068e",
         "_read_prior": "86726a6c27f53c21a7bb6146cc52d53b6cfe17504ffdd114a803958f9f34aeb5",
         "_render": "b10e390f8aefc37e389fea8243ce4134b16bff227fab002f099a19a32d9a0d3b",
         "_require": "002b814ce519e1e800f7467e9b68cb063d1ec9698a2a3bac1ab8cb1197842427",
@@ -21483,19 +21483,19 @@
         "_verify_legacy_chain": "41054870c5f1ec80baf65c891368a9b87cf6f19e947cba8c1dede164d8d26f1d",
         "_verify_search_coverage": "3a0cd46a68ba59f71ffb2546853900e2a5c043b3b0387e40da13b15130f90589",
         "admit_reading_chain": "9966fa88293f0d3a3fce48ce97f6eac94e3e0cdf286b096df64e1daad097e168",
-        "choose_chain_protocol": "bf6d8aff9d2f1857eed57ce95c0ed3c7377d9a795265a15a0929f1fbf675a08a",
+        "choose_chain_protocol": "def5b337b2d084073af1fd3ccab9c745ee59d2c7b3b0b4a28cbbcb1715deb465",
         "classify_retained_entry": "af520de26229a08ca63144c195d19cb46b839fedf9e03b354e62a4b4782734cd",
         "describe_projection_decision": "402158beaf69a5067c4296bbc463aac386936a18fce1885e571cd61caa424a57",
         "describe_reading_entry_bounds": "264163c88693d479311b469308fc43e27b0e04b3cdc445d57a457333189f2812",
-        "describe_reading_receipt": "006654862c4f914da0064a7ab6d947086c5e4df923c24a5a718758bff5c88e73",
+        "describe_reading_receipt": "eafdd6fc2927f9d1e94c56e3f8afc98f1b374357348dce5ae81084872d19f0ed",
         "describe_reading_units": "05bd1bf570b20853560118ebd8d19b9bf5d4c3a2b0504c93f3bc22fabdceed17",
         "find_binding": "ef69c590f2637364f148bf3a17576e05d0be50d01303726f2edff2b2c5a95920",
         "find_chain_protocol": "46552355af0b8ed6d64f8a26e013d20dbfc86136e3689db9c2b1981291e5ecc7",
-        "find_final_assignment": "ecdc0e4b739e56b8b7a197457ad0d3dd060c97a555ec349b5cf8b7df17ef20a4",
+        "find_final_assignment": "073ce6ac217ad224c0c99b0e88ed461a77cb84ae142c254d6aef3d747a01aa3b",
         "find_protocol": "ec2a90be424418b4519a35b82164a07282532f0138da1bb48d4b8626004d17b8",
         "find_stage": "74e9cca1cc147f3b9d34ef75c1c28c5416c227dd43221f3994904395352afc60",
         "forecast_reading_chain": "9cd5eb169d11790172c806a720162c243304a4b68ec918fd251ac93968598ace",
-        "has_deliverable_passage": "0df3ebffdc03c8a54e769bd5496aaaed46382f5d81a28a4d22283cd3bc3f8815",
+        "has_deliverable_passage": "f1ffeb63c1e73627c1e2da0c08dc3d27d05356af0aa7c8e2b96c90aa1e0e81e2",
         "is_math_openness_packet": "0959d5b2aaff8265c20719a67419e161665341735b5f0eec6edb10d2226f2129",
         "is_openness_packet": "ca252095a297deb029b41bb0dcf13e4e6b45e0b69b8d80fcd168675104fa3dac",
         "list_delivery_rows": "57dfc60434dbea625bd962aae2e281cb07f13d37a03cf19ce068cc40c63a632b",
@@ -21511,12 +21511,12 @@
         "measure_record_entries": "f835bc235c5a6516fdc22f1898b1c0a5f440718e42c46b8c6ad2d0e9ab7ff716",
         "measure_retained_entries": "480b1668a5724d25f65f260ea68fdd3e097f00cbb5df5074d4db051f6d7cbb03",
         "preflight_final_input": "268eb020cdff80e28066e157fed03a95485ae96fd281195ff2f2515899e041dc",
-        "prepare_packet": "69063f84241020f193c89d4e824610101a127f27f906db4400ee1b6d58758a51",
+        "prepare_packet": "bf235cbb09188b97f8d829bda6a4234f569bf4baf7a487c45eae8b2408ef4eee",
         "project_reading_chain": "4b6636ba1888443b01887671d4093d5549d49a0dacff12569e704c27a1ef9ff5",
-        "require_reserved_identifier": "920907e14f682ca584804fa4498b345652d56a93c73763cddbfd6a4351f51c41",
+        "require_reserved_identifier": "12d2dd1f171bc3787b8a6df4abbe2ba60d8f0d671aa19e09194d9ddb0a0d637b",
         "select_delivered_bodies": "4fdbd56f8443be78f2cc1f00f09bd56ae642ce916b6e7fcaa9edceea59acda4c",
-        "validate_turn_output": "0946cc9be9b378dbaa16167a61362cf85563df028b771c0e6a5b4be4feff445c",
-        "verify_chain": "fade1aa0552c1cd8ae910badd2360851365a2673c5cabbc64d0ab78547bbfa0b",
+        "validate_turn_output": "738de4cdafbcbc3f1a9779bb3bc874f4730e7e4ddcae3c7b28e25eb581d013a1",
+        "verify_chain": "4190093f401aa258e8f03a16ca821c1b22edfad56254d2d0b56a2eaaa6d69f12",
         "verify_problem_coverage": "a59559a5a4d7fa7d8e9545f94fdc689b401d4da11baf74da7af8111eeab3ab60"
       },
       "packet_call_digests": [
@@ -21787,38 +21787,38 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the activation of 0.91.0 (ruling 37): NEW_PROBLEM_CHAIN_PROTOCOLS becomes (PROTOCOL_V7, PROTOCOL_V6); no packet member, call, write or closed shape changes. Reviewed 0.91.1: a math openness packet that fits one turn stays a single native turn under (v7, v6); the condition reads the packet kind only, and no packet member, call, write or closed shape changes. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "c3cf07185178b66d747d3309e0416f8567c36ae790f3d47a85055a43a5208a0e",
+      "ast_sha256": "0b75ef9600eb18abecb410f8997eff7e7b325b4a5a0e2bdc80823bea21fcff7c",
       "functions": {
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
         "_append_unit": "f6cb4ac11ffc0db1bbc01ecf87ec1ca4e26a2ccc64a24c9aebe0b2c8d2ce16a7",
         "_bind_body": "2987a8c5ea3492523f72bf960edfd02af8b55595d336b5dceb7f2c1e22a7f8a5",
-        "_check_v7_admission": "5be57be8d7dbdecd276b3c82e2eb4fef17cb595a95c297192eece67e2965857a",
+        "_check_v7_admission": "dcba0b9956ca0d6d00782b331533b02b89f700a8855527dfcba37a8d4ae0d68a",
         "_describe_checked_entries": "801983d7a44989fff7031afb726c8865c654c64be1bbbe6a43a4103672a0430a",
         "_describe_identity": "9bb7503add880d286c1090f5e1c17b70f16c710c36367bf548a1fb11dd75b8cb",
         "_describe_json": "7c6004e53039a80228d53341ea102c68af46e1cc51855d15c96893ebef98c919",
         "_require_selected": "1756d3596364595c60b215e7b5399de39b723df692cf0f0fc491826408282dbb",
-        "build_chain_state": "9e33587f2d5455a23df0c104a45545242994ff340945d01af2e3f396386d07da",
-        "build_inventory": "543bab306bae3a905a1169963dd36f45157da878818d28597eb1ec34f091f24f",
+        "build_chain_state": "4cd995c0c273f4d53a5867d0db8b3f3b38bdc976d5efbaf83d89de98f062c08f",
+        "build_inventory": "52e702dc837554711067f8cfc472c52e0d97f0fa72593f907d6dc0e0e9726cc4",
         "compute_allowance_rows_bound": "43cedd0b96e55219fc11fc700beb8044053e677919c8c6088032814fc1e4703e",
         "describe_carried_pool": "b8c0046b42a8d1d5d4d96483e43f2c49afbc294acad7e86f5b965bc922646932",
         "describe_visual_text_stop": "927e68cb236d962c4335fe26aa56b413360d4b6490ec47b1cb2e0f1fd35775fc",
-        "measure_turn_frames": "792efbb951f9475314e4567a0b6ceda0cd7c13439428db55d8842e1a900bea54",
+        "measure_turn_frames": "8a4808e734b085e3f8795acbe239f2241566736992dfb2b9ec35f8eeb8aa244b",
         "observe_carried_chain": "7830acc80f56e928029aec9390682f3131b0401efcfae5710bc27f826ef9fe5c",
-        "plan_inventory": "427d865ada5c730d6601f112e91becc1da90deba9d364145001dcbdee033d0d0",
+        "plan_inventory": "0ab9eecaf336b2c4d14998700000549bbd29fa68fc81dd1637c0acdf2ecb7b32",
         "project_carried_turn": "0c984a434694f523c26e101401f7d285b7d189fdf69c5cab89491985e5cbb682",
         "require_text_reading_route": "0996fc68285408ff85afa069221807feb9838d253254f15016f5b03c8df65d30",
         "check_v7_admission": "38bdcbd8427b5fdbfd57337252c5e65b955fae7fafc2eb917a79053474186de0",
         "_find_largest_one_request_targets": "63216bfd3c6a1bb3fe519e16cef63c3bc823e4177c101f0cd3f726fed7802542",
-        "build_turn_packet": "0a5725af0b4a90dcd38e436cc65197ab02be1251f599b96386af1285b684bf1f",
-        "validate_turn_output": "2c99c634225c2de3cbdf9e4aa63238b129af0e9a6827420fd64ea1b03b3dd14c",
-        "prepare_next_assignment": "2864e98f4e05415ed21d6fd91af41f00ce5d68e5fc7f77aad6bbe2d37bb2fb4a",
-        "prepare_refusal_assignment": "00a986736b4fd5ea9a1eb424a2a5cf0f458749bfd3511ba84a78e1c32213a303",
-        "prepare_notice_capacity_assignment": "c74671dc7c9363c16a35ce68548b56b5ee21ec4269ea817a28a3a0f1b53957af",
+        "build_turn_packet": "db47e4202e8a6f2f8e925ee72711933643bc62ffbb5791aef69881e17abc265d",
+        "validate_turn_output": "c36e57516ecaa2d54324231e65605727d2fe3412daa556c7912c044b0056e0f7",
+        "prepare_next_assignment": "962c206465492fd1bd64fc46243b06fbc35029728c4afbff739a0c9df93990e4",
+        "prepare_refusal_assignment": "b0a90d71bb178e34c62ac850c8ce1f4ba0248524e01fb4f29eea2d93b2f3b89e",
+        "prepare_notice_capacity_assignment": "b964067b322e7a188ffa0663fb92cd40efd3491d0a42a190268858f8bf5b61fb",
         "describe_admission_stop": "bcf896b64910a70f603dd83f76a5d473b7c8fcf38899452593f64d16340c138a",
-        "plan_turn_recovery": "ab053a7647ac00b19a9633ae10fb394d6f5e087c1043c66ed17c9ade07085f55",
-        "_verify_turn_binding": "feb63bce5e0fb935ddde7a0ec1c24e18c89d697226c8909f55fc6a0525d963a0",
+        "plan_turn_recovery": "26a4ee97bdc87fb5a53d91cdd56ec5c30c08621f0d0d21a567b9830a46c76820",
+        "_verify_turn_binding": "88d8533cce5125458d7d8e4a6240901822505fd82e104996b238429f66595686",
         "_verify_required_coverage": "8b657838ac15ae8c58b3d96efa73875ac28184cddc1d23924722ede9991e8ab9",
-        "matches_turn_prompt": "482e2a75f9e81d1d6b73df9ea39910fc0f3df9f01ac3da8d153c4871044e1bc5"
+        "matches_turn_prompt": "243892a6cef6808429e43d887697b5f8bfbcb0b54967bc582997b8e437d4aa8e"
       },
       "packet_call_digests": [
         "027bbbdf412a92864492ccaf59a88aaa3a1b544a2f6bae687e6d87e75227ea0f",
@@ -21936,12 +21936,12 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned."
     },
     "research_harness.openness_successor": {
-      "ast_sha256": "1cc69ae90d36fc3c50ab2119889ac44bfe1b0ca9de441a44d7f96acc1d6e882a",
+      "ast_sha256": "459a0709e5b0b24004b9b4dfc71c0202157d7529fa6e42b8ea498cb4f34e125b",
       "functions": {
         "_project_successor_native": "0de9e1c43a0bc6110caade10147bf3141daf94c700348e79ec671ad52b2a55f1",
-        "admit_successor_chain": "890932ee7823dd7ee815ec347f4ad6168994950ba3d864cdd567dff1eed6b46b",
-        "describe_input_handoff": "ebee243aa7ff71988662cb670ef7c82550e1589af4c4e37490a2dfba3ee83ca8",
-        "describe_successor_handoff": "0dba13772cc3d8ac7fc4e4a45d083d7b0478f8ad7f552d994c97e4a566e2f8ee"
+        "admit_successor_chain": "ff6c282e8a1bf7dab10dac9088e60949d68198e28cf04ff2556b1d30430485ad",
+        "describe_input_handoff": "b035a6cf22c38836dabfa70f74abb03d0acd5c6eb1230193ff3f6c753156ce96",
+        "describe_successor_handoff": "8aa200ef2f1c1a621d67c3aa11ee90c631061355b8e0656d851eb6ece9b79069"
       },
       "packet_call_digests": [
         "07a3312aabf5ec02665a48a64eb49f45b406def9a53fd3b78eca3ff60d889b66",
@@ -23609,10 +23609,10 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_continuation": {
-      "ast_sha256": "839282cf4b15d33480a481a89db9f3a21884fd94626b071519fc250e8d41a762",
+      "ast_sha256": "9847c4476706df01a72d38fc7c926d9c908ee88b7cc07371faf7a33661a54f17",
       "functions": {
-        "_build_assignment_payload": "852d5d1d923e2a76803f72f49e0dd9aab3c6cb448cfa7a8807a80b5a87cd7f4e",
-        "_build_run_payload": "d74332719fa5e822c1bdc1f4e8feb83fb6b76a964f1106185956b9670b2497fa",
+        "_build_assignment_payload": "c7708971b07203f01154c4236fce79c03a3737bc90db79359d07283d8a839d5d",
+        "_build_run_payload": "0a14cde861381a8aa9b30ce38e832e66d3021f9e6751e0446c81c53afa19a18d",
         "_collect_context_failure": "591e12413fff0246fc27cac36b5f5ae874a21b169b05a5975a48401eeb46b07c",
         "_describe_chain": "98e8f34d05cae16a3ef9c44db7b043062f4c5508d51c448bf5be4e303c98a4a4",
         "_describe_progress": "f09641decb6004b043d473c3422d29b58a1bedadb8f0a01a58554ce7e3612d94",
@@ -23863,7 +23863,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_failure_class": {
-      "ast_sha256": "f9a5b3e8debc1d043736a14df2aacfa480cbe416a961aa8843108ece41ee8c79",
+      "ast_sha256": "e5e3c6e566ace191af9da737d4b27896dad513380fafd9f82932d99d4fbe1a2e",
       "functions": {
         "_describe_sequence_counts": "1903571802ceebaa2e6413b445ccec82fa398d7cf4b738a57b18c5747957e01c",
         "_is_scheduled_unknown": "18dbfaffb3993eab30b42d6bf376556828c162d79bcca21ce050df0f51cd2f2e",
@@ -23892,10 +23892,10 @@
       "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_handles": {
-      "ast_sha256": "45f99e6deae81a82419ea2936dee677c1902dab8025676b0cbd23fa5a5ba6309",
+      "ast_sha256": "610851b56b9d3379c4fa39cfc13f5b184ae8426c957949d1da9ee23f72bc1f80",
       "functions": {
         "_build_parts_v3_handle_packet": "ad2bacc455713a39c325530791eb6029d5e4fe9ec56f29dbcbb098ac7a3b5777",
-        "_build_v7_handle_table": "32797911a38f358cdd655abba9fc823e400af4a95c19b8a348ff8fe2f3d14237",
+        "_build_v7_handle_table": "c70bbb25b430bc817b197bf5c90f7d3784ea0931e9be7ebf690b4be70e09fdd8",
         "_expand_value": "86889659458e121b55950554fb3ecb25e5590d6265ec37969a3e5671fce38208",
         "_refuse_handle": "915d5b47f24ddee7a7a3492784adfdd8386f9db2b8bfb1470e2770bc84c650ab",
         "_resolve_packet": "d436bf46b75722ee9462be9259741638af283d3e1e83a7c4f994b3a48bf3fbab",
@@ -23904,11 +23904,11 @@
         "authenticate_material": "5ba05cca7552c9a8e8c330fdccb463e459556f5b2f0e84a2132f8945a8ac5e4a",
         "build_gap_handles": "99761be4d98e910cd45de3f6d5c1b9761f4e9570ba4bb970cc28b244a2bd9a50",
         "derive_expanded_output": "4e0b6863beadf48979dc759d8c473600622c9c567a7801975bace6ceef27da2e",
-        "describe_expansion": "c1a978e1f287d84dd95ce30271ae0ec0b342be07102709dd1e7351dc1616fec4",
-        "expand_handles": "853ad98cffdbedd4c7c1415c7f7d4c801b822a53cfd4602df6deddd5cb78d04b",
-        "is_material_output": "66f5f518d924b353d7020e8e320c46d4871280e1d7ca1f07d00b2f00a3f30210",
+        "describe_expansion": "2e97c72859b4db517ac25106ee96cc8ba81ddba844e9c81ad31ff0d86aadaf11",
+        "expand_handles": "107bef5c82fa44473a3cb377ccf2a78c93089574c05ce4b2efa7dbcb85642772",
+        "is_material_output": "fd04b44aa2aaa0bdbea2ff6712beecdaa9746e36fb96fa6ba98b8da53f2470a7",
         "record_handle_output": "d5d26876a50254eab70457c2903210a424d352725a8edafd48d34cc3ab547d5e",
-        "validate_material": "97afd8fef997d401c29a5fb793515769f709c7a1c4bd80ebe62f312eee8e4cce"
+        "validate_material": "4a9e197ae80fb535675379c778b2d23c6b14fd7044f35e7cf57e75c09fc4ebd9"
       },
       "packet_call_digests": [
         "08a3801a5dc278a4fa3ec3959db6d5254e5c484656c412791dbd2ee5f4e0babc",
@@ -24755,9 +24755,9 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
     },
     "research_harness.review_preflight": {
-      "ast_sha256": "c589902e1dd43f7f02570917a0b9d7499ccf8bb6c51c6c2a79c89d12a0f0bef7",
+      "ast_sha256": "0411f74d330e326bb982462a878afbaffec2a4f1502c04e4711638ab6cc3355a",
       "functions": {
-        "build_assignment_report": "90ff62a6f3e031b301eaf0ae129b664ed9d1ffca81a9d315a08045242255a3c4",
+        "build_assignment_report": "aa8d0b119fcee376a20fc6385f848ce9a6b2abc63d523ce06a46b6f3215caeff",
         "build_report": "797c1b67d7ffdde547d9882ec2dd1188934aecd1a9dfefae31e458c834288c9b",
         "check_request": "922a094fbfbdc088ae8c1dd46353580916d86bdd5180bbcbc6fdfe60bdd336ac",
         "describe_work": "3637ef88ec1befcbc2d1f3b1ccb4e79d985c76a206a8a681835ab883dbf18f37"
@@ -24961,7 +24961,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "b884787c23c1aac9971d256f3d61cffa8271a6c223078baac9bfdcf5cfc343ac",
+      "ast_sha256": "90a4157d85c5bded072972087b377a194bea8f94a9cd5d62baa6a6db27914886",
       "functions": {
         "_assignment_state": "62dc47fa3c29e71002de10cd8cb10eec878b4d929cfa8806d69eb6f757bc7d01",
         "_bars": "fd41a7b94078e8e0761696db4a7cc67b063cbb5787f76d6d3dae65fcc7fe5f9f",
@@ -24987,7 +24987,7 @@
         "_payload": "c526bb2f57889470221ebb4e0bfe3b3ac0f4218f5a89615a1dd28c4744bf29eb",
         "_prepare_review_mutation": "2385be60d23b526de9f5574449784387944603ad8060cba6b95193bb17775c42",
         "_project_scoped_result": "c2a9b83a0c4760d56232bbf6de7ed4ef74c50d5ad4f6b1e1e4dc502f33c61ebe",
-        "_prompt_matches": "04b40902180fa44c16f5e61be98108facae32b377b2807e88696475a63debd28",
+        "_prompt_matches": "34611622122d5d9b7954a2296261289c16b4ec6d27d1c1455ba3267a359af568",
         "_put_json": "fae2721f42a5483694e38ac7a3a6006092ae8cefdf894fa21447ad2fd2070ad0",
         "_read_adjudication_review": "fcd04105dbc2473eacdbe01f05d5c23484a337f9c0afe0dcdb0fb12f5c6a144f",
         "_read_context_records": "85765f3f4614191373498fcca61846681cf30770af351b7458e03d6555400796",
@@ -25024,7 +25024,7 @@
         "build_probe_prompt": "54844f87f0fe366a9faa59c946d9ead80149d0b62d047c288579b11bafc1579e",
         "build_problem_subject": "e96122a41158bfff642fd370cbd33d7f54ee259af8fbc6521565a58df4fc7005",
         "build_rubric_objection": "b90e9c2ef1e913c48efb2bd743ff95efa254b2da574a4fea211248c864bc7707",
-        "canonical_prompt": "ab129cd6c9c9db7dcaeebc55b2554b68076bd058b5a74288c7ba6f6108116b7a",
+        "canonical_prompt": "a531cdb3db1e56947f4151fca52466c0d83cd6e714fd232d84bc03521bb658b0",
         "collect_adjudication_evidence": "8ef3c2bb7ebcd0bfe25dcd84a272ae0f9824a51137616936f28ce481999ddcaa",
         "collect_carried_records": "f9962ad55bb34a6a6a01507c872b4cfb771413ba3fd73d38e9f37c6ad4ac0f6f",
         "collect_historical_bar_objections": "0cce846dc00f86534e2bba1197859c3395e7ca521046af8d1bd8cae6f5a6d35e",
@@ -25051,7 +25051,7 @@
         "has_pending_invocation": "1100f816ca4769d642bcb040f697439bfd738a2a00c832bbbf9b153965e9ac76",
         "has_problem_result_rubric": "a25172c08931f9069a1d5d8535639c9a043c1cfb4fe8aa1bc4ddf71ed252458c",
         "has_verified_history": "80bcffdb051ef2a341dc4bd4a86f1dff05304d863526c75525803e349074c3bc",
-        "invoke_assignment": "ee91fa26447e42c4e0dee7ef0238ad15b532def5e3731aad2f43a9cc800963d8",
+        "invoke_assignment": "a5e2facdbc00577c1fbb9628eff712b6e725a6e388f0a2d6f90e51ece9b53e63",
         "is_dead_assignment": "0e87b884f14015390061ab33a6f17a4a95770ae46620127610f25244a62fcd85",
         "is_previous_prompt": "6a89da49434d83987b303155068983a6499cb140a6eb0b906a4e6c1043537f42",
         "is_version_2_problem_result": "b12d8be5451fd095516bf97d562c067466acb6d216815b6fe20a93f9e3520a0d",
@@ -25063,7 +25063,7 @@
         "read_raw_observation": "14e6b6c7ca97a4e3992d908f1d94f3add3a92bee7561ace63d220fb8cbf06834",
         "read_route_runtime": "e60df76fe94a9b3f2b98373e22d2c1bc846ca050d50044e4744a7e60fe71bca2",
         "record_adjudication": "f65c72f2a1d78c38ccc43754e518ff050beb086db56d42f3b81322be2297d5db",
-        "record_assignment": "ed69e838aa62e66bcff7650d76e4b78e1b2ab9e237ba0bd2abb0ce966f436481",
+        "record_assignment": "9be5dc6fd576eaef1fd343ba321e096b231bd3990a649f6e72c957f7c76e2de7",
         "record_attempt": "7145b51d5cdbea1477432a5cce61efb366e8dd94540e082fde33066063c4b8f3",
         "record_context_event": "725358847e29626ae330f19fe7a2b1530b762238e0893f3021cebbe0c70e49eb",
         "record_route": "eaa1d126f04ed9ff04f92ff38836725f9ba40802efcda880e2c6adc7b94d874e",
@@ -25274,10 +25274,10 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_refusal_replacement": {
-      "ast_sha256": "2ba10e1ea9bd47518b96033e77560de5478999d35c9164f7044ca1cd2169c297",
+      "ast_sha256": "ab977fb4790fef036943b423662195aa9958bb2f317f9591d7b0ba44840f8625",
       "functions": {
         "find_output_successor": "f9aa987eea6760e2a7fd3e29888f5e43903e4365d1e50938ea4b17c429b79967",
-        "prepare_replacement": "42a8870aa3b4b45ade180a6f536fb680cbb2a8911f9b5f826bd60e86c8fc7230",
+        "prepare_replacement": "af74c0c76a07dead4cbbdd9c06ca1a7f44da94742df59ce4c7309a4998a2210d",
         "read_position_context": "cdede8c28f9431efad8671676884d4e166ee1d9ad3e3728ac4414cc53cf87d32",
         "read_replacement_link": "c532b998f7ab3e173deea48b4d2b41ab8df7bcba6534694b9be6e35a17e27160",
         "require_selected_output": "c51358ab7d4eb8e8c97d27385ff001226126fdd7bf36960bf619db74ec1e1211",
@@ -25389,12 +25389,12 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_route_capacity": {
-      "ast_sha256": "8dc7818327bc7f42d757602e2b1de7f2713b95ca24917310b0f0a039d35c7440",
+      "ast_sha256": "19699b52c710ff790e70f91618baf17cff6a2236ae943d2b7353644a4d06680c",
       "functions": {
         "_build_serving_parts": "a2e6e2bcdc2f59febcf2f1da601e09dad8a50b6ec6d333fa24930307e4891b44",
         "_build_serving_repair": "c50aaef3ccfcccf6064f9a4cdaa0a0f52111886dd9b185936b6d1e5a38ab47ca",
         "_can_deliver_parts": "4cbd7d56f2a739fef566405d73c495a14fe05a16e5289d3b5092a2c8aa6935f2",
-        "_clear_carried_answers": "b995116ba00e68fd0f74d6cfe00eead0c442ef22b69482bc146bfcb52e374ea2",
+        "_clear_carried_answers": "a04fd7539e4553610ccac932959349720e145872beee6a40c1be15f7a72232df",
         "_clear_material": "90e10993e38c73281ba419d352e38cc8dcc44979c5fd71f6c4b530cb6bb0545a",
         "_collect_strings": "ec0518deeb23b8da9b1eacd1634dc2e018c3e69fcae3c5de317a52cb49823629",
         "_create_profile_row": "656620b16bfdb3289c0add9eac47656157a710ac05bf768a93ce8fa8d4c9d31c",
@@ -25423,9 +25423,9 @@
         "describe_assignment_limits": "7d463bd8c8479f7a8f0b3874cb734df1acd143601602ed3a83c90530145c2443",
         "describe_assignment_task": "2b71c68cb791cd1175e1fa915606d94a502782dd6e154690bde3cd3720a7c349",
         "describe_assignment_warning": "7b4cf02e9d3aeaf2314a64c6af65361dca797dfb4a5288ffe4d83edf851e69fe",
-        "describe_attempt": "8b8da7393f3c3dcb37732bd852465d6d7fe2daa118face05e553a9726370cfa0",
+        "describe_attempt": "049a0333657f6741762aa399617122e4aa1f59e1ac1cd97cd0891f22cea2cdcb",
         "describe_binary_rules": "10dba71afb020afb5ccb28e84a6d0cb06bfb3d4b2a91d74ce4e0702d67b56b5e",
-        "describe_capacity_decision": "8bf62b6a6eff48cc031f228800a96c8a43c3928db3c34169a5696afb449e78b5",
+        "describe_capacity_decision": "ac279b130d2b7b0b5fcb7d5940353bb7314cd15812c91d293e9bb2ffb348493e",
         "describe_capacity_forecast": "d7377b70814020792f0a7f43ecd1c057f8decd9a461064622cbf6b1f29209519",
         "describe_capacity_recovery_row": "7618bdee4271794170bcc4f05658e69a5f3f3b36afc5a112ca6ab4418bbfeabf",
         "describe_cli_version_status": "dd5d2885bce348ca26f78808bf2394ec24236d47ade407ef2f261853f4333a04",
@@ -25437,7 +25437,7 @@
         "describe_next_capacity_call": "ce1e087a414cac013c6e7862582c8ca6df7a1ff580dab2a3b3494901710c8bea",
         "describe_open_route_reports": "22d125513bd35b87825efbcd1c45894cd152084a73413e5dde760f1d27aba2b4",
         "describe_output_warning": "21de96d5af49fd055650e94897fadd5ab1bc0e52f6b62e24ade24413a0e1538f",
-        "describe_plan_preflight": "4880cb9d98774bff37778e94306085406870c807ab52d2662bfa7f713cb94b4e",
+        "describe_plan_preflight": "edbd463f579efadb44066c73b5d8e3b6d935a227780276c75cbf3c58487581df",
         "describe_route_capacity": "dc8c5c7fccc98f9fdaf056b80bbc9f508349b701d8981f39f27e2d819d94e024",
         "describe_route_class": "8c2e5fea846a7893c0a6d377dd0dbd77fa08d04cdb5b5dcd89b77cf8dae6cc92",
         "describe_route_report": "9b863e3edc15702489089729a9d56a67815a6b58bf38dcbd91810daee9f78f0f",
@@ -25447,11 +25447,11 @@
         "describe_task": "866a97559df87fedd8dd2c353579c7149732f801a6f244ffc46c40dc273842d8",
         "describe_task_kind": "57b29766ce276404a4f2267a58cd366242f1ebb1312798ac11dbd17913633c4d",
         "describe_text_room": "32432cfaa36ebb629ce9cbb6ce7441821d37da4b4284dd5fd2d769748a113169",
-        "describe_unsolved_reviews": "b10c5662b5a0d27327b1b6e1a3145ad94acfab170899c5fe0fc1a0b0cdd12fd1",
-        "describe_work_units": "468b91882eec9e12c79f14d7204231f94f8692d48afe20770440099acb5d84a7",
+        "describe_unsolved_reviews": "20b8ab1ce79b52279fa5ee9c0d54d6bb7aca8a79351eadd4880cdb9c4f5b50a3",
+        "describe_work_units": "407e6b1153ac347aef8c302c69c9198a8c96a77319590fbb9d44042d9d225a4b",
         "divide_room": "479df84167dc68c68051cf92f213230c797c15f1ac495e77fdb4b451d82ca270",
         "find_serving_routes": "41cceaad5a84ea924dcd3548abd3599d15fc5dba5a6ddb5836dc39052b37a874",
-        "list_capacity_recovery_rows": "1732ce2da6d572eae0cb7f4dd3625c6379662f1bdb2700ce03bd9435cc700a6a",
+        "list_capacity_recovery_rows": "f5cafdfe4d3c05262dff2d6197c91f62cde130c65c51f0fea281e048449b6db8",
         "measure_attempt_ratio": "7af1e6a8803c023ba2c482a852bba7c298840b4fec53d5ae45a7153f1bc4c509",
         "measure_capacity_value": "8a7a11792a66562ef24886b2129d2371de334d55c392b2b3505e366698564b50",
         "measure_request": "1615879024ec19d63e6243105beb627438f6d407aa9cc8fb5f7dcad5ce6b6abb",
@@ -27044,7 +27044,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.openness_final_pages": {
-      "ast_sha256": "a48b81191038c23277608a07f0cf971f09ff5039e0cd8145e849936dc2513a3b",
+      "ast_sha256": "26d52cf20ce0be91e0e870d6962b83f335ba0cc14e1cee2ab4919beb52db9267",
       "functions": {
         "read_binding": "2da24aa0945dc4a3857c77349290b841384ef906fff06f5393184d39aac5d679",
         "read_page_plan": "edcd39f87509ab69c60c42f8c20a25f9cf0f5e7d311845411344fcf964fe32f7",
@@ -27057,11 +27057,11 @@
         "publish_page_plan": "ba2ade2d94b18ebde66d4e82e843d7845bee8d192304b30556c61fc33f909ab1",
         "build_validation_envelope": "2f2c6c95117dcb172f84f550b518aec07c7b8a2dd2f9107116bc830fb650f198",
         "list_page_outputs": "18373aa1334deb468cfb8a94555dfc70ec0f48242ce36d2ae1582914dd122e39",
-        "build_final_packet": "a006b108664a516ba3fdc3e2a17986cf04a07c8133c9698ed4b5e5afcae993a4",
+        "build_final_packet": "438f1d1c52016e1a773b3053e97c30fabd498be57b690551afdad02c6c6711a0",
         "project_final_output": "8d4784bfaf92326b28b835e66c2b3ad17e760f3c5ed875916387f3e08976a65d",
         "list_composite_turns": "d5bb3db6ad6173c90067328e1b340795aa81cf7e3d03a35cd02138de47ccc38e",
         "read_composite_currency": "4bbc0254f15e8a36c4b1970c0a776a1a4103a1e34f3bbf380decbdedd5ff23e9",
-        "validate_composite_output": "b8eb20486da810397af0ba74b943cbe72ca92fb2b8f1eb72faed96182df101c6",
+        "validate_composite_output": "b00c9ba8c4bf9a1273e87010a6a94b4f62a4a6ad7ced74cea9f0d22b3b274223",
         "prepare_closing_composite": "c1ab75fe508e983b38fbb8d2a29c13bef93f0d3517b1b41b068afda54eaafd41",
         "verify_final_page_plans": "822e243cd0414acb6eafad8b9135ed739afb67d9f9f4e8356d962783a9e32b92",
         "verify_final_turn_binding": "ac6708b02f65571fd6847cdff8c2730df841b6c5ce075a534b0cdd315f6e233c",
@@ -43663,6 +43663,15 @@
           "quantity": "identifiers"
         },
         "searches": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/v7-bounded-turns",
+          "quantity": "identifiers"
+        },
+        "schema_version": {
           "bound": {
             "serialized_characters": "selected_request_input_limit"
           },
@@ -102907,6 +102916,20 @@
                     },
                     "orchestration": {
                       "$ref": "field_65efb83bb3ee"
+                    },
+                    "original_claim": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7._describe_math_fields"
+                      }
+                    },
+                    "resource_policy": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7._describe_math_fields"
+                      }
                     }
                   },
                   "quantity": "identifiers",
@@ -104568,7 +104591,18 @@
                             "$ref": "field_65efb83bb3ee"
                           },
                           "quantity": "units",
-                          "sample": "x"
+                          "sample": "x",
+                          "members": {
+                            "count": {
+                              "bound": {
+                                "serialized_characters": "selected_request_input_limit"
+                              },
+                              "class": "fixed",
+                              "entry": "Q1",
+                              "fixture": "native_math/v7-bounded-turns",
+                              "quantity": "identifiers"
+                            }
+                          }
                         },
                         "results": {
                           "bound": {
@@ -104643,7 +104677,18 @@
                             }
                           },
                           "quantity": "searches",
-                          "sample": "x"
+                          "sample": "x",
+                          "members": {
+                            "count": {
+                              "bound": {
+                                "serialized_characters": "selected_request_input_limit"
+                              },
+                              "class": "fixed",
+                              "entry": "Q1",
+                              "fixture": "native_math/v7-bounded-turns",
+                              "quantity": "identifiers"
+                            }
+                          }
                         },
                         "settling_work_id": {
                           "class": "fixed"
@@ -104706,6 +104751,13 @@
                     },
                     "scope": {
                       "$ref": "field_65efb83bb3ee"
+                    },
+                    "supplementary_inputs": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7._describe_math_fields"
+                      }
                     }
                   }
                 },
@@ -104747,6 +104799,76 @@
                       "entry": "Q1",
                       "fixture": "native_math/v7-bounded-turns",
                       "quantity": "identifiers"
+                    },
+                    "claim": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "evidence_digests": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "kind": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "milestone_id": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "next_hypothesis": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "origin": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "remaining_obligation_ids": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "schema_version": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "verification_status": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "what_changed": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
                     }
                   }
                 },
@@ -108775,6 +108897,76 @@
                       "entry": "Q1",
                       "fixture": "native_math/v7-bounded-turns",
                       "quantity": "identifiers"
+                    },
+                    "claim": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "evidence_digests": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "kind": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "milestone_id": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "next_hypothesis": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "origin": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "remaining_obligation_ids": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "schema_version": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "verification_status": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
+                    },
+                    "what_changed": {
+                      "class": "fixed",
+                      "opaque_json": {
+                        "limit_characters": 100000,
+                        "provenance": "research_harness.openness_reading_v7.build_turn_packet"
+                      }
                     }
                   }
                 },
