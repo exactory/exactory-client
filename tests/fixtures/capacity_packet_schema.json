@@ -21392,15 +21392,15 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_output_correction": {
-      "ast_sha256": "6eb963ef55ab2be2f51bfa0a9b9ec575fcb103b0d1304417dcf9eb81630e4d6f",
+      "ast_sha256": "8e5dc87f13a155484daed674d8602f7aff4ca2a1bf70d77da2f16eb5a77f698b",
       "functions": {
-        "_authenticate_observation": "b65c1f5fe929269e60583485528818c2ddefaa233f32789f36dd1801578cc12f",
+        "_authenticate_observation": "e816df292481a2045aad20cb4b55995771fdadbeb7a76080593b371eaafa2cb2",
         "_prepare_packet": "11d07c3cbf338a2830f2f4cc76304af8354d7f3d172d9942504d21540a2166d5",
         "_read_raw_target": "4491addb389010953e627b64b99ade851445436bea01683ba65009c014798554",
         "_reject": "4743e9a7a1e670066edc35edc538406087276a3f77d56949c49895d68a2394b1",
         "_route": "15f109e391988a3a6a732ebe1275c3523d8bbac1f741dcc729de2a7c63c16246",
         "build_request": "6ef05d388564cc965f2cb578c298272d8eb21867d40186de38b0089ab8035f9b",
-        "invoke_correction": "4d559319902a89d9522e7f38b71498b812420843a132889ce8db5ffa0a88ff98",
+        "invoke_correction": "34bfebb8be49538a61bddfab9b991217fea0f97a238199b915833febc13d346d",
         "prepare_packet": "55895aa00ffc512dd5bc1cab786282efed38950f5e22bf1b38f77168a8b69b0a",
         "selected_correction": "e4b84d6094d3587ef5d35d7fee8c6db4cf1748b52228925b9000d3452cbd149e",
         "validate_output": "0ea580f50a270c5957c7838fb2f5d8378ef11b7e7a898d81972d8ffdd37e21e4"
@@ -21413,7 +21413,7 @@
         "87c3cc57e36f8e70d05658c7fe8bb9587ecbf2042822c79ae198232ee273f72b",
         "a4e3e4d7d464207ad59c43b6e4096cd4217718b57dddf92dc2eefdc928bef8d7"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback forwarding to _invoke_once: it carries no packet arguments and changes no correction packet fields or shape."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback forwarding to _invoke_once: it carries no packet arguments and changes no correction packet fields or shape. Reviewed 0.91.3 recorded-runtime authentication: _authenticate_observation compares the recorded runtime with the runtime that the route record pins, and invoke_correction requires the installed runtime and the installed reviewer program before it records the invocation; no packet argument, member, call, write or shape changes."
     },
     "research_harness.review_packets": {
       "ast_sha256": "c9e9237b96b4d8b790b4b9d7f07f12fd8cf0f412d8c3b993efe3f73010b43e21",
@@ -22669,7 +22669,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_route_capacity": {
-      "ast_sha256": "81ca16006b426cd62dbbca6b1f2aef93e123addfc076f3b91a99bf531256464e",
+      "ast_sha256": "b35cf902d578545087dd199ed8852821b6db7525af4ea56659ac14d0d8a1c07e",
       "functions": {
         "_build_serving_parts": "8f2f7be1d7e1d4cc20fa124af779a48e77d41ab31cb6c7aed1fe3ed6a3de3afe",
         "_build_serving_repair": "c50aaef3ccfcccf6064f9a4cdaa0a0f52111886dd9b185936b6d1e5a38ab47ca",
@@ -22741,7 +22741,7 @@
         "prepare_assignment_capacity": "d96b0bdd7a9f87cad83917d10e304e7df2624b649a774c234da7d6d79b0c9b46",
         "qualifies_for_output_profile": "0b6dc9c47e30814e0677cf564d8471f1242e0b88c51e852b32df6b03846c08fd",
         "read_chain_capacity_plan": "bf38987008e1c94cba95973349a93c3130505138d155212b78db7f5650e32bb3",
-        "read_installed_cli_version": "7ab8a808e85c473964f019ff6052eb71f04a036c0115a21d0b491c00f5ee310b",
+        "read_installed_cli_version": "b368f69c03898a0a0c309b7eeed5a8d7604801666eab55418a88b2a9cdbf458d",
         "read_output_profile": "4844b8fa30fbcaa682409d10e96ee7588e5e1caaa9ac9c02d53f971e52a38524",
         "read_profile_priors": "66ba3117eae212e65062f37bd38406a83ea909b370394442889641ef6d5ef8d3",
         "render_profile_json": "a4c3f27e862185ae20a37bbef3f622c81a1876e1ecac702f1512eafa2704d605",
