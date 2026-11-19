@@ -45,7 +45,7 @@ class ContinuityGuardTests(unittest.TestCase):
         return case
 
     def test_other_installed_parts_execute_the_refusal_replacement(self):
-        for chain in ('parts_v1', 'parts_v2:study_readiness', 'parts_v2:problem_adjudicator'):
+        for chain in ('parts_v1', 'parts_v2:study_readiness', 'parts_v2:problem_adjudicator', 'parts_v2:problem_slate'):
             with self.subTest(chain=chain):
                 try:
                     journey = matrix_fixtures.execute_additional_refusal_chain(self, chain)

@@ -7583,7 +7583,7 @@
       "record": "20261112012956-slate-review-cannot-carry-a-forming-import",
       "class": "D1 slate packet delivery through parts v3",
       "summary": "A 28,600,000-character slate packet carries 106 imported forming artifact bodies totaling about 24,500,000 characters, exceeding one local text input.",
-      "expected": "The new slate slot plans bounded parts v3 turns and the reviewer stub finishes a slate review recorded by value-review, including a verified imported-record citation. Ordinary assignments and recorded source sessions retain their bytes.",
+      "expected": "The new slate slot plans bounded parts v3 turns and the reviewer stub finishes a slate review recorded by value-review, including a verified imported-record citation. Ordinary assignments and recorded source sessions retain their bytes. A refused slate turn is replaced through the planner with its refusal notice, and the series continues.",
       "fixed_in": "0.92.0",
       "test_kind": "real_shape",
       "tests": [
@@ -7591,7 +7591,8 @@
         "test_review_parts_slate.SlateSeriesTests.test_A1_imported_record_cite_verifies_in_recorded_slate_final",
         "test_review_parts_slate.SlateSeriesTests.test_ordinary_assignment_keeps_packet_prompt_and_request_bytes",
         "test_review_parts_slate.SlateSeriesTests.test_recorded_v2_and_v3_slate_sessions_keep_their_bytes",
-        "test_review_parts_slate.SlateSeriesTests.test_v4_session_admission_precedes_the_slate_adapter"
+        "test_review_parts_slate.SlateSeriesTests.test_v4_session_admission_precedes_the_slate_adapter",
+        "test_continuity_guard.ContinuityGuardTests.test_other_installed_parts_execute_the_refusal_replacement"
       ]
     }
   ]
