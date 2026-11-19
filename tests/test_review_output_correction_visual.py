@@ -73,6 +73,14 @@ class VisualCorrectionTests(unittest.TestCase):
         self.assertEqual(state['attempt_id'], 'negative-visual-two')
         self.assertEqual(state['output']['value'], original['value'])
         self.assertEqual(json.loads(artifacts.read(observed['output'])), delta)
+        # The installed Codex runtime changes after the correction; the stored correction keeps its selection.
+        pinned = records['review_route']['route']['runtime']
+        for member in ('version', 'executable', 'implementation_sha256'):
+            with self.subTest(installed=member), \
+                    patch.object(codex, 'runtime', return_value=dict(pinned, **{member: 'changed'})):
+                self.assertEqual(correction.selected_correction(records, artifacts, assignment['id'])['id'], 'text-delta')
+        with patch.object(codex, 'runtime', side_effect=ResearchError('review_runtime_missing', 'The CLI is not installed')):
+            self.assertEqual(correction.selected_correction(records, artifacts, assignment['id'])['id'], 'text-delta')
         supplied = collect_actual_input_packets(records, artifacts, assignment['id'])
         self.assertTrue(supplied)
         self.assertNotIn(correction.PROTOCOL, {row.get('protocol') for row in supplied})

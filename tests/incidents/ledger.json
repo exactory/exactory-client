@@ -7350,6 +7350,25 @@
         "test_review_route_renewal.RouteRenewalRegressionTests.test_no_command_records_an_assignment_on_a_stale_route_record",
         "test_review_route_renewal.RouteRenewalContractTests.test_first_turn_position_keeps_its_members_across_a_renewal"
       ]
+    },
+    {
+      "id": "accepted-correction-read-against-installed-runtime",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "authentication of a stored observation",
+      "summary": "An accepted output correction was authenticated against the installed reviewer runtime. After an update of the reviewer CLI or of a transport module, after a change of the program path, or without the reviewer program, the correction was not selected and its assignment showed review_output_refused. A correction call on a stale route record, or on a route whose reviewer program was not installed, recorded a failed correction without an answer and used the one correction of the assignment.",
+      "expected": "A correction authenticates against the runtime that its route record pins, when its call finishes and at every later read, whatever runtime is installed. A correction that records another runtime than the pinned one is not selected. A correction call is refused before any record, and the correction stays available, when the route record is stale and when the reviewer program of a Codex or a Claude route is not installed.",
+      "fixed_in": "0.91.3",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_correction_recorded_runtime.RecordedRuntimeTests.test_accepted_correction_stays_selected_under_every_other_installed_runtime",
+        "test_review_correction_recorded_runtime.RecordedRuntimeTests.test_correction_recorded_under_a_runtime_that_its_route_does_not_pin_is_refused",
+        "test_review_correction_recorded_runtime.RecordedRuntimeTests.test_stale_route_refuses_the_correction_before_any_record_and_keeps_it_available",
+        "test_review_correction_recorded_runtime.RecordedRuntimeTests.test_missing_program_refuses_the_correction_before_any_record",
+        "test_review_correction_recorded_runtime.RecordedRuntimeTests.test_answer_of_a_call_on_the_pinned_runtime_is_accepted_after_the_runtime_changes",
+        "test_review_correction_recorded_runtime.ClaudeRouteAdmissionTests.test_claude_route_without_its_cli_refuses_the_correction_before_any_record",
+        "test_review_output_correction_visual.VisualCorrectionTests.test_original_visual_delivery_and_negative_science_survive_observed_text_delta",
+        "test_installed_runtime_readers.InstalledRuntimeReaderTests.test_every_reader_of_the_installed_runtime_is_declared"
+      ]
     }
   ]
 }

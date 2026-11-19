@@ -187,6 +187,8 @@ def validate_output(records, artifacts, assignment, packet, output):
 
 
 def _authenticate_observation(records, artifacts, invocation, observation):
+    """Authenticate one correction observation from the stored records and artifacts alone. Its recorded runtime is
+    the runtime that its route record pins. The installed runtime decides only whether a new call starts."""
     from . import review_protocol as protocol
     assignment = records['review_assignment'][invocation['assignment_id']]
     route = _route(records, artifacts, assignment, invocation['route_id'])
@@ -199,7 +201,7 @@ def _authenticate_observation(records, artifacts, invocation, observation):
             or invocation['prompt_hash'] != digest(PROMPT) or invocation['diagnostic'] != packet['diagnostic']
             or invocation['route_digest'] != digest(route) or request != expected
             or observation['request_digest'] != digest(request) or observation['route_digest'] != digest(route)
-            or observation['runtime'] != protocol.read_route_runtime(artifacts, route)
+            or observation['runtime'] != route['runtime']
             or observation['status'] != 'completed'
             or observation.get('observed_model') != route['model']
             or response.get('model') != route['model']
@@ -219,6 +221,7 @@ def _authenticate_observation(records, artifacts, invocation, observation):
 
 def invoke_correction(store, payload, *, expected_revision, request_id, credential=None, after_start=None):
     from . import review_protocol as protocol
+    from .review_route_capacity import read_installed_cli_version
     artifacts = store.build_artifact_store()
 
     def start(records, value):
@@ -231,6 +234,11 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
             raise ResearchError('review_correction_exhausted', 'One correction invocation exhausts this assignment, including failure or decline.')
         built = build_request(records, artifacts, value['assignment_id'], value['route_id'])
         packet, route, request = (built['packet'], built['route'], built['request'])
+        # The one correction of the assignment is recorded only for a call that can start: the route record pins the
+        # installed runtime, and the reviewer program is installed. The Claude runtime reads no program, so the
+        # program is read here as the sender reads it.
+        protocol._require_route_runtime(route)
+        protocol.retry_runtime_check(read_installed_cli_version, route)
         invocation = dict(value, protocol=PROTOCOL, diagnostic=packet['diagnostic'], packet_digest=digest(packet),
             preflight=built['preflight'],
             prompt_hash=digest(PROMPT), route_digest=digest(route), request=protocol._put_json(artifacts, request),
