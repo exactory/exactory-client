@@ -54,16 +54,18 @@ class CapacityGuardFixTests(unittest.TestCase):
         from test_openness_reading_v7_turns import MemoryArtifacts, build_native
         from research_harness.stop_classes import STOP_REGISTRY
         route = build_reading_route('codex_cli_visual_v1', 'fits')
+        # An exported problem openness packet carries its kind and its contract, which the protocol choice reads.
+        native = dict(build_native(), kind='result', contract=dict(orchestration='problem_creation'))
         with patch.object(v7, 'build_inventory', side_effect=AssertionError('No visual inventory is built')), \
                 patch.object(transport, 'request_body', side_effect=AssertionError('No visual request is built')):
-            result = v7.check_v7_admission({}, MemoryArtifacts(), route, build_native())
+            result = v7.check_v7_admission({}, MemoryArtifacts(), route, native)
         self.assertEqual((result['state'], result.get('code')), ('stop', 'review_visual_text_route_required'))
         self.assertEqual(result['reason'], 'text_route_required')
         self.assertEqual(STOP_REGISTRY[result['code']]['group'], 'visual_text_reading')
         self.assertEqual(STOP_REGISTRY[result['code']]['class'], 'decision')
         with patch.object(reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (v7.PROTOCOL, reading.PROTOCOL_V6)), \
                 patch.object(reading, 'list_reading_rows', side_effect=AssertionError('No unsupported v6 fallback')):
-            selection = reading.choose_chain_protocol({}, MemoryArtifacts(), route, build_native())
+            selection = reading.choose_chain_protocol({}, MemoryArtifacts(), route, native)
         self.assertIsNone(selection['protocol'])
         self.assertEqual(selection['admissions'][0]['code'], 'review_visual_text_route_required')
 

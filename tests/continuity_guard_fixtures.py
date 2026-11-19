@@ -136,8 +136,10 @@ def fail_size_request(outcome, detail):
                 output=[dict(type='message', content=[dict(type='output_text', text='{}')])]))
         response['status'] = 'incomplete'
         if outcome == 'output_over_cap':
-            response['usage']['output_tokens'] = route['configuration']['max_output_tokens']
+            # The answer states the maximum that bounded the output: the route's limit, or the lower maximum of
+            # reduced_by_context (D1 11.1). The output tokens reach that maximum.
             maximum = route['configuration']['max_output_tokens'] // (2 if detail else 1)
+            response['usage']['output_tokens'] = maximum
             response['output'][0]['content'][0]['text'] = (
                 "API Error: Claude's response exceeded the %d output token maximum." % maximum)
         elif outcome == 'timeout':

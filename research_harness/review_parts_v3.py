@@ -2727,8 +2727,12 @@ def build_final_packet(route, artifacts, logical, inventory, plan, state, limits
 
 def list_composite_turns(records, artifacts, assignment):
     from .openness_final_pages import read_page_plan
-    header = _read_value(artifacts, assignment['packet']).get(legacy.KEY, {})
-    if header.get('protocol') != PROTOCOL or 'page_plan_digest' not in header:
+    # The assignment record names the protocol of its series, so an assignment of another family keeps its packet
+    # unread, as the other families of review_composite.FINAL_FAMILIES decide from the record.
+    if assignment.get(legacy.KEY, {}).get('protocol') != PROTOCOL:
+        return None
+    header = _read_value(artifacts, assignment['packet'])[legacy.KEY]
+    if 'page_plan_digest' not in header:
         return None
     members = sorted((row for row in records['review_assignment'].values()
         if row.get(legacy.KEY, {}).get('series_assignment_id') == header['series_assignment_id']),

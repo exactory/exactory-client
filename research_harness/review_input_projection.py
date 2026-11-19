@@ -83,25 +83,28 @@ def _require_review_packet(packet, assignments=None):
     """A packet label cannot stand in for a native scientific review identity."""
     subject = packet.get('subject') if isinstance(packet, dict) else None
     identifier = packet.get('digest') if isinstance(packet, dict) else None
+    parts = packet.get('review_parts') if isinstance(packet, dict) else None
     valid = (isinstance(packet, dict)
              and isinstance(packet.get('reviewer_id'), str) and bool(packet['reviewer_id'].strip())
              and isinstance(identifier, str) and len(identifier) == 64
              and all(character in '0123456789abcdef' for character in identifier)
              and isinstance(packet.get('evidence', []), list))
-    planned_parts = packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3'
+    planned_parts = isinstance(parts, dict) and parts.get('protocol') == 'exactory-review-parts-v3'
     if valid and planned_parts:
         from .review_parts_roles import ADAPTERS
         from .review_parts_v3 import has_packet_binding
-        adapter = packet['review_parts'].get('adapter')
+        adapter = parts.get('adapter')
         valid = adapter in ADAPTERS and has_packet_binding(packet, adapter)
         if valid and packet.get('role') == 'native_math':
             from . import native_review
-            try:
-                native_review.require_assignment_identity(packet['native'], dict(
-                    id=packet['review_parts'].get('replaces_assignment_id', packet['review_parts']['series_assignment_id']),
-                    reviewer_id=packet['reviewer_id'], dossier_id=None))
-            except (ResearchError, KeyError):
-                valid = False
+            valid = isinstance(packet.get('native'), dict)
+            if valid:
+                try:
+                    native_review.require_assignment_identity(packet['native'], dict(
+                        id=parts.get('replaces_assignment_id', parts['series_assignment_id']),
+                        reviewer_id=packet['reviewer_id'], dossier_id=None))
+                except (ResearchError, KeyError):
+                    valid = False
     if valid and not planned_parts:
         protocol, role = packet.get('protocol'), packet.get('role')
         problem = (protocol in ('exactory-problem-review-v1', 'exactory-problem-review-v2')

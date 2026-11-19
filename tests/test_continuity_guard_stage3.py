@@ -32,7 +32,8 @@ class Stage3MatrixTests(unittest.TestCase):
                         row = stage3.execute_size_journey(self, stage, outcome, detail)
                     # Final has one admitted level in 0.91.0. The response-body
                     # limit must use the reading ladder just as the other limits do.
-                    expected = [120000, 60000, 30000, 15000] if stage == 'reading' else [240000]
+                    # A condensing turn of five entries is split down to one entry.
+                    expected = dict(reading=[120000, 60000, 30000, 15000], combine=[5, 3, 2, 1]).get(stage, [240000])
                     self.assertEqual(row['levels'], expected, row)
                     self.assertEqual(row['end'], 'stop', row)
                 finally:

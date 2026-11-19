@@ -159,12 +159,14 @@ class ContinuationTests(unittest.TestCase):
         ready = dict(ready=True, output={'kind': 'requests', 'unit_requests': [{'unit': 'u1'}]},
                      refused_attempts=[], obligations=[], pending_source_requests=[])
         for adapter in ADAPTERS:
-            role = dict(problem_result='result', problem_adjudicator='adjudicator',
+            role = dict(problem_result='result', problem_adjudicator='adjudicator', problem_slate='slate',
                         context_repair='result', study_readiness='result',
                         study_verification='verification', native_math='native_math')[adapter]
-            assignment = dict(original, role=role, context={},
-                              review_parts=dict(adapter=adapter, kind='final', turn=1,
-                                                series_assignment_id='bar-first'))
+            parts = dict(adapter=adapter, kind='final', turn=1, series_assignment_id='bar-first')
+            # The packet of a parts assignment holds the same header as the assignment.
+            packet = dict(protocol._read_json(self.case.artifacts, original['packet']), review_parts=parts)
+            assignment = dict(original, role=role, context={}, review_parts=parts,
+                              packet=protocol._put_json(self.case.artifacts, packet))
             if role == 'verification':
                 assignment['context']['verification_task_id'] = 'task'
             elif role == 'native_math':

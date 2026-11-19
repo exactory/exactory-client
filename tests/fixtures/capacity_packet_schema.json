@@ -2874,6 +2874,24 @@
       ]
     },
     {
+      "ast_sha256": "fda53af5b7a409adc97a34710b2af5f6042e51e6d9025fdff901af99566c4abb",
+      "callee": "isinstance",
+      "caller": "research_harness.review_input_projection._require_review_packet",
+      "classification": "standard library",
+      "targets": [
+        "isinstance"
+      ]
+    },
+    {
+      "ast_sha256": "d6358ada728278a723a2c7f3d4def26a2202c05e0430ed661dd7922905f4478c",
+      "callee": "isinstance",
+      "caller": "research_harness.review_input_projection._require_review_packet",
+      "classification": "standard library",
+      "targets": [
+        "isinstance"
+      ]
+    },
+    {
       "ast_sha256": "1fb48b315a9641366ee6df81e7fea4f3494efdf715228734e438fee7d2effaf7",
       "callee": "bool",
       "caller": "research_harness.review_input_projection._require_review_packet",
@@ -21990,7 +22008,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.output_views": {
-      "ast_sha256": "11680c04d349f3d52ce579e3bf01629f9309fa1c740c4f2b13de9f06fcc1dc07",
+      "ast_sha256": "2eafed97ed42987cc4d60a054a5cda7126ca0901eb79385831ef721c33266183",
       "functions": {
         "_bound_embedded_record": "507cefe18a2105353d34b52ff9a18098be71433d56d02ac1371ce9b8cce0c238",
         "_build_bundles": "b53daac323240e839216fb01bb73e3605d3661a6922401443371c9a0c7dd0ef8",
@@ -22063,7 +22081,7 @@
         "render_workspace_views": "fd81bbe024597eb1472cb452cc2bb1c10b381cd9322aa1141a5c095a66967344"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.91.2 render lock wait, two-pass rendering, dirty markers and failure ordering: only derived output views and their existing marker fields change; reviewer packet shapes are unchanged."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.91.2 render lock wait, two-pass rendering, dirty markers and failure ordering: only derived output views and their existing marker fields change; reviewer packet shapes are unchanged. Reviewed the 0.92.0 placement of review_composite among the kinds without a view: no view, marker or packet changes."
     },
     "research_harness.overrides": {
       "ast_sha256": "b735f18316b1f7f8f1658e95d6ac0159e07ce36f673e0aa4af267371152108e7",
@@ -23942,10 +23960,10 @@
       "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_input_projection": {
-      "ast_sha256": "fd33c76373759331e158d9fe5458ab097bcd9f8330139d170c0fbdede593e119",
+      "ast_sha256": "050b20cc39b5932d249479f819acdb88dfc4ccc0222613144983cf24b075c2b3",
       "functions": {
         "_has_parts_binding": "b16cceeda1ada67a14441ae47e61364ccb25aeb12055196a49468a97c50425c9",
-        "_require_review_packet": "f60013f35c1f54c0040e2cfa33cd82cbdc9332f3922915e6859e67afd6f10493",
+        "_require_review_packet": "1fd4562465bcfd28c24c4bdaa4e3e897d05c4234d63e383e305c52ca83a9b584",
         "collect_attachments": "a7fbe365cc45168beb4182240d52fd02647415fdadd2e0c3f4f5396dacbd5eba",
         "find_attachment": "abefe0778bed5aa8dabd77667adfa011f00a18daa554ae63dd9df533d2fdd8ec",
         "packets_from_request": "5efd22fbee4faae7695ec082713ffce52927cdcfd4978a0d942c6cf0e34da4a1",
@@ -23984,6 +24002,7 @@
         "c8bd9889c600b5c5ff1ad4bd51f14291e53449caf12b3a4cb06abc586d9442e1",
         "ca0025169985213505ea5869ca2e36049baf56a885605778c50b577e278b374d",
         "caea7851793e11ed4a662e48382f46a361a05d5de9955af9431fbca970319597",
+        "d6358ada728278a723a2c7f3d4def26a2202c05e0430ed661dd7922905f4478c",
         "da97e4cd95df4c9a7ad8576e75550f1cfa2fbfc922aa35a05e8b52709c21ac62",
         "daeec1c418f7f5284dd1c435f27fbccea1467fda6ad5ece50a297c77e4d0543d",
         "e6a99b73b0d6d7be1da48687cbc615d4203071b683916ee65f76547a6f0bca1c",
@@ -23992,9 +24011,10 @@
         "f38786146d6e92e6ea6468c314b9b00e62ab4eeb42f29b87e3ee4dbde074d697",
         "f6bb37b356d21e6da74f0ce02aa7060118314373435f84e274b80939acedb50e",
         "f78d80912504231a8c0b90620db48de3be1bae20444ff3dda37a4b7946e2d4be",
-        "f951294f24d7e4a993130fc87009341e35e61ed80e51e23a832e4d3a7985e439"
+        "f951294f24d7e4a993130fc87009341e35e61ed80e51e23a832e4d3a7985e439",
+        "fda53af5b7a409adc97a34710b2af5f6042e51e6d9025fdff901af99566c4abb"
       ],
-      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision. Reviewed the 0.92.0 fix of _require_review_packet: a packet text that is not an object, a packet whose review_parts member is not an object, and a planned native_math packet whose native member is not an object are refused as unreadable inputs instead of raising; the two new isinstance calls on those members are declared, and no packet member is read or written otherwise."
     },
     "research_harness.review_objection_evidence": {
       "ast_sha256": "19078137703f6e76f33fc5cc16a3589fb0fb65186f436e8fcd96d5859f9c8500",
@@ -24630,7 +24650,7 @@
       "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
     },
     "research_harness.review_parts_v3": {
-      "ast_sha256": "f94cbf45c4f051e996d296bf7acf2ef736c2a5683ad9cfb10617e8d5e130a0b1",
+      "ast_sha256": "c6e8d2b6732018abf8462a1bebf322c9d90f0eb9c3dddf699d2b08e00b93543e",
       "functions": {
         "_advance_group": "c2a09676e335c9fa314f690d454f9660c1af77273d094f796173780e526b33f9",
         "_advance_requested_ranges": "b4e4f338dc5d496e021e1caff2ea7c3eeb2d7fed8984d47f8db85cc5b4a25810",
@@ -24716,7 +24736,7 @@
         "verify_series": "d1063c8b24e13f7c6d017c0e03bae9e68459192b2a7dd14d903864db16cec28f"
       },
       "packet_call_digests": [],
-      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision."
+      "reason": "Parts v3 protocol dispatch and bounded builder implementation reviewed with authenticated journey, capacity, and compatibility tests; complete module and function ASTs pin this revision. Reviewed the 0.92.0 fix of list_composite_turns: an assignment whose record names another protocol returns None before its packet is read; the turns of a v3 series are listed as before."
     },
     "research_harness.review_pdf_pages": {
       "ast_sha256": "eb4d7c5214145932bd6034bfa51b678849eb47e2f7fae1a8c500c2f5ead9d1ce",

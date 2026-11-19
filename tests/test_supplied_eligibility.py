@@ -285,8 +285,9 @@ class SuppliedEligibilityTests(unittest.TestCase):
                             coverage=[dict(target=target, searches='The bound search.')
                                       for target in binding['page']['targets']],
                             reason='A decisive judgment rests on the supplied text of ' + version + '.',
-                            grounds=[dict(kind='reviewer_gap', text='The supplied text is not verified.',
-                                          refs=[dict(ref='n1')])]))))
+                            # Finding version 2 keeps reviewer_gap for a named gap of the literature (task T6).
+                            grounds=[dict(kind='own_argument', refs=[dict(ref='n1')],
+                                          text='The reviewer has an argument on the supplied text to check.')]))))
                 records = case.store.snapshot()['records']
                 state = protocol.assignment_state(records, case.artifacts, identifier)
                 self.assertTrue(state['ready'], state['obligations'])

@@ -33,8 +33,10 @@ class ReadingCapacityGuardTests(unittest.TestCase):
         self.assertEqual(validate_open_members(registry), [])
         native = registry['roles']['native_math']['protocols']['exactory-independent-review-v1']['members']
         for field, definition in (('reading_turn', 'v7_reading_binding'), ('reading_final', 'v7_final_binding')):
+            # A native member is declared inline or by a reference to a shared definition.
+            schema = definitions[native[field]['$ref']] if '$ref' in native[field] else native[field]
             for member, declared in definitions[definition]['members'].items():
-                actual = native[field]['members'][member]
+                actual = schema['members'][member]
                 if '$ref' in declared:
                     declared = definitions[declared['$ref']]
                 if '$ref' in actual:
