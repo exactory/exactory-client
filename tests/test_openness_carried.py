@@ -174,7 +174,7 @@ class CarriedSelectionCases:
             with self.subTest(change=change):
                 identity = dict(self.identity, **change)
                 self.assertEqual(self.select_readings(identity=identity), [])
-                result = self.carried.list_qualifying_chains(self.records, self.artifacts, identity)
+                result = self.carried.list_passed_over_chains(self.records, self.artifacts, identity)
                 self.assertEqual(bool(result['passed_over']), 'reviewer_id' in change)
                 if result['passed_over']:
                     self.assertEqual(result['passed_over'][0]['reason'], 'reviewer_id')
@@ -316,7 +316,7 @@ class CarriedSelectionCases:
         self.invoke('later', self.build_reading_response(self.read_packet('later'), excerpts=[]))
         records = self.store.snapshot()['records']
         self.assertNotIn('later', [row['chain'] for row in self.carried.list_qualifying_chains(
-            records, self.artifacts, identity)['chains']])
+            records, self.artifacts, identity)])
         cutoff = read_cutoff(self, first)
         self.carried.verify_stored_selection(records, self.artifacts, inventory, identity, selection, cutoff=cutoff)
         self.assertEqual(self.carried.select_carried_readings(cutoff.records, cutoff, inventory, identity),
@@ -406,7 +406,7 @@ class CarriedSelectionCases:
         self.assertEqual({row['chain'] for row in report['outputs']}, {'turn-1', 'no-output', 'reread'})
         for row in report['outputs']:
             chain = next(chain for chain in self.carried.list_qualifying_chains(records, self.artifacts,
-                identity)['chains'] if chain['chain'] == row['chain'])
+                identity) if chain['chain'] == row['chain'])
             observed = self.carried.observe_qualifying_chain(records, self.artifacts, chain, identity)
             entries = [(kind, entry) for turn in observed for kind in ('excerpt', 'passage')
                        for entry in turn[kind + 's']
@@ -528,7 +528,53 @@ class V5CarriedSelectionTests(CarriedSelectionCases, OpennessReadingCase):
 
 
 class V6CarriedSelectionTests(CarriedSelectionCases, OpennessReadingCase):
-    pass
+    def assign_first(self, identifier, bindings=None, *, reviewer_id='openness-reviewer', route_id='route'):
+        from research_harness import review_protocol as protocol
+        from test_openness_carried_integration import export_bindings
+        bindings = bindings or [dict(formulation=self.selected['statement'], search_id=self.search['id'])]
+        return self.mutate(protocol.record_assignment, dict(id=identifier, route_id=route_id, dossier_id=None,
+            role='native_math', reviewer_id=reviewer_id, author_id='problem-author',
+            context=dict(native_packet=export_bindings(self, identifier, bindings, reviewer_id))))['result']
+
+    def test_selection_reads_the_artifacts_that_its_result_depends_on(self):
+        from codex_route_fixtures import record_codex_route
+        from research_harness import review_excerpts
+        from test_openness_carried_integration import bind_statement_searches
+        self.assign_first('other-reviewer', reviewer_id='another-reviewer')
+        record_codex_route(self, 'other-route', model=self.route_model, output_tokens=64000)
+        self.assign_first('other-route', route_id='other-route')
+        # One request holds every text, so this review stays a single turn.
+        with patch.object(review_excerpts, 'TURN_FULLTEXT_CHARACTERS', 2 * sum(self.text_sizes)):
+            self.assign_first('single')
+        self.assign_first('other-statement', bind_statement_searches(self, 'other-statement', ['Neighbour 0.']))
+        records = self.store.snapshot()['records']
+        assignments = records['review_assignment']
+        self.assertNotIn('reading_chain', assignments['single'])
+        identity = build_identity(records, self.artifacts, self.first)
+        with patch.object(self.artifacts, 'read', wraps=self.artifacts.read) as read:
+            turns = self.carried.select_carried_readings(records, self.artifacts, self.inventory, identity)
+        paths = {call.args[0]['path'] for call in read.call_args_list}
+        self.assertEqual({identifier: [name for name, reference in (
+                              ('packet', assignments[identifier]['packet']),
+                              ('native_packet', assignments[identifier]['context']['native_packet']))
+                              if reference['path'] in paths]
+                          for identifier in ('other-reviewer', 'other-route', 'single', 'other-statement', 'turn-1')},
+                         {'other-reviewer': [], 'other-route': [], 'single': [], 'other-statement': ['native_packet'],
+                          'turn-1': ['packet', 'native_packet']})
+        self.assertIn(records['review_attempt']['attempt-turn-1']['output']['path'], paths)
+        self.assertEqual([row['origin']['assignment_id'] for row in turns], ['turn-1'])
+
+    def test_lost_native_packet_of_a_candidate_refuses_the_verification(self):
+        from test_openness_carried_integration import bind_statement_searches, remove_artifact
+        bindings = bind_statement_searches(self, 'other-statement', ['Neighbour 0.'])
+        with patch.object(reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (v7.PROTOCOL, reading.PROTOCOL_V6)):
+            first = self.assign_first('new', bindings)
+        self.assertEqual(first['carried_selection']['protocol'], SELECTION_V2)
+        final = finish_v7(self, first)
+        with remove_artifact(self, self.first['context']['native_packet']), self.assertRaises(ResearchError) as caught:
+            reading.verify_chain(self.store.snapshot()['records'], self.artifacts, final)
+        self.assertEqual(caught.exception.code, 'artifact_missing')
+        self.assertTrue(reading.verify_chain(self.store.snapshot()['records'], self.artifacts, final))
 
 
 class StoredCaptureSelectionTests(unittest.TestCase):
@@ -818,7 +864,7 @@ def select_rule_fixture(carried, artifacts, inventory, chains, records):
     observations = dict(chains)
     candidates = [dict(chain=chain, protocol=turns[0]['origin']['protocol'],
         recorded_revision=records['review_assignment'][chain]['recorded_revision']) for chain, turns in chains]
-    with patch.object(carried, 'list_qualifying_chains', return_value=dict(chains=candidates, passed_over=[])), \
+    with patch.object(carried, 'list_qualifying_chains', return_value=candidates), \
             patch.object(carried, 'observe_qualifying_chain', side_effect=lambda r, a, chain, i: observations[chain['chain']]), \
             patch.object(carried, '_list_search_dependencies', return_value={}):
         return carried.build_carried_selection(records, artifacts, inventory, dict(recorded_revision=100))['selection']

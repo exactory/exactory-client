@@ -129,7 +129,7 @@ def select_as_0_91_1(records, artifacts, inventory, identity):
     """
     from research_harness import openness_carried as carried
     candidates = []
-    for chain in carried.list_qualifying_chains(records, artifacts, identity)['chains']:
+    for chain in carried.list_qualifying_chains(records, artifacts, identity):
         observations = carried.observe_qualifying_chain(records, artifacts, chain, identity)
         first = records['review_assignment'][chain['chain']]
         classes = carried.classify_carried_notes(inventory, observations,
