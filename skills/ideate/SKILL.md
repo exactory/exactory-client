@@ -18,8 +18,7 @@ holds the direction and investigation gates.
 In a problem record of math-conjecturer the tool has three commands of its own,
 `exactory-research forming`, `exactory-research form-outcome` and
 `exactory-research forming-import`. A forming call
-states its own question (a phenomenon with the places where it appears, a
-thought experiment or another start), names the move that produced its forms,
+states its own question, names the move that produced its forms,
 and records every tentative statement that it produced, with the amounts as the
 performer reports them. An outcome records how a form, an expected relation or a
 planned check ended. A forming import gives a record the forming history of

@@ -4568,13 +4568,13 @@ A problem workspace uses the shared research store and the `research` profile.
 "problem_creation", slug, area, field, authors, created, updated, research:
 {store, profile: "research"}}`. The nonempty immutable `authors` list governs
 reviewer independence. `area` is a nonempty `math.*` subject class; `field`
-describes the field and question explored for the bar reviewers. The optional
-`start` is `{kind, description}`, two nonempty texts that record the kind of
-start as an open value: `field_question`, `phenomenon` (a phenomenon that
-appears in several places), `thought_experiment`, or another kind in the
-author's words. Another shape is `invalid_input`. The marker holds `start` only
-when the payload gives it, so a marker without it keeps the bytes of 0.82.0 and
-reads as "not recorded"; full `status` shows it under `problem.start`. When
+describes the field and question explored for the bar reviewers. The payload
+holds no `start`: release 0.91.3 removed the kind of start, and a payload that
+gives the member is refused with `problem_start_kind_removed`
+([The removed kind of start](#the-removed-kind-of-start)). A marker that 0.83.0
+to 0.91.2 wrote can hold `start: {kind, description}`. It keeps its bytes, and
+full `status` shows the entry under `problem.start`. A marker without the entry
+has the shape of 0.82.0 and reads as "not recorded". When
 configuration is absent, initialization adopts the constitution and sets a null
 target. Study, draft and research-intent markers conflict with this marker
 (`orchestration_conflict`) in either direction, and so does a research target
@@ -4603,9 +4603,9 @@ since 0.73.0, and is checked, not refused.
 
 | Command | JSON payload | Records and behavior |
 | --- | --- | --- |
-| `problem-init` | `{slug, area, field, authors}` and the optional `start: {kind, description}` | Creates the orchestration marker and initial configuration. `start` records the kind of start as an open value (above). |
+| `problem-init` | `{slug, area, field, authors}` | Creates the orchestration marker and initial configuration. A payload with `start` is `problem_start_kind_removed` (above). |
 | `problem-area` | `{id, area, reason}` | `problem_area/<id>` names one further area of the record: a `math.*` subject class other than the record's own and other than the areas already recorded (`problem_area_duplicate`), with the reason for naming it. The record adds `recorded_revision`, and the marker keeps its bytes. The command runs while no slate assignment and no result assignment exists (`problem_area_new_record_required` otherwise). The bar and result packets then carry the areas, and their prompts carry the areas paragraph ([Further areas](#further-areas)). |
-| `problem-candidate` | `{id, previous, statement, source, observation, neighbours, potential, notes, disposition}` | `problem_candidate/<id>` records a tentative question, adding `recorded_revision`. `previous` is null or an existing candidate id (`problem_candidate_missing`); a candidate that a later candidate names as `previous` is no longer current. `source` is `{kind, reference, evidence}`: kind `own_record`, `literature`, `computation`, `section`, `user`, `thought_experiment` or `phenomenon`, a nonempty reference and a possibly empty list of evidence references. A candidate of kind `phenomenon` was formed in the record from a phenomenon that appears in several places; its evidence cites at least one forming call as `{kind: "record", record_kind: "forming_call", id, digest}` (`problem_candidate_forming_missing` otherwise). A candidate of any kind can cite forming calls and form outcomes in the same way ([Forming records](#forming-records)). `potential` holds the provisional grades `{significance: {B1, B2}, priority}` with an optional `readiness` verdict (`invalid_rubric_grades`). `notes` is a string, possibly empty. `disposition` is `{status, reason, evidence_needed}` with status `open`, `selected`, `deferred` or `rejected` and `evidence_needed` text or null. It is the author's provisional disposition when the candidate is recorded; the slate's lists are the decision of record, may differ from it, and are the only dispositions the gate reads. |
+| `problem-candidate` | `{id, previous, statement, source, observation, neighbours, potential, notes, disposition}` | `problem_candidate/<id>` records a tentative question, adding `recorded_revision`. `previous` is null or an existing candidate id (`problem_candidate_missing`); a candidate that a later candidate names as `previous` is no longer current. `source` is `{kind, reference, evidence}`: kind `own_record`, `literature`, `computation`, `section` or `user`, a nonempty reference and a possibly empty list of evidence references. The retired kinds `thought_experiment` and `phenomenon` are accepted only in a record that already holds the kind (`problem_start_kind_removed` otherwise; [The removed kind of start](#the-removed-kind-of-start)). The evidence of a `phenomenon` candidate cites at least one forming call as `{kind: "record", record_kind: "forming_call", id, digest}` (`problem_candidate_forming_missing` otherwise). A candidate of any kind can cite forming calls and form outcomes in the same way ([Forming records](#forming-records)). `potential` holds the provisional grades `{significance: {B1, B2}, priority}` with an optional `readiness` verdict (`invalid_rubric_grades`). `notes` is a string, possibly empty. `disposition` is `{status, reason, evidence_needed}` with status `open`, `selected`, `deferred` or `rejected` and `evidence_needed` text or null. It is the author's provisional disposition when the candidate is recorded; the slate's lists are the decision of record, may differ from it, and are the only dispositions the gate reads. |
 | `forming` | `{id, question, move, inputs, amounts, dictionary, comparison_count, forms, probes, stopping_reason, performer, usage}` | `forming_call/<id>` records one forming call of the Ideate tool: the question, the move, the inputs, the amounts that the performer reports, every form that the call produced, the probes that it used, the stopping reason and the performer. It adds `recorded_revision` and `recorded_at`. The fields, the rules and the refusals are in [Forming records](#forming-records). |
 | `form-outcome` | `{id, form_id, target, standing, disposition, lack_of_means, outcome, evidence, reason}` | `form_outcome/<id>` records how one form, or one expected relation or planned check of a form, ended, with its evidence. It adds `previous` (the id of the latest earlier outcome of the same item, or null), `refutation_basis`, `recorded_revision` and `recorded_at` ([Forming records](#forming-records)). |
 | `forming-import` | `{id, source_workspace, source_revision, source_candidate_ids}` | `problem_forming_import/<id>` gives this record the forming history of another problem record whose candidates it takes up. The command reads the source at its current revision, keeps a verified snapshot of it in this record's artifact store, and records one manifest of that snapshot: every forming call, outcome, probe, plan, run and assessment of the source, with the searches, readings and solver snapshots that they cite, each with its origin, its original id, its digest, its original date and its standing. No source record becomes a record of this store, and the source is not written. A candidate, an outcome and an entry of the accounts cite an imported record as `{kind: "record", origin, record_kind, id, digest}` ([Imported forming history](#imported-forming-history)). |
@@ -4673,7 +4673,7 @@ that imported at least one objection ([Carried objections](#carried-objections))
 `review_ids` is then nonempty, and an empty list is refused with
 `problem_slate_review_unverified`, which names the current `import_set_digest`
 and no `review_id`. The second is a slate that selects a candidate formed in the
-record: a candidate of the source kind `phenomenon`, or a candidate whose
+record: a candidate of the retired source kind `phenomenon`, or a candidate whose
 `source.evidence` cites a `forming_call` or a `form_outcome` record. Such a slate
 with an empty `review_ids` is refused with `problem_slate_review_required`;
 obtain a slate review of the current candidates and bars and name it. A formed
@@ -7458,7 +7458,7 @@ The payload of `forming`:
 | Field | Content |
 | --- | --- |
 | `id` | The id of the forming call. `forming_call/<id>` is immutable, and an id is used once: the same request replays its receipt, and another request with that id is `record_conflict`. |
-| `question` | `{kind, description, places}`. `kind` and `description` are nonempty text, and the kind is an open value such as `phenomenon`, `thought_experiment` or `field_question`. `places` is a list of `{description, evidence}`, each with at least one evidence reference: the places where a phenomenon appears, each with the reading, search or other evidence that shows it. The kind `phenomenon` needs at least one place. Another kind can leave the list empty. |
+| `question` | `{kind, description, places}`. `kind` and `description` are nonempty text, and the kind is an open value such as `field_question`. `places` is a list of `{description, evidence}`, each with at least one evidence reference: the places in which the question arises, each with the reading, search or other evidence that shows it. The retired kinds `phenomenon` and `thought_experiment` are accepted only in a record that already holds the kind (`problem_start_kind_removed` otherwise; [The removed kind of start](#the-removed-kind-of-start)), and the kind `phenomenon` needs at least one place. Another kind can leave the list empty. |
 | `move` | `{kind, description}`: the kind of step that produced the forms, as an open value with a description. Two kinds carry a further field: `transfer` needs `dictionary`, and `comparison` needs `comparison_count` and `amounts.pairs`. |
 | `inputs` | A list, possibly empty, of `{description, evidence}`: what the call worked from, each with at least one evidence reference. |
 | `amounts` | `{forms, nearest_alternatives, expected_relations, pairs}`. `forms` is a nonnegative integer. `nearest_alternatives` and `expected_relations` are objects with one nonnegative integer for each form id of this call and no other key. `pairs` is a nonnegative integer or null. The amounts are the performer's report of what was done. The harness records them as reported and does not compare them with `forms`. |
@@ -7561,7 +7561,7 @@ Refusals of the two commands:
 
 Two refusals of other commands concern forming records:
 `problem_candidate_forming_missing` when `problem-candidate` records a candidate
-of kind `phenomenon` whose evidence cites no forming call, and
+of the retired kind `phenomenon` whose evidence cites no forming call, and
 `problem_slate_review_required` when `problem-slate` selects a candidate formed
 in the record without a slate review.
 
@@ -7682,7 +7682,7 @@ lists the record. A reference that no import lists is `problem_forming_reference
 `strategy_evidence_stale`. The reference is accepted:
 
 - in `source.evidence` of a candidate. An imported forming call or outcome
-  counts as a forming record: it meets the rule of the source kind
+  counts as a forming record: it meets the rule of the retired source kind
   `phenomenon`, and a slate that selects the candidate needs a slate review
   (`problem_slate_review_required`);
 - in the evidence of a place, an input or a ground of a forming call, and in
@@ -8119,7 +8119,7 @@ paragraph, the replacement paragraph and the areas paragraph.
 | --- | --- | --- |
 | `exactory-problem-accounts-v1` | Result, in every turn of a series; adjudicator of `A3`, `priority`, `calibration` or `significance`, with the definition of the item | The delivered value record holds accounts. |
 | `exactory-problem-account-probes-v1` | Result, in every turn of a series; adjudicator of `A3`, `priority`, `calibration` or `significance`, with the definition of the item | The accounts paragraph is present, the delivered value record states `accounts_version: 2`, and `account_records` holds a `probe` record of this store. |
-| `exactory-problem-slate-forming-v1` | Slate | A current candidate has the source kind `phenomenon`, or its `source.evidence` cites a forming call or a form outcome. The slate packet then keeps those references in the candidate's `source.evidence`. |
+| `exactory-problem-slate-forming-v1` | Slate | A current candidate has the retired source kind `phenomenon`, or its `source.evidence` cites a forming call or a form outcome. The slate packet then keeps those references in the candidate's `source.evidence`. |
 | `exactory-problem-replacement-v1` | Result; adjudicator of `A7`, with the definition of the item | The accounts hold a nonempty `replacement`. |
 | `exactory-problem-areas-v1` | Bar; result | The record names a further area, so the packet carries `problem_areas` ([Further areas](#further-areas)). |
 
@@ -8324,7 +8324,7 @@ The current slate is the latest slate while it covers exactly the current
 candidates. A record without a current slate skips the first step.
 
 When the report is due. The rule applies to a record whose marker has the
-start kind `phenomenon` or `thought_experiment`, and to every record that
+retired start kind `phenomenon` or `thought_experiment`, and to every record that
 holds a forming call. For such a record the report is due once a current slate
 exists and selects nothing, or every candidate that it selects has ended.
 `status` and `next` then carry one `advisories` entry `{code:
@@ -8365,6 +8365,41 @@ Refusals of `problem-report`:
 | `problem_report_forms_open` | The report is due, and a form has no outcome or the disposition `open` (`form_ids`). Record a `form-outcome` for each, with the disposition `superseded`, `taken_up_as_candidate` or `set_aside`. |
 | `problem_report_evidence_missing` | A post passed the gate, and no saved review packet delivers the value record that its evidence digest covered (`post_id`). Restore the store from a copy that holds those packets and that value record unchanged. |
 | `record_conflict` | The report id is in use. A report does not change; record a new report under a new id. |
+
+### The removed kind of start
+
+From 0.83.0 to 0.91.2 `problem-init` took an optional `start: {kind,
+description}` and wrote it into the marker. The math-conjecturer skill gave a
+procedure of its own for two kinds, `phenomenon` and `thought_experiment`, and
+each of the two was also a source kind of a candidate and the kind of a forming
+question. Release 0.91.3 removed the kind of start. A new record holds none,
+and the two kinds are retired. [Retired starts](retired-starts.md) holds the
+procedure of the records that use them.
+
+A record holds a retired kind when its marker has that kind in `start.kind`,
+when one of its candidates, current or not, has it as `source.kind`, or when
+one of its forming calls has it as `question.kind`. The rule is applied to each
+of the two kinds apart.
+
+| Command | Behavior since 0.91.3 |
+| --- | --- |
+| `problem-init` | Refuses a payload that holds `start`, whatever its value. |
+| `problem-candidate` | Accepts `source.kind` `phenomenon` or `thought_experiment` in a record that holds that kind, and refuses it in every other record. |
+| `forming` | Accepts `question.kind` `phenomenon` or `thought_experiment` in a record that holds that kind, and refuses it in every other record. Every other kind stays an open value. |
+
+| Code | Cause and next action |
+| --- | --- |
+| `problem_start_kind_removed` | For `problem-init`: the payload holds `start`. Leave the member out, and describe the field and the question explored in `field`. For `problem-candidate`: the record does not hold the retired source kind (`kind`). Give the kind that names where the material came from: `own_record`, `literature`, `computation`, `section` or `user`. The candidate can cite its forming calls and form outcomes in `source.evidence` under every kind. For `forming`: the record does not hold the retired question kind (`kind`). Describe the kind of the question in your own words. |
+
+Nothing else changes for a record that holds a `start` entry or a retired kind.
+Its marker, its candidates and its forming calls keep their bytes and their
+digests, and `status` and the report of the exploration show its start. The
+rules of this reference that name the two kinds apply to it as written: the
+forming call that a `phenomenon` candidate cites
+(`problem_candidate_forming_missing`), the places of a forming call whose
+`question.kind` is `phenomenon`, the slate review of a `phenomenon` candidate,
+the slate paragraph `exactory-problem-slate-forming-v1` and the report that is
+due for the two start kinds.
 
 ## Development rounds
 
