@@ -1609,15 +1609,42 @@ each of these refusals.
      the turns that deliver them. The final answer is the finding of step 6a; a ground cites
      notes, gaps and arguments by handle (`refs`).
    - Keep the `reviewer_id`, the author and the route of the earlier chain when you export
-     again for the same statement and formulations. A new v7 chain then carries the verified
-     reading turns of the earlier chains under v5, v6 or v7 and reads only what they did not
-     read. The receipt of the first assignment carries `carried_readings`: the chains and
-     turns that it took over, the ranges that remain, and `passed_over`, the earlier chains
-     that differ only in the `reviewer_id`. Run `review-assignment --check` first to see the
-     protocol and this report without writing a record. The harness looks at every earlier
+     again for the same statement and formulations. The harness looks at every earlier
      chain of the record with the same reviewer, author, statement, formulations and route
      identity. The route identity is the adapter, the model, the endpoint and the
-     configuration, so a new route record with these four unchanged keeps it.
+     configuration, so a new route record with these four unchanged keeps it. A new v7 chain
+     carries the reading turns of each of those chains under v5, v6 or v7 from which it
+     takes a range, a search, an excerpt or a passage answer. It reads the ranges that
+     remain. It also reads the carried excerpts and passage answers that its final cannot
+     hold, and the newest carried notes that rest on a unit that changed or left the packet.
+     The receipt of the first assignment carries `carried_readings`: the chains and
+     turns that it took over, the ranges that remain, `passed_over`, the earlier chains
+     that differ only in the `reviewer_id`, and `outputs`. Run `review-assignment --check`
+     first to see the protocol and this report without writing a record, and read `outputs`
+     before the first reviewer call. `outputs` holds one row for each of those chains:
+     `reading_turns` counts the reading turns that the chain ran itself and that still
+     authenticate, `carried_turns` counts those that the new chain carries, and `carried`,
+     `superseded` and `source_changed` count the excerpts and passage answers of those turns.
+     For the chain that you continue, which is the latest of them, read the row whose
+     `chain` is the id of its first assignment. Expect `carried_turns` equal to
+     `reading_turns`, both equal to the number of reading turns that the chain ran itself,
+     and zeros under `superseded`. A replacement of the first turn of a v7 chain has a row
+     of its own with zero counts, which stands before the row of its chain. A v7 chain lists
+     the turns that it carried in the `reading_turns` of its recorded finding. Its row does
+     not count them: they count in the rows of their own chains. Expect zeros under
+     `source_changed` too, unless a unit that the chain quoted changed or left the packet.
+     In the row of an older chain, `superseded` counts the entries on text that a later
+     chain read again. The new chain carries the later reading of that text, and the
+     `message` of the row says so. Keep the rows in your report, and say where a row differs
+     from this. When the artifact store cannot give an artifact that the selection reads,
+     the first assignment of a v7 chain and its check are refused with the code of the store
+     (`artifact_missing` or `artifact_corrupt`, with the artifact in `details.path`), and
+     nothing is recorded. The selection reads the packet of every earlier `native_math`
+     assignment of the record without `context.prior_assignment_id`, also under another
+     `reviewer_id` or statement, and the turns of the chains above. Among these assignments
+     are the first assignment of every review and a replacement of the first turn of a v7
+     chain. Restore the exact bytes of that artifact and assign again. When you cannot
+     restore them, report the refusal with its details.
    - When a reading turn fails for its size or its time (`output_over_cap`,
      `input_over_limit`, `response_over_limit`, a second `timeout`) or the provider refuses
      it three times in a sequence, `review-series` looks for a smaller reading request on
@@ -1713,7 +1740,20 @@ each of these refusals.
 10. When a neighbour is added, a new material search is not bound, a bound search or reading
    changes, or the finding no longer covers the current formulation, refresh the finding
    (`problem_openness_stale`). A finding from a reading chain also becomes stale when a turn of its
-   chain is no longer ready or its observed attempt changes. A supplied native review also becomes
+   chain is no longer ready or its observed attempt changes. The finding of a v7 chain that 0.91.3
+   or later started is also stale, with the cause `artifact_missing` or `artifact_corrupt`, while
+   the artifact store cannot give an artifact that the carried selection of the chain reads
+   (step 6b), also when the chain carried nothing. Restore the exact bytes, and the finding is
+   current again. A new export does not clear this cause when its admission selects v7, because
+   its first assignment is refused with the same code. When the finding of a v7 chain is stale with
+   the cause `openness_reading_incomplete`, check first the route record of each chain that it
+   carried. The chains are the `origin.chain` of the carried turns in `reading_turns` of the
+   finding. The route record of each is the `route_id` of its first assignment. Run
+   `review-route-assess --route-id ID` for each. When its `context_status` is not
+   `verified_for_route`, probe that route record again with `review-probe`. A completed probe
+   makes the finding current again. Otherwise run `record-check`, and when it reports the record
+   ready, export again. The new chain carries no turn of the stale v7 chain. A supplied native
+   review also becomes
    stale when its current solver attempt, native snapshot, observed review or proof bytes change.
    Its required proof bytes must have reached both the original reviewer and the openness
    reviewer in their actual authenticated requests. An omitted body or artifact descriptor alone

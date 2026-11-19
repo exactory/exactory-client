@@ -5707,15 +5707,36 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   next turn is then again a final turn. The rules of the refusal
   `openness_finding_invalid` add `reason_bound`, `coverage_bound`,
   `ground_bound` and `recorded_references`.
-- Carried turns. A new v7 chain takes over the verified reading turns of
-  earlier chains under v5, v6 or v7 that have the same reviewer, author,
-  statement, formulations and route identity (adapter, model, endpoint and
+- Carried turns. A new v7 chain takes over reading turns of earlier chains
+  under v5, v6 or v7 that have the same reviewer, author, statement,
+  formulations and route identity (adapter, model, endpoint and
   configuration). The first assignment selects them once and stores the
   selection (`carried_selection: {protocol:
-  "exactory-openness-carried-selection-v1", digest, artifact}`); the receipt
-  carries `carried_readings`, with the chains and turns, the credited ranges
-  and searches, the entries, `remaining` and `passed_over`, the earlier
-  chains that differ only in the reviewer. A range that a carried turn read
+  "exactory-openness-carried-selection-v2", digest, artifact}`). The selection
+  reads the ready reading turns of each of those chains: the reading turns
+  with an observed, authenticated output in a verified context, as far as the
+  chain authenticates from its first turn on. It first credits ranges and
+  searches, with the turns in this order: the latest chain first, and the
+  turns of a chain in their order. For each unchanged unit, which is a unit of
+  the new packet with the same identity and the same SHA-256 as in the earlier
+  chain, it takes in this order each range that a turn delivered and that adds
+  a character not yet taken, until the unit is whole. It credits each search
+  to the first turn in this order whose deliveries completed it. A verified
+  excerpt or a delivered passage answer of a ready reading turn is then
+  carried when its own source is an unchanged unit, whichever turn delivered
+  that unit. One exception holds: an entry is superseded, and stays with its
+  own chain, when a later chain read its characters again. That is the case
+  when the selection credits the search that the entry quotes to a later
+  chain, or takes from later chains ranges that hold the whole span of the
+  entry. A later chain is a chain whose first assignment was recorded later,
+  so an entry of the latest chain is never superseded. When the selection
+  takes a range, a search or an entry from a chain, it carries every ready
+  reading turn of that chain with its notes. A turn that gives no range and no
+  search is carried too, for example a turn that delivered an earlier part of
+  a search record. A v7 chain that 0.91.0, 0.91.1 or 0.91.2 started keeps its
+  stored selection under `exactory-openness-carried-selection-v1`, which
+  carries only the turns that give a range or a search. A range that a carried
+  turn read
   in an unchanged unit is not delivered again, a carried search counts as
   read when the selection holds it, and the carried excerpts and passage
   answers enter a pool of the final. The latest carried notes that rest only
@@ -5729,8 +5750,49 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   the pool are delivered as a unit, and the reviewer keeps one with `{keep,
   targets}` in `excerpts`. The
   earlier turns stay authenticated under their own protocols and keep their
-  bytes. When v6 starts the chain, the receipt carries `carried_readings`
-  with `would_carry`, and nothing is carried.
+  bytes. To find the chains that qualify, the selection reads the packet of
+  every earlier assignment of the role `native_math` without
+  `context.prior_assignment_id`, whatever its reviewer, author, statement or
+  route, and the native packet of each one whose packet is under v5, v6 or v7.
+  Among these assignments are the first assignment of every review and a
+  replacement of the first turn of a v7 chain. Of the chains that qualify it
+  reads the turns. When the artifact store cannot give one of these artifacts,
+  the selection ends with the refusal of the store: `artifact_missing` or
+  `artifact_corrupt` with the artifact in `details.path`, `storage_io` or
+  `unsafe_path`. The first assignment and its check then record nothing. For
+  `artifact_missing` and `artifact_corrupt`, restore the exact bytes of that
+  artifact, and assign again. For `storage_io` and `unsafe_path`, follow the
+  stop of that code
+  ([Stops and overrides](research-workflow.md#stops-and-overrides)).
+- The report of the carried turns. The receipt of the first assignment, also
+  with `--check`, carries `carried_readings`: the chains and turns, the
+  credited ranges and searches, the entries, `remaining`, `passed_over` (the
+  earlier chains that differ only in the reviewer) and `outputs`. `outputs`
+  holds one row for each earlier chain with the same reviewer, author,
+  statement, formulations and route identity, the latest chain first: `{chain,
+  protocol, reading_turns, carried_turns, carried, superseded,
+  source_changed}`. `reading_turns` counts the ready reading turns that the
+  chain ran itself, and `carried_turns` those that the selection carries. The
+  turns that a v7 chain carried count in the rows of their own chains, and its
+  row does not count them. A replacement of the first turn of a v7 chain has a
+  row of its own under the id of the replacement, with zero counts, which
+  stands before the row of its chain. The row of the chain, under the id of
+  its first assignment, counts the turns. `carried`, `superseded` and
+  `source_changed` are each `{excerpts, passages, characters}`. Together they
+  count every verified excerpt and every delivered passage answer of those
+  turns once: as carried, as superseded, or under `source_changed` when its
+  source unit changed or left the packet. A row with superseded entries also
+  holds a `message`. The stored assignment holds `carried_selection` and not
+  this report. The handoff `export` of a stopped chain gives the same report
+  under `details.successor.carried_readings` when the new chain is a v7 chain.
+  When v6 starts the chain, nothing is carried. The receipt then carries
+  `carried_readings` with an empty `chains`, with `would_carry` (the chains
+  from which a v7 chain would carry turns), `passed_over` and `outputs`, which
+  state what a v7 chain would carry. The harness makes the selection of a v7
+  chain for this report. When that selection ends with a refusal of the store,
+  the v6 chain still starts, and the report holds `refusal: {code, details}`
+  with three empty lists and without `outputs`. For a packet whose required
+  evidence is not UTF-8 text, the report holds the three empty lists alone.
 - A turn that failed. For `output_over_cap`, `input_over_limit`,
   `response_over_limit`, `timeout` from the second timeout and
   `provider_refused` from the third refusal of a sequence, the planner looks
@@ -5826,8 +5888,9 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   verified turns stay for a later chain.
 - The verification. `problem-openness` records the finding of a v7 final
   when the chain verifies from the stored records: the carried selection
-  matches its reference and each carried turn authenticates under its own
-  protocol; the inventory and the state of every turn equal what the
+  matches its reference and verifies under the protocol that it names, and
+  each carried turn authenticates under its own protocol (the next item);
+  the inventory and the state of every turn equal what the
   harness rebuilds; every turn keeps the role, packet, route, reviewer,
   author, inventory and plan of the first assignment, and its packet and
   prompt equal the rebuilt ones at the limits that held when it was
@@ -5840,6 +5903,57 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   names the condition. The record keeps `reading_turns`: the carried turns
   first, each with its `origin` (`chain`, `protocol`, `assignment_id` and
   `attempt_id`), then the turns of the chain.
+- The verification of the carried selection. The harness verifies a stored
+  selection under the protocol that it names. For
+  `exactory-openness-carried-selection-v2` the verification has two parts. In
+  the first part the harness makes the selection again on the store as it
+  stood at the revision before the first assignment, which it reads from the
+  history of the store, and the stored turns must equal the result. A store
+  that holds such a selection keeps that history, as a managed store does.
+  What is recorded later changes nothing in this part: a turn of an earlier
+  chain that becomes ready later, a chain that is recorded later, a content
+  record that changes later, and a contamination of a chain from which nothing
+  is carried. In the second part every earlier chain that gives a carried turn
+  must authenticate up to its last carried turn under the records as they
+  stand now, and every stored range, search and entry must match its
+  authenticated turn and its unit. A selection under
+  `exactory-openness-carried-selection-v1` has the second part alone, which
+  also requires a range or a search in every stored turn. A chain that fails
+  either part is refused with `openness_reading_incomplete`, and a finding
+  that it recorded becomes `problem_openness_stale` with that cause.
+  `review-series` still reports a chain with a recorded finding as done. Three
+  later events are known to fail the second part, as they did before 0.91.3: a
+  contamination event on a carried turn, a change of the content records from
+  which a carried chain is observed (for example a source bundle that links
+  the capture of a delivered text as a supplement), and a failed probe of the
+  route record of a carried chain while it is the latest probe of that record.
+  A completed probe of that route record ends the third, and it makes a
+  recorded finding current again. The route record is the `route_id` of the
+  first assignment of the carried chain, which `origin.chain` of a carried
+  turn names in `reading_turns` of the finding.
+  `review-route-assess --route-id ID` shows the state that the latest probe of
+  that route record gives: `context_status: verified_for_route` with that
+  probe in `probe_id` after a completed probe, and `unverified` with a null
+  `probe_id` after a failed one. After the other two, a new export starts a
+  chain that carries the turns of earlier chains that still authenticate from
+  their first turn on. It carries no turn of the v7 chain whose carried
+  selection no longer verifies, so it reads again what that chain read itself.
+  When the artifact store cannot give an artifact that the selection of the
+  first part reads, the verification ends with the refusal of the store
+  (Carried turns, above) and gives no answer on the selection. This holds for
+  an artifact of every chain that the selection reads, also of a chain that it
+  passed over or from which nothing is carried. While the chain has not
+  recorded its finding, `review-series` ends with a decision stop of that
+  code, whose step is `record-check`. A recorded finding is
+  `problem_openness_stale` with that code as its cause, and for
+  `artifact_missing` and `artifact_corrupt` `record-check` fails at its step
+  `integrity` with the same code. All of this ends when the exact bytes are
+  back. Under version 1 a lost artifact of a carried chain fails the second
+  part with `openness_reading_incomplete`, as before 0.91.3, and an artifact
+  of another chain is not read. A later chain carries the reading turns that a
+  v7 chain ran itself under the same rule, also when the selection of that
+  chain is under version 2, and it takes the turns that the v7 chain carried
+  from their own chains.
 
 A native result review of a math-solver objective reads its packet in the same
 chain when the packet binds `scientific_context.openness_minimum` outside
@@ -5959,9 +6073,9 @@ Refusal codes of a reading chain:
   the delivered prefix, and a chain that continues after a native result.
   Recorded `reading_turns` that differ from the chain verified now are
   `openness_reading_incomplete` itself, raised by the controller. For a v7
-  chain the code names a failed condition of its verification, and for a new
-  v7 chain a stored selection of carried turns that no longer matches its
-  origin (The reading protocol v7, above).
+  chain the code names a failed condition of its verification, the
+  verification of its carried selection included (The reading protocol v7,
+  above).
 - `invalid_review_context` (since 0.91.0, for a v7 chain): a payload with
   `context.unread` or `context.reading_replacement` that is not the step
   which the plan of the failed turn gives. Run `review-series` on the head.
@@ -6745,7 +6859,7 @@ example the population of the cohort tool. The post decision is
 | `problem_attempt_extension_unexplained` | Explain an attempt exceeding 24 moves, 24 runs, one admitted worker or 300 admitted timeout seconds; `totals` gives usage and admitted bounds, and `exceeded` lists the limit names. |
 | `problem_openness_missing`, `problem_openness_unresolved` | Obtain an observed supported openness finding with the audited minimum. |
 | `problem_already_solved` | Redirect to the named established result or record a new statement. |
-| `problem_openness_stale` | Refresh the finding for the changed formulation, search or reading. |
+| `problem_openness_stale` | Refresh the finding for the changed formulation, search or reading. For the finding of a v7 chain whose `cause` is `openness_reading_incomplete`, `artifact_missing` or `artifact_corrupt`, first read the item "The verification of the carried selection" above. A completed probe of the route record of a carried chain makes such a finding current again when a failed probe caused it, and the restored bytes do when a lost artifact caused it. Neither needs a new export. |
 | `problem_value_missing`, `problem_value_reading_missing`, `problem_value_computation_missing` | Supply a value record with the accounts of the statement and ordered value paragraphs, with valid full readings or admitted, reconciled, assessed computation support. |
 | `problem_value_stale` | The current value record holds accounts, and the record gained a later run on the current text, a later outcome of a form in the history of the statement, or a later delivered snapshot of a cited objective (`value_id`, `changes`). Record a new value record whose accounts take each change into account and cite the latest snapshot. The result reviews are then refreshed ([The accounts of a value record](#the-accounts-of-a-value-record)). |
 | The codes of the accounts, for example `problem_neighbour_role_missing` or `problem_test_run_invalid` | The current value record does not validate against the current records, for example after a revision of the statement changed its neighbours. Record a new value record. The table under [The accounts of a value record](#the-accounts-of-a-value-record) gives the repair for each code. |

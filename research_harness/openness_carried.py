@@ -1,8 +1,10 @@
 """Pure D2 selection of earlier problem readings for a new v7 chain.
 
-The caller supplies the new first assignment's identity and recorded revision. Version 2 selections
-are checked against the store before that assignment and authenticate each carried item today. The route-identity unit supplies
-review_context_repair.is_same_route(first, second), with the identity of Ruling 2.
+The caller supplies the new first assignment's identity and recorded revision. The verifier compares
+a stored selection of version 2 with the selection of the store as it stood before that assignment,
+and it authenticates each carried item of a stored selection under the records as they stand. The
+route-identity unit supplies review_context_repair.is_same_route(first, second), with the identity
+of Ruling 2.
 """
 
 import copy

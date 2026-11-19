@@ -33,9 +33,20 @@ VISUAL_TEXT_ROUTE_MESSAGE = ('Protocol v7 delivers text units. Register and prob
 VISUAL_TEXT_ROUTE_QUESTION = 'Which text route of this model should read the packet?'
 VISUAL_TEXT_ROUTE_ANSWER = 'Register and probe the text route of the same model.'
 LABEL_CHARACTERS = 120
-SELECTION_MISMATCH_MESSAGE = ('The stored selection is not the selection that the harness makes for the store as it '
-                              'stood before the first assignment, or a chain that gives a carried turn no longer '
-                              'authenticates.')
+SELECTION_MISMATCH_MESSAGE = (
+    'The carried selection of this chain does not verify. One of four cases is the cause. First, under '
+    'exactory-openness-carried-selection-v2, the stored selection is not the selection that the harness makes again '
+    'on the store as it stood before the first assignment. Second, an earlier chain no longer authenticates up to '
+    'its last carried turn under the records as they stand now. A contamination event on a carried turn has this '
+    'effect, and so has a failed latest probe of the route record of a carried chain. Third, a stored item of a '
+    'carried turn does not match the authenticated turn that it comes from or the inventory of this chain. Fourth, '
+    'the stored selection has a form or a protocol that this release does not verify. The chain gives no finding, '
+    'and a finding that it recorded is stale. When the latest probe of the route record of a carried chain failed, '
+    'probe that route record again. A completed probe of that route record ends the refusal. In every other case, '
+    'check the record with record-check. When record-check reports the record ready, export a new packet with the '
+    'same reviewer_id. Assign it for a new finding. The new chain carries the turns of earlier chains that still '
+    'authenticate from their first turn on. It carries no turn of this chain, and it reads again what this chain '
+    'read itself.')
 ALLOWANCES_CHARACTERS = 30000
 TARGET_LABELS_CHARACTERS = 100000
 DECISIVE_WORK_IDS_CHARACTERS = 10000
@@ -83,9 +94,10 @@ KEEP_REVIEWER_TEXT = ('A new chain carries the verified reading turns of an earl
                       'chain when you export again for the same statement.')
 PASSED_OVER_TEXT = ('The earlier chain {chain} read the same statement on the same route under another reviewer_id, '
                     'so this chain carries none of its turns.')
-SUPERSEDED_TEXT = ('The chain {chain} read {units} units that a later chain read again; its {entries} excerpts and '
-                   'passage answers of those units stay in its own records, and the new chain carries the later '
-                   'reading of each unit.')
+SUPERSEDED_TEXT = ('Each superseded excerpt or passage answer of the chain {chain} quotes text that a later chain read '
+                   'again (entries: {entries}, units that they quote: {units}). Such an entry stays in the records of '
+                   'its own chain. A chain of exactory-openness-reading-v7 carries the later reading of that text in '
+                   'its place. This needs no action.')
 FINAL_MATERIAL_FIELDS = ('notes', 'entries', 'gaps', 'material', 'sources', 'fill')
 TARGET_PAGE_SENTENCE = (
     ' The list of formulations, the statement record and the other fields of the native packet each '
@@ -2211,12 +2223,17 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
                 details=dict(material_allowance=bounds['material_allowance'], answer_bound=bounds['answer_bound']))
 
 
-# The verification of a v7 chain has five conditions, and each has one refusal message. A chain that fails one gives
-# no finding.
+# The verification of a v7 chain has five conditions, and a chain that fails one gives no finding. Each condition has
+# its own refusal message. Condition 1 also refuses with SELECTION_MISMATCH_MESSAGE or with a refusal of the artifact
+# store.
 ORIGIN_VERIFICATION_MESSAGE = (
-    'The reference on the first assignment must name the protocol of the stored selection, which this release '
-    'verifies as version 1 or version 2, and its digest must match; for version 2 the store must give its records '
-    'at the revision before the first assignment, whose stamp must be the revision of its commit.')
+    'The harness cannot verify the carried selection of this chain from its first assignment. One of three cases is '
+    'the cause. First, the reference carried_selection of that assignment names a protocol or a digest other than '
+    'those of the stored selection. Second, under exactory-openness-carried-selection-v2, the records give no '
+    'history from which the harness reads the store as it stood before the first assignment. Third, under the same '
+    'protocol, recorded_revision of the first assignment is not the revision at which the history of the store '
+    'shows that assignment recorded. The chain gives no finding. Check the record with record-check. When '
+    'record-check reports the record ready, report this refusal.')
 STATE_VERIFICATION_MESSAGE = (
     'A stored inventory or state of this chain differs from what the harness rebuilds from the native packet, the '
     'carried selection and the authenticated turns, or the state_digest in the packet of a turn does not name the '
