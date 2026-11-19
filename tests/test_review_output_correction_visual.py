@@ -115,6 +115,19 @@ class VisualCorrectionTests(unittest.TestCase):
             bad['response'] = artifacts.put(json.dumps(response).encode(), 'application/json')
             with self.subTest(actual_context=key):
                 self.assertIsNone(correction.selected_correction(changed, artifacts, assignment['id']))
+        # The shape of the live record: the assignment is on the visual route, the correction on the text route. A
+        # retirement of either route, recorded after the correction, leaves the corrected assignment as it stands.
+        expected = protocol.assignment_state(records, artifacts, assignment['id'])
+        self.assertEqual(expected['output_correction_id'], 'text-delta')
+        self.assertEqual([row['code'] for row in expected['obligations']], [])
+        for named in ('bar-second', assignment['id']):
+            case.mutate(protocol.record_context_event, dict(id='retirement-of-' + named, assignment_id=named,
+                kind='route_retired', source='owner', reason='The owner withdrew this route.',
+                evidence=[case.supporting]))
+            records = case.read_records()
+            with self.subTest(retirement_names=named):
+                self.assertEqual(protocol.assignment_state(records, artifacts, assignment['id']), expected)
+        self.assertEqual(protocol.retired_routes(records), {'route', 'visual-route'})
 
 
 if __name__ == '__main__':

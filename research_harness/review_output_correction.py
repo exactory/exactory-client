@@ -265,13 +265,13 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
                         'The correction answer reached the output limit of the route, so the harness does not use '
                         'it, and the one correction of this assignment is spent. Run review-series on the head '
                         'for the next step.')
-                evaluation = Evaluation.of(records, artifacts)
-                assignment, packet, output = _authenticate_observation(records, evaluation, invocation, result)
+                origin = protocol.read_origin(records, artifacts, invocation['recorded_revision'])
+                assignment, packet, output = _authenticate_observation(origin.records, origin, invocation, result)
                 if set(output) == {'correction', 'reason'} and output['correction'] == 'declined':
                     text(output['reason'], 'Decline reason')
                     result['correction_status'] = 'declined'
                 else:
-                    corrected = validate_output(records, evaluation, assignment, packet, output)
+                    corrected = validate_output(origin.records, origin, assignment, packet, output)
                     result['corrected_output'] = protocol._put_json(artifacts, corrected)
                     result['correction_status'] = 'accepted'
             except (ResearchError, ValueError, TypeError, KeyError, OSError) as error:
@@ -285,7 +285,10 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
 
 
 def selected_correction(records, artifacts, assignment_id):
-    """Return only an exact authenticated observed correction; raw attempts remain refused."""
+    """Return only an exact authenticated observed correction; raw attempts remain refused. The correction is
+    authenticated against the records as they stood when its call was admitted, as an attempt is: a record that came
+    later does not unselect it and acts in the state of the assignment."""
+    from . import review_protocol as protocol
     invocations = [item for item in records.get('review_output_correction_invocation', {}).values()
                    if item['assignment_id'] == assignment_id]
     if len(invocations) != 1:
@@ -299,17 +302,15 @@ def selected_correction(records, artifacts, assignment_id):
                 or any(result.get(key) != invocation.get(key) for key in ('id', 'assignment_id', 'route_id', 'protocol', 'diagnostic'))
                 or result['recorded_revision'] <= invocation['recorded_revision']):
             return None
-        evaluation = Evaluation.of(records, artifacts)
-        assignment, packet, output = _authenticate_observation(records, evaluation, invocation, result)
-        corrected = validate_output(records, evaluation, assignment, packet, output)
+        origin = protocol.read_origin(records, artifacts, invocation['recorded_revision'])
+        assignment, packet, output = _authenticate_observation(origin.records, origin, invocation, result)
+        corrected = validate_output(origin.records, origin, assignment, packet, output)
         if (result.get('composition') != 'original-output-plus-observed-metadata-delta'
                 or json.loads(artifacts.read(result['corrected_output'])) != corrected):
             return None
-        selected = {'id': result['id'], 'attempt_id': packet['diagnostic']['attempt_id'], 'output': corrected,
-                    'source_raw_output_digest': packet['diagnostic']['original_output_digest'],
-                    'corrected_raw_output_digest': digest(corrected)}
-        if assignment.get('staged_review') is not None:
-            selected['requires_reauthorization'] = True
-        return selected
+        return {'id': result['id'], 'attempt_id': packet['diagnostic']['attempt_id'], 'output': corrected,
+                'route_id': invocation['route_id'],
+                'source_raw_output_digest': packet['diagnostic']['original_output_digest'],
+                'corrected_raw_output_digest': digest(corrected)}
     except (ResearchError, ValueError, TypeError, KeyError):
         return None

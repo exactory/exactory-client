@@ -7369,6 +7369,28 @@
         "test_review_output_correction_visual.VisualCorrectionTests.test_original_visual_delivery_and_negative_science_survive_observed_text_delta",
         "test_installed_runtime_readers.InstalledRuntimeReaderTests.test_every_reader_of_the_installed_runtime_is_declared"
       ]
+    },
+    {
+      "id": "accepted-correction-unselected-by-a-later-record",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "authentication of a stored observation",
+      "summary": "An accepted output correction was admitted again at every read, on the records of that time. A record that was written after it took its selection away: a retirement of the route of the assignment or of the correction, a later probe that did not verify, a contamination event, a later contamination in the lineage of the repair, or a later assignment in the slot. The assignment then showed review_output_refused with no output; the refusal planner planned, and the harness recorded, a refusal replacement that discarded the accepted correction; a context repair that followed carried the refused raw outputs in place of the corrected output; and a record that arrived during the correction call turned its answer into an invalid correction.",
+      "expected": "A correction is authenticated against the review records as they stood before its invocation was recorded, when its call finishes and at every later read. A later record leaves it selected and acts in the state of the assignment as it acts on an accepted attempt: no obligation after a retirement of either route, the context obligation after a probe that does not verify or after a contamination, review_context_repair_stale after a later cause event of the repair, and review_assignment_replaced after a successor, which takes the corrected output as its history. A new correction call keeps every condition on the records of today.",
+      "fixed_in": "0.91.3",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_correction_origin.LaterRecordTests.test_retirement_of_the_route_keeps_the_corrected_output_ready",
+        "test_review_correction_origin.LaterRecordTests.test_retirement_in_the_lineage_of_the_repair_keeps_the_corrected_output",
+        "test_review_correction_origin.LaterRecordTests.test_later_probe_that_does_not_verify_keeps_the_corrected_output",
+        "test_review_correction_origin.LaterRecordTests.test_contamination_of_the_assignment_keeps_the_corrected_output",
+        "test_review_correction_origin.LaterRecordTests.test_later_contamination_of_the_predecessor_keeps_the_corrected_output",
+        "test_review_correction_origin.LaterRecordTests.test_context_repair_that_succeeds_the_assignment_takes_the_corrected_output_as_its_history",
+        "test_review_correction_origin.LaterRecordTests.test_later_record_plans_no_replacement_of_the_corrected_output",
+        "test_review_correction_origin.CallOriginTests.test_answer_is_accepted_when_a_record_arrives_during_the_call",
+        "test_review_correction_origin.CallOriginTests.test_correction_on_another_route_record_follows_the_state_of_that_route",
+        "test_review_output_correction_visual.VisualCorrectionTests.test_original_visual_delivery_and_negative_science_survive_observed_text_delta",
+        "test_review_effective_consumers.EffectiveConsumerTests.test_selected_graph_revalidates_raw_receipts_and_sibling_actual_inputs"
+      ]
     }
   ]
 }

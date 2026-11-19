@@ -18,6 +18,7 @@ import stat
 import time
 import uuid
 from collections import ChainMap
+from collections.abc import Mapping
 from contextlib import ExitStack
 
 from .artifacts import ArtifactStore, describe_artifact, validate_reference
@@ -4474,6 +4475,9 @@ def read_assignment_output(records, artifacts, assignment_id):
     return None, None
 
 
+ROUTE_CONTEXT_MSG = 'Independent approval requires this actual tested route and uncontaminated context.'
+
+
 def assignment_state(records, artifacts, assignment_id):
     if records.get('review_assignment', {}).get(assignment_id) is None:
         return _assignment_state(records, artifacts, assignment_id)
@@ -4522,7 +4526,7 @@ def _assignment_state(records, artifacts, assignment_id):
     if route is None or digest(route) != assignment['route_digest'] or not _prompt_matches(assignment, packet=packet):
         state['context_status'] = 'unverified' if not events else 'contaminated'
     if state['context_status'] != 'verified_for_route':
-        state['obligations'].append(obligation('review_context_' + state['context_status'], 'Independent approval requires this actual tested route and uncontaminated context.', assignment_id=assignment_id))
+        state['obligations'].append(obligation('review_context_' + state['context_status'], ROUTE_CONTEXT_MSG, assignment_id=assignment_id))
     try:
         from .evaluation import Evaluation
         repair_records = _read_context_records(records, assignment)
@@ -4573,9 +4577,14 @@ def _assignment_state(records, artifacts, assignment_id):
             original = records['review_attempt'][correction['attempt_id']]
             if 'answer_recovery' in original:
                 state['answer_recovery'] = copy.deepcopy(original['answer_recovery'])
+            # The corrected output rests on a second observation, so its route counts as the route of the assignment does.
+            correction_route_status = route_state(records, artifacts, correction['route_id'])['context_status']
+            if correction_route_status != 'verified_for_route' and state['context_status'] == 'verified_for_route':
+                state['context_status'] = correction_route_status
+                state['obligations'].append(obligation('review_context_' + state['context_status'], ROUTE_CONTEXT_MSG, assignment_id=assignment_id))
     else:
         state['obligations'].append(obligation('review_output_pending', 'A complete observed reviewer response is required.'))
-    if binding is None and assignment['route_id'] in retired_routes(records):
+    if binding is None and state['output'] is None and assignment['route_id'] in retired_routes(records):
         state['obligations'].append(obligation('review_route_retired', 'The route of this assignment was retired before an observed output; continue its slot through a context repair on another route.'))
     if assignment['role'] in bar_sources.ROLES:
         state.update(source_request_status='not_assessed', source_requests=[], pending_source_requests=[], source_request_obligations=[])
@@ -4608,6 +4617,45 @@ def _assignment_state(records, artifacts, assignment_id):
         state['obligations'].append(obligation('review_assignment_replaced', NOT_SELECTED_MSG, assignment_id=successor['id']))
     state['ready'] = not state['obligations']
     return state
+
+
+# The review records that are written once and keep the revision of their commit.
+ORIGIN_KINDS = ('review_assignment', 'review_invocation', 'review_attempt', 'review_context_event',
+                'review_probe_invocation', 'review_route_probe', 'review_output_refusal',
+                'review_output_correction_invocation', 'review_output_correction')
+
+
+class _OriginRows(Mapping):
+    """The rows of one record kind that were recorded before a revision. A keyed read and an iteration reach what
+    they reach in the wrapped rows, so the origin of a scoped view lists and serves the same rows as that view. A
+    filtered read of the origin reaches only the rows that the wrapped rows list."""
+
+    def __init__(self, rows, revision):
+        self._rows, self._revision = rows, revision
+
+    def __getitem__(self, key):
+        row = self._rows[key]
+        if row['recorded_revision'] >= self._revision:
+            raise KeyError(key)
+        return row
+
+    def __iter__(self):
+        return (key for key, row in self._rows.items() if row['recorded_revision'] < self._revision)
+
+    def __len__(self):
+        return sum(1 for _ in self)
+
+
+def read_origin(records, artifacts, revision):
+    """The review records as they stood before one revision, as an evaluation of their own: every row of ORIGIN_KINDS
+    that was recorded at that revision or later is left out, and every other kind is read as it stands. A stored
+    observation is authenticated against the origin of its call; later records govern the state of today without
+    rewriting that origin. The view is memoized in the evaluation's arena, and it is stable only within the caller's
+    immutable snapshot."""
+    from .evaluation import Evaluation
+    evaluation = Evaluation.of(records, artifacts)
+    return evaluation.once(('review_origin', revision), lambda: Evaluation.of(dict(records, **{
+        kind: _OriginRows(records.get(kind, {}), revision) for kind in ORIGIN_KINDS}), evaluation))
 
 
 def retired_routes(records):
