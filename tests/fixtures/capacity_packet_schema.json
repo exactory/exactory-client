@@ -18334,11 +18334,11 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.direction_reviews": {
-      "ast_sha256": "94d767ae723ab7249303d809fd634ae55d86c8b1f76d8e9f28bdffe5d910a114",
+      "ast_sha256": "a21fbccb3d182d4ccae3f58f9187bacff6aa752e803647bdad3b7d7fd04d2199",
       "functions": {
         "_collect_historical_task_graph": "761da8ff0432e1d83592a66e1630829f19f767409da07e3246fb90264bc10b34",
         "_collect_selected_task_graph": "17a36ffdc4bbe5e0b18532f54cb42d8503369e59e56f55ab2e83a104895d44e7",
-        "_collect_task_graph": "b348f70d0759ff9d356465036f438a39c1000a987d31e849197161c5a1c0bcb7",
+        "_collect_task_graph": "5dfb0239b9c113dee15a6fc8ac8cb15efd99af63c5adf39592ea5f9a01c9add5",
         "_matches_bound_input_ancestry": "43a0852594a4de27ce080662ebf16cdebf06df6384126d219b53fd4693bd8fe9",
         "assess_direction_reviews": "bc77fc39f059371b924f9936a672269ebf4eb5d62180d00cc9f4d1d019671d2a",
         "collect_actual_input_packets": "f9fa3fcd4aaecda00c98f9fea5c08a83c848377ed717c38f96d2485d064f3f90",
@@ -18349,7 +18349,7 @@
       "packet_call_digests": [
         "43d45d51f8570daf1fb3088acd5156a8cfbd8598dcb683e4e6d50c6173095a6b"
       ],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.91.3 staged correction guard: _collect_task_graph reads the correction invocations of a child through read_filtered_records and refuses the composition while a correction of the child is pending or accepted, in place of selected_correction; no packet argument or member changes."
     },
     "research_harness.direction_sources": {
       "ast_sha256": "f4945ed45d4790f00f6e8a63f0e93aafdd59cca51824b6582ba495541267e9b4",
@@ -20506,7 +20506,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.record_check": {
-      "ast_sha256": "670f2ff4b10a933773506ca2c4e992a65e09535f647b85b9ebc95d39f123c4ff",
+      "ast_sha256": "a6527127948286e6d89b01ee405ba748ae13dd279b2ccdfc97328dbf904664ec",
       "functions": {
         "_rebuild_invocation": "1acc896d0015ad5e31d50f3cf2ab1e450f660f53550945aea2137f13c3c44901",
         "build_reader_timeout_error": "6ff145b44f5467abad05c9dba2ddcc8fc8347d4b4702c7933ed70eb410c6624b",
@@ -20526,7 +20526,7 @@
         "confine_local_reads": "0a7062151c209847a71f092f2f17851120e842565987837ba337a24fd85da55d",
         "copy_snapshot": "a3041f285b8995ba52acb6b17305bb674b1457f6f23c1c08e44ad219a5a8ad91",
         "describe_capacity_decision": "21c917dcbc7d3789649c4e1927e78abb6db79322809e21bdf1b8293a6dc13ff7",
-        "describe_correction_observation": "808c0d20716b05690c8b4af1acb94920ee33cb0767de8c3292630c4ee4c83e76",
+        "describe_correction_observation": "e3a595c3c7f63884799aa4e9a648e209034376a495e9e8b8ef13701bebc75ef5",
         "describe_observation": "ee7f38529f654071940daab2d48f218a172730d80150f4b53c39c922ba1c01ff",
         "describe_probe_observation": "d4fb4f23f12684d9f5db3248dee31c6c24a012a5cc77a9c58c350047eda6a2a4",
         "describe_series_stops": "1afc646fe9f9ab9b177db2f5fd33ba0fef0ad29df02303fdfeb62162712681b8",
@@ -20541,7 +20541,7 @@
         "run_timed_check": "1b036cf9e08be718add474e56867e0555381712eb624af1d77b59c1584fb7e7c"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.3 origin authentication: describe_correction_observation passes the origin view of the records to _authenticate_observation; no packet argument or member changes."
     },
     "research_harness.remote": {
       "ast_sha256": "897072ca205d979c3f6a3a964936b3958452730ba4fe9e5532c59ce05b6a2114",
@@ -21392,7 +21392,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_output_correction": {
-      "ast_sha256": "8e5dc87f13a155484daed674d8602f7aff4ca2a1bf70d77da2f16eb5a77f698b",
+      "ast_sha256": "bb6c9e422fd275c2e7bed45621e545d28377f90debe3d0496d6e7eb3d8c5b165",
       "functions": {
         "_authenticate_observation": "e816df292481a2045aad20cb4b55995771fdadbeb7a76080593b371eaafa2cb2",
         "_prepare_packet": "11d07c3cbf338a2830f2f4cc76304af8354d7f3d172d9942504d21540a2166d5",
@@ -21400,9 +21400,9 @@
         "_reject": "4743e9a7a1e670066edc35edc538406087276a3f77d56949c49895d68a2394b1",
         "_route": "15f109e391988a3a6a732ebe1275c3523d8bbac1f741dcc729de2a7c63c16246",
         "build_request": "6ef05d388564cc965f2cb578c298272d8eb21867d40186de38b0089ab8035f9b",
-        "invoke_correction": "34bfebb8be49538a61bddfab9b991217fea0f97a238199b915833febc13d346d",
+        "invoke_correction": "4c36e562535f0ac40778ebcff1edce63ceecd651bb4241a56ec3d5d87a2912ac",
         "prepare_packet": "55895aa00ffc512dd5bc1cab786282efed38950f5e22bf1b38f77168a8b69b0a",
-        "selected_correction": "e4b84d6094d3587ef5d35d7fee8c6db4cf1748b52228925b9000d3452cbd149e",
+        "selected_correction": "71c8ff94e4d711d322cade84376305051257c0d2282d6a6959690d5e99a9ea2c",
         "validate_output": "0ea580f50a270c5957c7838fb2f5d8378ef11b7e7a898d81972d8ffdd37e21e4"
       },
       "packet_call_digests": [
@@ -21413,7 +21413,7 @@
         "87c3cc57e36f8e70d05658c7fe8bb9587ecbf2042822c79ae198232ee273f72b",
         "a4e3e4d7d464207ad59c43b6e4096cd4217718b57dddf92dc2eefdc928bef8d7"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback forwarding to _invoke_once: it carries no packet arguments and changes no correction packet fields or shape. Reviewed 0.91.3 recorded-runtime authentication: _authenticate_observation compares the recorded runtime with the runtime that the route record pins, and invoke_correction requires the installed runtime and the installed reviewer program before it records the invocation; no packet argument, member, call, write or shape changes."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback forwarding to _invoke_once: it carries no packet arguments and changes no correction packet fields or shape. Reviewed 0.91.3 recorded-runtime authentication: _authenticate_observation compares the recorded runtime with the runtime that the route record pins, and invoke_correction requires the installed runtime and the installed reviewer program before it records the invocation; no packet argument, member, call, write or shape changes. Reviewed 0.91.3 origin authentication: invoke_correction and selected_correction pass the origin view of the records to _authenticate_observation and validate_output, and selected_correction returns route_id in place of requires_reauthorization; no packet argument, member, call, write or shape changes."
     },
     "research_harness.review_packets": {
       "ast_sha256": "c9e9237b96b4d8b790b4b9d7f07f12fd8cf0f412d8c3b993efe3f73010b43e21",
@@ -22251,9 +22251,9 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "937593ab5e720d34c0ce90aac1740ae42bb52a608f369948c84edd9c3a6c66e0",
+      "ast_sha256": "cfd22a31d00ba1355446d80aea1a92aa21147b08aa1bdb11538485e2b5d60082",
       "functions": {
-        "_assignment_state": "805eca7b4483852dbee0f8e05928cde22acbc7c7be8ec46ba127c3e71a0ddcbc",
+        "_assignment_state": "49c943308227c20d44664e3b577eed08bd99a3208d824ceb976bcb71f80f8b62",
         "_bars": "fd41a7b94078e8e0761696db4a7cc67b063cbb5787f76d6d3dae65fcc7fe5f9f",
         "_build_prompt": "fed24ab4acff270fa5f67d8875c3afa05e1e89829a813c1b0629faf558ccaeba",
         "_context_observed": "706588f918f9418a213ffad4175220255e9b1eda12193cf0c4aa200208736e68",
@@ -22351,6 +22351,7 @@
         "probe_route": "5d3a8b4ec9c0c024323f38feec31423ea29f0034fda16e08899de275048107e8",
         "read_assignment_output": "11a6d3cf0cf63b32e9a776db3cfb3e41b0d2a85e191e7c5e2d610ca33307c9da",
         "read_codex_diagnostic": "9fb58c3ffeaf8c0c4359805d7baa51f5f1cd5352ae73b42c0bf560bfa93329a7",
+        "read_origin": "e9dbcbe3f6db29e65cd278d5847b70c8100a5c6f06c70c353eb87f2d5f873271",
         "read_raw_observation": "14e6b6c7ca97a4e3992d908f1d94f3add3a92bee7561ace63d220fb8cbf06834",
         "read_route_runtime": "e60df76fe94a9b3f2b98373e22d2c1bc846ca050d50044e4744a7e60fe71bca2",
         "record_adjudication": "01d2fc25fe7225693aa60a9e3e8f098c2ece6ac5656ce378a07989533681a79d",
@@ -22431,7 +22432,7 @@
         "f71df93e3effb278f474cea48473ab543f2e3e9f35807725d57775c354ddc1d9",
         "f9de906674de2fc03fd882f06649fc77f3536e68a95d398f173553e2a01ce4df"
       ],
-      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback after the committed invocation admission, plus invoke_assignment and probe_route forwarding: it renders derived views without changing authenticated packets, requests or their closed shapes. Reviewed 0.91.3 route renewal: is_route_stale compares the pinned runtime with the reading of the route state; require_installed_runtime refuses an assignment on a stale, unretired route record before any record; _require_route_runtime keeps its comparison and its message in a constant; record_assignment calls the check after the retirement check and before every dispatch. No packet member or stored record changes."
+      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback after the committed invocation admission, plus invoke_assignment and probe_route forwarding: it renders derived views without changing authenticated packets, requests or their closed shapes. Reviewed 0.91.3 route renewal: is_route_stale compares the pinned runtime with the reading of the route state; require_installed_runtime refuses an assignment on a stale, unretired route record before any record; _require_route_runtime keeps its comparison and its message in a constant; record_assignment calls the check after the retirement check and before every dispatch. No packet member or stored record changes. Reviewed 0.91.3 origin view: read_origin returns the review records before one revision through _OriginRows; _assignment_state adds review_route_retired only without an output and reads the route state of a selected correction, and its context message is the constant ROUTE_CONTEXT_MSG; no packet member, call or stored record changes."
     },
     "research_harness.review_provider_usage": {
       "ast_sha256": "8b45cdd4c5b5a98325852d3040a320283c876c25fc99d358556999417a76c986",
@@ -23758,14 +23759,14 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_visual_route": {
-      "ast_sha256": "f366fdbbcd6c196fb2280e5a46e70b3200a00fee490208f40fbd1d221b6120d0",
+      "ast_sha256": "e4f42b385c096b746e2c077553e0fed59378c63f519fb9b40dd5e8dfe2e8cce2",
       "functions": {
         "_require": "1ed039dfb3f1d9be19c4316345b4bfa46131a026cfac0d6495add1f469802ea8",
-        "validate_lineage_bridge": "6644b771adcade13d5abb9cc98edc25207a8644f1bd1639f6de1030181a4f61d",
+        "validate_lineage_bridge": "77dd5e0ac580ec60ccad099b7c932f46dc7d7ad1d9c98c37e06d6b76a7ed525b",
         "validate_transition": "ebffacaae6c1f258ef75486d7b0597717b3ccddc301b1fb2983de0d06c02c223"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.91.3 shared origin view: validate_lineage_bridge reads its origin through review_protocol.read_origin with the revision of the child; the validated transition and the packet are unchanged."
     },
     "research_harness.review_visual_sources": {
       "ast_sha256": "d74af98e07907e497c29c085e5a038e040f2e953a5d5909fc6c94b7d0408e259",
