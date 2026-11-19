@@ -125,6 +125,9 @@ def _validate_session_composite(records, artifacts, assignment, packet, output):
 FINAL_FAMILIES = {
     'exactory-openness-reading-v7': dict(list_turns=_list_v7_final_turns,
         read_currency=_read_v7_currency, validate_output=_validate_v7_composite),
+    # A math chain shares the v7 page plan; its validator is the one of its protocol description.
+    'exactory-openness-reading-math-v2': dict(list_turns=_list_v7_final_turns,
+        read_currency=_read_v7_currency, validate_output=_validate_v7_composite),
     'exactory-review-parts-v3': dict(list_turns=_list_parts_final_turns,
         read_currency=_read_parts_currency, validate_output=_validate_parts_composite),
     'exactory-independent-review-sources-v4': dict(list_turns=_list_session_final_turns,

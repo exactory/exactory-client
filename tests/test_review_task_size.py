@@ -116,7 +116,7 @@ class RecoveryRowsTests(unittest.TestCase):
                     and re.fullmatch(r'exactory-openness-reading-(?:v[0-9]+|math-v[0-9]+)', value)}
         for version in versions:
             expected.update((kind, version) for kind in ('reading', 'final'))
-        expected.add(('combine', reading.PROTOCOL_V7))
+        expected.update(('combine', version) for version in reading.BOUNDED_CHAIN_PROTOCOLS)
         from research_harness.review_parts_v3 import PROTOCOL as PARTS_V3
         expected.update((kind, PARTS_V3) for kind in parts.KINDS)
         from research_harness.review_session_v4 import PROTOCOL as SESSION_V4
@@ -161,8 +161,10 @@ class RecoveryRowsTests(unittest.TestCase):
                     self.assertEqual(recovery['details']['attempts'][0]['output_tokens'], 138371)
                     self.assertEqual(recovery['details']['effort'], 'max')
                     self.assertTrue(recovery['details']['effort_message'])
-                    self.assertEqual(recovery['details']['required_unit'],
-                                     'reading-math-v2' if version == reading.MATH_PROTOCOL else 'reading-v7-turns')
+                    if version == reading.MATH_PROTOCOL:
+                        self.assertNotIn('required_unit', recovery['details'])
+                    else:
+                        self.assertEqual(recovery['details']['required_unit'], 'reading-v7-turns')
                     self.assertEqual(case.records, before)
 
     def test_a19_reduced_context_cap_replaces_a_read_and_real_assignment_halves_it(self):

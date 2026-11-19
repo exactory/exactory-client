@@ -31,6 +31,8 @@ from .storage import _canonical
 
 
 HANDLE_TABLE = 'handle_table'
+# A protocol builder can supply the openness minimum that an approval of its packet records (decision 25).
+SUPPLIED_MINIMUM = 'supplied_minimum'
 EXPANSION_PROTOCOL = 'exactory-review-handle-expansion-v1'
 MATERIAL_PART_LIMIT = 8
 INVALID_REFERENCE_HANDLE_MESSAGE = (
@@ -124,8 +126,8 @@ def _expand_value(table, value, path, artifacts=None):
 
 
 def _build_v7_handle_table(packet, artifacts, assignment):
-    from .openness_reading import find_protocol, PROTOCOL_V7
-    if find_protocol(packet) != PROTOCOL_V7:
+    from .openness_reading import find_protocol, BOUNDED_CHAIN_PROTOCOLS
+    if find_protocol(packet) not in BOUNDED_CHAIN_PROTOCOLS:
         return packet
     from .openness_reading_v7 import build_handle_packet
     return build_handle_packet(packet, artifacts, assignment)
@@ -204,7 +206,7 @@ def expand_handles(packet, output, *, artifacts=None, assignment=None, raw=False
         if packet.get('material_state', {}).get('pending') and not is_material_output(packet, output):
             raise ResearchError('invalid_review_material', INVALID_MATERIAL_MESSAGE,
                                 {'path': '/stage', 'pending': packet['material_state']['pending']})
-        return _expand_value(packet[HANDLE_TABLE], output, '', artifacts)[0]
+        return _supply_minimum(packet, _expand_value(packet[HANDLE_TABLE], output, '', artifacts)[0])
 
 
 def describe_expansion(packet, output, response, *, artifacts=None, assignment=None):
@@ -215,6 +217,7 @@ def describe_expansion(packet, output, response, *, artifacts=None, assignment=N
     with contract_check('review.shape'):
         _validate_v7_refs(packet, output, raw=True)
         expanded, count = _expand_value(packet[HANDLE_TABLE], output, '', artifacts)
+        expanded = _supply_minimum(packet, expanded)
     answer = extract_answer_text(response)
     certificate = dict(protocol=EXPANSION_PROTOCOL, references=count,
                        answer_sha256=hashlib.sha256(answer.encode('utf-8')).hexdigest(),
@@ -278,24 +281,25 @@ def build_gap_handles(minimum_gaps, artifacts):
 
 
 def is_material_output(packet, output):
-    from .openness_reading import find_protocol, PROTOCOL_V7
+    from .openness_reading import find_protocol, BOUNDED_CHAIN_PROTOCOLS
     return (HANDLE_TABLE in packet or 'session_turn' in packet or 'session_final' in packet
-            or find_protocol(packet) == PROTOCOL_V7
+            or find_protocol(packet) in BOUNDED_CHAIN_PROTOCOLS
             or packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3') and isinstance(output, dict) and output.get('stage') == 'material'
 
 
 def validate_material(packet, output, *, artifacts=None, assignment=None):
     """Check a material part once at the output-contract boundary."""
+    from .openness_reading import BOUNDED_CHAIN_PROTOCOLS
     packet = _resolve_packet(packet, artifacts, assignment) if HANDLE_TABLE not in packet else packet
     with contract_check('review.shape'):
-        if ('session_turn' in packet or packet.get('reading_turn', {}).get('protocol') == 'exactory-openness-reading-v7'
+        if ('session_turn' in packet or packet.get('reading_turn', {}).get('protocol') in BOUNDED_CHAIN_PROTOCOLS
                 or packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3'
                 and packet['review_parts']['kind'] != 'final'):
             raise ResearchError('invalid_review_material', MATERIAL_READING_TURN_MESSAGE, dict(path='/stage'))
         fields(output, ('stage', 'title', 'part', 'text', 'more'), code='invalid_review_material', path='')
         for name in ('title', 'text'):
             text(output[name], 'Material ' + name, code='invalid_review_material')
-        if 'session_final' in packet or any(packet.get(key, {}).get('protocol') == 'exactory-openness-reading-v7'
+        if 'session_final' in packet or any(packet.get(key, {}).get('protocol') in BOUNDED_CHAIN_PROTOCOLS
                for key in ('reading_turn', 'reading_final')) or packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
             if len(output['title']) > 120:
                 raise ResearchError('invalid_review_material', INVALID_MATERIAL_MESSAGE,
@@ -350,3 +354,12 @@ def authenticate_material(packet, output, material, artifacts, *, assignment=Non
             return artifacts.read(reference)
 
     return _canonical(advance_material(packet, output, ReadOnlyArtifacts())) == _canonical(material)
+
+
+def _supply_minimum(packet, output):
+    """Set the supplied minimum on an approval; the role validator reports a malformed approval."""
+    findings = output.get('findings') if isinstance(output, dict) and output.get('decision') == 'approve' else None
+    openness = findings.get('openness') if isinstance(findings, dict) else None
+    if SUPPLIED_MINIMUM in packet and isinstance(openness, dict):
+        openness['minimum'] = copy.deepcopy(packet[SUPPLIED_MINIMUM])
+    return output

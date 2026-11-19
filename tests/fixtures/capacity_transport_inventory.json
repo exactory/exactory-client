@@ -33,7 +33,7 @@
     "research_harness/review_protocol.py:_observed": "896e10fd17b469f2f469fe89b8f07113b9dec3ec9e829e146e300a516bcf5765",
     "research_harness/review_call_admission.py:admit_review_call": "91bbea98b04dd72715df943eebf3cf1f498a614109b0ba4df2130ba4900177c2",
     "research_harness/review_route_capacity.py:describe_session_stop": "65cfe3b9fb9d3f1bf3d0506b7f01594166971485799cafe4497a32b995166af5",
-    "research_harness/review_protocol.py:invoke_assignment": "ee91fa26447e42c4e0dee7ef0238ad15b532def5e3731aad2f43a9cc800963d8"
+    "research_harness/review_protocol.py:invoke_assignment": "a5e2facdbc00577c1fbb9628eff712b6e725a6e388f0a2d6f90e51ece9b53e63"
   },
   "limit_readers": [
     "research_harness/batches.py",
@@ -1875,7 +1875,7 @@
     "skills/math-solver/harness/search_controller/cli.py": "9762296da2edd0164115e6caff107645477f33d91479a6144031d277e4505848",
     "skills/math-solver/harness/search_controller/adoption.py": "48a4f1030bb3527af6cb21b01035a2a8b2b6eb5c7f9f6ce1c15c72f589a8ef59",
     "skills/math-solver/harness/search_controller/strategy_refresh.py": "c7f6f855fc6b91d788ef4d03ce8c8e2c4aae14b843a404e8ced7079c47871bce",
-    "skills/math-solver/harness/search_controller/reviewer.py": "84f95fb77e39c20f1dfcda681ab0ac80263d2dcb41fe3c22981985b95dd2bea5",
+    "skills/math-solver/harness/search_controller/reviewer.py": "242dc3ada244cdb8d41abc02222a31ed717c22708c3d1bb857f1903c6b9be795",
     "skills/math-solver/harness/search_controller/closure_delivery.py": "76714a2668c73a72348864b3c2d21d267998f43ce11f0be0dbfbd5144d99ae2a",
     "skills/math-solver/harness/search_controller/storage.py": "e6935835f974cf385a5f303e927038779dfc7692d06f24eab3257ba0d6b885d2",
     "skills/math-solver/harness/search_controller/attempt_delivery.py": "efe0ac35398aa05ab5f2b0aaf3b388f0479d5eae2ac2ba36e518bff0ceae7e2e",

@@ -190,7 +190,7 @@ def _build_assignment_payload(records, assignment, *, replace=False):
                     'correction', 'source_delivery')}
         context['prior_assignment_id'] = assignment['id']
     maximum = (openness_reading.RESERVED_IDENTIFIER_CHARACTERS if assignment['prompt']['template_id'].startswith(
-        (openness_reading.PROTOCOL_V6 + '/', 'exactory-openness-reading-v7/')) else None)
+        tuple(protocol + '/' for protocol in (openness_reading.PROTOCOL_V6,) + openness_reading.BOUNDED_CHAIN_PROTOCOLS)) else None)
     payload.update(id=_find_unused_id(records, lineage[0]['id'] + '-t' + str(len(lineage) + 1), maximum=maximum),
                    context=context)
     return payload
@@ -203,7 +203,7 @@ def _build_run_payload(records, assignment):
                    if row['assignment_id'] == assignment['id']]
     count = len({row['id'] for row in attempts + invocations}) + 1
     maximum = (openness_reading.RESERVED_IDENTIFIER_CHARACTERS if assignment['prompt']['template_id'].startswith(
-        (openness_reading.PROTOCOL_V6 + '/', openness_reading.PROTOCOL_V7 + '/')) else None)
+        tuple(protocol + '/' for protocol in (openness_reading.PROTOCOL_V6,) + openness_reading.BOUNDED_CHAIN_PROTOCOLS)) else None)
     return dict(id=_find_unused_id(records, assignment['id'] + '-run-' + str(count), maximum=maximum),
                 assignment_id=assignment['id'])
 

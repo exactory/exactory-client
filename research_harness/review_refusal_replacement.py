@@ -105,7 +105,7 @@ def prepare_replacement(records, artifacts, value, revision):
         raise ResearchError('review_refusal_replacement_ineligible', INELIGIBLE_REPLACEMENT_MSG)
     packet = protocol._read_json(artifacts, prior['packet'])
     from . import openness_reading_v7 as v7
-    is_v7 = protocol.openness_reading.find_protocol(packet) == v7.PROTOCOL
+    is_v7 = protocol.openness_reading.find_protocol(packet) in v7.PROTOCOL_DESCRIPTIONS
     if (prior.get('staged_review') or prior.get('reading_chain') and not is_v7
             or prior['role'] == 'native_math' and review_parts.KEY not in prior and not is_v7
             or prior['role'] not in protocol.bar_sources.ROLES + ('adjudicator',) and review_parts.KEY not in prior and not is_v7

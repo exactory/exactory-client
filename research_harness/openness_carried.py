@@ -113,6 +113,7 @@ CHAIN_OBSERVERS = MappingProxyType({
     'exactory-openness-reading-v6': v7.observe_carried_chain,
     'exactory-openness-reading-v7': v7.observe_v7_chain,
     reading.MATH_PROTOCOL: observe_math_chain,
+    reading.MATH_PROTOCOL_V2: v7.observe_v7_chain,
 })
 
 

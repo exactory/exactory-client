@@ -276,7 +276,7 @@ def build_final_packet(records, artifacts, route, logical, chain, number, invent
     if catalog is None:
         _, catalog, full = build_final_inputs(artifacts, route, logical, chain, number, inventory, state, plan, limits,
                                               turn['context']['page_room'])
-    rule_packet = dict(native=logical['native'], reading_final=dict(protocol=v7.PROTOCOL,
+    rule_packet = dict(native=logical['native'], reading_final=dict(protocol=inventory['protocol'],
         page=dict(targets=plan['targets']['handles']), page_plan_digest=digest(page_plan)))
     handle_assignment = dict(capacity_plan=dict(protocol=capacity.CAPACITY_PLAN_PROTOCOL, digest=digest(plan),
         artifact=artifacts.put(serialize_record(plan), 'application/json')), reading_chain=dict(
@@ -459,9 +459,9 @@ def read_composite_currency(records, artifacts, assignment):
 
 
 def validate_composite_output(records, artifacts, assignment, packet, output):
-    from .native_review import validate_finding, find_finding_version
+    from .openness_reading_v7 import describe_protocol
     try:
-        validate_finding(packet, output, finding_version=find_finding_version(assignment), artifacts=artifacts)
+        describe_protocol(packet=packet)['validate_final'](packet, output, artifacts=artifacts, assignment=assignment)
     except ResearchError as error:
         error.details['composed_finding'] = True
         raise

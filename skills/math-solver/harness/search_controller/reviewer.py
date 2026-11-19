@@ -450,7 +450,7 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
     from research_harness.artifacts import ArtifactStore
     from research_harness.errors import ResearchError
     from research_harness.native_review import load_packet
-    from research_harness.openness_reading import find_final_assignment, verify_chain
+    from research_harness.openness_reading import MATH_PROTOCOL_V2, find_final_assignment, find_protocol, verify_chain
     from research_harness.operations import normalized_text
     from research_harness.review_protocol import assignment_state, find_replacement
     from research_harness import review_parts
@@ -476,8 +476,13 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
                   "Native approval requires its native mathematical assignment", "review_assignment_mismatch")
         if "reading_chain" in assignment:
             assignment = find_final_assignment(records, artifacts, identifier)
+            turns = verify_chain(records, artifacts, assignment)
+            if find_protocol(json.loads(artifacts.read(assignment['packet']))) == MATH_PROTOCOL_V2:
+                # The chain authenticates coverage; native records retain their receipt schema.
+                turns = [dict(assignment_id=turn['assignment_id'], attempt_id=turn['attempt_id'],
+                              delivered_units=[]) for turn in turns]
             current = dict(assignment_state(records, artifacts, assignment["id"]),
-                           reading_turns=verify_chain(records, artifacts, assignment))
+                           reading_turns=turns)
         elif review_parts.KEY in assignment or capacity_series:
             from research_harness import review_parts_native
             assignment = review_parts_native.find_final_assignment(records, artifacts, identifier)
@@ -493,6 +498,7 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
             # Native parts have no openness reading units; the verified series supplies their coverage.
             current = dict(current, reading_turns=[dict(assignment_id=receipt['assignment_id'],
                 attempt_id=receipt['attempt_id'], delivered_units=[]) for receipt in receipts])
+        if 'reading_chain' in assignment or review_parts.KEY in assignment:
             from research_harness.review_composite import read_final_output
             output, composite = read_final_output(records, artifacts, assignment)
             if composite is not None:
