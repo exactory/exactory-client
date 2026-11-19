@@ -496,7 +496,10 @@ def prepare_repair(records, artifacts, assignment_payload):
     history = collect_scientific_history(records, artifacts, chain, roles,
         exhausted_position=exhaustion['position'] if exhaustion is not None else ())
     predecessor_history = next(item for item in history if item['assignment_id'] == predecessor['id'])
-    result = {'predecessor': predecessor, 'slot_id': original_slot, 'packet': predecessor_history['packet'],
+    # A session of the rules v4 holds the packet of its role behind the turns that delivered it.
+    packet = (json.loads(artifacts.read(predecessor['session_chain']['logical'])) if predecessor.get('session_chain')
+              else predecessor_history['packet'])
+    result = {'predecessor': predecessor, 'slot_id': original_slot, 'packet': packet,
             'predecessor_binding': bind_predecessor(records, predecessor, state, history),
             'historical_reviews': _reviews(records, {item['id'] for item in chain if item['role'] == predecessor['role']}),
             'scientific_history': history,
@@ -539,6 +542,15 @@ def collect_scientific_history(records, artifacts, chain, roles, *, exhausted_po
         packet = source_delivery_packet(records, artifacts, ancestor)
         from . import review_problem_parts, review_parts
         intermediate_output = None
+        if ancestor.get('session_chain'):
+            from .review_session_v4 import find_session_form
+            form = find_session_form(packet)
+            if form in ('request', 'page', 'combine'):
+                intermediate_output, scientific_output = scientific_output, None
+            elif form == 'closing' and scientific_output is not None:
+                # A final in pages is recorded as the review that its closing page composes.
+                from .review_composite import read_final_output
+                scientific_output = read_final_output(records, artifacts, ancestor)[0]
         if (review_problem_parts.find_stage(packet) == 'part'
                 or review_parts.find_kind(packet) is not None
                 and (review_parts.find_kind(packet) != 'final'
@@ -557,7 +569,7 @@ def collect_scientific_history(records, artifacts, chain, roles, *, exhausted_po
         from .bar_sources import pending
         epoch = records.get('review_epoch', {}).get(ancestor.get('staged_review', {}).get('epoch_id'), {})
         if (scientific_output is not None and ancestor['role'] in roles
-                and not pending(packet, scientific_output, manifest=epoch.get('manifest'))
+                and (ancestor.get('session_chain') or not pending(packet, scientific_output, manifest=epoch.get('manifest')))
                 and not scientific_output.get('settled_requests')):
             finals = _reviews(records, {ancestor['id']})
             if not any({key: value for key, value in saved.get('payload', saved).items()
@@ -729,6 +741,8 @@ def frozen_reassessment_packet(records, artifacts, assignment):
     repairs = [item for item in _lineage(records, assignment)
                if item.get('context', {}).get('context_repair') is not None]
     bound = repairs[-1] if repairs else assignment
+    if bound.get('session_chain'):
+        return json.loads(artifacts.read(bound['session_chain']['logical']))
     return json.loads(artifacts.read(bound['packet']))
 
 

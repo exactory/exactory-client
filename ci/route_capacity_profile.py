@@ -59,8 +59,9 @@ def calculate_upper_share(calls, over):
     return (low + high) / 2
 
 
-def _describe_verification_attempt(records, artifacts, attempt, plan):
+def _describe_verification_attempt(records, artifacts, attempt, plan, packet, replaced):
     from research_harness.review_failure_class import classify_attempt
+    from research_harness.review_session_v4 import read_session_binding
     assignment = records['review_assignment'][attempt['assignment_id']]
     route = records['review_route'][assignment['route_id']]
     classification = (classify_attempt(records, artifacts, attempt)
@@ -72,18 +73,105 @@ def _describe_verification_attempt(records, artifacts, attempt, plan):
         type(tokens) is int and tokens >= limit))
     generated = bool(attempt.get('completed_generation')) or over
     task = attempt.get('task', {})
-    level = task.get('material_allowance')
+    binding = read_session_binding(packet)
+    bounds = binding.get('capacity', {})
+    level = task.get('level_material_allowance', task.get('material_allowance', bounds.get('level_material_allowance')))
     if level is None and type(task.get('material_characters')) is int:
         start = plan.get('task', {}).get(task.get('kind'), {}).get('material_allowance')
         level = next((value for value in reversed(capacity.describe_material_levels(task.get('kind')))
                       if task['material_characters'] <= value and start is not None and value <= start), None)
-    return dict(id=attempt['id'], assignment_id=assignment['id'],
-        position=assignment.get('context', {}).get('prior_assignment_id'),
-        level=level, kind=task.get('kind'), tokens=tokens,
+    # A turn of a session keeps its number through its replacements; each turn of a final in pages,
+    # the pages of a split among them, has a number of its own.
+    if 'final_turn' in binding:
+        position = 'final:%d' % binding['final_turn']
+    elif assignment.get('session_chain'):
+        position = 'turn:%d' % assignment['session_chain']['turn']
+    else:
+        parent = assignment.get('context', {}).get('prior_assignment_id')
+        position = 'after:' + parent if parent else 'initial'
+    return dict(id=attempt['id'], assignment_id=assignment['id'], position=position,
+        protocol=packet.get('source_rules'), level=level, answer_bound=bounds.get('answer_bound'),
+        kind=task.get('kind'), tokens=tokens,
         outcome=(classification or {}).get('outcome', 'completed' if generated else attempt['status']),
         effort=route['configuration'].get('effort'), output_limit=limit,
         route_id=route['id'],
-        generated=generated, at_or_over_limit=over, recorded=attempt.get('output') is not None)
+        generated=generated, at_or_over_limit=over,
+        # A recorded answer is one that the chain kept: not refused, and not replaced for its size.
+        recorded=(attempt['status'] == 'completed' and attempt.get('output') is not None
+                  and attempt['id'] not in records.get('review_output_refusal', {})
+                  and assignment['id'] not in replaced))
+
+
+def _read_verification_page_plans(artifacts, members):
+    from research_harness.openness_final_pages import read_page_plan
+    plans = {}
+    for member in members:
+        reference = member.get('session_chain', {}).get('final_page_plan')
+        if reference:
+            for item in reference.get('predecessors', []) + [reference]:
+                if item['digest'] not in plans:
+                    plans[item['digest']] = read_page_plan(artifacts, item)
+    return list(plans.values())
+
+
+def _list_split_positions(row, plans):
+    """The positions of the turns that a successor page plan with the cause split puts in place of the attempt's turn."""
+    for plan in plans:
+        cause = plan.get('cause', {})
+        if cause.get('kind') == 'split' and cause['attempt_id'] == row['id']:
+            return {'final:%d' % turn['number'] for turn in plan['turns'] if turn.get('split_of') == cause['turn']}
+    return set()
+
+
+def _is_verification_replacement(row, later, plan, plans):
+    """AR22.1: the attempt is followed, at the same effort, by the successor that its recovery row names."""
+    recovery = next((item for item in capacity.list_capacity_recovery_rows()
+                     if item['kind'] == row['kind'] and item['protocol'] == row['protocol']), None)
+    if recovery is None or recovery['handler'] == 'nothing':
+        return False
+    later = [other for other in later if other['effort'] == row['effort'] and other['route_id'] == row['route_id']]
+    split = _list_split_positions(row, plans)
+    if split:
+        return split <= {other['position'] for other in later}
+    following = next((other for other in later if other['position'] == row['position']), None)
+    if following is None:
+        return False
+    final = recovery['handler'] == 'final_session_v4'
+    levels = ([item['material_allowance'] for item in plan.get('task', {}).get(row['kind'], {}).get('levels', [])]
+              or list(capacity.describe_material_levels(row['kind'])))
+    if following['assignment_id'] == row['assignment_id']:
+        # One more run where the kind has no smaller task: the lowest level, or a final turn that no split replaced.
+        return final or row['level'] == levels[-1] == following['level']
+    lower = next((level for level in levels if type(row['level']) is int and level < row['level']), None)
+    return (lower is not None and following['level'] == lower
+            or final and type(row['answer_bound']) is int and type(following['answer_bound']) is int
+            and following['answer_bound'] < row['answer_bound'])
+
+
+def _describe_verification_initial_profile(plan, kinds):
+    initial = {}
+    for kind in kinds:
+        task = plan.get('task', {}).get('final' if kind == 'combine' else kind, {})
+        if 'state' in task and 'at_or_over_limit_share' in task:
+            initial[kind] = dict(state=task['state'], share_at_or_over_limit=task['at_or_over_limit_share'])
+    return initial
+
+
+def _find_verification_recorded_bar(records, members):
+    identifiers = {row['id'] for row in members}
+    paged = any(row.get('session_chain', {}).get('final_page_plan') for row in members)
+    for review in records.get('value_review', {}).values():
+        if review.get('assignment_id') not in identifiers:
+            continue
+        if not paged:
+            return review
+        reference = review.get('composite', {})
+        composite = records.get('review_composite', {}).get(reference.get('id'))
+        if (composite is not None and reference.get('digest') == capacity.digest(composite)
+                and composite['chain']['assignment_id'] in identifiers
+                and composite['closing']['assignment_id'] == review['assignment_id']):
+            return review
+    return None
 
 
 def _assess_chain(records, artifacts, members, attempts):
@@ -91,25 +179,22 @@ def _assess_chain(records, artifacts, members, attempts):
     identifiers = {row['id'] for row in members}
     reference = first.get('capacity_plan')
     plan = json.loads(artifacts.read(reference['artifact'])) if reference else {}
+    packets = {member['id']: json.loads(artifacts.read(member['packet'])) for member in members}
+    plans = _read_verification_page_plans(artifacts, members)
+    replaced = {member['capacity_replacement_of'] for member in members if member.get('capacity_replacement_of')}
     ordered = sorted((row for row in attempts if row['assignment_id'] in identifiers),
                      key=lambda row: (row['recorded_revision'], row['id']))
-    rows = [_describe_verification_attempt(records, artifacts, row, plan) for row in ordered]
-    for row in rows:
-        row['position'] = 'after:' + row['position'] if row['position'] else 'initial:' + first['id']
+    rows = [_describe_verification_attempt(records, artifacts, row, plan, packets[row['assignment_id']], replaced)
+            for row in ordered]
     calls = sum(row['generated'] for row in rows)
     over = [row for row in rows if row['at_or_over_limit']]
     positions = {}
     reasons = []
-    for row in over:
+    for index, row in enumerate(rows):
+        if not row['at_or_over_limit']:
+            continue
         positions.setdefault(row['position'], []).append(row['id'])
-        following = next((other for other in rows[rows.index(row) + 1:]
-                          if other['position'] == row['position']), None)
-        levels = capacity.describe_material_levels(row['kind'])
-        lower = next((level for level in levels if type(row['level']) is int and level < row['level']), None)
-        valid = following is not None and following['effort'] == row['effort'] and (
-            following['assignment_id'] != row['assignment_id'] and following['level'] == lower if lower is not None else
-            following['assignment_id'] == row['assignment_id'] and row['level'] == levels[-1])
-        if not valid:
+        if not _is_verification_replacement(row, rows[index + 1:], plan, plans):
             reasons.append('replacement_missing_or_not_smaller_at_same_effort')
     bound = (calls + capacity.VERIFICATION_CALLS_PER_OVER_LIMIT - 1) // capacity.VERIFICATION_CALLS_PER_OVER_LIMIT
     if len(over) > bound:
@@ -126,12 +211,9 @@ def _assess_chain(records, artifacts, members, attempts):
     if any(row.get('assignment_id') in identifiers and row.get('source') == 'owner'
            for row in records.get('review_context_event', {}).values()):
         reasons.append('owner_step')
-    packets = [json.loads(artifacts.read(member['packet'])) for member in members]
-    if any(packet.get('source_inventory', {}).get('protocol') != 'exactory-independent-review-sources-v4'
-           for packet in packets):
+    if any(packet.get('source_rules') != 'exactory-independent-review-sources-v4' for packet in packets.values()):
         reasons.append('session_rules_are_not_v4')
-    if any(records['review_route'][member['route_id']]['configuration'].get('effort') != 'max'
-           for member in members):
+    if any(records['review_route'][member['route_id']]['configuration'].get('effort') != 'max' for member in members):
         reasons.append('effort_changed')
     if any(member['route_id'] != first['route_id'] for member in members):
         reasons.append('chain_route_changed')
@@ -139,32 +221,45 @@ def _assess_chain(records, artifacts, members, attempts):
             or plan.get('policy') != capacity.POLICY or not plan.get('profile')
             or any(member.get('capacity_plan') != reference for member in members)):
         reasons.append('stored_capacity_plan_missing_or_changed')
-    initial_profile = plan.get('profile', {})
-    if any(not isinstance(initial_profile.get(kind), dict) or
-           not {'state', 'share_at_or_over_limit'}.issubset(initial_profile[kind])
-           for kind in {row['kind'] for row in rows}):
+    kinds = set(plan.get('task', {})) | {row['kind'] for row in rows}
+    initial_profile = _describe_verification_initial_profile(plan, kinds)
+    if kinds - set(initial_profile):
         reasons.append('initial_profile_missing_kind')
-    recorded = any(row.get('assignment_id') in identifiers
-                   for row in records.get('value_review', {}).values())
+    recorded = _find_verification_recorded_bar(records, members)
     return dict(id=first['id'], route_id=first['route_id'], calls=calls, bound=bound, at_or_over_limit=len(over),
-        positions=positions, attempts=rows, initial_profile=plan.get('profile'),
+        positions=positions, attempts=rows, initial_profile=initial_profile,
+        recorded_bar=recorded['id'] if recorded else None,
         size_stops=stops, reasons=sorted(set(reasons)),
         result='fail' if reasons else 'pass' if recorded else 'incomplete')
+
+
+def _describe_verification_policy():
+    """The constants and tables of the policy that the criterion reads; the report names the policy by their digest."""
+    return dict(id=capacity.POLICY, calls_per_over_limit=capacity.VERIFICATION_CALLS_PER_OVER_LIMIT,
+        position_over_limit=capacity.VERIFICATION_POSITION_OVER_LIMIT, minimum_calls=capacity.VERIFICATION_MINIMUM_CALLS,
+        recorded_output_limit=capacity.VERIFICATION_RECORDED_OUTPUT_LIMIT,
+        size_stop_codes=list(capacity.VERIFICATION_SIZE_STOP_CODES), recovery_rows=capacity.list_capacity_recovery_rows(),
+        material_levels={kind: list(capacity.describe_material_levels(kind)) for kind in ('request', 'final', 'combine')})
 
 
 def assess_verification_chain(records, artifacts, declaration):
     """Assess the predeclared run from a clone snapshot, including unfinished starts.
 
-    declaration names clone, route_id, max_calls and its recorded_revision before
+    declaration names clone, route_ids, max_calls and its recorded_revision before
     the first assignment. It is retained by the supervisor before the paid run.
     No caller-supplied successful-chain list can filter the snapshot.
     """
     from research_harness.review_failure_class import list_turn_assignments
+    from research_harness.evaluation import Evaluation
+    artifacts = Evaluation.of(records, artifacts)
     assignments = records.get('review_assignment', {})
     roots, groups = {}, {}
     for row in sorted(assignments.values(), key=lambda item: (item['recorded_revision'], item['id'])):
         parent = row.get('context', {}).get('prior_assignment_id')
-        if parent in roots:
+        session_root = row.get('session_chain', {}).get('first_assignment_id')
+        if session_root in roots:
+            root = roots[session_root]
+        elif parent in roots:
             root = roots[parent]
         elif parent is not None or row['role'] != 'bar':
             continue
@@ -186,13 +281,18 @@ def assess_verification_chain(records, artifacts, declaration):
         reasons.append('declaration_has_no_started_chain')
     if calls > declaration['max_calls']:
         reasons.append('declared_call_budget_exceeded')
-    if any(chain['route_id'] != declaration['route_id'] for chain in chains):
+    if any(chain['route_id'] not in declaration['route_ids'] for chain in chains):
         reasons.append('verification_route_changed')
     if over > bound:
         reasons.append('verification_output_share_above_bound')
     failed = reasons or any(chain['result'] == 'fail' for chain in chains)
     complete = calls >= capacity.VERIFICATION_MINIMUM_CALLS and all(chain['result'] == 'pass' for chain in chains)
-    return dict(policy=capacity.POLICY, declaration=dict(declaration),
+    from research_harness.provenance import plugin_version
+    route_ids = set(declaration['route_ids']) | {member['route_id'] for members in groups.values() for member in members}
+    return dict(policy=capacity.POLICY, policy_digest=capacity.digest(_describe_verification_policy()),
+        plugin_version=plugin_version(), routes={identifier: dict(records['review_route'][identifier],
+            digest=capacity.digest(records['review_route'][identifier])) for identifier in sorted(route_ids)},
+        declaration=dict(declaration),
         result='fail' if failed else 'pass' if complete else 'incomplete',
         calls=calls, bound=bound, at_or_over_limit=over, chains=chains, reasons=reasons,
         upper_share_95=calculate_upper_share(calls, over), assumes_independent_attempts=True)

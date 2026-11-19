@@ -153,7 +153,17 @@ def collect_exhaustion_predecessor_turns(records, artifacts, assignment):
     if records.get('review_assignment', {}).get(bound['id']) != bound:
         return []
     predecessor = records['review_assignment'][binding['assignment_id']]
-    if (bound['route_id'] != predecessor['route_id']
+    # A repair of the rules v4 compares route identities, and a cause event that it binds makes it read again (D2 7.9).
+    is_v4_session = bool(bound.get('session_chain'))
+    if is_v4_session and binding['event_ids']:
+        return []
+
+    def has_bound_route(other):
+        if is_v4_session:
+            return repair.is_same_route(records['review_route'][bound['route_id']], records['review_route'][other['route_id']])
+        return other['route_id'] == bound['route_id']
+
+    if (not has_bound_route(predecessor)
             or protocol.normalized_text(bound['reviewer_id']) != protocol.normalized_text(predecessor['reviewer_id'])):
         return []
     evaluation = Evaluation.of(records, artifacts)
@@ -174,7 +184,7 @@ def collect_exhaustion_predecessor_turns(records, artifacts, assignment):
             continue
         seen.add(identifier)
         prior = records['review_assignment'][identifier]
-        if (prior['role'] != bound['role'] or prior['route_id'] != bound['route_id']
+        if (prior['role'] != bound['role'] or not has_bound_route(prior)
                 or protocol.normalized_text(prior['reviewer_id']) != protocol.normalized_text(bound['reviewer_id'])
                 or repair.slot_id(records, prior) != repair.slot_id(records, bound)):
             continue
@@ -230,7 +240,11 @@ def _read_session_delivery(records, artifacts, assignment, delivery):
     packets = []
     for parent, attempt in collect_prior_session_turns(records, artifacts, assignment):
         observed = _read_authenticated_delivery(records, artifacts, parent, attempt)
-        packets.append(observed['current_input']['packets'][-1])
+        actual = observed['current_input']['packets']
+        # An exhaustion repair can credit a legacy request, whose replayed
+        # messages delivered bodies beyond its last packet. V4's seeded state
+        # and citation audit must read that same authenticated input.
+        packets.extend(actual if assignment.get('session_chain') else actual[-1:])
     if not packets:
         return delivery
     packets += delivery['packets']

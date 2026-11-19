@@ -3242,6 +3242,10 @@ def _repair_packet(records, artifacts, value, repair):
     last_turn = repair['scientific_history'][-1]
     output = review_parts.project_source_output(
         last_turn['observed_output'] or last_turn.get('intermediate_output') or {}, value['role'])
+    if repair['predecessor'].get('session_chain'):
+        # V4 request responses belong to their bound session state, not the
+        # legacy source-request vocabulary used to reconstruct older repairs.
+        output = {}
     epoch = records.get('review_epoch', {}).get(repair['predecessor'].get('staged_review', {}).get('epoch_id'), {})
     requested = bar_sources.pending(repair['packet'], output, manifest=epoch.get('manifest'))
     if packet.get('source_rules') == bar_sources.PROTOCOL_V3:
@@ -3807,13 +3811,24 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         if parent is not None and parent.get('session_chain'):
             return review_session_v4.prepare_session_assignment(records, artifacts, value, route,
                 expected_revision + 1, parent=parent, slot=slot_identifier)
-        if (parent is None and repair is None and upgrade is None and value['role'] in bar_sources.ROLES
+        if (parent is None and upgrade is None and value['role'] in bar_sources.ROLES
                 and review_session_v4.PROTOCOL in NEW_SESSION_RULES):
-            logical = build_packet(records, artifacts, value['dossier_id'], value['role'], value['reviewer_id'], **value['context'])
+            planning = artifacts
+            if repair is None:
+                logical = build_packet(records, artifacts, value['dossier_id'], value['role'], value['reviewer_id'], **value['context'])
+            else:
+                # The rendered history stays in memory until the session publishes its units, so a refused
+                # admission writes none of it. The refusal notice of a predecessor turn has no place in a new chain.
+                from .openness_reading_v7 import _PlanningArtifacts
+                from .review_parts_repair import prepare_history
+                planning = _PlanningArtifacts(artifacts)
+                logical = _repair_packet(records, artifacts, value, repair)
+                logical.pop('output_refusal', None)
+                logical = prepare_history(records, planning, logical, history=repair['scientific_history'])
             for rules in NEW_SESSION_RULES:
                 if rules != review_session_v4.PROTOCOL:
                     break
-                admission = review_session_v4.check_v4_admission(records, artifacts, route, value['role'], logical)
+                admission = review_session_v4.check_v4_admission(records, planning, route, value['role'], logical)
                 session_admission = {key: value for key, value in admission.items() if key not in ('inventory', 'bodies', 'capacity_members')}
                 if admission['state'] == 'record':
                     return review_session_v4.prepare_session_assignment(records, artifacts, value, route,

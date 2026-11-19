@@ -97,6 +97,14 @@ def build_session_inventory(records, artifacts, packet, frame_units=()):
         reference = dict(path=descriptor['location'], **{
             key: descriptor[key] for key in ('sha256', 'size', 'media_type')})
         append_unit('artifact', dict(sha256=reference['sha256']), reference, reference['sha256'])
+    if packet.get('context_repair'):
+        from .review_protocol import collect_references
+        # Historical frames, observations and their bodies are independent
+        # material units. The frame carries only their classified descriptors.
+        references = {row['sha256']: row for row in collect_references(packet.get('scientific_history', []))}
+        for identifier in sorted(references):
+            reference = references[identifier]
+            append_unit('history', dict(sha256=identifier), reference, identifier)
     for row in frame_units:
         append_unit(row['kind'], row['identity'], row['artifact'], row.get('label', row['kind']))
     return dict(inventory=inventory, artifact=_describe_json(inventory), bodies=bodies)
@@ -343,8 +351,9 @@ def _require_turn(condition, **details):
         raise ResearchError('invalid_review_session_turn', TURN_CONTRACT_MESSAGE, details or None)
 
 
-def build_turn_prompt(role, kind, bounds, *, common_version=None):
-    from . import review_protocol as protocol
+def build_turn_prompt(role, kind, bounds, *, common_version=None, repair_suffix=None):
+    """repair_suffix is the context-repair suffix of review_context_repair that every turn of a repair chain ends with."""
+    from . import review_protocol as protocol, review_context_repair as repair
     prompts = dict(bar=dict(request=BAR_REQUEST_PROMPT, final=BAR_FINAL_PROMPT),
                    slate=dict(request=SLATE_REQUEST_PROMPT, final=SLATE_FINAL_PROMPT),
                    result=dict(request=RESULT_REQUEST_PROMPT, final=RESULT_FINAL_PROMPT))
@@ -353,12 +362,29 @@ def build_turn_prompt(role, kind, bounds, *, common_version=None):
     text = protocol._select_common_prompt(common_version or protocol.COMMON_VERSION) + '\n\n' + prompts[role][kind] + TURN_LIMITS_PROMPT
     if kind in ('page', 'closing'):
         text += protocol.SESSION_PAGE_REQUESTS_PROMPT
-    return protocol._build_prompt(PROTOCOL + '/' + role + '/' + kind, text,
-        dict(source_rules=PROTOCOL, session_stage=kind, capacity=copy.deepcopy(bounds)), common_version or protocol.COMMON_VERSION)
+    template = PROTOCOL + '/' + role + '/' + kind
+    parameters = dict(source_rules=PROTOCOL, session_stage=kind, capacity=copy.deepcopy(bounds))
+    if repair_suffix is not None:
+        # The parameters name the suffix as they do in a repair prompt of the base path.
+        text += repair_suffix
+        template += '/context-repair'
+        parameters['context_repair'] = True
+        if repair_suffix == repair.EXHAUSTION_PROMPT_V1:
+            parameters['context_repair_exhaustion'] = repair.EXHAUSTION_PROTOCOL
+    return protocol._build_prompt(template, text, parameters, common_version or protocol.COMMON_VERSION)
+
+
+def _select_repair_suffix(logical):
+    """The suffix that the base path gives a repair of the same binding, or None outside a context repair."""
+    from . import review_context_repair as repair
+    binding = logical.get('context_repair')
+    if binding is None:
+        return None
+    return repair.EXHAUSTION_PROMPT_V1 if 'exhaustion' in binding else repair.PROMPT
 
 
 def matches_turn_prompt(assignment, packet=None):
-    from . import review_protocol as protocol, review_prompt_paragraphs as paragraphs
+    from . import review_protocol as protocol, review_prompt_paragraphs as paragraphs, review_context_repair as repair
     envelope = copy.deepcopy(assignment['prompt'])
     bounds = envelope['parameters'].pop('capacity', None)
     base = paragraphs.strip_prompt_paragraphs(envelope, assignment['role'])
@@ -371,7 +397,13 @@ def matches_turn_prompt(assignment, packet=None):
             return False
     if kind not in ('request', 'final', 'page', 'closing', 'combine'):
         return False
-    expected = build_turn_prompt(assignment['role'], kind, bounds, common_version=protocol.find_common_prompt_version(base))
+    suffix = None
+    if base['parameters'].get('context_repair') is True:
+        suffix = (repair.EXHAUSTION_PROMPT_V1 if 'context_repair_exhaustion' in base['parameters'] else repair.PROMPT)
+    if (suffix is not None) != (assignment.get('reassessment_required') is True):
+        return False
+    expected = build_turn_prompt(assignment['role'], kind, bounds, common_version=protocol.find_common_prompt_version(base),
+                                 repair_suffix=suffix)
     expected['parameters'].pop('capacity')
     return base == expected
 
@@ -429,7 +461,7 @@ def check_v4_admission(records, artifacts, route, role, packet):
             inventory = built['inventory']
             inventory.update(targets=targets, logical_fields=logical)
             for row in inventory['units']:
-                row['required'] = row['kind'] in ('frame', 'artifact')
+                row['required'] = row['kind'] in ('frame', 'artifact', 'history')
             declaration = describe_session_plan(route, frames, inventory['units'], [row['handle'] for row in targets], final_pages=True)
             members = capacity.prepare_assignment_capacity(records, overlay, route, declaration)
             plan = capacity.read_chain_capacity_plan(overlay, members)
@@ -809,6 +841,39 @@ def build_handle_packet(packet, artifacts, assignment):
     return result
 
 
+def build_initial_session_state(records, artifacts, assignment, inventory, plan, route, logical):
+    """Return the state of a first turn: empty, or, for an exhaustion repair, with the bodies that the
+    authenticated turns of its predecessor delivered (D2 7.9)."""
+    state = build_session_state(inventory, [], route, plan)['state']
+    if not logical.get('context_repair'):
+        return state
+    from .review_delivered_evidence import collect_exhaustion_predecessor_turns, read_attempt_delivery
+    bound_records = dict(records, review_assignment=dict(records.get('review_assignment', {}),
+                                                        **{assignment['id']: assignment}))
+    turns = collect_exhaustion_predecessor_turns(bound_records, artifacts, assignment)
+    ranges = {}
+    for prior, attempt in turns:
+        delivery = read_attempt_delivery(records, artifacts, prior, attempt)['current_input']
+        for identifier in delivery['artifacts']:
+            ranges.setdefault(identifier, set()).add((0, None))
+        for entry in delivery.get('segments', []):
+            segment = entry['segment']
+            ranges.setdefault(entry['original_artifact']['sha256'], set()).add((segment['start'], segment['end']))
+    for unit in inventory['units']:
+        spans = ranges.get(unit['sha256'], ())
+        if not spans:
+            continue
+        content = artifacts.read(unit['artifact']).decode('utf-8')
+        for number, (start, end) in enumerate(sorted(spans, key=lambda row: row[0]), 1):
+            end = len(content) if end is None else end
+            state['deliveries'].append(dict(unit=unit['handle'], part=number, start=start, end=end, turn=0,
+                sha256=hashlib.sha256(content[start:end].encode('utf-8')).hexdigest()))
+    delivered = {row['unit'] for row in state['deliveries']}
+    state['delivered_sources'] = len({row['identity']['version_id'] for row in inventory['units']
+                                      if row['kind'] in ('abstract', 'fulltext') and row['handle'] in delivered})
+    return state
+
+
 def prepare_session_assignment(records, artifacts, value, route, revision, *, logical=None, parent=None,
                                admission=None, slot=None, replacement=False, notice=None, refused_ids=(), diagnoses=None, replay=False, replay_state=None):
     """Publish one deterministic request and its immutable bindings in the command mutation."""
@@ -826,9 +891,10 @@ def prepare_session_assignment(records, artifacts, value, route, revision, *, lo
         inventory = built['inventory']
         members = admission['capacity_members']
         plan = admission['capacity_plan']
-        state = build_session_state(inventory, [], route, plan)['state']
         chain = dict(first_assignment_id=value['id'], turn=1, inventory=protocol._put_json(artifacts, inventory),
                      logical=protocol._put_json(artifacts, logical))
+        state = build_initial_session_state(records, artifacts, dict(value, recorded_revision=revision, session_chain=chain),
+                                            inventory, plan, route, logical)
         kind = 'request'
         limits = capacity.derive_plan_task_limits(plan, kind)
     else:
@@ -878,14 +944,15 @@ def prepare_session_assignment(records, artifacts, value, route, revision, *, lo
         packet = build_session_packet(artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
                                       inventory, state, plan, limits, kind, notice=notice)
     prompt = build_turn_prompt(value['role'], find_session_form(packet), read_session_binding(packet)['capacity'],
-        common_version=protocol.find_common_prompt_version(parent['prompt']) if parent else None)
+        common_version=protocol.find_common_prompt_version(parent['prompt']) if parent else None,
+        repair_suffix=_select_repair_suffix(logical))
     for entry in packet['evidence']:
         artifacts.put(entry['content'].encode('utf-8'), entry['artifact']['media_type'])
     record = dict(value, packet=protocol._put_json(artifacts, packet), packet_digest=packet['digest'], prompt=prompt,
         prompt_hash=prompt['rendered_prompt_hash'], route_digest=digest(route), context_state=protocol.route_state(records, artifacts, value['route_id']),
         assignment_policy=protocol.POLICY, history=[], session_id=chain['first_assignment_id'],
         history_assignment_id=parent.get('history_assignment_id') if replacement else parent['id'] if parent else None,
-        reassessment_required=False, recorded_revision=revision, session_chain=chain,
+        reassessment_required=bool(logical.get('context_repair')), recorded_revision=revision, session_chain=chain,
         capacity_plan=members['capacity_plan'], capacity_plan_kind=kind, slot_id=slot or (parent.get('slot_id', parent['id']) if parent else value['id']))
     if replacement:
         record['capacity_replacement_of'] = parent['id']
@@ -960,7 +1027,8 @@ def _authenticate_session_binding(records, artifacts, assignment, packet):
         raise ResearchError('review_invocation_unverified', TURN_BINDING_MESSAGE)
     before = (rebuild_session_state(records, artifacts, records['review_assignment'][parent_id], inventory, plan,
                                    records['review_route'][assignment['route_id']]) if parent_id else
-              build_session_state(inventory, [], records['review_route'][assignment['route_id']], plan)['state'])
+              build_initial_session_state(records, artifacts, root, inventory, plan,
+                                          records['review_route'][assignment['route_id']], logical))
     if (state != before or binding.get('plan_digest') != digest(plan)
             or binding.get('inventory_digest') != digest(inventory) or binding.get('state_digest') != digest(state)
             or binding.get('chain') != chain['first_assignment_id'] or binding.get('turn') != chain['turn']):
@@ -1082,7 +1150,8 @@ def prepare_refusal_assignment(records, artifacts, value, revision, prior, froze
             packet = build_session_packet(artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
                                        inventory, state, plan, limits, kind, notice=notice)
         prompt = build_turn_prompt(prior['role'], find_session_form(packet), read_session_binding(packet)['capacity'],
-                                    common_version=protocol.find_common_prompt_version(prior['prompt']))
+                                    common_version=protocol.find_common_prompt_version(prior['prompt']),
+                                    repair_suffix=_select_repair_suffix(logical))
         bounds = prompt['parameters'].pop('capacity')
         prompt = paragraphs.append_prompt_paragraphs(prompt, prior['role'], None,
                                                      [paragraphs.REFUSAL_PARAGRAPH_VERSIONS[notice['form']]])
