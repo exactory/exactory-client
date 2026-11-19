@@ -2459,6 +2459,41 @@ def read_route_runtime(artifacts, route):
     return transport.runtime(route)
 
 
+def is_route_stale(artifacts, route):
+    """Whether the runtime that this route record pins differs from the installed one, as review-run compares them.
+    record-check reads an HTTPS route by its adapter and the hash of its transport file alone; that reading is
+    compared with the same two members of the pinned runtime."""
+    from .evaluation import Evaluation
+    store = artifacts.store if isinstance(artifacts, Evaluation) else artifacts
+    installed = store.read_runtime_fingerprint(route)
+    pinned = route['runtime']
+    if route['adapter'] == transport.ADAPTER and set(installed) == {'adapter', 'implementation_sha256'}:
+        pinned = {key: pinned.get(key) for key in installed}
+    return installed != pinned
+
+
+def require_installed_runtime(records, artifacts, route, value):
+    """Record no assignment on a route record that pins another reviewer runtime than the installed one. A retired
+    route record keeps the refusal of its retirement."""
+    if route['id'] in retired_routes(records):
+        return
+    try:
+        if not is_route_stale(artifacts, route):
+            return
+    except ResearchError as error:
+        if error.code != 'review_runtime_missing':
+            raise
+        return
+    details = dict(route_id=route['id'])
+    binding = value['context'].get('output_refusal')
+    prior_id = binding.get('assignment_id') if isinstance(binding, dict) else None
+    prior = records.get('review_assignment', {}).get(prior_id) if isinstance(prior_id, str) else None
+    if prior is not None:
+        from .review_refusal_replacement import describe_route_renewal
+        details['renewal'] = describe_route_renewal(records, artifacts, prior)
+    raise ResearchError('review_route_runtime_stale', ROUTE_RUNTIME_STALE_MSG, details)
+
+
 def verify_route_context(artifacts, route, request, response, *, required=False):
     if route['adapter'] in transport.LOCAL_ADAPTERS:
         from .evaluation import Evaluation
@@ -2488,10 +2523,13 @@ def retry_runtime_check(check, *args):
         time.sleep(_RUNTIME_RETRY_SECONDS[index])
 
 
+ROUTE_RUNTIME_STALE_MSG = ('The installed reviewer adapter differs from the one this route pins; record and probe a '
+                           'new route')
+
+
 def _require_route_runtime(route):
     if retry_runtime_check(transport.runtime, route) != route['runtime']:
-        raise ResearchError('review_route_runtime_stale',
-                            'The installed reviewer adapter differs from the one this route pins; record and probe a new route')
+        raise ResearchError('review_route_runtime_stale', ROUTE_RUNTIME_STALE_MSG)
 
 
 def validate_observation_fields(observation):
@@ -3572,6 +3610,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         route = _get(records, 'review_route', value['route_id'])
         if value['route_id'] in retired_routes(records):
             raise ResearchError('review_route_retired', 'The route was retired; assign on another route, and continue a preserved slot through a context repair')
+        require_installed_runtime(records, artifacts, route, value)
         if value['dossier_id'] is not None:
             d = _payload(_get(records, 'strategy_dossier', value['dossier_id']))
             intent = _payload(_get(records, 'research_intent', d['intent_id']))

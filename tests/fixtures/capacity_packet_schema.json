@@ -21247,7 +21247,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_failure_class": {
-      "ast_sha256": "a95e75652f935db14e8050ee5fcaeae7693ea91c0e05b40240be89fe3f936ee5",
+      "ast_sha256": "98aeaf20c985edfb2957541c1608a407d2eddc349bc504976c3d3fdce3a9c7dd",
       "functions": {
         "_describe_sequence_counts": "1903571802ceebaa2e6413b445ccec82fa398d7cf4b738a57b18c5747957e01c",
         "_is_scheduled_unknown": "18dbfaffb3993eab30b42d6bf376556828c162d79bcca21ce050df0f51cd2f2e",
@@ -21259,21 +21259,22 @@
         "find_output_cap_signal": "6f59f04a865cce942c17d9c6d81c771009d0ea962b72c3e6b92116e43dafca5b",
         "find_safeguard_notice": "f7009c2ad7f4d22a276386c1374d2309091fc5e5d2bcc2cd081f1c31bd3b9e13",
         "has_smaller_task": "80bb5eb8bff91f61b78800f3e2cfb25880612ce57a386086340680468439f7b4",
-        "list_turn_assignments": "c459557d60564eb8ea2566a13ec5f25f000a927b439c8cbb7bc928347f7d7413",
+        "list_turn_assignments": "667cbd416ef7d54301da84fe4ee74ada60fc94f768601c0e6a3fab0d4ce1369a",
         "parse_observation_time": "a45e9741d77a027bf18518e09c8b1a262125934f0d6cecd3ac63c3c30df7f367",
         "parse_reset_time": "329cd60d6bb86719c819441543f5e9aae44305bd754318af2996e51f1dc23488",
         "plan_after_failure": "c5bbade2d3cf33f16c4007d949bf30b29f0ff2abdcd2e854220072faf1c1b53d",
         "plan_output_replacement": "4ffcc61f5bc883f9f888739c941db2e21b0b85ce1933c124f6fd10d304fc5fbf",
-        "plan_refusal_recovery": "fc11b4b1d6915e3ac237cebd8ad53507dee9206e32ba650d2208191ce5c83f7e",
+        "plan_refusal_recovery": "c6ffd77842e8c737171954154d8ff5b78d0094c88870ba668a090a83a84dbdf1",
         "plan_scheduled_retry": "d9de465ba74c6d4fc57df8aa62eee4c4073cad20d97b2a126860705d1ff0748e",
         "read_attempt_evidence": "7e3c10495f9111dae700adde8d8f342a79bcf2c58725057b7f88bc0d9efb5d9b",
+        "read_position_origin": "23e910247e2a1fc7c164d66677756feb7ed4cb0a704decc3b53b0bbc22ec0e44",
         "should_reduce_capacity_task": "d34f992090c27feb219d958c982de4ef824cb589b734765a95819c45bd8167ff"
       },
       "packet_call_digests": [
         "970177577bb835b5c5ac97a0d64163966e523d06e418589e16eca0c8b79f9e11",
         "cbe54a67fb69e0e1fe1dc5085d4b2e4fcc27a2019eee930193876a86c72fa49d"
       ],
-      "reason": "Reviewed explicit capacity replacement command context and frozen refusal notice forwarding into both real parts fitters, with exact candidate preflight and strict smaller-request checks. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Reviewed explicit capacity replacement command context and frozen refusal notice forwarding into both real parts fitters, with exact candidate preflight and strict smaller-request checks. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.3 route renewal: read_position_origin: Follow the refusal links back to the first assignment of a position. list_turn_assignments: Group a first-turn position from its origin and append the assignments that a refusal link ties to a member, whatever route record they name; a stored store gets the list of 0.91.2. plan_refusal_recovery: For a refused head on a stale, unretired route, name the renewed route record in the payload, or return the handoff of what a renewal lacks, or the stop of the role, before any record. No packet member, packet call or stored record changes."
     },
     "research_harness.review_handles": {
       "ast_sha256": "7257d93f0eccad48edf5fef1587f80cad93ebfba8e1b1c5fe5e51b2c7481d91e",
@@ -22021,11 +22022,11 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_plan_steps": {
-      "ast_sha256": "b18ac2cf35fb950ad1772efba01f54bb598e9e2bc5fb586ce456e5319dbe1312",
+      "ast_sha256": "f1e9ed3ae566b48f99ba17bb20682be61618ad9ce72c6f69e8cc78128d845577",
       "functions": {
         "_build_identity_payload": "8c41d637f54ac4de2e9d293d13134f6a1383c0f7c5aa4b5a49def65900292e6e",
         "_describe_session_route_steps": "01fa8f8c3ca1320a76e96825d7dbde99f8a691b141450938e35ba8faa1df2244",
-        "complete_plan": "3d1dbe964954208141b70a1bb0296041e0f8799b1c2875b237336e40c953e777",
+        "complete_plan": "2b60c8977b1669baf088118636a3a26b7518c029d23ee6508f29ca64320fe886",
         "describe_capacity_steps": "442d2c73dfadb15ff6bb92ede22da18610582beb03970aa5b8e17049ba6bb735",
         "describe_role_handoff": "d65f685aa227cdcc7b1b2afa6a57b59d717acb8108d7a53febd4949d11744429",
         "describe_step": "b58ff7a5887eb4e40bc93fb01c56eca87957f6ec9f2bb489bd3cbfb0b04eb991",
@@ -22041,7 +22042,7 @@
         "78548c36c7cc5bb377d14d1244f711e05dfa5277795ce8cd541d00119f739603",
         "b8b5c33a4bfba3471cd01e8011931d6115a8c93dc2fecce646b5fe3839895214"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed 0.91.3 route renewal: complete_plan: For review_route_runtime_stale with details.renewal, give the step that the renewal lacks, or the steps of the stale-route procedure for a head outside the renewal; without the member the branch is unchanged."
     },
     "research_harness.review_preflight": {
       "ast_sha256": "c589902e1dd43f7f02570917a0b9d7499ccf8bb6c51c6c2a79c89d12a0f0bef7",
@@ -22250,7 +22251,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "c79c53bac9303cb9c2bc4633c2d56b32cc551785d332dbfcb0a573481362adb9",
+      "ast_sha256": "937593ab5e720d34c0ce90aac1740ae42bb52a608f369948c84edd9c3a6c66e0",
       "functions": {
         "_assignment_state": "805eca7b4483852dbee0f8e05928cde22acbc7c7be8ec46ba127c3e71a0ddcbc",
         "_bars": "fd41a7b94078e8e0761696db4a7cc67b063cbb5787f76d6d3dae65fcc7fe5f9f",
@@ -22288,7 +22289,7 @@
         "_reference_templates": "d2e4382875c62d696528a4948e3c3e15fa2d8ed55c74504d2fdc0f473625a960",
         "_repair_packet": "99c46ac113d1c754424fa9cc5915f3930567ec832a8c0e5842a376fdab86da82",
         "_require_focused_identity": "138fa6d35d131d40fbf99bd07134615853023823120bce41c02863e8ed1ae58e",
-        "_require_route_runtime": "f6f68f195397930ae8f8f4cabee13600ff004ddd013e99fb688b9a27a54ead19",
+        "_require_route_runtime": "8b26107bbe05d8e69e7f351b2d336e218554b5206f2d3ac0ea2b60e2fa5bc82e",
         "_route_state": "d3f2af6a908bbb7362e29677973d45c983c1a0a4793cdf48fdd19da5de2a8e57",
         "_save_derivatives": "ec152af73c108934e2f0456ef182a91580f8f24b0d5f9b2bfa0f76504a343f97",
         "_select_common_prompt": "fcebe555799aee9c524fed96f36c4d8868ad4d113d9da7ee08a6475f8812b099",
@@ -22343,6 +22344,7 @@
         "invoke_assignment": "e3d47a744d920c6e5593f2cb7839cc712ba5e84d5c11dbcdab115c0e2a46792b",
         "is_dead_assignment": "0e87b884f14015390061ab33a6f17a4a95770ae46620127610f25244a62fcd85",
         "is_previous_prompt": "6a89da49434d83987b303155068983a6499cb140a6eb0b906a4e6c1043537f42",
+        "is_route_stale": "e1adbfab7c0931b33eb0e4c6addde882883e8fe37531d3e70f1ca2f964441b85",
         "is_version_2_problem_result": "b12d8be5451fd095516bf97d562c067466acb6d216815b6fe20a93f9e3520a0d",
         "prepare_capacity_notice": "d81cbdd6b4f35b94be5d1b78a51b14de536895c22e83bacc0ac2ac4ebeb62e8c",
         "previous_problem_result_prompt": "949b2f4a70472ac4ab16f554d88f070cddee79d2d8005e93ad1d08c287e8cc90",
@@ -22352,11 +22354,12 @@
         "read_raw_observation": "14e6b6c7ca97a4e3992d908f1d94f3add3a92bee7561ace63d220fb8cbf06834",
         "read_route_runtime": "e60df76fe94a9b3f2b98373e22d2c1bc846ca050d50044e4744a7e60fe71bca2",
         "record_adjudication": "01d2fc25fe7225693aa60a9e3e8f098c2ece6ac5656ce378a07989533681a79d",
-        "record_assignment": "17af460848d614510cc75c2bc879b77d44269dbcc1366ef7719202d2cf92c062",
+        "record_assignment": "8572092f6aaf10276a72f99820e76c61c4c9b48d65547f67aaa08bac01188da5",
         "record_attempt": "7145b51d5cdbea1477432a5cce61efb366e8dd94540e082fde33066063c4b8f3",
         "record_context_event": "725358847e29626ae330f19fe7a2b1530b762238e0893f3021cebbe0c70e49eb",
         "record_route": "eaa1d126f04ed9ff04f92ff38836725f9ba40802efcda880e2c6adc7b94d874e",
         "require_calibrated_bars": "4745670f6df434f7415d772c4d326d2a17cd2e8da151123a8a685015189fe214",
+        "require_installed_runtime": "4c7aa287ce91a46c0248689f9151536bedd769f185f79b003bdb1731a4a4ffa0",
         "require_verified_assignment": "8cbd79a074d2cf9b72f1d7692e9ead66475b7ece1407e441541656492363e7f9",
         "resolve_original_calibrations": "057135282546307ba2591b22cec7139406898e6d473eb9d3d024249d40e9ee23",
         "retired_routes": "67364cd241ee40cd8a7e467d59785bc6e9ed1686e36975fdd4ea8a284eaa2b54",
@@ -22428,7 +22431,7 @@
         "f71df93e3effb278f474cea48473ab543f2e3e9f35807725d57775c354ddc1d9",
         "f9de906674de2fc03fd882f06649fc77f3536e68a95d398f173553e2a01ce4df"
       ],
-      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback after the committed invocation admission, plus invoke_assignment and probe_route forwarding: it renders derived views without changing authenticated packets, requests or their closed shapes."
+      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback after the committed invocation admission, plus invoke_assignment and probe_route forwarding: it renders derived views without changing authenticated packets, requests or their closed shapes. Reviewed 0.91.3 route renewal: is_route_stale compares the pinned runtime with the reading of the route state; require_installed_runtime refuses an assignment on a stale, unretired route record before any record; _require_route_runtime keeps its comparison and its message in a constant; record_assignment calls the check after the retirement check and before every dispatch. No packet member or stored record changes."
     },
     "research_harness.review_provider_usage": {
       "ast_sha256": "8b45cdd4c5b5a98325852d3040a320283c876c25fc99d358556999417a76c986",
@@ -22546,14 +22549,19 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_refusal_replacement": {
-      "ast_sha256": "c17dcdeffc2f15202cbec9c5e4f43bc39c931111cc6ea6dc1fa44819c25e9af4",
+      "ast_sha256": "9b0f3e7ec40e2fb414251f49d2a1260a037de47f733a13d2a82ee6a2a9ff9e2e",
       "functions": {
+        "admits_route_renewal": "77afbc4fcc2dafa41019d850afb898731df98f254431dbbeccea8c0caac22016",
+        "describe_route_renewal": "01243bf4e5bc191b8a283ec87e645cb8998453ca24b54a68b3ca650548e8b33f",
         "find_output_successor": "f9aa987eea6760e2a7fd3e29888f5e43903e4365d1e50938ea4b17c429b79967",
-        "prepare_replacement": "a7ddbaa90806583c3dde8eb3d95f2ab761970823c1a4b66aca47a5dae2efe6fc",
+        "is_session_turn": "9808d1647ff5d14dd7aad135088c3720310e8198ba327a7d6047028db338684e",
+        "prepare_replacement": "34063d3bf50a0120541db6d22cc80158e1ef5e8fc1df0aa57e6e9359c7cbcfe6",
+        "read_latest_refusal_revision": "38bf96df2646e4145eb836b003a851c2928cdcd9a1de545afbae0d8ed6f5b3a1",
         "read_position_context": "cdede8c28f9431efad8671676884d4e166ee1d9ad3e3728ac4414cc53cf87d32",
         "read_replacement_link": "c532b998f7ab3e173deea48b4d2b41ab8df7bcba6534694b9be6e35a17e27160",
         "require_selected_output": "c51358ab7d4eb8e8c97d27385ff001226126fdd7bf36960bf619db74ec1e1211",
-        "validate_replacement_origin": "01175d76bd46ef6121aab22491baea32a5163484860688a1cad0fa60790bf0da"
+        "select_renewal_probe": "e705de0cd8ebf299651fb5017554549ec6a82fdb06a3aefaa516e37cf7c77204",
+        "validate_replacement_origin": "f1d7916f6526559bf6bbccb15b0f11d78d8c2b108f3ff50d6e9f942af3f4a8f8"
       },
       "packet_call_digests": [
         "37c72ed8cb3bd9e5d0586c05e133a41bac51681db8997de8284002ebced91962",
@@ -22575,7 +22583,7 @@
         "f39814fa03694fc06afd107a8e76d88a1044a005183edc72cd8ea55b0d57508f",
         "f94bff00439cfb92fe19efa32bf359ad60d305548b0148aaad4243cb4d2ea818"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless successor ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless successor ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed 0.91.3 route renewal: is_session_turn, admits_route_renewal, read_latest_refusal_revision, describe_route_renewal and select_renewal_probe read stored records and measure requests; they write nothing. prepare_replacement: Admit a replacement on a renewed route record of the same identity, measure the notice and the smaller task on that record, and take its route digest and context state; on the route of the replaced assignment the record, packet, prompt and request are those of 0.91.2. validate_replacement_origin: Accept a differing route record only for two stored records of one identity with different pinned runtimes and a session turn."
     },
     "research_harness.review_request_evaluation": {
       "ast_sha256": "0907cb21fc2c40c98f294d1c49ce2f9712aee0ecaa3f8401ad9d201a9c81179b",
@@ -23293,7 +23301,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_staged_protocol": {
-      "ast_sha256": "7649c49a7f1aecff230080137e8e615bfd42c1f5cd1dfe8ba8184276bf1518c0",
+      "ast_sha256": "be91f55c73b52cb5d985a97d1efd5d339bb7fad6179c3cd114c749053724c223",
       "functions": {
         "_collect_successor_ancestry": "adaba0e3062a55abcff00aa835b6634c57342a5b0a5ba4a6f3b0b8c418a9a6d5",
         "_collect_successor_findings": "e295526cf1f0cfcdc760b01f3008a7f3e8b9465975d29647e4bd89c286b494b4",
@@ -23337,7 +23345,7 @@
         "matches_currency": "08256408e364c58451233fcd1d293bff60c9702ae210fa97face468c813a7274",
         "matches_prompt": "ecccfb21c3320fa1deb7a9de3eb1c078803f4c5b9810f5ad911d2bb12edf90e9",
         "measure_task_payload": "640df16e4dec6d36cf00a3c09ba6ce4ffa796e13d1c42bf1cfeb40da7ca33313",
-        "plan_frontier": "19dbb152dfe64c46321b5abe5a9ae4943b92dc16d9e89fb55e909413e59d45b6",
+        "plan_frontier": "584dc86e7c9f7a4c34a45d256e20715bbaf8b1a9b8c650fc51653e8d265a50bb",
         "plan_remaining_tasks": "16c04c60977b2d44bc7b7611cf31d12302e623f94887a099fcdf62539d2404bd",
         "prepare_attempt": "49bfff54b5d4b796b8ea974a5de62c28f557ac184c2b6dbc972d19ef43a752fa",
         "prepare_capture_attempt": "416f8d48732d2e5dd9a84bbe56e601e420dd797f4dd428a7322e0ce2614046d7",
@@ -23463,7 +23471,7 @@
         "f4c3ef51b8f0e65211e7b558f0a57e04aa43e0c83c2a9066fcc9e79c9907fdff",
         "f6d243d594e08bd80942e0a306c538cad678aacd0b5964d838ccb8a29bea004e"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed PR 143 profile estimation forwarding the selected capacity parameters; packet construction is unchanged."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed PR 143 profile estimation forwarding the selected capacity parameters; packet construction is unchanged. Reviewed 0.91.3 route renewal: plan_frontier refuses a new child on a stale, unretired route record of its controller before it prepares the child; no packet member or stored record changes."
     },
     "research_harness.review_state_evaluation": {
       "ast_sha256": "02df3d94a0b5e8d1e70c52927c0863e1696d5431d92e7388a3ecad4a46feba64",

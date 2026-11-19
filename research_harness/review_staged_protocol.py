@@ -2313,6 +2313,7 @@ def plan_frontier(store, payload, *, expected_revision, request_id):
                 context=dict(controller_assignment_id=controller['id'], task_id=task['id']))
             if composition_plan is not None:
                 child_value['context']['composition_plan'] = composition_plan
+            protocol.require_installed_runtime(records, artifacts, route, child_value)
             child_changes, child = prepare_child(current, artifacts, child_value, store.revision + 1)
             changes.extend(child_changes)
         return changes, dict(controller_assignment_id=controller['id'], task_ids=[task['id']], next=[dict(kind='command',

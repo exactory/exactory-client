@@ -271,6 +271,9 @@ class ReviewProtocolTests(LiteratureCase):
         attempt = records['review_attempt']['attempt']
         pinned = records['review_route']['route']['runtime']
         self.assertTrue(protocol.authenticate_attempt(records, self.artifacts, assignment, attempt))
+        # The next assignment is recorded while the route pins the installed runtime: no command records an
+        # assignment on a route record whose runtime is not the installed one.
+        self.assign(identifier='next-assignment', reviewer='next-reviewer')
         installed = dict(pinned, implementation_sha256='2' * 64, controls=['features.code_mode_host=false'])
         with patch.object(codex, 'runtime', return_value=installed):
             self.assertTrue(protocol.authenticate_provenance(records, self.artifacts, assignment, attempt))
@@ -278,8 +281,11 @@ class ReviewProtocolTests(LiteratureCase):
             state = protocol.route_state(records, self.artifacts, 'route')
             self.assertEqual(state['context_status'], 'verified_for_route')
             self.assertTrue(protocol.assignment_state(records, self.artifacts, 'assignment')['ready'])
-            self.assign(identifier='next-assignment', reviewer='next-reviewer')
             revision = self.store.revision
+            with self.assertRaises(ResearchError) as refused:
+                self.assign(identifier='stale-assignment', reviewer='stale-reviewer')
+            self.assertEqual(refused.exception.code, 'review_route_runtime_stale')
+            self.assertEqual(self.store.revision, revision)
             with patch.object(review_transport, 'send_request', side_effect=AssertionError('Must not dispatch')):
                 for operation, payload in [
                         (protocol.probe_route, {'id': 'new-probe', 'route_id': 'route'}),
