@@ -133,10 +133,16 @@ class UnboundStoppedPacketTests(unittest.TestCase):
                 else:
                     case.assign('turn-2', metadata['native'], prior='turn-1')
             sender.assert_not_called()
-        self.assertEqual(caught.exception.code,
-                         'review_route_runtime_stale' if uncalled else 'review_route_capacity_below_floor')
+        self.assertEqual(caught.exception.code, 'review_route_runtime_stale')
         if not uncalled:
-            self.assertEqual(caught.exception.details['measure']['token_limit'], 0)
+            # The admission refuses the stale route record before the stop of ruling 31, whose capacity probe cannot
+            # run on it. The record still has the limit zero of that ruling.
+            from research_harness import review_route_capacity as capacity
+            self.assertEqual(caught.exception.details['route_id'], 'route')
+            self.assertNotIn('renewal', caught.exception.details)
+            records = before['records']
+            self.assertEqual(capacity.describe_route_capacity(route, capacity.read_output_profile(records, route),
+                records=records, artifacts=case.artifacts)['input_tokens']['value'], 0)
         self.assertEqual(case.store.snapshot(), before)
 
     def test_archived_stopped_plans_keep_pending_capture_and_delivery_credit(self):
@@ -178,16 +184,14 @@ class UnboundStoppedPacketTests(unittest.TestCase):
                                                   declare_stored_backend=False)
                 stack.callback(case.doCleanups)
                 if version == 5:
-                    before = case.store.snapshot()
-                    with patch.object(transport, 'send_request') as sender:
-                        with self.assertRaises(ResearchError) as caught:
-                            case.assign('turn-2', metadata['native'], prior='turn-1')
-                        self.assertEqual(caught.exception.code, 'openness_reading_incomplete')
-                        self.assertEqual(caught.exception.details['handoff'], 'export')
-                        sender.assert_not_called()
-                    self.assertEqual(case.store.snapshot(), before)
-                else:
-                    self.assert_obsolete_route_refuses_new_call(case, metadata)
+                    # The planner stops the chain with the handoff export before any assignment.
+                    from research_harness.evaluation import Evaluation
+                    from research_harness.review_continuation import plan_next
+                    records = case.store.snapshot()['records']
+                    plan = plan_next(records, Evaluation(records, case.artifacts), 'turn-1')
+                    self.assertEqual((plan['state'], plan['code'], plan['details']['handoff']),
+                                     ('stop', 'openness_reading_incomplete', 'export'))
+                self.assert_obsolete_route_refuses_new_call(case, metadata)
 
     def test_current_keyed_stopped_prefixes_continue_and_deliver_the_chosen_capture(self):
         for version, variant in self.variants:

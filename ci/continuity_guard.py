@@ -22,12 +22,16 @@ STAGE2_EVIDENCE_MESSAGE = ('A Stage 2 continuity requirement or supported chain 
                          'Keep a real-command journey for each supported chain and run every named evidence test.')
 STAGE2_EVIDENCE = (
     dict(id='session-refusal', requirement='scientific_refused', chains=('session',), tests=(
-        'test_review_refusal_planner.RefusalPlannerTests.test_first_refusal_plans_and_executes_replacement_then_records',)),
+        'test_review_refusal_planner.RefusalPlannerTests.test_first_refusal_plans_and_executes_replacement_then_records',
+        'test_review_route_renewal.RouteRenewalRegressionTests.test_refused_final_on_a_stale_route_is_recorded_through_a_replacement_on_a_renewed_route',
+        'test_review_route_renewal.RouteRenewalRegressionTests.test_stale_route_without_a_renewed_route_ends_before_any_record',
+        'test_review_route_renewal.RouteRenewalCapacityTests.test_capacity_probe_is_offered_when_evidence_is_what_the_record_lacks')),
     dict(id='focused-refusal', requirement='scientific_refused', chains=('adjudication',), tests=(
         'test_review_refusal_planner.PlannerChainRowsTests.test_focused_adjudication_executes_the_planned_row',)),
     dict(id='repair-refusal', requirement='scientific_refused', chains=('context_repair', 'parts_v2:context_repair'), tests=(
         'test_review_refusal_planner.PlannerChainRowsTests.test_repaired_bar_final_executes_the_planned_row',
-        'test_review_exhaustion_repair.ExhaustionRepairTests.test_parts_final_uses_the_versioned_exhaustion_cause_and_replays_the_old_final')),
+        'test_review_exhaustion_repair.ExhaustionRepairTests.test_parts_final_uses_the_versioned_exhaustion_cause_and_replays_the_old_final',
+        'test_review_route_renewal.RouteRenewalRegressionTests.test_refused_turn_outside_the_renewal_on_a_stale_route_ends_before_any_record')),
     dict(id='result-parts-refusal', requirement='scientific_refused', chains=('parts_v2:problem_result',), tests=(
         'test_review_refusal_planner.PlannerChainRowsTests.test_parts_read_combine_check_and_final_execute_the_planned_row',)),
     dict(id='native-parts-refusal', requirement='scientific_refused', chains=('parts_v2:native_math',), tests=(
