@@ -16,6 +16,37 @@ from research_harness.problem_openness import serialize_record
 from research_harness.errors import ResearchError
 
 
+@contextmanager
+def remove_artifact(case, reference):
+    """Take one artifact out of the case's store for the block, and put its bytes back after it."""
+    path = case.root / reference['path']
+    content = path.read_bytes()
+    path.unlink()
+    try:
+        yield
+    finally:
+        path.write_bytes(content)
+
+
+def bind_statement_searches(case, identifier, neighbours):
+    """Select a statement with these neighbours, record a search for each neighbour, and return the bindings."""
+    from test_research_problem_openness_minimum import ProblemOpennessMinimumTests
+    case.selected = case.select_statement(identifier=identifier, candidate_id='candidate-1', neighbours=neighbours)
+    bindings = [dict(formulation=case.selected['statement'], search_id=case.search['id'])]
+    for formulation in case.selected['neighbours']:
+        search = ProblemOpennessMinimumTests.search(case, formulation=formulation)
+        bindings.append(dict(formulation=formulation, search_id=search['id']))
+    return bindings
+
+
+def export_bindings(case, identifier, bindings, reviewer_id='openness-reviewer'):
+    """Export the openness packet of assignment `identifier` over these search bindings."""
+    from research_harness.problem_openness import export_openness
+    return export_openness(case.store, dict(assignment_id=identifier, reviewer_id=reviewer_id,
+        minimum=dict(searches=bindings, settling_work_id=None, duplicate_resolutions=[])),
+        case.root / (identifier + '-export'))['native_packet']
+
+
 class CarriedIntegrationSupport:
     reading_protocol = None
     route_model = 'gpt-6-astra'
@@ -979,23 +1010,14 @@ class StoredSelectionIntegrationTests(CarriedIntegrationSupport, OpennessReading
         self.assertIn('turn-1', receipt['carried_readings']['would_carry'] if
             'would_carry' in receipt['carried_readings'] else [row['chain'] for row in receipt['carried_readings']['chains']])
         # The nine-target packet exceeds the v7 per-request target floor and
-        # exercises its real v6 fallback, including the diagnostic refusal.
-        self.selected = self.select_statement(identifier='fallback-statement', candidate_id='candidate-1',
-            neighbours=['Neighbour %d.' % number for number in range(8)])
-        from research_harness.problem_openness import export_openness
-        from test_research_problem_openness_minimum import ProblemOpennessMinimumTests
-        bindings = [dict(formulation=self.selected['statement'], search_id=self.search['id'])]
-        for formulation in self.selected['neighbours']:
-            search = ProblemOpennessMinimumTests.search(self, formulation=formulation)
-            bindings.append(dict(formulation=formulation, search_id=search['id']))
-        fallback = export_openness(self.store, dict(assignment_id='fallback', reviewer_id='openness-reviewer',
-            minimum=dict(searches=bindings, settling_work_id=None, duplicate_resolutions=[])),
-            self.root / 'fallback-export')['native_packet']
-        try:
-            path.unlink()
+        # exercises its real v6 fallback, including the diagnostic refusal: the
+        # store cannot give the packet of an earlier chain on the same statement.
+        bindings = bind_statement_searches(self, 'fallback-statement', ['Neighbour %d.' % number for number in range(8)])
+        self.assign('old', export_bindings(self, 'old', bindings))
+        self.invoke('old', self.build_reading_response(self.read_packet('old')))
+        fallback = export_bindings(self, 'fallback', bindings)
+        with remove_artifact(self, self.store.snapshot()['records']['review_assignment']['old']['packet']):
             fallback_receipt = self.assign('fallback', fallback)
-        finally:
-            path.write_bytes(content)
         self.assertEqual(fallback_receipt['protocol_selection']['protocol'], reading.PROTOCOL_V6)
         self.assertEqual(fallback_receipt['carried_readings']['refusal']['code'], 'artifact_missing')
 
@@ -1053,6 +1075,153 @@ class StoredV1ChainTests(CarriedIntegrationSupport, OpennessReadingCase):
         with self.assertRaises(ResearchError) as caught:
             reading.verify_chain(records, self.artifacts, last)
         self.assertEqual(caught.exception.code, 'openness_reading_incomplete')
+
+
+class ReadScopeIntegrationTests(CarriedIntegrationSupport, OpennessReadingCase):
+    """C9 to C11: the selection reads an artifact of an earlier assignment only when its result can depend on it."""
+
+    def build_payload(self, identifier='new', *, reviewer_id='openness-reviewer', route_id='route', bindings=None):
+        bindings = bindings or [dict(formulation=self.selected['statement'], search_id=self.search['id'])]
+        return dict(id=identifier, route_id=route_id, dossier_id=None, role='native_math', reviewer_id=reviewer_id,
+                    author_id='problem-author',
+                    context=dict(native_packet=export_bindings(self, identifier, bindings, reviewer_id)))
+
+    def check_assignment(self, payload):
+        return check_mutation(self.store, protocol.record_assignment, payload, expected_revision=self.store.revision,
+                              request_id='read-scope-check', bounded_payload=payload)
+
+    def read_earlier_first(self):
+        return self.store.snapshot()['records']['review_assignment']['turn-1']
+
+    def test_lost_packet_of_a_chain_under_another_reviewer_does_not_refuse_the_assignment(self):
+        from research_harness import problem_openness
+        packet = self.read_earlier_first()['packet']
+        payload = self.build_payload(reviewer_id='another-reviewer')
+        with remove_artifact(self, packet):
+            report = self.mutate(protocol.record_assignment, payload)['result']['carried_readings']
+            self.assertEqual(report['passed_over'], [])
+            self.assertEqual(report['unavailable_chains'], [dict(chain='turn-1', code='artifact_missing',
+                details=dict(path=packet['path']), message=v7.UNAVAILABLE_CHAIN_TEXT.format(chain='turn-1'))])
+            packets = self.finish_chain(payload['context']['native_packet'])
+            last = 'new' if len(packets) == 1 else 'new-%d' % len(packets)
+            self.mutate(self.load_problem_module().record_openness, dict(assignment_id=last))
+            records = self.store.snapshot()['records']
+            self.assertTrue(reading.verify_chain(records, self.artifacts, records['review_assignment'][last]))
+            self.assertNotIn('problem_openness_stale',
+                             [row['code'] for row in problem_openness.assess_openness(records, self.artifacts)])
+        report = self.check_assignment(self.build_payload('further', reviewer_id='another-reviewer'))['carried_readings']
+        self.assertEqual([(row['chain'], row['reason']) for row in report['passed_over']], [('turn-1', 'reviewer_id')])
+        self.assertNotIn('unavailable_chains', report)
+
+    def test_lost_artifact_of_a_chain_on_another_route_identity_does_not_refuse_the_assignment(self):
+        from codex_route_fixtures import record_codex_route
+        record_codex_route(self, 'other-route', model=self.route_model, output_tokens=64000)
+        payload = self.build_payload(route_id='other-route')
+        first = self.read_earlier_first()
+        for name, reference in (('packet', first['packet']), ('native_packet', first['context']['native_packet'])):
+            with self.subTest(artifact=name), remove_artifact(self, reference):
+                checked = self.check_assignment(payload)
+                self.assertEqual(checked['protocol_selection']['protocol'], v7.PROTOCOL)
+                self.assertEqual(checked['carried_readings']['chains'], [])
+                self.assertNotIn('unavailable_chains', checked['carried_readings'])
+
+    def test_lost_artifact_of_a_chain_on_another_statement_does_not_refuse_the_assignment(self):
+        first = self.read_earlier_first()
+        payload = self.build_payload(bindings=bind_statement_searches(self, 'other-statement', ['Neighbour 0.']))
+        held = {row['artifact']['path'] for row in
+                json.loads(self.artifacts.read(payload['context']['native_packet']))['evidence']}
+        evidence = next(row['artifact'] for row in
+                        json.loads(self.artifacts.read(first['context']['native_packet']))['evidence']
+                        if row['artifact']['path'] not in held)
+        for name, reference in (('packet', first['packet']), ('evidence', evidence)):
+            with self.subTest(artifact=name), remove_artifact(self, reference):
+                checked = self.check_assignment(payload)
+                self.assertEqual(checked['protocol_selection']['protocol'], v7.PROTOCOL)
+                self.assertEqual(checked['carried_readings']['chains'], [])
+                self.assertNotIn('unavailable_chains', checked['carried_readings'])
+
+    def assert_replacement_has_no_row(self, native, replacement):
+        """The next chain names the replaced chain once, by its first assignment, with the turns of the replacement."""
+        self.finish_chain(native, replacement)
+        _, receipt = self.start_chain('following')
+        rows = receipt['carried_readings']['outputs']
+        self.assertEqual(rows[0]['chain'], 'new')
+        self.assertEqual([row['chain'] for row in rows], ['new', 'turn-1'])
+        self.assertEqual(rows[0]['carried_turns'], rows[0]['reading_turns'])
+        selection = json.loads(self.artifacts.read(receipt['carried_selection']['artifact']))
+        turns = [row['origin']['assignment_id'] for row in selection['turns'] if row['origin']['chain'] == 'new']
+        self.assertEqual(turns, [replacement] + ['%s-%d' % (replacement, number) for number in range(2, len(turns) + 1)])
+
+    def test_replacement_of_a_first_turn_for_capacity_has_no_row_of_its_own(self):
+        from codex_route_fixtures import build_codex_response, bind_codex_response
+        from research_harness.review_failure_class import plan_after_failure
+        native, _ = self.start_chain()
+
+        def respond(route, request, credential):
+            response = build_codex_response(route, request, {})
+            response.update(status='incomplete')
+            response['usage']['output_tokens'] = 128001
+            return bind_codex_response(route, request, response)
+        with patch.object(protocol.transport, 'send_request', side_effect=respond):
+            self.mutate(protocol.invoke_assignment, dict(id='failed-new', assignment_id='new'), credential='fixture')
+        recovery = plan_after_failure(self.store.snapshot()['records'], self.artifacts, 'new')
+        self.assertEqual(recovery['state'], 'replace')
+        self.mutate(protocol.record_assignment, dict(recovery['details']['recovery']['payload'], id='replacement'))
+        self.assert_replacement_has_no_row(native, 'replacement')
+
+    def test_replacement_of_a_first_turn_after_a_refused_output_has_no_row_of_its_own(self):
+        from research_harness.review_continuation import plan_next
+        native, _ = self.start_chain()
+        self.invoke('new', dict(stage='reading', notes=42))
+        plan = plan_next(self.store.snapshot()['records'], self.artifacts, 'new')
+        self.assertEqual(plan['state'], 'replace')
+        replacement = self.mutate(protocol.record_assignment, plan['payload'])['result']
+        self.assertIn('output_refusal', replacement['context'])
+        self.assert_replacement_has_no_row(native, replacement['id'])
+
+    def test_lost_packet_of_a_chain_on_another_statement_leaves_the_v6_report_whole(self):
+        # The nine-target packet exceeds the v7 per-request target floor, so v6 starts the chain.
+        fallback = export_bindings(self, 'fallback', bind_statement_searches(
+            self, 'fallback-statement', ['Neighbour %d.' % number for number in range(8)]))
+        with remove_artifact(self, self.read_earlier_first()['packet']):
+            receipt = self.assign('fallback', fallback)
+        report = receipt['carried_readings']
+        self.assertNotIn('refusal', report)
+        self.assertEqual(receipt['protocol_selection']['protocol'], reading.PROTOCOL_V6)
+        self.assertNotIn('unavailable_chains', report)
+        self.assertNotIn('turn-1', report['would_carry'] + [row['chain'] for row in report['passed_over'] + report['outputs']])
+
+
+class SingleTurnReadScopeTests(OpennessReadingCase):
+    """C10: a single-turn review starts no reading chain, so a new chain reads none of its artifacts."""
+    reading_protocol = None
+    route_model = 'gpt-6-astra'
+    route_output_tokens = 128000
+
+    def setUp(self):
+        super().setUp()
+        self.limit_input(1300000)
+        self.assign('single', self.export(name='single-export', assignment_id='single'))
+        self.invoke('single', self.build_native_result(self.read_packet('single'), outcome='unresolved'))
+
+    def assign_without(self, name):
+        single = self.store.snapshot()['records']['review_assignment']['single']
+        self.assertNotIn('reading_chain', single)
+        native = self.export(name='new-export', assignment_id='new')
+        with remove_artifact(self, single['packet'] if name == 'packet' else single['context'][name]), patch.object(
+                reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (v7.PROTOCOL, reading.PROTOCOL_V6)):
+            return self.assign('new', native)
+
+    def test_lost_packet_of_a_single_turn_review_does_not_refuse_the_assignment(self):
+        receipt = self.assign_without('packet')
+        self.assertEqual(receipt['protocol_selection']['protocol'], v7.PROTOCOL)
+        self.assertEqual(receipt['carried_readings']['outputs'], [])
+
+    def test_lost_native_packet_of_a_single_turn_review_does_not_refuse_the_assignment(self):
+        receipt = self.assign_without('native_packet')
+        self.assertEqual(receipt['protocol_selection']['protocol'], v7.PROTOCOL)
+        self.assertEqual(receipt['carried_readings']['outputs'], [])
+
 
 class Record12ShapeTests(OpennessReadingCase):
     """The two earlier chains retain the cut's turns, units and output counts.

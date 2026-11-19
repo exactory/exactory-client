@@ -94,6 +94,11 @@ KEEP_REVIEWER_TEXT = ('A new chain carries the verified reading turns of an earl
                       'chain when you export again for the same statement.')
 PASSED_OVER_TEXT = ('The earlier chain {chain} read the same statement on the same route under another reviewer_id, '
                     'so this chain carries none of its turns.')
+UNAVAILABLE_CHAIN_TEXT = ('The earlier chain {chain} ran under another reviewer_id, with the author and the route '
+                          'identity of this chain. The store could not give one of its artifacts (code and details '
+                          'name it), so this report cannot say whether that chain read the same statement and '
+                          'formulations. This chain carries none of its turns in either case. This needs no action '
+                          'for this chain.')
 SUPERSEDED_TEXT = ('Each superseded excerpt or passage answer of the chain {chain} quotes text that a later chain read '
                    'again (entries: {entries}, units that they quote: {units}). Such an entry stays in the records of '
                    'its own chain. A chain of exactory-openness-reading-v7 carries the later reading of that text in '
@@ -1541,7 +1546,7 @@ def describe_uncarried_chains(records, artifacts, value, route, native):
     """Report the selection v7 would carry when admission instead chooses v6; credit nothing."""
     if has_binary_native_evidence(artifacts, native):
         return dict(chains=[], would_carry=[], passed_over=[])
-    from .openness_carried import build_carried_selection, describe_carried_selection
+    from .openness_carried import STORE_REFUSAL_CODES, build_carried_selection, describe_carried_selection
     overlay = _PlanningArtifacts(artifacts)
     built = build_inventory(records, overlay, native, review=value)
     built = prepare_inventory(built, native, route)
@@ -1551,12 +1556,16 @@ def describe_uncarried_chains(records, artifacts, value, route, native):
         selection = build_carried_selection(records, artifacts, built['inventory'], identity)['selection']
         report = describe_carried_selection(records, artifacts, built['inventory'], identity, selection)
     except ResearchError as error:
-        if error.code not in ('artifact_missing', 'artifact_corrupt', 'storage_io', 'unsafe_path'):
+        if error.code not in STORE_REFUSAL_CODES:
             raise
         return dict(chains=[], would_carry=[], passed_over=[], refusal=dict(code=error.code, details=error.details))
-    return dict(chains=[], would_carry=[row['chain'] for row in report['chains']],
-                passed_over=[dict(row, message=PASSED_OVER_TEXT.format(chain=row['chain'])) for row in report['passed_over']],
-                outputs=report['outputs'])
+    uncarried = dict(chains=[], would_carry=[row['chain'] for row in report['chains']],
+                     passed_over=[dict(row, message=PASSED_OVER_TEXT.format(chain=row['chain']))
+                                  for row in report['passed_over']],
+                     outputs=report['outputs'])
+    if 'unavailable_chains' in report:
+        uncarried['unavailable_chains'] = report['unavailable_chains']
+    return uncarried
 
 
 def read_carried_inventory(artifacts, first):
