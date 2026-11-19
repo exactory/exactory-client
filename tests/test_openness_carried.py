@@ -576,6 +576,23 @@ class V6CarriedSelectionTests(CarriedSelectionCases, OpennessReadingCase):
         self.assertEqual(caught.exception.code, 'artifact_missing')
         self.assertTrue(reading.verify_chain(self.store.snapshot()['records'], self.artifacts, final))
 
+    def test_native_packet_whose_openness_minimum_is_no_object_is_no_candidate(self):
+        # The commands cannot record such a native packet, so the earlier first assignment is built in memory.
+        expected = self.select_readings()
+        self.assertEqual([row['origin']['assignment_id'] for row in expected], ['turn-1'])
+        first = self.records['review_assignment']['turn-1']
+        native = json.loads(self.artifacts.read(first['context']['native_packet']))
+        for minimum in (['not', 'an', 'object'], 'text', None):
+            with self.subTest(minimum=minimum):
+                native['scientific_context']['openness_minimum'] = minimum
+                records = copy.deepcopy(self.records)
+                malformed = dict(copy.deepcopy(first), id='malformed', recorded_revision=first['recorded_revision'] - 1,
+                                 reading_chain=dict(first_assignment_id='malformed', turn=1))
+                malformed['context']['native_packet'] = self.artifacts.put(serialize_record(native), 'application/json')
+                records['review_assignment']['malformed'] = malformed
+                self.assertEqual(self.select_readings(records=records), expected)
+                self.assertIsNone(self.carried._describe_chain(records, self.artifacts, malformed, self.identity))
+
 
 class StoredCaptureSelectionTests(unittest.TestCase):
     def test_g8_c8_completed_chosen_capture_and_stopped_pending_capture(self):

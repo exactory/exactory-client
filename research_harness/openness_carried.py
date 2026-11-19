@@ -36,8 +36,10 @@ def _describe_chain(records, artifacts, first, identity):
     """Qualify one named first assignment, independently of every other chain; the caller compares the reviewer.
 
     C9 orders the comparisons so that an artifact is read only when the result can depend on it: the records
-    first, then the native packet, the packet and the envelope with its evidence. Under C10 an assignment
-    starts a chain only when its record names itself as the first assignment of a reading chain.
+    first, then the native packet, the packet and the envelope with its evidence. The native packet decides the
+    digests and the formulations for every value, so an openness_minimum that is no object makes the assignment
+    no candidate; the envelope step then tests the kind of the packet alone. Under C10 an assignment starts a
+    chain only when its record names itself as the first assignment of a reading chain.
     """
     if (first['role'] != 'native_math' or first['context'].get('prior_assignment_id') is not None
             or first.get('reading_chain', {}).get('first_assignment_id') != first['id']
@@ -46,24 +48,19 @@ def _describe_chain(records, artifacts, first, identity):
             or not review_context_repair.is_same_route(records['review_route'][first['route_id']], identity['route'])):
         return None
     binding = strict_json(artifacts.read(first['context']['native_packet']))
-    if isinstance(binding, dict):
-        context = binding.get('scientific_context')
-        minimum = context.get('openness_minimum') if isinstance(context, dict) else None
-        if (binding.get('subject_digest') != identity['subject_digest']
-                or binding.get('claim_digest') != identity['claim_digest']
-                or isinstance(minimum, dict) and dict(statement=minimum.get('statement'),
+    context = binding.get('scientific_context') if isinstance(binding, dict) else None
+    minimum = context.get('openness_minimum') if isinstance(context, dict) else None
+    if (not isinstance(minimum, dict)
+            or binding.get('subject_digest') != identity['subject_digest']
+            or binding.get('claim_digest') != identity['claim_digest']
+            or dict(statement=minimum.get('statement'),
                     neighbours=minimum.get('neighbours')) != identity['formulations']):
-            return None
+        return None
     protocol = reading.find_protocol(json.loads(artifacts.read(first['packet'])))
     if protocol not in CHAIN_OBSERVERS:
         return None
     native = load_packet(artifacts, first['context']['native_packet'], first['reviewer_id'])
     if not reading.is_openness_packet(native):
-        return None
-    minimum = native['scientific_context']['openness_minimum']
-    if (native['subject_digest'] != identity['subject_digest']
-            or native['claim_digest'] != identity['claim_digest']
-            or dict(statement=minimum['statement'], neighbours=minimum['neighbours']) != identity['formulations']):
         return None
     return dict(chain=first['id'], protocol=protocol, recorded_revision=first['recorded_revision'])
 
