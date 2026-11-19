@@ -7593,6 +7593,27 @@
         "test_review_parts_slate.SlateSeriesTests.test_recorded_v2_and_v3_slate_sessions_keep_their_bytes",
         "test_review_parts_slate.SlateSeriesTests.test_v4_session_admission_precedes_the_slate_adapter"
       ]
+    },
+    {
+      "id": "session-v4-entry-repairs-and-verification-of-v4-chains",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "D1 session entry under the rules v4 and the verification criterion of the release",
+      "summary": "A context repair of a bar, slate or result slot did not start under the session rules v4, and the verification criterion of task T2 could not read a v4 chain: its rules, its stored plan, the positions of its pages and splits, and its two routes.",
+      "expected": "A new slot and a context repair start under the first admitted session rules. The repair delivers its scientific history as units, and a clean exhaustion repair is credited the bodies that its predecessor delivered. Running v2 and v3 sessions keep their bytes. The criterion reads stub-driven v4 bar chains at max to pass or fail by their calls, positions, split successors, recorded bars and declared routes.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_entry.SessionEntryTests.test_retirement_repair_starts_v4_and_delivers_history_as_bounded_units",
+        "test_review_session_v4_entry.SessionEntryTests.test_repair_after_a_recorded_final_in_pages_starts_v4_with_the_composed_review",
+        "test_review_session_v4_entry.SessionEntryTests.test_clean_exhaustion_credits_delivered_body_and_citation_audit_passes",
+        "test_review_session_v4_entry.SessionEntryTests.test_exhaustion_with_contamination_reads_bodies_again",
+        "test_review_session_v4_entry.SessionEntryTests.test_exhaustion_with_retirement_reads_bodies_again",
+        "test_review_session_v4_entry.SessionEntryTests.test_slot_and_repair_that_v4_admission_refuses_take_the_base_path",
+        "test_review_session_v4_entry.LegacySessionBytesTests.test_running_v2_and_v3_continuations_keep_packet_prompt_request_and_check_bytes",
+        "test_verification_criterion.StoredSessionVerificationTests.test_two_real_v4_bars_in_24_calls_report_actual_plan_and_routes",
+        "test_verification_criterion.StoredSessionVerificationTests.test_real_page_split_and_nested_split_keep_new_positions",
+        "test_verification_criterion.StoredSessionVerificationTests.test_real_parent_and_child_page_failures_both_count_in_the_bounds"
+      ]
     }
   ]
 }
