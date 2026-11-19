@@ -3,6 +3,7 @@
 import copy
 import json
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from codex_route_fixtures import invoke_codex, record_codex_route
@@ -15,13 +16,22 @@ from research_harness.errors import ResearchError
 from research_harness.review_bodies import read_history
 
 
+class ProbeClock(datetime):
+    """The fixed instant of the fixture route's capacity probe. Its UTC date enters the output profile of every
+    capacity plan, so the pinned packet and plan bytes must not take it from the wall clock."""
+    @classmethod
+    def now(cls, tz=None):
+        return cls(2026, 11, 17, tzinfo=timezone.utc).astimezone(tz)
+
+
 class SessionTurnsTests(unittest.TestCase):
     def setUp(self):
         self.case = problem_fixtures.ProblemReviewTests()
         self.case.setUp()
         self.addCleanup(self.case.doCleanups)
         self.case.supporting = self.case.artifacts.put(b'A synthetic field standard.', 'text/plain')
-        record_codex_route(self.case, model='gpt-6-astra', output_tokens=128000)
+        with patch.object(protocol, 'datetime', ProbeClock):
+            record_codex_route(self.case, model='gpt-6-astra', output_tokens=128000)
         preferred = patch.object(protocol, 'NEW_SESSION_RULES', (session.PROTOCOL, bar_sources.PROTOCOL_V3))
         preferred.start()
         self.addCleanup(preferred.stop)
