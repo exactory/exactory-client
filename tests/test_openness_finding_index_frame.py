@@ -15,6 +15,7 @@ from unittest.mock import patch
 from openness_named_gap_fixtures import (FIXED_PACKET_NAMES, bind_fixture_basis, build_fixed_answer, build_ground,
                                          build_query, build_reason, fixture_case, index_case)
 from research_harness import openness_reading as reading, openness_reading_v7 as v7
+from research_harness import review_prompt_paragraphs as paragraphs, review_protocol as protocol
 from research_harness import review_route_capacity as capacity, review_search_delivery as delivery
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
@@ -27,6 +28,8 @@ from v7_capacity_fixtures import build_route
 STATED_CHARACTERS = 100000
 # Bound searches of the store whose index fits in no form with unit references.
 SEARCHES = 40
+# The registered version of the paragraph of G8.11, written out for the same reason.
+FINDING_UNITS_VERSION = 'exactory-openness-finding-units-v1'
 
 
 def measure_json(value):
@@ -363,7 +366,8 @@ class UnchangedFormTests(unittest.TestCase):
             self.assertNotIn('finding_units', turn)
 
     def test_g8_an_index_within_its_stated_size_keeps_the_complete_form(self):
-        for name in FIXED_PACKET_NAMES:
+        # The six fixed packets of T6; excluded-work-long holds a value that leaves (ExcludedWorkLongTests).
+        for name in [name for name in FIXED_PACKET_NAMES if name != 'excluded-work-long']:
             with self.subTest(packet=name):
                 case = fixture_case(name, 'v7')
                 self.addCleanup(case.doCleanups)
@@ -421,8 +425,12 @@ def build_search(number, reason, query_characters=40):
                 dispositions=dispositions, resolved=[], row_dispositions=[])
 
 
-def admit(route, artifacts, native, built, *, finding_version=2, frame_bound=None):
-    """Admit on the route, or on a route whose final frame can hold at most frame_bound characters."""
+def admit(route, artifacts, native, built, *, finding_version=2, frame_bound=None, reading_bound=None):
+    """Admit on the route, or on a route whose final frame can hold at most frame_bound characters.
+
+    With reading_bound as well, the notes reserve of the reading frame is sized so that the reading frame can hold at
+    most reading_bound characters on the same route.
+    """
     from research_harness.review_refusal_notice import BOUNDED_NOTICE_CHARACTERS
     patches = [patch.object(v7, 'build_inventory', return_value=built),
                patch.object(capacity, 'read_profile_priors', return_value=[])]
@@ -430,13 +438,26 @@ def admit(route, artifacts, native, built, *, finding_version=2, frame_bound=Non
         room = frame_bound + BOUNDED_NOTICE_CHARACTERS + capacity.describe_material_levels('final')[-1]
         tokens = capacity.describe_route_capacity(route)['input_tokens']['value']
         # The reading frame keeps its notes reserve at the minimum, so the bound isolates the final frame.
-        patches += [patch.object(capacity, 'NOTES_MAXIMUM_CHARACTERS', 6000),
+        notes = 6000
+        if reading_bound is not None:
+            rows = v7.compute_allowance_rows_bound(route, [row['handle'] for row in v7.list_target_labels(native)])
+            notes = (room - BOUNDED_NOTICE_CHARACTERS - capacity.describe_material_levels('reading')[-1] - rows
+                     - reading_bound)
+        patches += [patch.object(capacity, 'NOTES_MAXIMUM_CHARACTERS', notes),
                     patch.object(v7, 'derive_inherited_ratio', return_value=dict(
                         characters_per_token=(room + .5) / tokens, source=dict(chain='old', attempt='measured')))]
     with ExitStack() as stack:
         for item in patches:
             stack.enter_context(item)
         return v7.check_v7_admission({}, artifacts, route, native, finding_version=finding_version)
+
+
+def measure_version_change(route):
+    """Return the characters that a version 2 final adds to its frame at least: longer rules and a descriptor."""
+    from research_harness.review_protocol import canonical_prompt
+    texts = [canonical_prompt('native_math', reading_stage='final', reading_protocol=v7.PROTOCOL,
+                              finding_version=version)['text'] for version in (1, 2)]
+    return len(texts[1]) - len(texts[0]) + v7.measure_finding_descriptor(route)
 
 
 class AdmissionLoopTests(unittest.TestCase):
@@ -450,11 +471,7 @@ class AdmissionLoopTests(unittest.TestCase):
         return admit(self.route, self.artifacts, native, built, **options)
 
     def measure_version_change(self):
-        """Return the characters that a version 2 final adds to its frame at least: longer rules and a descriptor."""
-        from research_harness.review_protocol import canonical_prompt
-        texts = [canonical_prompt('native_math', reading_stage='final', reading_protocol=v7.PROTOCOL,
-                                  finding_version=version)['text'] for version in (1, 2)]
-        return len(texts[1]) - len(texts[0]) + v7.measure_finding_descriptor(self.route)
+        return measure_version_change(self.route)
 
     def test_g8_a_final_frame_slightly_over_its_bound_lets_the_index_give_up_values_first(self):
         native, built = build_admission_native(self.artifacts, [build_search(number, build_reason(str(number), 30000))
@@ -566,6 +583,417 @@ class RegistryTests(unittest.TestCase):
         _, packet = case.finish_reading(case.export())
         self.assertIn('units', packet['finding_index'])
         self.assertEqual(validate_packet('native_math', packet, registry), [])
+
+
+def list_chain_turns(case, first):
+    """Return (assignment, packet) for every turn of the chain that starts with first, in recorded order."""
+    records = case.store.snapshot()['records']
+    rows = sorted((row for row in records['review_assignment'].values()
+                   if row.get('reading_chain', {}).get('first_assignment_id') == first),
+                  key=lambda row: row['recorded_revision'])
+    return [(row, json.loads(case.artifacts.read(row['packet']))) for row in rows]
+
+
+def list_body_deliveries(turns, handle):
+    """Return the spans of one body that the reading turns delivered, as (start, end) in delivery order."""
+    return [(row['start'], row['end']) for _, packet in turns
+            for row in packet.get('reading_turn', {}).get('plan', {}).get('now', []) if row['handle'] == handle]
+
+
+def merge_spans(spans):
+    merged = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def read_body_text(case, inventory, handle):
+    body = next(row for row in inventory['material'] if row['handle'] == handle)
+    return case.artifacts.read(body['artifact']).decode('utf-8')
+
+
+def assert_reading_turns_name_values(test, turns, count):
+    """Every reading turn holds reading_turn.finding_units with count, and its prompt the registered paragraph."""
+    reading_turns = [(assignment, packet) for assignment, packet in turns if 'reading_turn' in packet]
+    test.assertTrue(reading_turns)
+    for assignment, packet in reading_turns:
+        with test.subTest(turn=assignment['id']):
+            test.assertEqual(packet['reading_turn']['finding_units'], count)
+            test.assertIn(FINDING_UNITS_VERSION, assignment['prompt']['parameters']['problem_paragraphs'])
+            test.assertIn(paragraphs.FINDING_UNITS_PROMPT, assignment['prompt']['text'])
+            test.assertTrue(protocol._prompt_matches(assignment, packet))
+    return reading_turns
+
+
+class FindingUnitsTests(unittest.TestCase):
+    """G8.11: the reading turns of a chain whose final names values by their bodies hold their count and paragraph."""
+
+    def make_case(self):
+        case = index_case(describe_long_shapes(120000))
+        self.addCleanup(case.doCleanups)
+        return case
+
+    def test_g8_reading_turns_hold_the_count_and_the_paragraph_and_the_inventory_the_spans(self):
+        case = self.make_case()
+        reference = case.export()
+        current, packet = case.finish_reading(reference)
+        inventory = read_chain(case, current)['inventory']
+        shared, own = case.searches[0]['dispositions'], case.searches[2]['dispositions']
+        rows = inventory['finding_units']
+        self.assertEqual([row['unit'] for row in rows],
+                         [packet['finding_index']['units'][digest(value)]['unit'] for value in (shared, own)])
+        self.assertEqual((rows[0]['start'], rows[0]['end']), (0, measure_json(shared)))
+        self.assertEqual(rows[1]['unit'], find_search_body(inventory, case.searches[2]))
+        for row, value in zip(rows, (shared, own)):
+            text = read_body_text(case, inventory, row['unit'])
+            self.assertEqual(text[row['start']:row['end']], serialize_record(value).decode('utf-8'))
+        turns = assert_reading_turns_name_values(self, list_chain_turns(case, 'turn-1'), 2)
+        from ci.capacity_packet_inventory import read_packet_registry, validate_packet
+        registry = read_packet_registry()
+        self.assertEqual(validate_packet('native_math', turns[0][1], registry), [])
+        self.assertTrue(validate_packet('native_math', dict(turns[0][1], reading_turn=dict(
+            turns[0][1]['reading_turn'], finding_units=dict(undeclared=True))), registry))
+        for row in rows:
+            self.assertTrue(any(start <= row['start'] and row['end'] <= end
+                                for start, end in merge_spans(list_body_deliveries(turns, row['unit']))))
+        self.assertNotIn('finding_units', packet['reading_final'])
+        LongValueChainTests.record_supported_open(self, case, reference, current)
+
+    def test_g8_a_span_is_located_by_the_key_of_its_value_and_not_by_its_text(self):
+        value = [dict(disposition='out_of_scope', reason='The delivered row concerns infinite graphs only.',
+                      work_id='work-1')]
+        residual = dict(fields=dict(dispositions=value, resolved=value, scope='Finite graphs.'), record_id='search-1',
+                        search_digest='a' * 64, shared_fields=dict(queries='b' * 64))
+        text = serialize_record(residual).decode('utf-8')
+        expected = serialize_record(value).decode('utf-8')
+        for path in (('fields', 'dispositions'), ('fields', 'resolved'), ('fields', 'scope'), ('record_id',), ()):
+            with self.subTest(path=path):
+                start, end = delivery.locate_value_span(residual, path)
+                found = residual
+                for key in path:
+                    found = found[key]
+                self.assertEqual(text[start:end], serialize_record(found).decode('utf-8'))
+        start, _ = delivery.locate_value_span(residual, ('fields', 'resolved'))
+        self.assertNotEqual(start, text.find(expected))
+
+    def test_g8_a_refused_reading_turn_keeps_the_paragraph_before_the_refusal_paragraph(self):
+        texts = dict(whole=paragraphs.REFUSAL_WHOLE_PROMPT, bounded=paragraphs.REFUSAL_BOUNDED_PROMPT)
+        # A refused answer whose escaped text does not fit the reading turn takes the bounded notice.
+        pattern = '{"finding": ["quoted", "\\\\", null]}\n'
+        for form, padding in (('whole', 0), ('bounded', 200000)):
+            with self.subTest(form=form):
+                case = self.make_case()
+                reference = case.export()
+                case.assign('turn-1', reference)
+                output = dict(stage='reading', notes=42)
+                if padding:
+                    output['padding'] = (pattern * (padding // len(pattern) + 1))[:padding]
+                response = case.invoke('turn-1', output)
+                self.assertIn('output_refusal', response)
+                current, packet = replace_refused(case, 'turn-1', 'replacement-' + form)
+                self.assertEqual(packet['output_refusal']['form'], form)
+                self.assertEqual(packet['reading_turn']['finding_units'], 2)
+                assignment = case.store.snapshot()['records']['review_assignment'][current]
+                prompt = assignment['prompt']
+                self.assertEqual(prompt['parameters']['problem_paragraphs'],
+                                 [FINDING_UNITS_VERSION, paragraphs.REFUSAL_PARAGRAPH_VERSIONS[form]])
+                self.assertLess(prompt['text'].index(paragraphs.FINDING_UNITS_PROMPT), prompt['text'].index(texts[form]))
+                self.assertTrue(protocol._prompt_matches(assignment, packet))
+                current, packet = continue_chain(case, reference, current, 'after-' + form)
+                LongValueChainTests.record_supported_open(self, case, reference, current)
+                case.doCleanups()
+
+    def test_g8_a_capacity_replacement_of_a_reading_turn_measures_the_paragraph(self):
+        from codex_route_fixtures import bind_codex_response, build_codex_response
+        from research_harness import review_preflight
+        case = self.make_case()
+        reference = case.export()
+        case.assign('turn-1', reference)
+        def respond(route, request, credential):
+            response = build_codex_response(route, request, {})
+            response.update(status='incomplete')
+            response['usage']['output_tokens'] = route['configuration']['max_output_tokens']
+            return bind_codex_response(route, request, response)
+        with patch.object(protocol.transport, 'send_request', side_effect=respond):
+            case.mutate(protocol.invoke_assignment, dict(id='over-1', assignment_id='turn-1'), credential='fixture')
+        records = case.store.snapshot()['records']
+        recovery = capacity.plan_capacity_recovery(records, case.artifacts, records['review_assignment']['turn-1'],
+                                                   'output_over_cap')
+        self.assertEqual(recovery['kind'], 'replace')
+        replacement = case.mutate(protocol.record_assignment, recovery['payload'])['result']
+        packet = case.read_packet(replacement['id'])
+        self.assertEqual(packet['reading_turn']['finding_units'], 2)
+        self.assertLess(packet['reading_turn']['capacity']['material_allowance'],
+                        case.read_packet('turn-1')['reading_turn']['capacity']['material_allowance'])
+        self.assertIn(paragraphs.FINDING_UNITS_PROMPT, replacement['prompt']['text'])
+        records = case.store.snapshot()['records']
+        report = review_preflight.build_assignment_report(records, case.artifacts,
+                                                          records['review_assignment'][replacement['id']])
+        self.assertEqual(recovery['preflight']['input_size'], report['input_size'])
+
+    def test_g8_the_paragraph_and_its_member_fit_the_reserve_that_the_reading_frame_holds(self):
+        from research_harness import review_transport as transport
+        for adapter, model in (('codex_cli_v1', 'gpt-6-astra'), ('claude_cli_v1', 'claude-opus-5-5')):
+            with self.subTest(adapter=adapter):
+                route = build_route(adapter, model)
+                base = capacity.measure_request(route, transport.request_body(route, '', {}))['text_characters']
+                request = transport.request_body(route, paragraphs.FINDING_UNITS_PROMPT, dict(finding_units=999999999))
+                self.assertLessEqual(capacity.measure_request(route, request)['text_characters'] - base,
+                                     v7.FINDING_UNITS_CHARACTERS)
+        route, artifacts = build_route('codex_cli_v1', 'gpt-6-astra'), MemoryArtifacts()
+        for reason in (None, build_reason('long', 30000)):
+            with self.subTest(reason=reason is not None):
+                native, built = build_admission_native(artifacts, [build_search(number, reason) for number in range(5)])
+                admission = admit(route, artifacts, native, built)
+                inventory, plan = admission['inventory']['inventory'], admission['capacity_plan']
+                self.assertEqual('finding_units' in inventory, reason is not None)
+                first = v7.measure_turn_frames(route, native)['reading']
+                second = v7.measure_turn_frames(route, native, fixed_bounds=inventory['fixed_bounds'],
+                    finding_index=plan['finding_index'], inventory=inventory)['reading']
+                self.assertEqual(second, dict(first, finding_units=v7.FINDING_UNITS_CHARACTERS))
+                self.assertEqual(plan['frame']['reading']['fields'], second)
+                self.assertNotIn('finding_units', v7.measure_turn_frames(route, native, finding_index=None)['final'])
+
+    def test_g8_a_descriptor_index_without_a_value_that_can_leave_names_the_unit_alone(self):
+        route, artifacts = build_route('codex_cli_v1', 'gpt-6-astra'), MemoryArtifacts()
+        native, built = build_admission_native(artifacts, [build_search(number, None, 5000) for number in range(10)])
+        frame = sum(v7.measure_turn_frames(route, native)['final'].values())
+        admission = admit(route, artifacts, native, built, frame_bound=frame + 30000)
+        self.assertEqual(admission['state'], 'record')
+        inventory, plan = admission['inventory']['inventory'], admission['capacity_plan']
+        self.assertEqual(delivery.build_last_finding_form(plan['finding_index'], inventory)['units'], {})
+        unit = find_index_unit(inventory)
+        self.assertEqual(v7.fit_packet_finding_index(route, inventory, plan['finding_index']),
+                         dict(unit=unit['bodies'][0], characters=unit['characters'], searches=10, read_works=0))
+        self.assertEqual(inventory['finding_units'], [dict(unit=unit['bodies'][0], start=0, end=unit['characters'])])
+        logical = dict(protocol='exactory-independent-review-v1', role='native_math', reviewer_id='openness-reviewer',
+                       dossier_id=None, native=native)
+        packet, _ = v7.prepare_first_assignment({}, artifacts, dict(id='turn-1'), route, logical, [],
+                                                admission=admission)
+        self.assertEqual(packet['reading_turn']['finding_units'], 1)
+        self.assertEqual(paragraphs.select_prompt_parameters('native_math', packet),
+                         dict(problem_paragraphs=[FINDING_UNITS_VERSION]))
+
+    def test_g8_outside_the_reading_band_version_2_admits_wherever_version_1_does(self):
+        route, artifacts = build_route('codex_cli_v1', 'gpt-6-astra'), MemoryArtifacts()
+        change = measure_version_change(route)
+        for searches in (1, 5):
+            for characters in (0, 6000, 100000):
+                native, built = build_admission_native(artifacts, [build_search(number, build_reason('shared', characters))
+                                                                   for number in range(searches)])
+                frames = v7.measure_turn_frames(route, native)
+                reading_frame, final_frame = (sum(frames[kind].values()) for kind in ('reading', 'final'))
+                for extra in (0, 3000):
+                    with self.subTest(searches=searches, characters=characters, extra=extra):
+                        bounds = dict(frame_bound=final_frame + change + 3000,
+                                      reading_bound=reading_frame + v7.FINDING_UNITS_CHARACTERS + extra)
+                        self.assertEqual(admit(route, artifacts, native, built, finding_version=1, **bounds)['state'],
+                                         'record')
+                        self.assertEqual(admit(route, artifacts, native, built, **bounds)['state'], 'record')
+        for long_statement in (False, True):
+            with self.subTest(band=True, long_statement=long_statement):
+                native, built = build_admission_native(artifacts, [build_search(0, build_reason('one', 6000))])
+                if long_statement:
+                    native['subject']['statement'] = 'A synthetic exact statement. ' + 's' * 3000
+                frames = v7.measure_turn_frames(route, native)
+                reading_frame, final_frame = (sum(frames[kind].values()) for kind in ('reading', 'final'))
+                bounds = dict(frame_bound=final_frame + change + 3000,
+                              reading_bound=reading_frame + v7.FINDING_UNITS_CHARACTERS - 1)
+                self.assertEqual(admit(route, artifacts, native, built, finding_version=1, **bounds)['state'], 'record')
+                admission = admit(route, artifacts, native, built, **bounds)
+                if long_statement:
+                    # The reading frame moves its largest movable field to a unit, and the chain is admitted.
+                    self.assertEqual(admission['state'], 'record')
+                    fixed_bounds = admission['inventory']['inventory']['fixed_bounds']
+                    self.assertIn(0, (fixed_bounds['statement'], fixed_bounds['formulations']))
+                else:
+                    self.assertEqual((admission['state'], admission['details']['reason']), ('stop', 'fixed_frame'))
+
+
+class ExcludedWorkLongTests(unittest.TestCase):
+    """Test 12 without reviewer calls: the fixed acceptance packet excluded-work-long in a real v7 store."""
+
+    def test_g8_the_long_excluded_work_judgment_is_read_kept_and_settles_the_final(self):
+        from openness_named_gap_fixtures import load_fixed_packet
+        descriptor = load_fixed_packet('excluded-work-long')
+        self.assertGreater(sum(measure_json(row) for row in descriptor['dispositions'][2:]), 100000)
+        case = fixture_case('excluded-work-long', 'v7')
+        self.addCleanup(case.doCleanups)
+        reference = case.export()
+        current, packet = case.finish_reading(reference)
+        inventory = read_chain(case, current)['inventory']
+        dispositions = case.search['dispositions']
+        self.assertEqual(case.searches[1]['dispositions'], dispositions)
+        judgment = dispositions[1]
+        self.assertEqual((judgment['disposition'], judgment['reason']),
+                         ('out_of_scope', 'The delivered row concerns infinite graphs only.'))
+        body = find_body(inventory, digest(dispositions))
+        self.assertEqual(packet['finding_index']['units'],
+                         {digest(dispositions): dict(unit=body, characters=measure_json(dispositions))})
+        self.assertEqual(inventory['finding_units'], [dict(unit=body, start=0, end=measure_json(dispositions))])
+        assert_reading_turns_name_values(self, list_chain_turns(case, 'turn-1'), 1)
+        kept = [row for row in packet['reading_final']['entries']
+                if row['text'] == serialize_record(judgment).decode('utf-8')]
+        self.assertEqual([(row['unit'], row['targets']) for row in kept], [(body, ['t1', 't2'])])
+        accepted = case.invoke(current, build_fixed_answer(packet))
+        self.assertNotIn('output_refusal', accepted, accepted)
+        record = case.mutate(case.load_problem_module().record_openness, dict(assignment_id=current))['result']
+        self.assertEqual(record['outcome'], descriptor['expected_outcome'])
+        records = case.store.snapshot()['records']
+        reading.verify_chain(records, case.artifacts, records['review_assignment'][current])
+
+
+# The deliveries of the new chain of the G8 journey, scenario stopped-both-observed, measured on the first change set
+# (63ea8d29): its final holds the complete index, and the second change set leaves them as they are.
+STOPPED_BOTH_OBSERVED_DELIVERIES = [
+    [('u19', 0, 489), ('u3', 0, 12672)],
+    [('u3', 12672, 41715)],
+    [('u3', 41715, 50000), ('u5', 0, 1298), ('u7', 0, 2526), ('u9', 0, 3143), ('u11', 0, 298), ('u13', 0, 519),
+     ('u15', 0, 210), ('u17', 0, 455)]]
+
+
+def run_g8_journey(owner, scenario, *, every_value_leaves=False):
+    """Run the journey of the G8 test on its stored store and return the case, receipt and turns of the new chain.
+
+    The new chain carries the turns of the stored v5 chain. every_value_leaves gives the chain the stated size of the
+    last form of its index, so that every value that can leave does.
+    """
+    from unbound_packet_fixtures import open_stored_case
+    from codex_route_fixtures import limit_codex_input, record_codex_route
+    from research_harness.problem_openness import export_openness
+    import test_openness_carried_integration as integration
+    import test_openness_reading_v7_refusal as refusal
+    import test_openness_reading_v7_turns as turn
+    case, _ = open_stored_case(owner, 5, scenario)
+    limit_codex_input(case, 1300000)
+    route = case.store.snapshot()['records']['review_route']['route']
+    record_codex_route(case, 'current-route', model=route['model'],
+                       output_tokens=route['configuration']['max_output_tokens'])
+    def assign(identifier, native_packet, prior=None):
+        context = dict(native_packet=native_packet)
+        if prior is not None:
+            context['prior_assignment_id'] = prior
+        return case.mutate(protocol.record_assignment, dict(id=identifier, route_id='current-route', dossier_id=None,
+            role='native_math', reviewer_id='openness-reviewer', author_id=case.author_id, context=context))['result']
+    case.assign = assign
+    minimum = dict(searches=[dict(formulation=row['question'], search_id=row['id']) for row in case.searches],
+                   settling_work_id=None, duplicate_resolutions=[])
+    with patch.object(reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (v7.PROTOCOL, reading.PROTOCOL_V6)):
+        native = export_openness(case.store, dict(assignment_id='c8-successor', reviewer_id='openness-reviewer',
+            minimum=minimum), case.root / 'c8-new-export', accept_gaps=True)['native_packet']
+        stated = v7.FINDING_INDEX_CHARACTERS
+        if every_value_leaves:
+            records = case.store.snapshot()['records']
+            current = records['review_route']['current-route']
+            admission = v7.check_v7_admission(records, case.artifacts, current, json.loads(case.artifacts.read(native)))
+            stated = capacity.measure_capacity_value(current, delivery.build_last_finding_form(
+                admission['capacity_plan']['finding_index'], admission['inventory']['inventory']))
+        with patch.object(v7, 'FINDING_INDEX_CHARACTERS', stated):
+            receipt = case.assign('c8-successor', native)
+        case.build_v7_answer = lambda packet: integration.CarriedIntegrationSupport.answer_v7(case, packet)
+        case.build_v7_finding = lambda packet, handle: turn.V7CommandTests.build_v7_finding(case, packet, handle)
+        refusal.V7RefusalTests.finish_from(case, native, 'c8-successor')
+    return case, receipt, list_chain_turns(case, 'c8-successor')
+
+
+class CarriedChainTests(unittest.TestCase):
+    """Test 15 (G8.12): a chain that carries earlier turns reads the values that its final names in its own turns."""
+
+    def read_initial_state(self, case, receipt):
+        inventory = json.loads(case.artifacts.read(receipt['reading_chain']['inventory']))
+        return inventory, json.loads(case.artifacts.read(receipt['reading_chain']['state']))
+
+    def test_g8_a_carried_chain_reads_the_value_that_its_final_names_in_its_own_turns(self):
+        case, receipt, turns = run_g8_journey(self, 'workaround')
+        self.assertEqual(receipt['protocol_selection']['protocol'], v7.PROTOCOL)
+        inventory, initial = self.read_initial_state(case, receipt)
+        searches = {row['id']: row for row in case.searches}
+        shared = searches['shared-search-0']['dispositions']
+        self.assertEqual(searches['shared-search-1']['dispositions'], shared)
+        body = find_body(inventory, digest(shared))
+        self.assertEqual(measure_json(shared), 290071)
+        self.assertEqual(inventory['finding_units'], [dict(unit=body, start=0, end=290071)])
+        final = turns[-1][1]
+        self.assertEqual(final['finding_index']['units'], {digest(shared): dict(unit=body, characters=290071)})
+        reading_turns = assert_reading_turns_name_values(self, turns, 1)
+        # Each character of the named body arrives once, in the chain's own turns; no full text arrives (test 1).
+        spans = list_body_deliveries(reading_turns, body)
+        self.assertEqual(merge_spans(spans), [(0, 290071)])
+        self.assertEqual(sum(end - start for start, end in spans), 290071)
+        self.assertFalse(any(row['kind'] == 'fulltext' for _, packet in reading_turns
+                             for row in packet['reading_turn']['plan']['now']))
+        # The three searches stay credited to the carried turns.
+        expected = sorted(row['search_digest'] for row in inventory['search_delivery']['searches'])
+        self.assertEqual(sorted(initial['searches']), expected)
+        self.assertTrue(all(turn['origin'] is not None for turn in initial['turns']))
+        # The report of the carried selection lists the named body as remaining work, as the reading plan does.
+        report = receipt['carried_readings']
+        remaining = {row['unit']: row for row in report['remaining_material']}
+        self.assertEqual(remaining[body]['ranges'], [dict(start=0, end=290071, characters=290071)])
+        planned = {}
+        for row, start, end in v7._find_remaining_ranges(inventory, initial):
+            planned.setdefault(row['handle'], []).append((start, end))
+        self.assertEqual(sum(end - start for start, end in planned[body]), remaining[body]['characters'])
+        self.assertEqual(report['credited_material_characters'] + report['remaining_material_characters'],
+                         sum(row['characters'] for row in v7.read_carried_inventory(case.artifacts, receipt)['material']))
+        # Outside G8: a carried search credit covers the residual of search-9 only up to the length of its record, so
+        # the reading plan also holds the tail of that residual, which the report counts as credited.
+        tails = {handle: spans for handle, spans in planned.items() if handle not in remaining}
+        self.assertEqual(tails, {find_search_body(inventory, searches['search-9']): [(1155, 1797)]})
+        self.assertEqual({handle: [(row['start'], row['end']) for row in remaining[handle]['ranges']]
+                          for handle in remaining}, {handle: spans for handle, spans in planned.items()
+                                                     if handle in remaining})
+        # Condition 4: the chain verifies, and the same final without the own deliveries of the body does not. The
+        # receipts of the two searches that share the body wait for those deliveries.
+        records = case.store.snapshot()['records']
+        verified = v7.verify_problem_coverage(records, case.artifacts, turns[-1][0], final=True)
+        plan = capacity.read_chain_capacity_plan(case.artifacts, receipt)
+        selection = json.loads(case.artifacts.read(receipt['carried_selection']['artifact']))
+        state = verified['state']
+        self.assertEqual(sorted(v7._verify_required_coverage(case.artifacts, inventory, state, plan, selection)),
+                         expected)
+        without = dict(state, deliveries=[row for row in state['deliveries'] if row['unit'] != body])
+        with self.assertRaises(ResearchError) as caught:
+            v7._verify_required_coverage(case.artifacts, inventory, without, plan, selection)
+        self.assertEqual(caught.exception.code, 'openness_reading_incomplete')
+        self.assertIn(dict(unit=body, start=0, end=290071), caught.exception.details['ranges'])
+        owners = {row['search_digest'] for row in inventory['search_delivery']['searches']
+                  if 'dispositions' in row['shared_fields']}
+        self.assertEqual(len(owners), 2)
+        self.assertEqual(set(v7._collect_completed_searches(case.artifacts, inventory, without, [])),
+                         set(expected) - owners)
+
+    def test_g8_a_value_that_one_carried_search_holds_alone_is_read_as_its_span(self):
+        case, receipt, turns = run_g8_journey(self, 'workaround', every_value_leaves=True)
+        inventory, _ = self.read_initial_state(case, receipt)
+        search = next(row for row in case.searches if row['id'] == 'search-9')
+        residual = find_search_body(inventory, search)
+        named = [row for row in inventory['finding_units'] if row['unit'] == residual]
+        self.assertEqual(len(named), 1)
+        text = read_body_text(case, inventory, residual)
+        self.assertEqual(text[named[0]['start']:named[0]['end']],
+                         serialize_record(search['dispositions']).decode('utf-8'))
+        record = next(row for row in inventory['units'] if residual in row['bodies'])
+        tail = (record['characters'], len(text))
+        self.assertEqual(tail, (1155, 1797))
+        reading_turns = assert_reading_turns_name_values(self, turns, len(inventory['finding_units']))
+        self.assertEqual(merge_spans(list_body_deliveries(reading_turns, residual)),
+                         [(named[0]['start'], named[0]['end']), tail])
+
+    def test_g8_a_carried_chain_whose_final_holds_the_complete_index_reads_as_before(self):
+        case, receipt, turns = run_g8_journey(self, 'stopped-both-observed')
+        inventory, _ = self.read_initial_state(case, receipt)
+        self.assertNotIn('finding_units', inventory)
+        self.assertNotIn('units', turns[-1][1]['finding_index'])
+        reading_turns = [(assignment, packet) for assignment, packet in turns if 'reading_turn' in packet]
+        self.assertEqual([[(row['handle'], row['start'], row['end']) for row in packet['reading_turn']['plan']['now']]
+                          for _, packet in reading_turns], STOPPED_BOTH_OBSERVED_DELIVERIES)
+        for assignment, packet in reading_turns:
+            self.assertNotIn('finding_units', packet['reading_turn'])
+            self.assertNotIn('problem_paragraphs', assignment['prompt']['parameters'])
 
 
 def load_queries():

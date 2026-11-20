@@ -100,6 +100,8 @@ def _order_leaving_values(index, inventory):
 
     A value can leave when it is no queries value and is longer than its reference {unit, characters}. unit is the
     shared body whose SHA-256 is the digest, or else the residual or whole record of the first search that holds it.
+    Each row is (digest, reference, path): path is the sequence of keys of the value in the JSON of its body, empty
+    for a shared body, which is the value itself.
     """
     manifest = inventory['search_delivery']
     bodies = {row['sha256']: row['handle'] for row in inventory['material']}
@@ -111,24 +113,61 @@ def _order_leaving_values(index, inventory):
         if key in queries:
             continue
         if key in shared:
-            handle = bodies[key]
+            handle, path = bodies[key], ()
         else:
             owner = next(row for row in index['searches'] if key in (row.get(field) for field in FINDING_INDEX_FIELDS))
+            field = next(field for field in FINDING_INDEX_FIELDS if owner.get(field) == key)
             entry = entries[owner['search_digest']]
             handle = bodies[(entry['residual'] or entry['artifact'])['sha256']]
+            path = ('fields', field) if entry['residual'] else (field,)
         reference = dict(unit=handle, characters=len(serialize_record(value).decode('utf-8')))
         if reference['characters'] > len(serialize_record(reference).decode('utf-8')):
-            leaving.append((key, reference))
+            leaving.append((key, reference, path))
     return sorted(leaving, key=lambda row: (-row[1]['characters'], row[0]))
 
 
 def build_last_finding_form(index, inventory):
     """Return the form of the index from which every value that can leave has left, named in units by its body."""
     form = dict(copy.deepcopy(index), units={})
-    for key, reference in _order_leaving_values(index, inventory):
+    for key, reference, _ in _order_leaving_values(index, inventory):
         del form['fields'][key]
         form['units'][key] = reference
     return form
+
+
+def locate_value_span(record, path):
+    """Return the character span of the canonical JSON of the value at path, a sequence of keys, in that of record.
+
+    The span is located by the keys of the value, never by a search for its text, which another field can repeat.
+    """
+    start, value = 0, record
+    for key in path:
+        before = {name: value[name] for name in value if name < key}
+        head = serialize_record(before).decode('utf-8')[:-1] + (',' if before else '')
+        start += len(head) + len(serialize_record(key).decode('utf-8')) + 1
+        value = value[key]
+    return start, start + len(serialize_record(value).decode('utf-8'))
+
+
+def list_finding_units(index, inventory, bodies, form):
+    """Return the rows {unit, start, end} of the values that the packet form of a complete index names (G8.11).
+
+    A row gives the body of a value that left and the character span of its canonical JSON there. A descriptor form
+    names every value that can leave, in the order of G8.4, and then the whole body of the unit finding_index. bodies
+    maps the SHA-256 of each body of the inventory to its bytes. A complete form names no value: the result is None.
+    """
+    if 'units' not in form and 'fields' in form:
+        return None
+    handles = {row['handle']: row['sha256'] for row in inventory['material']}
+    rows = []
+    for key, reference, path in _order_leaving_values(index, inventory):
+        if 'units' in form and key not in form['units']:
+            continue
+        start, end = locate_value_span(json.loads(bodies[handles[reference['unit']]]), path)
+        rows.append(dict(unit=reference['unit'], start=start, end=end))
+    if 'units' not in form:
+        rows.append(dict(unit=form['unit'], start=0, end=form['characters']))
+    return rows
 
 
 def fit_finding_index(index, inventory, stated_characters, measure, *, formulations=None):
@@ -146,7 +185,7 @@ def fit_finding_index(index, inventory, stated_characters, measure, *, formulati
         return dict(unit=unit['bodies'][0], characters=unit['characters'], searches=len(index['searches']),
                     read_works=len(index['read_works']))
     form = dict(copy.deepcopy(selected), units={})
-    for key, reference in _order_leaving_values(selected, inventory):
+    for key, reference, _ in _order_leaving_values(selected, inventory):
         del form['fields'][key]
         form['units'][key] = reference
         if measure(form) <= stated_characters:

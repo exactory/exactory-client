@@ -435,7 +435,8 @@ def describe_carried_selection(records, artifacts, inventory, identity, selectio
     """Describe stored selection JSON, with logical credit and the physical work the new chain still reads.
 
     Counts use unions of ranges. Completed original searches cover their current physical components;
-    components give no credit independently. Equal material bodies are counted once by the inventory.
+    components give no credit independently. Equal material bodies are counted once by the inventory. A span of
+    inventory.finding_units stays remaining work, as in the reading plan of the chain (G8.12).
     No scientific text enters the report.
     """
     projections = verify_carried_selection(records, artifacts, inventory, identity, selection, plan=plan)
@@ -456,7 +457,7 @@ def describe_carried_selection(records, artifacts, inventory, identity, selectio
                 interval = ((0, material[body]['characters'])
                             if unit['identity'].get('record_kind') == 'literature_search'
                             else (span['start'], span['end']))
-                material_ranges.setdefault(body, []).append(interval)
+                material_ranges.setdefault(body, []).extend(v7.remove_finding_spans(inventory, body, [interval]))
     remaining = [_describe_missing_ranges(unit, ranges.get(unit['handle'], [])) for unit in inventory['units']]
     remaining_material = [_describe_missing_ranges(body, material_ranges.get(body['handle'], []))
                           for body in inventory['material']]

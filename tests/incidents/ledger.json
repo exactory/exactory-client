@@ -7647,6 +7647,21 @@
         "test_openness_finding_index_frame.LongValueChainTests.test_g8_eighteen_searches_keep_their_shortest_values_within_the_stated_size",
         "test_openness_finding_index_frame.LongValueChainTests.test_g8_twenty_nine_searches_keep_every_query_and_read_work_in_a_form_with_references"
       ]
+    },
+    {
+      "id": "carried-credit-covers-a-named-value",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "A carried credit covers a body that the final names",
+      "summary": "A final of a bounded chain names the longest field values of its bound searches by their bodies. A new chain that carried the turns of an earlier chain took the credit of each search that the earlier chain completed for every body of that search, so in the stored store of the G8 journey the shared dispositions value of 290,071 characters that the final names was never delivered to the reviewer, and the reading turns had no sentence about such values.",
+      "expected": "The inventory of a chain whose final names values by their bodies lists the span of each value, and its reading turns hold their number and a registered paragraph. A span counts as delivered only when a reading turn of the chain itself delivered it: the chain reads the named values in its own turns, the report of the carried selection lists them as remaining work, the carried credit stays for the searches and for every other part of their bodies, and the verification refuses a final before those deliveries.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_finding_index_frame.CarriedChainTests.test_g8_a_carried_chain_reads_the_value_that_its_final_names_in_its_own_turns",
+        "test_openness_finding_index_frame.CarriedChainTests.test_g8_a_value_that_one_carried_search_holds_alone_is_read_as_its_span",
+        "test_openness_finding_index_frame.FindingUnitsTests.test_g8_reading_turns_hold_the_count_and_the_paragraph_and_the_inventory_the_spans",
+        "test_openness_finding_index_frame.ExcludedWorkLongTests.test_g8_the_long_excluded_work_judgment_is_read_kept_and_settles_the_final"
+      ]
     }
   ]
 }

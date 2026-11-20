@@ -1764,8 +1764,10 @@
         "research_harness.review_prompt_paragraphs._has_capacity_notice",
         "research_harness.review_prompt_paragraphs._has_carry",
         "research_harness.review_prompt_paragraphs._has_delivery_notice",
+        "research_harness.review_prompt_paragraphs._has_finding_units",
         "research_harness.review_prompt_paragraphs._has_forming_candidates",
         "research_harness.review_prompt_paragraphs._has_replacement",
+        "research_harness.review_prompt_paragraphs._has_unread_final",
         "research_harness.review_prompt_paragraphs._has_whole_refusal"
       ]
     },
@@ -20230,6 +20232,33 @@
         "research_harness.review_parts_slate.can_start_series"
       ],
       "reason": "The optional admission callback is declared only by the slate adapter."
+    },
+    {
+      "ast_sha256": "3722a9d116559332c2fbbecac4a2d8395cf6ac9a5cccd381cb3702361fa347db",
+      "callee": "research_harness.review_prompt_paragraphs._has_finding_units",
+      "caller": "research_harness.review_prompt_paragraphs.select_prompt_parameters",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_prompt_paragraphs._has_finding_units"
+      ]
+    },
+    {
+      "ast_sha256": "afb442e096b7819a4c843ece6ee0621795fc8ae38165d1931841cd1052a6d3dc",
+      "callee": "research_harness.review_prompt_paragraphs._has_unread_final",
+      "caller": "research_harness.review_prompt_paragraphs.select_prompt_parameters",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_prompt_paragraphs._has_unread_final"
+      ]
+    },
+    {
+      "ast_sha256": "caa53821f00d253ccf092e660dc16c11b0b1a47089d75a1c8e04acc3acbbe6e5",
+      "callee": "research_harness.review_prompt_paragraphs.select_prompt_parameters",
+      "caller": "research_harness.openness_reading_v7.plan_turn_recovery",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_prompt_paragraphs.select_prompt_parameters"
+      ]
     }
   ],
   "certificates": {
@@ -21331,7 +21360,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.openness_carried": {
-      "ast_sha256": "70335b7a2fbe9e42230b467c21bddc2906858f7a0e67290190ed615e0e425335",
+      "ast_sha256": "ab0707e431079d1196bfe86b122559fcbc787195790f8bc74bfd3b2803164d67",
       "functions": {
         "_count_characters": "e2a2bd30a7064019751f71e6460089f6113944250985699cc26032e713767abf",
         "_describe_chain": "81e2b697903eee6bb2162b26daa92a7c194d88fb0b3658d71f6cdafa8a84e831",
@@ -21346,7 +21375,7 @@
         "build_carried_selection": "affaaaaecda8942422209ce8244affbcd9ecc53a52cf60ebcb8fb55cfa37e496",
         "classify_carried_notes": "9e180cf2c1f14caa28754531b470abf05fe3aa821e64801a7f1b1a4ba844dd6d",
         "credit_carried_turn": "6be211ff3069c5e68aa726fc407b1c04566499c355c76f95971a02e6f7f41bad",
-        "describe_carried_selection": "e5a75c3e7a0002722ca4c2f1b604aceb611e4b15b65933cd1d969640869db964",
+        "describe_carried_selection": "3688f01652e78cb65f4a9d883c3e306dc5b4c9feadc7bb94aa34f22ce7a1e83b",
         "list_qualifying_chains": "e8d7e624c9f3c66abe107438121cd9810b116e79bae7bb442aff03db0a1095ac",
         "observe_math_chain": "256aebc696b215d646a7eebb5502974bf657b1f4d82eb03cb4e38c7331cbb859",
         "observe_qualifying_chain": "f93665f40415d7d97f3570650c9c1a0a248af76ba8b2aba87671af67e829ad11",
@@ -21426,7 +21455,7 @@
         "f013eb9d7635176aea0b64e444fadc93e413cc61c62fb93eb34f36060f8e2bff",
         "fc3140397252aa4c89048c885b9f6dd0d1d7c2f2842dae7387ca129a7e05dc9a"
       ],
-      "reason": "Reviewed complete selection/successor module: selection and planning collections stay in digest-bound artifacts or planner receipts; logical native packet and projected minimum fields use the existing closed native declarations. Whole source and functions are pinned, including unexecuted branches. Reviewed Step A against 493461ef: math-v1 prefix authentication produces the existing internal observation form; credit_carried_turn projects its span_sha256 to the existing range sha256 and build_carried_selection retains its stored form. packet_kind selects a policy, not a wire member. Existing v7 carried selection references and bounded projected reading/final schemas are unchanged. Both dispatch sites now include the math observer, and its packet-source calls are declared."
+      "reason": "Reviewed complete selection/successor module: selection and planning collections stay in digest-bound artifacts or planner receipts; logical native packet and projected minimum fields use the existing closed native declarations. Whole source and functions are pinned, including unexecuted branches. Reviewed Step A against 493461ef: math-v1 prefix authentication produces the existing internal observation form; credit_carried_turn projects its span_sha256 to the existing range sha256 and build_carried_selection retains its stored form. packet_kind selects a policy, not a wire member. Existing v7 carried selection references and bounded projected reading/final schemas are unchanged. Both dispatch sites now include the math observer, and its packet-source calls are declared. G8.11 and G8.12 of 0.92.0 (lane g8-finding-index, second change set, for review): the inventory of a bounded chain whose final names values by their bodies lists their spans in finding_units, located by key; its reading turns hold their number and the paragraph finding-units, and the reading frame reserves FINDING_UNITS_CHARACTERS; a carried credit does not cover a named span, in the reading plan and in the report of the carried selection; a capacity replacement selects the paragraphs of its new packet."
     },
     "research_harness.openness_minimum": {
       "ast_sha256": "fbd57555c16ef3d15e17a839e39295183278727515d33e10092307bdfaa8a274",
@@ -21815,7 +21844,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the activation of 0.91.0 (ruling 37): NEW_PROBLEM_CHAIN_PROTOCOLS becomes (PROTOCOL_V7, PROTOCOL_V6); no packet member, call, write or closed shape changes. Reviewed 0.91.1: a math openness packet that fits one turn stays a single native turn under (v7, v6); the condition reads the packet kind only, and no packet member, call, write or closed shape changes. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "4eda07abbc8ffe4234b2607d7305f530cc7bc546b45912e9e26e36188fe58b89",
+      "ast_sha256": "3c8fb58f199a205279bd4dde03a0cd2ff81c011460104f8dfaae962a3987318e",
       "functions": {
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
         "_append_unit": "f6cb4ac11ffc0db1bbc01ecf87ec1ca4e26a2ccc64a24c9aebe0b2c8d2ce16a7",
@@ -21826,27 +21855,28 @@
         "_describe_json": "7c6004e53039a80228d53341ea102c68af46e1cc51855d15c96893ebef98c919",
         "_require_selected": "1756d3596364595c60b215e7b5399de39b723df692cf0f0fc491826408282dbb",
         "build_chain_state": "4cd995c0c273f4d53a5867d0db8b3f3b38bdc976d5efbaf83d89de98f062c08f",
+        "remove_finding_spans": "d97c3fd3a471763b68255517b585fbe676f6c5bc29025687f28df4f05b93e2e8",
         "build_inventory": "52e702dc837554711067f8cfc472c52e0d97f0fa72593f907d6dc0e0e9726cc4",
         "compute_allowance_rows_bound": "43cedd0b96e55219fc11fc700beb8044053e677919c8c6088032814fc1e4703e",
         "measure_finding_descriptor": "eced9ebbdf4fb19f26e90d1ffb537d599a94a1b559dab1251428e61ae3fc0b3c",
         "measure_finding_index_frame": "e13105a214587e19a17f1ddcbb0942d25398be046852afc792b0a746d3a087dc",
         "describe_carried_pool": "b8c0046b42a8d1d5d4d96483e43f2c49afbc294acad7e86f5b965bc922646932",
         "describe_visual_text_stop": "927e68cb236d962c4335fe26aa56b413360d4b6490ec47b1cb2e0f1fd35775fc",
-        "measure_turn_frames": "bf92f20acb3c876322b56bf3b76ea9313a072de1d6f00c2a3e1d5d4f0b792e56",
+        "measure_turn_frames": "6b7f7f5bfd62fe985caa1d9ea415952d65c00ec927a35cba565e499357536dac",
         "observe_carried_chain": "7830acc80f56e928029aec9390682f3131b0401efcfae5710bc27f826ef9fe5c",
         "plan_inventory": "0ab9eecaf336b2c4d14998700000549bbd29fa68fc81dd1637c0acdf2ecb7b32",
         "project_carried_turn": "0c984a434694f523c26e101401f7d285b7d189fdf69c5cab89491985e5cbb682",
         "require_text_reading_route": "0996fc68285408ff85afa069221807feb9838d253254f15016f5b03c8df65d30",
         "check_v7_admission": "38bdcbd8427b5fdbfd57337252c5e65b955fae7fafc2eb917a79053474186de0",
         "_find_largest_one_request_targets": "63216bfd3c6a1bb3fe519e16cef63c3bc823e4177c101f0cd3f726fed7802542",
-        "build_turn_packet": "bc9378ffd93512113d9281480403c3ddf7cc33cac68a2a5c84dbfea8cbcce2dc",
+        "build_turn_packet": "fc57bb2cdd987b5adb1d7b6822e795b7a1f44ba3dff1e43a91d7436eba3f520b",
         "fit_packet_finding_index": "4e1769d7794c8fb72c60209028cd085991e47dbae812bff33a2d1536c8cc0143",
         "validate_turn_output": "c0fa207927995acd2aa1d82e55360ea8ced43fbc3cda51b7ad4620f75f675fcb",
         "prepare_next_assignment": "d8cdd849d9ac056ecb1465a3c269d649b1480008c8793d320a78e1ba389d0093",
         "prepare_refusal_assignment": "644eb059414d6c0ab981042d7c11da1b288274fcca0ee5ff9475ffe7af13a398",
         "prepare_notice_capacity_assignment": "b964067b322e7a188ffa0663fb92cd40efd3491d0a42a190268858f8bf5b61fb",
         "describe_admission_stop": "bcf896b64910a70f603dd83f76a5d473b7c8fcf38899452593f64d16340c138a",
-        "plan_turn_recovery": "26a4ee97bdc87fb5a53d91cdd56ec5c30c08621f0d0d21a567b9830a46c76820",
+        "plan_turn_recovery": "a12b503bc8d6feebb40751e7c0e68e722c2c3a5491aa6a85e90339cd973fcab2",
         "_verify_turn_binding": "e215f6a41cb0c81d4a365156159c2b977e1fb4f930526b86e6a1999305d317db",
         "verify_packet_finding_index": "231261393a99b006546b45019bc97ad0d65f9778fb75233f4caad87911c03e81",
         "_verify_required_coverage": "8b657838ac15ae8c58b3d96efa73875ac28184cddc1d23924722ede9991e8ab9",
@@ -21963,9 +21993,10 @@
         "c5d81d1e55f1fee5731bf283c56bb5c44c5afa98f897e6cc5eb14b72624eb0ca",
         "c960364ec75eb8027253db4e4b978b24350d57ba4778fdabc51f655b7e460f04",
         "ddd2ee4315b1e0d526acf49967b38413510df7bb05c438a1903329816f71fad4",
-        "e93e925e6368eeeebc84fba3be13c87ac300e3b776e3f2d7d355140b214528ac"
+        "e93e925e6368eeeebc84fba3be13c87ac300e3b776e3f2d7d355140b214528ac",
+        "caa53821f00d253ccf092e660dc16c11b0b1a47089d75a1c8e04acc3acbbe6e5"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment. G8.11 and G8.12 of 0.92.0 (lane g8-finding-index, second change set, for review): the inventory of a bounded chain whose final names values by their bodies lists their spans in finding_units, located by key; its reading turns hold their number and the paragraph finding-units, and the reading frame reserves FINDING_UNITS_CHARACTERS; a carried credit does not cover a named span, in the reading plan and in the report of the carried selection; a capacity replacement selects the paragraphs of its new packet."
     },
     "research_harness.openness_successor": {
       "ast_sha256": "459a0709e5b0b24004b9b4dfc71c0202157d7529fa6e42b8ea498cb4f34e125b",
@@ -24947,10 +24978,11 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_prompt_paragraphs": {
-      "ast_sha256": "8556f4e7ac4ee561652f18d7087597c065eac7f8cb9ec85780be77d97e5894b3",
+      "ast_sha256": "9b3a97a7ccf02f47edb9935f25f3e21bf274b376bc1c233d34c86e4c65781a1c",
       "functions": {
+        "_has_finding_units": "c1e885c2ea1a09211f4512f835166d05e33d0d9629e7ea1f8f127a0c01ce9329",
         "_append_selected_paragraphs": "b463ad8836dd7f7e2c0961c4c64ade4a0ed5bfbbce62519f3b113f910050ffd6",
-        "_describe_template_suffix": "c3800a380dad412ec2eabb656c368209f4434960ad3366bc2706d64ad49d51b1",
+        "_describe_template_suffix": "e1ac9c15af984c359939679a5b6d75d20e8d8bcd8af4dcee3d7ae2213cc3a1ae",
         "_has_account_probes": "fa5759bc282453f036b806caf0a3f57c03dabfe500a96a0c2233333da02febac",
         "_has_accounts": "2c1535199e1d3ff7182d77d55bef95c7c2d0a8c03ff0f7484f9c52044b810eff",
         "_has_areas": "284eb21e3b6c2f47949968d1ee6dedcb554fab432d604c37e03dcc3eaf8aec88",
@@ -24966,11 +24998,11 @@
         "append_prompt_paragraphs": "6af71600e7b6dff6096a81c0cd60c21e7a33eaf66c3e4fff691912fb85564a5d",
         "append_rubric_definition": "bfb1a91a0c98eec409091ae5972839c1a86b6cb119acaeae2d3bc0b349018191",
         "has_capacity_paragraph": "754241c893eeeff237964841d50bbf00be6efea18045546c73a7d96014c368ef",
-        "has_only_shared_paragraphs": "166b7a20a8537eb169566985b0c87df30660b2032556f8429a6463d733ebb97f",
+        "has_only_shared_paragraphs": "4fb2962985b63420c5556d0f8edc39a05bbeb058dbc70e157d8e7b878b806551",
         "matches_packet_paragraphs": "aec9e28fbf61f98ff68cbf675a1a0be3882f9d9aac792f84aa1c10264e4fd208",
         "preserve_prompt_conditions": "45db596afafb54ffd1215890cc4dc4b33a4300355bf843706328c25add5d68a0",
         "read_paragraph_parameters": "f306d07ecdd19836459099c32cbef18737b7d4480cfb6be18dc41e00ae0d0da4",
-        "select_prompt_parameters": "be25f8eb3ab1559715132ff0c93cae98b110c2a6c1b273e95c55ae78eb7100a3",
+        "select_prompt_parameters": "12274399eaad1863d2b9ae55967fd565fdd7f025ed19d6d491b61b835ea531c6",
         "strip_prompt_paragraphs": "71a44e7971252ba5eb62bf3c3a4146c9fc2d1f22000ed46f17ab67e8bf6517f5"
       },
       "packet_call_digests": [
@@ -24990,9 +25022,11 @@
         "b453babdeba73b1a28a3d38e903c29776a35c1a2e8d10d3092e52e18c847f522",
         "b65d71b0f7c7bafe6966a66d7a1514b20b9ef1e63d43fab312e1a03e3818d708",
         "bd01b36e067355a8f0c1e765513e33161679a741f0cc47e75c8ba682741d2e43",
-        "c028215c5274d690c4dbc9e561a96faefb9da20033afaeee3184646b0134c60e"
+        "c028215c5274d690c4dbc9e561a96faefb9da20033afaeee3184646b0134c60e",
+        "3722a9d116559332c2fbbecac4a2d8395cf6ac9a5cccd381cb3702361fa347db",
+        "afb442e096b7819a4c843ece6ee0621795fc8ae38165d1931841cd1052a6d3dc"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. G8.11 and G8.12 of 0.92.0 (lane g8-finding-index, second change set, for review): the inventory of a bounded chain whose final names values by their bodies lists their spans in finding_units, located by key; its reading turns hold their number and the paragraph finding-units, and the reading frame reserves FINDING_UNITS_CHARACTERS; a carried credit does not cover a named span, in the reading plan and in the report of the carried selection; a capacity replacement selects the paragraphs of its new packet."
     },
     "research_harness.review_protocol": {
       "ast_sha256": "575afa8c42bc7be02a35ea8554d5e74ef3ea2cd6d06e36a3fa2ddc100458aa8d",
@@ -25645,7 +25679,7 @@
       "reason": "Reviewed slate-series adapter, v3-only ordered admission, session precedence and preserved legacy repair delegation; authenticated slate journey and compatibility tests pin this source."
     },
     "research_harness.review_search_delivery": {
-      "ast_sha256": "88ea46d92c92be80458a25771cbda4bdedd70b7d89ed5fb9e077ebd4be25a7f6",
+      "ast_sha256": "088fa27dd9ac4e402f6011c95adc73c8907d708aa7876b7f45b93ba735477c41",
       "functions": {
         "_matches": "65bccdcc9dc0c1d33b3f87af515ef091108c36f71746900fe685880545be43f7",
         "plan_search_delivery": "c1792bd0351d82207e3130f7c272b66d58a215afb91bfcba50103181b2678962",
@@ -25654,9 +25688,11 @@
         "build_finding_index": "08a81ecaaca91a5f77465d66d89d18c5171363bb9767b3d82db421a59a3ba6c3",
         "validate_finding_index": "3a836751a409565bceb7cf3541a07faae77a8ab965af6319903c4dc9d85ee6b8",
         "select_finding_index": "fddb3f6741b5ff3f608a178adadbf23ddee81ed40a4c73b7702c57ecd52fa966",
-        "_order_leaving_values": "1093d824eee373c1e126b1b54c6951d33e2eb32accac9caa7c5f0606ff3e34c7",
-        "build_last_finding_form": "7204025c23b395ffb8c29c19c4b204c4f534dad66dcd9163e4784b3c1eb86a89",
-        "fit_finding_index": "46327f487198fb713c0fc0a78fb41ca763eff6c02a203347ad6804675487af30",
+        "_order_leaving_values": "327884d545ca54ce18f225fe6f3ff18ef513568506fd698619fbc48718d5535c",
+        "build_last_finding_form": "5e9fae4991515afc41cbd0660e483ff794a81126877b8166ead7c6e83d2f49c3",
+        "locate_value_span": "5ecba5f7dc0ec4b97d4fca695acab5f41f16457482ca92e232c1aa84565af8b9",
+        "list_finding_units": "0fa80bad38adf31a4938ba3e1d717f5f9cb2d581db434deb083f2e199ee05e90",
+        "fit_finding_index": "c55d7b2ab9e248ddfbfed3ab53c108e857f41a9c5d79d97b72ceb22e63e91d7d",
         "verify_finding_index": "fd6a5576b761c8700c6d8a157a2a6b4bc46629f316fce7f1b580cfea68a6ca92"
       },
       "packet_call_digests": [
@@ -25720,7 +25756,7 @@
         "fb126e5ff9493c0ab0ea2b0a7e1763b4511b95d71cc04b6f56ee948807b963ee",
         "fb88cb6f5ee054f27ee2bab009adcb62fa3d7c61391bdfe2d7944587c4e6588f"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment. G8.11 and G8.12 of 0.92.0 (lane g8-finding-index, second change set, for review): the inventory of a bounded chain whose final names values by their bodies lists their spans in finding_units, located by key; its reading turns hold their number and the paragraph finding-units, and the reading frame reserves FINDING_UNITS_CHARACTERS; a carried credit does not cover a named span, in the reading plan and in the report of the carried selection; a capacity replacement selects the paragraphs of its new packet."
     },
     "research_harness.review_series": {
       "ast_sha256": "2f7aecc8ac79cbae01a97fb371c92585caff30e75921c209ffa222ccc2e5f0c4",
@@ -28611,6 +28647,7 @@
       "research_harness.review_protocol._prompt_matches"
     ],
     "research_harness.review_prompt_paragraphs.select_prompt_parameters": [
+      "research_harness.openness_reading_v7.plan_turn_recovery",
       "research_harness.review_problem_parts._prepare_legacy_packet",
       "research_harness.review_problem_parts.plan_objection_body_part",
       "research_harness.review_prompt_paragraphs.append_rubric_definition",
@@ -29458,6 +29495,12 @@
       "research_harness.review_protocol.record_assignment.prepare",
       "research_harness.review_route_capacity._build_serving_parts",
       "research_harness.review_route_capacity.find_serving_routes"
+    ],
+    "research_harness.review_prompt_paragraphs._has_finding_units": [
+      "research_harness.review_prompt_paragraphs.select_prompt_parameters"
+    ],
+    "research_harness.review_prompt_paragraphs._has_unread_final": [
+      "research_harness.review_prompt_paragraphs.select_prompt_parameters"
     ]
   },
   "computed_sites": {},
@@ -44025,6 +44068,16 @@
           "entry": "Q1",
           "fixture": "native_math/v7-bounded-turns",
           "quantity": "identifiers"
+        },
+        "finding_units": {
+          "bound": {
+            "serialized_characters": 1500
+          },
+          "class": "fixed",
+          "entry": "Q1",
+          "fixture": "native_math/finding-index-forms",
+          "ground": "G8.11 of 0.92.0: the number of rows of inventory.finding_units, the field values of bound searches that the final of the chain names by their bodies. Only a reading turn of a bounded chain whose final names such a value holds it, and the paragraph finding-units goes with it; the reading frame of every chain with a finding index reserves FINDING_UNITS_CHARACTERS for the member and the paragraph.",
+          "quantity": "identifiers"
         }
       },
       "quantity": "identifiers"
@@ -47247,7 +47300,8 @@
     "native_math/finding-index-forms": {
       "builder": "research_harness.openness_reading_v7.build_turn_packet",
       "tests": [
-        "test_openness_finding_index_frame.RegistryTests.test_g8_every_form_of_the_index_has_a_closed_declaration"
+        "test_openness_finding_index_frame.RegistryTests.test_g8_every_form_of_the_index_has_a_closed_declaration",
+        "test_openness_finding_index_frame.FindingUnitsTests.test_g8_reading_turns_hold_the_count_and_the_paragraph_and_the_inventory_the_spans"
       ]
     }
   },
@@ -109091,6 +109145,16 @@
                   "class": "fixed",
                   "entry": "Q1",
                   "fixture": "native_math/v7-bounded-turns",
+                  "quantity": "identifiers"
+                },
+                "finding_units": {
+                  "bound": {
+                    "serialized_characters": 1500
+                  },
+                  "class": "fixed",
+                  "entry": "Q1",
+                  "fixture": "native_math/finding-index-forms",
+                  "ground": "G8.11 of 0.92.0: the number of rows of inventory.finding_units, the field values of bound searches that the final of the chain names by their bodies. Only a reading turn of a bounded chain whose final names such a value holds it, and the paragraph finding-units goes with it; the reading frame of every chain with a finding index reserves FINDING_UNITS_CHARACTERS for the member and the paragraph.",
                   "quantity": "identifiers"
                 }
               }

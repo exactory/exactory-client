@@ -223,6 +223,9 @@ def list_target_labels(native):
 
 UNREAD_PACKET_CHARACTERS = 30000
 UNREAD_CORE_CHARACTERS = 1500
+# The reading frame of every chain with a finding index holds this many characters for the member
+# reading_turn.finding_units and the paragraph finding-units (G8.11), whether or not its final names a value.
+FINDING_UNITS_CHARACTERS = 1500
 # One text for the planned step (details.message) and for the refusal of any other payload with context.unread.
 UNREAD_FINAL_MESSAGE = (
     'A final over unread ranges is admitted only as the step that review-series plans. It plans that step when the '
@@ -622,6 +625,8 @@ def measure_turn_frames(route, native, *, fixed_bounds=None, finding_index=None,
                           refusal_paragraph=NOTICE_PARAGRAPH_CHARACTERS, unread=UNREAD_CORE_CHARACTERS)
         else:
             fields['affected_notes_index'] = AFFECTED_INDEX_CHARACTERS * 2
+            if finding_index is not None:
+                fields['finding_units'] = FINDING_UNITS_CHARACTERS
         # Bound envelope keys, capacity/allowance scalars, handles and counters;
         # evidence rows and plan.now are charged as material with their text.
         fields.update(envelope=3000, instructions=len(canonical_prompt(
@@ -1171,6 +1176,7 @@ def prepare_inventory(built, native, route, *, fixed_bounds=None, finding_index=
 
     With the complete finding index of a chain, the last form of that index is one more such unit when it measures
     more than fixed_bounds['finding_index'] (G8.5); it is added after the handles are final, so that it names them.
+    When the final names values of the index by their bodies, finding_units lists the span of each (G8.11).
     """
     result = copy.deepcopy(built)
     inventory, bodies = result['inventory'], result['bodies']
@@ -1209,7 +1215,7 @@ def prepare_inventory(built, native, route, *, fixed_bounds=None, finding_index=
             row.update(handle=physical[row['handle']], units=[logical[handle] for handle in row['units']])
         inventory['packet_handles'] = True
     if finding_index is not None:
-        from .review_search_delivery import FINDING_INDEX_UNIT_FIELD, build_last_finding_form
+        from .review_search_delivery import FINDING_INDEX_UNIT_FIELD, build_last_finding_form, list_finding_units
         last = build_last_finding_form(finding_index, inventory)
         if capacity.measure_capacity_value(route, last) > fixed_bounds['finding_index']:
             content = serialize_record(last)
@@ -1219,6 +1225,10 @@ def prepare_inventory(built, native, route, *, fixed_bounds=None, finding_index=
             _bind_body(inventory, {row['sha256']: row for row in inventory['material']}, unit, reference, content,
                        'fixed_field')
             bodies[reference['sha256']] = content
+        named = list_finding_units(finding_index, inventory, bodies,
+                                   fit_packet_finding_index(route, inventory, finding_index))
+        if named is not None:
+            inventory['finding_units'] = named
     units = {row['handle']: row for row in inventory['units']}
     for row in inventory['material']:
         shared = sorted({field['field'] for field in inventory['search_delivery']['shared_fields']
@@ -1267,6 +1277,25 @@ def describe_allowances(route, state, answer_bound):
     return result
 
 
+def remove_finding_spans(inventory, body, spans):
+    """Return the parts of spans of the body that lie outside every span of inventory.finding_units (G8.12).
+
+    A value that the final names by its body counts as delivered only when a reading turn of the chain itself
+    delivered it, so a carried credit covers the rest of the body alone.
+    """
+    named = sorted((row['start'], row['end']) for row in inventory.get('finding_units', []) if row['unit'] == body)
+    result = []
+    for left, right in spans:
+        for start, end in named:
+            if start < right and left < end:
+                if left < start:
+                    result.append((left, start))
+                left = end
+        if left < right:
+            result.append((left, right))
+    return result
+
+
 def _find_remaining_ranges(inventory, state):
     deliveries = {}
     for row in state['deliveries']:
@@ -1282,10 +1311,13 @@ def _find_remaining_ranges(inventory, state):
         if row['kind'] == 'carried_reading' and row['handle'] not in priority:
             continue
         start = 0
-        # Own deliveries name physical bodies, carried projections logical units.
+        # Own deliveries name physical bodies, carried projections logical units. A carried credit does not cover a
+        # span that the final names (G8.12), so the receipts of a carried search whose body holds such a span wait
+        # for an own turn to deliver it (_collect_completed_searches). In a final over unread ranges with such a
+        # span unread, the search therefore drops out of the verified searches of the finding.
         spans = list(deliveries.get(row['handle'], []))
-        for unit in row['units']:
-            spans.extend(deliveries.get(unit, []))
+        spans.extend(remove_finding_spans(inventory, row['handle'],
+                                          [span for unit in row['units'] for span in deliveries.get(unit, [])]))
         for left, right in sorted(spans):
             if left > start:
                 result.append((row, start, left))
@@ -1423,6 +1455,8 @@ def build_turn_packet(artifacts, route, logical, chain, number, inventory, state
             characters=sum(row['characters'] for row in optional_notes))
         if number == 1:
             binding['affected_notes']['index'] = _describe_affected_note_index(plan, state)
+        if 'finding_units' in inventory:
+            binding['finding_units'] = len(inventory['finding_units'])
         labels = list_target_labels(native)
         fixed_bounds = inventory.get('fixed_bounds', dict(formulations=TARGET_LABELS_CHARACTERS, statement=100000))
         binding['formulations'] = (labels if capacity.measure_capacity_value(route, labels) <= fixed_bounds['formulations']
@@ -2438,16 +2472,15 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
         if error.code == 'review_route_capacity_below_floor':
             return None
         raise
+    from . import review_prompt_paragraphs as paragraphs
     from .openness_final_pages import read_binding
+    # A replacement keeps the paragraphs of a refused prompt; otherwise its packet selects them, as at assignment.
+    versions = (paragraphs.read_paragraph_parameters(assignment['prompt']).get(paragraphs.PARAMETER, [])
+                if packet.get('output_refusal') else
+                paragraphs.select_prompt_parameters('native_math', packet).get(paragraphs.PARAMETER, []))
     prompt = review_protocol.canonical_prompt('native_math', reading_stage=reading.find_stage(packet), reading_protocol=reading.find_protocol(packet),
-        capacity=read_binding(packet)['capacity'],
+        capacity=read_binding(packet)['capacity'], problem_paragraphs=versions or None,
         finding_version=2 if 'finding_index' in packet else 1)
-    if packet.get('output_refusal'):
-        from . import review_prompt_paragraphs as paragraphs
-        prompt['parameters'].pop('capacity', None)
-        versions = paragraphs.read_paragraph_parameters(assignment['prompt']).get(paragraphs.PARAMETER, [])
-        prompt = paragraphs.append_prompt_paragraphs(prompt, 'native_math', versions=versions)
-        prompt['parameters']['capacity'] = read_binding(packet)['capacity']
     candidate = dict(value, prompt=prompt, packet=overlay.put(serialize_record(packet), 'application/json'),
                      reading_chain=chain, capacity_plan=assignment['capacity_plan'], capacity_plan_kind=kind)
     request = review_protocol.transport.request_body(route, prompt['text'], packet)
