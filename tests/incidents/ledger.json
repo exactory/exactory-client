@@ -7457,6 +7457,20 @@
         "test_probe_capture_contention.ProbeEarlierReleaseTests.test_outcome_file_of_a_refused_store_is_captured_again_from_the_terminal_evidence",
         "test_probe_capture_contention.ProbeCaptureFailureTests.test_unsafe_output_keeps_the_exit_status_of_the_program_beside_the_failed_capture"
       ]
+    },
+    {
+      "id": "ending-step-copied-over-steps-of-its-command",
+      "record": "20261115234509-bar-slot-ends-on-evidence-form-and-route-input-limit",
+      "class": "completion of the step of a series ending",
+      "summary": "Since 0.90.0 the ending of review-series completed the step of the ending and then copied it over every step of every answer that had the same command. For the stop review_turn_failures_exhausted of a bar, the answer \"Keep this route\" then began with the review-context event of kind route_retired, which is the first step of the answer \"Move to another route\". For the stop review_pending_delivery_over_plan, every select-main-capture step named the first pending source: in the two stored endings of a bar slot of the record, seven capture steps named one version, and six of the seven pending sources were named by no step.",
+      "expected": "The ending replaces a step of an answer by the completed step of the ending only when that step is the step of the ending. Every other step keeps its own id, payload, chooses and prerequisites and still receives the arguments of its command. For every stop whose plan builds a decision, the answers of the ending hold the id, command and payload of each step that the plan built. The identity of an ending and the stored stops do not change.",
+      "fixed_in": "0.91.7",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_series_ending.SeriesEndingTests.test_keep_this_route_shows_its_own_observation_step",
+        "test_series_ending.SeriesEndingTests.test_capture_answer_names_each_pending_source",
+        "test_series_ending.SeriesEndingTests.test_every_planned_decision_keeps_its_steps_in_the_ending"
+      ]
     }
   ]
 }

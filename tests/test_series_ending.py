@@ -2,19 +2,28 @@
 
 from contextlib import ExitStack
 import copy
+from functools import partial
 import io
 import json
 from pathlib import Path
 import unittest
 from unittest.mock import patch
 
-from research_harness import automatic_overrides, cli, record_check, review_series, stop_classes
+from research_harness import automatic_overrides, cli, record_check, review_plan_steps, review_series, stop_classes
+from research_harness import review_protocol as protocol
 from research_harness.errors import ResearchError
 import test_review_continuation as fixtures
+import test_session_forecast as forecast_fixtures
 
 
 INJECTED_CODES = frozenset(('rr8_injected_alpha', 'rr8_injected_beta'))
 INJECTED_CODE = sorted(INJECTED_CODES)[0]
+
+
+def read_answers(plan):
+    """Read each answer of a decision as the id, command and payload of each of its steps."""
+    return [(answer['answer'], [(step.get('id'), step['command'], step.get('payload', {})) for step in answer['steps']])
+            for answer in plan['details']['decision']['then']]
 
 
 class SeriesEndingTests(unittest.TestCase):
@@ -1069,3 +1078,70 @@ class SeriesEndingTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertEqual(rows[0]['details']['omitted']['diagnostics']['code'], INJECTED_CODE)
         self.assertEqual(rows[-1]['state'], 'done')
+
+    def end_after_exhausted_turns(self):
+        """End the series of a bar whose turn position provider refusals have exhausted."""
+        with patch('research_harness.review_transport.send_request', side_effect=OSError('The call ended.')):
+            self.case.mutate(protocol.invoke_assignment, dict(id='refused', assignment_id='bar-first'),
+                             credential='fixture')
+        # The stop of the failure planner after nine provider refusals, as test_d2_outcomes counts them.
+        exhausted = dict(state='stop', code='review_turn_failures_exhausted', stop_class='decision', not_before=None,
+                         details=dict(outcome='provider_refused', sequence=3, failed_attempts=3, sequences_remaining=0))
+        lines = []
+        with patch('research_harness.review_failure_class.plan_after_failure', return_value=exhausted):
+            self.assertEqual(self.run_series(self.case.store, 'bar-first', emit=lines.append), 3)
+        return lines[-1]
+
+    def end_over_pending_delivery(self):
+        """End a bar session whose three requested full texts exceed the input of its route."""
+        forecast = forecast_fixtures.SessionForecastTests()
+        forecast.setUp()
+        self.addCleanup(forecast.doCleanups)
+        requested = forecast.request_texts([180000, 180000, 180000])
+        lines = []
+        self.assertEqual(self.run_series(forecast.case.store, forecast.assignment['id'], emit=lines.append), 3)
+        return lines[-1], [row['version_id'] for row in requested]
+
+    def test_keep_this_route_shows_its_own_observation_step(self):
+        # Source: 20261115234509-bar-slot-ends-on-evidence-form-and-route-input-limit.
+        line = self.end_after_exhausted_turns()
+        self.assertEqual((line['state'], line['code']), ('stop', 'review_turn_failures_exhausted'))
+        answers = {answer['answer']: answer['steps'] for answer in line['details']['decision']['then']}
+        keep = answers['Keep this route'][0]
+        self.assertEqual((keep['id'], keep['command'], keep['payload']['kind']), (9, 'review-context', 'observation'))
+        self.assertEqual(keep['arguments'], {'--workspace': str(self.case.store.root)})
+        self.assertEqual(answers['Move to another route'][0]['payload']['kind'], 'route_retired')
+        stop = self.case.read_records()['review_series_stop'][line['stop_id']]
+        self.assertEqual(stop['plan']['details']['decision'], line['details']['decision'])
+
+    def test_capture_answer_names_each_pending_source(self):
+        # Source: 20261115234509-bar-slot-ends-on-evidence-form-and-route-input-limit, where seven capture steps
+        # of the stored ending named the first pending source.
+        line, versions = self.end_over_pending_delivery()
+        self.assertEqual((line['state'], line['code']), ('stop', 'review_pending_delivery_over_plan'))
+        captures = [step for step in line['details']['decision']['then'][0]['steps']
+                    if step['command'] == 'select-main-capture']
+        self.assertEqual(len(set(versions)), 3)
+        self.assertEqual([step['payload']['version_id'] for step in captures], versions)
+
+    def test_every_planned_decision_keeps_its_steps_in_the_ending(self):
+        # Each registry code whose plan has a decision in the fixtures of this module and of test_d2_outcomes.
+        # The harness defect review_route_capacity_plan_violated is left out: its only answer is the step of
+        # the ending, which the ending rebuilds with the id of the retained stop.
+        endings = [(code, partial(self.run_refusal, code))
+                   for code in ('artifact_missing', 'review_budget_exhausted', 'review_output_over_cap')]
+        endings += [('review_turn_failures_exhausted', self.end_after_exhausted_turns),
+                    ('review_pending_delivery_over_plan', lambda: self.end_over_pending_delivery()[0])]
+        complete_plan = review_plan_steps.complete_plan
+        planned = []
+        def record_planned_answers(*args):
+            plan = complete_plan(*args)
+            if plan.get('details', {}).get('decision'):
+                planned.append(copy.deepcopy(read_answers(plan)))
+            return plan
+        for code, end_series in endings:
+            planned.clear()
+            with self.subTest(code=code), patch.object(review_plan_steps, 'complete_plan', record_planned_answers):
+                line = end_series()
+                self.assertEqual(line['code'], code)
+                self.assertEqual(read_answers(line), planned[-1])

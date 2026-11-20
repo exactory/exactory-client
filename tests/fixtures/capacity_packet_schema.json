@@ -22909,11 +22909,11 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.review_series": {
-      "ast_sha256": "2f7aecc8ac79cbae01a97fb371c92585caff30e75921c209ffa222ccc2e5f0c4",
+      "ast_sha256": "283cc2d1149ba00ddf3371c31b662d663a8ec32a433de2e61f24e1dd83353ec6",
       "functions": {
         "_bind_ending_receipt": "fd38b5531ffa06a25d4a1eb3ca22d6d66e8ed981d79082ed77b30fb13e25e4e0",
         "_build_check_step": "4b2347650fb596f1d9461652debc7c9f375e493f4c6c234af1adc8f20520f24c",
-        "_complete_ending_step": "d70c4b3c2b73234fdf02ef7ebbb39db32028fbcb608db960b7ae4ae5ffe4443c",
+        "_complete_ending_step": "c4f3f0da20604f280b47ef12d787d8428a4e443184d88c8592efe2a7346e8cbb",
         "_describe_requested_ending": "abeb59f4d280789065e7ad8f0dac9a23fc9df9f28f7be12de34f7513b259702c",
         "_describe_stop": "15c25ece855cdac6d1ec6269155110861cf560e668347c14c380ac716ee9a303",
         "_emit_json": "dbbed1d765fe841a04765b4a502b9b303aa6d6df1c15a20113dbbc017bca2267",
@@ -22938,7 +22938,7 @@
         "ce3d632c43cd98ea8eb54e2acc5ce058df26a5a646f054388a8a92cc0c3efaac",
         "f7598854c85c37169821c5a5f8de589f782bf1c8e28d95fe256c2711354c79bb"
       ],
-      "reason": "Reviewed requested-stop signals bypassing the diagnostic boundary handler while every other BaseException preserves the original operation refusal and retained boundary omission; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Reviewed requested-stop signals bypassing the diagnostic boundary handler while every other BaseException preserves the original operation refusal and retained boundary omission; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the ending of review-series: a step of an answer is replaced only by the completed step of the ending."
     },
     "research_harness.review_single_request": {
       "ast_sha256": "ab05f30662deab8518abed569f5c124ff8e78ebe75ab7e535c0e44c730417613",
