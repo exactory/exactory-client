@@ -1,8 +1,10 @@
 """Pure D2 selection of earlier problem readings for a new v7 chain.
 
-The caller supplies the new first assignment's identity and recorded revision. Stored selections bind
-items, never a rerun of the selection policy. The later D2 route-identity unit supplies
-review_context_repair.is_same_route(first, second), with the identity of Ruling 2.
+The caller supplies the new first assignment's identity and recorded revision. The verifier compares
+a stored selection of version 2 with the selection of the store as it stood before that assignment,
+and it authenticates each carried item of a stored selection under the records as they stand. The
+route-identity unit supplies review_context_repair.is_same_route(first, second), with the identity
+of Ruling 2.
 """
 
 import copy
@@ -10,7 +12,7 @@ import hashlib
 import json
 from types import MappingProxyType
 
-from . import openness_reading as reading, openness_reading_v7 as v7, review_context_repair
+from . import openness_reading as reading, openness_reading_v7 as v7, review_context_repair, storage
 from .artifacts import describe_artifact
 from .errors import ResearchError
 from .evidence import digest
@@ -18,62 +20,99 @@ from .evaluation import Evaluation
 from .native_review import load_packet
 from .operations import normalized_text
 from .problem_openness import serialize_record
+from .workspace import strict_json
 
-SELECTION_PROTOCOL = 'exactory-openness-carried-selection-v1'
+SELECTION_PROTOCOL_V1 = 'exactory-openness-carried-selection-v1'
+SELECTION_PROTOCOL = 'exactory-openness-carried-selection-v2'
 CHAIN_OBSERVERS = MappingProxyType({
     'exactory-openness-reading-v5': v7.observe_carried_chain,
     'exactory-openness-reading-v6': v7.observe_carried_chain,
     'exactory-openness-reading-v7': v7.observe_v7_chain,
 })
+STORE_REFUSAL_CODES = ('artifact_missing', 'artifact_corrupt', 'storage_io', 'unsafe_path')
 
 
 def _describe_chain(records, artifacts, first, identity):
-    """Qualify one named first assignment, independently of every other chain."""
+    """Qualify one named first assignment, independently of every other chain. The caller compares the reviewer.
+
+    An artifact is read only when the result can depend on it, so the comparisons run in four steps, and the
+    first that fails ends them. The records come first: the role, the first turn of a reading chain, the cutoff,
+    the author and the route identity. Then comes the native packet, which decides the two digests and the
+    formulations for every value: an openness_minimum that is no object makes the assignment no candidate. Then
+    comes the packet with its reading protocol, and last the envelope with its evidence, where the kind of the
+    packet alone is tested. An assignment starts a chain only when its record names itself as the first
+    assignment of a reading chain, so a single-turn review and a replacement of a first turn start none.
+    """
     if (first['role'] != 'native_math' or first['context'].get('prior_assignment_id') is not None
-            or first['recorded_revision'] >= identity['recorded_revision']):
+            or first.get('reading_chain', {}).get('first_assignment_id') != first['id']
+            or first['recorded_revision'] >= identity['recorded_revision']
+            or first['author_id'] != identity['author_id']
+            or not review_context_repair.is_same_route(records['review_route'][first['route_id']], identity['route'])):
         return None
-    packet = json.loads(artifacts.read(first['packet']))
-    protocol = reading.find_protocol(packet)
+    binding = strict_json(artifacts.read(first['context']['native_packet']))
+    context = binding.get('scientific_context') if isinstance(binding, dict) else None
+    minimum = context.get('openness_minimum') if isinstance(context, dict) else None
+    if (not isinstance(minimum, dict)
+            or binding.get('subject_digest') != identity['subject_digest']
+            or binding.get('claim_digest') != identity['claim_digest']
+            or dict(statement=minimum.get('statement'),
+                    neighbours=minimum.get('neighbours')) != identity['formulations']):
+        return None
+    protocol = reading.find_protocol(json.loads(artifacts.read(first['packet'])))
     if protocol not in CHAIN_OBSERVERS:
         return None
     native = load_packet(artifacts, first['context']['native_packet'], first['reviewer_id'])
     if not reading.is_openness_packet(native):
         return None
-    minimum = native['scientific_context']['openness_minimum']
-    if (first['author_id'] != identity['author_id']
-            or native['subject_digest'] != identity['subject_digest']
-            or native['claim_digest'] != identity['claim_digest']
-            or dict(statement=minimum['statement'], neighbours=minimum['neighbours']) != identity['formulations']
-            or not review_context_repair.is_same_route(records['review_route'][first['route_id']], identity['route'])):
-        return None
     return dict(chain=first['id'], protocol=protocol, recorded_revision=first['recorded_revision'])
 
 
 def list_qualifying_chains(records, artifacts, identity):
-    """Return {chains, passed_over}, newest first; passed_over rows give reason reviewer_id.
+    """Return the chains that qualify, newest first. No artifact of an assignment under another reviewer is read.
 
     identity is {reviewer_id, author_id, route, subject_digest, claim_digest, formulations,
     recorded_revision}. The revision is the new first assignment's cutoff, exclusive.
     """
-    chains, passed_over = [], []
+    chains = []
     for first in sorted(records.get('review_assignment', {}).values(),
                         key=lambda row: row['recorded_revision'], reverse=True):
+        if normalized_text(first['reviewer_id']) != normalized_text(identity['reviewer_id']):
+            continue
         try:
             chain = _describe_chain(records, artifacts, first, identity)
         except ResearchError:
-            continue  # An unavailable historical packet is not a candidate.
-        if chain is None:
-            continue
-        if normalized_text(first['reviewer_id']) != normalized_text(identity['reviewer_id']):
-            passed_over.append(dict(chain, reason='reviewer_id'))
-        else:
+            continue  # A packet that is no openness packet is not a candidate.
+        if chain is not None:
             chains.append(chain)
-    return dict(chains=chains, passed_over=passed_over)
+    return chains
+
+
+def list_passed_over_chains(records, artifacts, identity):
+    """Return {passed_over, unavailable_chains} for the chains under another reviewer, newest first.
+
+    These rows belong to the report alone: no selection holds such a chain. A chain whose artifact the
+    store cannot give is a row of unavailable_chains, with the code and details of that refusal.
+    """
+    passed_over, unavailable = [], []
+    for first in sorted(records.get('review_assignment', {}).values(),
+                        key=lambda row: row['recorded_revision'], reverse=True):
+        if normalized_text(first['reviewer_id']) == normalized_text(identity['reviewer_id']):
+            continue
+        try:
+            chain = _describe_chain(records, artifacts, first, identity)
+        except ResearchError as error:
+            if error.code in STORE_REFUSAL_CODES:
+                unavailable.append(dict(chain=first['id'], code=error.code, details=error.details,
+                                        message=v7.UNAVAILABLE_CHAIN_TEXT.format(chain=first['id'])))
+            continue
+        if chain is not None:
+            passed_over.append(dict(chain, reason='reviewer_id'))
+    return dict(passed_over=passed_over, unavailable_chains=unavailable)
 
 
 def _select_recorded_attempts(records, identity):
     """Exclude outputs first recorded at or after the new first assignment."""
-    return dict(records, **{kind: {key: row for key, row in records.get(kind, {}).items()
+    return storage.overlay_kinds(records, {kind: {key: row for key, row in records.get(kind, {}).items()
                                  if row['recorded_revision'] < identity['recorded_revision']}
                             for kind in ('review_attempt', 'review_invocation')})
 
@@ -85,7 +124,7 @@ def observe_qualifying_chain(records, artifacts, chain, identity):
     inside a prefix. The dispatch table is the only home for supported observer protocols.
     """
     eligible = _select_recorded_attempts(records, identity)
-    artifacts = Evaluation.of(eligible, artifacts)
+    artifacts = _SelectionEvaluation.of(eligible, artifacts)
     members = [row for row in records['review_assignment'].values()
                if row['recorded_revision'] < identity['recorded_revision']
                and (row['id'] == chain['chain']
@@ -189,44 +228,140 @@ def _count_characters(ranges):
     return sum(end - start for start, end in _merge_ranges(ranges))
 
 
+def derive_carried_turns(inventory, chains, credits):
+    """Return own-source entries for every ready turn of each carried chain, newest chain first.
+
+    Credits retain the unit walk's ranges and completed searches. Only credits of later chains
+    supersede an eligible entry, and only when they cover its whole span or its original search.
+    """
+    sources = _index_sources(inventory)
+    searches = {row['sha256']: row['handle'] for row in inventory['units']
+                if row['identity'].get('record_kind') == 'literature_search'}
+    later_ranges, later_searches, result = {}, set(), {}
+    for chain_id, observations in chains:
+        entries, credited = {}, False
+        for observation in observations:
+            key = observation['origin']['assignment_id']
+            credit = credits.get(key, dict(ranges=[], searches=[]))
+            credited = credited or bool(credit['ranges'] or credit['searches'])
+            entries[key] = []
+            for item in credit_carried_turn(inventory, observation)['entries']:
+                entry = observation[item['kind'] + 's'][item['index']]
+                unit = sources[(digest(entry['identity']), entry['source_sha256'])]['handle']
+                covered = any(start <= entry['start'] and entry['end'] <= end
+                              for start, end in _merge_ranges(later_ranges.get(unit, [])))
+                if unit not in later_searches and not covered:
+                    entries[key].append(item)
+        if credited or any(entries.values()):
+            result.update(entries)
+        for observation in observations:
+            credit = credits.get(observation['origin']['assignment_id'], dict(ranges=[], searches=[]))
+            for span in credit['ranges']:
+                later_ranges.setdefault(span['unit'], []).append((span['start'], span['end']))
+            later_searches.update(searches[sha256] for sha256 in credit['searches'])
+    return result
+
+
+class _SelectionArtifacts:
+    """Remember store refusals even when a historical observer catches them."""
+
+    def __init__(self, source):
+        self.source = source
+        self.root = source.root
+        self.refusals = []
+
+    def read(self, reference):
+        try:
+            return self.source.read(reference)
+        except ResearchError as error:
+            if error.code in STORE_REFUSAL_CODES:
+                self.refusals.append(error)
+            raise
+
+    def put(self, content, media_type):
+        return self.source.put(content, media_type)
+
+    def require_local_read(self, purpose):
+        return self.source.require_local_read(purpose)
+
+    def require_external_effect(self):
+        return self.source.require_external_effect()
+
+
+class _SelectionEvaluation(Evaluation):
+    """Include descriptor refusals raised before Evaluation reaches the artifact store."""
+
+    def read(self, reference):
+        try:
+            return super().read(reference)
+        except ResearchError as error:
+            if (isinstance(self.store, _SelectionArtifacts) and error.code == 'unsafe_path'
+                    and error not in self.store.refusals):
+                self.store.refusals.append(error)
+            raise
+
+    def read_json(self, reference, *, strict=False):
+        try:
+            return super().read_json(reference, strict=strict)
+        except ResearchError as error:
+            if (isinstance(self.store, _SelectionArtifacts) and error.code == 'unsafe_path'
+                    and error not in self.store.refusals):
+                self.store.refusals.append(error)
+            raise
+
+
 def select_carried_readings(records, artifacts, inventory, identity):
     """Select R67 candidates latest chain first, then turn number, walking inventory units in order.
 
     Take an overlapping range whole only when it contributes a character not already taken.
     Emit carried turns in recorded order, using only the form consumed by project_carried_turn.
     """
-    candidates = []
-    for chain in list_qualifying_chains(records, artifacts, identity)['chains']:
-        observations = observe_qualifying_chain(records, artifacts, chain, identity)
-        first = records['review_assignment'][chain['chain']]
-        classes = classify_carried_notes(inventory, observations,
-            search_dependencies=_list_search_dependencies(records, artifacts, first))
-        for observation, notes in zip(observations, classes):
-            # The v7 observer must likewise expose only turns that this chain ran itself.
-            if observation['origin']['chain'] != chain['chain'] or observation['turn']['kind'] != 'reading':
-                continue
-            credit = credit_carried_turn(inventory, observation)
-            credit['notes'] = notes
-            candidates.append((observation, credit, dict(credit, ranges=[], searches=[])))
-    for unit in inventory['units']:
-        covered = []
-        for observation, credit, selected in candidates:
-            if unit['identity'].get('record_kind') == 'literature_search':
-                if unit['sha256'] in credit['searches']:
-                    selected['searches'].append(unit['sha256'])
-                    break
-            else:
-                for span in credit['ranges']:
-                    if span['unit'] != unit['handle']:
-                        continue
-                    extended = _merge_ranges(covered + [(span['start'], span['end'])])
-                    if _count_characters(extended) > _count_characters(covered):
-                        selected['ranges'].append(span)
-                        covered = extended
-                if _count_characters(covered) >= unit['characters']:
-                    break
-    selected = [row for observation, credit, row in candidates if row['ranges'] or row['searches']]
-    return sorted(selected, key=lambda row: records['review_attempt'][row['origin']['attempt_id']]['recorded_revision'])
+    while isinstance(artifacts, Evaluation):
+        artifacts = artifacts.store
+    noted = _SelectionArtifacts(artifacts)
+    artifacts = _SelectionEvaluation(records, noted)
+    try:
+        candidates, chains = [], []
+        for chain in list_qualifying_chains(records, artifacts, identity):
+            observations = observe_qualifying_chain(records, artifacts, chain, identity)
+            first = records['review_assignment'][chain['chain']]
+            classes = classify_carried_notes(inventory, observations,
+                search_dependencies=_list_search_dependencies(records, artifacts, first))
+            own = []
+            for observation, notes in zip(observations, classes):
+                # The v7 observer must likewise expose only turns that this chain ran itself.
+                if observation['origin']['chain'] != chain['chain'] or observation['turn']['kind'] != 'reading':
+                    continue
+                credit = credit_carried_turn(inventory, observation)
+                credit['notes'] = notes
+                candidates.append((observation, credit, dict(credit, ranges=[], searches=[])))
+                own.append(observation)
+            chains.append((chain['chain'], own))
+        for unit in inventory['units']:
+            covered = []
+            for observation, credit, selected in candidates:
+                if unit['identity'].get('record_kind') == 'literature_search':
+                    if unit['sha256'] in credit['searches']:
+                        selected['searches'].append(unit['sha256'])
+                        break
+                else:
+                    for span in credit['ranges']:
+                        if span['unit'] != unit['handle']:
+                            continue
+                        extended = _merge_ranges(covered + [(span['start'], span['end'])])
+                        if _count_characters(extended) > _count_characters(covered):
+                            selected['ranges'].append(span)
+                            covered = extended
+                    if _count_characters(covered) >= unit['characters']:
+                        break
+        derived = derive_carried_turns(inventory, chains,
+            {row['origin']['assignment_id']: row for observation, credit, row in candidates})
+        selected = [dict(row, entries=derived[row['origin']['assignment_id']])
+                    for observation, credit, row in candidates if row['origin']['assignment_id'] in derived]
+        return sorted(selected, key=lambda row: records['review_attempt'][row['origin']['attempt_id']]['recorded_revision'])
+    finally:
+        if noted.refusals:
+            raise noted.refusals[0]
 
 
 def build_carried_selection(records, artifacts, inventory, identity):
@@ -264,7 +399,7 @@ def verify_carried_selection(records, artifacts, inventory, identity, selection,
             v7._require_selected(serialize_record(selection) == content)
         keys = ('protocol', 'inventory_digest', 'turns')
         _require_shape(selection, keys + ('affected_notes',) if 'affected_notes' in selection else keys)
-        v7._require_selected(selection['protocol'] == SELECTION_PROTOCOL
+        v7._require_selected(selection['protocol'] in (SELECTION_PROTOCOL_V1, SELECTION_PROTOCOL)
                              and selection['inventory_digest'] == digest(inventory)
                              and isinstance(selection['turns'], list))
         eligible = _select_recorded_attempts(records, identity)
@@ -298,7 +433,8 @@ def verify_carried_selection(records, artifacts, inventory, identity, selection,
             observation = observations[origin['assignment_id']]
             v7._require_selected(observation['origin'] == origin and observation['turn']['kind'] == 'reading'
                                  and selected['notes'] == notes[origin['assignment_id']]
-                                 and bool(selected['ranges'] or selected['searches']))
+                                 and (selection['protocol'] != SELECTION_PROTOCOL_V1
+                                      or bool(selected['ranges'] or selected['searches'])))
             revision = eligible['review_attempt'][origin['attempt_id']]['recorded_revision']
             v7._require_selected(previous_revision < revision < identity['recorded_revision'])
             previous_revision = revision
@@ -322,6 +458,27 @@ def verify_carried_selection(records, artifacts, inventory, identity, selection,
         v7._require_selected(False)
 
 
+def verify_stored_selection(records, artifacts, inventory, identity, selection, *, cutoff=None, plan=None):
+    """Require a v2 stored selection to equal the cutoff selection, then authenticate its items today.
+
+    Version 1 retains its item-only verification. Artifact refusals from selecting the cutoff
+    pass through unchanged, before any comparison with the stored turns.
+    """
+    try:
+        if isinstance(selection, dict) and 'path' in selection:
+            content = artifacts.read(selection)
+            selection = json.loads(content)
+            v7._require_selected(serialize_record(selection) == content)
+        protocol = selection['protocol']
+    except (ResearchError, KeyError, TypeError, ValueError):
+        v7._require_selected(False)
+    if protocol == SELECTION_PROTOCOL:
+        v7._require_selected(cutoff is not None)
+        expected = select_carried_readings(cutoff.records, cutoff, inventory, identity)
+        v7._require_selected(selection.get('turns') == expected)
+    return verify_carried_selection(records, artifacts, inventory, identity, selection, plan=plan)
+
+
 def _describe_missing_ranges(unit, spans):
     missing, start = [], 0
     for left, right in _merge_ranges(spans):
@@ -331,6 +488,41 @@ def _describe_missing_ranges(unit, spans):
     if start < unit['characters']:
         missing.append(dict(start=start, end=unit['characters'], characters=unit['characters'] - start))
     return dict(unit=unit['handle'], ranges=missing, characters=sum(row['characters'] for row in missing))
+
+
+def _describe_outputs(records, artifacts, inventory, identity, selection, qualifying):
+    """Account for every verified excerpt and delivered passage of each qualifying chain."""
+    chains = [(chain['chain'], [row for row in observe_qualifying_chain(records, artifacts, chain, identity)
+               if row['origin']['chain'] == chain['chain'] and row['turn']['kind'] == 'reading'])
+              for chain in qualifying]
+    credits = {row['origin']['assignment_id']: row for row in selection['turns']}
+    derived = derive_carried_turns(inventory, chains, credits)
+    sources, outputs = _index_sources(inventory), []
+    for chain, (chain_id, observations) in zip(qualifying, chains):
+        row = dict(chain=chain_id, protocol=chain['protocol'], reading_turns=len(observations),
+                   carried_turns=sum(value['origin']['assignment_id'] in derived for value in observations),
+                   carried=dict(excerpts=0, passages=0, characters=0),
+                   superseded=dict(excerpts=0, passages=0, characters=0),
+                   source_changed=dict(excerpts=0, passages=0, characters=0))
+        superseded_units = set()
+        for observation in observations:
+            carried = derived.get(observation['origin']['assignment_id'], [])
+            for kind in ('excerpt', 'passage'):
+                for index, entry in enumerate(observation[kind + 's']):
+                    if entry['status'] != ('verified' if kind == 'excerpt' else 'delivered'):
+                        continue
+                    unit = sources.get((digest(entry['identity']), entry['source_sha256']))
+                    state = ('source_changed' if unit is None else 'carried'
+                             if dict(kind=kind, index=index) in carried else 'superseded')
+                    row[state][kind + 's'] += 1
+                    row[state]['characters'] += len(entry['text'])
+                    if state == 'superseded':
+                        superseded_units.add(unit['handle'])
+        if superseded_units:
+            row['message'] = v7.SUPERSEDED_TEXT.format(chain=chain_id, units=len(superseded_units),
+                entries=row['superseded']['excerpts'] + row['superseded']['passages'])
+        outputs.append(row)
+    return outputs
 
 
 def describe_carried_selection(records, artifacts, inventory, identity, selection, *, plan=None):
@@ -364,13 +556,19 @@ def describe_carried_selection(records, artifacts, inventory, identity, selectio
                           for body in inventory['material']]
     remaining = [row for row in remaining if row['ranges']]
     remaining_material = [row for row in remaining_material if row['ranges']]
-    return dict(chains=[dict(chain=chain, turns=turns) for chain, turns in chains.items()],
-                ranges=[dict(unit=unit, start=start, end=end, characters=end - start)
-                        for unit, spans in ranges.items() for start, end in _merge_ranges(spans)],
-                credited_characters=sum(_count_characters(spans) for spans in ranges.values()),
-                searches=searches, entries=entries, notes=notes,
-                remaining=remaining, remaining_characters=sum(row['characters'] for row in remaining),
-                remaining_material=remaining_material,
-                remaining_material_characters=sum(row['characters'] for row in remaining_material),
-                credited_material_characters=sum(_count_characters(spans) for spans in material_ranges.values()),
-                passed_over=list_qualifying_chains(records, artifacts, identity)['passed_over'])
+    uncarried = list_passed_over_chains(records, artifacts, identity)
+    report = dict(chains=[dict(chain=chain, turns=turns) for chain, turns in chains.items()],
+                  ranges=[dict(unit=unit, start=start, end=end, characters=end - start)
+                          for unit, spans in ranges.items() for start, end in _merge_ranges(spans)],
+                  credited_characters=sum(_count_characters(spans) for spans in ranges.values()),
+                  searches=searches, entries=entries, notes=notes,
+                  remaining=remaining, remaining_characters=sum(row['characters'] for row in remaining),
+                  remaining_material=remaining_material,
+                  remaining_material_characters=sum(row['characters'] for row in remaining_material),
+                  credited_material_characters=sum(_count_characters(spans) for spans in material_ranges.values()),
+                  passed_over=uncarried['passed_over'],
+                  outputs=_describe_outputs(records, artifacts, inventory, identity, selection,
+                                            list_qualifying_chains(records, artifacts, identity)))
+    if uncarried['unavailable_chains']:
+        report['unavailable_chains'] = uncarried['unavailable_chains']
+    return report

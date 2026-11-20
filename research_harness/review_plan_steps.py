@@ -368,6 +368,26 @@ def complete_plan(records, artifacts, assignment, plan):
         number = steps[-1] if steps[-1] in (4, 5, 6) else 1
         details['step'] = describe_step(records, artifacts, assignment, number)
         plan.update(state='handoff', command=details['step']['command'])
+    elif code == 'review_route_runtime_stale' and details.get('renewal', {}).get('admitted') is False:
+        # A refused head outside the renewal: the steps of the stale-route procedure for its role.
+        numbers = select_route_steps(records, artifacts, assignment)
+        if numbers in ([4], [5]):
+            numbers = [7] + numbers
+        details['steps'] = [describe_step(records, artifacts, assignment, number) for number in numbers]
+        details['step'] = details['steps'][0]
+        plan.update(state='handoff', command=details['step']['command'])
+    elif code == 'review_route_runtime_stale' and details.get('renewal', {}).get('lacks') in ('probe', 'capacity'):
+        # The renewed route record lacks its probe or its capacity evidence; review-series then sends the replacement.
+        renewal = details['renewal']
+        candidate = dict(assignment, route_id=renewal['route_id'])
+        if renewal['lacks'] == 'capacity':
+            details['step'] = describe_step(records, artifacts, candidate, 16)
+            details['step']['payload']['capacity'] = dict(input_tokens=renewal['capacity']['input_tokens'])
+        else:
+            details['step'] = describe_step(records, artifacts, candidate, 7)
+            details['step'].update(command='review-probe', payload=dict(route_id=renewal['route_id']), chooses=['id'])
+        details['step']['then'] = [dict(command='review-series', assignment_id=assignment['id'])]
+        plan.update(state='handoff', command='review-probe')
     elif code in ('review_runtime_missing', 'review_route_runtime_stale') or (
             code == 'review_context_unverified' and plan['state'] == 'handoff'):
         details['step'] = describe_step(records, artifacts, assignment, 7)
@@ -378,6 +398,8 @@ def complete_plan(records, artifacts, assignment, plan):
             details['step'].update(command='review-probe', payload=dict(route_id=assignment['route_id']),
                                    chooses=['id'])
             details['step'].pop('then', None)
+        elif details.get('renewal', {}).get('lacks') == 'record':
+            details['step']['then'].append(dict(command='review-series', assignment_id=assignment['id']))
     elif code == 'review_route_capacity_below_floor':
         details['step'] = describe_step(records, artifacts, assignment, 7)
         plan.update(state='handoff', command='review-route')

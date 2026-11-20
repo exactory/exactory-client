@@ -748,21 +748,37 @@ during upgrade can temporarily run alongside the configured capacity.
 
 A route pins the adapter runtime it was recorded with: the adapter's controls,
 its input contract and the SHA-256 of its module, and for a Codex route also the
-version and the path of the installed Codex CLI. Verification of probes and
-attempts uses that pinned runtime, so a review bound on a route stays verifiable
-after a plugin update changes the adapter or a Codex update changes the CLI.
-Execution requires the installed adapter runtime to match the route's pinned
-runtime. When it differs, `review-probe` and `review-run` on that route are
-refused with `review_route_runtime_stale` before any call and before any record
-is written. The refusal means that the plugin or the Codex CLI now installed
-differs from the one the route was recorded with. It says nothing about the
-route's earlier probes and attempts, which keep their standing. Record a new
-route with a new id and the same adapter, model, endpoint and configuration,
-probe it, and assign new reviews on it. An assignment on the stale route that
-has no observed output cannot run: assign its role again on the new route, or,
-for a slot with history, retire the stale route and continue the slot through
-a context repair, as described below. The 0.66.0 release changed the bytes of
-the three Codex transports, so every Codex route recorded before it is stale.
+version and the path of the installed Codex CLI. Verification of probes,
+attempts and output corrections uses that pinned runtime, so a review bound on
+a route stays verifiable after a plugin update changes the adapter or a Codex
+update changes the CLI. Execution requires the installed adapter runtime to
+match the route's pinned runtime. A route record is stale when the runtime that
+it pins is not equal to the installed runtime, as `review-run` compares the
+two. `review-assignment`, `review-probe`, `review-run` and
+`review-output-correction` on a stale route are refused with
+`review_route_runtime_stale` before any call and before any record is written.
+`review-assignment` refuses every new assignment there: a first turn, a next
+turn, a replacement and the child of a staged review. The refusal means that
+the plugin or the Codex CLI now installed differs from the one the route was
+recorded with. It says nothing about the earlier probes, attempts and output
+corrections of the route, which keep their standing. Record a new route with a
+new id and the same adapter, model, endpoint and configuration, probe it, and
+assign new reviews on it. An assignment on the stale route that has no observed
+output cannot run: assign its role again on the new route. For a refused
+session turn, the replacement runs on the new route, and `review-series` plans
+it (the [CLI reference](research-cli.md#review-chains-and-review-series), "The
+renewal of the route"). For a slot with history, retire the stale route and
+continue the slot through a context repair, as described below. The plan of a
+refused head and `review-assignment` read the installed runtime as `review-run`
+does. While the installed runtime of a route cannot be read, for example while
+the Codex CLI is missing, `review-assignment` records a new assignment as
+before, and `review-run` then refuses it with `review_runtime_missing`. Under
+`record-check` the reading of an HTTPS route holds its adapter and the hash of
+its transport file alone, and these two members are compared with the same two
+members of the pinned runtime. A change of the host, the platform or the Python
+version of an HTTPS route then shows at the command and not in the check. The
+0.66.0 release changed the bytes of the three Codex transports, so every Codex
+route recorded before it is stale.
 The `openai_responses_v1` route pins the SHA-256 of the shared transport module
 `research_harness/review_transport.py`, with the host name, the platform and
 the Python version of the recording process. The 0.67.0 release changed the
@@ -915,8 +931,11 @@ slot's last observed assignment, `source: "owner"` or the actual cause, a
 reason, and the owner's instruction as the evidence artifact. From then on the
 route accepts no new assignment and no run (`review_route_retired`), an
 assignment on it that never produced an observed output is dead and holds no
-slot, and the observed outputs on it stay verified. The slot continues through
-the context-repair path: probe another route after the retirement, then assign
+slot, and the observed outputs on it stay verified. A corrected output is an
+observed output. If a later record retires its route or the route of its
+correction, the assignment keeps the corrected output. The slot continues
+through the context-repair path: probe another route after the retirement, then
+assign
 the same role with `context.context_repair` naming the retirement event, its
 evidence and the probe. The repair packet carries the cause under
 `context_repair.cause`, so the replacement reviewer reads why it reassesses.

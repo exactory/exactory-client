@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 import test_research_problem_reviews as fixtures
-from research_harness import literature, reading, research_decisions as decisions
+from research_harness import cli, literature, reading, research_decisions as decisions
 from research_harness import review_protocol as protocol, review_refusal as refusal
 from research_harness.evidence import digest
 from research_harness.errors import ResearchError
@@ -14,7 +14,9 @@ from research_harness.source_links import span_locator
 
 
 class PartOffsetReplacementIncidentTests(unittest.TestCase):
-    def test_revision_200_repaired_bar_gets_part_offsets_and_records_in_its_slot(self):
+    def build_revision_200(self):
+        """The store of record 7 at revision 200: a repaired bar continuation with two refused answers that cite the
+        second part of a split full text with whole-text offsets."""
         # Shape and quantities: 20261112072628-bar-final-refused-for-part-citation-with-whole-text-offsets, T2.
         case = fixtures.ProblemReviewTests()
         case.setUp()
@@ -94,6 +96,10 @@ class PartOffsetReplacementIncidentTests(unittest.TestCase):
         while case.store.revision < 200:
             case.put('fixture_revision', 'padding', dict(value=case.store.revision))
         self.assertEqual(case.store.revision, 200)
+        return case, parent, bad, part_text, version, invoke
+
+    def test_revision_200_repaired_bar_gets_part_offsets_and_records_in_its_slot(self):
+        case, parent, bad, part_text, version, invoke = self.build_revision_200()
         before = copy.deepcopy(case.read_records())
         relative = copy.deepcopy(bad)
         relative['value']['evidence'][0]['link']['locator'] = span_locator(part_text, 0, 38629)
@@ -158,3 +164,37 @@ class PartOffsetReplacementIncidentTests(unittest.TestCase):
         for kind in ('review_output_refusal', 'review_assignment', 'review_attempt'):
             for key, value in before[kind].items():
                 self.assertEqual(after[kind][key], value)
+
+    def test_revision_200_stale_route_records_through_a_replacement_on_a_renewed_route(self):
+        """The route of the chain pins an earlier reviewer runtime, as the route of record 7 did at revision 200."""
+        from research_harness.review_series import run_series
+        case, parent, bad, part_text, _, _ = self.build_revision_200()
+        route = case.read_records()['review_route']['route']
+        installed = dict(route['runtime'], implementation_sha256='0' * 64)
+        corrected = copy.deepcopy(bad)
+        corrected['value']['evidence'][0]['link']['locator'] = span_locator(part_text, 0, 38629)
+        def respond(route, request, credential):
+            packet = json.loads(request['input'][0]['content'].split('\n', 1)[1])
+            if 'allowed_control' in packet:
+                return case.build_provider_response(dict(allowed_control=packet['allowed_control'],
+                    evidence_control=packet['evidence_control'], excluded_controls=[]))
+            return case.build_provider_response(corrected)
+        lines = []
+        with patch.object(protocol.transport, 'runtime', return_value=installed), \
+                patch.object(protocol.transport, 'send_request', side_effect=respond):
+            case.mutate(cli.OPERATIONS['review-route'], dict(id='route-renewed',
+                **{key: route[key] for key in ('adapter', 'model', 'endpoint', 'configuration')}))
+            case.mutate(protocol.probe_route, dict(id='renewed-probe', route_id='route-renewed'), credential='fixture')
+            run_series(case.store, parent['id'], emit=lines.append)
+        # On 0.91.2 the series ends with the handoff review-route under review_route_runtime_stale.
+        self.assertEqual(lines[-1]['state'], 'done', lines[-1])
+        records = case.read_records()
+        [replacement] = [row for row in records['review_assignment'].values()
+                         if row['context'].get('output_refusal') == {'assignment_id': parent['id']}]
+        self.assertEqual(replacement['route_id'], 'route-renewed')
+        notice = protocol._read_json(case.artifacts, replacement['packet'])['output_refusal']
+        self.assertEqual([entry['attempt_id'] for entry in notice['refused']], ['refused-1', 'refused-2'])
+        for entry in notice['refused']:
+            self.assertEqual(entry['details']['part_relative_span'], dict(start=0, end=38629))
+        self.assertEqual((replacement['slot_id'], replacement['reviewer_id']), (parent['slot_id'], parent['reviewer_id']))
+        self.assertTrue(any(row['assignment_id'] == replacement['id'] for row in records['value_review'].values()))

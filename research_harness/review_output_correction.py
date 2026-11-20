@@ -187,6 +187,8 @@ def validate_output(records, artifacts, assignment, packet, output):
 
 
 def _authenticate_observation(records, artifacts, invocation, observation):
+    """Authenticate one correction observation from the stored records and artifacts alone. Its recorded runtime is
+    the runtime that its route record pins. The installed runtime decides only whether a new call starts."""
     from . import review_protocol as protocol
     assignment = records['review_assignment'][invocation['assignment_id']]
     route = _route(records, artifacts, assignment, invocation['route_id'])
@@ -199,7 +201,7 @@ def _authenticate_observation(records, artifacts, invocation, observation):
             or invocation['prompt_hash'] != digest(PROMPT) or invocation['diagnostic'] != packet['diagnostic']
             or invocation['route_digest'] != digest(route) or request != expected
             or observation['request_digest'] != digest(request) or observation['route_digest'] != digest(route)
-            or observation['runtime'] != protocol.read_route_runtime(artifacts, route)
+            or observation['runtime'] != route['runtime']
             or observation['status'] != 'completed'
             or observation.get('observed_model') != route['model']
             or response.get('model') != route['model']
@@ -219,6 +221,7 @@ def _authenticate_observation(records, artifacts, invocation, observation):
 
 def invoke_correction(store, payload, *, expected_revision, request_id, credential=None, after_start=None):
     from . import review_protocol as protocol
+    from .review_route_capacity import read_installed_cli_version
     artifacts = store.build_artifact_store()
 
     def start(records, value):
@@ -231,6 +234,11 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
             raise ResearchError('review_correction_exhausted', 'One correction invocation exhausts this assignment, including failure or decline.')
         built = build_request(records, artifacts, value['assignment_id'], value['route_id'])
         packet, route, request = (built['packet'], built['route'], built['request'])
+        # The one correction of the assignment is recorded only for a call that can start: the route record pins the
+        # installed runtime, and the reviewer program is installed. The Claude runtime reads no program, so the
+        # program is read here as the sender reads it.
+        protocol._require_route_runtime(route)
+        protocol.retry_runtime_check(read_installed_cli_version, route)
         invocation = dict(value, protocol=PROTOCOL, diagnostic=packet['diagnostic'], packet_digest=digest(packet),
             preflight=built['preflight'],
             prompt_hash=digest(PROMPT), route_digest=digest(route), request=protocol._put_json(artifacts, request),
@@ -257,13 +265,13 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
                         'The correction answer reached the output limit of the route, so the harness does not use '
                         'it, and the one correction of this assignment is spent. Run review-series on the head '
                         'for the next step.')
-                evaluation = Evaluation.of(records, artifacts)
-                assignment, packet, output = _authenticate_observation(records, evaluation, invocation, result)
+                origin = protocol.read_origin(records, artifacts, invocation['recorded_revision'])
+                assignment, packet, output = _authenticate_observation(origin.records, origin, invocation, result)
                 if set(output) == {'correction', 'reason'} and output['correction'] == 'declined':
                     text(output['reason'], 'Decline reason')
                     result['correction_status'] = 'declined'
                 else:
-                    corrected = validate_output(records, evaluation, assignment, packet, output)
+                    corrected = validate_output(origin.records, origin, assignment, packet, output)
                     result['corrected_output'] = protocol._put_json(artifacts, corrected)
                     result['correction_status'] = 'accepted'
             except (ResearchError, ValueError, TypeError, KeyError, OSError) as error:
@@ -277,7 +285,10 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
 
 
 def selected_correction(records, artifacts, assignment_id):
-    """Return only an exact authenticated observed correction; raw attempts remain refused."""
+    """Return only an exact authenticated observed correction; raw attempts remain refused. The correction is
+    authenticated against the records as they stood when its call was admitted, as an attempt is: a record that came
+    later does not unselect it and acts in the state of the assignment."""
+    from . import review_protocol as protocol
     invocations = [item for item in records.get('review_output_correction_invocation', {}).values()
                    if item['assignment_id'] == assignment_id]
     if len(invocations) != 1:
@@ -291,17 +302,15 @@ def selected_correction(records, artifacts, assignment_id):
                 or any(result.get(key) != invocation.get(key) for key in ('id', 'assignment_id', 'route_id', 'protocol', 'diagnostic'))
                 or result['recorded_revision'] <= invocation['recorded_revision']):
             return None
-        evaluation = Evaluation.of(records, artifacts)
-        assignment, packet, output = _authenticate_observation(records, evaluation, invocation, result)
-        corrected = validate_output(records, evaluation, assignment, packet, output)
+        origin = protocol.read_origin(records, artifacts, invocation['recorded_revision'])
+        assignment, packet, output = _authenticate_observation(origin.records, origin, invocation, result)
+        corrected = validate_output(origin.records, origin, assignment, packet, output)
         if (result.get('composition') != 'original-output-plus-observed-metadata-delta'
                 or json.loads(artifacts.read(result['corrected_output'])) != corrected):
             return None
-        selected = {'id': result['id'], 'attempt_id': packet['diagnostic']['attempt_id'], 'output': corrected,
-                    'source_raw_output_digest': packet['diagnostic']['original_output_digest'],
-                    'corrected_raw_output_digest': digest(corrected)}
-        if assignment.get('staged_review') is not None:
-            selected['requires_reauthorization'] = True
-        return selected
+        return {'id': result['id'], 'attempt_id': packet['diagnostic']['attempt_id'], 'output': corrected,
+                'route_id': invocation['route_id'],
+                'source_raw_output_digest': packet['diagnostic']['original_output_digest'],
+                'corrected_raw_output_digest': digest(corrected)}
     except (ResearchError, ValueError, TypeError, KeyError):
         return None

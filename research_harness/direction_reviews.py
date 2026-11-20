@@ -51,6 +51,7 @@ def _collect_task_graph(records, artifacts, assignment_id, *, historical):
     epoch = records['review_epoch'][binding['epoch_id']]
     controller_id = epoch['controller_assignment_id']
     from .review_staged_protocol import collect_epoch_acceptances, collect_observations, list_epoch_tasks
+    from .storage import read_filtered_records
     tasks = list_epoch_tasks(records, epoch)
     selected, _, obligations = collect_observations(records, evaluation, epoch, include_contaminated=historical)
     for problem in obligations:
@@ -65,14 +66,19 @@ def _collect_task_graph(records, artifacts, assignment_id, *, historical):
             continue
         child = records['review_assignment'][attempt['assignment_id']]
         raw = protocol.read_raw_observation(records, evaluation, attempt['id'])
-        if any(row['assignment_id'] == child['id'] for row in
-               records.get('review_output_correction_invocation', {}).values()):
-            from .review_output_correction import selected_correction
-            correction = selected_correction(records, evaluation, child['id'])
-            if correction is not None and correction.get('requires_reauthorization'):
+        # A correction of the child that is pending or accepted withholds the composition that rests on its raw
+        # output, as the exhaustion binding of a context repair reads the same two states.
+        for invocation in read_filtered_records(
+                records, 'review_output_correction_invocation', assignment_id=child['id']).values():
+            correction = records.get('review_output_correction', {}).get(invocation['id'])
+            details = {'attempt_id': attempt['id'], 'output_correction_id': invocation['id']}
+            if correction is None:
                 raise ResearchError('review_composition_pending',
-                    'A raw task correction invalidates its dependent composition; authorize a new root.',
-                    {'attempt_id': attempt['id'], 'output_correction_id': correction['id']})
+                    'A raw task correction is pending. Reconcile it before you read its dependent composition.',
+                    details)
+            if correction['correction_status'] == 'accepted':
+                raise ResearchError('review_composition_pending',
+                    'A raw task correction invalidates its dependent composition; authorize a new root.', details)
         binder = getattr(staged, 'bind_quotations', None)
         bound, _ = (binder(raw['raw_output'], epoch=epoch, sources=epoch['manifest']['sources'])
                     if binder is not None else (raw['raw_output'], []))

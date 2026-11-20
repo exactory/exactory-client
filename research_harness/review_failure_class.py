@@ -360,14 +360,31 @@ def classify_attempt(records, artifacts, attempt):
     return dict(outcome=outcome, signal=signal, reset_at=reset_at)
 
 
+def read_position_origin(records, assignment):
+    """The first assignment of a turn position, reached by following the refusal links back."""
+    from .review_refusal_replacement import KEY
+    seen = {assignment['id']}
+    while True:
+        prior = records.get('review_assignment', {}).get(
+            (assignment.get('context', {}).get(KEY) or {}).get('assignment_id'))
+        if prior is None or prior['id'] in seen:
+            return assignment
+        seen.add(prior['id'])
+        assignment = prior
+
+
 def list_turn_assignments(records, assignment):
-    """Group replacements of the same initial context or the same continuation parent."""
-    from .review_refusal_replacement import read_position_context
+    """Group replacements of the same initial context or the same continuation parent. A first-turn position also
+    holds every assignment that a refusal link ties to one of its members, whatever route record it names."""
+    from .review_refusal_replacement import KEY, read_position_context
     capacity_chain = assignment.get('capacity_plan') and assignment.get('reading_chain')
     if capacity_chain:
         while assignment.get('capacity_replacement_of'):
             assignment = records['review_assignment'][assignment['capacity_replacement_of']]
     parent = assignment.get('context', {}).get('prior_assignment_id')
+    linked = parent is None and not capacity_chain
+    if linked:
+        assignment = read_position_origin(records, assignment)
     result = []
     for other in records.get('review_assignment', {}).values():
         if other.get('role') != assignment['role']:
@@ -392,6 +409,15 @@ def list_turn_assignments(records, assignment):
                             key=lambda row: row['recorded_revision']):
             if other.get('capacity_replacement_of') in result and other['id'] not in result:
                 result.append(other['id'])
+    members, grown = set(result), linked
+    while grown:
+        grown = False
+        for other in records.get('review_assignment', {}).values():
+            if (other['id'] not in members and other.get('role') == assignment['role']
+                    and (other.get('context', {}).get(KEY) or {}).get('assignment_id') in members):
+                result.append(other['id'])
+                members.add(other['id'])
+                grown = True
     return result
 
 
@@ -673,6 +699,18 @@ REFUSAL_NOTICE_HANDOFF_MSG = (
     'bounded notice still exceeds 45,000 characters after its details and its refused part are shortened. No '
     'replacement can carry the refusal. Take the step in the details; it continues the slot or the chain as '
     'the step of an exhausted position does.')
+ROUTE_RENEWAL_MSG = (
+    'This head holds a refused answer, and its route record pins another reviewer runtime than the installed one. '
+    'Such a route record takes no assignment, so no replacement was recorded. When details.renewal.admitted is true, '
+    'the replacement can run on another route record. That record has the same adapter, model, endpoint and '
+    'configuration, and it pins the installed runtime. details.renewal.lacks names what the store lacks for it, and '
+    'details.step holds the command. When details.renewal.lacks is record, record such a route and probe it. When '
+    'details.renewal.lacks is probe, probe the route record that details.renewal.route_id names. When '
+    'details.renewal.lacks is capacity, obtain the authorization of the owner first, because the capacity probe is a '
+    'paid call. Then run the capacity probe of details.step. After the step, run review-series on this head again. '
+    'It records and sends the replacement on the other route record, or it names the next step. When '
+    'details.renewal.admitted is false, the replacement of this head cannot run on another route record. Take the '
+    'steps of the stale-route procedure in the order of details.steps.')
 
 
 def plan_refusal_recovery(records, artifacts, assignment):
@@ -726,6 +764,19 @@ def plan_refusal_recovery(records, artifacts, assignment):
         payload['id'] = _find_unused_id(records, assignment['id'] + '-refusal',
                                        maximum=protocol.openness_reading.RESERVED_IDENTIFIER_CHARACTERS)
     payload['context']['output_refusal'] = {'assignment_id': assignment['id']}
+    renewal = None
+    route = records['review_route'][assignment['route_id']]
+    if route['id'] not in protocol.retired_routes(records):
+        try:
+            if protocol.is_route_stale(artifacts, route):
+                renewal = review_refusal_replacement.describe_route_renewal(records, artifacts, assignment)
+        except ResearchError as error:
+            if error.code != 'review_runtime_missing':
+                raise
+    renewed = (renewal is not None and renewal['route_id'] is not None and renewal['lacks'] is None
+               and 'unserved' not in renewal)
+    if renewed:
+        payload['route_id'] = renewal['route_id']
     value = dict(payload)
     if 'subject' in assignment:
         value['subject'] = assignment['subject']
@@ -742,7 +793,21 @@ def plan_refusal_recovery(records, artifacts, assignment):
             return dict(result, state='run')
         elif error.code not in ('review_slot_exhausted', 'review_refusal_replacement_ineligible', 'review_input_too_large'):
             raise
-        return result
+        if error.code != 'review_input_too_large' or renewal is None or not renewal['admitted']:
+            return result
+        if renewed:
+            probe = review_refusal_replacement.select_renewal_probe(records, staged, value, revision,
+                                                                    error.details['trials'])
+            renewal = (dict(renewal, unserved=probe) if 'reason' in probe
+                       else dict(renewal, lacks='capacity', capacity=probe))
+        candidate = None
+    if renewal is not None and (candidate is None or not renewed):
+        # A stale route record takes no assignment: the handoff names what a renewal lacks, before any record.
+        details.update(route_id=assignment['route_id'], renewal=renewal)
+        if 'unserved' in renewal:
+            return result
+        details['message'] = ROUTE_RENEWAL_MSG
+        return dict(result, state='handoff', command='review-route', code='review_route_runtime_stale')
     packet = protocol._read_json(staged, candidate['packet'])
     details['form'] = packet['output_refusal']['form']
     return dict(result, state='replace', payload=payload)

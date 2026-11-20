@@ -479,7 +479,8 @@ def describe_correction_observation(records, artifacts, invocation, observation)
     result = {'authenticated': False, 'status': observation['status']}
     if observation['status'] == 'completed':
         try:
-            _authenticate_observation(records, artifacts, invocation, observation)
+            origin = protocol.read_origin(records, artifacts, invocation['recorded_revision'])
+            _authenticate_observation(origin.records, origin, invocation, observation)
         except (ResearchError, json.JSONDecodeError) as error:
             result['error_code'] = error.code if isinstance(error, ResearchError) else 'record_json_invalid'
         else:

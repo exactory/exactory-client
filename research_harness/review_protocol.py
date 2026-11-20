@@ -18,6 +18,7 @@ import stat
 import time
 import uuid
 from collections import ChainMap
+from collections.abc import Mapping
 from contextlib import ExitStack
 
 from .artifacts import ArtifactStore, describe_artifact, validate_reference
@@ -2459,6 +2460,41 @@ def read_route_runtime(artifacts, route):
     return transport.runtime(route)
 
 
+def is_route_stale(artifacts, route):
+    """Whether the runtime that this route record pins differs from the installed one, as review-run compares them.
+    record-check reads an HTTPS route by its adapter and the hash of its transport file alone; that reading is
+    compared with the same two members of the pinned runtime."""
+    from .evaluation import Evaluation
+    store = artifacts.store if isinstance(artifacts, Evaluation) else artifacts
+    installed = store.read_runtime_fingerprint(route)
+    pinned = route['runtime']
+    if route['adapter'] == transport.ADAPTER and set(installed) == {'adapter', 'implementation_sha256'}:
+        pinned = {key: pinned.get(key) for key in installed}
+    return installed != pinned
+
+
+def require_installed_runtime(records, artifacts, route, value):
+    """Record no assignment on a route record that pins another reviewer runtime than the installed one. A retired
+    route record keeps the refusal of its retirement."""
+    if route['id'] in retired_routes(records):
+        return
+    try:
+        if not is_route_stale(artifacts, route):
+            return
+    except ResearchError as error:
+        if error.code != 'review_runtime_missing':
+            raise
+        return
+    details = dict(route_id=route['id'])
+    binding = value['context'].get('output_refusal')
+    prior_id = binding.get('assignment_id') if isinstance(binding, dict) else None
+    prior = records.get('review_assignment', {}).get(prior_id) if isinstance(prior_id, str) else None
+    if prior is not None:
+        from .review_refusal_replacement import describe_route_renewal
+        details['renewal'] = describe_route_renewal(records, artifacts, prior)
+    raise ResearchError('review_route_runtime_stale', ROUTE_RUNTIME_STALE_MSG, details)
+
+
 def verify_route_context(artifacts, route, request, response, *, required=False):
     if route['adapter'] in transport.LOCAL_ADAPTERS:
         from .evaluation import Evaluation
@@ -2488,10 +2524,19 @@ def retry_runtime_check(check, *args):
         time.sleep(_RUNTIME_RETRY_SECONDS[index])
 
 
+ROUTE_RUNTIME_STALE_MSG = (
+    'This route record pins another reviewer runtime than the installed one, so it takes no new assignment, run, '
+    'probe or output correction. The command recorded nothing and sent no request. Use another route record with the '
+    'same adapter, model, endpoint and configuration. It must pin the installed runtime and be verified by a probe. '
+    'When the store holds none, record one and probe it. For a first assignment or an output correction, run the '
+    'command again with the id of that route record as route_id. An assignment that stands on this route record '
+    'cannot run, and its chain takes no next turn and no replacement on it. For these, take the step that '
+    'review-series plans for the head.')
+
+
 def _require_route_runtime(route):
     if retry_runtime_check(transport.runtime, route) != route['runtime']:
-        raise ResearchError('review_route_runtime_stale',
-                            'The installed reviewer adapter differs from the one this route pins; record and probe a new route')
+        raise ResearchError('review_route_runtime_stale', ROUTE_RUNTIME_STALE_MSG)
 
 
 def validate_observation_fields(observation):
@@ -3572,6 +3617,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         route = _get(records, 'review_route', value['route_id'])
         if value['route_id'] in retired_routes(records):
             raise ResearchError('review_route_retired', 'The route was retired; assign on another route, and continue a preserved slot through a context repair')
+        require_installed_runtime(records, artifacts, route, value)
         if value['dossier_id'] is not None:
             d = _payload(_get(records, 'strategy_dossier', value['dossier_id']))
             intent = _payload(_get(records, 'research_intent', d['intent_id']))
@@ -4435,6 +4481,11 @@ def read_assignment_output(records, artifacts, assignment_id):
     return None, None
 
 
+ROUTE_CONTEXT_MSG = ('Independent approval requires this actual tested route and uncontaminated context. When an '
+                     'output correction completed the output on another route record, that route record must be '
+                     'verified too.')
+
+
 def assignment_state(records, artifacts, assignment_id):
     if records.get('review_assignment', {}).get(assignment_id) is None:
         return _assignment_state(records, artifacts, assignment_id)
@@ -4483,7 +4534,7 @@ def _assignment_state(records, artifacts, assignment_id):
     if route is None or digest(route) != assignment['route_digest'] or not _prompt_matches(assignment, packet=packet):
         state['context_status'] = 'unverified' if not events else 'contaminated'
     if state['context_status'] != 'verified_for_route':
-        state['obligations'].append(obligation('review_context_' + state['context_status'], 'Independent approval requires this actual tested route and uncontaminated context.', assignment_id=assignment_id))
+        state['obligations'].append(obligation('review_context_' + state['context_status'], ROUTE_CONTEXT_MSG, assignment_id=assignment_id))
     try:
         from .evaluation import Evaluation
         repair_records = _read_context_records(records, assignment)
@@ -4534,9 +4585,14 @@ def _assignment_state(records, artifacts, assignment_id):
             original = records['review_attempt'][correction['attempt_id']]
             if 'answer_recovery' in original:
                 state['answer_recovery'] = copy.deepcopy(original['answer_recovery'])
+            # The corrected output rests on a second observation, so its route counts as the route of the assignment does.
+            correction_route_status = route_state(records, artifacts, correction['route_id'])['context_status']
+            if correction_route_status != 'verified_for_route' and state['context_status'] == 'verified_for_route':
+                state['context_status'] = correction_route_status
+                state['obligations'].append(obligation('review_context_' + state['context_status'], ROUTE_CONTEXT_MSG, assignment_id=assignment_id))
     else:
         state['obligations'].append(obligation('review_output_pending', 'A complete observed reviewer response is required.'))
-    if binding is None and assignment['route_id'] in retired_routes(records):
+    if binding is None and state['output'] is None and assignment['route_id'] in retired_routes(records):
         state['obligations'].append(obligation('review_route_retired', 'The route of this assignment was retired before an observed output; continue its slot through a context repair on another route.'))
     if assignment['role'] in bar_sources.ROLES:
         state.update(source_request_status='not_assessed', source_requests=[], pending_source_requests=[], source_request_obligations=[])
@@ -4569,6 +4625,45 @@ def _assignment_state(records, artifacts, assignment_id):
         state['obligations'].append(obligation('review_assignment_replaced', NOT_SELECTED_MSG, assignment_id=successor['id']))
     state['ready'] = not state['obligations']
     return state
+
+
+# The review records that are written once and keep the revision of their commit.
+ORIGIN_KINDS = ('review_assignment', 'review_invocation', 'review_attempt', 'review_context_event',
+                'review_probe_invocation', 'review_route_probe', 'review_output_refusal',
+                'review_output_correction_invocation', 'review_output_correction')
+
+
+class _OriginRows(Mapping):
+    """The rows of one record kind that were recorded before a revision. A keyed read and an iteration reach what
+    they reach in the wrapped rows, so the origin of a scoped view lists and serves the same rows as that view. A
+    filtered read of the origin reaches only the rows that the wrapped rows list."""
+
+    def __init__(self, rows, revision):
+        self._rows, self._revision = rows, revision
+
+    def __getitem__(self, key):
+        row = self._rows[key]
+        if row['recorded_revision'] >= self._revision:
+            raise KeyError(key)
+        return row
+
+    def __iter__(self):
+        return (key for key, row in self._rows.items() if row['recorded_revision'] < self._revision)
+
+    def __len__(self):
+        return sum(1 for _ in self)
+
+
+def read_origin(records, artifacts, revision):
+    """The review records as they stood before one revision, as an evaluation of their own: every row of ORIGIN_KINDS
+    that was recorded at that revision or later is left out, and every other kind is read as it stands. A stored
+    observation is authenticated against the origin of its call; later records govern the state of today without
+    rewriting that origin. The view is memoized in the evaluation's arena, and it is stable only within the caller's
+    immutable snapshot."""
+    from .evaluation import Evaluation
+    evaluation = Evaluation.of(records, artifacts)
+    return evaluation.once(('review_origin', revision), lambda: Evaluation.of(dict(records, **{
+        kind: _OriginRows(records.get(kind, {}), revision) for kind in ORIGIN_KINDS}), evaluation))
 
 
 def retired_routes(records):

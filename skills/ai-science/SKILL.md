@@ -152,14 +152,24 @@ without an output, and the same reviewer identity is not sampled again) names
 `review_route_retired` name `review-assignment` for a context repair.
 `review_recording_required` names the recording step of another role:
 `manuscript-review`, `export` with kind `outputs` for a standalone review, or
-`review`. `review_route_runtime_stale` names `review-route`. The planner keeps
-the route of the chain, so `review-series` on the same head gives this handoff
-again. Record a new route with a new id and the same adapter, model, endpoint
-and configuration. Probe it. Then follow the stale-route procedure of the
-[route instructions](../../docs/research-decisions.md#commands-and-shared-state):
-assign the role again on the new route, or, for a slot with history, retire
-the stale route and continue the slot through a context repair. Then run
-`review-series` with the new assignment. Exit status 3 with a
+`review`. `review_route_runtime_stale` names `review-route`, or for a head that
+holds a refused answer the command of `details.step`. The route record of the
+head pins another reviewer runtime than the installed one, and
+`review-assignment` records no assignment on such a route. When the handoff
+carries `details.renewal` with `admitted: true`, the replacement of the refused
+answer can run on another route record. `details.step` then names what that
+needs: a new route record and its probe, a probe, or a capacity probe. A
+capacity probe is a paid call, so obtain the owner's authorization before you
+run it. Take the step, and then run `review-series` on the same head again.
+When `admitted` is false, or the member is absent, the planner keeps the route
+of the chain, so `review-series` on the same head gives this handoff again.
+Record a new route with a new id and the same adapter, model, endpoint and
+configuration. Probe it. Then follow the stale-route procedure of the [route
+instructions](../../docs/research-decisions.md#commands-and-shared-state):
+assign the role again on the new route, or, for a slot with history, retire the
+stale route and continue the slot through a context repair. When `admitted` is
+false, `details.steps` lists these steps. Then run `review-series` with the new
+assignment. Exit status 3 with a
 `stop` on the last line: a typed limit or refusal with its `code` and
 `details`; the harness cannot continue the chain. `review_slot_exhausted`
 (the turn position is exhausted: no correction and no replacement that carries

@@ -2,6 +2,25 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "carried-selection-leaves-out-turns-without-a-credit",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "carried selection",
+      "summary": "The selection of a new v7 chain carried a turn only when a range or a completed search was taken from it. A turn that delivered shared search fields or an earlier part of a search record was left out with its notes, excerpts and passage answers: on the store of record 12 at revision 1646, 12 of the 57 turns of the stopped chain with 164 entries. The verifier required a range or a search of every stored turn, so it agreed.",
+      "expected": "Every ready reading turn of a chain that the selection takes anything from is carried with its notes. An excerpt or a passage answer is carried when its own source is unchanged, unless the selection takes the reading of that unit from other chains, and the receipt counts every entry as carried, superseded or with a changed source. A selection of version 2 that lacks a turn, the end of a chain, a chain or an entry does not verify.",
+      "fixed_in": "0.91.4",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_carried.V5PartialSearchTests.test_turn_with_an_earlier_part_of_a_search_is_carried_with_its_entries",
+        "test_openness_carried.V5PartialSearchTests.test_last_ready_turn_without_a_credit_gives_the_starting_notes",
+        "test_openness_carried.V5CarriedSelectionTests.test_entry_of_a_turn_whose_delivered_units_changed_is_carried",
+        "test_openness_carried.V6PartialSearchTests.test_turn_with_an_earlier_part_of_a_search_is_carried_with_its_entries",
+        "test_openness_carried.V6PartialSearchTests.test_last_ready_turn_without_a_credit_gives_the_starting_notes",
+        "test_openness_carried.V6CarriedSelectionTests.test_entry_of_a_turn_whose_delivered_units_changed_is_carried",
+        "test_openness_carried_integration.Record12ShapeTests.test_stopped_chain_carries_all_57_turns_and_every_output",
+        "test_openness_carried_integration.Record12ShapeTests.test_v7_chain_reaches_a_verified_finding_with_the_carried_outputs"
+      ]
+    },
+    {
       "id": "phenomenon-account-probe-delivery",
       "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
       "class": "account probe provenance undelivered",
@@ -7294,6 +7313,83 @@
       "tests": [
         "test_foreground_write_stale_during_review_call.ForegroundWriteStaleDuringReviewCallTests.test_refuse_revision_read_before_review_completion_and_retry",
         "test_foreground_write_stale_during_review_call.ForegroundWriteStaleDuringReviewCallTests.test_refuse_prepared_value_after_review_completion_and_retry"
+      ]
+    },
+    {
+      "id": "successor-projection-binds-records-that-it-does-not-carry",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "successor admission",
+      "summary": "The admission of the next export upgraded the version 1 minimum of a v5 packet to version 2 and kept the evidence of the old packet. Where a bound search names a reading, the upgraded minimum binds that reading as a supporting reading, the projected packet did not carry it, and the stopped chain ended with openness_reading_incomplete in place of the handoff export.",
+      "expected": "The projected packet carries every record that its minimum binds, built by the function that the export uses, and a chain of v5 or v6 whose next request cannot fit ends with the handoff export when a protocol admits the projected packet.",
+      "fixed_in": "0.91.4",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_v5_head_whose_search_names_a_reading_exports_to_v7_and_records",
+        "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_v5_head_with_a_family_reading_exports_to_v7_and_records",
+        "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_named_reading_with_nine_targets_exports_to_v6_and_records",
+        "test_openness_reading_v7_refusal.SuccessorProjectionTests.test_projected_packet_carries_every_record_that_its_minimum_binds",
+        "test_openness_reading_v7_refusal.SuccessorProjectionTests.test_projection_equals_the_export_of_the_same_declarations",
+        "test_openness_reading_v7_refusal.Record12ShapeTests.test_stopped_head_is_handed_to_an_export_whose_chain_carries_it"
+      ]
+    },
+    {
+      "id": "refused-turn-on-a-stale-route-takes-no-replacement",
+      "record": "20261112072628-bar-final-refused-for-part-citation-with-whole-text-offsets",
+      "class": "refusal replacement across a route renewal",
+      "summary": "A refused turn whose route record pins an earlier reviewer runtime got its replacement on that record. The call ended with review_route_runtime_stale, the assignment stayed as the head of the position, and review-assignment refused the same replacement on a new route record with the same adapter, model, endpoint and configuration. On the store of record 7 at revision 200 the series of bar B ended with the handoff review-route and no reviewer call.",
+      "expected": "No command records an assignment on a route record that pins another reviewer runtime. The plan of a refused session turn on such a record is the replacement on a verified route record of the same identity with the installed runtime, or the handoff that names what such a record lacks, or the step of the role when no such record can carry the replacement, each before any assignment is recorded. The replacement keeps the reviewer, the slot and the position, its notice lists every refusal of the position, and its origin verifies from stored records.",
+      "fixed_in": "0.91.4",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_route_renewal.RouteRenewalRegressionTests.test_refused_final_on_a_stale_route_is_recorded_through_a_replacement_on_a_renewed_route",
+        "test_review_route_renewal.RouteRenewalRegressionTests.test_stale_route_without_a_renewed_route_ends_before_any_record",
+        "test_review_route_renewal.RouteRenewalRegressionTests.test_review_assignment_admits_the_replacement_on_a_renewed_route",
+        "test_review_refusal_replacement_incident.PartOffsetReplacementIncidentTests.test_revision_200_stale_route_records_through_a_replacement_on_a_renewed_route",
+        "test_review_route_renewal.RouteRenewalRegressionTests.test_refused_turn_outside_the_renewal_on_a_stale_route_ends_before_any_record",
+        "test_review_route_renewal.RouteRenewalReadingRegressionTests.test_refused_v7_reading_turn_on_a_stale_route_ends_before_any_record",
+        "test_review_route_renewal.RouteRenewalRegressionTests.test_no_command_records_an_assignment_on_a_stale_route_record",
+        "test_review_route_renewal.RouteRenewalContractTests.test_first_turn_position_keeps_its_members_across_a_renewal"
+      ]
+    },
+    {
+      "id": "accepted-correction-read-against-installed-runtime",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "authentication of a stored observation",
+      "summary": "An accepted output correction was authenticated against the installed reviewer runtime. After an update of the reviewer CLI or of a transport module, after a change of the program path, or without the reviewer program, the correction was not selected and its assignment showed review_output_refused. A correction call on a stale route record, or on a route whose reviewer program was not installed, recorded a failed correction without an answer and used the one correction of the assignment.",
+      "expected": "A correction authenticates against the runtime that its route record pins, when its call finishes and at every later read, whatever runtime is installed. A correction that records another runtime than the pinned one is not selected. A correction call is refused before any record, and the correction stays available, when the route record is stale and when the reviewer program of a Codex or a Claude route is not installed.",
+      "fixed_in": "0.91.4",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_correction_recorded_runtime.RecordedRuntimeTests.test_accepted_correction_stays_selected_under_every_other_installed_runtime",
+        "test_review_correction_recorded_runtime.RecordedRuntimeTests.test_correction_recorded_under_a_runtime_that_its_route_does_not_pin_is_refused",
+        "test_review_correction_recorded_runtime.RecordedRuntimeTests.test_stale_route_refuses_the_correction_before_any_record_and_keeps_it_available",
+        "test_review_correction_recorded_runtime.RecordedRuntimeTests.test_missing_program_refuses_the_correction_before_any_record",
+        "test_review_correction_recorded_runtime.RecordedRuntimeTests.test_answer_of_a_call_on_the_pinned_runtime_is_accepted_after_the_runtime_changes",
+        "test_review_correction_recorded_runtime.ClaudeRouteAdmissionTests.test_claude_route_without_its_cli_refuses_the_correction_before_any_record",
+        "test_review_output_correction_visual.VisualCorrectionTests.test_original_visual_delivery_and_negative_science_survive_observed_text_delta",
+        "test_installed_runtime_readers.InstalledRuntimeReaderTests.test_every_reader_of_the_installed_runtime_is_declared"
+      ]
+    },
+    {
+      "id": "accepted-correction-unselected-by-a-later-record",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "authentication of a stored observation",
+      "summary": "An accepted output correction was admitted again at every read, on the records of that time. A record that was written after it took its selection away: a retirement of the route of the assignment or of the correction, a later probe that did not verify, a contamination event, a later contamination in the lineage of the repair, or a later assignment in the slot. The assignment then showed review_output_refused with no output; the refusal planner planned, and the harness recorded, a refusal replacement that discarded the accepted correction; a context repair that followed carried the refused raw outputs in place of the corrected output; and a record that arrived during the correction call turned its answer into an invalid correction.",
+      "expected": "A correction is authenticated against the review records as they stood before its invocation was recorded, when its call finishes and at every later read. A later record leaves it selected and acts in the state of the assignment as it acts on an accepted attempt: no obligation after a retirement of either route that names no assignment in the exposure lineage of the repair, the context obligation after a probe that does not verify or after a contamination, review_context_repair_stale after a later cause event of the repair (a contamination or a retirement that names an assignment in that lineage), and review_assignment_replaced after a successor, which takes the corrected output as its history. A new correction call keeps every condition on the records of today.",
+      "fixed_in": "0.91.4",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_correction_origin.LaterRecordTests.test_retirement_of_the_route_keeps_the_corrected_output_ready",
+        "test_review_correction_origin.LaterRecordTests.test_retirement_in_the_lineage_of_the_repair_keeps_the_corrected_output",
+        "test_review_correction_origin.LaterRecordTests.test_later_probe_that_does_not_verify_keeps_the_corrected_output",
+        "test_review_correction_origin.LaterRecordTests.test_contamination_of_the_assignment_keeps_the_corrected_output",
+        "test_review_correction_origin.LaterRecordTests.test_later_contamination_of_the_predecessor_keeps_the_corrected_output",
+        "test_review_correction_origin.LaterRecordTests.test_context_repair_that_succeeds_the_assignment_takes_the_corrected_output_as_its_history",
+        "test_review_correction_origin.LaterRecordTests.test_later_record_plans_no_replacement_of_the_corrected_output",
+        "test_review_correction_origin.CallOriginTests.test_answer_is_accepted_when_a_record_arrives_during_the_call",
+        "test_review_correction_origin.CallOriginTests.test_correction_on_another_route_record_follows_the_state_of_that_route",
+        "test_review_output_correction_visual.VisualCorrectionTests.test_original_visual_delivery_and_negative_science_survive_observed_text_delta",
+        "test_review_effective_consumers.EffectiveConsumerTests.test_selected_graph_revalidates_raw_receipts_and_sibling_actual_inputs"
       ]
     }
   ]

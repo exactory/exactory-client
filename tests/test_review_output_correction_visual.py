@@ -73,6 +73,14 @@ class VisualCorrectionTests(unittest.TestCase):
         self.assertEqual(state['attempt_id'], 'negative-visual-two')
         self.assertEqual(state['output']['value'], original['value'])
         self.assertEqual(json.loads(artifacts.read(observed['output'])), delta)
+        # The installed Codex runtime changes after the correction; the stored correction keeps its selection.
+        pinned = records['review_route']['route']['runtime']
+        for member in ('version', 'executable', 'implementation_sha256'):
+            with self.subTest(installed=member), \
+                    patch.object(codex, 'runtime', return_value=dict(pinned, **{member: 'changed'})):
+                self.assertEqual(correction.selected_correction(records, artifacts, assignment['id'])['id'], 'text-delta')
+        with patch.object(codex, 'runtime', side_effect=ResearchError('review_runtime_missing', 'The CLI is not installed')):
+            self.assertEqual(correction.selected_correction(records, artifacts, assignment['id'])['id'], 'text-delta')
         supplied = collect_actual_input_packets(records, artifacts, assignment['id'])
         self.assertTrue(supplied)
         self.assertNotIn(correction.PROTOCOL, {row.get('protocol') for row in supplied})
@@ -107,6 +115,19 @@ class VisualCorrectionTests(unittest.TestCase):
             bad['response'] = artifacts.put(json.dumps(response).encode(), 'application/json')
             with self.subTest(actual_context=key):
                 self.assertIsNone(correction.selected_correction(changed, artifacts, assignment['id']))
+        # The shape of the live record: the assignment is on the visual route, the correction on the text route. A
+        # retirement of either route, recorded after the correction, leaves the corrected assignment as it stands.
+        expected = protocol.assignment_state(records, artifacts, assignment['id'])
+        self.assertEqual(expected['output_correction_id'], 'text-delta')
+        self.assertEqual([row['code'] for row in expected['obligations']], [])
+        for named in ('bar-second', assignment['id']):
+            case.mutate(protocol.record_context_event, dict(id='retirement-of-' + named, assignment_id=named,
+                kind='route_retired', source='owner', reason='The owner withdrew this route.',
+                evidence=[case.supporting]))
+            records = case.read_records()
+            with self.subTest(retirement_names=named):
+                self.assertEqual(protocol.assignment_state(records, artifacts, assignment['id']), expected)
+        self.assertEqual(protocol.retired_routes(records), {'route', 'visual-route'})
 
 
 if __name__ == '__main__':

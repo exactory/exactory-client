@@ -17,8 +17,21 @@ INELIGIBLE_REPLACEMENT_MSG = (
     'must authenticate and still be refused. The position holds at most four refusal records. Run review-series on '
     'the head and take the step that it plans.')
 REPLACEMENT_IDENTITY_MSG = (
-    'The replacement does not keep the role, dossier, subject, route, reviewer, author and context of the refused '
-    'assignment. Repeat these values of the refused assignment, and add only context.output_refusal.')
+    'The replacement differs from the refused assignment in a value that it must repeat. Repeat the role, dossier, '
+    'subject, reviewer, author and context of the refused assignment, and add only context.output_refusal. Repeat '
+    'its route_id as well, unless the plan of review-series names another route record for the replacement.')
+REPLACEMENT_ROUTE_MSG = (
+    'The replacement names another route record than the refused assignment, and the conditions for that do not '
+    'hold. A replacement runs on another route record only when three conditions hold. First, the refused assignment '
+    'admits it, which details.renewal.admitted states. Second, the route record of the refused assignment pins '
+    'another reviewer runtime than the installed one and is not retired. Third, the named route record has the same '
+    'adapter, model, endpoint and configuration. It pins the installed runtime, is not retired and is verified by a '
+    'probe. details.renewal is what the plan of review-series reads for the refused assignment when its route record '
+    'is stale. The named route record does not change it, and it does not say which condition failed. Run '
+    'review-series on the head and take the step that it plans. That is the replacement on a route record that '
+    'admits it, or the handoff review_route_runtime_stale. That handoff names what the store lacks, or it lists the '
+    'steps of the stale-route procedure. When no route record can carry the replacement, or the turn position is '
+    'exhausted, the step is the step of the role of the head.')
 REPLACEMENT_ATTEMPT_LIMIT_MSG = (
     'A replacement that carries a refusal has one output, and the output of this replacement was refused. Run '
     'review-series on the head. It plans another replacement that carries the refusal when one is admissible, and '
@@ -75,6 +88,116 @@ def require_selected_output(records, assignment):
         raise ResearchError(code, NOT_SELECTED_MSG, {'assignment_id': successor['id']})
 
 
+def is_session_turn(artifacts, assignment):
+    """A turn of a bar, slate, result or adjudicator session outside a staged review, a reading chain, a series in
+    parts and the first turn of a context repair, by its stored form."""
+    from . import review_protocol as protocol, review_parts
+    return (assignment['role'] in protocol.bar_sources.ROLES + ('adjudicator',)
+            and not any(assignment.get(key) for key in ('staged_review', 'reading_chain', 'capacity_plan',
+                                                        review_parts.KEY))
+            and review_parts.find_kind(protocol._read_json(artifacts, assignment['packet'])) is None
+            and 'context_repair' not in assignment.get('context', {}))
+
+
+def admits_route_renewal(records, artifacts, prior):
+    """A session turn whose earlier turn is verified as review-run requires it can take its replacement on a renewed
+    route record."""
+    from . import review_protocol as protocol
+    parent = prior.get('history_assignment_id')
+    return is_session_turn(artifacts, prior) and (
+        parent is None or protocol.has_verified_history(protocol.assignment_state(records, artifacts, parent)))
+
+
+def read_latest_refusal_revision(records, assignment):
+    """The recorded revision of the latest refusal in the turn position of this assignment, or 0 without one."""
+    from .review_failure_class import list_turn_assignments
+    position = set(list_turn_assignments(records, assignment))
+    return max((row['recorded_revision'] for row in records.get('review_output_refusal', {}).values()
+                if row['assignment_id'] in position), default=0)
+
+
+def describe_route_renewal(records, artifacts, prior):
+    """The route record of the same identity on which a replacement of this head can run, or what the store lacks
+    for one: a record with the installed runtime, or its probe."""
+    from . import review_protocol as protocol
+    if not admits_route_renewal(records, artifacts, prior):
+        return dict(admitted=False, route_id=None, lacks=None)
+    stale, retired = records['review_route'][prior['route_id']], protocol.retired_routes(records)
+    candidates = sorted((row for row in records['review_route'].values()
+                         if row['id'] != stale['id'] and row['id'] not in retired
+                         and protocol.context_repair.is_same_route(stale, row)
+                         and not protocol.is_route_stale(artifacts, row)),
+                        key=lambda row: (row['recorded_revision'], row['id']), reverse=True)
+    if not candidates:
+        return dict(admitted=True, route_id=None, lacks='record')
+    verified = next((row for row in candidates
+                     if protocol.route_state(records, artifacts, row['id'])['context_status'] == 'verified_for_route'),
+                    None)
+    if verified is not None:
+        return dict(admitted=True, route_id=verified['id'], lacks=None)
+    latest = candidates[0]
+    probe = max((row for row in records.get('review_route_probe', {}).values() if row['route_id'] == latest['id']),
+                key=lambda row: row['recorded_revision'], default=None)
+    if (probe is not None and 'capacity' in probe
+            and probe['recorded_revision'] > read_latest_refusal_revision(records, prior)):
+        # The capacity probe of this refusal did not complete; no further probe is offered.
+        return dict(admitted=True, route_id=latest['id'], lacks=None,
+                    unserved=dict(reason='probes_used', probe_ids=[probe['id']]))
+    return dict(admitted=True, route_id=latest['id'], lacks='probe')
+
+
+def select_renewal_probe(records, artifacts, value, revision, trials):
+    """The size of the capacity probe after which the replacement fits on the renewed route record, with the form
+    and the tokens of the request that it serves, or the reason why no capacity probe is offered."""
+    from . import review_protocol as protocol, review_route_capacity as capacity
+    from .review_capacity_evidence import describe_capacity_key, read_capacity_evidence
+    route = records['review_route'][value['route_id']]
+    key = describe_capacity_key(route)
+    short = sorted(((trial['form'], trial['request_measure']) for trial in trials
+                    if type(trial.get('request_measure', {}).get('tokens_upper')) is int
+                    and trial['request_measure']['tokens_upper'] > trial['request_measure']['token_limit']),
+                   key=lambda row: row[1]['tokens_upper'])
+    selected = None
+    for form, measure in short if key is not None else ():
+        needed = measure['tokens_upper'] + measure['output_reservation_tokens']
+        # A view with verified evidence of this size under the key; it holds no route digest and no runtime, so the
+        # route state does not take it for a probe of the record. Nothing is written.
+        evidence = dict(id='renewal-capacity-evidence', route_id=route['id'], capacity=dict(input_tokens=needed),
+                        capacity_verified=True, capacity_evidence=dict(key=key, input_tokens=needed),
+                        recorded_revision=revision)
+        view = dict(records, review_route_probe=dict(records.get('review_route_probe', {}),
+                                                     **{evidence['id']: evidence}))
+        try:
+            prepare_replacement(view, artifacts, value, revision)
+        except ResearchError as error:
+            if error.code != 'review_input_too_large':
+                raise
+            continue
+        selected = dict(form=form, request_tokens=measure['tokens_upper'], needed=needed)
+        break
+    if selected is None:
+        return dict(reason='limit')
+    probes = [row for row in records.get('review_route_probe', {}).values()
+              if 'capacity' in row and describe_capacity_key(records['review_route'][row['route_id']]) == key]
+    refused_at = read_latest_refusal_revision(
+        records, records['review_assignment'][value['context'][KEY]['assignment_id']])
+    later = sorted((row for row in probes if row['recorded_revision'] > refused_at), key=lambda row: row['id'])
+    if len(later) >= 2 or any(not row.get('capacity_verified') for row in later):
+        return dict(reason='probes_used', probe_ids=[row['id'] for row in later])
+    size = selected['needed']
+    if not any(row.get('capacity_verified') for row in probes):
+        size = max(size, read_capacity_evidence(route, records, artifacts=artifacts)['probe_input_tokens'])
+    try:
+        capacity.build_capacity_probe_request(route, protocol.build_probe_prompt(route),
+            dict(allowed_control='a' * 32, evidence_control='b' * 32, evidence=''),
+            capacity.scale_capacity_probe_size(records, artifacts, route, size))
+    except ResearchError as error:
+        if error.code != 'invalid_review_capacity_probe':
+            raise
+        return dict(reason='probe_unavailable', code=error.code, message=error.message)
+    return dict(input_tokens=size, form=selected['form'], request_tokens=selected['request_tokens'])
+
+
 def prepare_replacement(records, artifacts, value, revision):
     """Check admission once, then freeze a fresh request over the refused turn's packet."""
     from . import review_protocol as protocol, review_parts, review_prompt_paragraphs as paragraphs
@@ -111,10 +234,20 @@ def prepare_replacement(records, artifacts, value, revision):
             or prior['role'] not in protocol.bar_sources.ROLES + ('adjudicator',) and review_parts.KEY not in prior and not is_v7
             or prior['context_state']['context_status'] != 'verified_for_route'):
         raise ResearchError('review_refusal_replacement_ineligible', INELIGIBLE_REPLACEMENT_MSG)
-    if (any(prior.get(key) != value.get(key) for key in ('role', 'dossier_id', 'subject', 'route_id'))
+    if (any(prior.get(key) != value.get(key) for key in ('role', 'dossier_id', 'subject'))
             or any(normalized_text(prior[key]) != normalized_text(value[key]) for key in ('reviewer_id', 'author_id'))
             or read_position_context(prior) != read_position_context(value)):
         raise ResearchError('review_refusal_replacement_mismatch', REPLACEMENT_IDENTITY_MSG)
+    route = records['review_route'][value['route_id']]
+    renewed = route['id'] != prior['route_id']
+    if renewed:
+        stale, retired = records['review_route'][prior['route_id']], protocol.retired_routes(records)
+        if not (admits_route_renewal(records, artifacts, prior) and stale['id'] not in retired
+                and route['id'] not in retired and protocol.context_repair.is_same_route(stale, route)
+                and protocol.is_route_stale(artifacts, stale) and not protocol.is_route_stale(artifacts, route)
+                and protocol.route_state(records, artifacts, route['id'])['context_status'] == 'verified_for_route'):
+            raise ResearchError('review_refusal_replacement_mismatch', REPLACEMENT_ROUTE_MSG,
+                                dict(renewal=describe_route_renewal(records, artifacts, prior)))
     if sum(read_replacement_link(member)[0] == 'output_refused' for member in members) >= 2:
         raise ResearchError('review_slot_exhausted', REPLACEMENT_LIMIT_MSG)
     identifiers = {member['id'] for member in members}
@@ -142,7 +275,6 @@ def prepare_replacement(records, artifacts, value, revision):
         return paragraphs.append_prompt_paragraphs(base_prompt, prior['role'],
             parameters.get(paragraphs.CARRY_PARAMETER), versions + [paragraphs.REFUSAL_PARAGRAPH_VERSIONS[form]],
             parameters.get(paragraphs.CAPACITY_PARAMETER))
-    route = records['review_route'][prior['route_id']]
     latest = completed[-1]
     task = latest.get('task') or capacity.describe_task(prior['role'], packet, route=route,
         request=protocol._read_json(artifacts, latest['request']))
@@ -156,18 +288,21 @@ def prepare_replacement(records, artifacts, value, revision):
           and diagnoses[latest['id']]['code'] == 'review_reassessment_mismatch'
           and diagnoses[latest['id']]['check'] == 'review.reassessment'):
         try:
-            correction.build_request(records, artifacts, prior['id'], prior['route_id'])
+            correction.build_request(records, artifacts, prior['id'], route['id'])
         except ResearchError as error:
             if error.code == 'review_input_too_large':
                 forms = ('bounded',)
     selection = notices.select_refusal_notice(records, artifacts, refused_ids, diagnoses=diagnoses,
         route=route, role=prior['role'], prompt=render_prompt, packet=packet,
         task_characters=None, task_limit_characters=limit, forms=forms)
+    first_trials = selection['trials']
     if selection['notice'] is None:
         from .review_failure_class import plan_capacity_recovery, plan_output_replacement
-        recovery = plan_capacity_recovery(records, artifacts, prior, 'input_over_limit')
+        # The smaller task of the refused turn as the route of the replacement sends it.
+        sender = dict(prior, route_id=route['id']) if renewed else prior
+        recovery = plan_capacity_recovery(records, artifacts, sender, 'input_over_limit')
         if recovery['kind'] == 'replace':
-            lower = plan_output_replacement(records, artifacts, prior, include_packet=True,
+            lower = plan_output_replacement(records, artifacts, sender, include_packet=True,
                                             outcome='input_over_limit', replacement_id=value['id'])
             if lower is not None and lower['state'] == 'replace':
                 packet = lower['packet']
@@ -178,6 +313,11 @@ def prepare_replacement(records, artifacts, value, revision):
                 selection = notices.select_refusal_notice(records, artifacts, refused_ids, diagnoses=diagnoses,
                     route=route, role=prior['role'], prompt=render_prompt, packet=packet,
                     task_characters=None, task_limit_characters=limit, forms=('bounded',))
+        if selection['notice'] is None and renewed:
+            # The gate is read for its kind alone here: its recovery names steps for the renewed record, which
+            # cannot run for a slot that stands on the stale record.
+            trials = first_trials + ([] if selection['trials'] is first_trials else selection['trials'])
+            raise ResearchError('review_input_too_large', notices.NOTICE_DELIVERY_MSG, dict(trials=trials))
         if selection['notice'] is None:
             raise ResearchError('review_input_too_large', notices.NOTICE_DELIVERY_MSG,
                                 {'trials': selection['trials'], 'recovery': recovery})
@@ -194,6 +334,8 @@ def prepare_replacement(records, artifacts, value, revision):
         recorded_revision=revision)
     # Packet identity keeps the original spellings of these normalized identities.
     record.update({key: prior[key] for key in ('reviewer_id', 'author_id')})
+    if renewed:
+        record.update(route_digest=digest(route), context_state=protocol.route_state(records, artifacts, route['id']))
     # The scientific parent stays the same. The replaced turn is counted separately for citations.
     record['slot_id'] = protocol.context_repair.slot_id(records, prior)
     if review_parts.find_kind(packet) is not None:
@@ -228,7 +370,14 @@ def validate_replacement_origin(records, artifacts, assignment, packet=None):
     prior = records.get('review_assignment', {}).get(binding['assignment_id'])
     require(prior is not None and prior['recorded_revision'] < assignment['recorded_revision'])
     require(read_position_context(prior) == read_position_context(origin))
-    require(all(prior.get(key) == assignment.get(key) for key in ('role', 'dossier_id', 'subject', 'route_id')))
+    require(all(prior.get(key) == assignment.get(key) for key in ('role', 'dossier_id', 'subject')))
+    if prior['route_id'] != assignment['route_id']:
+        # A renewal, told from stored records alone: two route records of one identity with different runtimes.
+        routes = records.get('review_route', {})
+        stale, renewed = routes.get(prior['route_id']), routes.get(assignment['route_id'])
+        require(stale is not None and renewed is not None
+                and protocol.context_repair.is_same_route(stale, renewed) and stale['runtime'] != renewed['runtime']
+                and is_session_turn(artifacts, prior))
     require(protocol.context_repair.slot_id(records, prior) == protocol.context_repair.slot_id(records, assignment))
     require(all(normalized_text(prior[key]) == normalized_text(assignment[key]) for key in ('reviewer_id', 'author_id')))
     entries = notice.get('refused', [])
