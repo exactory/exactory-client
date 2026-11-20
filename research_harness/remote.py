@@ -25,11 +25,12 @@ REMOTE_ANSWER_STORE_BUSY_MSG = (
     'The research store stayed busy, or kept changing the records that this write read. The answer of the remote '
     'service to this step was not recorded. The request was sent once, and the service answered. details.response '
     'holds the members of the answer that the step needs, and no record holds them. The intent keeps the step as '
-    'pending. While it is pending, exactory submit and exactory verify do not take their managed path. Without '
-    '--managed-only, they then send the request directly, a second time. Do not run them again for this request, and '
-    'do not send the request another way. For a deposit, run exactory-draft reconcile with the intent ID in '
-    'details.intent_id. For a submission, run exactory reconcile with that intent ID. Each of them reads the service '
-    'and records the step. A verdict has no such read: give details.response to the user.')
+    'pending. While it is pending, exactory submit and exactory verify do not take their managed path. exactory '
+    'verify then sends the verdict directly, a second time. exactory submit sends its request directly, a second '
+    'time, unless it runs with --managed-only. Do not run them again for this request, and do not send the request '
+    'another way. For a deposit, run exactory-draft reconcile with the intent ID in details.intent_id. For a '
+    'submission, run exactory reconcile with that intent ID. Each of them reads the service and records the step. A '
+    'verdict has no such read: give details.response to the user.')
 REMOTE_READ_STORE_BUSY_MSG = (
     'The research store stayed busy, or kept changing the records that this write read. What a read of the '
     'service showed about the pending step was not recorded. This command sent no write to the service. The intent '

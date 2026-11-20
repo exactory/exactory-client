@@ -62,21 +62,22 @@ REFUSED_INDEX_LIMIT = 100
 # The messages of the record of a refused reviewer output when the store refused that record beyond the wait: after a
 # run, and after a recording command that was refused.
 OUTPUT_REFUSAL_AFTER_RUN_STORE_BUSY_MSG = (
-    'The research store stayed busy, and no refusal of this reviewer output was recorded. The run and its output are '
-    'recorded. details.refusal names the check that the output fails, so the assignment has no result. details.refusal '
-    'is absent when the store could not be read to check the output. Until the refusal of a failing output is recorded, '
-    'the assignment takes no second run and no replacement that carries the refusal. Run review-run again for the same '
-    'attempt: the payload holds the attempt ID in details.attempt_id as id and the assignment ID in '
-    'details.assignment_id, and the request ID is the one in details.request_id. It returns the recorded run, calls no '
-    'reviewer, checks the output and records its refusal when the output fails. When review-series sent the run, it '
-    'runs that request again by itself.')
+    'The research store stayed busy, or kept changing the records that this write read. No refusal of this reviewer '
+    'output was recorded. The run and its output are recorded. details.refusal names the check that the output fails, '
+    'so the assignment has no result. When the busy store did not let the check of the output run, details.refusal is '
+    'absent. Until the refusal of a failing output is recorded, the assignment takes no second run and no replacement '
+    'that carries the refusal. Run review-run again for the same attempt, with the request ID in details.request_id. '
+    'Its payload holds the attempt ID in details.attempt_id as id, and the assignment ID in details.assignment_id as '
+    'assignment_id. It returns the recorded run and calls no reviewer. It then checks the output and, when the output '
+    'fails, records the refusal. When review-series sent the run, it runs that request again by itself.')
 OUTPUT_REFUSAL_AFTER_RECORDING_STORE_BUSY_MSG = (
-    'The research store stayed busy, and no refusal of this reviewer output was recorded. The recording command was '
-    'refused, and details.recording_refusal holds its refusal. details.refusal names the check that the output fails. '
-    'details.refusal is absent when the store could not be read to check the output. Until the refusal of a failing '
-    'output is recorded, the assignment takes no second run and no replacement that carries the refusal. Run the same '
-    'recording command again with the current revision. It is refused as before, checks the output and records its '
-    'refusal when the output fails.')
+    'The research store stayed busy, or kept changing the records that this write read. No refusal of this reviewer '
+    'output was recorded. The recording command was refused, and details.recording_refusal holds its refusal. '
+    'details.refusal names the check that the output fails. When the busy store did not let the check of the output '
+    'run, details.refusal is absent. Until the refusal of a failing output is recorded, the assignment takes no '
+    'second run and no replacement that carries the refusal. Run the same recording command again with the current '
+    'revision. It is refused as before. It then checks the output and, when the output fails, records the refusal of '
+    'the output.')
 
 # Only output values, frozen packet values, and measurements computed from them belong here.
 # In particular, an existing review's scientific text is never a notice detail.

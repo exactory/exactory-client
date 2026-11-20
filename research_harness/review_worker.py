@@ -42,35 +42,37 @@ from .workspace import checked_parent
 # owns, and for the worker of a staged review task), the launch claim and the authorization that the launching command
 # writes, and the records with which the worker takes and starts its reservation and captures its call.
 CALL_CHILD_STORE_BUSY_MSG = (
-    'The research store stayed busy, and the process that starts the reviewer program was not recorded. The reviewer '
-    'program did not start, and no request was sent to the reviewer. The call has no outcome yet. Run review-series on '
-    'its assignment, or review-run with action reconcile for the call. Each of them records the call as interrupted. '
-    'The next run then starts the reviewer.')
+    'The research store stayed busy, and a transport process of this reviewer call was not recorded. That process '
+    'started no program, and no request was sent to the reviewer. The call has no outcome yet. Run review-series on '
+    'its assignment, or review-run with action reconcile, the operation of the call and the id of the call as '
+    'invocation_id. Each of them records the call as interrupted. The next run then starts the reviewer.')
 WORKER_CHILD_STORE_BUSY_MSG = (
-    'The research store stayed busy, and the process that starts the reviewer program of this review task was not '
-    'recorded. The reviewer program did not start, and no request was sent to the reviewer. The worker captures this '
-    'refusal as a failed observation, and its reservation ends as a known failure. The task then takes its next attempt '
-    'when it has an attempt left.')
+    'The research store stayed busy, and a transport process of the reviewer call of this review task was not '
+    'recorded. That process started no program, and no request was sent to the reviewer. The worker captures this '
+    'refusal as a failed observation, and its reservation ends as a known failure. When the task has an attempt left, '
+    'it then takes its next attempt.')
 WORKER_CLAIM_STORE_BUSY_MSG = (
-    'The research store stayed busy, and the launch of the worker of this review task was not claimed. No worker and '
-    'no reviewer program started, and the reservation is unchanged. Run the same command again.')
+    'The research store stayed busy, and the launch of the worker of this review task was not claimed. No worker '
+    'started, and no request was sent to the reviewer. The reservation is unchanged. Run the same command again.')
 WORKER_AUTHORIZE_STORE_BUSY_MSG = (
     'The research store stayed busy, and the start of the worker of this review task was not authorized. The reviewer '
-    'program did not start, and no request was sent to the reviewer. The worker gets no token and ends. Run '
-    'review-series on the controller assignment. It reconciles the reservation as a known failure and plans the next '
-    'attempt of the task when the task has an attempt left.')
+    'call of the task did not start, and no request was sent to the reviewer. The worker gets no token and ends. Run '
+    'review-series on the controller assignment, or review-run with the task payload and action reconcile. Each of '
+    'them reconciles the reservation as a known failure. When the task has an attempt left, it then takes its next '
+    'attempt.')
 WORKER_READY_STORE_BUSY_MSG = (
     'The research store stayed busy, and the worker of this review task did not record that it is ready. The reviewer '
-    'program did not start, and no request was sent to the reviewer. The worker ends here. The reconciliation of its '
-    'reservation records a known failure, and the task then takes its next attempt when it has an attempt left.')
+    'call of the task did not start, and no request was sent to the reviewer. The worker ends here. The '
+    'reconciliation of its reservation records a known failure. When the task has an attempt left, it then takes its '
+    'next attempt.')
 WORKER_RUNNING_STORE_BUSY_MSG = (
-    'The research store stayed busy, and the worker of this review task did not record its start. The reviewer '
-    'program did not start, and no request was sent to the reviewer. The worker ends here. The reconciliation of its '
-    'reservation records a known failure, and the task then takes its next attempt when it has an attempt left.')
+    'The research store stayed busy, and the worker of this review task did not record its start. The reviewer call '
+    'of the task did not start, and no request was sent to the reviewer. The worker ends here. The reconciliation of '
+    'its reservation records a known failure. When the task has an attempt left, it then takes its next attempt.')
 WORKER_CAPTURE_STORE_BUSY_MSG = (
-    'The research store stayed busy, and the worker of this review task did not capture what its reviewer call '
-    'returned, so no record holds it. The worker ends here. The reconciliation of its reservation records an unknown '
-    'outcome, and the task then takes its next attempt when it has an attempt left.')
+    'The research store stayed busy, and the worker of this review task did not capture the observation of its '
+    'reviewer call. No record holds what the reviewer returned. The worker ends here. The reconciliation of its '
+    'reservation records an unknown outcome. When the task has an attempt left, it then takes its next attempt.')
 
 
 def _directory(reservation_id):
@@ -299,7 +301,7 @@ def read_polling_store(read):
 
 def launch_worker(store, reservation_id, *, handshake_timeout=SCOPED_FINISH_WAIT_SECONDS):
     """Allow a loaded worker to start, retaining a reconcilable claim on refusal. The handshake waits for the record
-    of the worker as long as the worker waits for a busy store, and ends when the worker ends."""
+    of the worker for at most SCOPED_FINISH_WAIT_SECONDS, the wait of one record, and ends when the worker ends."""
     if not isinstance(handshake_timeout, (int, float)) or not 0 < handshake_timeout <= SCOPED_FINISH_WAIT_SECONDS:
         raise ResearchError("invalid_input", "Worker handshake timeout must be positive and at most %d seconds"
                             % SCOPED_FINISH_WAIT_SECONDS)
@@ -475,7 +477,8 @@ def _await_release(root, reservation_id, descriptor, release):
     granted = os.read(release, 1)
     os.close(release)
     if granted != b"1":
-        raise ResearchError("review_worker_reconciliation_required", "The owner of this transport child did not record it")
+        raise ResearchError("review_worker_reconciliation_required",
+                            "The owner of this transport child sent no release, so the child starts no program")
 
 
 def _observe_live(store, route, request):
@@ -484,8 +487,10 @@ def _observe_live(store, route, request):
 
 
 def run_worker(root, reservation_id, token, descriptor):
-    """Worker entry point: handshake, observe once, retry capture only, then exit. Each record of the worker waits for
-    a busy store; the worker writes a refusal after the wait to its log."""
+    """Worker entry point: handshake, one observation, capture, then exit. The reviewer is called at most once. Each
+    record of the worker waits for a busy store. A refusal of the ready, start or capture record after the wait ends
+    the worker, and its log holds the message. A refused record of a transport child becomes the failed observation
+    that the worker captures."""
     kept = {"reservation_id": reservation_id}
     store = retry_finishing_write(lambda: Store(Path(root)), WORKER_READY_STORE_BUSY_MSG, kept=kept,
                                   codes=LOCK_RETRY_CODES)

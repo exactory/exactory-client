@@ -7513,7 +7513,7 @@
       "record": "20261119223643-finishing-writes-give-up-after-eight-seconds",
       "class": "concurrency",
       "summary": "The records before a reviewer program starts (the process that starts the program, and the claim, the ready record, the authorization and the start of the worker of a staged task) were tried for 8 seconds or once. A store that another command locked, or that the launching command itself read, ended the worker or the guardian before the reviewer program started, and an attempt of the task or of the turn was spent. The guardian wrote its record inside the time limit of the transport: on a store of 1,004 MB that record took 28 seconds, longer than the 15 seconds of the version check of a Codex route, so no Codex call started.",
-      "expected": "The owner of a call records the process that starts a reviewer program before the transport starts its time limit, and a refused record of that process ends the call before the program, past the transport. The five records wait for a locked store for at most 600 seconds, and the launch handshake waits as long. A refusal after the wait is store_busy with a message that says that no reviewer program started; the worker of a staged task writes it to its log or captures it as its failed observation.",
+      "expected": "The owner of a call records the process that starts a reviewer program before the transport starts its time limit. The transport does not turn a refused record of that process into a failed observation: the command that owns the call is refused, and the program does not start. The five records wait for a locked store for at most 600 seconds, and the launch handshake waits as long. A refusal after the wait is store_busy with a message that says that no request was sent to the reviewer; the worker of a staged task writes it to its log or captures it as its failed observation.",
       "fixed_in": "open",
       "test_kind": "real_shape",
       "tests": [
@@ -7533,7 +7533,7 @@
       "record": "20261119223643-finishing-writes-give-up-after-eight-seconds",
       "class": "concurrency",
       "summary": "The refusal record of a reviewer output that fails its contract was a compare-and-swap on the revision of the whole store with one attempt, and its failure was swallowed. After a commit of another command the run returned without output_refusal, the plan moved to the next turn on the refused answer, and the second run and the replacement that carries the refusal were refused.",
-      "expected": "The refusal record commits against the records that the check of the output read, and it and the read of the store after the run wait for a busy store for at most 600 seconds. A refusal after the wait refuses the command with store_busy and a message that names the request that records the refusal, and review-series runs that request again by itself.",
+      "expected": "The refusal record commits against the records that the check of the output read, and it and the read of the store after the run wait for a busy store for at most 600 seconds. A refusal after the wait refuses the command with store_busy and a message that names the command that records the refusal. After a run, that command is the same review-run request, and review-series runs it again by itself.",
       "fixed_in": "open",
       "test_kind": "real_shape",
       "tests": [

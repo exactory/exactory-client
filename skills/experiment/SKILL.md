@@ -152,8 +152,11 @@ released, that has no outcome, and whose folder holds no stream and no terminal
 outcome. The program of an admission never runs a second time. When
 `exactory-lab run` or `reconcile-run` is refused with `store_busy`, read its
 message and run the command that it names. After the program ran, that command
-records the run from the kept files. Do not admit the run again for a result that
-is kept.
+records the run from the kept files. For a Colab job that no record released,
+that command records the release. It is then refused with
+`execution_recovery_required` until the runner finishes the program. After
+that, the same command records the run. Do not admit the run again for a
+result that is kept.
 
 When the outputs of an assessed cycle are needed in another format, admit a
 format-only run instead of a successor: add `format_only_of` with the id of the

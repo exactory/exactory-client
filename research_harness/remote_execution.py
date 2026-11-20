@@ -31,13 +31,13 @@ _RUNNER_CLAIMS = {}
 _POLLING_READ_BUSY = object()
 # The message of the record that releases a Colab job when the store refused it beyond the wait.
 REMOTE_RELEASE_STORE_BUSY_MSG = (
-    'The research store stayed busy, and the release of this Colab job was not recorded. The runner did not start the '
-    'program: it starts the program only after the release and its signal. The admission keeps its claim, and the '
-    'shared folder keeps the job and the claim of the runner. Run the same exactory-lab run command again with the '
-    'request ID in details.request_id, or exactory-research reconcile-run for the admission ID in '
-    'details.admission_id. Each of them records the release and signals the runner. While the runner has not '
-    'finished, each of them is then refused with execution_recovery_required. The same command after that records '
-    'the run.')
+    'The research store stayed busy, or kept changing the records that this write read. The release of this Colab job '
+    'was not recorded. The runner did not start the program: it starts the program only after the release and its '
+    'signal. The admission keeps its claim, and the shared folder keeps the job and the claim of the runner. Run the '
+    'same exactory-lab run command again with the request ID in details.request_id, or exactory-research '
+    'reconcile-run for the admission ID in details.admission_id. Each of them records the release and signals the '
+    'runner. Until the runner finishes the program, each of them is then refused with execution_recovery_required. '
+    'After that, the same command records the run.')
 
 
 def transport_root():

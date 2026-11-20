@@ -14,9 +14,10 @@ from .storage import _canonical
 PROTOCOL = 'review-call-observation-v1'
 # The message of the capture of a reviewer call that a command owns when the store refused it beyond the wait.
 CALL_CAPTURE_STORE_BUSY_MSG = (
-    'The research store stayed busy, and what this reviewer call returned was not captured, so no record holds it. Run '
-    'review-series on its assignment, or review-run with action reconcile for the call. Each of them records the call '
-    'as interrupted. The next run then calls the reviewer again.')
+    'The research store stayed busy, and the observation of this reviewer call was not captured. No record holds what '
+    'the reviewer returned. Run review-series on its assignment, or review-run with action reconcile, the operation '
+    'of the call and the id of the call as invocation_id. Each of them records the call as interrupted. The next run '
+    'then calls the reviewer again.')
 
 
 def _check_bindings(records, artifacts, captured, operation, payload, request_id):

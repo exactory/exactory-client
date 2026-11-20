@@ -2693,10 +2693,10 @@ def _observed(artifacts, route, request, credential, *, capacity_probe=False):
 
 # The message of the record that finishes a reviewer call from its capture when the store refused it beyond the wait.
 CALL_FINISH_STORE_BUSY_MSG = (
-    'The research store stayed busy, or kept changing the records that this write read, and the result of this '
-    'reviewer call was not recorded. The call ended, and the store holds what it returned. Run the same command again '
-    'with the same payload and request ID. It records the result from what the store holds and does not call the '
-    'reviewer again.')
+    'The research store stayed busy, or kept changing the records that this write read. The result of this reviewer '
+    'call was not recorded. The call ended, and the store holds what it returned. Run the same command again with the '
+    'same payload and request ID. It records the result from what the store holds and does not call the reviewer '
+    'again.')
 
 
 # Retain the live observation through busy-store retries; committed captures can finish in a later process.
