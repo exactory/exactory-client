@@ -10,7 +10,7 @@ import re
 from . import problem_evidence, strategy
 from .errors import ResearchError
 from .operations import fields, immutable_record, iso_date, prepared_mutation, strings, text, timestamp
-from .problem_claims import require_problem
+from .problem_claims import RETIRED_KINDS, has_retired_kind, require_problem
 
 
 CLAIM_STANDINGS = ("refuted", "proved", "implied_by_known_results", "found_in_literature", "supported",
@@ -171,6 +171,12 @@ def record_forming(store, payload, *, expected_revision, request_id):
         fields(question, ("kind", "description", "places"))
         text(question["kind"], "Question kind")
         text(question["description"], "Question description")
+        if question["kind"] in RETIRED_KINDS and not has_retired_kind(records, question["kind"]):
+            raise ResearchError("problem_start_kind_removed",
+                                "Describe the kind of the question in your own words in question.kind. The kind "
+                                + question["kind"] + " belongs to a kind of start that release 0.91.3 removed. Only "
+                                "a record that already holds this kind accepts it",
+                                {"kind": question["kind"]})
         if question["kind"] == "phenomenon" and not question["places"]:
             raise ResearchError("invalid_input",
                                 "Give question.places for the kind phenomenon: each place as {description, evidence}, "

@@ -13,7 +13,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, strings, text
-from .problem_claims import find_current_statement, find_latest, require_problem
+from .problem_claims import RETIRED_KINDS, find_current_statement, find_latest, has_retired_kind, require_problem
 from .research_decisions import _independence, _pair
 from .review_context_repair import slot_id
 from .review_protocol import build_problem_subject, is_previous_prompt, validate_problem_bars
@@ -47,6 +47,13 @@ def record_candidate(store, payload, *, expected_revision, request_id):
         source = value["source"]
         fields(source, ("kind", "reference", "evidence"))
         strategy.choice(source["kind"], SOURCE_KINDS, "Candidate source kind", "invalid_input")
+        if source["kind"] in RETIRED_KINDS and not has_retired_kind(records, source["kind"]):
+            raise ResearchError("problem_start_kind_removed",
+                                "Give the source kind that names where the material came from: own_record, "
+                                "literature, computation, section or user. The kind " + source["kind"] + " belongs "
+                                "to a kind of start that release 0.91.3 removed. Only a record that already holds "
+                                "this kind accepts it",
+                                {"kind": source["kind"]})
         text(source["reference"], "Candidate source reference")
         strategy.evidence(records, artifacts, source["evidence"], required=False)
         if source["kind"] == "phenomenon" and not any(

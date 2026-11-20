@@ -17,7 +17,8 @@ from test_research_problem_forming import build_form, build_forming, build_outco
 class ProblemReportTests(CheckCommandMixin, ProblemCase):
     def setUp(self):
         super().setUp()
-        self.initialize_problem(start=dict(kind="phenomenon", description="A recurring finite bound."))
+        self.initialize_problem()
+        self.restore_start("phenomenon", "A recurring finite bound.")
 
     def record_report(self, identifier="report-1", **changes):
         return self.mutate(cli.OPERATIONS["problem-report"], dict(id=identifier,

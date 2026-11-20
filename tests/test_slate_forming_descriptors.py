@@ -34,7 +34,7 @@ class SlateFormingTests(unittest.TestCase):
             kind='model_lane', lane_id='forming-lane', model='fixture-model', effort='reported',
             prompt=artifact, output=artifact)))['result']
         reference = dict(kind='record', record_kind='forming_call', id=call['id'], digest=digest(call))
-        case.record_candidate(source=dict(kind='phenomenon', reference='A repeated finite comparison.', evidence=[reference]))
+        case.record_candidate(source=dict(kind='own_record', reference='A repeated finite comparison.', evidence=[reference]))
         case.observe_bars()
         assignment = case.assign('slate', 'first')
         output = case.build_slate_output(['candidate-1'])
@@ -78,8 +78,9 @@ class SlateFormingTests(unittest.TestCase):
 
     def check_slate_repair(self, case, artifact, reference):
         from research_harness import review_parts_repair
-        case.record_candidate(source=dict(kind='phenomenon', reference='The finite comparison.', evidence=[reference]))
+        case.record_candidate(source=dict(kind='computation', reference='The finite comparison.', evidence=[reference]))
         case.observe_bars()
+        case.assert_error('problem_slate_review_required', case.record_slate)
         original = case.assign('slate', 'first')
         output = case.build_slate_output(['candidate-1'])
         output['value']['status'] = 'unresolved'
@@ -120,7 +121,7 @@ class SlateFormingTests(unittest.TestCase):
                     for index in range(3)]
         references = [dict(kind='record', record_kind=kind, id=row['id'], digest=digest(row))
                       for kind, row in [('forming_call', call)] + [('form_outcome', row) for row in outcomes]]
-        case.record_candidate(source=dict(kind='phenomenon', reference='The recorded finite observation.', evidence=references))
+        case.record_candidate(source=dict(kind='own_record', reference='The recorded finite observation.', evidence=references))
         case.observe_bars()
         assignment = case.assign('slate', 'first')
         packet = json.loads(case.artifacts.read(assignment['packet']))
@@ -157,6 +158,7 @@ class SlateFormingTests(unittest.TestCase):
         case = self.make_destination()
         imported = fixture.import_history(destination=case)
         reference = fixture.reference('forming_call', call, imported['source_origin'])
+        case.restore_start('phenomenon')
         case.record_candidate(source=dict(kind='phenomenon', reference='An imported observation.', evidence=[reference]))
         case.observe_bars()
         from capacity_evidence_fixtures import build_capacity_prior

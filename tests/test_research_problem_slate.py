@@ -37,6 +37,7 @@ class ProblemSlateTests(ProblemDeliveryCase):
         return output
 
     def record_formed_candidates(self):
+        self.restore_start("phenomenon")
         self.mutate(problem_forming.record_forming, build_forming())
         self.mutate(problem_forming.record_form_outcome, build_outcome())
         records = self.read_records()
@@ -44,7 +45,7 @@ class ProblemSlateTests(ProblemDeliveryCase):
         for identifier, source_kind, record_kind, record_id in (
                 ("phenomenon", "phenomenon", "forming_call", "forming-1"),
                 ("call", "own_record", "forming_call", "forming-1"),
-                ("outcome", "thought_experiment", "form_outcome", "outcome-1")):
+                ("outcome", "own_record", "form_outcome", "outcome-1")):
             reference = {"kind": "record", "record_kind": record_kind, "id": record_id,
                          "digest": digest(records[record_kind][record_id])}
             self.record_candidate(identifier, source={"kind": source_kind,

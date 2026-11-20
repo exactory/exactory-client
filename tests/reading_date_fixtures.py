@@ -65,8 +65,11 @@ def record_stored_gain(case):
     # Use the public forming writer with retained synthetic performer bytes.
     reading = case.store.snapshot()["records"]["reading"][case.reading["reading_id"]]
     payload = build_forming(performer=build_synthetic_performer(case))
+    payload["question"]["kind"] = "thought_experiment"
     payload["forms"][0]["grounds"][0]["evidence"] = [dict(kind="record", record_kind="reading", id=reading["id"], digest=digest(reading))]
-    call = case.mutate(problem_forming.record_forming, payload)["result"]
+    # The fixture was captured before 0.91.3, which accepted the kind in every record; record the call as it did.
+    with patch.object(problem_forming, "RETIRED_KINDS", ()):
+        call = case.mutate(problem_forming.record_forming, payload)["result"]
     candidate = build_candidate()
     candidate["source"]["evidence"] = [dict(kind="record", record_kind="forming_call", id=call["id"], digest=digest(call))]
     from research_harness import problem_candidates
@@ -103,7 +106,11 @@ def record_reading_import(owner):
     source.initialize_problem(slug="synthetic-source")
     destination.initialize_problem(slug="synthetic-destination")
     reading = source.record_full_reading()
-    call = source.mutate(problem_forming.record_forming, build_forming(performer=build_synthetic_performer(source)))["result"]
+    payload = build_forming(performer=build_synthetic_performer(source))
+    payload["question"]["kind"] = "thought_experiment"
+    # The fixture was captured before 0.91.3, which accepted the kind in every record; record the call as it did.
+    with patch.object(problem_forming, "RETIRED_KINDS", ()):
+        call = source.mutate(problem_forming.record_forming, payload)["result"]
     candidate = build_candidate()
     candidate["source"]["evidence"] = [dict(kind="record", record_kind="forming_call", id=call["id"], digest=digest(call))]
     from research_harness import problem_candidates

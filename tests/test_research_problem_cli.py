@@ -3,23 +3,26 @@
 import json
 from pathlib import Path
 
+from test_research_check_mode import CheckCommandMixin
 from test_research_problem_claims import ProblemCase
 from research_harness import cli
 
 
-class ProblemCliTests(ProblemCase):
-    def test_problem_init_and_status_include_a_recorded_start(self):
-        parser = cli.build_parser()
-        payload = cli.run(parser.parse_args(["example", "problem-init"]))
+class ProblemCliTests(CheckCommandMixin, ProblemCase):
+    def test_problem_init_refuses_a_start_entry_also_under_check(self):
+        payload = cli.run(cli.build_parser().parse_args(["example", "problem-init"]))
         payload["start"] = {"kind": "phenomenon",
                             "description": "The same finite bound appears in several constructions."}
-        path = self.root / "problem-init.json"
-        path.write_text(json.dumps(payload), encoding="utf-8")
-        saved = cli.run(parser.parse_args(["problem-init", "--workspace", str(self.root), "--file", str(path),
-                                          "--expected-revision", "0", "--request-id", "init-start"]))
-        self.assertEqual(saved["result"]["start"], payload["start"])
-        report = cli.run(parser.parse_args(["status", "--workspace", str(self.root)]))
-        self.assertEqual(report["problem"]["start"], payload["start"])
+        self.assert_refusal_parity("problem-init", payload, "problem_start_kind_removed")
+        self.assertEqual(self.store.revision, 0)
+        self.assertEqual(self.store.snapshot()["records"], {})
+
+    def test_status_shows_the_start_of_a_record_of_an_earlier_release(self):
+        start = {"kind": "phenomenon", "description": "The same finite bound appears in several constructions."}
+        self.initialize_problem()
+        self.restore_start(**start)
+        report = cli.run(cli.build_parser().parse_args(["status", "--workspace", str(self.root)]))
+        self.assertEqual(report["problem"]["start"], start)
 
     def test_problem_init_and_status_omit_an_unrecorded_start(self):
         parser = cli.build_parser()
