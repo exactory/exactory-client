@@ -2219,7 +2219,8 @@ accounts with the parts that the harness derives, and the records that their ent
      instructions](../../docs/research-decisions.md#commands-and-shared-state): assign the
      role again on the new route, or, for a slot with history, retire the stale route and
      continue the slot through the context repair of step 2. When `admitted` is false,
-     `details.steps` lists these steps. Then run `review-series` with the new assignment.
+     `details.steps` lists these steps in the order to take them. Then run `review-series`
+     with the new assignment.
      `review_worker_reconciliation_required` is the handoff of a staged
      review, and `assessment_incomplete` is its stop, below.
    - Exit status 3 with a `stop` on the last line: a typed limit or refusal, with its `code` and

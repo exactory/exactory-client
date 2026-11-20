@@ -168,8 +168,8 @@ configuration. Probe it. Then follow the stale-route procedure of the [route
 instructions](../../docs/research-decisions.md#commands-and-shared-state):
 assign the role again on the new route, or, for a slot with history, retire the
 stale route and continue the slot through a context repair. When `admitted` is
-false, `details.steps` lists these steps. Then run `review-series` with the new
-assignment. Exit status 3 with a
+false, `details.steps` lists these steps in the order to take them. Then run
+`review-series` with the new assignment. Exit status 3 with a
 `stop` on the last line: a typed limit or refusal with its `code` and
 `details`; the harness cannot continue the chain. `review_slot_exhausted`
 (the turn position is exhausted: no correction and no replacement that carries
