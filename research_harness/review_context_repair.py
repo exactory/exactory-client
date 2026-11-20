@@ -7,7 +7,7 @@ The link does not represent reused transport context or a new blind review.
 
 import json
 
-from .errors import ResearchError
+from .errors import ResearchError, describe_error_at
 from .evidence import digest
 from .operations import fields, normalized_text, strings, text
 from .review_supplied_evidence import collect_qualified_objections, find_scientific_predecessor
@@ -770,7 +770,7 @@ def validate_reassessment(records, artifacts, assignment, observed_output, *, re
     # observed output: an inherited review recorded under a qualified identity itself delivers no stated_id.
     identities = {(objection['stated_id'], objection['claim']): objection['id']
                   for objection in collect_qualified_objections(packet)}
-    for finding in findings:
+    for index, finding in enumerate(findings):
         fields(finding, ('review_id', 'disposition', 'reason', 'evidence'), code='review_reassessment_mismatch')
         text(finding['review_id'], 'Historical review ID', code='review_reassessment_mismatch')
         if finding['review_id'] in seen or finding['review_id'] not in originals:
@@ -783,7 +783,9 @@ def validate_reassessment(records, artifacts, assignment, observed_output, *, re
             strategy.evidence(records, artifacts, finding['evidence'], review_binding=binding)
         else:
             from .review_refusal import validate_evidence_contract
-            (evidence_validator or validate_evidence_contract)(records, artifacts, finding['evidence'], review_binding=binding)
+            with describe_error_at('/reassessment/findings/' + str(index) + '/evidence'):
+                (evidence_validator or validate_evidence_contract)(records, artifacts, finding['evidence'],
+                                                                   review_binding=binding)
         if delivery is not None:
             from .research_decisions import find_review_undelivered_references
             missing = find_review_undelivered_references(records, artifacts, finding['evidence'], delivery)

@@ -199,6 +199,7 @@ def _complete_ending_step(store, row):
             command=row.get('command', 'record-check'), payload=row.get('payload', {}),
             chooses=[], prerequisites=[]))
     step = details['step']
+    planned_step = copy.deepcopy(step)
     step.setdefault('payload', {})
     step.setdefault('chooses', [])
     step.setdefault('prerequisites', [])
@@ -218,6 +219,8 @@ def _complete_ending_step(store, row):
                 then=[dict(answer='Take the step of this ending', steps=[copy.deepcopy(step)])])
         for answer in details['decision'].get('then', []):
             for choice in answer.get('steps', []):
+                # Only the step of the ending takes its completed form; another step of its command keeps its own.
+                is_ending_step = choice == planned_step
                 arguments = choice.setdefault('arguments', {})
                 if choice['command'].startswith('search '):
                     if choice.get('root') is not None:
@@ -226,7 +229,7 @@ def _complete_ending_step(store, row):
                     arguments.setdefault('--workspace', str(store.root))
                 if choice.get('command') == 'review-series':
                     choice['arguments']['--assignment'] = row['head_id']
-                if choice.get('command') == step['command']:
+                if is_ending_step:
                     choice.update(copy.deepcopy(step))
 
 

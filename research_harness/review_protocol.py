@@ -22,11 +22,11 @@ from collections.abc import Mapping
 from contextlib import ExitStack
 
 from .artifacts import ArtifactStore, describe_artifact, validate_reference
-from .errors import ResearchError
+from .errors import ResearchError, describe_error_at
 from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, prepared_task_mutation, text
-from .finishing import retry_store_write
+from .finishing import SCOPED_FINISH_ATTEMPT_COUNT, SCOPED_FINISH_RETRY_CODES, SCOPED_FINISH_WAIT_SECONDS, retry_store_write
 from . import review_transport as transport
 from .review_answer_recovery import derive_output, extract_answer_text, recover_answer
 from . import bar_sources
@@ -2692,10 +2692,6 @@ def _observed(artifacts, route, request, credential, *, capacity_probe=False):
 
 
 # Retain the live observation through busy-store retries; committed captures can finish in a later process.
-_FINISH_ATTEMPT_COUNT = 600
-_FINISH_WAIT_SECONDS = 600.0
-
-
 def _finish_call(store, payload, operation, finish, *, request_id):
     from .review_call_capture import read_call_observation
     from .review_task_execution import identify_call, release_call
@@ -2711,8 +2707,8 @@ def _finish_call(store, payload, operation, finish, *, request_id):
             return _prepare_review_mutation(store, operation, payload, prepare,
                 request_id=request_id, _snapshot=finishing, scoped=True,
                 validate_commit=lambda tx, result, revision: release_call(tx, lifecycle_id, termination, revision))
-    return retry_store_write(commit, attempts=_FINISH_ATTEMPT_COUNT, seconds=_FINISH_WAIT_SECONDS,
-                             codes=('store_busy', 'stale_revision', 'review_task_dependency_changed'))
+    return retry_store_write(commit, attempts=SCOPED_FINISH_ATTEMPT_COUNT, seconds=SCOPED_FINISH_WAIT_SECONDS,
+                             codes=SCOPED_FINISH_RETRY_CODES)
 
 
 def _invoke_once(store, payload, operation, start, finish, *, expected_revision, request_id, credential,
@@ -4772,7 +4768,8 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
             raise ResearchError('invalid_review_adjudication', 'Correction admissibility is null when no correction is assigned')
         text(output['reason'], 'Adjudication reason')
         if packet.get('subject', {}).get('kind') == 'problem':
-            validate_evidence_contract(records, artifacts, output['evidence'], packets=packets)
+            with describe_error_at('/evidence'):
+                validate_evidence_contract(records, artifacts, output['evidence'], packets=packets)
         else:
             # Generic focused findings retain their existing recursive artifact-evidence contract.
             # Artifact availability is still checked by _evidence when recording.

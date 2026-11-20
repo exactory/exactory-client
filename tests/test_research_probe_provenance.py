@@ -399,19 +399,19 @@ class ResearchProbeProvenanceTests(DevelopmentCase):
                 [{"probe_id": "pending-probe", "sha256": descriptor["sha256"], "roles": ["outputs"]}])
             self.assertFalse((self.root / descriptor["path"]).exists())
             return original(artifacts, value, media_type)
-        prepare = probe_provenance.prepared_mutation
+        prepare = probe_provenance.prepared_task_mutation
         attempts = []
         def race_once(*args, **kwargs):
             attempts.append(True)
             if len(attempts) == 1:
                 raise ResearchError("stale_revision", "Fixture concurrent mutation")
             return prepare(*args, **kwargs)
-        with mock.patch.object(probe_provenance, "prepared_mutation", side_effect=race_once):
+        with mock.patch.object(probe_provenance, "prepared_task_mutation", side_effect=race_once):
             with mock.patch.object(ArtifactStore, "put", new=inspect_publication):
                 result = probe_provenance.pin_probe_artifact(self.root, "pending-probe", data, "text/plain", "outputs")
         self.assertEqual(result, descriptor)
         self.assertEqual(len(attempts), 2)
-        with mock.patch.object(probe_provenance, "prepared_mutation", side_effect=ResearchError("storage_busy", "Fixture lock")) as failed:
+        with mock.patch.object(probe_provenance, "prepared_task_mutation", side_effect=ResearchError("storage_busy", "Fixture lock")) as failed:
             self.assert_error("storage_busy", lambda: probe_provenance.pin_probe_artifact(
                 self.root, "pending-probe", b"Never published", "text/plain", "stdout"))
         self.assertEqual(failed.call_count, 1)
