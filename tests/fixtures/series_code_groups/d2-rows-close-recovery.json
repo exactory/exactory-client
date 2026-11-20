@@ -408,6 +408,9 @@
           "content",
           "record"
         ],
+        "research_harness/openness_reading_v7.py:verify_packet_finding_index#1": [
+          "content"
+        ],
         "research_harness/problem_openness.py:assess_openness#1": [
           "record"
         ],

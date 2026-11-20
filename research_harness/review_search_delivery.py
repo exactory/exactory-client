@@ -16,6 +16,8 @@ SHARED_FIELDS = ('dispositions', 'queries', 'responses', 'scope')
 MEDIA_TYPE = 'application/json'
 FINDING_INDEX_FIELDS = ('queries', 'scope', 'dispositions', 'resolved', 'row_dispositions')
 FINDING_INDEX_MESSAGE = 'The finding index differs from its bound search or reading originals.'
+# The field of the inventory unit that holds an index too long for any form with unit references (G8.5).
+FINDING_INDEX_UNIT_FIELD = 'finding_index'
 
 
 def build_finding_index(records, artifacts, native, *, formulations=None):
@@ -91,6 +93,65 @@ def select_finding_index(index, formulations):
     keys = {row[field] for row in searches for field in FINDING_INDEX_FIELDS if field in row}
     return dict(searches=searches, fields={key: copy.deepcopy(value) for key, value in index['fields'].items()
                                         if key in keys}, read_works=copy.deepcopy(index['read_works']))
+
+
+def _order_leaving_values(index, inventory):
+    """List the values that can leave the index, longest canonical JSON first and then by digest, with references.
+
+    A value can leave when it is no queries value and is longer than its reference {unit, characters}. unit is the
+    shared body whose SHA-256 is the digest, or else the residual or whole record of the first search that holds it.
+    """
+    manifest = inventory['search_delivery']
+    bodies = {row['sha256']: row['handle'] for row in inventory['material']}
+    shared = {row['artifact']['sha256'] for row in manifest['shared_fields']}
+    entries = {row['search_digest']: row for row in manifest['searches']}
+    queries = {row['queries'] for row in index['searches'] if 'queries' in row}
+    leaving = []
+    for key, value in index['fields'].items():
+        if key in queries:
+            continue
+        if key in shared:
+            handle = bodies[key]
+        else:
+            owner = next(row for row in index['searches'] if key in (row.get(field) for field in FINDING_INDEX_FIELDS))
+            entry = entries[owner['search_digest']]
+            handle = bodies[(entry['residual'] or entry['artifact'])['sha256']]
+        reference = dict(unit=handle, characters=len(serialize_record(value).decode('utf-8')))
+        if reference['characters'] > len(serialize_record(reference).decode('utf-8')):
+            leaving.append((key, reference))
+    return sorted(leaving, key=lambda row: (-row[1]['characters'], row[0]))
+
+
+def build_last_finding_form(index, inventory):
+    """Return the form of the index from which every value that can leave has left, named in units by its body."""
+    form = dict(copy.deepcopy(index), units={})
+    for key, reference in _order_leaving_values(index, inventory):
+        del form['fields'][key]
+        form['units'][key] = reference
+    return form
+
+
+def fit_finding_index(index, inventory, stated_characters, measure, *, formulations=None):
+    """Return the packet form of a complete index, or of its selection for formulations, within a stated size.
+
+    The complete form when it fits; otherwise the first form in which values have left, the longest first, that
+    fits; otherwise the descriptor of the inventory unit whose body is the last form of the complete index. measure
+    gives the size of a value in the measure of the route.
+    """
+    selected = index if formulations is None else select_finding_index(index, formulations)
+    if measure(selected) <= stated_characters:
+        return copy.deepcopy(selected)
+    if measure(build_last_finding_form(selected, inventory)) > stated_characters:
+        unit = next(row for row in inventory['units'] if row['identity'].get('field') == FINDING_INDEX_UNIT_FIELD)
+        return dict(unit=unit['bodies'][0], characters=unit['characters'], searches=len(index['searches']),
+                    read_works=len(index['read_works']))
+    form = dict(copy.deepcopy(selected), units={})
+    for key, reference in _order_leaving_values(selected, inventory):
+        del form['fields'][key]
+        form['units'][key] = reference
+        if measure(form) <= stated_characters:
+            break
+    return form
 
 
 def verify_finding_index(records, artifacts, native, index, *, formulations=None):

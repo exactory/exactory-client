@@ -585,20 +585,22 @@ class SessionAllowancePlanTests(unittest.TestCase):
         from research_harness import openness_reading_v7 as v7
         from test_openness_reading_v7_turns import MemoryArtifacts, build_native
         # Pin the admission frames of 0.92.0, including the unread-final reserve. They differ from 0.91.1 only by
-        # finding version 2: the plan and the final frame gain finding_index, and the final instructions grow.
+        # finding version 2: the plan and the final frame gain finding_index, and the final instructions grow. G8
+        # adds the sentences on finding_index.units and the descriptor form to the rules of version 2 (563
+        # characters), which every final frame, room and task size of these plans follows.
         cases = [
             ('claude_cli_v1', 'claude-opus-5-5', 1,
-             'dfcf78f7efd4e4af3cc39df1980d9bb34ae8d8ebd40e8faa51eb8ed4eabf0ab8',
-             'd5f847a18426df3b7ce29b3c8a4cd88ceb7749b4c0cac4cbbef016d3684c5744'),
+             '4c5f6ec74df0828c798c50a249376fbce0231f3e5430ca7bc965f21c6fe92922',
+             'f7a5ce453c44b225cfd77e2eed78452e1dbba12a7f385fde4a4eebb0c9199fa3'),
             ('claude_cli_v1', 'claude-opus-5-5', 2,
-             '60a30e88146dec281972772da13d6d76026e63ab63fd90203812afe234f109a1',
-             '6aabf2c2267a8b06189b015776ae4897fe94acc6f8c35c8a7c78e65b9d2b27d6'),
+             '8762eb1fb1610c334010f7b0a0de8f4f9cfc12b372fdbd27c8ac44bfa0b48943',
+             '46b47c4579cab3a001e57fc13dc5d32162ba2e8674dba76a01793473d0555775'),
             ('codex_cli_v1', 'gpt-6-astra', 1,
-             '162de10e79ace533bbb33d6336358c24295f50056b9bf97a006b007453c92602',
-             'd1c3429246c8aebce238b5cf6b8a960c26904dac9cf6a7644685be0d6b436eac'),
+             '63a2a13e9aa553b1ed4c60d4bf7e98bbf1dfa4a508a0915975db0a6526aab16c',
+             'c806facd301ef125d802e6853867653ec3b8a7400e948653430ad5c9f8f95600'),
             ('codex_cli_v1', 'gpt-6-astra', 8,
-             'b0e2abcbee6e076b3984317856eb5dafa82e9316d4f36fae7238d2134453800d',
-             '46a11d5b3e7adb25f7889a210b641fee4d3094e483cfbd49c3e9a1c1be8eb2d5')]
+             'fd7b63db71e8f6c7ddef58f4bd491335564f7c2bb0273d484f3672004ce1d191',
+             '203d24b85f747e02ff7b5913d4ec31b99f4979793313b970388a76a35075b8a8')]
         for adapter, model, targets, expected, expected_artifact in cases:
             with self.subTest(adapter=adapter, targets=targets), patch.object(v7, 'build_inventory',
                     return_value=v7.plan_inventory([], {})):

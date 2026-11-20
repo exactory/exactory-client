@@ -258,8 +258,15 @@ def execute_visual_text_answer(test, route, details, *, case=None, built=None):
     if built is not None:
         for body in built['bodies'].values():
             case.artifacts.put(body, 'text/plain; charset=utf-8')
+    plan_inventory = v7.plan_inventory
+
+    def add_scaled_units(rows, bodies, **options):
+        # The exported packet binds the searches of the store, and its finding index names their bodies, so the
+        # inventory keeps the units of the packet and gains the scaled units.
+        scaled = [dict(unit['identity'], artifact=unit['artifact']) for unit in built['inventory']['units']]
+        return plan_inventory(list(rows) + scaled, dict(bodies, **built['bodies']), **options)
     with patch.object(reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (v7.PROTOCOL, reading.PROTOCOL_V6)), \
-            (patch.object(v7, 'build_inventory', return_value=built) if built is not None else nullcontext()):
+            (patch.object(v7, 'plan_inventory', side_effect=add_scaled_units) if built is not None else nullcontext()):
         checked = check_mutation(case.store, protocol.record_assignment, assignment,
             expected_revision=case.store.revision, request_id='text-check-' + text_route['id'],
             bounded_payload=assignment)

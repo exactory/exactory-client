@@ -86,6 +86,16 @@
     },
     "research_harness.review_session_v4.build_composition_packet": {
       "parameters": []
+    },
+    "research_harness.review_search_delivery.build_last_finding_form": {
+      "parameters": [
+        "index"
+      ]
+    },
+    "research_harness.review_search_delivery.fit_finding_index": {
+      "parameters": [
+        "index"
+      ]
     }
   },
   "callee_inventory": [
@@ -21113,7 +21123,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.native_review": {
-      "ast_sha256": "1db6c717d72cf905d8042b64c43a6cf86168d6016946388d1fe766fee570f6c8",
+      "ast_sha256": "9bf7e310f9b97f76bcfab99d851d652d447623764dd02e8497e6e59841e34a0d",
       "functions": {
         "_closed": "42e89b4afe40f000d59d6f9b80dc1335795381afadd36f76fc48f62e7f944cb3",
         "_nonempty": "9a6abcbc7e7271ccb4bb730efbeb22ba18339942e47553315e7c90ecd98da2bb",
@@ -21259,7 +21269,7 @@
         "f9c804d353cf29ba081381c2d702e47e0c736ab37c41bb553f2c21b29154bff5",
         "fb76fd60b663eef39d4a73d6f1c458845c9d317d23dfee77616e2452bdb63fc1"
       ],
-      "reason": "prompt text lookup keyed by the grounds selectors of FINDING_RULES; read only by render_finding_rule Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned."
+      "reason": "prompt text lookup keyed by the grounds selectors of FINDING_RULES; read only by render_finding_rule Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment."
     },
     "research_harness.native_writes": {
       "ast_sha256": "fbbed9384941aabe8d671f17f3082a503272800c8b31e17fc1ece1d12467f4db",
@@ -21448,7 +21458,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.openness_reading": {
-      "ast_sha256": "b3433669a76c381b81893fb4d338a2ac110dafcf257aafabec01b17987d52dfe",
+      "ast_sha256": "92dcf15257209ca9d87e048bf8ddaea05577b8fb0f67525c22b363a798322453",
       "functions": {
         "_add_source": "bf750a7009979c804b515fe2fa49795c9649ea87dcafa53f80cef1045aeb2340",
         "_assemble_reading_turn": "9c44a6537d6d1fae1af0dc44b726cd7059da1ee593c0d2f800617c0c1655160a",
@@ -21529,7 +21539,7 @@
         "measure_record_entries": "f835bc235c5a6516fdc22f1898b1c0a5f440718e42c46b8c6ad2d0e9ab7ff716",
         "measure_retained_entries": "480b1668a5724d25f65f260ea68fdd3e097f00cbb5df5074d4db051f6d7cbb03",
         "preflight_final_input": "268eb020cdff80e28066e157fed03a95485ae96fd281195ff2f2515899e041dc",
-        "prepare_packet": "bf235cbb09188b97f8d829bda6a4234f569bf4baf7a487c45eae8b2408ef4eee",
+        "prepare_packet": "1dc17a60ad43031b1e4888d9d934a11e6a7befac8db79313c9600261ebbf97b0",
         "project_reading_chain": "4b6636ba1888443b01887671d4093d5549d49a0dacff12569e704c27a1ef9ff5",
         "require_reserved_identifier": "12d2dd1f171bc3787b8a6df4abbe2ba60d8f0d671aa19e09194d9ddb0a0d637b",
         "select_delivered_bodies": "4fdbd56f8443be78f2cc1f00f09bd56ae642ce916b6e7fcaa9edceea59acda4c",
@@ -21802,15 +21812,15 @@
         "eeb22b9d0624450542d6e74b4a6c6123a04f94f261b69705ea07dbec82562b10",
         "f5a3d9ca9254a2ee2eccc00ed90baaf653318b145dfc4bd4f752637f4227236d"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the activation of 0.91.0 (ruling 37): NEW_PROBLEM_CHAIN_PROTOCOLS becomes (PROTOCOL_V7, PROTOCOL_V6); no packet member, call, write or closed shape changes. Reviewed 0.91.1: a math openness packet that fits one turn stays a single native turn under (v7, v6); the condition reads the packet kind only, and no packet member, call, write or closed shape changes. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the activation of 0.91.0 (ruling 37): NEW_PROBLEM_CHAIN_PROTOCOLS becomes (PROTOCOL_V7, PROTOCOL_V6); no packet member, call, write or closed shape changes. Reviewed 0.91.1: a math openness packet that fits one turn stays a single native turn under (v7, v6); the condition reads the packet kind only, and no packet member, call, write or closed shape changes. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "0b75ef9600eb18abecb410f8997eff7e7b325b4a5a0e2bdc80823bea21fcff7c",
+      "ast_sha256": "4eda07abbc8ffe4234b2607d7305f530cc7bc546b45912e9e26e36188fe58b89",
       "functions": {
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
         "_append_unit": "f6cb4ac11ffc0db1bbc01ecf87ec1ca4e26a2ccc64a24c9aebe0b2c8d2ce16a7",
         "_bind_body": "2987a8c5ea3492523f72bf960edfd02af8b55595d336b5dceb7f2c1e22a7f8a5",
-        "_check_v7_admission": "dcba0b9956ca0d6d00782b331533b02b89f700a8855527dfcba37a8d4ae0d68a",
+        "_check_v7_admission": "0fd21aba0571ad8a43620a4628326d0303fdcfb6407a5a8ecece20706e655fd2",
         "_describe_checked_entries": "801983d7a44989fff7031afb726c8865c654c64be1bbbe6a43a4103672a0430a",
         "_describe_identity": "9bb7503add880d286c1090f5e1c17b70f16c710c36367bf548a1fb11dd75b8cb",
         "_describe_json": "7c6004e53039a80228d53341ea102c68af46e1cc51855d15c96893ebef98c919",
@@ -21818,23 +21828,27 @@
         "build_chain_state": "4cd995c0c273f4d53a5867d0db8b3f3b38bdc976d5efbaf83d89de98f062c08f",
         "build_inventory": "52e702dc837554711067f8cfc472c52e0d97f0fa72593f907d6dc0e0e9726cc4",
         "compute_allowance_rows_bound": "43cedd0b96e55219fc11fc700beb8044053e677919c8c6088032814fc1e4703e",
+        "measure_finding_descriptor": "eced9ebbdf4fb19f26e90d1ffb537d599a94a1b559dab1251428e61ae3fc0b3c",
+        "measure_finding_index_frame": "e13105a214587e19a17f1ddcbb0942d25398be046852afc792b0a746d3a087dc",
         "describe_carried_pool": "b8c0046b42a8d1d5d4d96483e43f2c49afbc294acad7e86f5b965bc922646932",
         "describe_visual_text_stop": "927e68cb236d962c4335fe26aa56b413360d4b6490ec47b1cb2e0f1fd35775fc",
-        "measure_turn_frames": "8a4808e734b085e3f8795acbe239f2241566736992dfb2b9ec35f8eeb8aa244b",
+        "measure_turn_frames": "bf92f20acb3c876322b56bf3b76ea9313a072de1d6f00c2a3e1d5d4f0b792e56",
         "observe_carried_chain": "7830acc80f56e928029aec9390682f3131b0401efcfae5710bc27f826ef9fe5c",
         "plan_inventory": "0ab9eecaf336b2c4d14998700000549bbd29fa68fc81dd1637c0acdf2ecb7b32",
         "project_carried_turn": "0c984a434694f523c26e101401f7d285b7d189fdf69c5cab89491985e5cbb682",
         "require_text_reading_route": "0996fc68285408ff85afa069221807feb9838d253254f15016f5b03c8df65d30",
         "check_v7_admission": "38bdcbd8427b5fdbfd57337252c5e65b955fae7fafc2eb917a79053474186de0",
         "_find_largest_one_request_targets": "63216bfd3c6a1bb3fe519e16cef63c3bc823e4177c101f0cd3f726fed7802542",
-        "build_turn_packet": "db47e4202e8a6f2f8e925ee72711933643bc62ffbb5791aef69881e17abc265d",
-        "validate_turn_output": "c36e57516ecaa2d54324231e65605727d2fe3412daa556c7912c044b0056e0f7",
-        "prepare_next_assignment": "962c206465492fd1bd64fc46243b06fbc35029728c4afbff739a0c9df93990e4",
-        "prepare_refusal_assignment": "b0a90d71bb178e34c62ac850c8ce1f4ba0248524e01fb4f29eea2d93b2f3b89e",
+        "build_turn_packet": "bc9378ffd93512113d9281480403c3ddf7cc33cac68a2a5c84dbfea8cbcce2dc",
+        "fit_packet_finding_index": "4e1769d7794c8fb72c60209028cd085991e47dbae812bff33a2d1536c8cc0143",
+        "validate_turn_output": "c0fa207927995acd2aa1d82e55360ea8ced43fbc3cda51b7ad4620f75f675fcb",
+        "prepare_next_assignment": "d8cdd849d9ac056ecb1465a3c269d649b1480008c8793d320a78e1ba389d0093",
+        "prepare_refusal_assignment": "644eb059414d6c0ab981042d7c11da1b288274fcca0ee5ff9475ffe7af13a398",
         "prepare_notice_capacity_assignment": "b964067b322e7a188ffa0663fb92cd40efd3491d0a42a190268858f8bf5b61fb",
         "describe_admission_stop": "bcf896b64910a70f603dd83f76a5d473b7c8fcf38899452593f64d16340c138a",
         "plan_turn_recovery": "26a4ee97bdc87fb5a53d91cdd56ec5c30c08621f0d0d21a567b9830a46c76820",
-        "_verify_turn_binding": "88d8533cce5125458d7d8e4a6240901822505fd82e104996b238429f66595686",
+        "_verify_turn_binding": "e215f6a41cb0c81d4a365156159c2b977e1fb4f930526b86e6a1999305d317db",
+        "verify_packet_finding_index": "231261393a99b006546b45019bc97ad0d65f9778fb75233f4caad87911c03e81",
         "_verify_required_coverage": "8b657838ac15ae8c58b3d96efa73875ac28184cddc1d23924722ede9991e8ab9",
         "matches_turn_prompt": "243892a6cef6808429e43d887697b5f8bfbcb0b54967bc582997b8e437d4aa8e"
       },
@@ -21951,7 +21965,7 @@
         "ddd2ee4315b1e0d526acf49967b38413510df7bb05c438a1903329816f71fad4",
         "e93e925e6368eeeebc84fba3be13c87ac300e3b776e3f2d7d355140b214528ac"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment."
     },
     "research_harness.openness_successor": {
       "ast_sha256": "459a0709e5b0b24004b9b4dfc71c0202157d7529fa6e42b8ea498cb4f34e125b",
@@ -22596,7 +22610,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.problem_openness": {
-      "ast_sha256": "c2ac64c8b06faa9b9b3ed8bbd5e6994015eb321eda10427af5f6d1ee414125fc",
+      "ast_sha256": "f99f68d8f7fd5f0f6347091a56c254438adbef226c96fa18247c0663207e561d",
       "functions": {
         "_is_utf8": "802384d729df9c710bdc631eac4e0a7c325b5239cf38258e5f37412a5cae902c",
         "assess_openness": "30556492c6f2b1ea713c3d6a24af505ca668f988e5bb5d161d6073a70f8b1182",
@@ -22608,7 +22622,7 @@
         "describe_gap_fact": "23dcb18ade44f5a8d2fdfc01d68d1484828e68884d61bff384b46f47c7ddf298",
         "export_openness": "059b7ec53c5702791a1618a8bdb388dfefb72e4cbac8f90f3de06fb026660f1d",
         "list_reading_citations": "1e10edb49b268265b79893763303217b089a037928712089e634bd7c4eeb086b",
-        "prepare_openness": "e158403394b276b2614c7a2e8c3d7abbe79cf0ba8bae385582d2730a0563c615",
+        "prepare_openness": "171afbe7ab03c7b20ab516dab3da995be551c99ba5e6df80353bd30f4db1ddc7",
         "serialize_record": "f7243934e28cc8ee92a7c6af903b9056bd8864249cf01df9d8466a5a00442d69"
       },
       "packet_call_digests": [
@@ -22629,7 +22643,7 @@
         "35d832a5c788603afcbfc749786d41fa53a4e66416e2aace1cbbf15d3f8ddf6a",
         "de5514ebbda67621a5dc4aee7ec34792c92c3a81e6bc3979912491c6dfe9137a"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment."
     },
     "research_harness.problem_openness_reviews": {
       "ast_sha256": "dfa213888c1b7488093077f71797cb8738f0662b12183da143c485b33ecfbefe",
@@ -25631,7 +25645,7 @@
       "reason": "Reviewed slate-series adapter, v3-only ordered admission, session precedence and preserved legacy repair delegation; authenticated slate journey and compatibility tests pin this source."
     },
     "research_harness.review_search_delivery": {
-      "ast_sha256": "feccdd15a16076938df1927de499b12fd9c61756b0df63174ef4d2d7c305b84f",
+      "ast_sha256": "88ea46d92c92be80458a25771cbda4bdedd70b7d89ed5fb9e077ebd4be25a7f6",
       "functions": {
         "_matches": "65bccdcc9dc0c1d33b3f87af515ef091108c36f71746900fe685880545be43f7",
         "plan_search_delivery": "c1792bd0351d82207e3130f7c272b66d58a215afb91bfcba50103181b2678962",
@@ -25640,6 +25654,9 @@
         "build_finding_index": "08a81ecaaca91a5f77465d66d89d18c5171363bb9767b3d82db421a59a3ba6c3",
         "validate_finding_index": "3a836751a409565bceb7cf3541a07faae77a8ab965af6319903c4dc9d85ee6b8",
         "select_finding_index": "fddb3f6741b5ff3f608a178adadbf23ddee81ed40a4c73b7702c57ecd52fa966",
+        "_order_leaving_values": "1093d824eee373c1e126b1b54c6951d33e2eb32accac9caa7c5f0606ff3e34c7",
+        "build_last_finding_form": "7204025c23b395ffb8c29c19c4b204c4f534dad66dcd9163e4784b3c1eb86a89",
+        "fit_finding_index": "46327f487198fb713c0fc0a78fb41ca763eff6c02a203347ad6804675487af30",
         "verify_finding_index": "fd6a5576b761c8700c6d8a157a2a6b4bc46629f316fce7f1b580cfea68a6ca92"
       },
       "packet_call_digests": [
@@ -25703,7 +25720,7 @@
         "fb126e5ff9493c0ab0ea2b0a7e1763b4511b95d71cc04b6f56ee948807b963ee",
         "fb88cb6f5ee054f27ee2bab009adcb62fa3d7c61391bdfe2d7944587c4e6588f"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment."
     },
     "research_harness.review_series": {
       "ast_sha256": "2f7aecc8ac79cbae01a97fb371c92585caff30e75921c209ffa222ccc2e5f0c4",
@@ -27064,7 +27081,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.openness_final_pages": {
-      "ast_sha256": "26d52cf20ce0be91e0e870d6962b83f335ba0cc14e1cee2ab4919beb52db9267",
+      "ast_sha256": "f2037941d61d7ee66439b4d11e6eb35196aae975ad0b9db1018cf7d991f3aa99",
       "functions": {
         "read_binding": "2da24aa0945dc4a3857c77349290b841384ef906fff06f5393184d39aac5d679",
         "read_page_plan": "edcd39f87509ab69c60c42f8c20a25f9cf0f5e7d311845411344fcf964fe32f7",
@@ -27075,9 +27092,9 @@
         "list_final_progress": "7f408a109e7bbf99406e6dd85d354aa073fde6e60db54e226506d1c50db6dea1",
         "prepare_final_packet": "042d81dc5b9bfaeb6bdccc9c170f6170bfdba1a885d54a001fe924e7d08db9c5",
         "publish_page_plan": "ba2ade2d94b18ebde66d4e82e843d7845bee8d192304b30556c61fc33f909ab1",
-        "build_validation_envelope": "2f2c6c95117dcb172f84f550b518aec07c7b8a2dd2f9107116bc830fb650f198",
+        "build_validation_envelope": "7f5d2752c9435d8ff58a8d325a2e18cd666115ef9761720a4f021aa070d7c33c",
         "list_page_outputs": "18373aa1334deb468cfb8a94555dfc70ec0f48242ce36d2ae1582914dd122e39",
-        "build_final_packet": "438f1d1c52016e1a773b3053e97c30fabd498be57b690551afdad02c6c6711a0",
+        "build_final_packet": "77efc66b05183684f9927d1412e9af8b6d82b9e0335b01cd057c69f965fb3810",
         "project_final_output": "8d4784bfaf92326b28b835e66c2b3ad17e760f3c5ed875916387f3e08976a65d",
         "list_composite_turns": "d5bb3db6ad6173c90067328e1b340795aa81cf7e3d03a35cd02138de47ccc38e",
         "read_composite_currency": "4bbc0254f15e8a36c4b1970c0a776a1a4103a1e34f3bbf380decbdedd5ff23e9",
@@ -27097,7 +27114,7 @@
         "aba05bfa59a1aa8259f6ce5719de6a70d031ae65b20e6d241957fefcbd028f5b",
         "c6a21e336b296a15f79e12ae71acb2a2d67b346a054d9bb1b85b1351e1dbbe8a"
       ],
-      "reason": "Reviewed v7 page-plan integration: bounded packet selection from immutable plan, inventory and state artifacts; complete native validation stays transient. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. Reviewed the byte-measured page-room fallback: it retains the frozen allocation and current material bound; calibrated ratio adaptation is unchanged."
+      "reason": "Reviewed v7 page-plan integration: bounded packet selection from immutable plan, inventory and state artifacts; complete native validation stays transient. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. Reviewed the byte-measured page-room fallback: it retains the frozen allocation and current material bound; calibrated ratio adaptation is unchanged. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment."
     },
     "research_harness.review_session_v4": {
       "ast_sha256": "3074ae1007047e3ed293b852f9e6faf4e80beb42a9bd0b14e3710e26fd159d02",
@@ -45860,7 +45877,7 @@
       },
       "entry": "Q1",
       "fixture": "native_math/named-gaps-v2",
-      "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit.",
+      "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit.",
       "members": {
         "record_id": {
           "class": "fixed",
@@ -45870,7 +45887,7 @@
           },
           "entry": "Q1",
           "fixture": "native_math/named-gaps-v2",
-          "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+          "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit."
         },
         "search_digest": {
           "class": "fixed",
@@ -45880,7 +45897,7 @@
           },
           "entry": "Q1",
           "fixture": "native_math/named-gaps-v2",
-          "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+          "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit."
         },
         "formulations": {
           "class": "collection",
@@ -45890,7 +45907,7 @@
           },
           "entry": "Q1",
           "fixture": "native_math/named-gaps-v2",
-          "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit.",
+          "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit.",
           "items": {
             "class": "fixed",
             "quantity": "texts",
@@ -45899,7 +45916,7 @@
             },
             "entry": "Q1",
             "fixture": "native_math/named-gaps-v2",
-            "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+            "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit."
           }
         },
         "queries": {
@@ -45910,7 +45927,7 @@
           },
           "entry": "Q1",
           "fixture": "native_math/named-gaps-v2",
-          "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+          "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit."
         },
         "scope": {
           "class": "fixed",
@@ -45920,7 +45937,7 @@
           },
           "entry": "Q1",
           "fixture": "native_math/named-gaps-v2",
-          "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+          "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit."
         },
         "dispositions": {
           "class": "fixed",
@@ -45930,7 +45947,7 @@
           },
           "entry": "Q1",
           "fixture": "native_math/named-gaps-v2",
-          "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+          "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit."
         },
         "resolved": {
           "class": "fixed",
@@ -45940,7 +45957,7 @@
           },
           "entry": "Q1",
           "fixture": "native_math/named-gaps-v2",
-          "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+          "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit."
         },
         "row_dispositions": {
           "class": "fixed",
@@ -45950,7 +45967,7 @@
           },
           "entry": "Q1",
           "fixture": "native_math/named-gaps-v2",
-          "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+          "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit."
         }
       }
     },
@@ -45962,7 +45979,7 @@
       },
       "entry": "Q1",
       "fixture": "native_math/named-gaps-v2",
-      "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit.",
+      "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit.",
       "members": {
         "reading_id": {
           "class": "fixed",
@@ -45972,7 +45989,7 @@
           },
           "entry": "Q1",
           "fixture": "native_math/named-gaps-v2",
-          "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+          "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit."
         },
         "reading_digest": {
           "class": "fixed",
@@ -45982,7 +45999,7 @@
           },
           "entry": "Q1",
           "fixture": "native_math/named-gaps-v2",
-          "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+          "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit."
         },
         "version_id": {
           "class": "fixed",
@@ -45992,7 +46009,7 @@
           },
           "entry": "Q1",
           "fixture": "native_math/named-gaps-v2",
-          "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+          "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit."
         },
         "identifiers": {
           "class": "collection",
@@ -46002,7 +46019,7 @@
           },
           "entry": "Q1",
           "fixture": "native_math/named-gaps-v2",
-          "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit.",
+          "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit.",
           "items": {
             "class": "fixed",
             "quantity": "identifiers",
@@ -46011,7 +46028,7 @@
             },
             "entry": "Q1",
             "fixture": "native_math/named-gaps-v2",
-            "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+            "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit."
           }
         },
         "title": {
@@ -46022,7 +46039,7 @@
           },
           "entry": "Q1",
           "fixture": "native_math/named-gaps-v2",
-          "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+          "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit."
         }
       }
     },
@@ -46034,7 +46051,7 @@
       },
       "entry": "Q1",
       "fixture": "native_math/named-gaps-v2",
-      "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit.",
+      "ground": "G8 of 0.92.0: a field value is content of its bound search record. It stays in fields while the index is within its stated size; beyond it the longest values other than queries leave, and units names the body of each. A v6 final and a review of one request hold every value and count it against the selected keyed request limit.",
       "items": {
         "class": "fixed",
         "quantity": "sources",
@@ -46043,7 +46060,7 @@
         },
         "entry": "Q1",
         "fixture": "native_math/named-gaps-v2",
-        "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit.",
+        "ground": "G8 of 0.92.0: a field value is content of its bound search record. It stays in fields while the index is within its stated size; beyond it the longest values other than queries leave, and units names the body of each. A v6 final and a review of one request hold every value and count it against the selected keyed request limit.",
         "members": {
           "work_id": {
             "class": "fixed",
@@ -46053,7 +46070,7 @@
             },
             "entry": "Q1",
             "fixture": "native_math/named-gaps-v2",
-            "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+            "ground": "G8 of 0.92.0: a field value is content of its bound search record. It stays in fields while the index is within its stated size; beyond it the longest values other than queries leave, and units names the body of each. A v6 final and a review of one request hold every value and count it against the selected keyed request limit."
           },
           "disposition": {
             "class": "fixed",
@@ -46063,7 +46080,7 @@
             },
             "entry": "Q1",
             "fixture": "native_math/named-gaps-v2",
-            "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+            "ground": "G8 of 0.92.0: a field value is content of its bound search record. It stays in fields while the index is within its stated size; beyond it the longest values other than queries leave, and units names the body of each. A v6 final and a review of one request hold every value and count it against the selected keyed request limit."
           },
           "reason": {
             "class": "fixed",
@@ -46073,7 +46090,7 @@
             },
             "entry": "Q1",
             "fixture": "native_math/named-gaps-v2",
-            "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+            "ground": "G8 of 0.92.0: a field value is content of its bound search record. It stays in fields while the index is within its stated size; beyond it the longest values other than queries leave, and units names the body of each. A v6 final and a review of one request hold every value and count it against the selected keyed request limit."
           },
           "source_id": {
             "class": "fixed",
@@ -46083,7 +46100,7 @@
             },
             "entry": "Q1",
             "fixture": "native_math/named-gaps-v2",
-            "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+            "ground": "G8 of 0.92.0: a field value is content of its bound search record. It stays in fields while the index is within its stated size; beyond it the longest values other than queries leave, and units names the body of each. A v6 final and a review of one request hold every value and count it against the selected keyed request limit."
           },
           "index": {
             "class": "fixed",
@@ -46093,7 +46110,7 @@
             },
             "entry": "Q1",
             "fixture": "native_math/named-gaps-v2",
-            "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+            "ground": "G8 of 0.92.0: a field value is content of its bound search record. It stays in fields while the index is within its stated size; beyond it the longest values other than queries leave, and units names the body of each. A v6 final and a review of one request hold every value and count it against the selected keyed request limit."
           },
           "provider": {
             "class": "fixed",
@@ -46103,7 +46120,7 @@
             },
             "entry": "Q1",
             "fixture": "native_math/named-gaps-v2",
-            "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+            "ground": "G8 of 0.92.0: a field value is content of its bound search record. It stays in fields while the index is within its stated size; beyond it the longest values other than queries leave, and units names the body of each. A v6 final and a review of one request hold every value and count it against the selected keyed request limit."
           },
           "row_id": {
             "class": "fixed",
@@ -46113,7 +46130,7 @@
             },
             "entry": "Q1",
             "fixture": "native_math/named-gaps-v2",
-            "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+            "ground": "G8 of 0.92.0: a field value is content of its bound search record. It stays in fields while the index is within its stated size; beyond it the longest values other than queries leave, and units names the body of each. A v6 final and a review of one request hold every value and count it against the selected keyed request limit."
           },
           "record_type": {
             "class": "fixed",
@@ -46123,7 +46140,7 @@
             },
             "entry": "Q1",
             "fixture": "native_math/named-gaps-v2",
-            "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+            "ground": "G8 of 0.92.0: a field value is content of its bound search record. It stays in fields while the index is within its stated size; beyond it the longest values other than queries leave, and units names the body of each. A v6 final and a review of one request hold every value and count it against the selected keyed request limit."
           },
           "row_digest": {
             "class": "fixed",
@@ -46133,7 +46150,7 @@
             },
             "entry": "Q1",
             "fixture": "native_math/named-gaps-v2",
-            "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+            "ground": "G8 of 0.92.0: a field value is content of its bound search record. It stays in fields while the index is within its stated size; beyond it the longest values other than queries leave, and units names the body of each. A v6 final and a review of one request hold every value and count it against the selected keyed request limit."
           },
           "row_byte_length": {
             "class": "fixed",
@@ -46143,7 +46160,7 @@
             },
             "entry": "Q1",
             "fixture": "native_math/named-gaps-v2",
-            "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+            "ground": "G8 of 0.92.0: a field value is content of its bound search record. It stays in fields while the index is within its stated size; beyond it the longest values other than queries leave, and units names the body of each. A v6 final and a review of one request hold every value and count it against the selected keyed request limit."
           },
           "row_excerpt": {
             "class": "fixed",
@@ -46153,7 +46170,7 @@
             },
             "entry": "Q1",
             "fixture": "native_math/named-gaps-v2",
-            "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit."
+            "ground": "G8 of 0.92.0: a field value is content of its bound search record. It stays in fields while the index is within its stated size; beyond it the longest values other than queries leave, and units names the body of each. A v6 final and a review of one request hold every value and count it against the selected keyed request limit."
           }
         }
       }
@@ -46166,7 +46183,7 @@
       },
       "entry": "Q1",
       "fixture": "native_math/named-gaps-v2",
-      "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit.",
+      "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit.",
       "members": {
         "searches": {
           "class": "collection",
@@ -46176,7 +46193,7 @@
           },
           "entry": "Q1",
           "fixture": "native_math/named-gaps-v2",
-          "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit.",
+          "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit.",
           "items": {
             "$ref": "finding_index_search"
           }
@@ -46189,7 +46206,7 @@
           },
           "entry": "Q1",
           "fixture": "native_math/named-gaps-v2",
-          "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit.",
+          "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit.",
           "keyed": true,
           "values": {
             "$ref": "finding_index_field_value"
@@ -46203,10 +46220,44 @@
           },
           "entry": "Q1",
           "fixture": "native_math/named-gaps-v2",
-          "ground": "T6.7: the exact finding index is frozen from bound search and reading originals. It is mandatory serialized frame data, never a movable or withheld evidence body. v6 final projection and request fitting, single-request admission, and v7 measure_turn_frames plus final/page admission count its complete serialized value against the selected keyed request limit.",
+          "ground": "G8 of 0.92.0: the finding index is frozen from bound search and reading originals in the plan of a chain. A packet of a bounded chain holds it within the stated size inventory.fixed_bounds.finding_index: complete when it fits, otherwise without its longest values other than queries, which units names by the body that holds each; an index that fits in no such form is the inventory unit finding_index, and the packet holds its descriptor {unit, characters, searches, read_works}. A v6 final and a review of one request hold the complete index and count it against the selected keyed request limit.",
           "items": {
             "$ref": "finding_index_read_work"
           }
+        },
+        "units": {
+          "class": "fixed",
+          "quantity": "units",
+          "bound": {
+            "serialized_characters": "stated_finding_index_characters"
+          },
+          "entry": "Q1",
+          "fixture": "native_math/finding-index-forms",
+          "ground": "G8 of 0.92.0: units maps the digest of each value that left fields to {unit, characters}: the handle of the shared body whose SHA-256 is the digest, or of the residual or whole record of the first search that holds the value, and the length of its canonical JSON. Only a packet of a bounded chain holds it; verification rebuilds the form from the complete index of the plan, the stored size, the route and the inventory.",
+          "keyed": true,
+          "values": {
+            "$ref": "finding_index_unit_reference"
+          }
+        },
+        "unit": {
+          "class": "fixed",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 64
+          },
+          "entry": "Q1",
+          "fixture": "native_math/finding-index-forms",
+          "ground": "G8 of 0.92.0: the descriptor form names the body of the inventory unit finding_index, whose content is the last form of the complete index, and its length; searches and read_works are then the numbers of rows. Only a packet of a bounded chain whose index fits in no form with unit references holds it."
+        },
+        "characters": {
+          "class": "fixed",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 64
+          },
+          "entry": "Q1",
+          "fixture": "native_math/finding-index-forms",
+          "ground": "G8 of 0.92.0: the descriptor form names the body of the inventory unit finding_index, whose content is the last form of the complete index, and its length; searches and read_works are then the numbers of rows. Only a packet of a bounded chain whose index fits in no form with unit references holds it."
         }
       }
     },
@@ -47013,6 +47064,38 @@
           }
         }
       }
+    },
+    "finding_index_unit_reference": {
+      "class": "fixed",
+      "quantity": "identifiers",
+      "bound": {
+        "serialized_characters": 128
+      },
+      "entry": "Q1",
+      "fixture": "native_math/finding-index-forms",
+      "ground": "G8 of 0.92.0: units maps the digest of each value that left fields to {unit, characters}: the handle of the shared body whose SHA-256 is the digest, or of the residual or whole record of the first search that holds the value, and the length of its canonical JSON. Only a packet of a bounded chain holds it; verification rebuilds the form from the complete index of the plan, the stored size, the route and the inventory.",
+      "members": {
+        "unit": {
+          "class": "fixed",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 64
+          },
+          "entry": "Q1",
+          "fixture": "native_math/finding-index-forms",
+          "ground": "G8 of 0.92.0: units maps the digest of each value that left fields to {unit, characters}: the handle of the shared body whose SHA-256 is the digest, or of the residual or whole record of the first search that holds the value, and the length of its canonical JSON. Only a packet of a bounded chain holds it; verification rebuilds the form from the complete index of the plan, the stored size, the route and the inventory."
+        },
+        "characters": {
+          "class": "fixed",
+          "quantity": "identifiers",
+          "bound": {
+            "serialized_characters": 64
+          },
+          "entry": "Q1",
+          "fixture": "native_math/finding-index-forms",
+          "ground": "G8 of 0.92.0: units maps the digest of each value that left fields to {unit, characters}: the handle of the shared body whose SHA-256 is the digest, or of the residual or whole record of the first search that holds the value, and the length of its canonical JSON. Only a packet of a bounded chain holds it; verification rebuilds the form from the complete index of the plan, the stored size, the route and the inventory."
+        }
+      }
     }
   },
   "fixtures": {
@@ -47160,6 +47243,12 @@
       "builder": "research_harness.review_session_v4.build_paged_packet",
       "test": "tests.test_review_session_v4_pages.SessionPagesTests.test_a5_a14_bar_pages_reach_recorded_review",
       "source": "Synthetic session page, closing and condensing turns from the production builders"
+    },
+    "native_math/finding-index-forms": {
+      "builder": "research_harness.openness_reading_v7.build_turn_packet",
+      "tests": [
+        "test_openness_finding_index_frame.RegistryTests.test_g8_every_form_of_the_index_has_a_closed_declaration"
+      ]
     }
   },
   "mapping_sites": [

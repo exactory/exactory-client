@@ -101,8 +101,12 @@ class UnreadFindingVersionTests(unittest.TestCase):
         entries = packet['reading_final'].pop('entries')
         packet['reading_final']['closing'] = dict(rows=[])
         artifacts = MemoryArtifacts()
+        # The envelope takes the complete finding index from the plan of the chain (G8.7).
+        from research_harness.review_route_capacity import CAPACITY_PLAN_PROTOCOL
+        plan = dict(finding_index=packet['finding_index'])
         assignment = dict(context=dict(native_packet=artifacts.put(serialize_record(packet['native']), 'application/json')),
-            reading_chain=dict(state=artifacts.put(serialize_record(dict(entries=entries)), 'application/json')))
+            reading_chain=dict(state=artifacts.put(serialize_record(dict(entries=entries)), 'application/json')),
+            capacity_plan=dict(protocol=CAPACITY_PLAN_PROTOCOL, digest=digest(plan), artifact=artifacts.put_json(plan)))
         envelope = build_validation_envelope(artifacts, assignment, packet)
         validate_finding(envelope, build_fixed_answer(envelope, ground=build_ground(packet)), finding_version=2)
 

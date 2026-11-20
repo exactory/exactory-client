@@ -97,9 +97,12 @@ def build_fixed_answer(packet, *, outcome=None, ground=None):
     return build_answer(packet, outcome, [] if ground is None else [ground])
 
 
-def record_fixed_search(case, formulation, found, dispositions):
-    """Capture two searches with identical queries and supported disposition rows."""
-    queries = case.descriptor['queries']
+def record_fixed_search(case, formulation, found, dispositions, *, queries=None, first_reason=None):
+    """Capture two searches with identical queries and supported disposition rows.
+
+    queries replaces the queries of the descriptor; first_reason replaces the reason of the first disposition row.
+    """
+    queries = queries or case.descriptor['queries']
     titles = {case.versions[0]: case.descriptor['read_title']}
     titles.update({version: 'Infinite minor models: results for infinite graphs only'
                    for version in found if version != case.versions[0]})
@@ -119,8 +122,9 @@ def record_fixed_search(case, formulation, found, dispositions):
         scope=case.descriptor['scope'], queries=list(queries), responses=responses,
         captured_at='2026-10-15T12:00:00Z', found_work_ids=list(found), verdict='nothing-new', cited_work_ids=[],
         dispositions=[dict(work_id=version, disposition=dispositions.get(version, 'relevant'),
-            reason='The delivered row concerns infinite graphs only.' if version in dispositions
-                   else 'The planar partial case bears on both formulations.') for version in found],
+            reason=first_reason if first_reason is not None and number == 0
+                   else 'The delivered row concerns infinite graphs only.' if version in dispositions
+                   else 'The planar partial case bears on both formulations.') for number, version in enumerate(found)],
         resolved=[], impact='Evidence for the exact synthetic formulation.', gaps=[]))
     return case.store.snapshot()['records']['literature_search'][identifier]
 
@@ -263,5 +267,44 @@ def fixture_case(name, protocol='single'):
     case = NamedGapStoreCase()
     case.packet_name = name
     case.request_form = protocol
+    case.setUp()
+    return case
+
+
+def build_reason(label, characters):
+    """Return an authored recorded judgment of exactly the given length."""
+    sentence = 'Recorded judgment %s: the delivered row concerns infinite graphs only. ' % label
+    return (sentence * (characters // len(sentence) + 1))[:characters]
+
+
+def build_query(label, characters):
+    """Return an authored bound query of exactly the given length."""
+    words = 'Hadwiger colouring minor variant %s ' % label
+    return (words * (characters // len(words) + 1))[:characters].strip() + ' ' + label
+
+
+class IndexStoreCase(NamedGapStoreCase):
+    """A store whose bound searches follow search_shapes: rows {formulation, queries?, reason?}.
+
+    formulation 0 is the statement and 1 the neighbour. Equal reasons give two searches one shared dispositions value.
+    """
+
+    search_shapes = ()
+
+    def record_searches(self):
+        if self.selected['statement'] != self.descriptor['statement']:
+            return super().record_searches()
+        formulations = (self.descriptor['statement'], self.descriptor['neighbour'])
+        return [record_fixed_search(self, formulations[shape['formulation']], self.versions, {},
+                                    queries=shape.get('queries'), first_reason=shape.get('reason'))
+                for shape in self.search_shapes]
+
+
+def index_case(shapes, protocol='v7', name='variant-search'):
+    """Create a disposable store of IndexStoreCase; the caller must call doCleanups()."""
+    case = IndexStoreCase()
+    case.packet_name = name
+    case.request_form = protocol
+    case.search_shapes = shapes
     case.setUp()
     return case

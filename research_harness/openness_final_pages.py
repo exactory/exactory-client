@@ -251,12 +251,23 @@ def read_final_position(artifacts, reference, number):
 
 
 def build_validation_envelope(artifacts, assignment, packet, targets=None):
-    """Keep the complete native science context and explicitly select the v7 finding contract."""
+    """Keep the complete native science context and explicitly select the v7 finding contract.
+
+    The envelope holds the complete finding index of the plan, selected for the formulations of a page (G8.7).
+    """
     envelope = dict(packet, native=json.loads(artifacts.read(assignment['context']['native_packet'])))
     binding = copy.deepcopy(packet.get('reading_final', {}))
     if targets is not None:
         binding['page'] = dict(targets=list(targets))
     if 'finding_index' in packet:
+        from . import openness_reading_v7 as v7
+        from .review_search_delivery import select_finding_index
+        index = capacity.read_chain_capacity_plan(artifacts, assignment)['finding_index']
+        page = packet.get('reading_final', {}).get('page')
+        if page is not None:
+            labels = {row['handle']: row['formulation'] for row in v7.list_target_labels(envelope['native'])}
+            index = select_finding_index(index, [labels[handle] for handle in page['targets']])
+        envelope['finding_index'] = index
         state = json.loads(artifacts.read(assignment['reading_chain']['state']))
         binding['entries'] = [copy.deepcopy(row) for row in state['entries']
                               if row['status'] in ('verified', 'delivered')]
@@ -384,9 +395,9 @@ def build_final_packet(records, artifacts, route, logical, chain, number, invent
         packet['evidence'] = evidence
     packet.pop('digest', None)
     if 'finding_index' in packet and turn['kind'] in ('page', 'final'):
-        from .review_search_delivery import select_finding_index
         labels = {row['handle']: row['formulation'] for row in v7.list_target_labels(logical['native'])}
-        packet['finding_index'] = select_finding_index(packet['finding_index'], [labels[key] for key in turn['targets']])
+        packet['finding_index'] = v7.fit_packet_finding_index(route, inventory, plan['finding_index'],
+                                                              formulations=[labels[key] for key in turn['targets']])
     packet['digest'] = digest(packet)
     return packet
 

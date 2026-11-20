@@ -2190,9 +2190,12 @@ def prepare_packet(records, artifacts, value, route, packet):
     native = packet['native']
     prior_id = value['context'].get('prior_assignment_id')
     prior = records.get('review_assignment', {}).get(prior_id)
-    prior_protocol = find_protocol(json.loads(artifacts.read(prior['packet']))) if prior is not None else None
+    prior_packet = json.loads(artifacts.read(prior['packet'])) if prior is not None else None
+    # The finding version of a chain is fixed at its first assignment (G8.8). The first turn builds the finding index;
+    # a later v6 turn carries the index that the first turn froze, and every other later turn holds none.
     if (is_openness_packet(native) and native['scientific_context']['openness_minimum'].get('schema_version') == 2
-            and prior_protocol in (None, PROTOCOL_V6, PROTOCOL_V7)):
+            and (prior_id is None or prior_packet is not None and find_protocol(prior_packet) == PROTOCOL_V6
+                 and 'finding_index' in _find_record(prior_packet))):
         from .review_search_delivery import build_finding_index
         packet = dict(packet, finding_index=build_finding_index(records, artifacts, native))
         # A one-request finding has no reading record. Name the delivered units
