@@ -272,7 +272,7 @@ class ResearchProbeProvenanceTests(DevelopmentCase):
         from research_harness.workspace import strict_json
         canonical = self.export_native_json(b'{ "metric": 7 }\n')
         admission = admit_lab(self, body="import sys\nsys.stdout.write('{\"metric\":7}')\n")
-        original = execution.prepared_mutation
+        original = execution.prepared_task_mutation
         def retain_legacy_observation(store, operation, payload, prepare, **identity):
             if operation == "execution.observe":
                 def prepare_legacy(records, value):
@@ -284,7 +284,7 @@ class ResearchProbeProvenanceTests(DevelopmentCase):
                     return changes, observation
                 return original(store, operation, payload, prepare_legacy, **identity)
             return original(store, operation, payload, prepare, **identity)
-        with mock.patch.object(execution, "prepared_mutation", side_effect=retain_legacy_observation):
+        with mock.patch.object(execution, "prepared_task_mutation", side_effect=retain_legacy_observation):
             execution.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
                 request_id="legacy-canonical-run")
         self.launch_json_probe(b'{ "metric": 7 }\n')
@@ -558,12 +558,12 @@ class ResearchProbeProvenanceTests(DevelopmentCase):
         from research_harness import execution
         self.save_probe(self.artifacts.put(b'{"metric": 7}\n', "text/plain"))
         admission = admit_lab(self, body="print('{\"metric\": 7}')\n")
-        prepare = execution.prepared_mutation
+        prepare = execution.prepared_task_mutation
         def interrupt_observation(store, operation, *args, **kwargs):
             if operation == "execution.observe":
                 raise OSError("Fixture interruption before observation publication")
             return prepare(store, operation, *args, **kwargs)
-        with mock.patch.object(execution, "prepared_mutation", side_effect=interrupt_observation):
+        with mock.patch.object(execution, "prepared_task_mutation", side_effect=interrupt_observation):
             with self.assertRaisesRegex(OSError, "Fixture interruption"):
                 execution.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
                                            request_id="interrupted-identical-rerun")

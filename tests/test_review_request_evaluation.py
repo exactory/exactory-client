@@ -198,8 +198,8 @@ class RequestReuseTests(ResultPartsCase):
             return call
         with patch.object(protocol, 'assignment_state', side_effect=observe(protocol.assignment_state)), \
                 patch.object(refusals, 'classify_observed_output', side_effect=observe(refusals.classify_observed_output)):
-            refusals._record_refusal(self.case.store, {'assignment_id': self.assignment['id']},
-                                    expected_revision=self.case.store.revision, request_id='check-refusal')
+            refusals._record_refusal(self.case.store, self.assignment['id'], None, request_id='check-refusal',
+                                     busy_msg=refusals.OUTPUT_REFUSAL_AFTER_RUN_STORE_BUSY_MSG, kept={})
         self.assertGreater(len(observed), 1)
         self.assertTrue(all(isinstance(item, Evaluation) for item in observed))
         self.assertEqual(len({id(item._requests) for item in observed}), 1)

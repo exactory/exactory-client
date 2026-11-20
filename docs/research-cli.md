@@ -84,7 +84,7 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), `codex_cli_framed_v1` at `codex://local` (an isolated versioned route for lossless openness evidence framing), `codex_cli_visual_v1` at `codex://local` (a Codex route that also receives the rendered pages of a required PDF inspection as images), or `openai_responses_v1` at an HTTPS endpoint with an API credential. The record pins the runtime of the installed adapter. Probes, attempts and output corrections verify against that pin. As a result, a review that was bound earlier stays verifiable after the adapter changes. A route record is stale when the runtime that it pins is not equal to the installed runtime. A new assignment, a run, a probe or an output correction on a stale route record is refused with `review_route_runtime_stale`. The refusal comes before any call and before any record. Record and probe a new route then. While the installed runtime of a route cannot be read, for example while the Codex CLI is missing, a new assignment on it is recorded as before, and `review-run` then refuses it with `review_runtime_missing`. Since 0.75.0 a new probe, invocation and assignment on `codex_cli_v1` or `codex_cli_framed_v1` record `codex_invocation: "codex-invocation-settings-v1"`. Every observation of a call on these routes (an attempt, an output correction or a staged task) records the field too. The child assignment that runs a staged task does not record the field. The response of such a call retains the native rollout of the call under `codex_invocation.native_rollout`, read after the call returns. A response that holds the field authenticates only through the retained rollout. A probe whose record carries the field authenticates only when its response holds the rollout. The same holds for an ordinary attempt whose assignment or attempt record carries the field, and for a staged task whose observation carries it. The rollout must have the recorded `rollout_digest` and hold one `session_meta` and one `turn_context`. The turn's `model` must be the route's model and its `effort` must be `high`. The inspection of the retained rollout must give the recorded `context_evidence` again. The answer in the response must be the assistant output of the rollout. When the rollout cannot be read after the call, the response records the error under `codex_invocation.error` instead, and the call does not authenticate. A record without the field keeps its earlier authentication. A record whose `codex_invocation` is another value authenticates nothing. A `status` read or a review preparation observes the installed runtime of the adapters in use at its start and at its end; when it changed in between, the command refuses with `review_runtime_changed` and writes nothing, and the same command run again reads the current runtime. |
 | `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. The probe binds to the route's pinned runtime; after an adapter change, probe a new route instead of the old one. A probe interrupted after the reviewer answered is finished or reconciled as an interrupted `review-run` is. Since 0.89.2 the payload accepts `capacity: {input_tokens: N}`, where `N` is a positive integer. The probe is then a capacity probe: the same test with a request built for that target size, which gives the route evidence of its input limit (The capacity of a route, below). A probe that finds the reviewer capacity occupied waits for it (the queue, in [Staged problem reviews](#staged-problem-reviews)), and a standing store stop refuses it with `review_chain_stopped` ([Review chains and `review-series`](#review-chains-and-review-series)). |
 | `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. When a post closes the chain of a new assignment, the assignment is refused with `problem_already_posted` ([Problem creation](#problem-creation)). A packet whose request does not fit one input of a local text route, or whose fitted request withholds an evidence body, is delivered as a series of fresh-input turns when an adapter applies to its role (a problem `result` or `adjudicator` packet, a context repair, a `verification` or readiness `result` packet, a `native_math` packet without an openness minimum; [Reviews in fresh parts](#reviews-in-fresh-parts)) on a `claude_cli_v1`, `codex_cli_v1` or `codex_cli_framed_v1` route with a local input limit; an admitted adjudicator repair on such a route enters parts whatever its size. The next turn is assigned with a new id, the same role, dossier, route, reviewer and author, and the last turn as `context: {prior_assignment_id}`, and the assignment result carries `review_parts_plan`. A recorded 0.69.x result series continues in parts under its own protocol ([Problem evidence in parts](#problem-evidence-in-parts)). A staged review starts only through `context: {staged_upgrade: {assignment_id}}`, which opens one in a recorded slot; `{controller_assignment_id}` alone then plans and assigns its next task and returns the next command, `context: {controller_assignment_id, task_id}` records the child that runs one of its tasks, and `scheduler: {store_limit, route_limits}` records the reviewer capacity ([Staged problem reviews](#staged-problem-reviews)). A turn of a recorded 0.69.x series that the v1 part planner refuses with `review_input_too_large` can instead freeze a reduced replay history of completed earlier series, and since 0.73.0, when the planner refuses the reduced history too, starts one parts v2 successor in the same slot ([Problem evidence in parts](#problem-evidence-in-parts)). Since 0.71.0 an ordinary assignment, one that is neither on a `codex_cli_visual_v1` route nor the controller or a task of a staged review nor a turn of a parts v2 series (whose `history` is `[]`), stores its replayed history as `history_ref` instead of `history`: a version 1 root with `version`, `message_count`, `history_digest` and the ordered `pages`, each page an immutable artifact with `version`, `start` and at most 32 `messages`, and each message with `body` (an artifact that holds the exact content, UTF-8 text or JSON for a native content array), `metadata` (the other fields of the message), `source` (`assignment_id`, `message_index`) and `occurrence` (`session_id`, `index`); the pages and bodies of an unchanged prefix are shared between the turns of a session. Every command reads either form, and the reviewer receives the identical history. A record that carries both fields is refused with `review_history_ambiguous`, and a page or body that does not match its root with `review_history_invalid`, or with `artifact_missing` or `artifact_corrupt` when its artifact is gone or altered; either code means that the artifacts of the store are damaged or a record was edited, so stop and report it. |
-| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. When a post closes the chain of the assignment, `review-run` is refused with `problem_already_posted`, except for a replay, an acceptance and a reconciliation ([Problem creation](#problem-creation)). When the reviewer answers, the run commits the answer as one immutable record, `review_call_observation`, before the write that records the run: this capture binds the operation and the invocation, the original request ID and the digest of the payload, the route and the request, the reservation and the calling process, and holds the exact observation with its artifacts. The write that records the run reads the capture and is tried again after `store_busy`, `stale_revision` or `review_task_dependency_changed`, at most 600 times within 600 seconds, without a second call. The run that waited exits with the last of those refusals, and the capture stays. A run whose process ended after the capture committed, or whose write is still refused after that wait, is finished by repeating `review-run` with the same payload and the original request ID: that returns the recorded receipt when one exists and otherwise records the run from the capture, without calling the reviewer again. Until then the invocation is pending: a `review-run` of the assignment under another `id` refuses with `review_invocation_pending` and names that step, and `review-attempt` refuses an import under the run's `id`. A run whose process ended before the capture committed leaves an unknown outcome and the invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`, and the refusals say to reconcile it. `review-run` with `{"action": "reconcile", "operation": OPERATION, "invocation_id": ID}`, where the operation is `review.invoke` for a run, `review.route_probe` for a probe or `review.output_correction` for a correction and the id is the `id` of the original payload, releases the capacity of the call once its process and its transport processes have ended; for a call without a capture it also records the unknown outcome as a `failed` attempt, probe or correction with the error `review_invocation_interrupted`, which ends the pending state. For a run that 0.69.x started, which has no reservation, the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload), and the refusal carries that payload under `next`. After either step, a `review-run` of the assignment under a new `id` and request ID is permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. For a part turn of a problem result series ([Problem evidence in parts](#problem-evidence-in-parts)), `review-run` checks the part response when an authenticated run completes and writes the output refusal `invalid_value_review` under `review.shape` when it fails. For a turn of a parts v2 series ([Reviews in fresh parts](#reviews-in-fresh-parts)) it checks a read, combine or check output and the request form of a final the same way, under `review.shape` whatever the role, with `invalid_value_review` for a contract failure and `review_parts_request_no_progress` for a request that makes no progress. For a task of a staged review, `review-run {assignment_id, epoch_id, task_id}` reserves the task, runs it through an owned worker, accepts its committed capture and reconciles the worker; `action: "accept"` resumes an acceptance and `action: "reconcile"` a reconciliation, neither with a reviewer call; a refused capture permits one retry with the same request, and the result names `review-assignment {controller_assignment_id}` as the next step ([Staged problem reviews](#staged-problem-reviews)). Since 0.89.2 a run that finds the reviewer capacity occupied waits for it (the queue, in [Staged problem reviews](#staged-problem-reviews)), and a review stop that stands for the chain or for the store refuses a new call with `review_chain_stopped` ([Review chains and `review-series`](#review-chains-and-review-series)). See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
+| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. When a post closes the chain of the assignment, `review-run` is refused with `problem_already_posted`, except for a replay, an acceptance and a reconciliation ([Problem creation](#problem-creation)). When the reviewer answers, the run commits the answer as one immutable record, `review_call_observation`, before the write that records the run: this capture binds the operation and the invocation, the original request ID and the digest of the payload, the route and the request, the reservation and the calling process, and holds the exact observation with its artifacts. The write that records the run reads the capture and is tried again after `store_busy`, `stale_revision` or `review_task_dependency_changed`, at most 600 times within 600 seconds, without a second call. The run that waited exits with `store_busy`, whose `details.cause` holds the last of those refusals, and the capture stays. A run whose process ended after the capture committed, or whose write is still refused after that wait, is finished by repeating `review-run` with the same payload and the original request ID: that returns the recorded receipt when one exists and otherwise records the run from the capture, without calling the reviewer again. Until then the invocation is pending: a `review-run` of the assignment under another `id` refuses with `review_invocation_pending` and names that step, and `review-attempt` refuses an import under the run's `id`. A run whose process ended before the capture committed leaves an unknown outcome and the invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`, and the refusals say to reconcile it. `review-run` with `{"action": "reconcile", "operation": OPERATION, "invocation_id": ID}`, where the operation is `review.invoke` for a run, `review.route_probe` for a probe or `review.output_correction` for a correction and the id is the `id` of the original payload, releases the capacity of the call once its process and its transport processes have ended; for a call without a capture it also records the unknown outcome as a `failed` attempt, probe or correction with the error `review_invocation_interrupted`, which ends the pending state. For a run that 0.69.x started, which has no reservation, the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload), and the refusal carries that payload under `next`. After either step, a `review-run` of the assignment under a new `id` and request ID is permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. For a part turn of a problem result series ([Problem evidence in parts](#problem-evidence-in-parts)), `review-run` checks the part response when an authenticated run completes and writes the output refusal `invalid_value_review` under `review.shape` when it fails. For a turn of a parts v2 series ([Reviews in fresh parts](#reviews-in-fresh-parts)) it checks a read, combine or check output and the request form of a final the same way, under `review.shape` whatever the role, with `invalid_value_review` for a contract failure and `review_parts_request_no_progress` for a request that makes no progress. For a task of a staged review, `review-run {assignment_id, epoch_id, task_id}` reserves the task, runs it through an owned worker, accepts its committed capture and reconciles the worker; `action: "accept"` resumes an acceptance and `action: "reconcile"` a reconciliation, neither with a reviewer call; a refused capture permits one retry with the same request, and the result names `review-assignment {controller_assignment_id}` as the next step ([Staged problem reviews](#staged-problem-reviews)). Since 0.89.2 a run that finds the reviewer capacity occupied waits for it (the queue, in [Staged problem reviews](#staged-problem-reviews)), and a review stop that stands for the chain or for the store refuses a new call with `review_chain_stopped` ([Review chains and `review-series`](#review-chains-and-review-series)). See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
 | `review-series` | `--assignment HEAD`, where any assignment of the chain resolves to the chain's current head, and `--workspace` (default `.`). Execute the planned actions of one review chain in process, through the same operations as the CLI, until the chain is done or needs the agent. It takes no `--file`, `--expected-revision` or `--request-id`, and has no turn limit. `--check` is refused with `check_unsupported` before any workspace or model effect. Every `stop` and `wait` line with a `code` carries `stop_class`, and the last line of a run that ends in a `stop` carries `stop_id`, the id of the `review_series_stop` record that the driver writes for that stop, with `revision_after_stop`, or `stop_record_error`. Since 0.89.2 a run that meets a review stop ends in a `stop` with the code `review_chain_stopped`, whose `stop_id` is the id of the `review_stop` record, and SIGTERM or SIGINT to the command stops its chain in the same way. [Review chains and `review-series`](#review-chains-and-review-series) states the plan of a chain, the exit statuses, the handoffs, the outcomes of a failed reviewer call, the stop record and the review stop. |
 | `review-stop` | `{id, action: "stop", mode, reason}` with exactly one of `assignment_id` and `scope: "store"`, or `{id, action: "release", stop_id, reason}`. Stop the reviewer calls of one review chain or of the whole store, and release that stop later. `mode` is `now`, which ends the running calls, or `after_turn`, which lets them finish. In both modes no new call of the scope starts until the release. `--check` is refused with `check_unsupported`. [Review chains and `review-series`](#review-chains-and-review-series) states the scope, the two modes, the settlement of the stopped calls and the release. |
 | `review-attempt` | Preserve imported output or failure history; imported assertions never establish verified independence. |
@@ -694,10 +694,15 @@ and plans again. During that sleep it reads the store every 5 seconds: it ends
 at a review stop (The stop, below), and it plans again at once when the
 revision of the store changed. A refusal with `store_busy`, `stale_revision` or
 `review_task_dependency_changed` is planned again from a fresh read, at most
-8 times in a row; the 8th ends in a `stop` with that code. A captured call is
+8 times in a row; the 8th ends in a `stop` with that code. One case has no new
+plan. When `details.request_id` of such a refusal is the request ID of the
+refused action, the driver runs that action again with the same request ID. It
+does so until an action succeeds or the 8th refusal ends the run. A run whose
+output refusal the store did not take is refused in this way
+([Problem evidence in parts](#problem-evidence-in-parts)). A captured call is
 resumed with its original request id (state `resume`, field `request_id`);
-every other action, including the reconciliation of an uncaptured call, gets
-a new request id. It
+every other planned action, including the reconciliation of an uncaptured
+call, gets a new request id. It
 stops with `review_series_no_progress` when it would repeat an action (the
 same command and payload apart from a fresh id) while the chain's progress is
 unchanged; the `details` then hold `command`, `action_state`,
@@ -770,6 +775,26 @@ reports the stop with its code and details in its summary and continues the
 work that does not depend on this chain. After exit status 4, the agent runs
 `review-series` again at `not_before`. The agent writes no driver, turn limit
 or retry loop of its own around reviewer calls.
+
+The records of a call. A reviewer call on a local route starts several
+transport processes. They are the version checks, the page renders of a visual
+route, and the process that sends the request to the reviewer. The command
+that owns the call records each transport process before that process starts
+its program. The time limit of the program starts after that record. After
+the call, the command writes the capture and then the record of the result.
+Each of these records takes the wait that
+[Inputs and receipts](#inputs-and-receipts) describes. When the record of a
+transport process is still refused after the wait, the command is refused with
+`store_busy`. That process started no program, and no request was sent to the
+reviewer. When the capture is still refused after the wait, the command is
+refused with `store_busy`, and no record holds what the reviewer returned. In
+both cases the call is in the state `interrupted` (The stop, below).
+`review-series`, or `review-run` with `action: "reconcile"`, then records the
+call with the error `review_invocation_interrupted`, and the next run calls
+the reviewer. When the record of the result is still refused after the wait,
+the command is refused with `store_busy`, and the capture stays. The same
+command with the same payload and request ID then records the result without
+a reviewer call.
 
 The stop. Since 0.89.2 `review-stop` stops the reviewer calls of a scope, and
 they stay stopped until the stop is released. The payload is `{id, action:
@@ -2334,10 +2359,11 @@ and otherwise the head's own run, which then waits in the queue.
 
 Capture, acceptance and recovery. `review-run` reserves the task
 (`review_reservation/<id>`, `review_task_execution/<task id>` and
-`review_execution_plan/<plan id>`), launches an owned worker process, gives it
-60 seconds to bind its process identity to the reservation (the launch
-handshake), waits for its capture up to the route's timeout plus 15 seconds,
-accepts the capture and reconciles the worker. The worker holds a lock under
+`review_execution_plan/<plan id>`), launches an owned worker process, waits
+for the worker to bind its process identity to the reservation (the launch
+handshake), for as long as the worker runs and at most 600 seconds, waits for
+its capture up to the route's timeout plus 15 seconds, accepts the capture and
+reconciles the worker. The worker holds a lock under
 `research/review-workers/`, makes the one reviewer call and commits the
 observation as `review_observation/<reservation id>` through the store. A
 response file that no worker committed is no observation. Capture is that
@@ -2358,9 +2384,9 @@ the capture again. When the worker ends without a capture, the reservation is
 reconciled as `unknown` (it was running) or `known_failure` and released,
 `review-run` refuses with `review_worker_reconciliation_required`, and the
 next `review-run` of the task makes the one permitted retry. A launch
-handshake that does not complete within its 60 seconds, or that an
-interruption ends, is refused with the same code, and the reservation keeps
-its claim for `action: "reconcile"`. A capture whose
+handshake that does not complete, or that an interruption ends, is refused
+with the same code, and the reservation keeps its claim for
+`action: "reconcile"`. A capture whose
 status is not `completed` is a failed attempt under the same rule, and its
 result names the planning command as `next`. An output that fails its task
 check is refused: the harness records `review_task_refusal/<reservation id>`
@@ -2377,6 +2403,29 @@ third `review-run` of a task is refused with `review_task_exhausted` and
 records the execution-origin incomplete outcome. Capture and
 acceptance commit through task-scoped writes (`Store.mutate_scoped`), so a
 commit of another task of the same epoch does not invalidate them.
+
+The records around the worker. The launching command writes the launch claim
+and the authorization of the worker. The worker writes the record that binds
+it to the reservation and the record of its start. It then writes the record
+of each transport process of its reviewer call
+([Review chains and `review-series`](#review-chains-and-review-series)), and
+its capture. Each of these records takes the wait that
+[Inputs and receipts](#inputs-and-receipts) describes. When the launch claim
+is still refused after the wait, `review-run` is refused with `store_busy`.
+No worker started, the reservation is unchanged, and the same command launches
+again. When the authorization is still refused after the wait, `review-run` is
+refused with `store_busy`, and the worker gets no token and ends. When the
+worker does not write its binding, its start or its capture within the wait,
+it ends. `review-run` is then refused with
+`review_worker_reconciliation_required`, as for every worker that ends without
+a capture. When the record of a transport process is still refused after the
+wait, the worker captures that refusal. The capture is a failed observation
+with the code `store_busy`. After a refused capture, the reservation ends as
+`unknown`. In every other case except the refused claim, it ends as
+`known_failure`. When the task has an attempt left, it then takes its next
+attempt. The reviewer was called only in the case of a refused capture. The
+file `worker.log` in the folder of the worker under `research/review-workers/`
+holds the message of a record that the worker did not write.
 
 The resource ledger. `review_resource_ledger/<epoch id>` is charged in the
 transaction that reserves each task: `attempts`, `retries`, `rereads` (the
@@ -2983,6 +3032,28 @@ admissible it gives the handoff of the role of the head
 refused attempts of each assignment under `review.assignments`, and
 `usage_report` counts them as calls.
 
+The refusal record takes the wait that
+[Inputs and receipts](#inputs-and-receipts) describes. The record depends on
+the records that the check of the output read. When the record is still
+refused after the wait, the command is refused with `store_busy`.
+`details.refusal` then holds the code, the check and the details of what the
+output fails. It is absent when the busy store did not let the check of the
+output run. After a run, the run and its output are recorded. `review-run` for
+the same attempt (`details.attempt_id` as `id`, with `details.assignment_id`)
+and with the same request ID (`details.request_id`) then returns the recorded
+run, checks the output and records the refusal. `review-series` runs that
+request again by itself
+([Review chains and `review-series`](#review-chains-and-review-series)). The
+read of the store between a run and its refusal record also waits for a busy
+store, for at most 600 seconds. When that read is still refused, `review-run`
+is refused with the `store_busy` of the store. The same request then returns
+the recorded run and records the refusal. After a refused `value-review` or
+`review-adjudication`, `store_busy` takes the place of the refusal of that
+command, which `details.recording_refusal` holds. The same recording command
+at the current revision is then refused as before and records the refusal of
+the output. A recording command that is itself refused with `stale_revision`
+or `store_busy` writes no refusal record.
+
 After recorded context contamination, first record every actual observed final
 assessment in the inherited history with `value-review`, retaining the exact
 response, adverse findings and assignment. If repair returns
@@ -3180,6 +3251,27 @@ Later records and reviewer exports hold copies of the values of a command input 
 An earlier release did not check these bounds, so a store that it wrote can hold a value outside them. It can also hold a value that fits its record but not a later copy. A new payload, record or result that copies such a value is outside the bounds too, and it fails with `invalid_input`. For example, the bundle of `manuscript` holds the current assessment of every cycle 5 levels deeper than `assess` held it. So a current assessment whose payload an earlier release recorded with more than 95 levels makes `manuscript` fail. [Actual execution](#actual-execution) gives the cases for the seed and the metric of a run.
 
 Some commands write to the store in more than one step. If the store refuses a later step, the earlier steps stay, so the revision changes although the command fails. For example, `reconcile-run` and `exactory-lab run` record the outcome of a run before its observation.
+
+Some writes do not depend on the revision of the whole store. A command makes them by itself, for work that is admitted or done:
+
+- For an admitted run: the record that releases its program, its outcome, its observation, and the receipt of its reconciliation.
+- For a managed deposit, submission or verdict: the answer of each step, the receipt, and the start of the step of a verdict. The same holds for a pending step that a read of the service settles or clears. It also holds for what a read of the task or of the deposition showed.
+- For a direct deposit: the record that the command writes at its end. For a version draft: its concept DOI.
+- For an acquisition: its result. For a cohort collection: each page. For a full-text job: each of its records.
+- For a probe: each record that its launcher and its worker write. For a Colab run: the record that releases its job.
+- For a reviewer call: the record of each transport process, the capture and the record of the result. The same holds for the refusal of an output that fails a check. For a staged review task: the launch claim, the authorization of its worker and the records that the worker writes.
+
+Such a write depends on the records that it read. A commit of another command that changes none of those records does not refuse it. Some of these writes commit at the revision that the store has at the time of their write lock. They are the receipt of a reconciliation, the result of an acquisition, and a page of a cohort collection. For a reviewer call, they are the record of a transport process and the capture. For a staged review task, they are the launch claim, the authorization of the worker and the records that the worker writes. No commit of another command refuses them.
+
+One write reads the revision itself. The outcome of a run that pauses its cycle writes a checkpoint that names that revision. As a result, each commit of another command refuses an attempt of that write.
+
+After a refused attempt, the write is prepared again. This applies after a busy store (`store_busy`) and after a commit that changed a record that the write read. The write is tried at most 600 times, and no attempt starts later than 600 seconds after the first attempt. The wait applies to each record, so a command that writes several records can wait for longer.
+
+During an attempt, the write holds the write lock of the store and checks the history of the store once. A write of another command that starts in that time is refused with `store_busy` after 1 second. The commit of an attempt can meet a command that reads the store. The commit then waits for that read to end, inside the same 600 seconds, and the attempt keeps its work. A read or a write of another command that starts during that wait is refused with `store_busy` after 1 second. A write that is not in this list is rolled back after its commit waited 1 second for a reader, as before.
+
+When a record is still refused after the wait, the command is refused with `store_busy`. `details.cause` holds the last refusal. The message says what was recorded, what is kept, and which command goes on. That command is not always the refused command. The sections of the commands give the cases.
+
+Four cases have another form. When a record of a full-text job is still refused, its invocation ends. If the store also refuses the record that ends the invocation, the command is refused (see "Operation fields"). If not, the command returns a result. For the record of a direct deposit and for the concept DOI of a version draft, `exactory-draft` prints the message in its last lines (see "Review, publication, and verification"). The worker of a staged review task writes its own records, and "Staged problem reviews" says how `review-run` ends when one of them is still refused.
 
 The recurring types are:
 
@@ -3388,6 +3480,35 @@ a cohort definition or collection, a source URL or a job) holds a lock while
 it runs, so a second command for the same target is refused with
 `acquisition_in_progress`, whose details name the running operation; a replay
 of a committed request takes no lock.
+
+An acquisition records its result as "Inputs and receipts" describes for a
+write that does not depend on the revision of the store. A cohort collection
+records each page in the same way, and a full-text job each of its records.
+
+When the result of `acquire`, `expand`, `fulltext` or `visual` is still
+refused after the wait, the command is refused with `store_busy`. The
+operation then stays admitted and holds its request allowance, and no response
+of it is recorded. The same request ID returns the operation as incomplete
+(`operation_incomplete`). The same command with a new request ID replaces the
+operation, releases its allowance and sends the requests again.
+`import-fulltext` sends no request. After that refusal, the same command with
+a new request ID imports the file again.
+
+When a page of a collection is still refused after the wait, every earlier
+page is recorded. `resume` with a new request ID then requests that page
+again. When the end of a collection operation is still refused after the wait,
+every page is recorded. `resume` with a new request ID then ends the
+operation.
+
+When a record of a full-text job is still refused after the wait, the
+invocation ends. `fulltext-resume` then returns the job as pending, and an
+item of `pending` has the `code` `store_busy`. For a transfer unit, the item
+holds the last refusal as `cause`, and for an extraction page it holds `page`,
+`stage` and `recovery_action`. If the store also refuses the record that ends
+the invocation, `fulltext-resume` is refused with `store_busy`, and its
+operation stays admitted. In both cases, the job keeps every recorded unit.
+`fulltext-resume` with a new request ID then repeats at most the one unit
+whose record was refused.
 
 Source deferral requires an explicit authorization artifact and the actual retained
 retrieval evidence. It creates no HTTP failure, availability qualification or
@@ -4035,9 +4156,21 @@ Under an interpreter without a limit on integer string conversion, such as Pytho
 - A new `reconcile-run` request for such a run that an earlier release observed. A retry of `exactory-lab run` with the original request ID fails in the same way if that launch stopped before it reconciled the run.
 - `manuscript` of an otherwise ready study in which any cycle holds such an admission. The bundle holds the admissions of every cycle.
 
-For a local run, the launcher starts a worker process after the claim and waits until the worker reports that it is ready. The wait continues while the worker process is alive, for at most the binding's `timeout_seconds` plus 10 seconds. If the worker exits before it is ready, or is not ready in that time, the launch returns `execution_recovery_required` and the program does not run. If the worker process cannot start, for example at a limit on processes or open files, the launch also returns `execution_recovery_required`. Record that run with `reconcile-run`, giving `resolution: "interrupted"` and a reason. After the launcher releases its token to a ready worker, it waits for the worker to end for at most the binding's `timeout_seconds` plus 16 seconds. If the worker is still running then, the launch returns `execution_recovery_required` and the worker continues. After the worker ends, `reconcile-run` without a resolution records the run's outcome.
+For a local run, the launcher starts a worker process after the claim and waits until the worker reports that it is ready. The wait continues while the worker process is alive, for at most the binding's `timeout_seconds` plus 10 seconds. If the worker exits before it is ready, or is not ready in that time, the launch returns `execution_recovery_required` and the program does not run. If the worker process cannot start, for example at a limit on processes or open files, the launch also returns `execution_recovery_required`. In both cases no record released the program. The same `exactory-lab run` command with the same request ID then starts a worker for the claim, and the program runs. While a worker of the earlier launch is alive, that command can be refused with `execution_live`. If it is, run it again after that worker ends. To end the run instead, record it with `reconcile-run`, with `resolution: "interrupted"` and a reason. After the launcher releases its token to a ready worker, it waits for the worker to end for at most the binding's `timeout_seconds` plus 16 seconds. If the worker is still running then, the launch returns `execution_recovery_required` and the worker continues. After the worker ends, `reconcile-run` without a resolution records the run's outcome.
 
-After the launch, or after `reconcile-run`, the harness shows the run in `intermediate/lab/runs/<admission id>/`: `run.json` with every record of the run, `result.json` with the observation's summary and `log.txt` with the observed log; the run directory under `research/runs/` keeps the pinned files. Releases before 0.68.0 also wrote the summary and the log to `experiment/results/<node>.json` and `experiment/logs/<node>.log`; 0.68.0 does not. A retry returns/reconciles that run; it does not execute the same admission twice. Missing or lost results require `reconcile-run`. A dead local worker may be recorded interrupted after ownership checks. Unknown usage retains its full reservation. An interrupted process, timeout, missing output, or old modeled managed record cannot become current author readiness through a public result JSON label. An imported observation retains its actual provenance and chronological limits and does not consume or satisfy a prospective admission.
+After the claim, the launcher writes four records of a local run. The first record releases the program. The other three follow the program: the outcome, the observation, and the receipt of the reconciliation. "Inputs and receipts" describes how these writes commit and wait. The launcher reconciles its own run without a revision.
+
+When the record that releases the program is still refused after the wait, `exactory-lab run` is refused with `store_busy`. The program did not run, and the admission keeps its claim. Before each attempt of that record, the launcher looks at the worker. If the worker ended, the launch stops without the record and returns `execution_recovery_required`. In both cases, the same command with the same request ID starts the program.
+
+The same request starts the program of a claimed local run that no record released and that has no outcome. The folder of the run must hold no stream and no terminal outcome, and no worker of the run must be alive. A request with another ID is refused with `execution_recovery_required`, as before.
+
+When a record after the program is still refused after the wait, the command is refused with `store_busy`. Nothing false is recorded. The terminal outcome, the streams and the outputs stay under `research/runs/`. `reconcile-run` for the admission, or the same command with the same request ID, then records the run without a second execution.
+
+`reconcile-run` writes the same three records. Before it writes a new observation, it compares `--expected-revision` with the revision of the store. When a record of a resolution (`interrupted` or `not_released`) is still refused after the wait, `reconcile-run` is refused with `store_busy`. `reconcile-run` for the same admission, with the same resolution and reason and with the current revision, then records the resolution. For a claimed local run that no record released, `reconcile-run` without a resolution is refused with `execution_recovery_required`. The message of that refusal names the `exactory-lab run` command that starts the program.
+
+Each of these refusals holds `admission_id` and `request_id` in its details, except the refusal of a request with another ID. `request_id` is the request ID of the claim.
+
+After the launch, or after `reconcile-run`, the harness shows the run in `intermediate/lab/runs/<admission id>/`: `run.json` with every record of the run, `result.json` with the observation's summary and `log.txt` with the observed log; the run directory under `research/runs/` keeps the pinned files. Releases before 0.68.0 also wrote the summary and the log to `experiment/results/<node>.json` and `experiment/logs/<node>.log`; 0.68.0 does not. A retry returns or reconciles that run. When the program never started, a retry with the same request ID starts it. No retry executes the same admission twice. Missing or lost results require `reconcile-run`. A dead local worker may be recorded interrupted after ownership checks. Unknown usage retains its full reservation. An interrupted process, timeout, missing output, or old modeled managed record cannot become current author readiness through a public result JSON label. An imported observation retains its actual provenance and chronological limits and does not consume or satisfy a prospective admission.
 
 A second run of an assessed plan can change only the format of its outputs, for example the name of a file or the serialization of a JSON value. Give `admit` the optional field `format_only_of` with the id of the earlier execution. That execution must be a completed managed run of the same plan, with outputs, and an assessment of the cycle must list it (`format_only_reference_invalid` otherwise). Such an admission skips the reopening check and the closed-cycle refusal: the plan's recorded strategy failures stay as they are, and a `complete`, `failed` or `budget_paused` cycle keeps its status, so an ordinary admission after the conversion is still refused. Every other rule applies: the current decision, the other plan dependencies (`plan_dependencies_stale`), the pending run rule (`execution_pending`), the strategy budget (`strategy_budget_exhausted`) and the reviewed tranche (`research_tranche_exhausted`). Bind and launch the run as usual. Recording accepts the execution only when every output equals an earlier output of the same requirement: byte for byte, or, when both outputs declare a JSON media type, as equal strict JSON values, where a boolean never equals a number and key order and whitespace do not count. An output that keeps the id of an earlier output must equal that output, and every earlier output must be covered. Otherwise the recording fails with `format_only_output_mismatch`, no execution or outcome record is written, and the admission keeps its reservation under the ordinary reconciliation rules of this section. A recorded conversion carries `format_only_of: {execution_id, execution_digest}`. It leaves every earlier execution, assessment and failure in place, and its outputs do not count as changed evidence in a `reopening` entry. Its outputs need their own assessment before a candidate cites them. A figure redrawn in another image format, for example PNG to SVG, is not covered: its bytes differ and it is not JSON. Records without the field keep their earlier shape and behavior.
 
@@ -4048,6 +4181,8 @@ Older terminal records without a worker output seal cannot establish a new manag
 For Colab, set `EXACTORY_LAB_COLAB_DIR` to an existing shared folder on both hosts, bind `backend: "colab"`, and declare the actual remote Python version in `command.versions.python`. Run the installed `exactory-lab colab-serve` on the remote host. The client needs the same admitted logical script path, but the remote runner maps it to its private working directory and records the actual executable path and SHA-256. A runner started with a symbolic link, such as a venv's `bin/python3`, starts each program with that link. The program then has the venv's packages, and the runner records the file behind the link as `resolved_path`.
 
 Protocol 2 writes immutable job bytes and `READY`, records a runner's unique nonce and runtime, then commits a client release and `GO` only after current local preparation passes. A saved release does not authorize emitting a missing GO after preparation changes; that side effect needs a fresh current check. An already started or completed original job is collected without recreating a missing signal. Only the released nonce may start once. The producer validates its seal before publishing result files. Collection checks transport identities and per-file hashes while copying; reconciliation then validates the complete seal before recording the outcome. Both client and runner need the seal-aware execution implementation; older unsealed terminal bytes remain pending. Old jobs without protocol 2 cannot execute. A dead heartbeat or transport wait timeout leaves the run pending; it is not evidence that remote execution failed. A runner crash or mirror conflict after a durable release can require external inspection. No retry silently creates another job or refunds its reservation.
+
+The launcher writes the record that releases a Colab job as "Inputs and receipts" describes. The record depends on the records that the check of the admission read. The signal `GO` follows the commit of the record at once. When the record is still refused after the wait, `exactory-lab run` is refused with `store_busy`. The runner then started no program, and the admission keeps its claim. The details of the refusal hold `admission_id`, `request_id` and `job_id`. The same command with the same request ID, or `reconcile-run` for the admission, then records the release and signals the runner. Until the runner finishes the program, that command is refused with `execution_recovery_required`. After that, the same command records the run. A saved release without its signal gets its fresh check on a read during which the store takes no commit of another command.
 
 ## Planning a successor
 
@@ -4377,6 +4512,22 @@ UUID, DOI, and arXiv routes all fetch the task-only target. The server supplies 
 Under `sampled-v1` `bind-verdict` also checks the verdict body's prediction against the sample. The percentile and both band ends are integers from 1 to 100. It refuses with `prediction_mismatch` when the sample places no member, when the body states a percentile other than the sample estimate, when the body's band does not contain the sample band, or when more than 20 sampled members are unplaced and the body's band is no wider than the sample band. The refusal carries both the sample prediction and the claimed one.
 
 The task endpoint may reveal only an own-verdict ID after a lost POST response; it cannot establish the exact body that was accepted. Such an intent remains pending even when that ID exists, and the managed path does not repeat the POST; `exactory verify` prints the `Managed record skipped` line and sends the verdict directly. A verification-level owner serializes the complete verdict decision and write, including distinct assessment IDs. Other verification targets retain independent owners. Known-success receipts and explicitly bound revisions remain supported. A stale task response cannot erase a locally confirmed prior verdict or permit a revision that omits the latest known predecessor. The server's `requestedByViewer` means the request opener, not the paper author, and supplies no authorship proof.
+
+A managed deposit, submission or verdict writes the records of its remote intent as "Inputs and receipts" describes. One write is an exception: the start of a step that follows a check. Before each step of a deposit, the command checks the manuscript and the reviews. Before the request of a submission, the command checks the published record. Such a step starts only at the revision of its check.
+
+When another command commits between the check and the start of the step, the command is refused with `stale_revision`. When the store is busy at that moment, the command is refused with `store_busy`. Both messages say that no request of the step was sent. The same command then checks again and continues from the confirmed steps. The step of a verdict has no such check, and its start takes the wait.
+
+When the store still refuses the answer of a step after the wait, the command is refused with `store_busy`. The request was then sent once, and the service answered. `details.intent_id` names the intent, and the intent keeps the step as pending. `details.response` holds the members of the answer that the step needs, and never the whole answer:
+
+- A step of a deposit: `id`, `record_id`, `conceptrecid`, `state`, `submitted`, `doi`, `conceptdoi`, `links.html`, `links.record_html` and `metadata.prereserve_doi.doi`. An upload: `key`, `checksum` and `size`. The preview: `id`.
+- A submission: `id`, `verificationId`, `status`, `doi`, `webUrl`, `createdAt`, `supersedes` and `supersededBy`.
+- A verdict: `id`, `status`, `stance`, `supersedesVerdictId` and `createdAt`.
+
+For a deposit, `exactory-draft reconcile INTENT_ID` reads the deposition and records the step. For a submission, `exactory reconcile INTENT_ID` reads the task and records the step. A verdict has no such read: report `details.response` to the user. Do not run `exactory submit` or `exactory verify` again for that request. While the step is pending, these two commands do not take the managed path. `exactory verify` then sends the verdict directly, a second time. `exactory submit` sends its request directly, a second time, unless it runs with `--managed-only`.
+
+A read of the service can settle a pending step. When the store still refuses that record after the wait, the command sent no write to the service. The same command then reads the service again. When the receipt is still refused after the wait, every step is confirmed in the intent. The same command then records the receipt and sends no step a second time.
+
+The record that a direct deposit writes at its end takes the same wait. After that wait, the command reports that the store did not take the record.
 
 ### Deposit for a math problem
 

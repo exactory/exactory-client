@@ -19675,15 +19675,15 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.acquisition": {
-      "ast_sha256": "326370d007ddac387e85c55ba5fe479fbd5022f6d17c4c7d7938756ec5f2ccac",
+      "ast_sha256": "a1429462069bb7d7ee51de94801b68d66f0b1ac22ebebd4c2f054f5d4f7e251a",
       "functions": {
         "_begin": "01971de6b858fde242c2676ef97d3b0818d4102354aa1b9564d44547126b58f0",
         "_collection_members": "d5c211c6ab1e26eba61e6cac4a142ef6c78073431fa932bd0b44bf96c699640b",
         "_collection_summary": "5d823e41004d9c2f550a834258e7d4db9a621105abf3726715c8c4b69faf7888",
         "_definition": "09d87ca6001f3a45f8bda2b6c4c4ec4196802d0d864b9e6c90c1723f0092a5fb",
         "_extraction_options": "efe4f34ebcae0a2b90c4df5fa34501af9c11af2d0ed239f7c3477657843eecb0",
-        "_finish": "9acab6a752294d555dc7c41d65b0814888a031e4aeb29d852bf1511e604ce5f0",
-        "_finish_once": "f6dfa0dd7c8570c9ba3c13cdcd2ae05751e352510e10b2266cc9b9eaf36b3e93",
+        "_finish": "0984421a0ac2a322cae8765ae512cc4461a56786f165580d77464527076481dc",
+        "_finish_once": "a8ebd6f01b0870bb360cb8455f7562741d8cc6493151b24564b1576e8fb55896",
         "_import_page": "e25eb9db94ee38c8554e0e115fc35071968431c27ba6dab49a27510fdaf3ed9b",
         "_import_pending": "cadccbc024795a0e3b71765b63f1ce102f3aea33c31d95f6dcf7467fd78bf468",
         "_matches": "1206cfc60ea29930fabedfd39bd117d2070d32ef59f3d5eecbacc8e4010b381e",
@@ -19692,11 +19692,11 @@
         "_page_update": "6c34c8844a306fbb774b6fc21da6d2b8c9962e07accf9e3984dcf16d5597bef0",
         "_partition": "cba988c58f024992322475f6712bd4b1566293653d326443088415b94a8965ad",
         "_provider": "4153028c4006b614feb3f8931da311c54ff23689fbab5d5fdc624543a89c4680",
-        "_run_collection": "78ca3ef92df74f4b50c123edd5a856b849a777e8e5e59b7446cbcc47e31760f9",
+        "_run_collection": "50109286c0e8ba9b655925c1907b05105e3a408d8d6612d58f1f50e8a39a71f5",
         "_split_partition": "8ec00f8597518312d71adec656b99883b918fd6afa4f83c715edac165b63f004",
         "_supersede": "92dd25b5a05c66987415eb04014029e1a1571fd65c168215e3847af24f50eb6e",
-        "acquire_fulltext": "d26f4abfa4de08ab0b8f59376b67708190f23bd558f5a7f39809eccd575f2a34",
-        "acquire_work": "ee63c0f30885000fb1bf7068b76d80d9250ac45758d6b10292da2b843e4de5ca",
+        "acquire_fulltext": "1ba916dc8a759c6de69de92ea371b13e90d12747962406316f4437fd54f53520",
+        "acquire_work": "09d15587700d82c9c91db2ecb5fb1aa3151da3972f3c3c407ff9404edf5e2af2",
         "build_import_payload": "f9536fd72e1740f9c0d8cb10cee8a321f5227cc939a049a804d5df25d33d4f56",
         "check_supplied_sources": "37772e6e2619d603c65364b67ac9ffe96952feda487d51ea15253d29f8080dc4",
         "collect_cohort": "78091937164446e7f004825c5e830ac9ae48f1dfe43c5209b2e53b5039dfd22a",
@@ -19705,7 +19705,7 @@
         "describe_supplied_texts": "a72e133d41c4309bd9bda9977e68241390d4f8ae079cc1518b031b310a0c6cfd",
         "digest_bytes": "c4852d2242e57b053ab3df9e5db93a75d2f21a00b72b1c1188cb36bb435263e1",
         "hold_operation": "8baa76bc99a1b73cdff122c5a2904e622250f208fd81c65291775556a7051ff1",
-        "import_fulltext": "94b8c8b95b005e63c3b6ce341b238a717708886da0aded10587238f44343a2ca",
+        "import_fulltext": "d417e462d9f231fb26d4d811a83503471fd86efa94ea4a905b5dfe7648102cd3",
         "import_oai_cohort": "9d3a07558b624e61664458cb75f3181d4d5ba83c32426d06558294d1b0914b2c",
         "import_response": "e218adb31576e4a966d1b0f935abb05f4dcbe64925a7547367adfe5d4500d481",
         "import_response_file": "51a1b386c64b25e7cd44908cd19ad888a0852d36ddba215ad34bfbc735106619",
@@ -19716,7 +19716,7 @@
         "validate_supplied_origin": "40fafa84ee3d263fccd5e3971733559cf4703687fa3be2a04cc0a69cf69daaab"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
     },
     "research_harness.artifacts": {
       "ast_sha256": "d038166cf3411bdf883203fd6381be594fa89f0b11a007ccae800f0b44ca0caa",
@@ -20058,7 +20058,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.development": {
-      "ast_sha256": "bb89ca33fc67af84d235315e63d898c0d668f722be0149c10a4fe4521c5e863d",
+      "ast_sha256": "c1f4feee032697044a78d364f35b5c396929fb090a961217f4999617ef4477d6",
       "functions": {
         "_assess": "e4aa7bd96a735771d7f1ec241b6707a0dce17c7cbcc4bd07066baa28c592007f",
         "_assessed_checks": "19f2a063e2c3498d901ae71f9577b838453f10fed36c8c5a6ef35676e5f5084c",
@@ -20106,12 +20106,12 @@
         "plan_cycle": "acbe01c3a0342154cd48ef17a556b29f352203a45a5fd7ff5a6bad170d29d8e6",
         "prepare_combined_support": "4a8c836abdf85b5e98e8b870ad1797e4c30fa7ed48ed9576fe387a53b9f4548d",
         "readiness_report": "0680871639f33bc2c8bebc2fc3df77ea5f3de6e50e8473605920a2520274d999",
-        "record_execution": "9e242c32a834b0151aa5c86ca07fd200fcd687129295774cbee00690ee2467a8",
+        "record_execution": "dc17b0509f45eedb465254f9da8029cd19501dffe8e0f0194a7755347fe925c3",
         "record_readiness_review": "964e6ba8ba11b7503aa9865ae33445ff905d77c18797260e504cae13541c05f8",
         "validate_admitted_execution": "f14ba9b245fd54dd188175d8262cb0cb74740eddc4cbdd2d7ccc180046a41d0f"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
     },
     "research_harness.direction_reviews": {
       "ast_sha256": "75d3a953c40645f031b7e0a1c391abab944cbbe2de4038c802f7cbea5c3df218",
@@ -20225,30 +20225,33 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.91.6: the text limits, the trim characters, the line-break rule and the UTF-16 count of the post command have their home here; the module builds no packet. Reviewed 0.91.8: POST_TEXT_BOUNDS holds the bounds of every text field of a problem post in place of the two limits of What a resolution would change, and find_non_plain_text_character, split_statement_details and find_post_text_violation hold the character rule, the split at the --- line and the order of the rules of a post text, which bin/exactory and problem_claims read; the module builds no packet."
     },
     "research_harness.execution": {
-      "ast_sha256": "ce6a8ef2b2c67fa2c35b1ed99d867e09aeddbfe240d90e80d953388af9a870b1",
+      "ast_sha256": "b5a0d0df8f91af4cad1630bd069ffb8a47a3ca4e7372b7954e078c1c7b1e3032",
       "functions": {
         "_binding": "c5a1577c8efa18428b8d166fee62ec111d3f8b4ca767777d1c6da982fa3045ee",
         "_build_earlier_runtime": "4e9449595081c737c01e8d4c09ef916866f5ef7275f344af48057370cc16168d",
         "_claim": "aea620c4a333528b5e894de13959ebad3f94ab0d422175e4a6ed97f78f5b17d8",
+        "_name_launch": "9f0559fdf9e6c229da8c4f25d666663459174820bc3a7bfd512c4e987c3f123c",
         "_describe_interpreter": "8cba7d3c58a6c58a97b51ad77905c0697600350b9557f9eb83ceba85366d7f3a",
         "_directory": "61e4bb3097752b4ad3424daeaee88a8eef88b808919ba5cfbe206243299a1f78",
         "_files": "7245cb5367cbfd46f524d59e83a2f4b038e4db87d4d7c88d1d49b38b2863994d",
-        "_finish_reconciliation": "fcbb327c9e6873fbd8f3d77111b1b756b6997121dddc379fefe79521bb9182f5",
+        "_finish_reconciliation": "d378a7dbbbfc116002899f711993b8fff8510a51353a06a27d4377b975649718",
         "_materialize": "6e5cca2ee3955fe8c34be14c0698398a4fd55250503e6c10b717dd6e9191c95b",
         "_owner": "69afd2267161b44b7f5004e2aca41dd46707def88a823d67fbe737333b701086",
-        "_prelaunch": "8ee3a505604d59cf27e7d15404289c12f0ffefb6f72d949202e75513c9932987",
-        "_reconcile": "88ed648b142803359c7d46de41c9dc2f3409a72305746d0bc0a42928ffe8dbe4",
+        "_prelaunch": "96a206e0f0ea0e834249703f1bb0d12408671325b9052565746af77d82ddacd3",
+        "_is_unstarted_local_run": "50e8bc036723fb52726aa8980eabeaf648690d8fa2f8a7d596a47142f5710dd5",
+        "_reconcile": "deae046ff1c3c159f8c3bec0a12226671ff9e432110d42f1eb318a02afec33ce",
         "_runtime": "d02d1a74ce7563339d58ac35a7c520a1ebad8e16de5e3758cd6f701424e16a4d",
         "bind_execution": "caa3d7a39325b5209ade55e51bbfb40e02a5ff9c05befa9bfc3a71e6e0cb4e9e",
         "execution_status": "e59473b3c0e17736086cd4aa796890d74dae29789655494c67ff8fd096ef0f1a",
         "find_recorded_execution": "c2e2543e746e39effe57bb0e0900254bb3814fc7294a7bb5c08c6e5f55e9b6ad",
-        "launch_execution": "a60612bf125065ec84d289db29e76e944fab4d0ea11c463ceda52d1b48e45b0a",
-        "reconcile_execution": "4b63b894450d2d59b713296be006f3664a1a9f65f82c9ad85dd40cb0d55d9805",
+        "launch_execution": "123a7004140c4b4402e53efab80c7745271c150640bf9f709dc44eb85eaa4fee",
+        "reconcile_execution": "895baf406d6f67d625f568285a5c44062989099a06ff70408fe824ea78032185",
         "record_imported_execution": "4f0c17c099e62ad7b175155252803ba5e5a8fca2c60e71c82f092671f4804379",
-        "record_reconciliation": "e2c884b12b7e0feecfb021cffc18110a3c89f7ca9837ff2befccdae7dbfa4708"
+        "record_reconciliation": "ef5ab09a0d9ac90284c2121e572f5efa80f9b8d0d1aaab557c1c907240f1ed6d",
+        "_select_record_busy_msg": "81ba2a1689fe45d19fc0cca8f79fb423e2c2192a9241a02274963b75235f3c65"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
     },
     "research_harness.execution_accounting": {
       "ast_sha256": "96cb4b85ec4977d5dc484eb0c4212c2d6e06d70e79663c62b3f76e359c0085d6",
@@ -20309,12 +20312,13 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.finishing": {
-      "ast_sha256": "3fb5bf3db5818fdc495b6f387ba52c65d6fc0d6cb0a0a2c1f92a50f672ab59aa",
+      "ast_sha256": "c44dbc28c5a84a6bd02cd1f140fb830bdd2c108f7d2e7f009012d198d7d2c802",
       "functions": {
+        "retry_finishing_write": "552a7323b214471852cf2c34a9f534360ecd0260acd31af0722665b5a4d980f1",
         "retry_store_write": "4ed751301c59d637ed01e34744c9c88451b6ec794c61f2a6b464345fc9569ebb"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed probe-capture-contention (0.91.7): the attempt limit, the wait and the retried codes of a scoped finishing write have one definition in finishing, which review_protocol._finish_call and the probe writes import; no packet argument or member changes."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed probe-capture-contention (0.91.7): the attempt limit, the wait and the retried codes of a scoped finishing write have one definition in finishing, which review_protocol._finish_call and the probe writes import; no packet argument or member changes. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed finishing-writes-2 (the first patch release after 0.91.7): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and the transport does not turn a refused record of that process into a failed observation: the refusal reaches the command that owns the call or the worker of a staged task; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes."
     },
     "research_harness.fulltext": {
       "ast_sha256": "93d5968e8e159c1097ca48a876678adc1b8db8bf3dcf0a88997e5f5371946ba3",
@@ -20328,11 +20332,11 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.fulltext_jobs": {
-      "ast_sha256": "9cbb509bf1f8656b2619301f88943d554c3209fbc7ef5f5c0efcee1d875656b8",
+      "ast_sha256": "08e65d92f729af86f846143fc30fbfc7c63922d45d7a660979169d147ac14510",
       "functions": {
         "build_unit_key": "bdb3db4c3b21920307b1dc6cc27422b626ad0903c982b34c9d5f3723966b12ca",
         "charge_attempts": "e400831712a1c368e0b934623417f9e6c9c61dec187acf5304dc42c8edb95dbb",
-        "commit_job": "0ee9656d968a49fcd9b7c8836183b7699f7025911c2468fd801133c540519df5",
+        "commit_job": "10ae28ad97fd98504cf529c010e1219bf94049bb37d6987f5c127b9c7943f2a6",
         "read_job": "ca3586abc12c2c89064be75de5147747fac22de4148441d6e8ec931f1f47b55b",
         "read_job_status": "262bd23d854b8d3f675df0e365a80502c08c69e103a967d28d2f3e52ff05fd9b",
         "read_unit": "d2bbb3016da77632cbb9b793529978a1049ddd678a498048e3a0b6bfaa974ea6",
@@ -20342,13 +20346,13 @@
         "validate_assembly": "a98071285a67c4060ad5b8e960edaf80ca55e35b4910146c0121ddd307abc45a"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
     },
     "research_harness.fulltext_transfer": {
-      "ast_sha256": "17760aa685843b2cd36482f781f0e4c5bbc20bde308b8f73ddaa83a27eda148f",
+      "ast_sha256": "950b83587e5490c9e91bfd53d79d299cd1c4b360d243758f27d512a96003d28d",
       "functions": {},
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
     },
     "research_harness.gates": {
       "ast_sha256": "1de1772f0750183a5cf9d6b6ba3330cd863dab26472b9e64eebff181d94485ec",
@@ -20441,7 +20445,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.integration": {
-      "ast_sha256": "88ce44e5ce7bc093fc5de2a9a0d4904f8fc90947adae3d8e40f9aab03ffebaa7",
+      "ast_sha256": "77488fb58d9030228b61d13c4a4975b2656668a09d71d5e5d8fd0d74d69fa53f",
       "functions": {
         "_decisions": "12e706ad148e24be3a1131968b35e828e3d4f7cc49194fd4a06e9e0732da71bc",
         "adopt_workspace": "7f3c52a1e9693e6f2b9e5abe31c76f6109dddf9757837ef4f2e3240959e96ec9",
@@ -20454,12 +20458,12 @@
         "now": "0821e5547e33e30630380f395c75e3500724b22f7503542276fd6b766cc36e0f",
         "pin_artifact": "73297ab9d7289fcf09ad7c67a779adb2a22c01d5c54c31eb7487283a96ff339c",
         "record_decision": "d647e54c18d06366bcc52a6baae6b4aef32a1a1ab8576a7256d1f7ffb8294d85",
-        "record_direct_deposit": "75102760fd49ebe822654fba68021a72cf650dc1f426de1324a7730f74cdc2c4",
+        "record_direct_deposit": "9a95f8300cd793045f4b7c85787e4780087979aad529d043f19bca7d32f31b32",
         "study_state": "3793bba31b820c77ce6c0573b592724e3f45cbf008eaf7a5f2064530e27d6612",
         "update_study": "ffdc9a7898fc73b1105b6ca6bc533281b12de2e69efce25da7edb1401f2ce0df"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
     },
     "research_harness.jpeg": {
       "ast_sha256": "d30dc719d65b06d52da8db49d81d5657dcd020fdd904463a0402a683402e1062",
@@ -21502,11 +21506,11 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.probe": {
-      "ast_sha256": "afc10b79b3fa8d6ca48571781781a1c0ec21eff04d582a01200b75558ae431a3",
+      "ast_sha256": "0ed30e8ce2a231aaa7c25126e42c62fa2c1ec1115679f323b8cef895c241033a",
       "functions": {
         "_commit_probe_record": "6403e86ce00083629e3d4e4d41d805c70411509a2c062ea1c1b229ab71c1448d",
         "build_probe_directory": "d99cdb3e01efeb76d2bfcd5b7bcd7e983316c89920510e40cef03accd7533f32",
-        "commit_probe_mutation": "775e7dfb7c6309643aa9dbc5b8d1840015a3e8c9c773cfb51a34b03f33d2b194",
+        "commit_probe_mutation": "eb6c9e837292cfe1cbcfb9d6f21406b0b0aca970f1c122024263b7972b746c72",
         "find_probe_receipt": "5c944f44386d48133a9ba5fea7e1e0d1a812c77b94ef35447eb32c093774ab6f",
         "find_probe_terminal": "3e24df1e7fe9ab63337a8980de8b32dc582b9c52546630f294b5c56a8c1a3ef4",
         "find_supervisor_timeout": "f9187f04235619228ac0622f4f02333a0f4cda1109c4525199931a601adad0ef",
@@ -21530,10 +21534,10 @@
         "validate_probe_outcome": "721ffd43e8c23cb00fd025246656fe1f3bc8bc30b2f49980764d761d763a1e8b"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed probe-capture-contention (0.91.7): the probe's own writes commit against the records they read, the capture raises a refusal of the store, and the outcome of a failed capture holds `capture_failure`."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed probe-capture-contention (0.91.7): the probe's own writes commit against the records they read, the capture raises a refusal of the store, and the outcome of a failed capture holds `capture_failure`. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
     },
     "research_harness.probe_provenance": {
-      "ast_sha256": "0100e90474429f1ab1bce4ebb4ec3037955d27b480031760ba77c69070c3e4de",
+      "ast_sha256": "eb22bee36144d55af143dc5e71b1c199641ab91c540c1187cc8a05d0ea0717d4",
       "functions": {
         "check_normalized_identity": "6173a320e47db010282e8755d5397cff16527686c970810ac9e58bb9e1c9dd23",
         "find_probe_artifact_origins": "ef081194e9509346f3210f2cd0303fd34cbf37c58907c847ade14c23d073768d",
@@ -21543,12 +21547,11 @@
         "pin_probe_local_artifact": "c78df3ccddc3f0aa7b3262a5268f38a2c67b62091775e8ae85b83ac7304e0cba",
         "read_import_identity": "ec3f510489f16218da680b10699b153a272142f40ef1959a8242828bdd16d39e",
         "read_probe_pin_source": "41e9a5eecd6cb9eae8c275404109711ee4097c3830e719e000f742e3cd57bbbf",
-        "record_probe_artifact_origin": "d5bdf0eca986d535582e842db8694663dd9f4ef605396aefff4f4a8e09d28346",
-        "retry_probe_write": "459542b37dd8d38bb2dd9aac91cc4311d1d6ded13df3cb14660369ede57c8654",
+        "record_probe_artifact_origin": "959a242fbc99d1e158beb576dd2175340c9ec4fa6d0a00760b06cc1f0b6c028b",
         "should_stage_probe_artifact_pin": "cac940e6f873d9e2ceda8a8ff5950a8d8069829940503c76c0385b7540997039"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed probe-capture-contention (0.91.7): the probe's own writes commit against the records they read, the capture raises a refusal of the store, and the outcome of a failed capture holds `capture_failure`."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed probe-capture-contention (0.91.7): the probe's own writes commit against the records they read, the capture raises a refusal of the store, and the outcome of a failed capture holds `capture_failure`. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
     },
     "research_harness.probe_supervision": {
       "ast_sha256": "632f6b5fc68782cc4f2a5007c581ba2ba2ab58937750d2d53d85958601ce4064",
@@ -22443,25 +22446,26 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.4 origin authentication: describe_correction_observation passes the origin view of the records to _authenticate_observation; no packet argument or member changes. Reviewed 0.91.5 call payload definition: check_authentication rebuilds the payload of each committed call capture through review_task_execution.rebuild_call_payload, with the optional members that the invocation holds, in place of fixed key lists; no packet argument or member changes."
     },
     "research_harness.remote": {
-      "ast_sha256": "897072ca205d979c3f6a3a964936b3958452730ba4fe9e5532c59ce05b6a2114",
+      "ast_sha256": "d599e556b42725c174ed875eaa993548b3c679fdc7b11ed76052534793075d69",
       "functions": {
-        "_change": "182003d445452b26a998087b1fa764b611231a58af0a9f4f1dc911b3deffcbf0",
+        "_select_answer_members": "92f1798231f491c0e0f753a8e4984cba8fd30f216ecd04e2234f3a2bb5ec6a38",
+        "_change": "4b0684c358442d85218a613eca9593aa48cc686e18b3db02f0b06deaf5c4d6d5",
         "_compute_request_fingerprint": "c85df950087d4aeb76bf11d6f7899be503d30120d4eca111536f6120d3c849b6",
-        "_finish_intent_once": "c4538c6c42f743059cf0074fc5a3d6f3571dba4c15de30f53a94c05aadeddda9",
+        "_finish_intent_once": "ff1a14f38e8189abfa881039278aca50ea38b7e9f3de491263a4e3ffc445c04f",
         "_read_pending_step": "4580ce79e8b8e23df61b671e433f15f8a0b3b18f63b5a226c5a8631d9bae0658",
         "begin_intent": "6be41209c75597bc2e67e3a3542a0cae079e37fcfae31c937c3e945dd8fc236b",
-        "discard_step": "85430f7b9bb9629a780c4b4d9e88a737bb9eba4366dae757bfe6d11c3acad944",
+        "discard_step": "8cdf176f8a548d1fe8a089264153676c74632c8a1ab0afaef2db351e6c4d3053",
         "find_intent": "9cd4897569c7fa0939138cf35594b775a03eba261249a9e3dfd266b270a0b026",
-        "finish_intent": "5b5fccdb464d643d7626d96d8b666b486913f788ee1eb2cb7f5c6cba510c54be",
+        "finish_intent": "6a758c7068f8626d930256e0e8794916cfeb4577cfe4e88e9f7cb2580531de4b",
         "get_intent": "afc0d8c462b68840f25253ccb0e584a053a0e88098930c8ecd50fad8f91b7769",
-        "remote_step": "cbf4ec90879cf947e97f32a0215026448d8c6e488ee78432e71947319c520889",
-        "resolve_step": "f3a8061a5d736daa8acf787966a7f787f1ce2d31ad4183adce295ce81040aed6"
+        "remote_step": "b10ac2865e48422504dde0b652ab4c2d3cb0b3540d6c136c35d5cc9aaba1d5d8",
+        "resolve_step": "d9fd010e3cc275d0e24988b8f9e6bc73ebcfd8b52fa028870ae041b5b8cd6ff5"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
     },
     "research_harness.remote_execution": {
-      "ast_sha256": "5b1414a413325aedb2af1dcfbcf4c930f576ab58ccdc78f64269b48e91bcd525",
+      "ast_sha256": "0db14e6162fd34828a903b5283ea2e7f8d66b93f94f544c125e87529893a7c43",
       "functions": {
         "_exclusive": "a181824c762f22c6a9ac9e49dd80bbe2f4320f1a13fd95f32e4ffa0f2a5cac22",
         "_execute_job": "2d249897e532d71a6eef654b076cf0b282ae3a523dfee127da52d0b23e1df69b",
@@ -22469,15 +22473,15 @@
         "_interval": "b0bd22bbda7e708adf2c69386cc99fea209e384b35073149461c5c251e3636a6",
         "_job": "3d7a756a598d2555afdd08c2baa5ba77cfd909404a2c7bc4d0d7e5a6a20bfe13",
         "_publish_job": "a2a1b32c8e36bed0cbdd0cd647201f9c0d6edfeca6744a9782758d04294038a6",
-        "_release": "8eac0f57688fbd6de19e3dc39703afb8b2b4103b49efca30f20760ca37f040b6",
+        "_release": "2050dd87b1156ad2aaa4bb40ceabb8a7c843aadb74a3f2d53087a1ebbeeca572",
         "_runner_runtime": "6b188b637409b3a8c8ff155396b438b41855f5983813a2c4f7776b6d5b6cca42",
         "collect_colab": "7feacc94b10846187a756a71cd0cf09dda572760cb374f5d81812b11b137fd59",
-        "launch_colab": "16bd6c1c0db1f3cb196b5c87fc130af4cc03cea5b22b991d132d53681c760b78",
+        "launch_colab": "63a62cf54e9f626243ee518070b8ef710d4be502a0f62fb4c02cbd873af37967",
         "serve_scan_once": "86ab82424dc8b2dbd788166c416a3b8f9f4e82fec0fdaff04ef86f8785c001be",
         "transport_root": "49d51a52f4d373dfa740ebc505e3bb7c387d2a7ef389b96b7f974811db744e67"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed finishing-writes-2 (the first patch release after 0.91.7): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and the transport does not turn a refused record of that process into a failed observation: the refusal reaches the command that owns the call or the worker of a staged task; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes."
     },
     "research_harness.report_views": {
       "ast_sha256": "4e9e491287738b16fa61f56bc788b1698bb77e73b7372b8fffb1341e57e430dc",
@@ -22665,14 +22669,14 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_call_capture": {
-      "ast_sha256": "0bf48004198e73ded666d6461d79dad95448fb4a39021bc5bc474ac2a47846a8",
+      "ast_sha256": "a17d2a5011965264d8bfccb1ad18bdb6399995f0d6bbc6466567dd57acc19e48",
       "functions": {
         "_check_bindings": "aec9cd70558fa45092e6dd6b7a022eef91cf3e8e578d77c8757176e70d03442b",
-        "capture_call": "b2da2253a3010ab1f1cd9c96ea4e9bdecde6bc6b89ac30d0fcd1f67824f6b11a",
+        "capture_call": "94b92471e6f8b3e9e935a9bae50ff373010fc19c6f1b578deb600620956956b9",
         "read_call_observation": "9fe94bf236b7db2722f214bc01a6618b42cdfc1b1b7c86faf35398cf1fbc92ed"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the capture waits import the attempt count and the wait from finishing; no behavior, packet argument or member changes. Reviewed finishing-writes-2 (the first patch release after 0.91.7): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and the transport does not turn a refused record of that process into a failed observation: the refusal reaches the command that owns the call or the worker of a staged task; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes."
     },
     "research_harness.review_capacity_evidence": {
       "ast_sha256": "726ca00b521feccdc0902ac7b5ddb803106f25daa8b98152e0ff178a85938fdc",
@@ -24166,7 +24170,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.6: two registered paragraphs, changes-if-resolved for result and adjudicator and slate-places for slate, each selected by a member of its packet; the text of every earlier version keeps its bytes."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "475cac6342812d3d19f5865f45176ce6c5203d299eca69b9fcdd644302b98615",
+      "ast_sha256": "93bf120e5d1d12e10f8a10ca21d518024f930a71d2606e91015398fc33e05faf",
       "functions": {
         "_assignment_state": "49c943308227c20d44664e3b577eed08bd99a3208d824ceb976bcb71f80f8b62",
         "_bars": "fd41a7b94078e8e0761696db4a7cc67b063cbb5787f76d6d3dae65fcc7fe5f9f",
@@ -24176,11 +24180,11 @@
         "_find_frozen_carried_record": "a7d760b5466a0cac0efdebb765b39dd7d9a97398bc5c9af54e992d724fb93750",
         "_find_problem_refresh_parent": "cf44acbf2dd26a1a4a26a3f820bbe0f518a62ad7555a49bd191e99a823d6143e",
         "_find_session_bodies": "a9cacbf1a495baf61642cd19851f7a84ac39f63e02e1fb1040f72b39499b2063",
-        "_finish_call": "4bff703d67d669f6e3525101748086c38b07f1e32ecfb859c7673784d00abb71",
+        "_finish_call": "35ebd62e90dd16fa6d3fb78d43fd4796bcae4f8a7275b0c419aaeb7ed2576f7b",
         "_get": "fbf39112fc5589dd72eec0bcfdb2b3e9794d5c56fe0bfcb74ea6dfae7d077a78",
         "_initial_size_failure": "aec16d19bac7057f6d1cfb44556bd18434ebc5153026e0b27542c4a9af560df1",
         "_initial_slot": "5ead01961de08355f5028ad45bf3efd2d0b8d412544cdcf8efed3b2eab354eef",
-        "_invoke_once": "bca6bd6ffbbae0aeb1eb3ccb55ef0133a6a625c11a5246f8fb13e7f3ab030a39",
+        "_invoke_once": "0153153ea8474621371d706463ed7a5ef09c9ec95c3abfcf877866f212ac6d5e",
         "_is_evidence_refresh_needed": "0f27626505af03ea9b3e38ce700f9ee647c34cc3a114e32bcd1fb149a119cf93",
         "_is_problem_refresh": "bf5b04ebef5e63bbeb79a0b3cb1666cb10d56fefdbd290c2e8a7fcea73dfb47a",
         "_list_packet_records": "ac8eefd28584f8e1c4078e7e1b14c3c28c754d7eda0f6f3050f29f969274c931",
@@ -24256,7 +24260,7 @@
         "has_pending_invocation": "1100f816ca4769d642bcb040f697439bfd738a2a00c832bbbf9b153965e9ac76",
         "has_problem_result_rubric": "f7dcd7d5cc3c12342b63edfe47e3608e43d7c23902b5f02f268d9d5ef6767a8e",
         "has_verified_history": "80bcffdb051ef2a341dc4bd4a86f1dff05304d863526c75525803e349074c3bc",
-        "invoke_assignment": "7e3215c26696443fa7cffc38abccc142e2ca4d2e8e04bd036ca2fd7b6f10b9e5",
+        "invoke_assignment": "ae67d7f37b044b0d3798462ca4ef6f23b244afbdda59c8f9141d1da13bd2b531",
         "is_dead_assignment": "0e87b884f14015390061ab33a6f17a4a95770ae46620127610f25244a62fcd85",
         "is_previous_prompt": "6a89da49434d83987b303155068983a6499cb140a6eb0b906a4e6c1043537f42",
         "is_route_stale": "e1adbfab7c0931b33eb0e4c6addde882883e8fe37531d3e70f1ca2f964441b85",
@@ -24385,7 +24389,7 @@
         "fb73c23fe96d794ff147c6bd36a7d4fd6ffeecb46aa49dc9c7ca43698bc76bdf",
         "fcd4adf30287e29937ffa4784f5a66fdacae6358791b9b3fd106bd77a2e6fda8"
       ],
-      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback after the committed invocation admission, plus invoke_assignment and probe_route forwarding: it renders derived views without changing authenticated packets, requests or their closed shapes. Reviewed 0.91.4 route renewal: is_route_stale compares the pinned runtime with the reading of the route state; require_installed_runtime refuses an assignment on a stale, unretired route record before any record; _require_route_runtime keeps its comparison and its message in a constant; record_assignment calls the check after the retirement check and before every dispatch. No packet member or stored record changes. Reviewed 0.91.4 origin view: read_origin returns the review records before one revision through _OriginRows; _assignment_state adds review_route_retired only without an output and reads the route state of a selected correction, and its context message is the constant ROUTE_CONTEXT_MSG; no packet member, call or stored record changes. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked. Reviewed 0.91.5 call payload definition: PROBE_PAYLOAD_FIELDS and INVOKE_PAYLOAD_FIELDS hold the members that the start checks of probe_route and invoke_assignment read, the same members as before; no packet argument or member changes. Reviewed 0.91.6: add_problem_candidates writes the member place_review into a new slate packet, and the source-request continuation of a slate review copies it from its parent packet; the member is declared for the slate packet, and every other packet member stays as it is. Reviewed the refusal details of evidence.shape (record 20261115234509): validate_adjudication_contract names /evidence for the evidence check of a problem adjudication. No packet member, packet call or stored record changes. Reviewed probe-capture-contention (0.91.7): the attempt limit, the wait and the retried codes of a scoped finishing write have one definition in finishing, which review_protocol._finish_call and the probe writes import; no packet argument or member changes."
+      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback after the committed invocation admission, plus invoke_assignment and probe_route forwarding: it renders derived views without changing authenticated packets, requests or their closed shapes. Reviewed 0.91.4 route renewal: is_route_stale compares the pinned runtime with the reading of the route state; require_installed_runtime refuses an assignment on a stale, unretired route record before any record; _require_route_runtime keeps its comparison and its message in a constant; record_assignment calls the check after the retirement check and before every dispatch. No packet member or stored record changes. Reviewed 0.91.4 origin view: read_origin returns the review records before one revision through _OriginRows; _assignment_state adds review_route_retired only without an output and reads the route state of a selected correction, and its context message is the constant ROUTE_CONTEXT_MSG; no packet member, call or stored record changes. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked. Reviewed 0.91.5 call payload definition: PROBE_PAYLOAD_FIELDS and INVOKE_PAYLOAD_FIELDS hold the members that the start checks of probe_route and invoke_assignment read, the same members as before; no packet argument or member changes. Reviewed 0.91.6: add_problem_candidates writes the member place_review into a new slate packet, and the source-request continuation of a slate review copies it from its parent packet; the member is declared for the slate packet, and every other packet member stays as it is. Reviewed the refusal details of evidence.shape (record 20261115234509): validate_adjudication_contract names /evidence for the evidence check of a problem adjudication. No packet member, packet call or stored record changes. Reviewed probe-capture-contention (0.91.7): the attempt limit, the wait and the retried codes of a scoped finishing write have one definition in finishing, which review_protocol._finish_call and the probe writes import; no packet argument or member changes. Reviewed finishing-writes-2 (the first patch release after 0.91.7): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and the transport does not turn a refused record of that process into a failed observation: the refusal reaches the command that owns the call or the worker of a staged task; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes."
     },
     "research_harness.review_provider_usage": {
       "ast_sha256": "8b45cdd4c5b5a98325852d3040a320283c876c25fc99d358556999417a76c986",
@@ -24420,20 +24424,20 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.review_refusal": {
-      "ast_sha256": "65e471749483217784e52a0e287463a522340051f8db3b3781eab945c60236fb",
+      "ast_sha256": "68881562920972b932e3dd9dd78b70eafa3a227132351a6844a5655fd033f230",
       "functions": {
         "_find_delivered_part": "6fb04e71028feef3ef7ec90682db4f645b14889b69352c9a73a86a0bd5c82bac",
         "_frozen_pdf_capture": "d720f1747e180c4fc1efc6a9923a1691e1b4e554f52a1f3f1879fba5c6589f9b",
         "_project_staged_final": "4bbdc0d725fb566808cc5fa8f321e7498bdb28c97ef37d9e8d638ffb8934955b",
-        "_record_refusal": "e301bbe81a12850b609b001d0b175ea9e06c9336ff9a81a03a7aac78bba5abc8",
+        "_record_refusal": "e22a7170bf79ef48c0391ba3f68a9dcb21d9effe09a7deb9a9d90e7fffd1418b",
         "_validate_staged_final": "f4fe41342ac8e8623d8506b59214a141a4c314fbff63f31d1c15eb8700cdb3c0",
         "_validate_staged_objections": "76830b97bc4f81164c2bb4a0aeb7f66ffd873e9dcf40c1de644d6e0f9eda180d",
         "_validate_staged_pages": "4179cca8a7d476662b3ca834aecf2d9b38c61cda5a09e4afc9a9a94dac6533bb",
         "classify_observed_output": "a08d3d964206a7e966955eeefced49d8d9024abfded97ea3523119ea8c9559d4",
         "contract_check": "0d40814fe91e0e1eb703c09e1f4643a73138d0da3f0860ab5e8026680b2dee5f",
         "evidence_arrays": "71556454ae0296cc56ad3abfa9313c7d76146dd4c74e327a0a7dca415d9a422c",
-        "record_native_refusal": "d40201c986ad03e7127377e2282355b8f77565f15ff77487e69ccb70786b53bf",
-        "record_refusal_on_error": "aab5e3997f46c77a659efc6ab4fecf039a37226f58aab5462f92f454bd128eb4",
+        "record_native_refusal": "1d7ee56aca5f35b2f348a8c90842f76a6e32a54989e506a4b830e39eb8f32565",
+        "record_refusal_on_error": "cef78fd8302693e7597842dc5221c8c5b5306ec7834b4080d6c5905829d78c1c",
         "refused_attempts": "faffdaf5ca3eb26854c5b911424a9840a09ecc4dbd33a6822fe92d308a5fc101",
         "require_contract_check": "ae159027815db170fa65f195db78315ca5ffb0c94a8fe796e49a93a81301fb90",
         "validate_evidence_contract": "bba2dd7be5bef4db000775c08500f26b9a3bc3ef282fcd7fe102c91ffdd20702",
@@ -24456,7 +24460,7 @@
         "f0edafd0e800c3a1f3052f901be8124a3a502400b118de13c5ca20815273c705",
         "fc810252ca86139797998f95c44928c36ed170f7ece8638c58b854b8e703f15b"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed the refusal details of evidence.shape (record 20261115234509): validate_evidence_contract checks the shape of every entry and raises the error of the first refused entry with refused_indexes, refused_count and the notice text of a constant, and its new keyword arguments positions and forms_notice; _validate_staged_final names /evidence for the evidence of a staged adjudicator. No packet member, packet call or stored record changes."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed the refusal details of evidence.shape (record 20261115234509): validate_evidence_contract checks the shape of every entry and raises the error of the first refused entry with refused_indexes, refused_count and the notice text of a constant, and its new keyword arguments positions and forms_notice; _validate_staged_final names /evidence for the evidence of a staged adjudicator. No packet member, packet call or stored record changes. Reviewed finishing-writes-2 (the first patch release after 0.91.7): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and the transport does not turn a refused record of that process into a failed observation: the refusal reaches the command that owns the call or the worker of a staged task; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes."
     },
     "research_harness.review_refusal_notice": {
       "ast_sha256": "3819f43b1cfd5e1cd24138088280ad3e7ccf8e7bef69ec514bc2917832088234",
@@ -24871,7 +24875,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.review_series": {
-      "ast_sha256": "283cc2d1149ba00ddf3371c31b662d663a8ec32a433de2e61f24e1dd83353ec6",
+      "ast_sha256": "da3743adc150d2e51dfd29b6886f31d9653c9d887e8918a6644d6c681ad5f5b6",
       "functions": {
         "_bind_ending_receipt": "fd38b5531ffa06a25d4a1eb3ca22d6d66e8ed981d79082ed77b30fb13e25e4e0",
         "_build_check_step": "4b2347650fb596f1d9461652debc7c9f375e493f4c6c234af1adc8f20520f24c",
@@ -24887,7 +24891,7 @@
         "_record_omission": "fe80f63b02d829f499c8552030842a71f99276855ec40905b6e586dbfa9f5a89",
         "_recover_ending_line": "adec4cb1612bcc9862fca41c9b102b248ea3af33e7f3031defc982ed999236d7",
         "_render_views": "16a0f955e98d94830f067dab01fb8b80f82e956f3ce91c4b88349740752c57f3",
-        "_run_series": "6b8a06c7cea8fecf18ecebdb05e3389126aba36b7a44637c4e735298361f20c3",
+        "_run_series": "1ea1c382c469aea9e07bcf7f159d21185b380e05f1d6b6e14444a8741126aff1",
         "_use_fallback_step": "55a82f2ad5254991e1636a0060e80bcb4c74b85b7e49f79f1fa42b0e72e997e1",
         "_write_ending_file": "a9b54197e3893464b4c2a9a95c9f5cb17f9a250eaa6861d37299a14c64e4a0ed",
         "run_series": "c7e361654f3bac2b9edf1906ebff980cbea0f4c24e3cf8538e959b290c671bd2"
@@ -24900,7 +24904,7 @@
         "ce3d632c43cd98ea8eb54e2acc5ce058df26a5a646f054388a8a92cc0c3efaac",
         "f7598854c85c37169821c5a5f8de589f782bf1c8e28d95fe256c2711354c79bb"
       ],
-      "reason": "Reviewed requested-stop signals bypassing the diagnostic boundary handler while every other BaseException preserves the original operation refusal and retained boundary omission; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the ending of review-series: a step of an answer is replaced only by the completed step of the ending."
+      "reason": "Reviewed requested-stop signals bypassing the diagnostic boundary handler while every other BaseException preserves the original operation refusal and retained boundary omission; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the ending of review-series: a step of an answer is replaced only by the completed step of the ending. Reviewed finishing-writes-2 (the first patch release after 0.91.7): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and the transport does not turn a refused record of that process into a failed observation: the refusal reaches the command that owns the call or the worker of a staged task; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes."
     },
     "research_harness.review_single_request": {
       "ast_sha256": "ab05f30662deab8518abed569f5c124ff8e78ebe75ab7e535c0e44c730417613",
@@ -25779,9 +25783,10 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_worker": {
-      "ast_sha256": "281ab6305c91c4b4322279fc5bcb68d6f8dd47771de1886c63aa3de039535460",
+      "ast_sha256": "8cccba954576fadeb20cdf54209f17e39257dc01fca400d00f51dc1d213676a9",
       "functions": {
         "_authorize_launch": "e414038be49883a66ab781190f44ff2b1dd713f55766d4ea292ad5d5f5b9318d",
+        "_await_release": "627e3fd234bf8e2485e45cd23e2ec4ef05cc250e6543f8853e04001b579468b6",
         "_bind_worker": "0982ffedc32072d4ae3d08650b0418acd87d87054f8d24704158591b7adfae89",
         "_claim_launch": "0dd7c1190a8d5f67de3bb73926feb968e7a1e5f55cc0c4b70940b2beb7049475",
         "_directory": "580a96ce5d59e6f0fd56b4fb92a8cfc0da54ab71f685a4c0d9a8f58666333360",
@@ -25790,24 +25795,25 @@
         "_has_processes": "6931b00c946fa8450da017ce7df152d7270c68bb654202d1611807f3521461a0",
         "_identity": "64dc64a85fa2b59ba859901f1202f101438e3cf5964af96eecaeabfaa589f4c8",
         "_observe_live": "d903c0ce53c41dbbea4c69cb1423388eb0b43f2169b6e2bc8ff159ad39d346ad",
-        "_own_transport_processes": "a91ae6d012c6750f92d1eaf89e430f736c8717b8a38d8e8ae6fab5c249f98e0e",
+        "_own_transport_processes": "4298b7016edc69c468ede10e260fd6b366cc670b882fd147f6c9c3f908eaf9c4",
         "_owner": "6c6524a2853dbe5f72cd977f647b5f47f610a40042724e57d09fda62e6b70ba6",
         "_process_table": "0f54167ac063e3d4c69813366dad61667422f4e0fae162e82d497812d74ac8bd",
         "_project_process_identity": "ae0537460a820ba98413356d898f655c1eb149d0a18b9405a97f308ebe489451",
-        "_register_child": "2143dce705b826430086fdf012b732204aadd3cc3924c989071d15d3326db815",
+        "_register_child": "0d3984dddec8ee50fe81d70c16b7fa8110c9bb9d70c6660f4ed58a079df7b65e",
         "_same_process": "88591e0393c25d8d733bff1b4d816601868a024ab2acf094db8802c4597cbc39",
         "_start_worker": "95098b94dda5bdf2f524d2c2311da942d9bc38f89b655db98c744139fe94d927",
+        "_stop_unreleased_child": "3c245aa8488b464852d4f1eade2c0d4be41e5c95c7fd1305dbf51b35439f40a2",
         "_termination_guard": "554b9761f6f88d684927ea2401bdc642add637a2a239405cbf9d4311a52a621c",
         "confirm_termination": "3db5963a5c5de7e25833d00c67fcf6d34eea7d2ddbebb79d938294645d0e6484",
-        "launch_worker": "52de215a72a28c59657dc2d6ae05ce4c90aec98eddfc7b5fb8703dbb36c71416",
-        "main": "3b75a6f49cd0a9fa3585ebd227f23a42aa7fe528d8e40b7f5dababa43d148775",
+        "launch_worker": "fd53bc7080ce136d610bb99f301bc434f7d2fa3f1d8aa7a5c577d263567cfd73",
+        "main": "08ab75c2be7e421480ab2a40877fb0ac487d1f7108409e0ebd801550f1878e0a",
         "own_call": "9342250ee9c5653648eb1b3cf82f747598bd1725667fba3b80d49bba24ec29ed",
         "read_call_termination": "ea9b2da7c34829cdcf1b7c6346c177f068e9713e8474d054b191241b8c5afdf9",
         "read_polling_store": "7cad14111c4b4bdce12cded7e7870ce931aad4d115ad1b91a369708baeb6791a",
-        "run_worker": "cf22e6136ce8f74c940908276dd6a6ef765340377949b28a3d5742e5f5f2710d"
+        "run_worker": "385b98207e1935ad5f039bf848ecb1f7c0a54ca1718995d2feafa93a7978ac48"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the capture waits import the attempt count and the wait from finishing; no behavior, packet argument or member changes. Reviewed finishing-writes-2 (the first patch release after 0.91.7): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and the transport does not turn a refused record of that process into a failed observation: the refusal reaches the command that owns the call or the worker of a staged task; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes."
     },
     "research_harness.rounds": {
       "ast_sha256": "12c48c3b70682a177f4385921b30e8ea34135edfcbd804b2699e0f42e8eef529",
@@ -26056,12 +26062,13 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.6: the step of problem-value names changes_if_resolved among its fields; the packet members stay as they are."
     },
     "research_harness.storage": {
-      "ast_sha256": "30d8b582c89a5ac94d4f12a0d984bee96270bbaebec822341c49a447e486fdf4",
+      "ast_sha256": "7bfe3cf88f7edf025d8963ea22af33bfa6e4004c0834ed599933f5afb3f07151",
       "functions": {
         "_canonical": "83dab9f8520cc85f11ca786c64dc5f6901d8372d19972e7da48ed5fe3965f32a",
         "_check_bounds": "9b36c395983b709198dd33488615f500f7546ca88ac1c46a1f956e9e1bf13eac",
         "_check_stored_bounds": "f839678b663ade7a50c0a8f7cff949ed8cdc94601e3fe4dd0d8a1b3acf2d071f",
         "_commit_mutation": "195687d04cffb965dc1ac696b85a689ef906e80e2f82deea4943ef4a49f31514",
+        "_apply_at_revision": "40f107ae3d15b4a8b2acb01a710cc06477dc2604357d7ee74a1dba8ac314177c",
         "_digest": "485a29cf43e878ed21654b02720909dd9d113f583038f00ac6f62d31d0aa08f3",
         "_encode_json": "ed867884225ab6fc9f6912df0008795442a0ba4786211e776eb1be34ed8728ff",
         "_encode_mutation_input": "b877e80cc465fc648466ee9956807651786974353fe65e0ae741a2acdeec8f0e",
@@ -26071,6 +26078,9 @@
         "_fingerprint_entry": "292be1fdd03099e4f5f7aaaaf5eb21f73e6ffc797581d32bd42c5bceae280083",
         "_json_types": "8d162878ed0542c8730791e81ef96c4e2d7be4ce339fe145a36c8ac35338fa2d",
         "_load": "7681da397bf448599adfbb8ecf08d3e3d5fdffd1682df93c225d346b9697fd02",
+        "_is_busy_error": "189b282c135d7bb8002220cdd1b663d9d14c8bc1a5f266b0ed548cee1c6e6bf9",
+        "retry_busy_commits_until": "765dda7df28ad54472b5d45b641c9220abb808540430af0411d05715ef900f2d",
+        "_commit": "549c9543efd267b886bf6b2d0ce61a03661013e36e378e9d4226293730bf8486",
         "_matches_record_filter": "295e584ae4a922ed5b8b2ac3267d92048a19dc076eece4a0d9137178678c3e4d",
         "_read_creation_revision": "2bbd3b70b34b60ac101d384072a25ff142ac18fbbfe22e90ed90f2f73ee060f6",
         "_read_event_digests": "ea152d0fac119f0500168f321f6590a4e01d45891a43d73ddd9b3023bc61c997",
@@ -26080,7 +26090,7 @@
         "_request_row": "5fc4914ee16fd2ab72d614e07e26f0e54049b52e95d74d907d2e9ef3a7e39306",
         "_revalidate_scoped": "54859cafb3bb034757ff8500077d0f70107fa605ce585960208a40d0339ef02a",
         "_scoped_prefix": "77355155476e3536305e551b12f8df79431736b215ca8914ac2576c222b7fe77",
-        "_sql_error": "9f62502a76e4e5c235142fc4a23837b8c134ba4697bff6ac9ed0bf3df5e6eaa8",
+        "_sql_error": "cf0d0fbc9574bcf580142a8f273cecbc9d3ea719752a45330d0b78ee53fd5ce5",
         "_text": "3405e4e8b3e380cf3a41264df194d0d80630cf622989c81dd4ece566af5d1d60",
         "_validate": "338c52f0f829436751f2121962d382fe487679a36e22e7a2755ad8a91e86ec96",
         "check_command_bounds": "80ea744567bc13c21398e405a0150961acc0049bb76f2eeceb46388debc178c9",
@@ -26090,7 +26100,7 @@
         "select_record_groups": "e482783667db130c5fca6615f58feb274c61d77606589d537a5d90379b3cb968"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed scoped equality selectors for exact route/context and refusal parent groups; revalidation algorithms and authenticated row membership remain unchanged. Changed AST requires declaration review. Reviewed 0.91.4: _read_snapshot: Retain record-version history for an assignment whose carried_selection.protocol names version 2, after JSON member inspection without SQLite JSON extensions. overlay_kinds: Retain history, revision and the authentic current row source when overlaying kinds on snapshot, historical, prepared or scoped records."
+      "reason": "Reviewed scoped equality selectors for exact route/context and refusal parent groups; revalidation algorithms and authenticated row membership remain unchanged. Changed AST requires declaration review. Reviewed 0.91.4: _read_snapshot: Retain record-version history for an assignment whose carried_selection.protocol names version 2, after JSON member inspection without SQLite JSON extensions. overlay_kinds: Retain history, revision and the authentic current row source when overlaying kinds on snapshot, historical, prepared or scoped records. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
     },
     "research_harness.strategy": {
       "ast_sha256": "30a9dc55b611829fa7bc481961ecbb6822991ee2f9be7e49e52de9cbc902f928",
@@ -26130,19 +26140,19 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.submission": {
-      "ast_sha256": "51fd4eb9712dcacc6b63fae24950e21186c5ea0384b4e2e73195ac7c8a712395",
+      "ast_sha256": "f52f2292286d25960a19cb6c04bfd977d7a1ee85d7098d5381abcb4bea1a5b29",
       "functions": {
-        "_observation": "67863ad09f0f1efb66c798d69c43b514e193000881562327638dcdb06ed1bbda",
+        "_observation": "5cb23ed0270920906c85d251bc238dc79e0225846d912375955eec7bef2c859e",
         "_send_verdict": "bbfa11e943505f74edb3dab05de483ef5df1fa78938154637d2668e085b31337",
         "check_submission_preconditions": "bbb5793c108b8211100d4750b23a5f1766220addbfebd0f730eed9a38d8133d3",
         "check_verdict_preconditions": "12cc25ab249c3120c782e908f83a5073ec9749265f28cc24ee04ae806248b7d4",
-        "continue_submission": "7a5da5c0ecb167f1305e20f02bf97d8e46f8254571bf0a7411e674cb56306998",
+        "continue_submission": "c39a7055cc79c460129ed424ede9090321bfba923568b90df63c4b336f4faf5f",
         "send_verdict": "74bae0353fe2a67801441238b2ed377b44b003aef3422b656a249b845a2fcc10",
         "submit_managed": "d55b611338ea968b5744cbcdfd6d8d3a37220520892bd0b81e9edbd64ac4804c",
         "validate_submission": "f798de8b24d62fcea02c9ba861ab3108adab670c8cd977adf2add120726db8b9"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
     },
     "research_harness.synthesis": {
       "ast_sha256": "c6fa820431e1c4fd7875723e3d45f05495d3700651ae2e984dacb26e500c17be",
@@ -26186,16 +26196,16 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.visual_assets": {
-      "ast_sha256": "91169437c3d465a41fff7a714bc5e2257da866ae160b2360ddd2eb3f773afcfe",
+      "ast_sha256": "2dd7b7de7204865aa0db55ef3a4810f7505657accf11dcf80c397d271c3ecbff",
       "functions": {
-        "acquire_visual_asset": "7d537f425475c48eeefddb7322f48b45ab7be92d296f6c5b1f92d8fcc02db15e",
+        "acquire_visual_asset": "aac00a5077b9b56f29631936a6a8a5a1235bd29f878f682e398826e96053648c",
         "asset_dependencies": "bfb3386ff6c2e513bce8afd923a3df1c9db1c071fa42f99370e5d7f99a6cac4a",
         "asset_key": "b38192de5adef6ea7b05517e6be2bb602d6a2465ea61a356cfacd36dd9cabd9a",
         "current_asset": "f3d93466a51b83f3af4f3fff461fcefbd65825d56f97f11e7b72b245316df6d1",
         "visual_context": "a09182fb64dbf6ff5459003fd5371d4714d3dd75c5b35cb909ad575f52cd8483"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
     },
     "research_harness.workspace": {
       "ast_sha256": "7fea536a5dc3c0dbdbed22dba4880053ec0a4fca4778e2af06ab039131367e0d",
@@ -26214,14 +26224,14 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.zenodo": {
-      "ast_sha256": "4858098b00031c7b3be49fabe67cee2200f2591458824d7d8eec40de409445da",
+      "ast_sha256": "9a44712e97dd7d14c1c0ea1d10a8b95452d6f343bc1d519778adc9836788846c",
       "functions": {
         "_current": "1a81961f4e3171e57d0aaf04dd3718a40fdf9a8147ac8dd5581b9825bd158e09",
         "_deposition": "7039fa6718dabcb8aaadc4f835b3c3203e303abab680d4eaa839de81485b658d",
         "_files_match": "18b2f27aa5e4473f4c73d7e80fad293207741dbe545203b55e597427575dda5f",
         "_finish_deposit": "f3e91cc664be55a0f0aa530b41adc10bebbff9ea42877e181bbc06ba2c789dbb",
         "_is_published_deposition": "6924fe9518b2e29beaa582e62bd22ea226c12cb6f558ffd475daa50c93f1a92c",
-        "_record_read_back_publication": "067111161fab469444bf1c5be55abc1557965cabef6924fd040d24819ae4f1f6",
+        "_record_read_back_publication": "364cc06f7fbd61fc1ed77c6186eee71ea891cd76b9eb2d3ae3bb6025e665f686",
         "_recover_published_deposition": "7f707fdfe0e1157892cc6ceac8ce6846a0382220b89fb1eae7016387b251243c",
         "_require_published_deposition": "6f2297f4a510dd0498886bc3652642889280b30f6bb6376dcb0f46c819cca675",
         "_set_preview": "8a30c3afc26b9259398ccd2f32090c91b11e6d3c2be092257aff4bee8d3d654e",
@@ -26233,12 +26243,12 @@
         "has_claimed_publish": "b7a589e31c700344a8c82d7d0f54ebcca80fa91ccd3f264743a2407684d1a324",
         "has_published_record": "0c42a011bc1cdf6df7d77e49286d07ff52b6bf6d253fbfd7da6579d7a958fb08",
         "own_workspace_deposits": "e4c4e4a8ddb474265bcd8c8e562d71d29d8b7c1f07c3a2fd0e22d49d42f2af44",
-        "reconcile_pending": "5185b1a87104d75d8f47533327ef90f9155f58f94e3ba4fa6e22abb77f984178",
+        "reconcile_pending": "d5bececeba155ef3d267ff3ed00fcc8c097cbe74c6a43233a18264d2427b1390",
         "require_published_prior": "11a248e4520292329836d5ac07a6fe0ee52d932d320b445064da635449f19d2f",
         "validate_deposit": "377deb1f00bea47d8f2d1bbe5a97d2f846dcabf738118114fa7734e74295c27e"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
     }
   },
   "computed_sites": {},

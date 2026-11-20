@@ -7555,6 +7555,79 @@
         "test_openness_carried_integration.HistoryViewTests.test_capture_selection_in_the_store_keeps_the_turns_of_an_earlier_v7_chain",
         "test_openness_carried_integration.HistoryViewTests.test_condition_of_a_gate_override_reads_a_current_carried_finding_as_current"
       ]
+    },
+    {
+      "id": "finishing-write-gave-up-after-eight-seconds",
+      "record": "20261119223643-finishing-writes-give-up-after-eight-seconds",
+      "class": "concurrency",
+      "summary": "A record that finishes paid work was a compare-and-swap on the revision of the whole store. It was tried again for 8 seconds, or made once for a direct deposit and for the concept DOI of a version draft, while one write takes 4 to 48 seconds on a store of a study's size. Another command that wrote, or only read, refused it. exactory-lab run spent an admission before its program started, or ended refused after its program; a remote step kept an unknown outcome although the service had answered; an acquisition ended without the responses of its requests, a cohort collection without a page, and a direct deposit or the concept DOI of a version draft without its record.",
+      "expected": "The records of an admitted run, of a remote intent, of an acquisition, of a cohort page, of a full-text job, of a direct deposit and of the concept DOI of a version draft commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store for at most 600 seconds; within that wait a COMMIT that readers hold up keeps its transaction. A refusal after the wait is store_busy with a message that says what is kept and which command goes on, and the refusal of an answer of a remote step carries only the members that the step needs. The same exactory-lab run command starts a claimed local run whose program never started.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_finishing_write_commits.RunWriteTests.test_start_is_recorded_when_a_commit_meets_every_attempt",
+        "test_finishing_write_commits.RunWriteTests.test_run_is_recorded_when_a_commit_meets_every_write_after_the_program",
+        "test_finishing_write_commits.RemoteWriteTests.test_answer_of_a_step_is_recorded_when_a_commit_meets_every_attempt",
+        "test_finishing_write_commits.RemoteWriteTests.test_answer_refused_beyond_the_wait_carries_the_members_that_the_step_needs",
+        "test_finishing_write_commits.AcquisitionWriteTests.test_result_is_recorded_when_a_commit_meets_every_attempt",
+        "test_finishing_write_commits.AcquisitionWriteTests.test_pages_of_a_cohort_are_recorded_when_a_commit_meets_every_attempt",
+        "test_finishing_write_commits.DraftDepositWriteTests.test_direct_deposit_after_the_publish_is_recorded_when_a_commit_meets_every_attempt",
+        "test_finishing_write_commits.DraftDepositWriteTests.test_concept_of_a_version_draft_is_recorded_when_the_store_moves_once",
+        "test_finishing_write_commits.ReaderAtCommitTests.test_commit_of_a_finishing_write_that_a_reader_holds_up_is_tried_again_in_the_same_transaction",
+        "test_claimed_run_start.ClaimedRunStartTests.test_same_request_starts_a_claimed_run_whose_start_the_store_refused"
+      ]
+    },
+    {
+      "id": "colab-release-refused-by-another-writer",
+      "record": "20261119223643-finishing-writes-give-up-after-eight-seconds",
+      "class": "concurrency",
+      "summary": "The record that releases a Colab job was a compare-and-swap on the revision of the whole store with one attempt, and the launcher compared two revision reads before it wrote the signal of the runner. A commit of another command in between ended exactory-lab run before the runner started the program; the same command then released the job and was refused until the runner had finished.",
+      "expected": "The release commits against the records of the admission check and waits for a busy store for at most 600 seconds; its signal follows the commit; a release found without its signal is checked on a guarded read. A refusal after the wait is store_busy with a message that names the command that goes on.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_remaining_finishing_writes.ColabReleaseTests.test_release_is_recorded_and_signalled_when_a_commit_meets_every_attempt",
+        "test_remaining_finishing_writes.ColabReleaseTests.test_signal_follows_the_release_when_a_commit_lands_after_it",
+        "test_remaining_finishing_writes.ColabReleaseTests.test_retained_release_is_signalled_while_another_writer_waits_for_its_check",
+        "test_remaining_finishing_writes.ColabReleaseTests.test_launch_ends_with_the_run_when_commits_meet_the_release"
+      ]
+    },
+    {
+      "id": "records-before-a-reviewer-program-gave-up-after-eight-seconds",
+      "record": "20261119223643-finishing-writes-give-up-after-eight-seconds",
+      "class": "concurrency",
+      "summary": "The records before a reviewer program starts (the process that starts the program, and the claim, the ready record, the authorization and the start of the worker of a staged task) were tried for 8 seconds or once. A store that another command locked, or that the launching command itself read, ended the worker or the guardian before the reviewer program started, and an attempt of the task or of the turn was spent. The guardian wrote its record inside the time limit of the transport: on a store of 1,004 MB that record took 28 seconds, longer than the 15 seconds of the version check of a Codex route, so no Codex call started.",
+      "expected": "The owner of a call records the process that starts a reviewer program before the transport starts its time limit. The transport does not turn a refused record of that process into a failed observation: the command that owns the call is refused, and the program does not start. The five records wait for a locked store for at most 600 seconds, and the launch handshake waits as long. A refusal after the wait is store_busy with a message that says that no request was sent to the reviewer; the worker of a staged task writes it to its log or captures it as its failed observation.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_remaining_finishing_writes.ReviewerProgramStartTests.test_time_limit_of_a_reviewer_program_starts_after_its_record",
+        "test_remaining_finishing_writes.ReviewerProgramStartTests.test_reviewer_program_starts_after_the_store_was_locked_for_eleven_seconds",
+        "test_remaining_finishing_writes.ReviewerProgramStartTests.test_worker_takes_its_reservation_when_the_store_is_busy_for_nine_attempts",
+        "test_remaining_finishing_writes.ReviewerProgramStartTests.test_worker_starts_its_reservation_when_the_store_is_busy_for_nine_attempts",
+        "test_remaining_finishing_writes.ReviewerProgramStartTests.test_launch_is_authorized_when_the_store_is_busy_for_nine_attempts",
+        "test_remaining_finishing_writes.OwnedCallTransportTests.test_refused_record_of_the_version_check_inside_a_codex_send_starts_no_program",
+        "test_remaining_finishing_writes.OwnedCallTransportTests.test_refused_record_of_the_codex_call_itself_starts_no_program",
+        "test_remaining_finishing_writes.OwnedCallTransportTests.test_refused_record_of_the_version_check_inside_a_claude_send_starts_no_program",
+        "test_remaining_finishing_writes.OwnedCallTransportTests.test_refused_record_of_the_claude_call_itself_starts_no_program"
+      ]
+    },
+    {
+      "id": "output-refusal-record-lost-without-a-report",
+      "record": "20261119223643-finishing-writes-give-up-after-eight-seconds",
+      "class": "concurrency",
+      "summary": "The refusal record of a reviewer output that fails its contract was a compare-and-swap on the revision of the whole store with one attempt, and its failure was swallowed. After a commit of another command the run returned without output_refusal, the plan moved to the next turn on the refused answer, and the second run and the replacement that carries the refusal were refused.",
+      "expected": "The refusal record commits against the records that the check of the output read, and it and the read of the store after the run wait for a busy store for at most 600 seconds. A refusal after the wait refuses the command with store_busy and a message that names the command that records the refusal. After a run, that command is the same review-run request, and review-series runs it again by itself.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_remaining_finishing_writes.OutputRefusalTests.test_refusal_of_a_run_output_is_recorded_when_a_commit_meets_every_attempt",
+        "test_remaining_finishing_writes.OutputRefusalTests.test_refusal_refused_beyond_the_wait_refuses_the_run_and_the_same_request_records_it",
+        "test_remaining_finishing_writes.OutputRefusalTests.test_refusal_is_recorded_when_the_read_after_the_run_meets_a_busy_store",
+        "test_remaining_finishing_writes.OutputRefusalTests.test_series_runs_the_same_request_again_after_the_refusal_of_its_output_was_refused",
+        "test_remaining_finishing_writes.OutputRefusalTests.test_series_keeps_the_request_whose_refusal_is_pending_after_a_busy_read",
+        "test_remaining_finishing_writes.RecordingRefusalTests.test_recording_command_records_the_refusal_when_a_commit_meets_every_attempt"
+      ]
     }
   ]
 }

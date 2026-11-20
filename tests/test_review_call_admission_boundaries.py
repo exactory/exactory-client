@@ -5,7 +5,7 @@ import copy
 from pathlib import Path
 import shutil
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from research_harness import review_task_execution as execution, review_worker as worker
 from research_harness.evidence import digest
@@ -106,13 +106,24 @@ class CallAdmissionBoundaryTests(TaskExecutionFixture):
         authority = SimpleNamespace(reservation_id=execution.identify_call('review.invoke', 'ordinary'),
                                     token='call-token', identity=self.owner)
         invocation = dict(id='ordinary', route_id='route', assignment_id='assignment', request=self.request)
+
+        def register_frozen(store, reservation_id, token, *, call=False):
+            # The writer of the frozen source: the guardian records itself and checks its inherited lock.
+            with worker._owner(store.root, reservation_id, worker=True) as descriptor:
+                namespace['_register_child'](store.root, reservation_id, token, descriptor, call=call)
+
+        def register_current(store, reservation_id, token, *, call=False):
+            # The owner of the call records the process group of its started guardian, process 20.
+            owner = Mock(spec=worker._CallAuthority) if call else SimpleNamespace()
+            owner.root, owner.reservation_id, owner.token = store.root, reservation_id, token
+            worker._register_child(owner, SimpleNamespace(pid=20))
         with ExitStack() as stack:
             stack.enter_context(patch.object(execution, 'runtime_provenance', return_value=dict(version='0.85.3')))
             stack.enter_context(patch.object(execution.uuid, 'uuid4', return_value=SimpleNamespace(hex='reservation-token')))
             for store, start, reserve, claim, register in (
                     (frozen_store, namespace['start_call'], namespace['reserve_task'],
-                     namespace['_claim_launch'], namespace['_register_child']),
-                    (self.store, execution.start_call, execution.reserve_task, worker._claim_launch, worker._register_child)):
+                     namespace['_claim_launch'], register_frozen),
+                    (self.store, execution.start_call, execution.reserve_task, worker._claim_launch, register_current)):
                 def apply(tx, value, revision):
                     start(tx, 'review.invoke', invocation, authority, revision)
                     tx.put('review_invocation', invocation['id'], invocation)
@@ -120,8 +131,7 @@ class CallAdmissionBoundaryTests(TaskExecutionFixture):
                 started = execution._mutate_current(store, 'review.invoke', invocation, apply, request_id='ordinary-start')
                 self.assertEqual(execution._mutate_current(store, 'review.invoke', invocation, apply,
                                                           request_id='ordinary-start'), started)
-                with worker._owner(store.root, authority.reservation_id, worker=True) as descriptor:
-                    register(store.root, authority.reservation_id, authority.token, descriptor, call=True)
+                register(store, authority.reservation_id, authority.token, call=True)
                 membership = store.snapshot()['records']['review_pool_membership'][authority.reservation_id]
                 termination = dict(reservation_id=authority.reservation_id, owner=self.owner,
                                    children=[self.child], confirmed=True)
@@ -139,8 +149,7 @@ class CallAdmissionBoundaryTests(TaskExecutionFixture):
                 authority_for_task = SimpleNamespace(reservation_id=identifier, verify=lambda store, row: None)
                 start_worker = namespace['_start_worker'] if store is frozen_store else worker._start_worker
                 start_worker(store, authority_for_task)
-                with worker._owner(store.root, identifier, worker=True) as descriptor:
-                    register(store.root, identifier, 'reservation-token', descriptor)
+                register(store, identifier, 'reservation-token')
         before = frozen_store.snapshot()['records']
         after = self.store.snapshot()['records']
         self.assertEqual(after, before)

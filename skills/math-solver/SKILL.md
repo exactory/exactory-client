@@ -269,7 +269,11 @@ refusal with its `code` and `details`; the harness cannot continue the chain.
 A refused action of the chain ends the command this way with the refusal's
 code (for example `review_input_too_large` or a `review_parts_*` code); when
 the refusal recorded an output refusal, or its code is
-`review_invocation_pending`, the command plans again instead. Read `code`,
+`review_invocation_pending`, the command plans again instead. After
+`store_busy` the command also plans again by itself, at most 8 times in a row.
+When `review-series` or `review-run` still ends with `store_busy`, read the
+message of that refusal. It names the command that goes on, which is not
+always the refused command. Read `code`,
 `details` and `stop_class`. In an objective no stop passes automatically: the
 stop binds no study stage, and `gate-auto-pass` refuses it with
 `gate_override_internal_only`, so report a `harness_defect` stop like a

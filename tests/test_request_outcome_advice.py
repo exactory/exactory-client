@@ -841,7 +841,7 @@ class TestManagedVersionDraftRecord(_OfflineTestCase):
         self.assertEqual(self.store.revision, revision)
 
     def test_a_marker_write_failure_names_reconcile_and_no_publication(self):
-        with patch.object(self.store, "mutate", side_effect=OSError("marker write failed")):
+        with patch.object(self.store, "mutate_scoped", side_effect=OSError("marker write failed")):
             _, err = self.capture_exit(self.continue_completed)
         self.assertIn("could not finish recording the concept DOI of version draft deposition 4343", err)
         self.assertIn("exactory-draft reconcile version-intent", err)

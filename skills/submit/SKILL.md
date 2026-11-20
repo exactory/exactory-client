@@ -80,3 +80,11 @@ Two failures need a different next step from the user:
 - The command reports that the source has no such record. Ask the user to check the
   identifier.
 - The command reports that the source is not reachable. Send the same request later.
+
+When `exactory submit` is refused with `store_busy`, read its message and take the step
+that it names. A message that says that the request was sent once names
+`exactory reconcile` with the intent ID in `details.intent_id`. That command reads the
+task and records the submission. `details.response` holds the members of the answer of
+the server that the step needs. Do not run `exactory submit` again before that. With a
+pending step, the command without `--managed-only` sends the request directly, a second
+time.

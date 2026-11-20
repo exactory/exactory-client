@@ -9,10 +9,11 @@ from .execution import _owner
 from .evaluation import Evaluation
 from .gates import require_ready
 from .integration import export_workspace
-from .operations import immutable_record, prepared_mutation
-from .finishing import retry_store_write
+from .operations import immutable_record, prepared_task_mutation
+from .finishing import retry_finishing_write
 from .publication import publication_state, validate_upload
-from .remote import begin_intent, discard_step, finish_intent, get_intent, remote_step, resolve_step
+from .remote import (ANSWER_MEMBERS, REMOTE_READ_STORE_BUSY_MSG, begin_intent, discard_step, finish_intent,
+                     get_intent, remote_step, resolve_step)
 from .rounds import round_state
 from .publication_scope import validate_scope_binding
 
@@ -90,6 +91,13 @@ def _recover_published_deposition(store, intent, client, *, reconcile):
     return published
 
 
+# The message of a publication read back from Zenodo that the store refused beyond the wait.
+READ_BACK_STORE_BUSY_MSG = (
+    'The research store stayed busy, or kept changing the records that this write read. The publication that was '
+    'read back from Zenodo was not recorded. The read sent no write to Zenodo, and the record on Zenodo is published. '
+    'Run the same command again. It reads the deposition again and records the publication.')
+
+
 def _record_read_back_publication(store, identifier, receipt, published):
     """Record a publication that a read of the same deposition established for a receipt without a
     DOI. An earlier version completed such a receipt from a publish answer of JSON null. That receipt
@@ -110,8 +118,8 @@ def _record_read_back_publication(store, identifier, receipt, published):
             changes.append(("workspace", "deposit", value["deposit"]))
         return changes, value["receipt"]
 
-    retry_store_write(lambda: prepared_mutation(store, "publication.read_back", {"receipt": read_back, "deposit": state}, prepare,
-                      expected_revision=store.revision, request_id=identifier + ":read-back:" + digest(read_back)))
+    retry_finishing_write(lambda: prepared_task_mutation(store, "publication.read_back", {"receipt": read_back, "deposit": state},
+                          prepare, request_id=identifier + ":read-back:" + digest(read_back)), READ_BACK_STORE_BUSY_MSG)
     return read_back
 
 
@@ -223,7 +231,10 @@ def reconcile_pending(store, identifier, client):
     if observed is None:
         raise ResearchError("remote_reconciliation_required", "Remote reads have not established the pending mutation's exact outcome; no duplicate write was sent",
                             {"request_id": identifier, "pending": pending})
-    resolve_step(store, identifier, name, observed, {"kind": "remote_read", "pending_request": pending["request"]})
+    # The read answers with a deposition for every step but the preview, which reads the draft document.
+    answer_members = ANSWER_MEMBERS[("deposit", "preview" if name == "preview" else "deposition_read")]
+    resolve_step(store, identifier, name, observed, {"kind": "remote_read", "pending_request": pending["request"]},
+                 answer_members=answer_members, busy_msg=REMOTE_READ_STORE_BUSY_MSG)
     return get_intent(store, identifier)
 
 

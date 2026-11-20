@@ -15,6 +15,8 @@ from research_harness.problem_evidence import cite_record
 from research_harness.storage import Store
 
 ORIGINAL_MUTATE = Store.mutate
+# The commit entries of the store. A release before the one that adds mutate_serialized has the first two.
+COMMIT_ENTRIES = [name for name in ("mutate", "mutate_scoped", "mutate_serialized") if hasattr(Store, name)]
 OUTPUT_COUNT = 5
 # The members of a probe record that 0.91.4 writes for a capture that completed.
 PROBE_RECORD_MEMBERS_0_91_4 = ["command", "elapsed_seconds", "exit_status", "id", "observation", "outputs", "revision",
@@ -53,8 +55,8 @@ class ProbeContentionCase(LiteratureCase):
 
     def meet_commits(self, operations, act=None, role=None):
         """Before each commit of these operations another writer acts (by default it commits one unrelated record).
-        With role, only the origin writes of that role are met. Both commit entries of the store are wrapped, so a
-        test does not depend on which of them a write uses."""
+        With role, only the origin writes of that role are met. Every commit entry of the store is wrapped, so a test
+        does not depend on which of them a write uses."""
         act = act or self.commit_unrelated
 
         def wrap(original):
@@ -64,7 +66,7 @@ class ProbeContentionCase(LiteratureCase):
                     act()
                 return original(store, operation, payload, apply, **kwargs)
             return commit
-        for name in ("mutate", "mutate_scoped"):
+        for name in COMMIT_ENTRIES:
             patch = mock.patch.object(Store, name, wrap(getattr(Store, name)))
             patch.start()
             self.addCleanup(patch.stop)
@@ -267,7 +269,7 @@ class ProbeBusyStoreTests(ProbeContentionCase):
                     calls.append(True)
                     raise ResearchError(code, "Fixture refusal")
                 with self.assertRaises(ResearchError) as caught:
-                    probe_provenance.retry_probe_write(refuse, probe_provenance.PROBE_STORE_BUSY_MSG)
+                    finishing.retry_finishing_write(refuse, probe_provenance.PROBE_STORE_BUSY_MSG)
                 if code == "probe_intent_missing":
                     self.assertEqual((caught.exception.code, len(calls)), (code, 1))
                 else:

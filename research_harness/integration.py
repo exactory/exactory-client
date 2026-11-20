@@ -14,7 +14,8 @@ from .drafting import export_draft, prepare_draft
 from .errors import ResearchError
 from .evidence import digest
 from .gates import STAGES, gate_state, validate_transition
-from .operations import _read_preparation, fields, immutable_record, prepared_mutation, strings, text
+from .operations import (_read_preparation, fields, immutable_record, prepared_mutation, prepared_task_mutation, strings,
+                         text)
 from .principles import prepare_initialization
 from .storage import Store
 from .workspace import json_projection, parse_workspace_marker, read_file, strict_json, write_projection
@@ -140,7 +141,10 @@ def record_direct_deposit(store, state, *, expected_revision, request_id):
     """Record a deposit made outside the managed publication path as the workspace's deposit.
 
     The projection export then keeps .exactory/deposit.json on this record. It
-    grants no publication credit: the gates read receipts bound to a reviewed bundle."""
+    grants no publication credit: the gates read receipts bound to a reviewed bundle.
+    With an expected revision the commit is the compare-and-swap on it. With None, which
+    exactory-draft passes for a deposit that it made itself, the commit depends on the
+    records that the preparation read."""
     def prepare(records, value):
         fields(value, ("environment", "deposition_id", "draft_url"), ("doi", "concept_doi", "record_url"))
         from .publication import find_selected_bundle
@@ -156,8 +160,11 @@ def record_direct_deposit(store, state, *, expected_revision, request_id):
         return [immutable_record(records, "direct_deposit", request_id, value),
                 ("workspace", "direct_deposit_context", context),
                 ("workspace", "deposit", value)], value
-    result = prepared_mutation(store, "workspace.direct_deposit", state, prepare,
-                               expected_revision=expected_revision, request_id=request_id)
+    if expected_revision is None:
+        result = prepared_task_mutation(store, "workspace.direct_deposit", state, prepare, request_id=request_id)
+    else:
+        result = prepared_mutation(store, "workspace.direct_deposit", state, prepare,
+                                   expected_revision=expected_revision, request_id=request_id)
     export_workspace(store)
     return result
 

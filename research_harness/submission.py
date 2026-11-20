@@ -3,22 +3,32 @@
 from urllib.parse import quote
 
 from .errors import ResearchError
-from .finishing import retry_store_write
+from .finishing import retry_finishing_write
 from .evidence import digest
 from .execution import _owner
-from .operations import immutable_record, prepared_mutation
+from .operations import immutable_record, prepared_task_mutation
 from .publication import list_publication_receipts, publication_report
 from .publication_scope import build_publication_scope_binding, validate_scope_binding, validate_caller_scope
-from .remote import begin_intent, find_intent, finish_intent, get_intent, remote_step, resolve_step
+from .remote import (ANSWER_MEMBERS, REMOTE_READ_STORE_BUSY_MSG, begin_intent, find_intent, finish_intent, get_intent,
+                     remote_step, resolve_step)
 from .verification import task_identity, validate_verdict
+
+
+# The message of an observation of a submission or a verdict that the store refused beyond the wait.
+SUBMISSION_OBSERVATION_STORE_BUSY_MSG = (
+    'The research store stayed busy, or kept changing the records that this write read. What the task read showed '
+    'about this remote operation was not recorded. The read sent no write to the service. When the command ended with '
+    'this refusal, run the same command again. It reads the task again. When this text follows "Managed record '
+    'skipped", the command did not end. It went on to send its request directly, and its later output says how that '
+    'request ended.')
 
 
 def _observation(store, intent_id, status, response):
     payload = {"intent_id": intent_id, "status": status, "response": response}
     identifier = intent_id + ":observation:" + digest(payload)
-    return retry_store_write(lambda: prepared_mutation(store, "submission.observe", payload,
+    return retry_finishing_write(lambda: prepared_task_mutation(store, "submission.observe", payload,
         lambda records, value: ([immutable_record(records, "remote_observation", identifier, value)], value),
-        expected_revision=store.revision, request_id=identifier))
+        request_id=identifier), SUBMISSION_OBSERVATION_STORE_BUSY_MSG)
 
 
 def validate_submission(store, body):
@@ -101,7 +111,9 @@ def continue_submission(store, identifier, client):
                                 {"intent_id": identifier, "actual_task": identity, "deposition_id": publication["deposition_id"]})
         if get_intent(store, identifier)["pending"] is not None:
             response = resolve_step(store, identifier, "submit", {"verificationId": task["verificationId"], "doi": task["doi"]},
-                                    {"kind": "task_only_read", "task": task})
+                                    {"kind": "task_only_read", "task": task},
+                                    answer_members=ANSWER_MEMBERS[("submit", "task_read")],
+                                    busy_msg=REMOTE_READ_STORE_BUSY_MSG)
         receipt = {"intent_id": identifier, "bundle_digest": binding["bundle_digest"], "publication": publication,
                    "request_body": binding["body"], "request_response": response, "task": task,
                    "task_identity": identity, "record_doi": publication["doi"], "canonical_doi": task["doi"], "matched": True}

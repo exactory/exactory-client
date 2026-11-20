@@ -21,13 +21,23 @@ from .development import validate_admitted_execution
 from .errors import ResearchError
 from .evidence import digest
 from .execution_outputs import output_paths, read_sealed_outputs, seal_outputs
-from .operations import immutable_record, prepared_mutation
+from .finishing import retry_finishing_write
+from .operations import immutable_record, prepared_task_mutation
 from .storage import _canonical
 from .workspace import checked_parent, json_projection, read_file, strict_json, write_projection
 
 
 _RUNNER_CLAIMS = {}
 _POLLING_READ_BUSY = object()
+# The message of the record that releases a Colab job when the store refused it beyond the wait.
+REMOTE_RELEASE_STORE_BUSY_MSG = (
+    'The research store stayed busy, or kept changing the records that this write read. The release of this Colab job '
+    'was not recorded. The runner did not start the program: it starts the program only after the release and its '
+    'signal. The admission keeps its claim, and the shared folder keeps the job and the claim of the runner. Run the '
+    'same exactory-lab run command again with the request ID in details.request_id, or exactory-research '
+    'reconcile-run for the admission ID in details.admission_id. Each of them records the release and signals the '
+    'runner. Until the runner finishes the program, each of them is then refused with execution_recovery_required. '
+    'After that, the same command records the run.')
 
 
 def transport_root():
@@ -111,6 +121,8 @@ def _release(store, claim, root, job, *, read_store=None):
         return _POLLING_READ_BUSY
     records = snapshot["records"]
     released = records.get("execution_remote_release", {}).get(claim["admission_id"])
+    # The commit of a release holds the admission check, so the signal of a release that this call commits follows it.
+    is_checked = False
     if released is None:
         claims_dir = root / "jobs" / job["job_id"] / "claims"
         if not claims_dir.is_dir():
@@ -127,14 +139,18 @@ def _release(store, claim, root, job, *, read_store=None):
         def prepare(current, payload):
             authorize(current)
             return [immutable_record(current, "execution_remote_release", claim["admission_id"], value)], value
-        revision = read_store(lambda: store.revision)
-        if revision is None:
-            return _POLLING_READ_BUSY
-        preparation = read_store(store._read_preparation)
-        if preparation is None:
-            return _POLLING_READ_BUSY
-        released = prepared_mutation(store, "execution.remote-release", value, prepare,
-            expected_revision=revision, request_id="remote-release-" + digest(claim), _snapshot=preparation)["result"]
+        release_request_id = "remote-release-" + digest(claim)
+
+        def commit_release():
+            # A release that another call committed is returned without prepare; it gets the check of a retained
+            # release below before its signal.
+            preparation = store._read_scoped_preparation()
+            response = prepared_task_mutation(store, "execution.remote-release", value, prepare,
+                                              request_id=release_request_id, _snapshot=preparation)
+            return not preparation.has_request(release_request_id), response["result"]
+        # The release commits against the records that the admission check read. The runner waits for its signal.
+        is_checked, released = retry_finishing_write(commit_release, REMOTE_RELEASE_STORE_BUSY_MSG,
+            kept={"admission_id": claim["admission_id"], "request_id": claim["request_id"], "job_id": job["job_id"]})
     nonce = released["worker"]["worker_nonce"]
     prefix = "jobs/" + job["job_id"]
     go = prefix + "/GO-" + nonce
@@ -148,17 +164,16 @@ def _release(store, claim, root, job, *, read_store=None):
             # Collection validates the complete original result. It does not
             # need to issue another execution signal to recover known history.
             return released
-        # A retained release is an immutable identity, not current permission
-        # to emit a signal that may never have reached the original runner.
-        current = read_store(store.snapshot)
-        if current is None:
-            return _POLLING_READ_BUSY
-        authorize(current["records"])
-        revision = read_store(lambda: store.revision)
-        if revision is None:
-            return _POLLING_READ_BUSY
-        if revision != current["revision"]:
-            raise ResearchError("stale_revision", "Research changed while checking a missing remote execution signal; retain the release and recheck before dispatch", {"expected_revision": current["revision"], "revision": revision})
+        if not is_checked:
+            # A retained release is an immutable identity, not current permission to emit a signal that may never
+            # have reached the original runner. The admission check runs on a guarded read, which no commit passes
+            # until the check ends, and the signal follows it.
+            def check_admission():
+                with store.guarded_snapshot() as guard:
+                    authorize(guard.snapshot()["records"])
+                return True
+            if read_store(check_admission) is None:
+                return _POLLING_READ_BUSY
     _immutable(root, go, _canonical(released).encode())
     return released
 
@@ -171,7 +186,7 @@ def launch_colab(store, claim):
     while True:
         released = _release(store, claim, root, job, read_store=read_polling_store)
         if released is not _POLLING_READ_BUSY and (root / "results" / job["job_id"] / "DONE").exists():
-            return reconcile_execution(store, {"admission_id": claim["admission_id"]}, expected_revision=store.revision,
+            return reconcile_execution(store, {"admission_id": claim["admission_id"]}, expected_revision=None,
                 request_id="remote-observe-" + digest(claim), owned=True)
         if time.monotonic() >= deadline:
             raise ResearchError("execution_recovery_required", "The Colab runner has no confirmed terminal outcome. Check RUNNER_ALIVE heartbeat and reconcile the same admitted identity; its reservation remains charged.", {"job_id": job["job_id"]})

@@ -10,7 +10,7 @@ from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evidence import digest, derived_id, prepare_sources, put_sources
 from .extraction_units import ExtractionEngine, PROTOCOL, _SupervisedTools, _hold_owner
-from .finishing import retry_store_write
+from .finishing import retry_finishing_write, retry_store_write
 from .fulltext import PdfExtractor, GENERIC_BINARY_MEDIA_TYPES, parse_base_media_type
 from .fulltext_transfer import FulltextTransfer
 from .http import HttpClient, HttpFailure, RequestBudget, safe_url
@@ -39,6 +39,14 @@ def validate_allowances(value, previous=None):
     return result
 
 
+# The message of a record of a full-text job that the store refused beyond the wait.
+FULLTEXT_JOB_STORE_BUSY_MSG = (
+    'The research store stayed busy, or kept changing the records that this write read. A record of this '
+    'full-text job was not written. Nothing false was recorded. The job keeps every unit that was recorded before. '
+    'Continue the job with fulltext-resume and a new request ID. It repeats at most the one unit whose record was '
+    'refused.')
+
+
 def read_job(store, job_id):
     text(job_id, 'Job ID')
     scope = store._read_scoped_preparation()
@@ -56,8 +64,9 @@ def commit_job(store, job_id, operation, payload, request_id, apply):
         return store.mutate_scoped(operation, payload, commit, request_id=request_id,
                                    _preparation=scope.release_proof())['result']
     # A transfer or extraction already spent its network requests and work; a refused write of its record is tried
-    # again instead of fetching or extracting again.
-    return retry_store_write(write, codes=('store_busy', 'stale_revision', 'storage_io'))
+    # again instead of fetching or extracting again. A busy store is waited for as for every finishing write, and an
+    # I/O error of the store is tried again within each attempt.
+    return retry_finishing_write(lambda: retry_store_write(write, codes=('storage_io',)), FULLTEXT_JOB_STORE_BUSY_MSG)
 
 
 def build_unit_key(job_id, stage, ordinal):

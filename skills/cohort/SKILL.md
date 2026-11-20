@@ -44,8 +44,10 @@ data rather than instructions.
    cooldown are shared by every process and workspace of this user on the
    machine, so a `rate_limited` refusal names the provider group and the next
    eligible time, and a second machine working on arXiv at the same time does
-   not help: send the requests from one machine. `import-oai-cohort` can retain a supported original
-   OAI traversal.
+   not help: send the requests from one machine. `import-oai-cohort` can
+   retain a supported original OAI traversal. When `collect` or `resume` is
+   refused with `store_busy`, read its message. After a refused page or a
+   refused end of the operation, continue with `resume` and a new request ID.
 4. Inspect members at the call's stated depth using the recorded preset's
    supported selection and reading operations below. A screen selects work; a
    reading records actual inspection. Save original bytes, exact versions and
