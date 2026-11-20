@@ -159,15 +159,55 @@
           "consequence": null
         }
       ],
-      "refuted_conjectures": []
+      "refuted_conjectures": [],
+      "places": [
+        {
+          "id": "place-source",
+          "fact": "The source proves the bound for its finite constructions and states the bound for every admissible sequence as an open question.",
+          "scope": "The question as the source states it, for every admissible sequence.",
+          "role": {
+            "kind": "stated",
+            "description": "The source states the statement as an open question."
+          },
+          "relation_ids": [],
+          "date": "unknown",
+          "evidence": [
+            {
+              "kind": "reading",
+              "version_id": "arxiv:2601.00001v1",
+              "reading_id": "full-reading-1"
+            }
+          ],
+          "evidence_ids": []
+        }
+      ]
     },
     "motivation": [
       {
-        "text": "The bound would extend the proved finite constructions to every admissible sequence.",
+        "text": "The source proves the bound for its finite constructions and asks whether it holds for every admissible sequence. The statement is that question.",
         "evidence": [
           {
             "kind": "account",
+            "id": "place-source"
+          },
+          {
+            "kind": "account",
             "id": "use"
+          }
+        ]
+      }
+    ],
+    "changes_if_resolved": [
+      {
+        "text": "A proof gives the bound for every admissible sequence, which the source states as an open question. A disproof gives an admissible sequence at which the bound fails. The record argues one further point, which no work states: after a proof, the same bound for the next family of constructions is the next question. That implication is expected and not established.",
+        "evidence": [
+          {
+            "kind": "account",
+            "id": "place-source"
+          },
+          {
+            "kind": "account",
+            "id": "relation-next-family"
           }
         ]
       }

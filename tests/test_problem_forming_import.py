@@ -147,9 +147,9 @@ class FormingImportTests(unittest.TestCase):
 
     def test_outcome_and_account_entry_cite_the_original_admissible_outcome(self):
         from test_problem_forming_evidence import build_evidence
-        reference = self.source.record_full_reading()
+        reading = self.source.record_full_reading()
         outcome = self.source.mutate(problem_forming.record_form_outcome, build_outcome('proved', standing='proved',
-            evidence=[build_evidence(reference)]))["result"]
+            evidence=[build_evidence(reading)]))["result"]
         imported = self.import_history()
         reference = self.reference('form_outcome', outcome, imported['source_origin'])
         self.destination.mutate(problem_forming.record_forming, build_forming())
@@ -157,7 +157,9 @@ class FormingImportTests(unittest.TestCase):
             evidence=[build_evidence(reference)]))["result"]
         self.assertEqual(saved['evidence'][0]['reference'], reference)
         self.destination.select_statement()
-        value = self.destination.build_value([reference])
+        # The place rests on the imported full reading, so the destination still holds no reading of its own.
+        value = self.destination.build_value([reference], place_evidence=[self.reference(
+            'reading', self.source.store.snapshot()['records']['reading'][reading['reading_id']], imported['source_origin'])])
         self.destination.mutate(problem_claims.record_value, value)
         records = self.destination.store.snapshot()['records']
         delivered = problem_evidence.describe_evidence(records, self.destination.artifacts)
@@ -342,7 +344,8 @@ class FormingImportTests(unittest.TestCase):
         execution = source.store.snapshot()['records']['execution'][source.observed['id']]
         reference = self.reference('execution', execution, imported['source_origin'])
         self.destination.select_statement()
-        self.destination.mutate(problem_claims.record_value, self.destination.build_value([reference]))
+        self.destination.mutate(problem_claims.record_value, self.destination.build_value(
+            [reference], place_evidence=[self.destination.record_full_reading()]))
         records = self.destination.store.snapshot()['records']
         earlier = describe_earlier_computations(records, dict(planned_revision=self.destination.store.revision + 1))
         self.assertEqual([(row['origin'], row['question']) for row in earlier], [(imported['source_origin'], source.planned['payload']['question'])])
@@ -460,7 +463,7 @@ class FormingImportTests(unittest.TestCase):
         self.destination.mutate(cli.OPERATIONS['problem-candidate'], candidate)
         self.destination.select_statement(candidate_id=candidate['id'])
         reference = self.reference('form_outcome', outcome, imported['source_origin'])
-        value = self.destination.build_value([reference])
+        value = self.destination.build_value([reference], place_evidence=[self.destination.record_full_reading()])
         from research_harness import literature
         search = self.destination.capture_search()
         search['question'] = 'What earlier statements give this advantage?'
@@ -712,9 +715,10 @@ class FormingImportTests(unittest.TestCase):
         candidate["source"]["evidence"] = [self.reference("forming_call", call, imported["source_origin"])]
         self.destination.mutate(cli.OPERATIONS["problem-candidate"], candidate)
         self.destination.select_statement(candidate_id=candidate["id"])
-        source_record = established if outcome else self.source.store.snapshot()["records"]["reading"][reading["reading_id"]]
-        reference = self.reference("form_outcome" if outcome else "reading", source_record, imported["source_origin"])
-        self.destination.value = self.destination.build_value([reference])
+        source_reading = self.reference("reading", self.source.store.snapshot()["records"]["reading"][reading["reading_id"]],
+                                        imported["source_origin"])
+        reference = self.reference("form_outcome", established, imported["source_origin"]) if outcome else source_reading
+        self.destination.value = self.destination.build_value([reference], place_evidence=[source_reading])
         self.destination.value["accounts"]["explanatory_use"][0]["date"] = "2026-02-01"
         ReadingDateCase.add_gain(self.destination)
         return imported

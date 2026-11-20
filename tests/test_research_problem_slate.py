@@ -366,6 +366,91 @@ class ProblemSlateTests(ProblemDeliveryCase):
                              dict(final, id="review-slate-first", dossier_id=None, assignment_id=continued["id"]))["result"]
         self.assertEqual(self.record_slate(review_ids=[review["id"]])["review_ids"], ["review-slate-first"])
 
+    def observe_recorded_slate(self, reviewer="first", output=None, record=True):
+        """A slate review as 0.91.5 recorded it: the slate packet holds no place_review."""
+        original = protocol.add_problem_candidates
+
+        def add_without_place_review(records, packet):
+            original(records, packet)
+            packet.pop("place_review")
+        with patch.object(protocol, "add_problem_candidates", side_effect=add_without_place_review):
+            return self.observe("slate", reviewer, output or self.build_slate_output(["candidate-1"]), record=record)
+
+    def read_assignment(self, identifier):
+        assignment = self.read_records()["review_assignment"][identifier]
+        return assignment, json.loads(self.artifacts.read(assignment["packet"]))
+
+    def test_a_new_slate_review_carries_the_places_paragraph(self):
+        self.record_candidate()
+        self.observe_bars()
+        review = self.observe("slate", "first", self.build_slate_output(["candidate-1"]))
+        assignment, packet = self.read_assignment("slate-first")
+        self.assertEqual(packet["place_review"], {"protocol": "exactory-problem-slate-places-v1"})
+        self.assertIn("exactory-problem-slate-places-v1", assignment["prompt"]["parameters"]["problem_paragraphs"])
+        self.assertIn("/slate-places-v1", assignment["prompt"]["template_id"])
+        self.assertIn(protocol.prompt_paragraphs.SLATE_PLACES_PROMPT, assignment["prompt"]["text"])
+        self.assertTrue(protocol._prompt_matches(assignment, packet=packet))
+        self.assertEqual(self.record_slate(review_ids=[review["id"]])["review_ids"], [review["id"]])
+
+    def test_a_recorded_slate_review_without_the_member_stays_verified(self):
+        self.record_candidate()
+        self.observe_bars()
+        review = self.observe_recorded_slate()
+        assignment, packet = self.read_assignment("slate-first")
+        self.assertNotIn("place_review", packet)
+        self.assertNotIn("/slate-places-v1", assignment["prompt"]["template_id"])
+        self.assertNotIn(protocol.prompt_paragraphs.SLATE_PLACES_PROMPT, assignment["prompt"]["text"])
+        self.assertTrue(protocol._prompt_matches(assignment, packet=packet))
+        self.assertFalse(protocol._prompt_matches(assignment, packet=dict(packet, place_review={
+            "protocol": "exactory-problem-slate-places-v1"})))
+        self.assertEqual(self.record_slate(review_ids=[review["id"]])["review_ids"], [review["id"]])
+
+    def test_a_source_request_continuation_keeps_the_paragraphs_of_its_parent(self):
+        self.record_candidate()
+        self.observe_bars()
+        request = self.build_slate_output(["candidate-1"])
+        request["value"]["status"] = "unresolved"
+        request["source_requests"] = [{"id": "page", "kind": "inventory_page", "page": 0}]
+        review_ids = []
+        for reviewer, recorded in (("first", True), ("second", False)):
+            with self.subTest(recorded=recorded):
+                if recorded:
+                    self.observe_recorded_slate(reviewer, request, record=False)
+                else:
+                    self.observe("slate", reviewer, request, record=False)
+                continued = self.assign("slate", reviewer, identifier="slate-" + reviewer + "-continued",
+                                        prior_assignment_id="slate-" + reviewer)
+                parent, parent_packet = self.read_assignment("slate-" + reviewer)
+                _, packet = self.read_assignment(continued["id"])
+                self.assertEqual(packet.get("place_review"), parent_packet.get("place_review"))
+                self.assertEqual("place_review" in packet, not recorded)
+                versions = continued["prompt"]["parameters"].get("problem_paragraphs", [])
+                self.assertEqual(versions, parent["prompt"]["parameters"].get("problem_paragraphs", []))
+                self.assertEqual("exactory-problem-slate-places-v1" in versions, not recorded)
+                final = self.build_slate_output(["candidate-1"])
+                with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(final)):
+                    self.mutate(protocol.invoke_assignment, {"id": "attempt-" + continued["id"],
+                                                             "assignment_id": continued["id"]}, credential="test-only")
+                review_ids.append(self.mutate(decisions.record_value_review, dict(
+                    final, id="review-slate-" + reviewer, dossier_id=None, assignment_id=continued["id"]))["result"]["id"])
+        self.assertEqual(self.record_slate(review_ids=review_ids)["review_ids"], review_ids)
+
+    def test_a_recorded_slate_review_refreshed_in_its_slot_gains_the_places_paragraph(self):
+        self.record_candidate()
+        self.observe_bars()
+        first = self.observe_recorded_slate()
+        self.record_candidate("candidate-2", statement="Does the bound hold for odd $n$?")
+        refreshed = self.observe("slate", "first", self.build_slate_output(["candidate-1", "candidate-2"]),
+                                 identifier="slate-first-refreshed")
+        original, _ = self.read_assignment("slate-first")
+        assignment, packet = self.read_assignment("slate-first-refreshed")
+        self.assertEqual((assignment["history_assignment_id"], assignment["slot_id"]), ("slate-first", original["slot_id"]))
+        self.assertEqual(packet["problem_refresh"]["review_ids"], [first["id"]])
+        self.assertEqual(packet["place_review"], {"protocol": "exactory-problem-slate-places-v1"})
+        self.assertIn("exactory-problem-slate-places-v1", assignment["prompt"]["parameters"]["problem_paragraphs"])
+        deferred = [{"candidate_id": "candidate-2", "evidence_needed": "A documented active line."}]
+        self.assertEqual(self.record_slate(deferred=deferred, review_ids=[refreshed["id"]])["review_ids"], [refreshed["id"]])
+
     def test_slate_review_context_repair_keeps_the_bars_and_candidates(self):
         original, review = self.prepare_repaired_slate_review()
         self.assertEqual(self.record_slate(review_ids=[review["id"]])["review_ids"], ["review-repaired-slate"])

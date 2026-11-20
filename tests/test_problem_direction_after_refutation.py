@@ -95,7 +95,8 @@ class ProblemDirectionTests(ProblemDeliveryCase):
         def seed_previous_value(store, payload, *, expected_revision, request_id):
             from research_harness.problem_evidence import collect_value_items
             evidence = collect_value_items(payload)
-            saved = {key: copy.deepcopy(value) for key, value in payload.items() if key != 'accounts'}
+            saved = {key: copy.deepcopy(value) for key, value in payload.items()
+                     if key not in ('accounts', 'changes_if_resolved')}
             for section in ('motivation', 'current_state'):
                 for paragraph in saved[section]:
                     paragraph['evidence'] = evidence
