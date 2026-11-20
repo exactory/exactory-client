@@ -700,12 +700,17 @@ REFUSAL_NOTICE_HANDOFF_MSG = (
     'replacement can carry the refusal. Take the step in the details; it continues the slot or the chain as '
     'the step of an exhausted position does.')
 ROUTE_RENEWAL_MSG = (
-    'This head holds a refused answer, and its route record pins another reviewer runtime than the installed one, '
-    'so no replacement was recorded. When details.renewal.admitted is true, take the step in the details: record a '
-    'route with the same adapter, model, endpoint and configuration, probe it, or run the capacity probe of the '
-    'stated size, which is a paid call that needs the owner\'s authorization. Then run review-series on this head; '
-    'it sends the replacement on that route. When details.renewal.admitted is false, take the steps of the '
-    'stale-route procedure in the order of details.steps.')
+    'This head holds a refused answer, and its route record pins another reviewer runtime than the installed one. '
+    'Such a route record takes no assignment, so no replacement was recorded. When details.renewal.admitted is true, '
+    'the replacement can run on another route record. That record has the same adapter, model, endpoint and '
+    'configuration, and it pins the installed runtime. details.renewal.lacks names what the store lacks for it, and '
+    'details.step holds the command. When details.renewal.lacks is record, record such a route and probe it. When '
+    'details.renewal.lacks is probe, probe the route record that details.renewal.route_id names. When '
+    'details.renewal.lacks is capacity, obtain the authorization of the owner first, because the capacity probe is a '
+    'paid call. Then run the capacity probe of details.step. After the step, run review-series on this head again. '
+    'It records and sends the replacement on the other route record, or it names the next step. When '
+    'details.renewal.admitted is false, the replacement of this head cannot run on another route record. Take the '
+    'steps of the stale-route procedure in the order of details.steps.')
 
 
 def plan_refusal_recovery(records, artifacts, assignment):

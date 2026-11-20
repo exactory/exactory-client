@@ -2210,7 +2210,7 @@ A store outside managed research retains the same indexed history once a review
 assignment of it stores a carried selection under
 `exactory-openness-carried-selection-v2`. This is the case for a problem record
 whose openness reading chain under `exactory-openness-reading-v7` started under
-0.91.3 or later. The verification of that chain reads the store as it stood
+0.91.4 or later. The verification of that chain reads the store as it stood
 before its first assignment (The reading protocol v7, under
 [Problem creation](research-cli.md#problem-creation)). Every other store outside
 managed research is read without that history, as before.

@@ -1619,7 +1619,12 @@ each of these refusals.
      hold, and the newest carried notes that rest on a unit that changed or left the packet.
      The receipt of the first assignment carries `carried_readings`: the chains and
      turns that it took over, the ranges that remain, `passed_over`, the earlier chains
-     that differ only in the `reviewer_id`, and `outputs`. Run `review-assignment --check`
+     that differ only in the `reviewer_id`, and `outputs`. When the store cannot give the
+     packet of an earlier chain under another `reviewer_id`, the report names that chain
+     under `unavailable_chains`, and the first assignment goes on. The same holds for
+     evidence of its native packet that the new packet does not hold. The new chain carries
+     nothing of such a chain in any case. A missing native packet of such a chain refuses the
+     first assignment instead (below). Run `review-assignment --check`
      first to see the protocol and this report without writing a record, and read `outputs`
      before the first reviewer call. `outputs` holds one row for each of those chains:
      `reading_turns` counts the reading turns that the chain ran itself and that still
@@ -1628,23 +1633,31 @@ each of these refusals.
      For the chain that you continue, which is the latest of them, read the row whose
      `chain` is the id of its first assignment. Expect `carried_turns` equal to
      `reading_turns`, both equal to the number of reading turns that the chain ran itself,
-     and zeros under `superseded`. A replacement of the first turn of a v7 chain has a row
-     of its own with zero counts, which stands before the row of its chain. A v7 chain lists
+     and zeros under `superseded`. A replacement of the first turn of a chain has no row
+     of its own, and neither has a final over unread ranges at the first position. The row
+     of the chain counts the reading turns of the replacement. A v7 chain lists
      the turns that it carried in the `reading_turns` of its recorded finding. Its row does
      not count them: they count in the rows of their own chains. Expect zeros under
      `source_changed` too, unless a unit that the chain quoted changed or left the packet.
      In the row of an older chain, `superseded` counts the entries on text that a later
      chain read again. The new chain carries the later reading of that text, and the
      `message` of the row says so. Keep the rows in your report, and say where a row differs
-     from this. When the artifact store cannot give an artifact that the selection reads,
-     the first assignment of a v7 chain and its check are refused with the code of the store
+     from this. When the artifact store cannot give an artifact that the admission of v7
+     reads, the first assignment and its check are refused with the code of the store
      (`artifact_missing` or `artifact_corrupt`, with the artifact in `details.path`), and
-     nothing is recorded. The selection reads the packet of every earlier `native_math`
-     assignment of the record without `context.prior_assignment_id`, also under another
-     `reviewer_id` or statement, and the turns of the chains above. Among these assignments
-     are the first assignment of every review and a replacement of the first turn of a v7
-     chain. Restore the exact bytes of that artifact and assign again. When you cannot
-     restore them, report the refusal with its details.
+     nothing is recorded. The same holds for an artifact that the selection of a v7 chain
+     reads. A chain that v6 starts still starts in that case, and its report holds the
+     refusal under `refusal`. The admission reads the native packet of every earlier turn of
+     a reading chain on the same route identity, also under another `reviewer_id` or
+     statement. Of each such turn over the same statement that has a capacity plan, it also
+     reads that plan. Of the earlier reading chains with the same `reviewer_id`, author and
+     route identity, the selection also reads the packet of the first turn when the statement
+     and the formulations are the same, and the evidence and the turns of the chains above.
+     Neither reads an artifact of a single-turn review or of a chain on another route
+     identity. Restore the exact bytes of that artifact and assign again. When you cannot
+     restore them, report the refusal with its details. The owner then decides whether the
+     review runs on a route of another route identity. A chain there carries no earlier turn
+     and reads every unit.
    - When a reading turn fails for its size or its time (`output_over_cap`,
      `input_over_limit`, `response_over_limit`, a second `timeout`) or the provider refuses
      it three times in a sequence, `review-series` looks for a smaller reading request on
@@ -1677,7 +1690,12 @@ each of these refusals.
      `details.successor.protocol`, `details.successor.carried_readings` for a v7 chain or
      `details.successor.planned_reading_turns` for a v6 chain that reads again, and
      `details.message`. Take `details.step`: export under a new assignment id with the same
-     `reviewer_id`, check the assignment, and assign it on the same route. When none is
+     `reviewer_id`, check the assignment, and assign it on the same route. When the check or
+     the assignment is refused with `review_route_runtime_stale`, the route record of the
+     stopped chain pins another reviewer runtime than the installed one, and nothing is
+     recorded. Record and probe a route with the same adapter, model, endpoint and
+     configuration, and assign the same export on that route. A v7 chain carries the same
+     turns there. When none is
      admitted, the command ends with the decision stop of the next item. Every other handoff
      `export`, for example `openness_packet_outdated` or `openness_review_not_approved`,
      keeps the instructions of its own code and carries no `details.successor`.
@@ -1740,7 +1758,7 @@ each of these refusals.
 10. When a neighbour is added, a new material search is not bound, a bound search or reading
    changes, or the finding no longer covers the current formulation, refresh the finding
    (`problem_openness_stale`). A finding from a reading chain also becomes stale when a turn of its
-   chain is no longer ready or its observed attempt changes. The finding of a v7 chain that 0.91.3
+   chain is no longer ready or its observed attempt changes. The finding of a v7 chain that 0.91.4
    or later started is also stale, with the cause `artifact_missing` or `artifact_corrupt`, while
    the artifact store cannot give an artifact that the carried selection of the chain reads
    (step 6b), also when the chain carried nothing. Restore the exact bytes, and the finding is
@@ -1751,8 +1769,12 @@ each of these refusals.
    finding. The route record of each is the `route_id` of its first assignment. Run
    `review-route-assess --route-id ID` for each. When its `context_status` is not
    `verified_for_route`, probe that route record again with `review-probe`. A completed probe
-   makes the finding current again. Otherwise run `record-check`, and when it reports the record
-   ready, export again. The new chain carries no turn of the stale v7 chain. A supplied native
+   makes the finding current again. When `review-probe` refuses that route record with
+   `review_route_runtime_stale`, no probe can end the state, and the step is a new export.
+   Otherwise run `record-check`. It stays ready after a contamination of a carried turn, and
+   its step `authentication` lists that turn under `assignments` with
+   `review_context_contaminated`. When it reports the record ready, export again. The new
+   chain carries no turn of the stale v7 chain. A supplied native
    review also becomes
    stale when its current solver attempt, native snapshot, observed review or proof bytes change.
    Its required proof bytes must have reached both the original reviewer and the openness
@@ -2381,7 +2403,16 @@ accounts with the parts that the harness derives, and the records that their ent
      the chain, and with the new assignment id when the step starts a new chain.
      `review_slot_exhausted` names `review-output-correction` when that operation admits the
      head and its request fits the route (the one metadata correction of a problem result
-     reassessment; replacements can then remain). Otherwise the turn position is exhausted, and
+     reassessment; replacements can then remain). When `review-output-correction` is then
+     refused with `review_route_runtime_stale`, the route record that the command named pins
+     another reviewer runtime than the installed one, and nothing is recorded. Record a route
+     with the same adapter, model, endpoint and configuration, probe it, and run the command
+     with the id of that route as `route_id`. A correction can run on another route record
+     than its assignment. When the latest probe of that record does not verify, the state of
+     the assignment shows `review_context_unverified` or `review_context_contaminated`. Its
+     handoff then names a probe of the route of the assignment or a context repair. Probe the
+     route record of the correction instead. When `review-output-correction` does not admit
+     the head, the turn position is exhausted, and
      the code names the step of the role of the head: `export`, kind `problem-openness`, for an
      openness chain (Openness, steps 6 and 6b), `review-assignment` of a new eligible reviewer for a bar
      and for an adjudicator, and `review-assignment` of a context repair with the member
@@ -2397,13 +2428,22 @@ accounts with the parts that the harness derives, and the records that their ent
      identity is not sampled again) names `review-assignment` for a new eligible reviewer.
      `review_context_*` and `review_route_retired` name `review-assignment` for the context
      repair of step 2. `review_route_runtime_stale` (the head's route pins another reviewer
-     runtime) names `review-route`. The planner keeps the route of the chain, so `review-series`
-     on the same head gives this handoff again. Record a new route with a new id and the same
-     adapter, model, endpoint and configuration. Probe it. Then follow the stale-route procedure
-     of the [route instructions](../../docs/research-decisions.md#commands-and-shared-state):
-     assign the role again on the new route, or, for a slot with history, retire the stale route
-     and continue the slot through the context repair of step 2. Then run `review-series` with
-     the new assignment. `review_worker_reconciliation_required` is the handoff of a staged
+     runtime than the installed one) names `review-route`, or for a head that holds a refused
+     answer the command of `details.step`. `review-assignment` records no assignment on such
+     a route. When the handoff carries `details.renewal` with `admitted: true`, the
+     replacement of the refused answer can run on another route record. `details.step` then
+     names what that needs: a new route record and its probe, a probe, or a capacity probe. A
+     capacity probe is a paid call, so obtain the owner's authorization before you run it.
+     Take the step, and then run `review-series` on the same head again. When `admitted` is
+     false, or the member is absent, the planner keeps the route of the chain, so
+     `review-series` on the same head gives this handoff again. Record a new route with a new
+     id and the same adapter, model, endpoint and configuration. Probe it. Then follow the
+     stale-route procedure of the [route
+     instructions](../../docs/research-decisions.md#commands-and-shared-state): assign the
+     role again on the new route, or, for a slot with history, retire the stale route and
+     continue the slot through the context repair of step 2. When `admitted` is false,
+     `details.steps` lists these steps. Then run `review-series` with the new assignment.
+     `review_worker_reconciliation_required` is the handoff of a staged
      review, and `assessment_incomplete` is its stop, below.
    - Exit status 3 with a `stop` on the last line: a typed limit or refusal, with its `code` and
      `details`; the harness cannot continue the chain. A refused action of the chain ends the

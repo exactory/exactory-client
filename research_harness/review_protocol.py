@@ -2524,8 +2524,14 @@ def retry_runtime_check(check, *args):
         time.sleep(_RUNTIME_RETRY_SECONDS[index])
 
 
-ROUTE_RUNTIME_STALE_MSG = ('The installed reviewer adapter differs from the one this route pins; record and probe a '
-                           'new route')
+ROUTE_RUNTIME_STALE_MSG = (
+    'This route record pins another reviewer runtime than the installed one, so it takes no new assignment, run, '
+    'probe or output correction. The command recorded nothing and sent no request. Use another route record with the '
+    'same adapter, model, endpoint and configuration. It must pin the installed runtime and be verified by a probe. '
+    'When the store holds none, record one and probe it. For a first assignment or an output correction, run the '
+    'command again with the id of that route record as route_id. An assignment that stands on this route record '
+    'cannot run, and its chain takes no next turn and no replacement on it. For these, take the step that '
+    'review-series plans for the head.')
 
 
 def _require_route_runtime(route):
@@ -4475,7 +4481,9 @@ def read_assignment_output(records, artifacts, assignment_id):
     return None, None
 
 
-ROUTE_CONTEXT_MSG = 'Independent approval requires this actual tested route and uncontaminated context.'
+ROUTE_CONTEXT_MSG = ('Independent approval requires this actual tested route and uncontaminated context. When an '
+                     'output correction completed the output on another route record, that route record must be '
+                     'verified too.')
 
 
 def assignment_state(records, artifacts, assignment_id):
