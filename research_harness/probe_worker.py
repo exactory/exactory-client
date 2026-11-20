@@ -158,9 +158,10 @@ def read_probe_outputs(root, launch):
 
 def capture_probe_outcome(root, launch, terminal):
     """Pin the streams and the outputs of an ended program and return its outcome. An output that cannot be read
-    safely gives the outcome failed with capture_failure, which keeps the exit status of the program. A refusal of
-    the store or of the artifact store is raised: it says nothing about the outputs, so no outcome exists yet and
-    the launch stays open for the same probe id."""
+    safely gives an outcome with capture_failure, which keeps the exit status of the program; its exit_status is
+    failed, or output_bound after a stream over its bound. A refusal of the store or of the artifact store is
+    raised: it says nothing about the outputs, so no outcome exists yet and the launch stays open for the same probe
+    id."""
     sealed = "program_run" in launch and not launch["program_run"]["read_outputs"]
     for origin in find_probe_stream_origins(root, launch):
         for role in origin["roles"]:

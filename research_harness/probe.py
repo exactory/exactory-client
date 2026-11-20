@@ -65,7 +65,7 @@ def validate_probe_outcome(artifacts, value):
         fields(failure, ("code", "program_exit_status"))
         text(failure["code"], "Probe capture_failure code")
         if not is_probe_exit_status(failure["program_exit_status"]):
-            raise ResearchError("invalid_input", "Probe capture_failure program_exit_status must be an exit status")
+            raise ResearchError("invalid_input", "Probe capture_failure program_exit_status must be an integer, timed_out, failed, output_bound or interrupted")
 
 
 def is_probe_exit_status(value):
@@ -75,8 +75,8 @@ def is_probe_exit_status(value):
 def _commit_probe_record(store, operation, payload, prepare, *, expected_revision, request_id, stamped_kind=None):
     """Commit the probe records that prepare(records, payload) returns as (changes, result). With an expected revision
     the commit is the compare-and-swap on the revision of the store that every command makes. With None, which the
-    launcher and the worker pass, the commit depends on the records that prepare read: only a commit that changes one
-    of them refuses it. A new record of stamped_kind holds the revision of its commit."""
+    launcher passes through commit_probe_mutation, the commit depends on the records that prepare read: only a commit
+    that changes one of them refuses it. A new record of stamped_kind holds the revision of its commit."""
     def stamp(changes, result, revision):
         if any(kind == stamped_kind for kind, _, _ in changes):
             changes = [(kind, key, dict(value, revision=revision) if kind == stamped_kind else value)

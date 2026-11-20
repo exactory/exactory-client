@@ -19614,9 +19614,9 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.probe": {
-      "ast_sha256": "b07c6809d4faa219ac357f285c710630ebb7d6c4616519e7555fd8fd4d6227af",
+      "ast_sha256": "afc10b79b3fa8d6ca48571781781a1c0ec21eff04d582a01200b75558ae431a3",
       "functions": {
-        "_commit_probe_record": "6696ca4e023a274dc151cec161a5bb16ee6962fadf6cdb1e75131d12aaefee32",
+        "_commit_probe_record": "6403e86ce00083629e3d4e4d41d805c70411509a2c062ea1c1b229ab71c1448d",
         "build_probe_directory": "d99cdb3e01efeb76d2bfcd5b7bcd7e983316c89920510e40cef03accd7533f32",
         "commit_probe_mutation": "775e7dfb7c6309643aa9dbc5b8d1840015a3e8c9c773cfb51a34b03f33d2b194",
         "find_probe_receipt": "5c944f44386d48133a9ba5fea7e1e0d1a812c77b94ef35447eb32c093774ab6f",
@@ -19639,7 +19639,7 @@
         "summarize_probes": "ae9862f7a1a10ac98f72a52b5572325c9a7bebb28661172ce9206b4ad1b9a5e9",
         "validate_probe_descriptor": "3eefdfd56359ad70ada53b1c1295bd61b65640751f1192565a0092de891eccd3",
         "validate_probe_descriptors": "f6731e9ae3b2e1b550edeaf1c9ad0a31adc5ef3c72872d1024b4f1956ef1aa32",
-        "validate_probe_outcome": "0a12d33a4c4ed1ac5e31f71f444621fe812d1592b111230dbde2f21a143b7c06"
+        "validate_probe_outcome": "721ffd43e8c23cb00fd025246656fe1f3bc8bc30b2f49980764d761d763a1e8b"
       },
       "packet_call_digests": [],
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed probe-capture-contention (the first patch release after 0.91.5): the probe's own writes commit against the records they read, the capture raises a refusal of the store, and the outcome of a failed capture holds `capture_failure`."
@@ -19677,9 +19677,9 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.probe_worker": {
-      "ast_sha256": "b0279ce4c25afe63afbd8b47b5229d9fccf28dcc02abbfc89bb585a8f5c350f8",
+      "ast_sha256": "6a76103138153b1ba1cfcd37e2a77ee3099f3981e205eb38e796b7ef63fe3560",
       "functions": {
-        "capture_probe_outcome": "7e153ccc0844a5d90d7856222bb5bc1414373d510acc9c19c5cf800d693946f9",
+        "capture_probe_outcome": "7aeacc447288ffc3743aa301c42973b330476f7ea3fd8cab5c301d6cae502a33",
         "find_probe_stream_origins": "8170456c4800c594ab717bd98338ebce9ce1f37121f830ccde7692123be7f7e2",
         "read_probe_log": "5929d8cd99bbe0c8bca2ac4ac629588b235648f3c945fe23badc3599b866a032",
         "read_probe_outputs": "8d96c48b49d9046e06b6132fd45c2d220b76dd06692a6eaf0e61e6fcb7c9732b",

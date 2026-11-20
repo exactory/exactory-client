@@ -3630,7 +3630,9 @@ another command that changes one of these records refuses the write, and the
 write is then prepared again: for example, the intent or the outcome of another
 probe, or a change of the budget. A commit that changes none of them does not
 refuse it. A busy store is waited for, for at most 600 seconds for each record
-that the probe writes. If a record is still refused after that time,
+that the probe writes. When the worker still cannot write a record after that
+time, it ends, and the launcher writes the records of the capture itself, with
+the same wait. When the launcher still cannot write a record after that time,
 `exactory-lab probe` is refused with `store_busy`, and `details.cause` holds
 the last refusal. The message says what was recorded and what the same command
 with the same `--id` does next:
@@ -3654,8 +3656,9 @@ link, a path that leaves the output directory, or a file that cannot be read. No
 unsafe artifact is admitted. The outcome then has `exit_status: "failed"`, or
 `"output_bound"` when a stream exceeded 32 MiB, and the member
 `capture_failure: {code, program_exit_status}`. `code` names the cause, and
-`program_exit_status` is the exit status of the program. A refusal of the store
-is never recorded as an outcome.
+`program_exit_status` is the exit status of the program. When the store or the
+artifact store refuses a write of a capture, the capture ends without an
+outcome.
 The launcher prints JSON receipts successfully for recorded failures and timeouts.
 Its managed request IDs are `probe-intent:ID`, `probe-launch:ID` and `probe:ID`.
 
