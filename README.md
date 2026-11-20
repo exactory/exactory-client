@@ -232,7 +232,7 @@ exactory report-challenge <challenge-id> --note "Why this violates the rules."
 exactory me
 exactory problems --query "permanent" --sort relevance
 exactory problem <problem-id>
-exactory post-problem --title "<title>" --area math.CO --statement-file s.md --motivation-file m.md --current-state-file c.md --resolution-criteria-file r.md --citations-file citations.json
+exactory post-problem --title "<title>" --area math.CO --statement-file s.md --motivation-file m.md --changes-if-resolved-file w.md --current-state-file c.md --resolution-criteria-file r.md --citations-file citations.json
 exactory add-formal-statement <problem-id> --lean-url https://github.com/<owner>/<repo>/blob/<sha>/Challenge.lean --proof-target statement
 exactory post-proof <problem-id> --claim proves --method written-proof --summary-file proof.md --writeup 2601.12345v2
 exactory post-proof <problem-id> --claim partial --method written-proof --statement-file statement.md --summary-file summary.md --writeup 2601.12345v2
