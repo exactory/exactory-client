@@ -290,6 +290,68 @@ class TestPostProblem(_MathCliTestCase):
         self.assertEqual(self.sent, [])
 
 
+class TestPostProblemChangesIfResolved(_MathCliTestCase):
+    """--changes-if-resolved and its file option send changesIfResolved, and the answer must return the sent text."""
+
+    _TEXT = "A proof decides the case that the source states as open, and a disproof gives a counterexample to it there."
+
+    def test_the_text_is_sent_inline_or_from_a_file_and_an_answer_that_returns_it_ends_normally(self) -> None:
+        path = self.scratch_dir / "changes-if-resolved.md"
+        path.write_bytes(("  " + self._TEXT.replace(", and", ",\r\nand") + "\n").encode())
+        for option, value, sent in (("--changes-if-resolved", self._TEXT, self._TEXT),
+                                    ("--changes-if-resolved-file", str(path), self._TEXT.replace(", and", ",\nand"))):
+            with self.subTest(option=option):
+                self.sent.clear()
+                self.answers[("POST", "/api/v1/math-problems")] = (201, {"id": _PROBLEM_ID, "changesIfResolved": sent})
+                stdout_text, stderr_text = self.run_cli(self.build_post_problem_argv(option, value))
+                self.assertEqual(self.read_sent_body("POST", "/api/v1/math-problems")["changesIfResolved"], sent)
+                self.assertEqual(json.loads(stdout_text), {"id": _PROBLEM_ID, "changesIfResolved": sent})
+                self.assertEqual(stderr_text, "")
+
+    def test_a_post_without_the_option_sends_no_field_and_reads_no_field_of_the_answer(self) -> None:
+        self.answers[("POST", "/api/v1/math-problems")] = (201, {"id": _PROBLEM_ID})
+        self.run_cli(self.build_post_problem_argv())
+        self.assertNotIn("changesIfResolved", self.read_sent_body("POST", "/api/v1/math-problems"))
+
+    def test_an_answer_without_the_sent_text_is_printed_and_ends_with_its_own_status(self) -> None:
+        for answer in ({"id": _PROBLEM_ID}, {"id": _PROBLEM_ID, "changesIfResolved": None},
+                       {"id": _PROBLEM_ID, "changesIfResolved": self._TEXT + " Changed."}, [{"id": _PROBLEM_ID}]):
+            with self.subTest(answer=answer):
+                self.sent.clear()
+                self.answers[("POST", "/api/v1/math-problems")] = (201, answer)
+                stdout_text, stderr_text = self.run_cli(
+                    self.build_post_problem_argv("--changes-if-resolved", self._TEXT), expected_exit_code=4)
+                self.assertEqual(json.loads(stdout_text), answer)
+                self.assertEqual(stderr_text, _cli._CHANGES_IF_RESOLVED_UNSTORED_ERR_MSG + "\n")
+                self.assertIn("is posted under the id of the answer above", stderr_text)
+                self.assertIn("Do not post the problem again.", stderr_text)
+                self.assertEqual(self.list_sent_requests(), [("POST", "/api/v1/math-problems")])
+
+    def test_the_length_after_the_trim_in_utf16_units_is_checked_before_any_request(self) -> None:
+        self.answers[("POST", "/api/v1/math-problems")] = (201, {"id": _PROBLEM_ID})
+        for text, accepted in (("x" * 99, False), (" " + "x" * 99 + "\n", False), ("x" * 100, True),
+                               (chr(0x1F600) * 50, True), ("x" * 5000, True), ("x" * 4999 + chr(0x1F600), False),
+                               ("x" * 5001, False)):
+            with self.subTest(units=len(text.encode("utf-16-le")) // 2):
+                self.sent.clear()
+                argv = self.build_post_problem_argv("--changes-if-resolved", text)
+                if accepted:
+                    self.answers[("POST", "/api/v1/math-problems")] = (201, {"id": _PROBLEM_ID,
+                                                                            "changesIfResolved": text})
+                    self.run_cli(argv)
+                    self.assertEqual(self.list_sent_requests(), [("POST", "/api/v1/math-problems")])
+                else:
+                    _, stderr_text = self.run_cli(argv, expected_exit_code=1)
+                    self.assertTrue(stderr_text.startswith("The text of what a resolution would change is "))
+                    self.assertEqual(self.sent, [])
+
+    def test_the_inline_and_the_file_option_exclude_each_other(self) -> None:
+        with self.assertRaises(SystemExit) as caught, contextlib.redirect_stderr(io.StringIO()):
+            _cli._build_parser().parse_args(self.build_post_problem_argv(
+                "--changes-if-resolved", self._TEXT, "--changes-if-resolved-file", "changes.md"))
+        self.assertEqual(caught.exception.code, 2)
+
+
 class TestVotesAndReports(_MathCliTestCase):
     def test_a_vote_a_cleared_vote_and_a_report_run_without_a_linked_id(self) -> None:
         self.answers[("POST", "/api/v1/reports")] = (201, {"id": "r1", "status": "pending"})
@@ -2354,6 +2416,10 @@ class TestPlainTextOfFreeTextFields(_MathCliTestCase):
                                          self.write_citations_file(citation, text))),
             ("post-problem --github-link, the label", "link label", 1,
              lambda text: self.build_post_problem_argv("--github-link", "https://github.com/o/r", text)),
+            ("post-problem --changes-if-resolved", "text of what a resolution would change", 100,
+             lambda text: self.build_post_problem_argv("--changes-if-resolved", text)),
+            ("post-problem --changes-if-resolved-file", "text of what a resolution would change", 100,
+             lambda text: self.build_post_problem_argv("--changes-if-resolved-file", self.write_text_file(text))),
             ("problems --query", "search text", 1, lambda text: ["problems", "--query", text]),
             ("add-formal-statement --note", "note", 0, lambda text: [*add_formal_statement, "--note", text]),
             ("add-formal-statement --note-file", "note", 0,

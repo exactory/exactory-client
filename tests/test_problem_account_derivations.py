@@ -315,6 +315,7 @@ class DerivedAccountsTests(unittest.TestCase):
         records = case.store.snapshot()['records']
         value = records['problem_value']['value-1']
         reference = value.pop('accounts')['explanatory_use'][0]['evidence'][0]
+        value.pop('changes_if_resolved')
         for section in ('motivation', 'current_state'):
             value[section][0]['evidence'] = [reference]
         problem_evidence.validate_value(records, case.artifacts, value)

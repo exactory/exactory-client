@@ -1,5 +1,10 @@
 """Hand-written accounts exercising the value command's public payload."""
 
+from research_harness.problem_accounts import is_full_reading
+
+CHANGES_IF_RESOLVED_TEXT = ("A proof gives the bound for every finite construction, which the source states as an open "
+                            "question. A disproof gives a finite construction at which the bound fails.")
+
 
 def build_accounts(evidence=None, neighbours=()):
     return {"answer": {"id": "answer", "status": "none", "text": None, "evidence_ids": []},
@@ -16,10 +21,22 @@ def build_accounts(evidence=None, neighbours=()):
             "relations": [], "refuted_conjectures": []}
 
 
-def build_account_value(evidence, identifier="value-1", neighbours=()):
-    return {"id": identifier, "statement_id": "statement-1", "accounts": build_accounts(evidence, neighbours),
+def build_place(evidence, identifier="place", **changes):
+    return dict({"id": identifier, "fact": "The source states the bound for every finite construction as an open question.",
+                 "scope": "The finite constructions of the source.",
+                 "role": {"kind": "stated", "description": "The source states the statement as an open question."},
+                 "relation_ids": [], "date": "unknown", "evidence": evidence, "evidence_ids": []}, **changes)
+
+
+def build_account_value(evidence, identifier="value-1", neighbours=(), place_evidence=None):
+    """A new value record: the place rests on the full readings among evidence unless place_evidence names its own."""
+    accounts = build_accounts(evidence, neighbours)
+    accounts["places"] = [build_place([item for item in evidence if is_full_reading(item)]
+                                      if place_evidence is None else place_evidence)]
+    return {"id": identifier, "statement_id": "statement-1", "accounts": accounts,
             "motivation": [{"text": "The bound would connect the finite constructions.",
-                            "evidence": [{"kind": "account", "id": "use"}]}],
+                            "evidence": [{"kind": "account", "id": "place"}]}],
+            "changes_if_resolved": [{"text": CHANGES_IF_RESOLVED_TEXT, "evidence": [{"kind": "account", "id": "place"}]}],
             "current_state": [{"text": "Only bounded examples have been established.",
                                "evidence": [{"kind": "account", "id": "use"}]}]}
 

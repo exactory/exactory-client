@@ -685,6 +685,9 @@ def build_post_files(records, artifacts, *, include_references=False, citation_p
              "motivation.md": "\n\n".join(row["text"] for row in value["motivation"]),
              "state.md": "\n\n".join(row["text"] for row in value["current_state"]),
              "citations.json": json.dumps(citations, ensure_ascii=False, sort_keys=True, indent=2)}
+    # Only a value record with the section yields this file, so the export of an earlier value record keeps its file set and its digest.
+    if "changes_if_resolved" in value:
+        files["changes-if-resolved.md"] = "\n\n".join(row["text"] for row in value["changes_if_resolved"])
     if include_references:
         references = (project_citations(records, artifacts, for_lookup=True, use_registry=False) if citation_projection is None
                       else citation_projection["references"])

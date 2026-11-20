@@ -125,7 +125,8 @@ def read_problem_export(directory, records):
         required_files.add('citation-refs.json')
     if formal is not None:
         required_files.add('formal-statement.txt')
-    optional_files = {'citations-omitted.json'} if expanded_citations else ({'reviews.json'} if not bypassed else set())
+    optional_files = {'changes-if-resolved.md'} | (
+        {'citations-omitted.json'} if expanded_citations else ({'reviews.json'} if not bypassed else set()))
     if not required_files <= set(manifest['files']) <= required_files | optional_files:
         return None
     files = {'problem-export.json': manifest_bytes}

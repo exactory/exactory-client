@@ -840,11 +840,13 @@ significance.
    such an objection follows the candidate into the result reviews and the post gate of this
    record until it is resolved with evidence or found not upheld. When the candidate moves to
    another record, the carry takes the objection with it ("Carry a reviewed candidate to another
-   record" in "Exploration"). Every slate review carries the places paragraph
-   (`exactory-problem-slate-places-v1`). It asks the reviewer where each candidate arises in
-   the works of the field, whatever the kind of its source, and to give level 1 on both grounds
-   to a candidate whose places show no need. Obtain a slate review by choice also when the place
-   of a selected candidate rests on a relation that is still expected.
+   record" in "Exploration"). A new slate review carries the places paragraph
+   (`exactory-problem-slate-places-v1`). The paragraph asks the reviewer where each candidate
+   arises in the works of the field, whatever the kind of its source, and to give level 1 on
+   both grounds to a candidate whose places show no need. A continuation or a repair of a
+   slate review that a release before 0.91.6 assigned keeps the paragraphs of that review.
+   Obtain a slate review by choice also when the place of a selected candidate rests on a
+   relation that is still expected.
 8. Record the selection with `exactory-research problem-slate`. Give every current candidate
    exactly one disposition: `selected`, `deferred` with the evidence that raises it, or
    `rejected` with the reason. A candidate of the excluded kind is `rejected` with the

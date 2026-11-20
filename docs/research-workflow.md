@@ -903,9 +903,11 @@ a bar reviewer is required after a carry that imported at least one objection
 candidate formed in the record, which is a candidate of the retired source kind
 `phenomenon` or one whose source evidence cites a forming call or a form outcome
 (`problem_slate_review_required` otherwise). It is optional otherwise, when the
-comparison needs an independent judgment. Since 0.91.6 every slate review
+comparison needs an independent judgment. Since 0.91.6 a new slate review
 carries the places paragraph (`exactory-problem-slate-places-v1`), which asks
-for every candidate in which work of the field the candidate arises. The
+for every candidate in which work of the field the candidate arises. A
+continuation or a repair of a slate review that an earlier release assigned
+keeps the paragraphs of that review. The
 review is bound to the exact candidate set,
 the current bars and the imported set. After a candidate is added or superseded,
 a bar is refreshed or a carry changes the imported set, assigning

@@ -36,7 +36,9 @@ class AccountTestCreditTests(ProblemToolsCase):
         self.mutate(development.record_execution, self.observed)
         self.mutate(development.assess_cycle, self.assessment(plan, self.observed))
         reference = {"kind": "computation", "execution_id": self.observed["id"], "output_id": "result", "formal_check": None}
-        self.value = build_account_value([reference], neighbours=self.statement["neighbours"])
+        # The place of the statement rests on a full reading of the work that states the bound.
+        self.value = build_account_value([reference], neighbours=self.statement["neighbours"],
+                                         place_evidence=[self.record_full_reading()])
         self.value["statement_id"] = self.statement["id"]
         accounts = self.value["accounts"]
         accounts["alternatives"] = [build_alternative()]
@@ -105,11 +107,12 @@ class AccountTestCreditTests(ProblemToolsCase):
             "relation_ids": ["gathered"], "separate_grounds": [{"id": "ground", "relation_id": "gathered", "evidence_ids": ["use"]}],
             "conjunction": {"status": "proved_equivalent", "description": "The conjunction is equivalent; the gain is the common mechanism.", "evidence_ids": ["use"]},
             "establishing_ids": ["use"], "new_object_justification": "The objects are standard."}
-        self.value["motivation"][0]["evidence"] = [{"kind": "account", "id": "gain"}]
+        self.value["motivation"].append({"text": "The same construction explains the family.",
+                                         "evidence": [{"kind": "account", "id": "gain"}]})
         saved = self.record()
         self.assertEqual(saved["accounts"]["gain"]["conjunction"]["status"], "proved_equivalent")
         projected = problem_evidence.describe_evidence(self.store.snapshot()["records"], self.artifacts)
-        self.assertEqual(projected["value"]["motivation"][0]["delivered_evidence"], accounts["explanatory_use"][0]["evidence"])
+        self.assertEqual(projected["value"]["motivation"][1]["delivered_evidence"], accounts["explanatory_use"][0]["evidence"])
 
     def test_a_failed_or_unresolved_signal_cannot_be_a_passed_test(self):
         for status in ("observed", "unresolved"):
@@ -122,11 +125,12 @@ class AccountTestCreditTests(ProblemToolsCase):
         self.assert_error("problem_test_run_invalid", self.record)
 
     def test_a_passed_test_fact_derives_its_run_through_the_check_reference(self):
-        reading = self.record_full_reading()
+        reading = self.value["accounts"]["places"][0]["evidence"][0]
         self.value["accounts"]["answer_evidence"][0].update(evidence=[reading], evidence_ids=[])
-        self.value["motivation"][0]["evidence"] = [{"kind": "account", "id": "passed"}]
+        self.value["motivation"].append({"text": "The prospective finite check passed.",
+                                         "evidence": [{"kind": "account", "id": "passed"}]})
         self.record()
-        paragraph = problem_evidence.describe_evidence(self.store.snapshot()["records"], self.artifacts)["value"]["motivation"][0]
+        paragraph = problem_evidence.describe_evidence(self.store.snapshot()["records"], self.artifacts)["value"]["motivation"][1]
         self.assertEqual({item["kind"] for item in paragraph["delivered_evidence"]}, {"reading", "computation"})
         self.assertIn(self.observed["id"], [item.get("execution_id") for item in paragraph["delivered_evidence"]])
 

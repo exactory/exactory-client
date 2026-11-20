@@ -38,9 +38,10 @@ class ProblemResultSupersessionTests(ProblemDeliveryCase):
         else:
             self.reference = build_objective_result(identifier)
         if cite_value:
-            value = build_account_value([self.reference], "cited-value")
+            value = build_account_value([self.reference], "cited-value", place_evidence=[self.full_reading])
             if stored:
                 value.pop("accounts")
+                value.pop("changes_if_resolved")
                 for section in ("motivation", "current_state"):
                     value[section][0]["evidence"] = [self.reference]
                 self.put("problem_value", value["id"], dict(value, recorded_revision=self.store.revision + 1))
@@ -144,12 +145,14 @@ class ProblemResultSupersessionTests(ProblemDeliveryCase):
         self.check_reports()
         before = self.store.snapshot()
         self.assert_error("problem_result_superseded", lambda: self.mutate(
-            self.load_problem_module().record_value, build_account_value([self.reference], "refused-value")))
+            self.load_problem_module().record_value, build_account_value([self.reference], "refused-value",
+                                                                         place_evidence=[self.full_reading])))
         self.assert_error("problem_result_superseded", lambda: self.mutate(
             cli.OPERATIONS["form-outcome"], dict(self.outcome, id="refused-outcome")))
         self.assertEqual(self.store.snapshot(), before)
         latest = build_objective_result(self.latest)
-        self.mutate(self.load_problem_module().record_value, build_account_value([latest], "latest-value"))
+        self.mutate(self.load_problem_module().record_value, build_account_value(
+            [latest], "latest-value", place_evidence=[self.full_reading]))
         pending = self.run_command("status")["obligations"]
         self.assertFalse({"problem_result_superseded", "problem_value_stale"} & {row["code"] for row in pending})
         self.assertIn("problem_evidence_unassessed", {row["code"] for row in pending})
@@ -203,7 +206,8 @@ class ProblemResultProjectionTests(ProblemCase):
         other["objective_id"] = "independent-objective"
         current = build_objective_result(put_native_attempt(self, other))
         self.mutate(self.load_problem_module().record_value, build_account_value([
-            first, dict(first, purpose="An independently worded purpose."), current]))
+            first, dict(first, purpose="An independently worded purpose."), current],
+            place_evidence=[self.record_full_reading()]))
         previous = None
         for moves in (23, 22):
             native["totals"]["moves"] = moves
@@ -228,7 +232,8 @@ class ProblemResultProjectionTests(ProblemCase):
         self.initialize_problem()
         self.select_statement()
         reference = build_objective_result(put_native_attempt(self, build_objective_native()))
-        self.mutate(self.load_problem_module().record_value, build_account_value([reference]))
+        self.mutate(self.load_problem_module().record_value, build_account_value(
+            [reference], place_evidence=[self.record_full_reading()]))
         records = self.store.snapshot()["records"]
         records.pop("native_attempt_current")
         for project in (problem_evidence.describe_binding, problem_evidence.describe_evidence):

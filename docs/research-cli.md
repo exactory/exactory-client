@@ -8388,7 +8388,7 @@ paragraph, the replacement paragraph and the areas paragraph.
 | `exactory-problem-account-probes-v1` | Result, in every turn of a series; adjudicator of `A3`, `priority`, `calibration` or `significance`, with the definition of the item | The accounts paragraph is present, the delivered value record states `accounts_version: 2`, and `account_records` holds a `probe` record of this store. |
 | `exactory-problem-changes-if-resolved-v1` | Result, in every turn of a series; adjudicator of `significance` or `calibration`, with the definition of the item | The delivered value record holds `changes_if_resolved`. |
 | `exactory-problem-slate-forming-v1` | Slate | A current candidate has the retired source kind `phenomenon`, or its `source.evidence` cites a forming call or a form outcome. The slate packet then keeps those references in the candidate's `source.evidence`. |
-| `exactory-problem-slate-places-v1` | Slate | The slate packet holds `place_review`. Every slate packet that is built since 0.91.6 holds it. |
+| `exactory-problem-slate-places-v1` | Slate | The slate packet holds `place_review`. The packet of a new slate assignment holds it since 0.91.6, also when the assignment refreshes an earlier review in its slot. A continuation or a repair holds it when its parent does. |
 | `exactory-problem-replacement-v1` | Result; adjudicator of `A7`, with the definition of the item | The accounts hold a nonempty `replacement`. |
 | `exactory-problem-areas-v1` | Bar; result | The record names a further area, so the packet carries `problem_areas` ([Further areas](#further-areas)). |
 
@@ -8427,11 +8427,14 @@ anchor, than the accounts paragraph or than a bar. Its template suffix is
 of a slate review, in which work the candidate arises, and it asks for level 1
 on both grounds of significance for a candidate whose places show no need. Its
 condition
-reads a member of the slate packet: a slate packet that is built since 0.91.6
-carries `place_review: {protocol: "exactory-problem-slate-places-v1"}`. A
-recorded slate packet holds no such member, so a recorded slate review keeps
-its prompt and stays verified. The template suffix is `/slate-places-v1`. Both
-paragraphs leave the response shapes as they are.
+reads a member of the slate packet: the packet of a new slate assignment
+carries `place_review: {protocol: "exactory-problem-slate-places-v1"}` since
+0.91.6. A recorded slate packet holds no such member, so a recorded slate
+review keeps its prompt and stays verified. A continuation or a repair takes
+the member from the packet of its parent, so the continuation or the repair of
+such a recorded review holds no member and keeps the paragraphs of its parent.
+The template suffix is `/slate-places-v1`. Both paragraphs leave the response
+shapes as they are.
 
 Refusals of `problem-value` for the accounts, beside the codes of the cited
 evidence:

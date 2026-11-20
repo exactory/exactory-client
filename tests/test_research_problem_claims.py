@@ -81,10 +81,11 @@ class ProblemCase(LiteratureCase):
             function()
         self.assertEqual(caught.exception.code, code, caught.exception.as_dict())
 
-    def build_value(self, evidence, identifier="value-1"):
+    def build_value(self, evidence, identifier="value-1", place_evidence=None):
         from problem_accounts_fixtures import build_account_value
         statement = self.load_problem_module().find_current_statement(self.store.snapshot()["records"])
-        return build_account_value(evidence, identifier, () if statement is None else statement["neighbours"])
+        return build_account_value(evidence, identifier, () if statement is None else statement["neighbours"],
+                                   place_evidence)
 
     def record_full_reading(self, version_id=None, note_id="read-full", **metadata):
         version = self.metadata(**metadata) if version_id is None else version_id
