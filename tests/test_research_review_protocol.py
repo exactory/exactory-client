@@ -549,7 +549,7 @@ class ReviewProtocolTests(LiteratureCase):
                 self.assertEqual(caught.exception.code, 'store_busy')
                 self.assertEqual(send.call_count, 1)
                 self.assertGreater(len(refusals), 8, 'a finished reviewer call waits longer than other writes')
-                self.assertLessEqual(len(refusals), p._FINISH_ATTEMPT_COUNT)
+                self.assertLessEqual(len(refusals), p.SCOPED_FINISH_ATTEMPT_COUNT)
                 with patch('research_harness.review_transport.send_request', side_effect=AssertionError('Must not resend')):
                     result = p.invoke_assignment(self.store, payload, expected_revision=revision, request_id=request_id)
                 self.assertEqual(result['result']['status'], 'failed' if failed else 'completed')

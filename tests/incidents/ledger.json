@@ -7437,6 +7437,26 @@
         "test_study_evidence_forms.ArrayPathTests.test_a_problem_adjudication_names_its_evidence_array",
         "test_study_evidence_forms.StoredShapeRefusalTests.test_a_stored_replacement_without_shape_details_stays_verified_with_the_same_fingerprint"
       ]
+    },
+    {
+      "id": "probe-capture-recorded-a-store-refusal-as-the-outcome",
+      "record": "20261116013236-probe-capture-fails-when-another-writer-commits",
+      "class": "concurrency",
+      "summary": "A probe whose program exited with status 0 was recorded as failed, with the observation \"Probe output capture failed: stale_revision\" and no outputs, while the capture of a second probe committed its records. Each write of a capture was a compare-and-swap on the revision of the whole store, with 8 attempts within 8 seconds, and one attempt took about 4 seconds on a store of the study's size. A refusal while an output was pinned became the recorded outcome, and a probe id cannot be recorded again. Probes that were launched together were refused with stale_revision or store_busy before their programs ran.",
+      "expected": "The records that the launcher and the worker write for a probe commit against the records that their preparation read, and each waits up to 600 seconds for a busy store. A refusal of the store or of the artifact store during a capture is raised and is not recorded as an outcome. The message of a store refusal after the wait says what the same command with the same id does next, and after the launch that command records the outcome from the kept files. Probes whose launches or captures meet are each recorded with the exit status of the program and every output. An outcome file that an earlier worker wrote for stale_revision or store_busy is captured again. A failed read of an output records capture_failure with the exit status of the program.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_probe_capture_contention.ProbeCaptureContentionTests.test_capture_keeps_every_output_when_a_commit_meets_every_attempt_of_an_output_pin",
+        "test_probe_capture_contention.ProbeCaptureContentionTests.test_launcher_records_the_program_status_when_commits_meet_its_capture",
+        "test_probe_capture_contention.ProbeCaptureContentionTests.test_intent_and_launch_are_recorded_when_a_commit_meets_every_attempt",
+        "test_probe_capture_contention.ProbeBusyStoreTests.test_store_busy_through_nine_attempts_of_an_output_pin_is_waited_for",
+        "test_probe_capture_contention.ProbeBusyStoreTests.test_store_busy_beyond_the_wait_records_no_outcome_and_the_same_id_finishes",
+        "test_probe_capture_contention.ProbeBusyStoreTests.test_intent_refused_beyond_the_wait_records_nothing_and_the_same_command_runs_the_program",
+        "test_probe_capture_contention.ProbeBusyStoreTests.test_launch_claim_refused_beyond_the_wait_keeps_the_intent_and_the_same_command_records_an_interruption",
+        "test_probe_capture_contention.ProbeEarlierReleaseTests.test_outcome_file_of_a_refused_store_is_captured_again_from_the_terminal_evidence",
+        "test_probe_capture_contention.ProbeCaptureFailureTests.test_unsafe_output_keeps_the_exit_status_of_the_program_beside_the_failed_capture"
+      ]
     }
   ]
 }

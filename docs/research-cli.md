@@ -3580,7 +3580,8 @@ The outcome payload is:
 {id, command, outputs, stdout, stderr, exit_status, elapsed_seconds, observation}
 ```
 
-Command and observation are required text. Outputs is an array of pinned
+An outcome whose capture failed also holds `capture_failure`. Command and
+observation are required text. Outputs is an array of pinned
 descriptors; stdout and stderr are pinned descriptors. Elapsed seconds is finite
 and nonnegative. Exit status is an integer code, `timed_out`, `failed`,
 `output_bound` or `interrupted`. Nonzero exits, timeout cleanup, launch failures
@@ -3630,19 +3631,60 @@ Partial artifacts remain pinned. Last measured elapsed time is charged and any
 unmeasured remainder is explicitly counted as unknown resource usage. Absence of
 an outcome alone never releases a hold. Use a new ID for a new execution.
 
+The launcher and the worker write the records of a probe while other commands
+write to the same store. Each of these writes depends on the records that it
+reads, and not on the revision of the store. Every write reads records of the
+probe itself. The intent also reads `configuration/research`, the
+experiment account and budget, every other intent and whether it has an
+outcome, and the cycle plan of a disclosed run. The outcome also reads
+`configuration/research` and the experiment account and budget. A commit of
+another command that changes one of these records refuses the write, and the
+write is then prepared again: for example, the intent or the outcome of another
+probe, or a change of the budget. A commit that changes none of them does not
+refuse it. A busy store is waited for, for at most 600 seconds for each record
+that the probe writes. When the worker still cannot write a record after that
+time, it ends, and the launcher writes the records of the capture itself, with
+the same wait. When the launcher still cannot write a record after that time,
+`exactory-lab probe` is refused with `store_busy`, and `details.cause` holds
+the last refusal. The message says what was recorded and what the same command
+with the same `--id` does next:
+
+- The intent was not recorded. Nothing was recorded, and the program did not
+  run. The same command records the intent and runs the program.
+- The launch was not recorded. The intent is recorded and keeps its
+  reservation, and the program did not run. The same command does not run the
+  program: it records the probe as `interrupted`, without outputs, and ends the
+  reservation. After that, run the program under a new `--id`.
+- A later record was not written. The probe has no outcome and keeps its
+  reservation. If its program has run, the files of the run are kept. The same
+  command records the outcome from the kept files and does not run the program
+  again.
+
 Each captured stream is bounded at 32 MiB. Exceeding that bound terminates the
 process group and records `output_bound`; the bounded prefix is pinned, the raw
-file remains, and its full SHA identity retains exploratory provenance. Unsafe
-output paths produce a charged failed capture without admitting unsafe artifacts.
+file remains, and its full SHA identity retains exploratory provenance. An
+output that the worker cannot read safely gives a charged failed capture: a
+link, a path that leaves the output directory, or a file that cannot be read. No
+unsafe artifact is admitted. The outcome then has `exit_status: "failed"`, or
+`"output_bound"` when a stream exceeded 32 MiB, and the member
+`capture_failure: {code, program_exit_status}`. `code` names the cause, and
+`program_exit_status` is the exit status of the program. When the store or the
+artifact store refuses a write of a capture, the capture ends without an
+outcome.
 The launcher prints JSON receipts successfully for recorded failures and timeouts.
 Its managed request IDs are `probe-intent:ID`, `probe-launch:ID` and `probe:ID`.
 
 Errors include `configuration_missing`, `resource_budget_exhausted` before launch,
 `probe_intent_missing` for an outcome without an intent, `invalid_input`,
 `artifact_missing`, `artifact_corrupt`, `artifact_sealed`, `unsafe_path`,
-`preplan_cycle_frozen`, and normal immutable/revision/request conflicts. Status
-adds `probes: {count, elapsed_seconds}` when probe history exists. Probes alone
-never form a result candidate.
+`preplan_cycle_frozen`, `store_busy` (see above), and normal
+immutable/revision/request conflicts. `probe_io` is an operating-system error of
+the launcher or of a capture. It records no outcome. Once the cause is gone, the
+same command with the same `--id` acts as it does after `store_busy`: it runs
+the program if the intent was not recorded, it records the probe as
+`interrupted` if the launch was not recorded, and otherwise it records the
+outcome from the kept files. Status adds `probes: {count, elapsed_seconds}` when
+probe history exists. Probes alone never form a result candidate.
 
 ## Search depth, coverage and provisional questions (`search`)
 
