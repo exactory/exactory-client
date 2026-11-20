@@ -17,14 +17,21 @@ INELIGIBLE_REPLACEMENT_MSG = (
     'must authenticate and still be refused. The position holds at most four refusal records. Run review-series on '
     'the head and take the step that it plans.')
 REPLACEMENT_IDENTITY_MSG = (
-    'The replacement does not keep the role, dossier, subject, route, reviewer, author and context of the refused '
-    'assignment. Repeat these values of the refused assignment, and add only context.output_refusal.')
+    'The replacement differs from the refused assignment in a value that it must repeat. Repeat the role, dossier, '
+    'subject, reviewer, author and context of the refused assignment, and add only context.output_refusal. Repeat '
+    'its route_id as well, unless the plan of review-series names another route record for the replacement.')
 REPLACEMENT_ROUTE_MSG = (
-    'The route of the replacement differs from the route of the refused assignment and is no renewal of it. A '
-    'renewal needs a refused session turn whose route record pins another reviewer runtime than the installed one, '
-    'and a route record with the same adapter, model, endpoint and configuration that has the installed runtime, is '
-    'not retired and has a verified probe. details.renewal names what is missing. Run review-series on the head; it '
-    'plans the replacement or the step that the renewal needs.')
+    'The replacement names another route record than the refused assignment, and the conditions for that do not '
+    'hold. A replacement runs on another route record only when three conditions hold. First, the refused assignment '
+    'admits it, which details.renewal.admitted states. Second, the route record of the refused assignment pins '
+    'another reviewer runtime than the installed one and is not retired. Third, the named route record has the same '
+    'adapter, model, endpoint and configuration. It pins the installed runtime, is not retired and is verified by a '
+    'probe. details.renewal is what the plan of review-series reads for the refused assignment when its route record '
+    'is stale. The named route record does not change it, and it does not say which condition failed. Run '
+    'review-series on the head and take the step that it plans. That is the replacement on a route record that '
+    'admits it, or the handoff review_route_runtime_stale. That handoff names what the store lacks, or it lists the '
+    'steps of the stale-route procedure. When no route record can carry the replacement, or the turn position is '
+    'exhausted, the step is the step of the role of the head.')
 REPLACEMENT_ATTEMPT_LIMIT_MSG = (
     'A replacement that carries a refusal has one output, and the output of this replacement was refused. Run '
     'review-series on the head. It plans another replacement that carries the refusal when one is admissible, and '

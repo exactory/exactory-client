@@ -14,11 +14,21 @@ from .problem_openness import serialize_record
 V7_SUCCESSOR_MESSAGE = (
     'Export a new packet and assign it on this route with the same reviewer_id, as details.step states. The '
     'admission accepts it as a chain of exactory-openness-reading-v7. That chain carries the verified reading turns '
-    'that details.successor.carried_readings lists, and it reads only the ranges that remain.')
+    'that details.successor.carried_readings lists. It reads the ranges that remain and the carried excerpts and '
+    'passage answers that its final cannot hold. It also reads the newest carried notes that rest on a unit that '
+    'changed or left the packet. When this route record pins another reviewer runtime than the installed one, '
+    'review-assignment refuses the assignment with review_route_runtime_stale and records nothing. In that case, '
+    'assign the same export on another route record with the same adapter, model, endpoint and configuration. That '
+    'record must pin the installed runtime and be verified by a probe. When the store holds none, record one and '
+    'probe it. A chain of exactory-openness-reading-v7 carries the same turns there.')
 V6_SUCCESSOR_MESSAGE = (
     'Export a new packet and assign it on this route with the same reviewer_id, as details.step states. The '
     'admission accepts it as a chain of exactory-openness-reading-v6. That chain carries no earlier turn: it reads '
-    'every unit again, in the number of reading turns that details.successor.planned_reading_turns gives.')
+    'every unit again, in the number of reading turns that details.successor.planned_reading_turns gives. When this '
+    'route record pins another reviewer runtime than the installed one, review-assignment refuses the assignment '
+    'with review_route_runtime_stale and records nothing. In that case, assign the same export on another route '
+    'record with the same adapter, model, endpoint and configuration. That record must pin the installed runtime and '
+    'be verified by a probe. When the store holds none, record one and probe it.')
 RATIO_SUCCESSOR_MESSAGE = (
     'When the new chain runs under exactory-openness-reading-v7, details.successor.measure states the ratio of its '
     'plan and the source of that ratio: the ratio of details.ratio, which this chain measured, or a denser one that '

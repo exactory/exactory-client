@@ -359,8 +359,7 @@ class ReviewProtocolTests(LiteratureCase):
                             credential='test-only')
 
         self.assertEqual(raised.exception.code, 'review_route_runtime_stale')
-        self.assertEqual(raised.exception.message,
-                         'The installed reviewer adapter differs from the one this route pins; record and probe a new route')
+        self.assertEqual(raised.exception.message, p.ROUTE_RUNTIME_STALE_MSG)
         provider.assert_not_called()
         self.assertNotIn('attempt', self.records().get('review_attempt', {}))
         self.assertNotIn('attempt', self.records().get('review_invocation', {}))
@@ -380,8 +379,7 @@ class ReviewProtocolTests(LiteratureCase):
                 self.mutate(p.probe_route, {'id': 'probe', 'route_id': 'route'}, credential='test-only')
 
         self.assertEqual(raised.exception.code, 'review_route_runtime_stale')
-        self.assertEqual(raised.exception.message,
-                         'The installed reviewer adapter differs from the one this route pins; record and probe a new route')
+        self.assertEqual(raised.exception.message, p.ROUTE_RUNTIME_STALE_MSG)
         provider.assert_not_called()
         self.assertNotIn('probe', self.records().get('review_route_probe', {}))
         self.assertNotIn('probe', self.records().get('review_probe_invocation', {}))

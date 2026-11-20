@@ -42,11 +42,12 @@ SELECTION_MISMATCH_MESSAGE = (
     'carried turn does not match the authenticated turn that it comes from or the inventory of this chain. Fourth, '
     'the stored selection has a form or a protocol that this release does not verify. The chain gives no finding, '
     'and a finding that it recorded is stale. When the latest probe of the route record of a carried chain failed, '
-    'probe that route record again. A completed probe of that route record ends the refusal. In every other case, '
-    'check the record with record-check. When record-check reports the record ready, export a new packet with the '
-    'same reviewer_id. Assign it for a new finding. The new chain carries the turns of earlier chains that still '
-    'authenticate from their first turn on. It carries no turn of this chain, and it reads again what this chain '
-    'read itself.')
+    'probe that route record again. A completed probe of that route record ends the refusal. No probe can end it '
+    'when review-probe refuses that route record with review_route_runtime_stale. In that case and in every other '
+    'case, check the record with record-check. When record-check reports the record ready, export a new packet with '
+    'the same reviewer_id. Assign it for a new finding. The new chain carries the turns of earlier chains that '
+    'still authenticate from their first turn on. It carries no turn of this chain, and it reads again what this '
+    'chain read itself.')
 ALLOWANCES_CHARACTERS = 30000
 TARGET_LABELS_CHARACTERS = 100000
 DECISIVE_WORK_IDS_CHARACTERS = 10000
@@ -94,11 +95,12 @@ KEEP_REVIEWER_TEXT = ('A new chain carries the verified reading turns of an earl
                       'chain when you export again for the same statement.')
 PASSED_OVER_TEXT = ('The earlier chain {chain} read the same statement on the same route under another reviewer_id, '
                     'so this chain carries none of its turns.')
-UNAVAILABLE_CHAIN_TEXT = ('The earlier chain {chain} ran under another reviewer_id, with the author and the route '
-                          'identity of this chain. The store could not give one of its artifacts (code and details '
-                          'name it), so this report cannot say whether that chain read the same statement and '
-                          'formulations. This chain carries none of its turns in either case. This needs no action '
-                          'for this chain.')
+UNAVAILABLE_CHAIN_TEXT = ('The earlier reading chain {chain} has the author and the route identity of this chain, '
+                          'and another reviewer_id. The store cannot give one of its artifacts, and this row '
+                          'holds the code and the details of that refusal. So this report cannot say whether that '
+                          'chain belongs in passed_over, which lists the earlier chains that differ from this chain '
+                          'only in the reviewer_id. This chain carries none of its turns in either case. This needs '
+                          'no action for this chain.')
 SUPERSEDED_TEXT = ('Each superseded excerpt or passage answer of the chain {chain} quotes text that a later chain read '
                    'again (entries: {entries}, units that they quote: {units}). Such an entry stays in the records of '
                    'its own chain. A chain of exactory-openness-reading-v7 carries the later reading of that text in '

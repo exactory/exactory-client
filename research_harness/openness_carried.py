@@ -33,13 +33,15 @@ STORE_REFUSAL_CODES = ('artifact_missing', 'artifact_corrupt', 'storage_io', 'un
 
 
 def _describe_chain(records, artifacts, first, identity):
-    """Qualify one named first assignment, independently of every other chain; the caller compares the reviewer.
+    """Qualify one named first assignment, independently of every other chain. The caller compares the reviewer.
 
-    C9 orders the comparisons so that an artifact is read only when the result can depend on it: the records
-    first, then the native packet, the packet and the envelope with its evidence. The native packet decides the
-    digests and the formulations for every value, so an openness_minimum that is no object makes the assignment
-    no candidate; the envelope step then tests the kind of the packet alone. Under C10 an assignment starts a
-    chain only when its record names itself as the first assignment of a reading chain.
+    An artifact is read only when the result can depend on it, so the comparisons run in four steps, and the
+    first that fails ends them. The records come first: the role, the first turn of a reading chain, the cutoff,
+    the author and the route identity. Then comes the native packet, which decides the two digests and the
+    formulations for every value: an openness_minimum that is no object makes the assignment no candidate. Then
+    comes the packet with its reading protocol, and last the envelope with its evidence, where the kind of the
+    packet alone is tested. An assignment starts a chain only when its record names itself as the first
+    assignment of a reading chain, so a single-turn review and a replacement of a first turn start none.
     """
     if (first['role'] != 'native_math' or first['context'].get('prior_assignment_id') is not None
             or first.get('reading_chain', {}).get('first_assignment_id') != first['id']
@@ -66,7 +68,7 @@ def _describe_chain(records, artifacts, first, identity):
 
 
 def list_qualifying_chains(records, artifacts, identity):
-    """Return the chains that qualify, newest first, without reading an assignment under another reviewer.
+    """Return the chains that qualify, newest first. No artifact of an assignment under another reviewer is read.
 
     identity is {reviewer_id, author_id, route, subject_digest, claim_digest, formulations,
     recorded_revision}. The revision is the new first assignment's cutoff, exclusive.
@@ -86,7 +88,7 @@ def list_qualifying_chains(records, artifacts, identity):
 
 
 def list_passed_over_chains(records, artifacts, identity):
-    """Return {passed_over, unavailable_chains} for the chains under another reviewer, newest first (C11).
+    """Return {passed_over, unavailable_chains} for the chains under another reviewer, newest first.
 
     These rows belong to the report alone: no selection holds such a chain. A chain whose artifact the
     store cannot give is a row of unavailable_chains, with the code and details of that refusal.
