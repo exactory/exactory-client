@@ -18524,12 +18524,12 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.finishing": {
-      "ast_sha256": "77bd78613eee7521aea283e1bf1d93732e95143526f901e2cb2fc099bd311405",
+      "ast_sha256": "3fb5bf3db5818fdc495b6f387ba52c65d6fc0d6cb0a0a2c1f92a50f672ab59aa",
       "functions": {
         "retry_store_write": "4ed751301c59d637ed01e34744c9c88451b6ec794c61f2a6b464345fc9569ebb"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed probe-capture-contention (the first patch release after 0.91.5): the attempt limit, the wait and the retried codes of a scoped finishing write have one definition in finishing, which review_protocol._finish_call and the probe writes import; no packet argument or member changes."
     },
     "research_harness.fulltext": {
       "ast_sha256": "93d5968e8e159c1097ca48a876678adc1b8db8bf3dcf0a88997e5f5371946ba3",
@@ -19614,10 +19614,11 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.probe": {
-      "ast_sha256": "a93f128f6815d68e213ad6dac8cdf15aae7a6f0ab171b354eafb9d0f2e254ee7",
+      "ast_sha256": "b07c6809d4faa219ac357f285c710630ebb7d6c4616519e7555fd8fd4d6227af",
       "functions": {
+        "_commit_probe_record": "6696ca4e023a274dc151cec161a5bb16ee6962fadf6cdb1e75131d12aaefee32",
         "build_probe_directory": "d99cdb3e01efeb76d2bfcd5b7bcd7e983316c89920510e40cef03accd7533f32",
-        "commit_probe_mutation": "c6ed41dbe49d5df195970febe181b601b04935808728ca09939c5e5bd7b81cd5",
+        "commit_probe_mutation": "775e7dfb7c6309643aa9dbc5b8d1840015a3e8c9c773cfb51a34b03f33d2b194",
         "find_probe_receipt": "5c944f44386d48133a9ba5fea7e1e0d1a812c77b94ef35447eb32c093774ab6f",
         "find_probe_terminal": "3e24df1e7fe9ab63337a8980de8b32dc582b9c52546630f294b5c56a8c1a3ef4",
         "find_supervisor_timeout": "f9187f04235619228ac0622f4f02333a0f4cda1109c4525199931a601adad0ef",
@@ -19625,26 +19626,26 @@
         "hold_probe_lock": "deb9fd51d99265b64c396b97fc1c78113d0fcc4f937dc81153b2372d4a3e04ff",
         "hold_probe_owner": "0dc599f47d9b02bf70150734f990b8ccde02a15c8036484c32d21e7a950a54e0",
         "is_probe_exit_status": "3bd80f7bf4e31accb2f7fb862e741eb3bb64f7daad1886931ae8ef008143d83a",
-        "launch_owned_probe": "934a8560fb4c958aa33fd6cec912b18427abec347c467aa205314083a9828cba",
+        "launch_owned_probe": "723eebc262114b944ca2d392b511e7978de1480a7532e17604dddd387844eb38",
         "launch_probe": "b581d073bccb091548029deb89f42173eea6960964c5159ef175edd9a558bf41",
         "read_probe_file": "27746162ab25ad61d9d73654c5b17576f84674b7da7854dc2f51e64c5a2aa0d1",
-        "read_probe_outcome": "43ac025580f627c2550685d3874f0256f213ffb93cdf3a153d88f8d2dfe2d4bb",
+        "read_probe_outcome": "ac5f58b0aa13aa6c1dc3546d29ebbfd4fcc04fe8616b66cf717daa49acf5d365",
         "reconcile_probe": "c5f7ee705974428e3a21662cccc6130626adc8161a50c8362dbec000a5eee19f",
-        "record_probe": "76a6892a4fef012f931e9b15b78f22d03eb697126a18f159edd0a6c6d85857f0",
-        "record_probe_intent": "4b2830ec1b5febf56ef9d6e8c6a84f8895b425ce296ce76597d63be939ce0533",
-        "record_probe_launch": "45be031aa44a5926dc8936b7e46de90c3d055615d33199059f2c9c5e7441005f",
-        "record_probe_recovery": "950e9c71fcf1a0031f9753069a8095804e46a6a7ef45f99002c23ee2336da183",
+        "record_probe": "8d305c8f92c141e046fdb5d44084243bc089931e51515482b20e9a37b09421b4",
+        "record_probe_intent": "2394d7c4e11d4880f779a6676ff47ca53330d6087c2838b8d9e791c87be9a51a",
+        "record_probe_launch": "a6ae266425a2714df82eb6c245d5272a95ba23be2aa383967da289299aa1e983",
+        "record_probe_recovery": "20d9ea72702857baed31612fa1f064b2e6e5c63e89a94bd7212b5ebc6da66ed4",
         "recover_expired_probe": "ded5389c02232e51adae64307ef423832774e9b3025d4f28dd804709ab888c4f",
         "summarize_probes": "ae9862f7a1a10ac98f72a52b5572325c9a7bebb28661172ce9206b4ad1b9a5e9",
         "validate_probe_descriptor": "3eefdfd56359ad70ada53b1c1295bd61b65640751f1192565a0092de891eccd3",
         "validate_probe_descriptors": "f6731e9ae3b2e1b550edeaf1c9ad0a31adc5ef3c72872d1024b4f1956ef1aa32",
-        "validate_probe_outcome": "1dce0ababdaa1d65cd7de4aeeaa02c62791b621bf70953b268946baf101d3f0d"
+        "validate_probe_outcome": "0a12d33a4c4ed1ac5e31f71f444621fe812d1592b111230dbde2f21a143b7c06"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed probe-capture-contention (the first patch release after 0.91.5): the probe's own writes commit against the records they read, the capture raises a refusal of the store, and the outcome of a failed capture holds `capture_failure`."
     },
     "research_harness.probe_provenance": {
-      "ast_sha256": "19a6c45423d7dfd4573404a0186f6c2ade3e935893c3ba0018df2496381e5fe8",
+      "ast_sha256": "0100e90474429f1ab1bce4ebb4ec3037955d27b480031760ba77c69070c3e4de",
       "functions": {
         "check_normalized_identity": "6173a320e47db010282e8755d5397cff16527686c970810ac9e58bb9e1c9dd23",
         "find_probe_artifact_origins": "ef081194e9509346f3210f2cd0303fd34cbf37c58907c847ade14c23d073768d",
@@ -19654,11 +19655,12 @@
         "pin_probe_local_artifact": "c78df3ccddc3f0aa7b3262a5268f38a2c67b62091775e8ae85b83ac7304e0cba",
         "read_import_identity": "ec3f510489f16218da680b10699b153a272142f40ef1959a8242828bdd16d39e",
         "read_probe_pin_source": "41e9a5eecd6cb9eae8c275404109711ee4097c3830e719e000f742e3cd57bbbf",
-        "record_probe_artifact_origin": "cc83f93fde4b7c26ce187613fa24d2f7dec6e0aecaf341cdac0397f82e19469f",
+        "record_probe_artifact_origin": "d5bdf0eca986d535582e842db8694663dd9f4ef605396aefff4f4a8e09d28346",
+        "retry_probe_write": "459542b37dd8d38bb2dd9aac91cc4311d1d6ded13df3cb14660369ede57c8654",
         "should_stage_probe_artifact_pin": "cac940e6f873d9e2ceda8a8ff5950a8d8069829940503c76c0385b7540997039"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed probe-capture-contention (the first patch release after 0.91.5): the probe's own writes commit against the records they read, the capture raises a refusal of the store, and the outcome of a failed capture holds `capture_failure`."
     },
     "research_harness.probe_supervision": {
       "ast_sha256": "632f6b5fc68782cc4f2a5007c581ba2ba2ab58937750d2d53d85958601ce4064",
@@ -19675,17 +19677,18 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.probe_worker": {
-      "ast_sha256": "b884df0b76e383bb63d02ebd5892e8ff4774f31578ce26746ee996776688e9a9",
+      "ast_sha256": "b0279ce4c25afe63afbd8b47b5229d9fccf28dcc02abbfc89bb585a8f5c350f8",
       "functions": {
-        "capture_probe_outcome": "6ec0066f8d81b408bfb2babc81b719e2eb23b5c5a63af8d4dcab776075c0d24a",
+        "capture_probe_outcome": "7e153ccc0844a5d90d7856222bb5bc1414373d510acc9c19c5cf800d693946f9",
         "find_probe_stream_origins": "8170456c4800c594ab717bd98338ebce9ce1f37121f830ccde7692123be7f7e2",
         "read_probe_log": "5929d8cd99bbe0c8bca2ac4ac629588b235648f3c945fe23badc3599b866a032",
+        "read_probe_outputs": "8d96c48b49d9046e06b6132fd45c2d220b76dd06692a6eaf0e61e6fcb7c9732b",
         "read_probe_process_exit": "9de6ab6c27939c2fb7d2ec17278fbbbe1bbd10ed9afcec0936902e3d15b35b82",
         "run_probe_process": "215d44c7f78afdfdcd9ed086a01ee3db4bff29bd198760d47253f2f684bda8c7",
         "run_probe_worker": "c4c88610eda1f7fe73471f33aab64a34621d79ce43ebb6c4ebd9955f78053ca5"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed probe-capture-contention (the first patch release after 0.91.5): the probe's own writes commit against the records they read, the capture raises a refusal of the store, and the outcome of a failed capture holds `capture_failure`."
     },
     "research_harness.problem_account_derivations": {
       "ast_sha256": "dd8392ed0fe33a430d8d6d1281a7715ddec81cdd4a63ee2d11a2d07ec831cbfa",
@@ -20309,10 +20312,10 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.program_probes": {
-      "ast_sha256": "1f144c11eb107a69f2f6c4aeb3380b828f43ebe185c7d10f65c32e3227a09bdb",
+      "ast_sha256": "f6b571689ede88f12ba11ce1114089dced720e4787f8090715239850ab9f294f",
       "functions": {
         "_describe_inventory_artifact": "a08174f8507de04d095117363ed3dc913c74fd23c024f9084d851549711983f9",
-        "build_program_probe_inventory": "f69cf6345a0ce1e309a5466bb926eb75ba8f6091beaa35d9229c8bb3bb112d57",
+        "build_program_probe_inventory": "955c62a22b2c69391e1fdcb18973dcaa0b009a1a80ca8bae1fa0e24b5a03c618",
         "build_program_run": "b688d840a96245a86847faf0900dba32f4753c932698664c3afaf45208e2e9d5",
         "format_utc_now": "781ac68a21eb9f473c60996ae7b1112ac2f082d664e122acae0808200669d71f",
         "validate_prior_knowledge": "b8da5b2bf8175579cd09a8c1531a51346d5f4d67f82a2019561020dbaee411c3",
@@ -20321,7 +20324,7 @@
         "validate_program_run_context": "32c0d9f6a487be1461d90ddc80f9b657029f929ee640fe3751be37e75f88ed04"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed probe-capture-contention (the first patch release after 0.91.5): the probe's own writes commit against the records they read, the capture raises a refusal of the store, and the outcome of a failed capture holds `capture_failure`."
     },
     "research_harness.provenance": {
       "ast_sha256": "2e4c31c9a51ab06f5b153c2f27f96928302adcd50d65c489a5abbae941a13182",
@@ -22252,7 +22255,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "af6c3c2b5bccfc010d8463883912b49a13fab54135c48bf7529aa88e3cdb8236",
+      "ast_sha256": "74747d3b1f63243eabd9679df4b14bcd7cfa1144d6cdcb1372e368d3c46de931",
       "functions": {
         "_assignment_state": "49c943308227c20d44664e3b577eed08bd99a3208d824ceb976bcb71f80f8b62",
         "_bars": "fd41a7b94078e8e0761696db4a7cc67b063cbb5787f76d6d3dae65fcc7fe5f9f",
@@ -22262,7 +22265,7 @@
         "_find_frozen_carried_record": "a7d760b5466a0cac0efdebb765b39dd7d9a97398bc5c9af54e992d724fb93750",
         "_find_problem_refresh_parent": "cf44acbf2dd26a1a4a26a3f820bbe0f518a62ad7555a49bd191e99a823d6143e",
         "_find_session_bodies": "a9cacbf1a495baf61642cd19851f7a84ac39f63e02e1fb1040f72b39499b2063",
-        "_finish_call": "0c931a568f9b79c69f933e4fa8305240b173e87e73fe8a28f73fac9ef33738c2",
+        "_finish_call": "4bff703d67d669f6e3525101748086c38b07f1e32ecfb859c7673784d00abb71",
         "_get": "fbf39112fc5589dd72eec0bcfdb2b3e9794d5c56fe0bfcb74ea6dfae7d077a78",
         "_initial_size_failure": "aec16d19bac7057f6d1cfb44556bd18434ebc5153026e0b27542c4a9af560df1",
         "_initial_slot": "5ead01961de08355f5028ad45bf3efd2d0b8d412544cdcf8efed3b2eab354eef",
@@ -22433,7 +22436,7 @@
         "f71df93e3effb278f474cea48473ab543f2e3e9f35807725d57775c354ddc1d9",
         "f9de906674de2fc03fd882f06649fc77f3536e68a95d398f173553e2a01ce4df"
       ],
-      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback after the committed invocation admission, plus invoke_assignment and probe_route forwarding: it renders derived views without changing authenticated packets, requests or their closed shapes. Reviewed 0.91.4 route renewal: is_route_stale compares the pinned runtime with the reading of the route state; require_installed_runtime refuses an assignment on a stale, unretired route record before any record; _require_route_runtime keeps its comparison and its message in a constant; record_assignment calls the check after the retirement check and before every dispatch. No packet member or stored record changes. Reviewed 0.91.4 origin view: read_origin returns the review records before one revision through _OriginRows; _assignment_state adds review_route_retired only without an output and reads the route state of a selected correction, and its context message is the constant ROUTE_CONTEXT_MSG; no packet member, call or stored record changes. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked. Reviewed 0.91.5 call payload definition: PROBE_PAYLOAD_FIELDS and INVOKE_PAYLOAD_FIELDS hold the members that the start checks of probe_route and invoke_assignment read, the same members as before; no packet argument or member changes."
+      "reason": "Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback after the committed invocation admission, plus invoke_assignment and probe_route forwarding: it renders derived views without changing authenticated packets, requests or their closed shapes. Reviewed 0.91.4 route renewal: is_route_stale compares the pinned runtime with the reading of the route state; require_installed_runtime refuses an assignment on a stale, unretired route record before any record; _require_route_runtime keeps its comparison and its message in a constant; record_assignment calls the check after the retirement check and before every dispatch. No packet member or stored record changes. Reviewed 0.91.4 origin view: read_origin returns the review records before one revision through _OriginRows; _assignment_state adds review_route_retired only without an output and reads the route state of a selected correction, and its context message is the constant ROUTE_CONTEXT_MSG; no packet member, call or stored record changes. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked. Reviewed 0.91.5 call payload definition: PROBE_PAYLOAD_FIELDS and INVOKE_PAYLOAD_FIELDS hold the members that the start checks of probe_route and invoke_assignment read, the same members as before; no packet argument or member changes. Reviewed probe-capture-contention (the first patch release after 0.91.5): the attempt limit, the wait and the retried codes of a scoped finishing write have one definition in finishing, which review_protocol._finish_call and the probe writes import; no packet argument or member changes."
     },
     "research_harness.review_provider_usage": {
       "ast_sha256": "8b45cdd4c5b5a98325852d3040a320283c876c25fc99d358556999417a76c986",
@@ -114161,6 +114164,7 @@
     "prog",
     "program",
     "program_diff",
+    "program_exit_status",
     "program_probes",
     "program_run",
     "program_sha256",

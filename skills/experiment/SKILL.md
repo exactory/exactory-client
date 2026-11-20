@@ -40,6 +40,10 @@ watchdog enforces the deadline after worker loss even without a retry. It writes
 `supervisor-timeout.json`, terminates the program group, verifies termination
 and writes `supervisor-terminal.json`. A later retry records the outcome and
 reconciles actual usage before releasing the reservation.
+When `exactory-lab probe` is refused with `store_busy`, read its message. It
+says whether the program ran and what the same command with the same `--id`
+does next. When the program ran, run the same command again; never repeat the
+run under a new id.
 
 When the probe runs the program that a planned cycle will admit, disclose it:
 add `--cycle-id` with the future cycle's id and `--program-path` with the

@@ -9,8 +9,8 @@ import stat
 
 from .artifacts import ArtifactStore, describe_artifact, is_sealed_artifact
 from .errors import ResearchError
-from .finishing import retry_store_write
-from .operations import _read_preparation, fields, immutable_record, prepared_mutation, text
+from .finishing import SCOPED_FINISH_ATTEMPT_COUNT, SCOPED_FINISH_RETRY_CODES, SCOPED_FINISH_WAIT_SECONDS, retry_store_write
+from .operations import _read_preparation, fields, immutable_record, prepared_mutation, prepared_task_mutation, text
 from .storage import Store
 from .workspace import checked_parent, read_file, strict_json
 
@@ -41,8 +41,39 @@ def read_import_identity(identity, artifacts):
     return raw
 
 
+# The messages of a probe write that the store refused beyond the wait: for the intent, for the launch claim, and for
+# every write after the launch claim.
+PROBE_INTENT_STORE_BUSY_MSG = (
+    'The research store stayed busy, and no record of this probe was written. The program did not run. Run the same '
+    'exactory-lab probe command again with the same --id. It records the intent of the probe and runs the program.')
+PROBE_LAUNCH_STORE_BUSY_MSG = (
+    'The research store stayed busy, and the launch of this probe was not recorded. The program did not run. The '
+    'intent of the probe is recorded and holds its reservation. Running the same exactory-lab probe command with the '
+    'same --id does not run the program: it records the probe as interrupted, without outputs, and ends the '
+    'reservation. To run the program, do that first, and then run the command with a new --id.')
+PROBE_STORE_BUSY_MSG = (
+    'The research store stayed busy, and a record of this probe was not written. Nothing false was recorded: the '
+    'probe has no outcome yet, and its reservation stands. If the program has run, its files are kept under '
+    'research/probes. Run the same exactory-lab probe command again with the same --id. It records the outcome from '
+    'the kept files and does not run the program again. Do not use a new id for the same run.')
+
+
+def retry_probe_write(write, busy_msg):
+    """Call write until the store takes it, for at most SCOPED_FINISH_WAIT_SECONDS. A probe write commits against the
+    records that it read, so a busy store or a commit that changes one of those records refuses an attempt. When the
+    refusals last beyond the wait, the write is refused with store_busy, busy_msg and the last refusal as cause."""
+    try:
+        return retry_store_write(write, attempts=SCOPED_FINISH_ATTEMPT_COUNT, seconds=SCOPED_FINISH_WAIT_SECONDS,
+                                 codes=SCOPED_FINISH_RETRY_CODES)
+    except ResearchError as error:
+        if error.code not in SCOPED_FINISH_RETRY_CODES:
+            raise
+        raise ResearchError('store_busy', busy_msg, {'cause': error.as_dict()}) from error
+
+
 def record_probe_artifact_origin(root, probe_id, sha256, role):
-    """Commit an exploratory identity before its captured bytes become importable."""
+    """Commit an exploratory identity before its captured bytes become importable. The commit depends on the intent
+    and on this origin record alone, and no other write changes them once they exist."""
     text(probe_id, "Probe ID")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", probe_id):
         raise ResearchError("invalid_input", "Probe artifact origin needs a safe probe ID")
@@ -57,8 +88,8 @@ def record_probe_artifact_origin(root, probe_id, sha256, role):
         if probe_id not in records.get("probe_intent", {}):
             raise ResearchError("probe_intent_missing", "Pin exploratory output only after its immutable probe intent")
         return [immutable_record(records, "probe_artifact", identifier, value)], value
-    return retry_store_write(lambda: prepared_mutation(store, "research.probe_artifact", payload, prepare,
-        expected_revision=store.revision, request_id="probe-artifact:" + identifier))
+    return retry_probe_write(lambda: prepared_task_mutation(store, "research.probe_artifact", payload, prepare,
+        request_id="probe-artifact:" + identifier), PROBE_STORE_BUSY_MSG)
 
 
 def pin_probe_artifact(root, probe_id, data, media_type, role, *, sealed=False):
