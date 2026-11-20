@@ -7471,6 +7471,37 @@
         "test_series_ending.SeriesEndingTests.test_capture_answer_names_each_pending_source",
         "test_series_ending.SeriesEndingTests.test_every_planned_decision_keeps_its_steps_in_the_ending"
       ]
+    },
+    {
+      "id": "account-entry-with-a-member-of-another-part-ends-with-a-python-exception",
+      "record": "20261119212253-impact-of-a-resolution-lineage-and-future",
+      "class": "shape of a payload before its members are read",
+      "summary": "problem-value told the part of an account entry by the members that the entry holds, and it read those members before it checked the member set of most parts. An explanatory_use entry, an alternative, a strength entry, a search_coverage entry or a separate_grounds entry that held establishing_ids or consequence ended with KeyError or TypeError in collect_entry_evidence, and an answer_evidence entry without alternative_id ended with KeyError in the check of a surplus. The independent review of 0.91.6 found the case of a place. An enumeration of changed payloads found 57 such payloads.",
+      "expected": "validate_accounts checks the member set of every entry of every part, and the type of each member that the entry registry, the walk of the references and the evidence check read, before any of them reads an entry. Every changed payload of problem-value and problem-statement ends with an acceptance or a refusal with a code. A payload that was valid stays valid.",
+      "fixed_in": "0.91.8",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_payload_changes.ValuePayloadChangeTests.test_an_object_that_holds_a_member_of_another_part_ends_with_a_refusal_or_an_acceptance",
+        "test_problem_payload_changes.ValuePayloadChangeTests.test_the_value_with_a_place",
+        "test_problem_payload_changes.ValuePayloadChangeTests.test_a_value_with_a_gain",
+        "test_problem_payload_changes.StatementPayloadChangeTests.test_a_statement_with_every_optional_member"
+      ]
+    },
+    {
+      "id": "record-takes-a-text-that-the-post-refuses",
+      "record": "20261119212253-impact-of-a-resolution-lineage-and-future",
+      "class": "rules of the post applied when the record takes a text",
+      "summary": "The record took the title, the statement, its details, the resolution criteria, the motivation and the current state without the length rule and the character rule of exactory post-problem. Since 0.91.6 it applied the length rule to changes_if_resolved only. A text that the post refuses was accepted at problem-statement or problem-value, and the refusal came at the post, after the reviews. The independent review of 0.91.6 found it by a reading of the code; no run met it.",
+      "expected": "problem-statement and problem-value apply the rules of the post to each of the seven texts when a new statement or a new value record is written, from one definition that exactory post-problem also reads. A text that breaks a rule is refused with problem_statement_post_text_invalid or problem_value_post_text_invalid, with the field or the section, the rule and its numbers. A stored statement or value record is not examined again.",
+      "fixed_in": "0.91.8",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_text_rules.StatementPostTextTests.test_each_text_is_refused_one_unit_outside_its_bounds_after_the_trim",
+        "test_problem_post_text_rules.StatementPostTextTests.test_a_refused_character_is_named_with_its_line_and_its_column_in_its_text",
+        "test_problem_post_text_rules.StatementPostTextTests.test_a_statement_with_two_lines_that_hold_only_the_separator_is_refused",
+        "test_problem_post_text_rules.ValuePostTextTests.test_each_section_is_refused_one_unit_outside_its_bounds_after_the_trim",
+        "test_problem_post_text_rules.ValuePostTextTests.test_a_refused_character_is_named_with_its_line_and_its_column_in_the_joined_text"
+      ]
     }
   ]
 }
