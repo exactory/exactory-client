@@ -604,18 +604,6 @@ def _resolve_paper_identifier(identifier: str) -> str:
     return identifier
 
 
-def _truncate_to_utf16_units(text: str, limit: int) -> str:
-    """The server bounds claim text in UTF-16 code units (JavaScript string length),
-    where a non-BMP character counts as two. Truncating by Python code points would
-    pass text the server then rejects."""
-    units = 0
-    for index, char in enumerate(text):
-        units += 2 if ord(char) > 0xFFFF else 1
-        if units > limit:
-            return text[:index]
-    return text
-
-
 # Bounds mirror the server's contract in UTF-16 code units, the unit the server
 # counts, so a bad request fails fast without a network round trip.
 

@@ -7,11 +7,13 @@ evaluation, so that the full reading of the fixture is assessed once and not onc
 """
 
 import copy
+import itertools
 import unittest
 
 from payload_changes import REPLACEMENT_VALUES, build_member_additions, find_unrefused_changes
 from problem_accounts_fixtures import build_relation
 from research_harness import problem_candidates, problem_claims
+from research_harness.errors import ResearchError
 from research_harness.evaluation import Evaluation
 # The account cases are imported as modules, so this module does not collect their tests.
 import test_problem_accounts
@@ -116,5 +118,20 @@ class StatementPayloadChangeTests(PayloadChangeCase):
                                        formal_statement={"language": "lean4", "text": "theorem bound : True := trivial"})
         payload["statement"] += "\n---\nHere $B(n)$ is the largest size of a finite construction of order $n$."
         case.mutate(problem_claims.record_statement, copy.deepcopy(payload))
-        self.assertEqual(find_unrefused_changes(payload, lambda changed: case.mutate(problem_claims.record_statement,
-                                                                                    changed)), [])
+        fresh_ids = ("changed-" + str(number) for number in itertools.count())
+        refusal_codes = set()
+
+        def record(changed):
+            # A saved id skips the checks of a new statement, so each changed payload is a statement of its own.
+            if isinstance(changed, dict) and changed.get("id") == payload["id"]:
+                changed["id"] = next(fresh_ids)
+            try:
+                return case.mutate(problem_claims.record_statement, changed)
+            except ResearchError as error:
+                refusal_codes.add(error.code)
+                raise
+
+        self.assertEqual(find_unrefused_changes(payload, record), [])
+        # The changes reach the rules of a new statement: a title of four characters is refused by the rule of the post.
+        self.assertIn("problem_statement_post_text_invalid", refusal_codes)
+        self.assertNotIn("record_conflict", refusal_codes)

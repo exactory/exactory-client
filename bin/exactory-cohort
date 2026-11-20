@@ -57,14 +57,6 @@ _SIGMA_CEILING = 10.0
 _LOGIT_BOUND = 10.0
 _DELTA_BOUND = 20.0
 
-# The server's bounds on a rationale, in UTF-16 code units. A sectioned rationale
-# holds the same total text as a one-block one, so the client refuses a file the
-# server would reject at the boundary anyway.
-_MAX_SECTION_COUNT = 20
-_MAX_HEADING_UNITS = 120
-_MAX_BODY_UNITS = 4000
-_MAX_RATIONALE_UNITS = 8000
-
 _ATOM_NS = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
 
 
@@ -185,18 +177,6 @@ def _run_freeze(args: argparse.Namespace) -> None:
         indent=2,
     )
     print()
-
-
-def _truncate_to_utf16_units(text: str, limit: int) -> str:
-    """The server bounds claim text in UTF-16 code units (JavaScript string length),
-    where a non-BMP character counts as two. Truncating by Python code points would
-    pass text the server then rejects."""
-    units = 0
-    for index, char in enumerate(text):
-        units += 2 if ord(char) > 0xFFFF else 1
-        if units > limit:
-            return text[:index]
-    return text
 
 
 def _run_collect(args: argparse.Namespace) -> None:

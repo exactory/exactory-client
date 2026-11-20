@@ -624,7 +624,7 @@ class TestPostProblemInputs(_MathCliTestCase):
 
 class TestPostProblemTextRuleBytes(_MathCliTestCase):
     """The rules of a post text live in research_harness.exactory_api since 0.91.8; each refusal and each help text of
-    post-problem keeps the bytes that 0.91.6 printed."""
+    post-problem keeps the bytes that 0.91.7 printed."""
 
     def test_each_text_refusal_keeps_its_bytes_and_its_exit_code(self) -> None:
         control = "The server accepts no control character except tab, line feed, and carriage return. Remove the character."

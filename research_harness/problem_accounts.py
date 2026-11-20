@@ -14,8 +14,8 @@ ACCOUNT_LIST_PARTS = ("answer_evidence", "boundaries", "explanatory_use", "alter
 STRENGTH_HEADS = ("range_of_instances", "constants", "exponents", "exactness")
 RELATION_KINDS = ("implies", "follows_from", "equivalent_to", "incompatible_with", "strengthens", "generalizes", "presents_anew")
 ALTERNATIVE_ROLES = ("stronger", "weaker", "same_assertion", "other_assertion", "no_alternative")
-# The members of each entry of the accounts and of the objects that an entry holds, as the arguments of fields(). Every
-# check of these members reads its set here.
+# The members of each entry of the accounts, and of the objects that the registry of the entries and the walk of the
+# references read in an entry, as the arguments of fields(). Every check of these members reads its set here.
 _FACT_MEMBERS = ("id", "fact", "scope", "evidence", "evidence_ids")
 ACCOUNT_MEMBERS = dict(
     answer=dict(required=("id", "status", "text", "evidence_ids")),
