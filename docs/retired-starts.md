@@ -338,7 +338,7 @@ formed it.
    and the outcomes that it derives from, and give each form that a candidate takes up an
    outcome with the disposition `taken_up_as_candidate` and the candidate's id. A slate that
    selects such a candidate cites a slate review, and the slate gives priority by the expected
-   gain ("Candidates and the slate", steps 6 and 7).
+   gain (section "Rules of the shared sections for these records" of this document).
 9. The end. Give every form an outcome: `set_aside` with the reason for a form that you leave,
    and `not_examined` with the means that were lacking for a form that you could not examine.
    When the exploration ends, record its report with `problem-report` ("The end of an

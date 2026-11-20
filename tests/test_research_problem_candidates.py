@@ -59,10 +59,70 @@ class ProblemCandidateTests(ProblemCase):
         forming = self.record_forming_reference()
         for kind in self.load_candidates_module().SOURCE_KINDS:
             evidence = [forming] if kind == "phenomenon" else []
-            self.record_candidate(build_candidate("candidate-" + kind, source={"kind": kind, "reference": "The recorded origin.", "evidence": evidence}))
+            candidate = build_candidate("candidate-" + kind, source={"kind": kind, "reference": "The recorded origin.", "evidence": evidence})
+            with self.subTest(kind=kind):
+                if kind in ("phenomenon", "thought_experiment"):
+                    self.assert_retired_kind_refused(kind, lambda: self.record_candidate(candidate))
+                else:
+                    self.record_candidate(candidate)
+        self.assertEqual(sorted(self.store.snapshot()["records"]["problem_candidate"]),
+                         ["candidate-1"] + ["candidate-" + kind for kind in ("computation", "literature", "own_record", "section", "user")])
         self.assert_error("record_conflict", lambda: self.record_candidate(dict(payload, observation="A changed observation.")))
 
+    def test_a_record_without_a_retired_kind_refuses_candidates_of_either_kind(self):
+        forming = self.record_forming_reference()
+        self.record_candidate(build_candidate(source={"kind": "own_record", "reference": "The recorded forming call.",
+                                                      "evidence": [forming]}))
+        for kind in ("phenomenon", "thought_experiment"):
+            with self.subTest(kind=kind):
+                candidate = build_candidate("retired", source={"kind": kind, "reference": "The recorded forming call.",
+                                                               "evidence": [forming]})
+                self.assert_retired_kind_refused(kind, lambda: self.record_candidate(candidate))
+        self.assertEqual(list(self.store.snapshot()["records"]["problem_candidate"]), ["candidate-1"])
+
+    def assert_ground_admits_candidates_of_its_own_kind(self, ground):
+        forming = self.record_forming_reference()
+        self.hold_retired_kind(ground, "phenomenon", forming)
+        for kind, other in (("phenomenon", "thought_experiment"), ("thought_experiment", None)):
+            payload = build_candidate("candidate-" + kind, source={"kind": kind, "reference": "The recorded forming call.",
+                                                                   "evidence": [forming]})
+            revision = self.store.revision
+            saved = self.record_candidate(payload)
+            self.assertEqual(saved, dict(payload, recorded_revision=revision + 1))
+            self.assertEqual(self.store.snapshot()["records"]["problem_candidate"][payload["id"]], saved)
+            if other is not None:
+                refused = build_candidate("refused", source={"kind": other, "reference": "The recorded forming call.",
+                                                             "evidence": [forming]})
+                self.assert_retired_kind_refused(other, lambda: self.record_candidate(refused))
+                self.hold_retired_kind(ground, other, forming)
+
+    def test_a_restored_start_admits_candidates_of_its_own_kind_only(self):
+        self.assert_ground_admits_candidates_of_its_own_kind("start")
+
+    def test_a_stored_candidate_admits_candidates_of_its_own_kind_only(self):
+        self.assert_ground_admits_candidates_of_its_own_kind("candidate")
+
+    def test_a_stored_forming_call_admits_candidates_of_its_own_kind_only(self):
+        self.assert_ground_admits_candidates_of_its_own_kind("forming_call")
+
+    def test_a_new_version_of_a_candidate_of_a_retired_kind_is_recorded(self):
+        forming = self.record_forming_reference()
+        self.hold_retired_kind("candidate", "thought_experiment", forming)
+        payload = build_candidate("revised", previous="earlier-thought_experiment", statement="Does the bound hold for odd $n$?",
+                                  source={"kind": "thought_experiment", "reference": "The earlier candidate.", "evidence": []})
+        saved = self.record_candidate(payload)
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["problem_candidate"]["revised"], saved)
+        self.assertEqual(list(self.load_candidates_module().find_current_candidates(records)), ["revised"])
+
+    def test_a_phenomenon_record_still_requires_a_cited_forming_call(self):
+        self.restore_start("phenomenon")
+        self.assert_error("problem_candidate_forming_missing", lambda: self.record_candidate(build_candidate(
+            source={"kind": "phenomenon", "reference": "Several constructions.", "evidence": []})))
+        self.assertNotIn("problem_candidate", self.store.snapshot()["records"])
+
     def test_records_a_phenomenon_candidate_with_evidence_and_projects_its_source(self):
+        self.restore_start("phenomenon")
         reading = self.record_full_reading()
         saved_reading = self.store.snapshot()["records"]["reading"][reading["reading_id"]]
         forming = self.record_forming_reference()
@@ -79,6 +139,7 @@ class ProblemCandidateTests(ProblemCase):
                          {"kind": "phenomenon", "reference": payload["source"]["reference"]})
 
     def test_records_a_thought_experiment_candidate_with_reading(self):
+        self.restore_start("thought_experiment")
         reading = self.record_full_reading()
         saved_reading = self.store.snapshot()["records"]["reading"][reading["reading_id"]]
         payload = build_candidate(source={"kind": "thought_experiment",

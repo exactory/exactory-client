@@ -7545,6 +7545,7 @@ Refusals of the two commands:
 | --- | --- |
 | `orchestration_conflict` | The workspace holds no problem record. Run the command in a workspace that `problem-init` opened; in this release the forming commands run in a problem record. |
 | `invalid_input` | A field is missing or extra, or has another type or value than the tables state. The message names the field and the repair, for example the `dictionary` of a transfer, the counts of a comparison, the places of a phenomenon, or the two fields of a planned check. |
+| `problem_start_kind_removed` | `forming` names `phenomenon` or `thought_experiment` as `question.kind` in a record that does not hold that kind (`kind`). Describe the kind of the question in your own words ([The removed kind of start](#the-removed-kind-of-start)). |
 | `invalid_strategy` | An evidence reference has none of the three shared shapes, or a place or an input has no evidence. |
 | `strategy_reference_missing` | A cited record, probe or candidate is not in the store (`id`). Record it first. |
 | `strategy_evidence_stale` | The digest of a record reference differs from the stored record (`id`). Compute the digest of the stored record. |
@@ -7559,11 +7560,12 @@ Refusals of the two commands:
 | `problem_form_counterexample_missing` | `refuted` rests on exploratory evidence that states no counterexample. State it in `counterexample`, or cite admissible evidence. |
 | `problem_value_reading_missing`, `problem_value_computation_missing`, `problem_value_result_missing`, `problem_result_unbound`, `problem_result_superseded`, `problem_result_missing`, `problem_result_extension_unexplained` | A cited reading, computation or result is not valid evidence; each code has the meaning that it has for value evidence. |
 
-Two refusals of other commands concern forming records:
+Three refusals of other commands concern forming records:
 `problem_candidate_forming_missing` when `problem-candidate` records a candidate
-of the retired kind `phenomenon` whose evidence cites no forming call, and
-`problem_slate_review_required` when `problem-slate` selects a candidate formed
-in the record without a slate review.
+of the retired kind `phenomenon` whose evidence cites no forming call,
+`problem_start_kind_removed` when `problem-candidate` names a retired source
+kind in a record that does not hold it, and `problem_slate_review_required` when
+`problem-slate` selects a candidate formed in the record without a slate review.
 
 A record that holds no forming record keeps the `status` report, the output
 folders and the digests of 0.82.0.
