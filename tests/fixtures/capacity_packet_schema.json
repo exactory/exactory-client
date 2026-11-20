@@ -18278,7 +18278,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.development": {
-      "ast_sha256": "81fa1537435809d376d220e4f3b041c3a6ce8b162078b55797a8ff6ca3e2936d",
+      "ast_sha256": "c1f4feee032697044a78d364f35b5c396929fb090a961217f4999617ef4477d6",
       "functions": {
         "_assess": "e4aa7bd96a735771d7f1ec241b6707a0dce17c7cbcc4bd07066baa28c592007f",
         "_assessed_checks": "19f2a063e2c3498d901ae71f9577b838453f10fed36c8c5a6ef35676e5f5084c",
@@ -18326,7 +18326,7 @@
         "plan_cycle": "acbe01c3a0342154cd48ef17a556b29f352203a45a5fd7ff5a6bad170d29d8e6",
         "prepare_combined_support": "4a8c836abdf85b5e98e8b870ad1797e4c30fa7ed48ed9576fe387a53b9f4548d",
         "readiness_report": "0680871639f33bc2c8bebc2fc3df77ea5f3de6e50e8473605920a2520274d999",
-        "record_execution": "8e5ff9790ca6b44def91386dd5bcb9e00bbb2edd42c0d793cc7c3a623b9a5857",
+        "record_execution": "dc17b0509f45eedb465254f9da8029cd19501dffe8e0f0194a7755347fe925c3",
         "record_readiness_review": "964e6ba8ba11b7503aa9865ae33445ff905d77c18797260e504cae13541c05f8",
         "validate_admitted_execution": "f14ba9b245fd54dd188175d8262cb0cb74740eddc4cbdd2d7ccc180046a41d0f"
       },
@@ -18442,7 +18442,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.91.6: the text limits, the trim characters, the line-break rule and the UTF-16 count of the post command have their home here; the module builds no packet."
     },
     "research_harness.execution": {
-      "ast_sha256": "b0085738bb0e21ef16d9f72c7416f3297cfb0beabd8bb0853aa177546325bd33",
+      "ast_sha256": "b5a0d0df8f91af4cad1630bd069ffb8a47a3ca4e7372b7954e078c1c7b1e3032",
       "functions": {
         "_binding": "c5a1577c8efa18428b8d166fee62ec111d3f8b4ca767777d1c6da982fa3045ee",
         "_build_earlier_runtime": "4e9449595081c737c01e8d4c09ef916866f5ef7275f344af48057370cc16168d",
@@ -18462,7 +18462,7 @@
         "execution_status": "e59473b3c0e17736086cd4aa796890d74dae29789655494c67ff8fd096ef0f1a",
         "find_recorded_execution": "c2e2543e746e39effe57bb0e0900254bb3814fc7294a7bb5c08c6e5f55e9b6ad",
         "launch_execution": "123a7004140c4b4402e53efab80c7745271c150640bf9f709dc44eb85eaa4fee",
-        "reconcile_execution": "c20aa61a96e957be113c7aa4882665d186e826d7683aef9a127a904d6937a84f",
+        "reconcile_execution": "895baf406d6f67d625f568285a5c44062989099a06ff70408fe824ea78032185",
         "record_imported_execution": "4f0c17c099e62ad7b175155252803ba5e5a8fca2c60e71c82f092671f4804379",
         "record_reconciliation": "ef5ab09a0d9ac90284c2121e572f5efa80f9b8d0d1aaab557c1c907240f1ed6d",
         "_select_record_busy_msg": "81ba2a1689fe45d19fc0cca8f79fb423e2c2192a9241a02274963b75235f3c65"
@@ -18549,7 +18549,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.fulltext_jobs": {
-      "ast_sha256": "0dc86132aeeef4e3c8a3a53e94f66eb0ab4a6f23a659ea6b95847e6a52f69967",
+      "ast_sha256": "08e65d92f729af86f846143fc30fbfc7c63922d45d7a660979169d147ac14510",
       "functions": {
         "build_unit_key": "bdb3db4c3b21920307b1dc6cc27422b626ad0903c982b34c9d5f3723966b12ca",
         "charge_attempts": "e400831712a1c368e0b934623417f9e6c9c61dec187acf5304dc42c8edb95dbb",
@@ -20557,7 +20557,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.4 origin authentication: describe_correction_observation passes the origin view of the records to _authenticate_observation; no packet argument or member changes. Reviewed 0.91.5 call payload definition: check_authentication rebuilds the payload of each committed call capture through review_task_execution.rebuild_call_payload, with the optional members that the invocation holds, in place of fixed key lists; no packet argument or member changes."
     },
     "research_harness.remote": {
-      "ast_sha256": "8a21b1993953dd33100af777fa9d9aabfad96785e5430c6f01add957b02cc06f",
+      "ast_sha256": "5489e31ac23718c9f1bc323df8e48198cac851b9cbea0e260ce08891c4a4584e",
       "functions": {
         "_select_answer_members": "92f1798231f491c0e0f753a8e4984cba8fd30f216ecd04e2234f3a2bb5ec6a38",
         "_change": "4b0684c358442d85218a613eca9593aa48cc686e18b3db02f0b06deaf5c4d6d5",
@@ -24166,7 +24166,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.submission": {
-      "ast_sha256": "bac4c3a5b05064d8dcce9b30db341dbb8a52766b871e96de19f91803d60f15b0",
+      "ast_sha256": "f52f2292286d25960a19cb6c04bfd977d7a1ee85d7098d5381abcb4bea1a5b29",
       "functions": {
         "_observation": "5cb23ed0270920906c85d251bc238dc79e0225846d912375955eec7bef2c859e",
         "_send_verdict": "bbfa11e943505f74edb3dab05de483ef5df1fa78938154637d2668e085b31337",
@@ -24250,7 +24250,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.zenodo": {
-      "ast_sha256": "2429843704af0708c87e657f9cac0e73e696e6aa3eb6c8ed2b354e0fc1373a34",
+      "ast_sha256": "9a44712e97dd7d14c1c0ea1d10a8b95452d6f343bc1d519778adc9836788846c",
       "functions": {
         "_current": "1a81961f4e3171e57d0aaf04dd3718a40fdf9a8147ac8dd5581b9825bd158e09",
         "_deposition": "7039fa6718dabcb8aaadc4f835b3c3203e303abab680d4eaa839de81485b658d",

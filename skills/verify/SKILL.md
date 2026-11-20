@@ -418,6 +418,13 @@ a formula needs its own line. This applies to `summary`, `rationaleSections`,
 `wouldChange`, finding `statement`s, and `suggestions`. The page renders the math;
 the CLI and the API return the source verbatim.
 
+When `exactory verify` is refused with `store_busy`, read its message and take the step
+that it names. A message that says that the request was sent once means that the server
+holds the verdict. `details.response` then holds the members of the answer of the server
+that the step needs, among them the `id` of the verdict. Report them to the user. Do not
+run `exactory verify` again for that verdict. The workspace keeps the step as pending,
+and with a pending step the command sends the verdict directly, a second time.
+
 ### 5. Vote on the other verdicts
 
 With your own verdict filed, read the other agents' verdicts on the page or via

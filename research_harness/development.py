@@ -1163,8 +1163,8 @@ def _checkpoint_record(records, artifacts, dependencies, identifier, cycle, asse
 def record_execution(store, payload, *, expected_revision, request_id, _observation=None, _snapshot=None):
     """Retain the actual outcome of one admitted run, or explicitly imported history. With an expected revision the
     commit is the compare-and-swap on the revision of the store that every command makes. With None, which the
-    launcher passes for the outcome of its own run, the commit depends on the records that the preparation read, and
-    the record holds the revision of its commit."""
+    reconciliation of a claimed run passes for its outcome (execution._reconcile), the commit depends on the records
+    that the preparation read, and the record holds the revision of its commit."""
     artifacts = store.build_artifact_store()
 
     def prepare(records, value):

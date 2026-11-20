@@ -288,3 +288,12 @@ and reading gaps. A `rate_limited` refusal sends nothing and names the provider
 group and the next eligible time; the arXiv interval and every `Retry-After`
 cooldown are shared by all processes and workspaces of this user on the machine. A pause, availability
 qualification, old receipt, or completed form does not discharge current work.
+
+When an acquisition command is refused with `store_busy`, read its message. A
+message of the acquisition says what is recorded, and that the command goes on
+with a new request ID. The message of the store itself names the same request:
+run it again. When the same request ID then returns `operation_incomplete`, the
+operation was admitted before the refusal. Then run the command with a new
+request ID. When `fulltext-resume` returns `store_busy` as an item of `pending`,
+the command was not refused. Continue the job with `fulltext-resume` and a new
+request ID.

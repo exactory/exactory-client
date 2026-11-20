@@ -3,9 +3,9 @@
 Lock order is execution-owner lock, then a short research Store operation. The
 worker owns a different run lock and never opens Store. The program of an
 admission runs at most once: the same request starts a claimed local run whose
-program no record released, and every other claimed run is reconciled, not
-launched again. A lost launcher response stays pending until its actual outcome
-is reconciled, retaining every reservation.
+program never started (_is_unstarted_local_run), and every other claimed run is
+reconciled, not launched again. A lost launcher response stays pending until its
+actual outcome is reconciled, retaining every reservation.
 """
 
 from contextlib import contextmanager
@@ -34,20 +34,21 @@ from .workspace import checked_parent, json_projection, read_file, strict_json, 
 # The messages of a record of an admitted run that the store refused beyond the wait: the record that releases the
 # program, a record of a run with a terminal outcome, and a record of a resolution that reconcile-run gave.
 RUN_START_STORE_BUSY_MSG = (
-    'The research store stayed busy, or kept changing the records that this write read, and the start of this '
+    'The research store stayed busy, or kept changing the records that this write read. The start of this '
     'admitted run was not recorded. The program did not run, and the admission keeps its claim. Run the same '
     'exactory-lab run command again with the request ID in details.request_id. It starts the program of this '
     'admission. If it is refused with execution_live, the earlier worker is still ending. Run it again after a minute.')
 RUN_RECORD_STORE_BUSY_MSG = (
-    'The research store stayed busy, or kept changing the records that this write read, and a record of this run was '
+    'The research store stayed busy, or kept changing the records that this write read. A record of this run was '
     'not written. Nothing false was recorded. The program ran once, and its terminal outcome, its streams and its '
     'output files are kept under research/runs. Run exactory-research reconcile-run for the admission ID in '
     'details.admission_id, or the same exactory-lab run command with the request ID in details.request_id. Each of '
     'them records the run from the kept files and does not run the program again.')
 RUN_RESOLUTION_STORE_BUSY_MSG = (
-    'The research store stayed busy, or kept changing the records that this write read, and the record of this '
-    'resolution was not written. Nothing false was recorded. Run the same exactory-research reconcile-run command '
-    'again with the current revision in --expected-revision. It records the resolution.')
+    'The research store stayed busy, or kept changing the records that this write read. A record of this '
+    'resolution was not written. Nothing false was recorded. Run exactory-research reconcile-run for the admission ID '
+    'in details.admission_id, with the same resolution and reason and with the current revision in '
+    '--expected-revision. It records the resolution.')
 # The messages of a claimed local run whose program did not start: its worker did not start, its worker ended while
 # the record that releases the program waited, or reconcile-run finds no record that released it.
 RUN_WORKER_NOT_STARTED_MSG = (
@@ -510,8 +511,9 @@ def _reconcile(store, payload, expected_revision, request_id):
 
 
 def reconcile_execution(store, payload, *, expected_revision, request_id, owned=False):
-    """Record the outcome of a claimed run from its kept files. The reconcile-run command gives the revision that it
-    read; the launcher, which reconciles its own run, gives None."""
+    """Record the outcome of a claimed run: from its terminal outcome and its kept files, or, for a claim without a
+    terminal outcome, from the resolution of the payload. The reconcile-run command gives the revision that it read;
+    the launcher, which reconciles its own run, gives None."""
     fields(payload, ("admission_id",), ("resolution", "reason"))
     text(payload["admission_id"], "Admission ID")
     if expected_revision is not None and (type(expected_revision) is not int or expected_revision < 0):
