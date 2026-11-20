@@ -7775,6 +7775,9 @@ of the retired kind `phenomenon` whose evidence cites no forming call,
 `problem_start_kind_removed` when `problem-candidate` names a retired source
 kind in a record that does not hold it, and `problem_slate_review_required` when
 `problem-slate` selects a candidate formed in the record without a slate review.
+A record holds a retired kind when its start, one of its candidates or one of
+its forming calls already has that kind
+([The removed kind of start](#the-removed-kind-of-start)).
 
 A record that holds no forming record keeps the `status` report, the output
 folders and the digests of 0.82.0.
