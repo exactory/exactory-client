@@ -21844,7 +21844,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the activation of 0.91.0 (ruling 37): NEW_PROBLEM_CHAIN_PROTOCOLS becomes (PROTOCOL_V7, PROTOCOL_V6); no packet member, call, write or closed shape changes. Reviewed 0.91.1: a math openness packet that fits one turn stays a single native turn under (v7, v6); the condition reads the packet kind only, and no packet member, call, write or closed shape changes. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "3c8fb58f199a205279bd4dde03a0cd2ff81c011460104f8dfaae962a3987318e",
+      "ast_sha256": "0b8996a02750a9373dcb481788660a4a3f153fae4293af9b43e1da495104b48a",
       "functions": {
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
         "_append_unit": "f6cb4ac11ffc0db1bbc01ecf87ec1ca4e26a2ccc64a24c9aebe0b2c8d2ce16a7",
@@ -21862,7 +21862,7 @@
         "measure_finding_index_frame": "e13105a214587e19a17f1ddcbb0942d25398be046852afc792b0a746d3a087dc",
         "describe_carried_pool": "b8c0046b42a8d1d5d4d96483e43f2c49afbc294acad7e86f5b965bc922646932",
         "describe_visual_text_stop": "927e68cb236d962c4335fe26aa56b413360d4b6490ec47b1cb2e0f1fd35775fc",
-        "measure_turn_frames": "6b7f7f5bfd62fe985caa1d9ea415952d65c00ec927a35cba565e499357536dac",
+        "measure_turn_frames": "bb63fd009a551117739e9c592b831a5cc91ed7ba5222f48b4495a01e8c604ae8",
         "observe_carried_chain": "7830acc80f56e928029aec9390682f3131b0401efcfae5710bc27f826ef9fe5c",
         "plan_inventory": "0ab9eecaf336b2c4d14998700000549bbd29fa68fc81dd1637c0acdf2ecb7b32",
         "project_carried_turn": "0c984a434694f523c26e101401f7d285b7d189fdf69c5cab89491985e5cbb682",
@@ -44076,7 +44076,7 @@
           "class": "fixed",
           "entry": "Q1",
           "fixture": "native_math/finding-index-forms",
-          "ground": "G8.11 of 0.92.0: the number of rows of inventory.finding_units, the field values of bound searches that the final of the chain names by their bodies. Only a reading turn of a bounded chain whose final names such a value holds it, and the paragraph finding-units goes with it; the reading frame of every chain with a finding index reserves FINDING_UNITS_CHARACTERS for the member and the paragraph.",
+          "ground": "G8.11 of 0.92.0: the number of rows of inventory.finding_units, the field values of bound searches that the final of the chain names by their bodies. Only a reading turn of a bounded chain whose final names such a value holds it, and the paragraph finding-units goes with it; the reading frame of such a chain reserves FINDING_UNITS_CHARACTERS for the member and the paragraph.",
           "quantity": "identifiers"
         }
       },
@@ -109154,7 +109154,7 @@
                   "class": "fixed",
                   "entry": "Q1",
                   "fixture": "native_math/finding-index-forms",
-                  "ground": "G8.11 of 0.92.0: the number of rows of inventory.finding_units, the field values of bound searches that the final of the chain names by their bodies. Only a reading turn of a bounded chain whose final names such a value holds it, and the paragraph finding-units goes with it; the reading frame of every chain with a finding index reserves FINDING_UNITS_CHARACTERS for the member and the paragraph.",
+                  "ground": "G8.11 of 0.92.0: the number of rows of inventory.finding_units, the field values of bound searches that the final of the chain names by their bodies. Only a reading turn of a bounded chain whose final names such a value holds it, and the paragraph finding-units goes with it; the reading frame of such a chain reserves FINDING_UNITS_CHARACTERS for the member and the paragraph.",
                   "quantity": "identifiers"
                 }
               }

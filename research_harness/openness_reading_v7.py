@@ -223,8 +223,8 @@ def list_target_labels(native):
 
 UNREAD_PACKET_CHARACTERS = 30000
 UNREAD_CORE_CHARACTERS = 1500
-# The reading frame of every chain with a finding index holds this many characters for the member
-# reading_turn.finding_units and the paragraph finding-units (G8.11), whether or not its final names a value.
+# The reading frame of a chain whose inventory holds finding_units, which is a chain whose final names a value by its
+# body, holds this many characters for the member reading_turn.finding_units and the paragraph finding-units (G8.11).
 FINDING_UNITS_CHARACTERS = 1500
 # One text for the planned step (details.message) and for the refusal of any other payload with context.unread.
 UNREAD_FINAL_MESSAGE = (
@@ -625,7 +625,7 @@ def measure_turn_frames(route, native, *, fixed_bounds=None, finding_index=None,
                           refusal_paragraph=NOTICE_PARAGRAPH_CHARACTERS, unread=UNREAD_CORE_CHARACTERS)
         else:
             fields['affected_notes_index'] = AFFECTED_INDEX_CHARACTERS * 2
-            if finding_index is not None:
+            if inventory is not None and 'finding_units' in inventory:
                 fields['finding_units'] = FINDING_UNITS_CHARACTERS
         # Bound envelope keys, capacity/allowance scalars, handles and counters;
         # evidence rows and plan.now are charged as material with their text.
