@@ -85,7 +85,7 @@ def finish_v7(case, first):
                key=lambda row: row['recorded_revision'])
 
 
-class CarriedSelectionCases:
+class CarriedSelectionSupport:
     reading_protocol = None
     route_model = 'gpt-6-astra'
     text_sizes = (50000, 50000, 50000)
@@ -123,6 +123,8 @@ class CarriedSelectionCases:
         return self.carried.verify_carried_selection(records or self.records, self.artifacts,
             inventory or self.inventory, self.identity, selection)
 
+
+class CarriedSelectionCases(CarriedSelectionSupport):
     def test_g8_changed_neighbour_keeps_credit_and_filters_own_source_entries(self):
         observations = v7.observe_carried_chain(self.records, self.artifacts, self.first)
         delivered = [row for row in observations[0]['deliveries'] if row['identity']['kind'] == 'fulltext']
@@ -592,6 +594,135 @@ class V6CarriedSelectionTests(CarriedSelectionCases, OpennessReadingCase):
                 records['review_assignment']['malformed'] = malformed
                 self.assertEqual(self.select_readings(records=records), expected)
                 self.assertIsNone(self.carried._describe_chain(records, self.artifacts, malformed, self.identity))
+
+
+# A refusal that states nothing about a turn of the earlier chain: a stop of the class harness_defect.
+NO_STATE_REFUSAL_CODE = 'review_route_capacity_plan_violated'
+STAND_IN_REFUSAL_MESSAGE = 'A stand-in refusal of the test.'
+
+
+def build_refusing_observer(assignment_id, code):
+    """A stand-in observer: it raises one refusal for the turn assignment_id and observes every other turn of a
+    v5 or v6 chain."""
+    def observe(records, artifacts, assignment):
+        if assignment['id'] == assignment_id:
+            raise ResearchError(code, STAND_IN_REFUSAL_MESSAGE)
+        return v7.observe_carried_chain(records, artifacts, assignment)
+    return observe
+
+
+class CarriedRefusalTests(CarriedSelectionSupport, OpennessReadingCase):
+    """Only the two refusals that state that a prefix is not ready send the selection to the turn before."""
+
+    def replace_observers(self, observer):
+        return patch.object(self.carried, 'CHAIN_OBSERVERS', dict.fromkeys(self.carried.CHAIN_OBSERVERS, observer))
+
+    def refuse_native_packets(self):
+        return patch.object(self.carried, 'load_packet', side_effect=ResearchError(
+            'invalid_native_review_packet', STAND_IN_REFUSAL_MESSAGE))
+
+    def test_observer_refusal_that_is_no_state_ends_the_selection(self):
+        self.assertEqual(len(self.select_readings()), 1)
+        native = self.export(name='new-export', assignment_id='new')
+        before = copy.deepcopy(self.store.snapshot()['records'])
+        with self.replace_observers(build_refusing_observer('turn-1', NO_STATE_REFUSAL_CODE)):
+            with self.assertRaises(ResearchError) as refused:
+                self.select_readings()
+            self.assertEqual((refused.exception.code, refused.exception.message),
+                             (NO_STATE_REFUSAL_CODE, STAND_IN_REFUSAL_MESSAGE))
+            with patch.object(reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (v7.PROTOCOL, reading.PROTOCOL_V6)), \
+                    self.assertRaises(ResearchError) as refused:
+                self.assign('new', native)
+        self.assertEqual(refused.exception.code, NO_STATE_REFUSAL_CODE)
+        self.assertEqual(self.store.snapshot()['records'], before)
+
+    def test_qualification_refusal_ends_the_selection(self):
+        with self.refuse_native_packets(), self.assertRaises(ResearchError) as refused:
+            self.select_readings()
+        self.assertEqual(refused.exception.code, 'invalid_native_review_packet')
+
+    def test_report_refusal_that_is_no_store_refusal_ends_the_report(self):
+        other = dict(self.identity, reviewer_id='another-reviewer')
+        self.assertEqual(len(self.carried.list_passed_over_chains(self.records, self.artifacts, other)['passed_over']), 1)
+        with self.refuse_native_packets(), self.assertRaises(ResearchError) as refused:
+            self.carried.list_passed_over_chains(self.records, self.artifacts, other)
+        self.assertEqual(refused.exception.code, 'invalid_native_review_packet')
+
+    def test_second_part_passes_a_refusal_that_is_no_state_through(self):
+        selection = self.carried.build_carried_selection(self.records, self.artifacts, self.inventory,
+                                                         self.identity)['selection']
+        self.assertEqual(len(self.verify_selection(selection)), 1)
+        with self.replace_observers(build_refusing_observer('turn-1', NO_STATE_REFUSAL_CODE)), \
+                self.assertRaises(ResearchError) as refused:
+            self.verify_selection(selection)
+        self.assertEqual((refused.exception.code, refused.exception.message),
+                         (NO_STATE_REFUSAL_CODE, STAND_IN_REFUSAL_MESSAGE))
+        for code in ('review_context_unverified', 'openness_reading_incomplete', 'artifact_missing'):
+            with self.subTest(code=code):
+                with self.replace_observers(build_refusing_observer('turn-1', code)), \
+                        self.assertRaises(ResearchError) as refused:
+                    self.verify_selection(selection)
+                self.assertEqual((refused.exception.code, refused.exception.message),
+                                 ('openness_reading_incomplete', v7.SELECTION_MISMATCH_MESSAGE))
+
+    def test_first_part_of_a_stored_selection_ends_with_the_refusal(self):
+        first, _, _, selection = start_v7(self)
+        self.assertEqual(len(selection['turns']), 1)
+        observe_v7(self, first)
+        records = self.store.snapshot()['records']
+        assignment = records['review_assignment'][first['id']]
+        v7.verify_problem_coverage(records, self.artifacts, assignment)
+        with self.replace_observers(build_refusing_observer('turn-1', NO_STATE_REFUSAL_CODE)), \
+                self.assertRaises(ResearchError) as refused:
+            v7.verify_problem_coverage(records, self.artifacts, assignment)
+        self.assertEqual((refused.exception.code, refused.exception.message),
+                         (NO_STATE_REFUSAL_CODE, STAND_IN_REFUSAL_MESSAGE))
+
+    def test_records_without_a_history_end_with_the_refusal_of_the_evaluation(self):
+        first, _, _, _ = start_v7(self)
+        observe_v7(self, first)
+        records = self.store.snapshot()['records']
+        assignment = records['review_assignment'][first['id']]
+        self.assertEqual(assignment['carried_selection']['protocol'], SELECTION_V2)
+        with self.assertRaises(ResearchError) as refused:
+            v7.verify_problem_coverage(dict(records), self.artifacts, assignment)
+        self.assertEqual(refused.exception.code, 'claim_reassessment_required')
+        chain = dict(chain=assignment['id'], protocol=v7.PROTOCOL, recorded_revision=assignment['recorded_revision'])
+        later = build_identity(records, self.artifacts, assignment)
+        self.assertEqual(len(self.carried.observe_qualifying_chain(records, self.artifacts, chain, later)), 1)
+        with self.assertRaises(ResearchError) as refused:
+            self.carried.observe_qualifying_chain(dict(records), self.artifacts, chain, later)
+        self.assertEqual(refused.exception.code, 'claim_reassessment_required')
+
+    def test_report_for_a_v6_chain_states_the_refusal_and_does_not_raise(self):
+        from research_harness.native_review import load_packet
+        value = dict(id='another', reviewer_id=self.first['reviewer_id'], author_id=self.first['author_id'])
+        route = self.records['review_route'][self.first['route_id']]
+        native = load_packet(self.artifacts, self.native, self.first['reviewer_id'])
+        report = v7.describe_uncarried_chains(self.records, self.artifacts, value, route, native)
+        self.assertEqual(report['would_carry'], ['turn-1'])
+        with self.replace_observers(build_refusing_observer('turn-1', NO_STATE_REFUSAL_CODE)):
+            report = v7.describe_uncarried_chains(self.records, self.artifacts, value, route, native)
+        self.assertEqual(report, dict(chains=[], would_carry=[], passed_over=[],
+                                      refusal=dict(code=NO_STATE_REFUSAL_CODE, details=None)))
+        # With v6 first in the admission order, v6 starts the chain and the report describes what v7 would carry.
+        export = self.export(name='v6-export', assignment_id='v6-first')
+        with self.replace_observers(build_refusing_observer('turn-1', NO_STATE_REFUSAL_CODE)), \
+                patch.object(reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (reading.PROTOCOL_V6, v7.PROTOCOL)):
+            receipt = self.assign('v6-first', export)
+        self.assertEqual(receipt['protocol_selection']['protocol'], reading.PROTOCOL_V6)
+        self.assertEqual(receipt['carried_readings'], report)
+        self.assertIn('v6-first', self.store.snapshot()['records']['review_assignment'])
+
+    def test_state_refusals_go_back_to_the_turn_before(self):
+        self.assign('turn-2', self.native, prior='turn-1')
+        records = self.store.snapshot()['records']
+        identity = build_identity(records, self.artifacts, self.first)
+        expected = self.select_readings(identity=identity, records=records)
+        self.assertEqual([row['origin']['assignment_id'] for row in expected], ['turn-1'])
+        for code in ('review_context_unverified', 'openness_reading_incomplete'):
+            with self.subTest(code=code), self.replace_observers(build_refusing_observer('turn-2', code)):
+                self.assertEqual(self.select_readings(identity=identity, records=records), expected)
 
 
 class StoredCaptureSelectionTests(unittest.TestCase):

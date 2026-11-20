@@ -12,6 +12,7 @@ from .evidence import digest
 from .gates import STAGES
 from .native_writes import write_atomic
 from .operations import fields, immutable_record, prepared_mutation, text, timestamp
+from .storage import overlay_kinds
 from .workspace import checked_parent, find_workspace, open_file, read_file, strict_json
 
 
@@ -295,10 +296,13 @@ def require_met_override_conditions(authority):
 
 
 def describe_override_write_authorities(records, local_overrides, row, artifacts):
-    """Show current authority for the writes of a recorded or proposed instruction."""
+    """Show current authority for the writes of a recorded or proposed instruction.
+
+    The proposed view keeps the history of the store, which the verification of a carried selection reads.
+    """
     proposed = records
     if records is not None and "recorded_revision" in row:
-        proposed = dict(records, gate_override={**records.get("gate_override", {}), row["id"]: row})
+        proposed = overlay_kinds(records, dict(gate_override={**records.get("gate_override", {}), row["id"]: row}))
     writes = [dict(gate=row["gate"], public_action=row.get("public_action"))]
     if row["gate"] == "post":
         writes.append(dict(kind="problem-override"))
