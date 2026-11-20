@@ -54,7 +54,7 @@ class AfterPostReviewTests(ClosureCase):
         self.stop_invocation()
         self.post()
         self.selected = self.select_statement(identifier='different-statement',
-                                              statement='Is the bound strict for every odd input?')
+                                              statement='Is the bound strict for every odd input of the finite construction?')
         self.searches = self.record_searches()
         self.assign('new-statement-review', self.export(name='new-claim-packet', assignment_id='new-statement-review'))
         report = cli.status_report(self.store)
@@ -86,7 +86,7 @@ class AfterPostReviewTests(ClosureCase):
     def test_closed_review_already_named_by_gate_moves_after_post_for_another_current_statement(self):
         self.stop_invocation()
         self.post()
-        self.select_statement(identifier='different-statement', statement='Is the bound strict for every odd input?')
+        self.select_statement(identifier='different-statement', statement='Is the bound strict for every odd input of the finite construction?')
         pending = dict(code='review_output_pending', explanation='A complete observed reviewer response is required.',
                        assignment_id=self.assignment['id'])
         before = self.store.snapshot()
@@ -101,7 +101,7 @@ class AfterPostReviewTests(ClosureCase):
     def test_closing_an_old_review_preserves_a_current_no_post_decision(self):
         self.stop_invocation()
         self.post()
-        self.select_statement(identifier='different-statement', statement='Is the bound strict for every odd input?')
+        self.select_statement(identifier='different-statement', statement='Is the bound strict for every odd input of the finite construction?')
         slate = self.store.snapshot()['records']['problem_slate']['slate-1']
         self.put('problem_slate', 'slate-1', dict(slate, selected=[], reason='No further post is planned.'))
         pending = dict(code='review_output_pending', explanation='A complete observed reviewer response is required.',
@@ -114,7 +114,7 @@ class AfterPostReviewTests(ClosureCase):
     def test_closing_the_last_old_review_preserves_the_export_decision(self):
         self.stop_invocation()
         self.post()
-        self.select_statement(identifier='different-statement', statement='Is the bound strict for every odd input?')
+        self.select_statement(identifier='different-statement', statement='Is the bound strict for every odd input of the finite construction?')
         pending = dict(code='review_output_pending', explanation='A complete observed reviewer response is required.',
                        assignment_id=self.assignment['id'])
         records = self.store.snapshot()['records']

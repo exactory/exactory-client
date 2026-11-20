@@ -11,8 +11,7 @@ import re
 from .artifacts import ArtifactStore, validate_reference
 from .errors import ResearchError
 from .evidence import digest
-from .exactory_api import (CHANGES_IF_RESOLVED_MAX_UNITS, CHANGES_IF_RESOLVED_MIN_UNITS, JAVASCRIPT_TRIM_CHARACTERS,
-                           UUID_RE, count_utf16_units, normalize_plain_text_line_breaks)
+from .exactory_api import UUID_RE, find_post_text_violation, split_statement_details
 from .graph import obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text, timestamp
 from .principles import prepare_initialization
@@ -21,6 +20,33 @@ from . import problem_rubric, strategy
 
 # Release 0.91.3 removed the kind of start; a record that holds one of these kinds keeps it.
 RETIRED_KINDS = ("phenomenon", "thought_experiment")
+# The refusals of a text that the post would refuse, by the rule that the text breaks.
+_STATEMENT_POST_TEXT_ERR_MSGS = {
+    "length": "The post does not accept this text at this length. field names the text: title, statement (the text "
+              "before a line that holds only ---), statement_details (the text after that line) or resolution_criteria. "
+              "characters gives the length of the text in UTF-16 code units after a trim, and minimum and maximum give "
+              "the limits. Make the text shorter or longer. Then record the statement again",
+    "character": "The post does not accept a character in this text. field names the text: title, statement (the text "
+                 "before a line that holds only ---), statement_details (the text after that line) or "
+                 "resolution_criteria. character gives the code point, and line and column give its place in that text, "
+                 "counted from 1. The post accepts no control character except tab, line feed and carriage return, and "
+                 "no half of a surrogate pair. Remove the character. Then record the statement again",
+}
+_STATEMENT_SEPARATOR_ERR_MSG = (
+    "The statement has more than one line that holds only ---. The post divides a statement at one such line: the "
+    "text before it is the statement, and the text after it is the details. Keep at most one such line. Then record "
+    "the statement again")
+_VALUE_POST_TEXT_ERR_MSGS = {
+    "length": "The post does not accept the text of this section at this length. The post sends the texts of the "
+              "paragraphs of a section with one empty line between them, after a trim. section names the section, "
+              "characters gives the length of that text in UTF-16 code units, and minimum and maximum give the limits. "
+              "Make the paragraphs shorter or longer. Then record the value again",
+    "character": "The post does not accept a character in the text of this section. The post sends the texts of the "
+                 "paragraphs of a section with one empty line between them. section names the section, character gives "
+                 "the code point, and line and column give its place in that text, counted from 1. The post accepts no "
+                 "control character except tab, line feed and carriage return, and no half of a surrogate pair. Remove "
+                 "the character. Then record the value again",
+}
 
 
 def has_retired_kind(records, kind):
@@ -53,6 +79,15 @@ def validate_area(area):
     text(area, "Mathematics subject class")
     if not area.startswith("math."):
         raise ResearchError("invalid_input", "The subject class must have the math. prefix")
+
+
+def require_post_texts(code, messages, name_key, texts):
+    """Refuse the first text that the post would refuse. texts maps each text field of the post to its text, and the
+    details name that field under name_key, with the broken rule and its numbers."""
+    for name, value in texts.items():
+        violation = find_post_text_violation(name, value)
+        if violation is not None:
+            raise ResearchError(code, messages[violation["rule"]], {name_key: name, **violation})
 
 
 def initialize_problem(store, payload, *, expected_revision, request_id):
@@ -120,6 +155,16 @@ def record_statement(store, payload, *, expected_revision, request_id):
                 raise ResearchError("problem_candidate_missing", "Formulate a current candidate",
                                     {"candidate_id": value["candidate_id"]})
         saved = records.get("problem_statement", {}).get(value["id"])
+        if saved is None:
+            # The post would refuse such a text after the reviews, so the write of a new statement refuses it now.
+            parts = split_statement_details(value["statement"])
+            if len(parts) > 2:
+                raise ResearchError("problem_statement_post_text_invalid", _STATEMENT_SEPARATOR_ERR_MSG,
+                                    {"field": "statement", "rule": "separator", "lines": len(parts) - 1})
+            texts = {"title": value["title"], "statement": parts[0], "resolution_criteria": value["resolution_criteria"]}
+            if len(parts) == 2:
+                texts["statement_details"] = parts[1]
+            require_post_texts("problem_statement_post_text_invalid", _STATEMENT_POST_TEXT_ERR_MSGS, "field", texts)
         revision = saved["recorded_revision"] if saved else expected_revision + 1
         record = dict(value, recorded_revision=revision)
         return [immutable_record(records, "problem_statement", value["id"], record),
@@ -192,44 +237,42 @@ def assess_assessment(records, artifacts):
     return pending
 
 
+def prepare_value(records, artifacts, value, revision):
+    """Check a new value record against the records, and return its change of the store and the record."""
+    require_problem(records)
+    fields(value, ("id", "statement_id", "motivation", "current_state"), ("accounts", "changes_if_resolved"))
+    if "accounts" not in value:
+        raise ResearchError("problem_accounts_required",
+                            "A new value record holds the accounts of the statement. Add accounts to the "
+                            "payload, and cite account entries in the value paragraphs. exactory-research example "
+                            "problem-value prints the shape")
+    # Since 0.91.6 a new value record holds accounts.places and changes_if_resolved. A stored value record without them stays valid.
+    if "changes_if_resolved" not in value:
+        raise ResearchError("problem_changes_if_resolved_required",
+                            "A new value record holds changes_if_resolved, the paragraphs of the section What a "
+                            "resolution would change. Add changes_if_resolved to the payload as a list of paragraphs "
+                            "{text, evidence}. exactory-research example problem-value prints the shape")
+    text(value["id"], "Problem value ID")
+    statement = find_current_statement(records)
+    if statement is None or value["statement_id"] != statement["id"]:
+        raise ResearchError("problem_statement_missing", "Select the exact current problem statement")
+    from .problem_evidence import list_value_sections, validate_value
+    validated = validate_value(records, artifacts, dict(value, accounts_version=2))
+    # The post would refuse such a text after the reviews, so the write refuses it now. The post joins the paragraphs.
+    require_post_texts("problem_value_post_text_invalid", _VALUE_POST_TEXT_ERR_MSGS, "section",
+                       {section: "\n\n".join(paragraph["text"] for paragraph in value[section])
+                        for section in list_value_sections(value)})
+    record = dict(validated, recorded_revision=revision)
+    return [immutable_record(records, "problem_value", value["id"], record)], record
+
+
 def record_value(store, payload, *, expected_revision, request_id):
     artifacts = store.build_artifact_store()
     size_report = None
 
     def prepare(records, value):
         nonlocal size_report
-        require_problem(records)
-        fields(value, ("id", "statement_id", "motivation", "current_state"), ("accounts", "changes_if_resolved"))
-        if "accounts" not in value:
-            raise ResearchError("problem_accounts_required",
-                                "A new value record holds the accounts of the statement. Add accounts to the "
-                                "payload, and cite account entries in the value paragraphs. exactory-research example "
-                                "problem-value prints the shape")
-        # Since 0.91.6 a new value record holds accounts.places and changes_if_resolved. A stored value record without them stays valid.
-        if "changes_if_resolved" not in value:
-            raise ResearchError("problem_changes_if_resolved_required",
-                                "A new value record holds changes_if_resolved, the paragraphs of the section What a "
-                                "resolution would change. Add changes_if_resolved to the payload as a list of paragraphs "
-                                "{text, evidence}. exactory-research example problem-value prints the shape")
-        text(value["id"], "Problem value ID")
-        statement = find_current_statement(records)
-        if statement is None or value["statement_id"] != statement["id"]:
-            raise ResearchError("problem_statement_missing", "Select the exact current problem statement")
-        from .problem_evidence import validate_value
-        validated = validate_value(records, artifacts, dict(value, accounts_version=2))
-        # The post would refuse this text after the reviews, so the write refuses it now, with the count of the post command.
-        posted_text = "\n\n".join(paragraph["text"] for paragraph in value["changes_if_resolved"])
-        characters = count_utf16_units(normalize_plain_text_line_breaks(posted_text).strip(JAVASCRIPT_TRIM_CHARACTERS))
-        if not CHANGES_IF_RESOLVED_MIN_UNITS <= characters <= CHANGES_IF_RESOLVED_MAX_UNITS:
-            raise ResearchError("problem_changes_if_resolved_length",
-                                "The text of changes_if_resolved is outside the length that the post accepts. The post "
-                                "sends the texts of the paragraphs with one empty line between them, after a trim. "
-                                "characters gives the length of that text, and minimum and maximum give the limits. Make "
-                                "the paragraphs shorter or longer. Then record the value again",
-                                {"characters": characters, "minimum": CHANGES_IF_RESOLVED_MIN_UNITS,
-                                 "maximum": CHANGES_IF_RESOLVED_MAX_UNITS})
-        record = dict(validated, recorded_revision=expected_revision + 1)
-        changes = [immutable_record(records, "problem_value", value["id"], record)]
+        changes, record = prepare_value(records, artifacts, value, expected_revision + 1)
         size_report = describe_value_size(records, artifacts, record)
         return changes, record
 

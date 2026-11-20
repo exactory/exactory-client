@@ -4,6 +4,11 @@ from research_harness.problem_accounts import is_full_reading
 
 CHANGES_IF_RESOLVED_TEXT = ("A proof gives the bound for every finite construction, which the source states as an open "
                             "question. A disproof gives a finite construction at which the bound fails.")
+# The motivation and the current state each hold the 100 characters that the post asks for (0.91.8).
+MOTIVATION_TEXT = ("The bound would connect the finite constructions. The source states it as an open question for every "
+                   "finite construction.")
+CURRENT_STATE_TEXT = ("Only bounded examples have been established. No argument in the works read reaches every finite "
+                      "construction.")
 
 
 def build_accounts(evidence=None, neighbours=()):
@@ -34,11 +39,9 @@ def build_account_value(evidence, identifier="value-1", neighbours=(), place_evi
     accounts["places"] = [build_place([item for item in evidence if is_full_reading(item)]
                                       if place_evidence is None else place_evidence)]
     return {"id": identifier, "statement_id": "statement-1", "accounts": accounts,
-            "motivation": [{"text": "The bound would connect the finite constructions.",
-                            "evidence": [{"kind": "account", "id": "place"}]}],
+            "motivation": [{"text": MOTIVATION_TEXT, "evidence": [{"kind": "account", "id": "place"}]}],
             "changes_if_resolved": [{"text": CHANGES_IF_RESOLVED_TEXT, "evidence": [{"kind": "account", "id": "place"}]}],
-            "current_state": [{"text": "Only bounded examples have been established.",
-                               "evidence": [{"kind": "account", "id": "use"}]}]}
+            "current_state": [{"text": CURRENT_STATE_TEXT, "evidence": [{"kind": "account", "id": "use"}]}]}
 
 
 def build_relation(identifier="relation", **changes):

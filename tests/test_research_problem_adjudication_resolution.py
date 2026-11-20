@@ -27,7 +27,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
     def prepare_bar_adjudication(self):
         self.prepare_reviews(bar_reviewer="second")
         changed = self.build_value([self.item], identifier="value-2")
-        changed["motivation"][0]["text"] = "The supplied comparator supports the exact stated implication."
+        changed["motivation"][0]["text"] = "The supplied comparator supports the exact stated implication, and the source of the place states that implication."
         self.mutate(self.load_problem_module().record_value, changed)
         return self.observe_adjudication(review_ids=["review-bar-first", "review-bar-second"])
 
@@ -494,7 +494,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                 check["status"] = "not_assessed"
         from research_harness.evidence import digest
         changed = self.build_value([self.item], identifier="value-stop-test")
-        changed["motivation"][0]["text"] = "A narrower implication follows from the supplied comparator."
+        changed["motivation"][0]["text"] = "A narrower implication follows from the supplied comparator, and the source of the place states the narrower case."
         self.mutate(self.load_problem_module().record_value, changed)
         self.observe("result", "second", output, identifier="refreshed-second-stop")
         records = self.store.snapshot()["records"]

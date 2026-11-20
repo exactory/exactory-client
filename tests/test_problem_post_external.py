@@ -222,7 +222,7 @@ class ExternalPostTests(checks.CheckCommandMixin, fixtures.ProblemCase):
         self.assertEqual(view.read_bytes(), before)
         # Old and new shapes coexist: recording a later exported statement must
         # leave the earlier receipt and raw historical view unchanged.
-        statement = self.select_statement(identifier='later-exported-statement', statement='A later exact statement.')
+        statement = self.select_statement(identifier='later-exported-statement', statement='A later exact statement about every finite construction.')
         newer = dict(self.payload, id='export-aware-post', export_digest='cd' * 32,
                      statement_digest=problem_claims.compute_statement_digest(statement))
         self.record_external(newer)
@@ -261,7 +261,7 @@ class ExternalPostTests(checks.CheckCommandMixin, fixtures.ProblemCase):
         operation = cli.OPERATIONS["problem-post-external"]
         revision = self.store.revision
         receipt = operation(self.store, self.payload, expected_revision=revision, request_id="external-request")
-        self.select_statement(identifier="later-statement", statement="A different exact mathematical statement.")
+        self.select_statement(identifier="later-statement", statement="A different exact mathematical statement about every finite construction.")
         before = self.store.snapshot()
         replay = operation(self.store, copy.deepcopy(self.payload), expected_revision=revision,
                            request_id="external-request")
@@ -299,7 +299,7 @@ class ExternalPostTests(checks.CheckCommandMixin, fixtures.ProblemCase):
         for index, posted_at in enumerate(times):
             with self.subTest(posted_at=posted_at), patch.object(problem_claims, 'datetime') as clock:
                 clock.now.return_value = now
-                self.select_statement(identifier='timed-' + str(index), statement='Synthetic bound ' + str(index))
+                self.select_statement(identifier='timed-' + str(index), statement='Synthetic bound for every finite construction, case ' + str(index))
                 statement = self.store.snapshot()['records']['problem_statement']['timed-' + str(index)]
                 payload = dict(self.payload, id='post-' + str(index), posted_at=posted_at,
                                statement_digest=problem_claims.compute_statement_digest(statement))

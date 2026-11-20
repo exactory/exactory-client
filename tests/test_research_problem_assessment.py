@@ -115,7 +115,7 @@ class ProblemAssessmentTests(ProblemCase):
         self.assertEqual(pending[0]['source'], 'self')
         self.assertEqual(pending[0]['assessment_id'], 'assessment-1')
         self.assertEqual(pending[0]['shortfalls'], [{'item': 'priority', 'required': '>= 2', 'graded': 1}])
-        self.select_statement(identifier='statement-2', statement='A revised question.')
+        self.select_statement(identifier='statement-2', statement='A revised question about every finite construction of the record.')
         pending = claims.assess_assessment(self.store.snapshot()['records'], self.artifacts)
         stale = next(row for row in pending if row['code'] == 'problem_assessment_stale')
         self.assertEqual((stale['assessment_id'], stale['statement_id']), ('assessment-1', 'statement-2'))
@@ -144,7 +144,7 @@ class ProblemAssessmentTests(ProblemCase):
         self.assertNotEqual(after, claims.compute_problem_evidence_digest(self.store.snapshot()['records'], self.artifacts))
 
     def test_assessment_references_deliver_bound_records_in_stable_order(self):
-        other = self.select_statement(identifier='comparison', statement='A related weaker bound.')
+        other = self.select_statement(identifier='comparison', statement='A related weaker bound for every finite construction of the record.')
         self.select_statement()
         reference = {'kind': 'record', 'record_kind': 'problem_statement',
                      'id': other['id'], 'digest': digest(other)}

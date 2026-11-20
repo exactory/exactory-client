@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+from problem_accounts_fixtures import CURRENT_STATE_TEXT
 from research_harness import cli, problem_claims, problem_delivery
 from research_harness.output_views import _hold_lock, render_all, render_workspace_views
 import test_gate_override as override_fixtures
@@ -40,7 +41,8 @@ class OverrideExportHistoryTests(override_fixtures.OverrideCommandMixin, Problem
         value.pop('accounts_version')
         value['id'] = identifier
         if text is not None:
-            value['current_state'][0]['text'] = text
+            # The changed sentence follows the fixture's text, so that the section keeps the length that the post accepts.
+            value['current_state'][0]['text'] = CURRENT_STATE_TEXT + ' ' + text
         response = self.invoke_command('problem-value', value, check=False, request=identifier)
         self.assertEqual(response[0], 0, response[2])
 
@@ -87,7 +89,7 @@ class OverrideExportHistoryTests(override_fixtures.OverrideCommandMixin, Problem
         self.assertFalse(first.exists())
         history = self.root / 'final/history/problem/exports'
         self.assertEqual(len(list(history.iterdir())), 2)
-        self.assertTrue(all((path / 'state.md').read_text() == 'Only bounded examples have been established.\n'
+        self.assertTrue(all((path / 'state.md').read_text() == CURRENT_STATE_TEXT + '\n'
                             for path in history.iterdir()))
 
     def test_source_change_during_export_returns_its_retained_history_destination(self):
@@ -101,7 +103,7 @@ class OverrideExportHistoryTests(override_fixtures.OverrideCommandMixin, Problem
             directory = self.export()
         self.assertTrue(directory.is_dir())
         self.assertEqual(directory.parent, self.store.root / 'final/history/problem/exports')
-        self.assertEqual((directory / 'state.md').read_text(), 'Only bounded examples have been established.\n')
+        self.assertEqual((directory / 'state.md').read_text(), CURRENT_STATE_TEXT + '\n')
         self.assertFalse(list((self.root / 'final/problem/exports').iterdir()))
 
     def test_busy_renderer_refuses_export_before_writing_its_file_set(self):
@@ -141,7 +143,7 @@ class OverrideExportHistoryTests(override_fixtures.OverrideCommandMixin, Problem
         value.pop('recorded_revision')
         value.pop('accounts_version')
         value['id'] = 'later-value'
-        value['current_state'][0]['text'] = 'The source record has changed.'
+        value['current_state'][0]['text'] = CURRENT_STATE_TEXT + ' ' + 'The source record has changed.'
         self.mutate(problem_claims.record_value, value)
         with contextlib.redirect_stderr(io.StringIO()):
             render_workspace_views(self.store.root)
@@ -344,7 +346,7 @@ class ReviewedExportHistoryTests(ProblemDeliveryCase):
         value.pop('recorded_revision')
         value.pop('accounts_version')
         value['id'] = 'later-value'
-        value['current_state'][0]['text'] = 'A later source changes the current state.'
+        value['current_state'][0]['text'] = CURRENT_STATE_TEXT + ' ' + 'A later source changes the current state.'
         self.mutate(problem_claims.record_value, value)
         render_all(self.store)
         for directory, files in [(legacy, legacy_files), (v2, v2_files), (current, current_files)]:
@@ -361,7 +363,7 @@ class ReviewedExportHistoryTests(ProblemDeliveryCase):
         value.pop('recorded_revision')
         value.pop('accounts_version')
         value['id'] = 'revised-value'
-        value['current_state'][0]['text'] = 'A later source changes the current state.'
+        value['current_state'][0]['text'] = CURRENT_STATE_TEXT + ' ' + 'A later source changes the current state.'
         self.mutate(problem_claims.record_value, value)
         render_all(self.store)
         self.assertFalse(first.exists())

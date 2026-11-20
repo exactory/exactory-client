@@ -622,6 +622,83 @@ class TestPostProblemInputs(_MathCliTestCase):
         self.assertEqual(self.sent, [])
 
 
+class TestPostProblemTextRuleBytes(_MathCliTestCase):
+    """The rules of a post text live in research_harness.exactory_api since 0.91.8; each refusal and each help text of
+    post-problem keeps the bytes that 0.91.7 printed."""
+
+    def test_each_text_refusal_keeps_its_bytes_and_its_exit_code(self) -> None:
+        control = "The server accepts no control character except tab, line feed, and carriage return. Remove the character."
+        for flag, text, message in (
+                ("--title", "x" * 7, "The title is 7 characters long. The minimum is 8. Make it longer."),
+                ("--title", "x" * 201, "The title is 201 characters long. The limit is 200. Make it shorter."),
+                ("--statement", "x" * 49, "The statement is 49 characters long. The minimum is 50. Make it longer."),
+                ("--statement", "x" * 20001,
+                 "The statement is 20001 characters long. The limit is 20000. Make it shorter."),
+                ("--motivation", "x" * 99, "The motivation is 99 characters long. The minimum is 100. Make it longer."),
+                ("--motivation", "x" * 10001,
+                 "The motivation is 10001 characters long. The limit is 10000. Make it shorter."),
+                ("--current-state", "x" * 99,
+                 "The current state is 99 characters long. The minimum is 100. Make it longer."),
+                ("--current-state", "x" * 10001,
+                 "The current state is 10001 characters long. The limit is 10000. Make it shorter."),
+                ("--resolution-criteria", "x" * 49,
+                 "The resolution criteria is 49 characters long. The minimum is 50. Make it longer."),
+                ("--resolution-criteria", "x" * 5001,
+                 "The resolution criteria is 5001 characters long. The limit is 5000. Make it shorter."),
+                ("--changes-if-resolved", "x" * 99,
+                 "The text of what a resolution would change is 99 characters long. The minimum is 100. Make it longer."),
+                ("--changes-if-resolved", "x" * 5001,
+                 "The text of what a resolution would change is 5001 characters long. The limit is 5000. Make it shorter."),
+                ("--statement", "s" * 60 + "\n---\n" + "d" * 20001,
+                 "The text below the --- line is 20001 characters long. The limit is 20000. Make it shorter."),
+                ("--statement", "s" * 60 + "\n---\n \t\n",
+                 "The text below the --- line is 0 characters long. The minimum is 1. Make it longer."),
+                ("--statement", "s" * 60 + "\n---\nd\n---\ne",
+                 "The statement has more than one line that holds only ---. Keep one such line, between the statement"
+                 " and its details."),
+                ("--title", "Dit" + chr(0x07) + "tert conjecture",
+                 "The title contains the control character U+0007 at position 4. " + control),
+                ("--motivation", "m" * 50 + "\n" + chr(0x1B) + "[1m" + "m" * 60,
+                 "The motivation contains the control character U+001B at line 2, column 1. Terminal color codes start"
+                 " with this character. Copy the text without colors."),
+                ("--current-state", "c" * 120 + _ARGUMENT_FROM_BYTE_FF,
+                 "The current state is not valid UTF-8 text. It contains U+DCFF at position 121. Give the text as UTF-8."),
+                ("--resolution-criteria", "r\r\n" + chr(0x7F) + "r" * 60,
+                 "The resolution criteria contains the control character U+007F at line 2, column 1. " + control),
+                ("--statement", "s" * 60 + "\n---\nab\n" + chr(0x0B) + "d",
+                 "The text below the --- line contains the control character U+000B at line 3, column 1. " + control),
+                ("--changes-if-resolved", "x" * 50 + "\r" + "y" * 10 + chr(0x01) + "y" * 50,
+                 "The text of what a resolution would change contains the control character U+0001 at line 2, column 11. "
+                 + control)):
+            with self.subTest(message=message):
+                self.sent.clear()
+                argv = self.build_post_problem_argv()
+                if flag in argv:
+                    argv[argv.index(flag) + 1] = text
+                else:
+                    argv += [flag, text]
+                _, stderr_text = self.run_cli(argv, expected_exit_code=1)
+                self.assertEqual(stderr_text, message + "\n")
+                self.assertEqual(self.sent, [])
+
+    def test_each_text_option_keeps_the_bytes_of_its_help(self) -> None:
+        commands = next(action for action in _cli._build_parser()._actions if action.dest == "command")
+        helps = {action.option_strings[0]: action.help for action in commands.choices["post-problem"]._actions}
+        self.assertEqual({flag: helps[flag] for flag in ("--title", "--statement", "--motivation", "--current-state",
+                                                         "--resolution-criteria", "--changes-if-resolved")}, {
+            "--title": "The problem title, 8-200 characters.",
+            "--statement": "The statement: the precise problem in TeX, 50-20000 characters, shown in a box. To add details"
+                           " under the box, add one line that holds only --- and then the details, 1-20000 characters.",
+            "--motivation": "The motivation: where the question comes from, with the line of results that leads to it,"
+                            " 100-10000 characters.",
+            "--current-state": "The current state: the prior work and why the problem is open, 100-10000 characters.",
+            "--resolution-criteria": "The resolution criteria: what a proof or a disproof must establish, 50-5000"
+                                     " characters.",
+            "--changes-if-resolved": "What a resolution would change: what a proof or a disproof decides or supplies for"
+                                     " work that exists, and which next question it opens, 100-5000 characters."
+                                     " Optional."})
+
+
 class TestVoteProblem(_MathCliTestCase):
     def test_a_downvote_sends_the_negative_value(self) -> None:
         self.run_cli(["vote-problem", _PROBLEM_ID, "--value", "-1"])
@@ -2542,10 +2619,10 @@ class TestPlainTextOfFreeTextFields(_MathCliTestCase):
 
     def test_the_post_normalization_character_rule_matches_the_server(self) -> None:
         refused_code_points = [code_point for code_point in range(0x10000)
-                               if _cli._NON_PLAIN_TEXT_CHARACTER_RE.search(chr(code_point))]
+                               if _cli.find_non_plain_text_character(chr(code_point)) is not None]
         self.assertEqual(refused_code_points,
                          [*range(0x00, 0x09), *range(0x0B, 0x20), 0x7F, *range(0xD800, 0xE000)])
-        self.assertIsNone(_cli._NON_PLAIN_TEXT_CHARACTER_RE.search(chr(0x1F600)))
+        self.assertIsNone(_cli.find_non_plain_text_character(chr(0x1F600)))
 
     def test_the_grand_challenge_fields_that_the_server_does_not_build_on_plain_text_keep_their_checks(self) -> None:
         # The server builds the title, the field, the problem statement, the current state, the resolution criteria,

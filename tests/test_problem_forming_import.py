@@ -608,7 +608,7 @@ class FormingImportTests(unittest.TestCase):
         self.addCleanup(source.doCleanups)
         source.record()
         source.mutate(cli.OPERATIONS['problem-candidate'], build_candidate('other'))
-        other = source.select_statement(identifier='other-statement', candidate_id='other', statement='Does another bound hold?')
+        other = source.select_statement(identifier='other-statement', candidate_id='other', statement='Does another bound hold for every finite construction?')
         records = source.store.snapshot()['records']
         plan = copy.deepcopy(records['cycle_plan']['cycle-1'])
         plan['id'] = 'unrelated-plan'

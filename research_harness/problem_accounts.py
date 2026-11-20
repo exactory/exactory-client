@@ -14,6 +14,34 @@ ACCOUNT_LIST_PARTS = ("answer_evidence", "boundaries", "explanatory_use", "alter
 STRENGTH_HEADS = ("range_of_instances", "constants", "exponents", "exactness")
 RELATION_KINDS = ("implies", "follows_from", "equivalent_to", "incompatible_with", "strengthens", "generalizes", "presents_anew")
 ALTERNATIVE_ROLES = ("stronger", "weaker", "same_assertion", "other_assertion", "no_alternative")
+# The members of each entry of the accounts, and of the objects that the registry of the entries and the walk of the
+# references read in an entry, as the arguments of fields(). Every check of these members reads its set here.
+_FACT_MEMBERS = ("id", "fact", "scope", "evidence", "evidence_ids")
+ACCOUNT_MEMBERS = dict(
+    answer=dict(required=("id", "status", "text", "evidence_ids")),
+    answer_evidence=dict(required=_FACT_MEMBERS + ("kind", "direction", "alternative_id"), optional=("date", "check_id")),
+    boundaries=dict(required=_FACT_MEMBERS + ("argument",), optional=("date", "check_id")),
+    explanatory_use=dict(required=_FACT_MEMBERS + ("answer_argument",), optional=("date", "check_id")),
+    alternatives=dict(required=("id", "neighbour", "form_id", "role"),
+                      optional=("relation_id", "surplus", "reason", "search_ids")),
+    strength=dict(required=("id", "head", "description", "alternative_ids", "no_alternative_reason"),
+                  code="problem_strength_incomplete"),
+    relations=dict(required=("id", "relation", "target", "alternative_id", "standing", "scope", "evidence", "evidence_ids",
+                             "earlier_statement", "consequence"), optional=("date",)),
+    checks=dict(required=("id", "target", "contradiction", "no_contradiction_reason", "result", "standing", "passed",
+                          "alternative_id", "evidence", "evidence_ids", "independence"), optional=("date", "lineage")),
+    search_coverage=dict(required=("id", "purpose", "search_ids", "unreached")),
+    refuted_conjectures=dict(required=("id", "statement", "identified_by", "sources", "evidence_ids")),
+    replacement=dict(required=("id", "refuted_id", "form_id", "evidence_ids", "account")),
+    places=dict(required=("id", "fact", "scope", "role", "relation_ids", "evidence", "evidence_ids"), optional=("date",)),
+    gain=dict(required=("id", "form", "claim", "relation_ids", "separate_grounds", "conjunction", "establishing_ids",
+                        "new_object_justification")),
+    separate_grounds=dict(required=("id", "relation_id", "evidence_ids")),
+    consequence=dict(required=("assertion", "instances_or_translation", "credited_to", "weaker_derivations")),
+    weaker_derivations=dict(required=("id", "alternative_id", "status", "reason", "evidence_ids")),
+    surplus=dict(required=("description", "status", "evidence_ids", "relation_ids")),
+    conjunction=dict(required=("description", "status", "evidence_ids")),
+)
 HISTORY_MISSING_MESSAGE = ("A gain claim and a passed test need a history. The candidate of the "
                            "statement must cite, in source.evidence, a forming call or a form outcome whose form was "
                            "recorded before the evidence of the gain or the plan of the test. Without such a form, record "
@@ -139,27 +167,9 @@ def validate_account_evidence(records, artifacts, accounts, entries, revision):
         for entry in accounts[part]}
     checks = {entry["id"]: entry for entry in accounts.get("checks", [])}
     for entry in entries.values():
-        if entry.get("role") == "weaker" and entry.get("surplus") is None:
-            raise ResearchError("problem_surplus_missing",
-                                "A weaker alternative needs surplus: {description, status, evidence_ids, relation_ids}. "
-                                "State what the statement asserts beyond this alternative, and set status to supported, "
-                                "used, supported_and_used or neither", {"id": entry["id"]})
-        for key in ("evidence_ids", "alternative_ids", "relation_ids", "establishing_ids"):
-            if key in entry:
-                strings(entry[key], "The account entry field " + key)
-        for key in ("relation_id", "check_id"):
-            if entry.get(key) is not None:
-                text(entry[key], "The account entry field " + key)
-        for key in ("surplus", "conjunction"):
-            if key in entry:
-                fields(entry[key], ("description", "status", "evidence_ids") + (("relation_ids",) if key == "surplus" else ()))
-                strings(entry[key]["evidence_ids"], "The evidence_ids of the " + key + " object")
-                if key == "surplus":
-                    strings(entry[key]["relation_ids"], "The relation_ids of the surplus")
         code = required_codes.get(entry["id"], "invalid_input")
         exploratory = entry["id"] in checks and entry.get("standing") != "test"
-        for reference in strategy.items(entry.get("evidence", []), "The evidence of an account entry", code="invalid_input"):
-            fields(reference, ("kind",), None)
+        for reference in entry.get("evidence", []):
             if reference['kind'] == 'record' and 'origin' in reference:
                 from .problem_forming_import import validate_imported_evidence
                 validate_imported_evidence(records, artifacts, reference, exploratory=exploratory)
@@ -232,7 +242,6 @@ def validate_alternatives(records, accounts, entries, statement):
                                 "other_assertion or no_alternative", {"neighbour": neighbour})
     forms = collect_forms(records)
     for entry in alternatives.values():
-        fields(entry, ("id", "neighbour", "form_id", "role"), ("relation_id", "surplus", "reason", "search_ids"))
         strategy.choice(entry["role"], ALTERNATIVE_ROLES, "The role of an alternative", "problem_neighbour_role_missing")
         for key in ("neighbour", "form_id"):
             if entry[key] is not None:
@@ -291,7 +300,6 @@ def validate_alternatives(records, accounts, entries, statement):
                                     "whose standing is established and consequence.credited_to is statement, or record "
                                     "the status supported or neither", {"id": entry["id"]})
     for entry in accounts["strength"]:
-        fields(entry, ("id", "head", "description", "alternative_ids", "no_alternative_reason"), code="problem_strength_incomplete")
         text(entry["head"], "The head of a strength entry")
     heads = [entry["head"] for entry in accounts["strength"]]
     if sorted(heads) != sorted(STRENGTH_HEADS):
@@ -334,7 +342,6 @@ def validate_relations(accounts, entries, alternatives):
         consequence = entry["consequence"]
         if consequence is None:
             continue
-        fields(consequence, ("assertion", "instances_or_translation", "credited_to", "weaker_derivations"))
         for key in ("assertion", "instances_or_translation"):
             text(consequence[key], "The consequence field " + key)
         text(consequence["credited_to"], "The credited_to of a consequence")
@@ -345,7 +352,6 @@ def validate_relations(accounts, entries, alternatives):
                                 "alternative gives the consequence")
         compared = []
         for comparison in consequence["weaker_derivations"]:
-            fields(comparison, ("id", "alternative_id", "status", "reason", "evidence_ids"))
             strategy.choice(comparison["status"], ("not_attempted", "derived", "not_derived"), "The status of a weaker_derivations entry", "invalid_input")
             text(comparison["reason"], "The reason of a weaker_derivations entry")
             strings(comparison["evidence_ids"], "The evidence_ids of a weaker_derivations entry")
@@ -366,20 +372,60 @@ def is_full_reading(reference):
             or reference["kind"] == "record" and reference.get("origin") and reference["record_kind"] == "reading")
 
 
-def validate_place_shape(entry):
-    # A place is a fact about a work: the work states the statement, needs it, stops at it, or has results that the statement continues.
-    fields(entry, ("id", "fact", "scope", "role", "relation_ids", "evidence", "evidence_ids"), ("date",))
-    text(entry["fact"], "The fact of a place")
-    text(entry["scope"], "The scope of a place")
-    try:
-        fields(entry["role"], ("kind", "description"))
-        for key in ("kind", "description"):
-            text(entry["role"][key], "The " + key + " of the role of a place")
-    except ResearchError as error:
-        raise ResearchError("invalid_input",
-                            "The role of a place is an open value {kind, description}: how the statement stands to "
-                            "the item of the place. The described kinds are stated, needed, decides, stops and "
-                            "continues") from error
+def validate_entry_shapes(accounts):
+    """Check the members of every entry of the accounts, and the type of each member that the entry registry, the
+    walk of the references and the evidence check read, before any of them reads an entry."""
+    for part in ACCOUNT_LIST_PARTS:
+        for entry in strategy.items(accounts.get(part, []), "The accounts part " + part, code="invalid_input"):
+            fields(entry, **ACCOUNT_MEMBERS[part])
+    fields(accounts["answer"], **ACCOUNT_MEMBERS["answer"])
+    for relation in accounts["relations"]:
+        if relation["consequence"] is not None:
+            fields(relation["consequence"], **ACCOUNT_MEMBERS["consequence"])
+            for comparison in strategy.items(relation["consequence"]["weaker_derivations"],
+                                             "The weaker_derivations of a consequence", code="invalid_input"):
+                fields(comparison, **ACCOUNT_MEMBERS["weaker_derivations"])
+    if accounts.get("gain") is not None:
+        fields(accounts["gain"], **ACCOUNT_MEMBERS["gain"])
+        for ground in strategy.items(accounts["gain"]["separate_grounds"], "The separate_grounds of the gain",
+                                     code="invalid_input"):
+            fields(ground, **ACCOUNT_MEMBERS["separate_grounds"])
+    # A place is a fact about a work: the work states the statement, needs it, stops at it, or has results that the
+    # statement continues. Its role has a shape of its own; the checks of every entry below read role as the role of an
+    # alternative.
+    for place in accounts.get("places", []):
+        text(place["fact"], "The fact of a place")
+        text(place["scope"], "The scope of a place")
+        try:
+            fields(place["role"], ("kind", "description"))
+            for key in ("kind", "description"):
+                text(place["role"][key], "The " + key + " of the role of a place")
+        except ResearchError as error:
+            raise ResearchError("invalid_input",
+                                "The role of a place is an open value {kind, description}: how the statement stands to "
+                                "the item of the place. The described kinds are stated, needed, decides, stops and "
+                                "continues") from error
+    for entry in collect_entries(accounts):
+        text(entry["id"], "The ID of an account entry")
+        if entry.get("role") == "weaker" and entry.get("surplus") is None:
+            raise ResearchError("problem_surplus_missing",
+                                "A weaker alternative needs surplus: {description, status, evidence_ids, relation_ids}. "
+                                "State what the statement asserts beyond this alternative, and set status to supported, "
+                                "used, supported_and_used or neither", {"id": entry["id"]})
+        for key in ("evidence_ids", "alternative_ids", "relation_ids", "establishing_ids"):
+            if key in entry:
+                strings(entry[key], "The account entry field " + key)
+        for key in ("relation_id", "check_id"):
+            if entry.get(key) is not None:
+                text(entry[key], "The account entry field " + key)
+        for key in ("surplus", "conjunction"):
+            if key in entry:
+                fields(entry[key], **ACCOUNT_MEMBERS[key])
+                strings(entry[key]["evidence_ids"], "The evidence_ids of the " + key + " object")
+                if key == "surplus":
+                    strings(entry[key]["relation_ids"], "The relation_ids of the surplus")
+        for reference in strategy.items(entry.get("evidence", []), "The evidence of an account entry", code="invalid_input"):
+            fields(reference, ("kind",), None)
 
 
 def validate_places(records, accounts, entries):
@@ -405,25 +451,9 @@ def validate_accounts(records, artifacts, value):
     accounts = copy.deepcopy(value["accounts"])
     fields(accounts, ("answer", "answer_evidence", "boundaries", "explanatory_use", "alternatives", "strength", "relations", "refuted_conjectures"),
            ("checks", "gain", "search_coverage", "replacement", "places"))
-    for part in ACCOUNT_LIST_PARTS:
-        strategy.items(accounts.get(part, []), "The accounts part " + part, code="invalid_input")
-    fields(accounts["answer"], ("id", "status", "text", "evidence_ids"))
-    # Check the nested shapes before indexing them in the shared entry registry.
-    for relation in accounts["relations"]:
-        fields(relation, ("id", "relation", "target", "alternative_id", "standing", "scope", "evidence", "evidence_ids", "earlier_statement", "consequence"), ("date",))
-        if relation["consequence"] is not None:
-            fields(relation["consequence"], ("assertion", "instances_or_translation", "credited_to", "weaker_derivations"))
-            strategy.items(relation["consequence"]["weaker_derivations"], "The weaker_derivations of a consequence", code="invalid_input")
-    if accounts.get("gain") is not None:
-        fields(accounts["gain"], ("id", "form", "claim", "relation_ids", "separate_grounds", "conjunction", "establishing_ids", "new_object_justification"))
-        strategy.items(accounts["gain"]["separate_grounds"], "The separate_grounds of the gain", code="invalid_input")
-    # The role of a place has its own shape. The checks of every entry below read role as the role of an alternative.
-    for place in accounts.get("places", []):
-        validate_place_shape(place)
+    validate_entry_shapes(accounts)
     entries = {}
     for entry in collect_entries(accounts):
-        fields(entry, ("id",), None)
-        text(entry["id"], "The ID of an account entry")
         if entry["id"] in entries or entry["id"] == "statement":
             raise ResearchError("problem_account_id_conflict",
                                 "Two entries of the accounts have this ID, or an entry has the ID statement. "
@@ -453,7 +483,6 @@ def validate_accounts(records, artifacts, value):
                                    ("boundaries", ("argument",), "problem_boundary_evidence_missing"),
                                    ("explanatory_use", ("answer_argument",), "problem_explanatory_evidence_missing")):
         for entry in accounts[part]:
-            fields(entry, ("id", "fact", "scope", "evidence", "evidence_ids") + additional, ("date", "check_id"))
             text(entry["fact"], "The fact of an account entry")
             text(entry["scope"], "The scope of an account entry")
             if part == "answer_evidence":
@@ -722,8 +751,6 @@ def validate_tier_two(records, value, accounts, entries, alternatives):
                             "A gain claim and a passed test need the second tier of the accounts. "
                             "Give checks, gain (null when the record claims no gain) and a nonempty search_coverage")
     for entry in checks.values():
-        fields(entry, ("id", "target", "contradiction", "no_contradiction_reason", "result", "standing", "passed",
-                       "alternative_id", "evidence", "evidence_ids", "independence"), ("date", "lineage"))
         fields(entry["target"], ("kind", "description"))
         strategy.choice(entry["target"]["kind"], ("instance", "family", "consequence", "asymptotic_regime"), "The kind of the target of a check", "invalid_input")
         text(entry["target"]["description"], "The description of the target of a check")
@@ -765,7 +792,6 @@ def validate_tier_two(records, value, accounts, entries, alternatives):
                                     "An agreement without such a check is an observation and no evidence for the answer: "
                                     "remove the entry, and keep the check in checks")
     for coverage in accounts.get("search_coverage", []):
-        fields(coverage, ("id", "purpose", "search_ids", "unreached"))
         strategy.choice(coverage["purpose"], ("earlier_statements", "alternatives", "gathered_as_case"), "The purpose of a search_coverage entry", "invalid_input")
         text(coverage["unreached"], "The unreached field of a search_coverage entry")
         strings(coverage["search_ids"], "The search_ids of a search_coverage entry", nonempty=True)
@@ -784,7 +810,6 @@ def validate_tier_two(records, value, accounts, entries, alternatives):
                             "consequence that is credited to the statement. Name such relations in gain.relation_ids, or "
                             "record gain as null")
     for ground in gain["separate_grounds"]:
-        fields(ground, ("id", "relation_id", "evidence_ids"))
         if ground["relation_id"] not in gain["relation_ids"]:
             raise ResearchError("problem_gain_relations_invalid",
                                 "A separate_grounds entry names in relation_id a relation that "
@@ -882,7 +907,6 @@ def validate_replacement(records, artifacts, accounts, entries):
     required_forms = {identifier for identifier in lineage & refuted if forms[identifier]["purpose"]["kind"] == "expected_statement"}
     conjectures = {entry["id"] for entry in accounts["refuted_conjectures"]}
     for entry in accounts["refuted_conjectures"]:
-        fields(entry, ("id", "statement", "identified_by", "sources", "evidence_ids"))
         text(entry["statement"], "The statement of a refuted_conjectures entry")
         strategy.choice(entry["identified_by"], ("author", "search", "reviewer"), "The identified_by of a refuted_conjectures entry", "invalid_input")
         strategy.evidence(records, artifacts, entry["sources"], required=entry["identified_by"] != "author")
@@ -891,7 +915,6 @@ def validate_replacement(records, artifacts, accounts, entries):
             resolve_entry(entries, identifier)
     covered_forms, covered_conjectures = set(), set()
     for entry in accounts.get("replacement", []):
-        fields(entry, ("id", "refuted_id", "form_id", "evidence_ids", "account"))
         text(entry["account"], "The account of a replacement entry")
         strings(entry["evidence_ids"], "The evidence_ids of a replacement entry")
         evidence = collect_entry_evidence(entries, entry["id"])

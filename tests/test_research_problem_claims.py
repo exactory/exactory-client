@@ -55,9 +55,11 @@ class ProblemCase(LiteratureCase):
         self.assertEqual(self.store.revision, revision)
 
     def build_statement(self, identifier="statement-1", **changes):
-        return dict({"id": identifier, "title": "A finite bound problem", "area": "math.CO",
-            "statement": r"For every $n$, does $B(n)\leq n^2$ hold?",
-            "resolution_criteria": r"Prove the bound for all $n$ or exhibit a counterexample.",
+        # 0.91.8: the statement has the 50 characters that the post asks for. The title and the criteria are shorter,
+        # so that a packet of this fixture keeps nearly the size against which the capacity tests are calibrated.
+        return dict({"id": identifier, "title": "Finite bound", "area": "math.CO",
+            "statement": r"For every $n$, does the bound $B(n)\leq n^2$ hold?",
+            "resolution_criteria": r"Prove it for all $n$, or exhibit a counterexample.",
             "neighbours": [], "formal_statement": None}, **changes)
 
     def select_statement(self, **changes):

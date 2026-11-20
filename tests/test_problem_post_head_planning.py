@@ -215,7 +215,7 @@ class PostedHeadPlanningTests(unittest.TestCase):
         case.historical_v5 = True
         original_statement_id = case.selected['id']
         case.selected = case.select_statement(identifier='second-statement',
-                                               statement='A distinct complete synthetic problem.')
+                                               statement='A distinct complete synthetic problem about every finite construction.')
         for index, search in enumerate(case.searches):
             search = dict(search, question=case.selected['statement'])
             case.put('literature_search', search['id'], search)

@@ -201,7 +201,7 @@ class TestDeclarationTests(ProblemToolsCase):
         self.assertEqual(problem_claims.compute_statement_digest(revised), expected)
         self.assertEqual(development.compute_plan_statement_digest(records, planned), expected)
         self.select_statement(identifier="revised-criteria", statement=self.objective["statement"],
-            resolution_criteria="Prove a strict bound instead.", revises_statement_id=revised["id"])
+            resolution_criteria="Prove a strict bound instead, or give a counterexample for some n.", revises_statement_id=revised["id"])
         records = self.store.snapshot()["records"]
         self.assertNotEqual(problem_claims.compute_statement_digest(problem_claims.find_current_statement(records)), expected)
         self.assertEqual(development.compute_plan_statement_digest(records, planned), expected)

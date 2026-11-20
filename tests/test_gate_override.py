@@ -12,7 +12,7 @@ import sys
 from unittest import mock
 import zipfile
 
-from problem_accounts_fixtures import CHANGES_IF_RESOLVED_TEXT
+from problem_accounts_fixtures import CHANGES_IF_RESOLVED_TEXT, CURRENT_STATE_TEXT, MOTIVATION_TEXT
 from research_harness import cli, integration, overrides, problem_claims, problem_delivery
 from research_harness.errors import ResearchError
 from research_harness.gates import STAGES
@@ -575,9 +575,9 @@ class ProblemOverrideTests(OverrideCommandMixin, ProblemCase):
         self.assertEqual(directory.name, problem_delivery.compute_export_digest({path.name: path.read_bytes() for path in directory.iterdir()}))
         expected = {"title.txt": statement["title"] + "\n", "statement.md": statement["statement"] + "\n",
                     "criteria.md": statement["resolution_criteria"] + "\n",
-                    "motivation.md": "The bound would connect the finite constructions.\n",
+                    "motivation.md": MOTIVATION_TEXT + "\n",
                     "changes-if-resolved.md": CHANGES_IF_RESOLVED_TEXT + "\n",
-                    "state.md": "Only bounded examples have been established.\n",
+                    "state.md": CURRENT_STATE_TEXT + "\n",
                     "formal-statement.txt": statement["formal_statement"]["text"] + "\n",
                     "citations.json": json.dumps(problem_delivery.project_citations(before, self.artifacts), ensure_ascii=False, sort_keys=True, indent=2) + "\n",
                     "citation-refs.json": json.dumps([{"referenceString": "A. Researcher. An authored example",
@@ -610,7 +610,7 @@ class ProblemOverrideTests(OverrideCommandMixin, ProblemCase):
     def test_new_statement_requires_a_new_override(self):
         self.prepare_problem()
         self.record_override(self.build_override(gate="post"))
-        self.select_statement(identifier="statement-2", statement="A different mathematical bound.")
+        self.select_statement(identifier="statement-2", statement="A different mathematical bound holds for every finite construction.")
         response = self.export_problem()
         self.assertNotEqual(response.returncode, 0)
         self.assertIn("gate_override_required", response.stderr)
@@ -660,9 +660,9 @@ class NormalProblemExportTests(OverrideCommandMixin, ProblemDeliveryCase):
         records = self.store.snapshot()["records"]
         statement = self.selected
         expected = {"title.txt": statement["title"] + "\n", "statement.md": statement["statement"] + "\n",
-            "criteria.md": statement["resolution_criteria"] + "\n", "motivation.md": "The bound would connect the finite constructions.\n",
+            "criteria.md": statement["resolution_criteria"] + "\n", "motivation.md": MOTIVATION_TEXT + "\n",
             **added,
-            "state.md": "Only bounded examples have been established.\n", "formal-statement.txt": statement["formal_statement"]["text"] + "\n",
+            "state.md": CURRENT_STATE_TEXT + "\n", "formal-statement.txt": statement["formal_statement"]["text"] + "\n",
             "citations.json": json.dumps(problem_delivery.project_citations(records, self.artifacts), ensure_ascii=False, sort_keys=True, indent=2) + "\n",
             "citation-refs.json": json.dumps([{"referenceString": "A. Researcher. An authored example",
                 "bibliography": {"arxivId": "2601.00001v1", "title": "An authored example",

@@ -443,7 +443,7 @@ class ProblemDeliveryTests(ProblemDeliveryCase):
     def test_statement_selection_makes_prior_finding_and_decision_stale(self):
         self.prepare_ready()
         self.record_post_decision()
-        self.select_statement(identifier="statement-2", statement="A changed exact mathematical claim.")
+        self.select_statement(identifier="statement-2", statement="A changed exact mathematical claim about every finite construction.")
         report = status_report(self.store)
         codes = {item["code"] for item in report["obligations"]}
         self.assertIn("problem_openness_stale", codes)

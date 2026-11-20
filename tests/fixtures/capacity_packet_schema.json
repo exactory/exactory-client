@@ -18432,14 +18432,17 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.exactory_api": {
-      "ast_sha256": "5ded8f1b4dbad12f2914824d5d96ffafc96605486a034deb1180fa23bc70f17d",
+      "ast_sha256": "d5399b2da086a80a8d3ea6bb39cc0930ae99bcbf17aa9fb8fa62529e77a60626",
       "functions": {
         "count_utf16_units": "94b34cedaf49f6292a6c2aaa8363a389ee4b53d2874ebd1aebd5b6f17b9f2a7a",
+        "find_non_plain_text_character": "ae78413e9c507f6e9460dfd32c6b4cf17a9af2fc324ebe6daa02f29f41002f11",
+        "find_post_text_violation": "705dcb7d8e30411e193287eb16bbccf766ba1f298a33ad0a15968ba42fb27f7a",
         "normalize_plain_text_line_breaks": "aeb8517887eb671bf88ca6db552b134b4d7169db47a5d5090fc0bad2e227c9fa",
-        "read_api_base_url": "638470d0529b8ad80f32b4b7888087cd52f61da1c6589929ac147e9be655d472"
+        "read_api_base_url": "638470d0529b8ad80f32b4b7888087cd52f61da1c6589929ac147e9be655d472",
+        "split_statement_details": "79fbce67e4ca3b9e85bbf2711d5ff8d5d825ad51473801dfcc3ca91d6a23b274"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.91.6: the text limits, the trim characters, the line-break rule and the UTF-16 count of the post command have their home here; the module builds no packet."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.91.6: the text limits, the trim characters, the line-break rule and the UTF-16 count of the post command have their home here; the module builds no packet. Reviewed 0.91.8: POST_TEXT_BOUNDS holds the bounds of every text field of a problem post in place of the two limits of What a resolution would change, and find_non_plain_text_character, split_statement_details and find_post_text_violation hold the character rule, the split at the --- line and the order of the rules of a post text, which bin/exactory and problem_claims read; the module builds no packet."
     },
     "research_harness.execution": {
       "ast_sha256": "ce6a8ef2b2c67fa2c35b1ed99d867e09aeddbfe240d90e80d953388af9a870b1",
@@ -19708,7 +19711,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.problem_accounts": {
-      "ast_sha256": "a934d3956999f17cdf6ed8766ef45fb268c10e33674962033712e0d5e47349b2",
+      "ast_sha256": "353732663bac279e6b1fb13a480d5e72ff44aa573b250ccc359799ab83f53fdf",
       "functions": {
         "collect_account_evidence": "75b28f01bcd1ecc1f3b2de937cd21a1ff425239022ade25af1fa41c10dee7940",
         "collect_candidate_form_history": "cec18153174e589f30d75fde922f35e00c9aa88f4bcb477ab571c73e5c04b763",
@@ -19726,20 +19729,20 @@
         "require_candidate_form": "6dab6963d3354a4f2bac92c5b22fdf95ebbf08ecc880f54121384b27a373760c",
         "require_prior_form": "f81c98e9b67371866fc6d50ab0d0f6247f1103156e30ffbf2b7bacda99097932",
         "resolve_entry": "e37c971f0a38318e7eb38ab3143ac917b305ce3459b7ceea989bcf0277011353",
-        "validate_account_evidence": "7d1221620b5c8d3dabd0c3467c7e309497d9de9b3bad7a1f56fe0da364b91967",
-        "validate_accounts": "d2f456ee06fe888c12f74e010d95d60e0320f964f3b1c39000b504fb27106d9f",
-        "validate_alternatives": "be34a0c86838a1b2f9836281bac7ee029d06fa0fdd05cb3746823608e8bdad55",
+        "validate_account_evidence": "760b08b3dc12c15d401d5290b2aad582c2a990197d0a530d304a748a049d98bd",
+        "validate_accounts": "d142a5a28acb7ba7bae90fc051b644ccff68ecc2a21497a25c7331c5e1e3daf6",
+        "validate_alternatives": "d00c59220aad696337bf17113e219a99228ac344861a411b093b2555781cd17f",
+        "validate_entry_shapes": "09bbe82f063400687ecb6d95356487be455e75b106470db19d74c4305f69b6a4",
         "validate_fact": "41cb4cabbf3dbb684b0ed2dfe316bcc5d12dadded92fd4a1ec9bc7bbfd5ab257",
         "validate_paragraph": "f638d8e2eb2ab67a9c5b530d737e44b21141f22de8faa2e958cfa5e5c107fb7e",
-        "validate_place_shape": "ed5ff141c2cc746f08c55610c0ae4284615bbb285f9282b279632e6ea15bed4b",
         "validate_places": "dc3e1eeb2f1db0313949dee6c53d38c767a43de1c60b4bcf497de71b22ca45c0",
-        "validate_relations": "eafaf95820067cc5bbf3074c030ca7ab8f3f2205ce01f79b036d7767cc159036",
-        "validate_replacement": "8c37fb62d81cb9fd1778f0e37f764b9b1b1c5efae9977ae533a15fda8a854a6f",
+        "validate_relations": "523b7fd4ba5128a49cac7f9a10725996da1ce9b4305654da8d476389571ac94f",
+        "validate_replacement": "04cbccb01dd6e9ec46f8c3954edc32ffa96ee6d05432bd9c8e231e5b1e70e71c",
         "validate_test": "ece29122c8068550d0325d5fd649a25193958d22462de19c92a9aa2a58728eaf",
-        "validate_tier_two": "5f017a3a7b980413a389c23d6b91e19a4b9a39a9d2d59e3dcaf2621a60ea7d11"
+        "validate_tier_two": "6bebde63f558d2754ca31007de58d396012393ad4609caf79874e7ecbadc97b1"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in describe_account_records; version 1 follows its existing projection. Reviewed 0.91.2 snapshot and reading dates, versioned history diagnostics and form checks. Traced entry_id and undated through validate_value to command refusals and problem_delivery._assess_minimum gate/status obligations only; classified both as non-packet names after verifying that packet obligations instead come from collect_results/assess_account_currency. The already reviewed version 2 probe projection and accounts_version declarations remain intact; no further packet members or closed shapes change. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.6: validate_accounts accepts the optional part places and validates each entry as a fact with a role and relation_ids; is_full_reading holds the full-reading test that validate_tier_two used inline before; value.accounts.places is declared for the result and adjudicator packets; validate_place_shape checks the members and the role of a place before the registry of the entries is built, so that the checks of every entry read a place of a checked shape; it writes no packet member."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in describe_account_records; version 1 follows its existing projection. Reviewed 0.91.2 snapshot and reading dates, versioned history diagnostics and form checks. Traced entry_id and undated through validate_value to command refusals and problem_delivery._assess_minimum gate/status obligations only; classified both as non-packet names after verifying that packet obligations instead come from collect_results/assess_account_currency. The already reviewed version 2 probe projection and accounts_version declarations remain intact; no further packet members or closed shapes change. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.6: validate_accounts accepts the optional part places and validates each entry as a fact with a role and relation_ids; is_full_reading holds the full-reading test that validate_tier_two used inline before; value.accounts.places is declared for the result and adjudicator packets; validate_place_shape checks the members and the role of a place before the registry of the entries is built, so that the checks of every entry read a place of a checked shape; it writes no packet member. Reviewed 0.91.8: validate_entry_shapes checks the members of every account entry from ACCOUNT_MEMBERS, and the types that the entry registry, collect_entry_evidence and validate_account_evidence read, before the registry is built; it takes the place of validate_place_shape and of the later member checks of the parts, validate_account_evidence keeps the checks of the evidence references, and no packet member or shape changes."
     },
     "research_harness.problem_areas": {
       "ast_sha256": "bd7409ab6ad4c0cb5283bf7676cc985299d034a8e2829f5791537dd87e65faaa",
@@ -19814,7 +19817,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.problem_claims": {
-      "ast_sha256": "81e6ef36fe7678dca8591f449d13bb851c301356b2d9f467e4af2c9f4b33d3ef",
+      "ast_sha256": "f460d380852728f2474a8d818526993af863dfa1f439dac056f9a6b0a4036cfa",
       "functions": {
         "assess_assessment": "c76361c42d4646f58cde01126a23215e05c0bcaa5a8b5e84cda3e7c6c6f22600",
         "compute_problem_evidence_digest": "a3db49acd6cc12448c855b12c7f0cac6923493ae6aeb259a09577f8a0436c834",
@@ -19827,6 +19830,7 @@
         "find_value": "886d73105aba50e22e7101cfff5321449afda845d7c8588065fdd22a1e6263db",
         "has_retired_kind": "0c83aa565c874bf42ef105ef3875c32c40136e4b336d6bd6b61d9dccf452124d",
         "initialize_problem": "f6d847d214ac141e666b280ce1e8511e729244a7b45e04606806f7b8739cf1ae",
+        "prepare_value": "673119628bfe3c7c3ceb8cd2aa2279558a0a5102e2881ff68f4209d926ae153f",
         "record_assessment": "e7e433c59e41766bdef4c1a4c52c60151bc68bde4e26c941fc9d1b6f4c605f18",
         "record_decision": "e5c74364a8b3be9de54ca3fc45e2beeb5605cb17fe865b304c6c73a62f139e67",
         "record_formal_check": "f6ac1dd2a649667278fb34f238433687b3421fd30499c6f5618adb03a46bcf3a",
@@ -19834,13 +19838,14 @@
         "record_post_external": "f3ffc32349c9b4bbcbe7404214842958cf0bf186d2208ddc9fb54c18e7fe9623",
         "record_post_time": "56572bb78c98d98f74226b2b56b0dbf4a640a165a524830b1160887b34975e7b",
         "record_posted": "b4340fae5603e4925ffbbd9323407d68f05ec02393f005b7ffdf0849067e0421",
-        "record_statement": "e4c06a7d93b5dbe3dc9621e0ea500a42bf58f3d625bfc85b72255aa837333e57",
-        "record_value": "a4150587ce07e8742025e7956e01f08c994859810323c137faef855f200db919",
+        "record_statement": "5229443067aa896c830c2a70a23a71a765686f6961546ee172772a54f3a1989f",
+        "record_value": "dbf74747752e6497f2c4b953b331a402f38e474dfe24ebb129fd6b184c2d3053",
+        "require_post_texts": "dfd9b3f08b56120a6d7717db8e2fa9b4c6cc1352731b40b4c8c475815a7bb19b",
         "require_problem": "abc57b391caad71c497184f1c463ca37f7f7cd03e0d1c2f75dc7d6fed40b4dec",
         "validate_area": "169a62a8bd4e54e05e164ae4ad900ff23b22296f199fbdb9f77f66ebae85a75a"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in describe_value_size; version 1 follows its existing projection. Reviewed 0.91.2 record_value accounts_version=2: result and adjudicator value schemas already declare accounts_version, and describe_value_size preserves the reviewed versioned account projection. No additional packet fields or shapes change. Reviewed 0.91.3: initialize_problem refuses the removed kind of start before any record is built; no packet field or shape changes. Reviewed 0.91.6: record_value requires changes_if_resolved in a new value record, requires accounts.places through validate_value, and checks the length of the joined text; a stored value record keeps its validation."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in describe_value_size; version 1 follows its existing projection. Reviewed 0.91.2 record_value accounts_version=2: result and adjudicator value schemas already declare accounts_version, and describe_value_size preserves the reviewed versioned account projection. No additional packet fields or shapes change. Reviewed 0.91.3: initialize_problem refuses the removed kind of start before any record is built; no packet field or shape changes. Reviewed 0.91.6: record_value requires changes_if_resolved in a new value record, requires accounts.places through validate_value, and checks the length of the joined text; a stored value record keeps its validation. Reviewed 0.91.8: record_statement refuses a new statement whose title, statement, details or resolution criteria the post would refuse, prepare_value holds the checks of record_value and refuses a section text that the post would refuse, and require_post_texts raises both refusals; the statement and value records and every packet keep their shapes."
     },
     "research_harness.problem_delivery": {
       "ast_sha256": "5ca6840d438a2173ab3d0fffcf7f1ea70244c6f93ea32cef68450209675f19f8",
@@ -42420,7 +42425,10 @@
     "source_changed": "Count of entries whose own source no longer matches the inventory, in the carried-reading receipt only.",
     "undated": "Reviewed 0.91.2: problem_accounts.validate_fact writes undated only in problem_account_date_missing ResearchError.details. Its validate_value callers are record_value (command refusal) and problem_delivery._assess_minimum (gate/status obligations), not reviewer packet construction. Native openness assessment_error gaps capture reading/deferral errors and never these account validators.",
     "forecast": "Internal describe_minimum_forecast return value; export stores it under audit_forecast.",
-    "supporting": "Internal bind_minimum_records return value listing supporting reading records; not a packet member."
+    "supporting": "Internal bind_minimum_records return value listing supporting reading records; not a packet member.",
+    "character": "Reviewed 0.91.8: exactory_api.find_post_text_violation returns character, the code point of a refused character, which problem_claims.require_post_texts writes only in the details of problem_statement_post_text_invalid and problem_value_post_text_invalid; character is also a key of the refusal message tables of problem_claims. Never a packet member.",
+    "column": "Reviewed 0.91.8: exactory_api.find_post_text_violation returns column, the place of a refused character in its line, which problem_claims.require_post_texts writes only in ResearchError.details. Never a packet member.",
+    "statement_details": "Reviewed 0.91.8: a key of exactory_api.POST_TEXT_BOUNDS, the bounds of the text after the --- line of a statement, which problem_claims writes only as the field of a problem_statement_post_text_invalid refusal. A statement record keeps the whole text in statement, so the name is never a packet member."
   },
   "non_packet_sites": [
     {
