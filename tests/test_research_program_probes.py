@@ -184,8 +184,8 @@ class ProgramProbeRecordingTests(ProgramProbeCase, LiteratureCase):
         script.write_text("print('unread output')\n")
         context = self.build_run_context()
         commit = probe.commit_probe_mutation
-        def change_caller_context(store, operation, payload, request_id):
-            receipt = commit(store, operation, payload, request_id)
+        def change_caller_context(store, operation, payload, request_id, **options):
+            receipt = commit(store, operation, payload, request_id, **options)
             if operation is probe.record_probe_intent:
                 context["read_outputs"].append("stdout")
             return receipt

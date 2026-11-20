@@ -7413,6 +7413,64 @@
         "test_call_payload_rebuild.CallPayloadRebuildTests.test_staged_start_check_reads_the_definition",
         "test_research_cli.StagedReviewCliTests.test_accept_requires_a_committed_capture_and_maps_to_the_child_assignment"
       ]
+    },
+    {
+      "id": "evidence-shape-refusal-names-one-array-without-its-entries",
+      "record": "20261115234509-bar-slot-ends-on-evidence-form-and-route-input-limit",
+      "class": "refusal notice of an evidence array",
+      "summary": "A study bar reviewer wrote the artifact member of a packet evidence entry and the citation of a prior_context passage as evidence entries. The check evidence.shape stopped at the first refused entry and gave only the path of the array and its message, and the notice of each replacement had empty details. The prompt of a study review states no form of an evidence entry, so the two replacements returned refused forms again: 45 of 45, 45 of 45 and 15 of 15 entries of every evidence array were refused, and the slot position ended without a bar. The path of a refusal also did not name the array in two places: the evidence of a reassessment finding was refused under the path /reassessment or under no path, and the evidence of an adjudication under no path.",
+      "expected": "The check evidence.shape checks every entry of the array and raises the code and the message of the first refused entry. Its details add refused_indexes (the positions of the refused entries in the array of the answer, at most 100), refused_count and notice, the accepted forms of an evidence entry, in the form of record reference that the call accepts. An array of the three forms that is refused as a whole gets notice alone, and an array of another grammar gets the positions of its refused entries and never notice. Every caller of the three forms names its array in path, the notice of a replacement shows the three details, and a stored refusal or replacement keeps its details and stays verified.",
+      "fixed_in": "0.91.7",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_study_evidence_forms.IncidentSessionTests.test_a_bar_refused_for_the_incident_forms_is_replaced_with_their_positions_and_recorded",
+        "test_study_evidence_forms.ShapeRefusalTests.test_the_notice_of_a_wrapped_descriptor_names_its_position_and_the_three_forms",
+        "test_study_evidence_forms.ShapeRefusalTests.test_every_refused_entry_is_named_with_the_forms_of_its_binding",
+        "test_study_evidence_forms.ShapeRefusalTests.test_a_refused_array_gets_the_forms_alone",
+        "test_study_evidence_forms.ShapeRefusalTests.test_the_positions_stop_at_their_limit_and_the_count_does_not",
+        "test_study_evidence_forms.ShapeRefusalTests.test_a_malformed_entry_after_a_refused_entry_keeps_the_first_refusal",
+        "test_study_evidence_forms.OtherGrammarTests.test_a_verification_final_names_the_refused_link_of_its_check",
+        "test_study_evidence_forms.OtherGrammarTests.test_a_v3_study_result_names_the_position_of_a_source_link_after_typed_references",
+        "test_study_evidence_forms.OtherGrammarTests.test_a_readiness_series_names_the_refused_reference_of_its_check",
+        "test_study_evidence_forms.ArrayPathTests.test_a_reassessment_finding_of_a_review_names_its_evidence_array",
+        "test_study_evidence_forms.ArrayPathTests.test_a_staged_final_names_the_array_of_a_reassessment_finding_and_of_an_adjudication",
+        "test_study_evidence_forms.ArrayPathTests.test_a_problem_adjudication_names_its_evidence_array",
+        "test_study_evidence_forms.StoredShapeRefusalTests.test_a_stored_replacement_without_shape_details_stays_verified_with_the_same_fingerprint"
+      ]
+    },
+    {
+      "id": "probe-capture-recorded-a-store-refusal-as-the-outcome",
+      "record": "20261116013236-probe-capture-fails-when-another-writer-commits",
+      "class": "concurrency",
+      "summary": "A probe whose program exited with status 0 was recorded as failed, with the observation \"Probe output capture failed: stale_revision\" and no outputs, while the capture of a second probe committed its records. Each write of a capture was a compare-and-swap on the revision of the whole store, with 8 attempts within 8 seconds, and one attempt took about 4 seconds on a store of the study's size. A refusal while an output was pinned became the recorded outcome, and a probe id cannot be recorded again. Probes that were launched together were refused with stale_revision or store_busy before their programs ran.",
+      "expected": "The records that the launcher and the worker write for a probe commit against the records that their preparation read, and each waits up to 600 seconds for a busy store. A refusal of the store or of the artifact store during a capture is raised and is not recorded as an outcome. The message of a store refusal after the wait says what the same command with the same id does next, and after the launch that command records the outcome from the kept files. Probes whose launches or captures meet are each recorded with the exit status of the program and every output. An outcome file that an earlier worker wrote for stale_revision or store_busy is captured again. A failed read of an output records capture_failure with the exit status of the program.",
+      "fixed_in": "0.91.7",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_probe_capture_contention.ProbeCaptureContentionTests.test_capture_keeps_every_output_when_a_commit_meets_every_attempt_of_an_output_pin",
+        "test_probe_capture_contention.ProbeCaptureContentionTests.test_launcher_records_the_program_status_when_commits_meet_its_capture",
+        "test_probe_capture_contention.ProbeCaptureContentionTests.test_intent_and_launch_are_recorded_when_a_commit_meets_every_attempt",
+        "test_probe_capture_contention.ProbeBusyStoreTests.test_store_busy_through_nine_attempts_of_an_output_pin_is_waited_for",
+        "test_probe_capture_contention.ProbeBusyStoreTests.test_store_busy_beyond_the_wait_records_no_outcome_and_the_same_id_finishes",
+        "test_probe_capture_contention.ProbeBusyStoreTests.test_intent_refused_beyond_the_wait_records_nothing_and_the_same_command_runs_the_program",
+        "test_probe_capture_contention.ProbeBusyStoreTests.test_launch_claim_refused_beyond_the_wait_keeps_the_intent_and_the_same_command_records_an_interruption",
+        "test_probe_capture_contention.ProbeEarlierReleaseTests.test_outcome_file_of_a_refused_store_is_captured_again_from_the_terminal_evidence",
+        "test_probe_capture_contention.ProbeCaptureFailureTests.test_unsafe_output_keeps_the_exit_status_of_the_program_beside_the_failed_capture"
+      ]
+    },
+    {
+      "id": "ending-step-copied-over-steps-of-its-command",
+      "record": "20261115234509-bar-slot-ends-on-evidence-form-and-route-input-limit",
+      "class": "completion of the step of a series ending",
+      "summary": "Since 0.90.0 the ending of review-series completed the step of the ending and then copied it over every step of every answer that had the same command. For the stop review_turn_failures_exhausted of a bar, the answer \"Keep this route\" then began with the review-context event of kind route_retired, which is the first step of the answer \"Move to another route\". For the stop review_pending_delivery_over_plan, every select-main-capture step named the first pending source: in the two stored endings of a bar slot of the record, seven capture steps named one version, and six of the seven pending sources were named by no step.",
+      "expected": "The ending replaces a step of an answer by the completed step of the ending only when that step is the step of the ending. Every other step keeps its own id, payload, chooses and prerequisites and still receives the arguments of its command. For every stop whose plan builds a decision, the answers of the ending hold the id, command and payload of each step that the plan built. The identity of an ending and the stored stops do not change.",
+      "fixed_in": "0.91.7",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_series_ending.SeriesEndingTests.test_keep_this_route_shows_its_own_observation_step",
+        "test_series_ending.SeriesEndingTests.test_capture_answer_names_each_pending_source",
+        "test_series_ending.SeriesEndingTests.test_every_planned_decision_keeps_its_steps_in_the_ending"
+      ]
     }
   ]
 }

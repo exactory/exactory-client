@@ -148,4 +148,6 @@ def build_program_probe_inventory(records, artifacts, plan, admissions):
             "statement": "The outputs were not read." if outcome["program_run"]["outputs_unread"]
                          else "The listed outputs were read before the plan.",
             "admitted_runs": comparisons}
+        if "capture_failure" in outcome:
+            inventory[identifier]["capture_failure"] = outcome["capture_failure"]
     return inventory

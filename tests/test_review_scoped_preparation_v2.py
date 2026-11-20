@@ -338,7 +338,7 @@ store.mutate('other-process', row, lambda tx: tx.put('review_attempt', row['id']
 
         with patch.object(self.store, 'mutate_scoped', side_effect=intervene), \
                 patch.object(storage, '_BUSY_TIMEOUT_SECONDS', .001), \
-                patch.object(protocol, '_FINISH_ATTEMPT_COUNT', 2), \
+                patch.object(protocol, 'SCOPED_FINISH_ATTEMPT_COUNT', 2), \
                 patch.object(protocol, '_observed', return_value=dict(status='failed', output=None)):
             self.refuse('review_task_dependency_changed', lambda: protocol.invoke_assignment(self.store,
                 dict(id='attempt', assignment_id='assignment'), expected_revision=self.store.revision,

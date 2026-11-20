@@ -418,6 +418,10 @@ class RefusalNoticeTests(RefusalCase):
                         self.assertEqual(notice['refused'][0]['details']['delivered_depth'], 'passage')
                         self.assertEqual(notice['refused'][0]['details']['notice'],
                                          refusal.SOURCE_LINK_ACCEPTED_FORMS_NOTICE)
+                    if check == 'evidence.shape':
+                        # A problem review binds its record references, so its notice is the bound form.
+                        self.assertEqual(notice['refused'][0]['details'], dict(refused_indexes=[0], refused_count=1,
+                                         notice=refusal.REVIEW_BOUND_EVIDENCE_FORMS_NOTICE))
 
     def test_bounded_notice_limits_serialized_entries_details_and_part_for_large_outputs(self):
         for characters in (10_000, 2_000_000, 5_000_000):

@@ -1207,24 +1207,32 @@ checks permits for the check (`notice_fields` in `CONTRACT_CHECKS`,
 `review_refusal.py`); every other detail is replaced by `{sha256}`, its digest.
 An entry has at most 6,000 characters in its JSON form, and details longer than
 4,000 characters keep their start as `{head, sha256, characters, complete:
-false}`. A notice therefore holds only values of the reviewer's own output, of
-the packets of its own chain, and values computed from them. The form `whole`
-adds `output`, the latest refused output in full. The form `bounded` adds
-`output_ref: {artifact, characters}`, the stored output and its length, and
-`refused_part: {path, value, complete}`, the part of that output at the `path`
-of the latest refusal, at most 20,000 characters and cut in the same way.
-`review-assignment` chooses the form by measurement. It tries `whole` and then
-`bounded`; a head with a correction invocation, or a reassessment whose
-correction request does not fit the route, tries `bounded` only. A form is
-chosen when its request passes the measurement and the preflight of the route,
-the sent packet holds the notice unchanged, and the task stays within its
-character allowance. When no form passes, the replacement is tried as the
-smaller task that the capacity recovery names, with the packet and the base
-prompt of that task and the bounded notice. When there is no smaller task, or
-it does not pass either, the refusal is `review_input_too_large` with the
-trials in its details and the position is exhausted. The prompt is the base
-prompt of the refused turn with the paragraph of the chosen form, which takes
-the place of an earlier refusal paragraph
+false}`. A notice holds values of the reviewer's own output, values of the
+packets of its own chain, values computed from them, and the fixed text
+`notice` that a check gives. The check `evidence.shape` names the refused
+evidence array in `path` and gives `refused_indexes` (the positions, counted
+from 0, of the refused entries in that array, at most 100), `refused_count`
+(their number) and `notice` (the accepted forms of an evidence entry). When it
+refuses the array itself, because it is not an array or is empty, it gives
+`notice` alone. For an array of another grammar, which is the evidence of a
+readiness check in the `support` member of a study result review or the
+evidence of a verification, it gives the two numbers when it refuses entries,
+and it never gives `notice`. The form `whole` adds `output`, the latest refused
+output in full. The form `bounded` adds `output_ref: {artifact, characters}`,
+the stored output and its length, and `refused_part: {path, value, complete}`,
+the part of that output at the `path` of the latest refusal, at most 20,000
+characters and cut in the same way. `review-assignment` chooses the form by
+measurement. It tries `whole` and then `bounded`; a head with a correction
+invocation, or a reassessment whose correction request does not fit the route,
+tries `bounded` only. A form is chosen when its request passes the measurement
+and the preflight of the route, the sent packet holds the notice unchanged, and
+the task stays within its character allowance. When no form passes, the
+replacement is tried as the smaller task that the capacity recovery names, with
+the packet and the base prompt of that task and the bounded notice. When there
+is no smaller task, or it does not pass either, the refusal is
+`review_input_too_large` with the trials in its details and the position is
+exhausted. The prompt is the base prompt of the refused turn with the paragraph
+of the chosen form, which takes the place of an earlier refusal paragraph
 (`exactory-review-output-refusal-whole-v1` or
 `exactory-review-output-refusal-bounded-v1`, recorded under
 `problem_paragraphs`), and the request is a fresh input: the prompt and the
@@ -2918,8 +2926,12 @@ of a reading response carry only `path` and `message`;
 and the checks of bars, work items, objections and candidates keep the
 identities they gave before. A check that runs on the items of a list names the
 item by its index or by its valid id, and the first failed check is the one
-reported. A refusal recorded before 0.67.0 keeps its `details` as recorded,
-`null` when its validator gave none, and its receipt is not rewritten. A `native_math`
+reported. The check `evidence.shape` checks every entry of an evidence array:
+`path` names the array, the code and the message are those of the first refused
+entry, and the details add `refused_indexes`, `refused_count` and `notice`,
+which are described with the member `output_refusal`. A refusal recorded before
+0.67.0 keeps its `details` as recorded, `null` when its validator gave none,
+and its receipt is not rewritten. A `native_math`
 review is recorded by `exactory-math`, not by this harness, so `review-run`
 checks its output when an authenticated run completes. A proposal review and an
 approval of a result or a recovery have the closed fields of the native review,
@@ -3568,7 +3580,8 @@ The outcome payload is:
 {id, command, outputs, stdout, stderr, exit_status, elapsed_seconds, observation}
 ```
 
-Command and observation are required text. Outputs is an array of pinned
+An outcome whose capture failed also holds `capture_failure`. Command and
+observation are required text. Outputs is an array of pinned
 descriptors; stdout and stderr are pinned descriptors. Elapsed seconds is finite
 and nonnegative. Exit status is an integer code, `timed_out`, `failed`,
 `output_bound` or `interrupted`. Nonzero exits, timeout cleanup, launch failures
@@ -3618,19 +3631,60 @@ Partial artifacts remain pinned. Last measured elapsed time is charged and any
 unmeasured remainder is explicitly counted as unknown resource usage. Absence of
 an outcome alone never releases a hold. Use a new ID for a new execution.
 
+The launcher and the worker write the records of a probe while other commands
+write to the same store. Each of these writes depends on the records that it
+reads, and not on the revision of the store. Every write reads records of the
+probe itself. The intent also reads `configuration/research`, the
+experiment account and budget, every other intent and whether it has an
+outcome, and the cycle plan of a disclosed run. The outcome also reads
+`configuration/research` and the experiment account and budget. A commit of
+another command that changes one of these records refuses the write, and the
+write is then prepared again: for example, the intent or the outcome of another
+probe, or a change of the budget. A commit that changes none of them does not
+refuse it. A busy store is waited for, for at most 600 seconds for each record
+that the probe writes. When the worker still cannot write a record after that
+time, it ends, and the launcher writes the records of the capture itself, with
+the same wait. When the launcher still cannot write a record after that time,
+`exactory-lab probe` is refused with `store_busy`, and `details.cause` holds
+the last refusal. The message says what was recorded and what the same command
+with the same `--id` does next:
+
+- The intent was not recorded. Nothing was recorded, and the program did not
+  run. The same command records the intent and runs the program.
+- The launch was not recorded. The intent is recorded and keeps its
+  reservation, and the program did not run. The same command does not run the
+  program: it records the probe as `interrupted`, without outputs, and ends the
+  reservation. After that, run the program under a new `--id`.
+- A later record was not written. The probe has no outcome and keeps its
+  reservation. If its program has run, the files of the run are kept. The same
+  command records the outcome from the kept files and does not run the program
+  again.
+
 Each captured stream is bounded at 32 MiB. Exceeding that bound terminates the
 process group and records `output_bound`; the bounded prefix is pinned, the raw
-file remains, and its full SHA identity retains exploratory provenance. Unsafe
-output paths produce a charged failed capture without admitting unsafe artifacts.
+file remains, and its full SHA identity retains exploratory provenance. An
+output that the worker cannot read safely gives a charged failed capture: a
+link, a path that leaves the output directory, or a file that cannot be read. No
+unsafe artifact is admitted. The outcome then has `exit_status: "failed"`, or
+`"output_bound"` when a stream exceeded 32 MiB, and the member
+`capture_failure: {code, program_exit_status}`. `code` names the cause, and
+`program_exit_status` is the exit status of the program. When the store or the
+artifact store refuses a write of a capture, the capture ends without an
+outcome.
 The launcher prints JSON receipts successfully for recorded failures and timeouts.
 Its managed request IDs are `probe-intent:ID`, `probe-launch:ID` and `probe:ID`.
 
 Errors include `configuration_missing`, `resource_budget_exhausted` before launch,
 `probe_intent_missing` for an outcome without an intent, `invalid_input`,
 `artifact_missing`, `artifact_corrupt`, `artifact_sealed`, `unsafe_path`,
-`preplan_cycle_frozen`, and normal immutable/revision/request conflicts. Status
-adds `probes: {count, elapsed_seconds}` when probe history exists. Probes alone
-never form a result candidate.
+`preplan_cycle_frozen`, `store_busy` (see above), and normal
+immutable/revision/request conflicts. `probe_io` is an operating-system error of
+the launcher or of a capture. It records no outcome. Once the cause is gone, the
+same command with the same `--id` acts as it does after `store_busy`: it runs
+the program if the intent was not recorded, it records the probe as
+`interrupted` if the launch was not recorded, and otherwise it records the
+outcome from the kept files. Status adds `probes: {count, elapsed_seconds}` when
+probe history exists. Probes alone never form a result candidate.
 
 ## Search depth, coverage and provisional questions (`search`)
 

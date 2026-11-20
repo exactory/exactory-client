@@ -135,7 +135,33 @@ def read_probe_process_exit(root, config, config_sha256, fallback):
     return fallback
 
 
+def read_probe_outputs(root, launch):
+    """Yield the name, the bytes and the media type of each file that the program created or changed under its
+    output directory. A link, or a path that leaves the directory, is refused with unsafe_path."""
+    relative = launch["directory"] + "/work"
+    suffix = "" if launch["output_dir"] == "." else "/" + launch["output_dir"]
+    with checked_parent(root, relative + suffix + "/.probe-directory"):
+        pass
+    for path in sorted((root / relative / launch["output_dir"]).rglob("*")):
+        if path.is_symlink():
+            raise ResearchError("unsafe_path", "Probe outputs must be regular files under their output directory")
+        if path.is_dir():
+            continue
+        name = path.relative_to(root / relative).as_posix()
+        data = read_file(root, relative + "/" + name)
+        media_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
+        initial = launch["initial"].get(name)
+        if initial is None or (path.stat().st_mtime_ns, describe_artifact(data, media_type)["sha256"]) != (
+                initial["mtime_ns"], initial["sha256"]):
+            yield name, data, media_type
+
+
 def capture_probe_outcome(root, launch, terminal):
+    """Pin the streams and the outputs of an ended program and return its outcome. An output that cannot be read
+    safely gives an outcome with capture_failure, which keeps the exit status of the program; its exit_status is
+    failed, or output_bound after a stream over its bound. A refusal of the store or of the artifact store is
+    raised: it says nothing about the outputs, so no outcome exists yet and the launch stays open for the same probe
+    id."""
     sealed = "program_run" in launch and not launch["program_run"]["read_outputs"]
     for origin in find_probe_stream_origins(root, launch):
         for role in origin["roles"]:
@@ -154,29 +180,27 @@ def capture_probe_outcome(root, launch, terminal):
             observation = "Probe output exceeded 32 MiB; the raw file and a bounded artifact prefix are retained."
     outputs = []
     named_outputs = []
-    relative = launch["directory"] + "/work"
-    suffix = "" if launch["output_dir"] == "." else "/" + launch["output_dir"]
-    try:
-        with checked_parent(root, relative + suffix + "/.probe-directory"):
-            pass
-        for path in sorted((root / relative / launch["output_dir"]).rglob("*")):
-            if path.is_symlink():
-                raise ResearchError("unsafe_path", "Probe outputs must be regular files under their output directory")
-            if path.is_dir():
-                continue
-            name = path.relative_to(root / relative).as_posix()
-            data = read_file(root, relative + "/" + name)
-            media_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
-            artifact = describe_artifact(data, media_type)
-            initial = launch["initial"].get(name)
-            if initial is None or (path.stat().st_mtime_ns, artifact["sha256"]) != (initial["mtime_ns"], initial["sha256"]):
-                outputs.append(pin_probe_artifact(root, launch["id"], data, media_type, "outputs", sealed=sealed))
-                named_outputs.append({"path": "work/" + name, "sha256": artifact["sha256"]})
-    except (ResearchError, OSError) as error:
-        status = "failed" if status != "output_bound" else status
-        observation = "Probe output capture failed: " + (error.code if isinstance(error, ResearchError) else str(error))
+    capture_failure = None
+    changed = read_probe_outputs(root, launch)
+    while True:
+        try:
+            name, data, media_type = next(changed)
+        except StopIteration:
+            break
+        except (ResearchError, OSError) as error:
+            # An output that cannot be read is a fact about the probe. The exit status of the program stays beside it.
+            capture_failure = {"code": error.code if isinstance(error, ResearchError) else "storage_io",
+                               "program_exit_status": terminal["exit_status"]}
+            status = "failed" if status != "output_bound" else status
+            observation = "Probe output capture failed: " + (error.code if isinstance(error, ResearchError) else str(error))
+            break
+        artifact = pin_probe_artifact(root, launch["id"], data, media_type, "outputs", sealed=sealed)
+        outputs.append(artifact)
+        named_outputs.append({"path": "work/" + name, "sha256": artifact["sha256"]})
     outcome = {"id": launch["id"], "command": launch["command"], "outputs": outputs, **logs,
                "exit_status": status, "elapsed_seconds": terminal["elapsed_seconds"], "observation": observation}
+    if capture_failure is not None:
+        outcome["capture_failure"] = capture_failure
     if "program_run" in launch:
         outcome["program_run"] = build_program_run(launch, terminal, named_outputs, logs)
     return outcome
