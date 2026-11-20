@@ -2800,12 +2800,17 @@ def build_probe_prompt(route):
               'Use only supplied evidence. This is an operational input-boundary probe.')
 
 
+# Required, then optional members of the payload of a route probe. The start check and every rebuild of the
+# payload of a started probe (review_task_execution.rebuild_call_payload) read this one definition.
+PROBE_PAYLOAD_FIELDS = (('id', 'route_id'), ('capacity',))
+
+
 def probe_route(store, payload, *, expected_revision, request_id, credential=None, after_start=None):
     store_artifacts = store.build_artifact_store()
     def start(records, value):
         from .evaluation import Evaluation
         artifacts = Evaluation.of(records, store_artifacts)
-        fields(value, ('id', 'route_id'), ('capacity',))
+        fields(value, *PROBE_PAYLOAD_FIELDS)
         if 'capacity' in value:
             fields(value['capacity'], ('input_tokens',), code='invalid_review_capacity_probe')
             size = value['capacity']['input_tokens']
@@ -4204,12 +4209,17 @@ def require_verified_assignment(records, artifacts, assignment):
                  next=plan_next(records, artifacts, assignment['id'])))
 
 
+# Required, then optional members of the payload of an ordinary reviewer call, staged or not. The start checks
+# and every rebuild of the payload of a started call (review_task_execution.rebuild_call_payload) read it.
+INVOKE_PAYLOAD_FIELDS = (('id', 'assignment_id'), ())
+
+
 def invoke_assignment(store, payload, *, expected_revision, request_id, credential=None, after_start=None):
     store_artifacts = store.build_artifact_store()
     def start(records, value):
         from .evaluation import Evaluation
         artifacts = Evaluation.of(records, store_artifacts)
-        fields(value, ('id', 'assignment_id'))
+        fields(value, *INVOKE_PAYLOAD_FIELDS)
         assignment = _get(records, 'review_assignment', value['assignment_id'])
         from .openness_reading import require_reserved_identifier
         require_reserved_identifier(value['id'], assignment['prompt']['template_id'].rsplit('/', 1)[0])

@@ -10,7 +10,8 @@ from .evidence import digest
 from .operations import fields, text, immutable_record
 from .review_budget import CALL_OPERATIONS
 from .review_task_execution import (_get, _mutate_current, _TransactionRecords, identify_call,
-                                    read_call_kinds, build_historical_attempt_step, find_reservation_dispatch)
+                                    read_call_kinds, build_historical_attempt_step, find_reservation_dispatch,
+                                    rebuild_call_payload)
 
 
 STOP_MESSAGE = ('A review stop stands for this chain or for the store. '
@@ -183,7 +184,7 @@ def _describe_call_step(records, call):
         dispatch = find_reservation_dispatch(records, reservation)
         if dispatch is not None and requires_capture_finish(records, reservation, capture):
             step = dict(command='review-run', request_id=dispatch[0],
-                        payload=dict(id=dispatch[1]['id'], assignment_id=dispatch[1]['assignment_id']))
+                        payload=rebuild_call_payload('review.invoke', dispatch[1]))
         attempt = read_reservation_attempt(records, reservation)
         return reservation, capture, attempt, step
     operation, identifier = call['operation'], call['invocation_id']
@@ -194,10 +195,8 @@ def _describe_call_step(records, call):
     capture = records.get('review_call_observation', {}).get(lifecycle_id)
     attempt = records.get(finished, {}).get(identifier)
     if capture is not None and attempt is None:
-        payload = dict(id=identifier)
-        payload.update({key: invocation[key] for key in ('assignment_id', 'route_id')
-                        if key in invocation and (key != 'route_id' or operation != 'review.invoke')})
-        step = dict(command=CALL_COMMANDS[operation], payload=payload, request_id=capture['request_id'])
+        step = dict(command=CALL_COMMANDS[operation], payload=rebuild_call_payload(operation, invocation),
+                    request_id=capture['request_id'])
     return member, capture, attempt, step
 
 

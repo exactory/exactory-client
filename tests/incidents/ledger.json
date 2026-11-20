@@ -7391,6 +7391,28 @@
         "test_review_output_correction_visual.VisualCorrectionTests.test_original_visual_delivery_and_negative_science_survive_observed_text_delta",
         "test_review_effective_consumers.EffectiveConsumerTests.test_selected_graph_revalidates_raw_receipts_and_sibling_actual_inputs"
       ]
+    },
+    {
+      "id": "committed-capacity-probe-rebuilt-without-capacity",
+      "record": "20261119165105-record-check-refuses-a-committed-call-observation",
+      "class": "rebuild of the payload of a started call",
+      "summary": "record-check rebuilt the payload of each committed route probe from id and route_id only. A capacity probe, which holds the optional member capacity since 0.89.2, then failed the payload binding of its capture, and record-check of a copy of a live record stopped at authentication with review_invocation_unverified. Five of the 34 captures of that record failed this binding. The step that review-stop gave for a captured capacity probe also lacked capacity, and the store refused a replay of that step with request_id_conflict.",
+      "expected": "Each kind of owned call defines its required and optional payload members once, in the module that starts the call. The start check and every rebuild of the payload of a started call read that definition: record-check, the step of a captured call in review-stop, the step of a staged dispatch, the resume plan of a head and the staged task run that resumes a recorded dispatch. Each rebuild gives back the payload of the start, with every optional member that the start received. record-check of the copy of that record is ready, and the step of a captured capacity probe finishes the probe without a reviewer call.",
+      "fixed_in": "0.91.5",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_capacity_probe.CapacityProbeTests.test_record_check_authenticates_a_committed_capacity_probe",
+        "test_review_capacity_probe.CapacityProbeTests.test_resume_step_of_a_captured_capacity_probe_carries_its_capacity",
+        "test_call_payload_rebuild.CallPayloadRebuildTests.test_every_call_kind_has_one_definition_and_every_optional_member_a_value",
+        "test_call_payload_rebuild.CallPayloadRebuildTests.test_route_probe_readers_rebuild_every_member",
+        "test_call_payload_rebuild.CallPayloadRebuildTests.test_invoke_readers_rebuild_every_member",
+        "test_call_payload_rebuild.CallPayloadRebuildTests.test_output_correction_readers_rebuild_every_member",
+        "test_call_payload_rebuild.CallPayloadRebuildTests.test_staged_dispatch_step_rebuilds_every_member",
+        "test_call_payload_rebuild.CallPayloadRebuildTests.test_staged_task_run_rebuilds_a_recorded_dispatch",
+        "test_call_payload_rebuild.CallPayloadRebuildTests.test_staged_task_run_takes_only_the_recorded_dispatch_of_its_own_attempt",
+        "test_call_payload_rebuild.CallPayloadRebuildTests.test_staged_start_check_reads_the_definition",
+        "test_research_cli.StagedReviewCliTests.test_accept_requires_a_committed_capture_and_maps_to_the_child_assignment"
+      ]
     }
   ]
 }
