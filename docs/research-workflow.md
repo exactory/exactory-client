@@ -829,7 +829,7 @@ operations of the Mathematics section.
 
 | Milestone | Condition computed from records |
 | --- | --- |
-| `exploration` | `problem-init` records the area, field and immutable authors, and the kind of start when the payload gives it, and adopts the constitution. `problem-area` records each further area that the statements concern. No current slate exists: none is recorded, or the latest slate no longer covers exactly the current candidates. |
+| `exploration` | `problem-init` records the area, field and immutable authors, and adopts the constitution. `problem-area` records each further area that the statements concern. No current slate exists: none is recorded, or the latest slate no longer covers exactly the current candidates. |
 | `slate` | `problem-slate` records the selection over every current candidate, bound to two observed blind bars that state the calibration of levels 2 and 3 (a bar on the version 1 template is refreshed first); no statement exists yet, or the current slate selects no candidate. |
 | `formulation` | The current slate selects a candidate and `problem-statement` has selected a statement: the exact statement, resolution criteria, neighbours, optional formal statement and the candidate it formulates. |
 | `attempt` | `problem-attempt` records a current, proportionate unresolved solver or critically assessed literature attempt; `assess_attempt` returns no obligations. |
@@ -837,9 +837,12 @@ operations of the Mathematics section.
 | `value` | Value evidence validates, with the accounts of the statement current, and `problem-assessment` binds a current self-assessment meeting the rubric thresholds; both observed bars and both result reviews, grading every rubric item including A7, cover the evidence and pass the assurances and rubric after adjudication; the current decision is `post`. |
 | `post` | `problem-posted` records the confirmed server id against the rebuilt approved export. |
 
-An exploration starts from a field question, from a phenomenon that appears in
-several places or from a thought experiment, and `problem-init` records which in
-its optional `start` entry. When the record forms a statement itself, two
+From 0.83.0 to 0.91.2 `problem-init` recorded a kind of start in an optional
+`start` entry, and two kinds, a phenomenon that appears in several places and a
+thought experiment, had a procedure of their own. Release 0.91.3 removed the
+kind of start: `problem-init` refuses the entry, and a new record holds none.
+A record that holds the entry keeps it and keeps working
+([Retired starts](retired-starts.md)). When the record forms a statement itself, two
 commands of the Ideate tool in a problem record keep the history: `forming`
 records one forming call with its question, its move, every form that it
 produced and the amounts that the performer reports, and `form-outcome` records
@@ -870,13 +873,15 @@ taken up in a new record that names the areas
 
 The exploration records each candidate question with `problem-candidate`: its
 tentative statement, its source (the harness's own research records, the
-literature, a computation, the Mathematics section, the user's material, a
-thought experiment, or a phenomenon that appears in several places), the
+literature, a computation, the Mathematics section or the user's material), the
 observation that produced it, its declared neighbours, the provisional potential
-grades and a provisional disposition. A candidate of the source kind
-`phenomenon` was formed in the record and cites at least one forming call
-(`problem_candidate_forming_missing` otherwise), and a candidate of any kind can
-cite forming calls and form outcomes as records. Two blind problem bars fix the
+grades and a provisional disposition. A candidate of any kind can cite forming
+calls and form outcomes as records. The retired kinds `phenomenon` and
+`thought_experiment` are accepted, as the source kind of a candidate and as the
+kind of a forming question, only in a record that already holds the kind
+(`problem_start_kind_removed` otherwise), and a `phenomenon` candidate cites at
+least one forming call (`problem_candidate_forming_missing` otherwise). Two
+blind problem bars fix the
 field's standard before any candidate is shown to a reviewer, and the slate
 (`problem-slate`) records the decision: every current candidate is selected,
 deferred with the evidence that would raise it, or rejected with the reason. A
@@ -893,7 +898,7 @@ the bar again to the same reviewer refreshes it on the current bar template in
 the same session and slot, with every area. A focused slate review by
 a bar reviewer is required after a carry that imported at least one objection
 (`problem_slate_review_unverified` otherwise), and when the slate selects a
-candidate formed in the record, which is a candidate of the source kind
+candidate formed in the record, which is a candidate of the retired source kind
 `phenomenon` or one whose source evidence cites a forming call or a form outcome
 (`problem_slate_review_required` otherwise). It is optional otherwise, when the
 comparison needs an independent judgment. It is bound to the exact candidate set,
@@ -1202,7 +1207,7 @@ and one of six outcomes. A post through the gate is classified from the
 accounts of the value record that its decision covered: a gain was
 established, or ordinary. A post outside the gate, and a post whose value
 record holds no accounts, is kind unassessed. The report is due for a record
-that started from a phenomenon or a thought experiment, and for every record
+of a retired start, a phenomenon or a thought experiment, and for every record
 that holds a forming call. `status` and `next` then show the advisory
 `problem_report_due`, and they show `problem_report_stale` when the records
 that a report read changed after its cutoff. Neither changes a gate, an

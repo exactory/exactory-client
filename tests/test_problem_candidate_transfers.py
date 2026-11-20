@@ -11,7 +11,8 @@ from test_research_problem_claims import ProblemCase
 class ProblemCandidateTransferTests(CheckCommandMixin, ProblemCase):
     def setUp(self):
         super().setUp()
-        self.initialize_problem(start=dict(kind="phenomenon", description="A recurring bound."))
+        self.initialize_problem()
+        self.restore_start("phenomenon", "A recurring bound.")
         self.mutate(cli.OPERATIONS["problem-candidate"], build_candidate())
         self.put_slate("slate-1", selected=["candidate-1"])
         (self.root.parent / "destination").mkdir()

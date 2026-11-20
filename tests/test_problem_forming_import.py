@@ -54,9 +54,12 @@ class FormingImportTests(unittest.TestCase):
         reference = self.reference("forming_call", self.call, imported["source_origin"])
         candidate = build_candidate()
         candidate["source"].update(kind="phenomenon", evidence=[reference])
+        self.destination.restore_start("phenomenon")
         saved = self.destination.mutate(cli.OPERATIONS["problem-candidate"], candidate)["result"]
         self.assertEqual(saved["source"]["evidence"], [reference])
-        self.assertNotIn("forming_call", self.destination.store.snapshot()["records"])
+        records = self.destination.store.snapshot()["records"]
+        self.assertNotIn("forming_call", records)
+        self.assertEqual(verify_imports(records, self.destination.artifacts), 1)
 
     def test_reports_name_both_ends_and_keep_inherited_history_and_counts_apart(self):
         from research_harness import problem_reports
@@ -490,9 +493,10 @@ class FormingImportTests(unittest.TestCase):
         imported = self.import_history(destination=destination)
         reference = self.reference('forming_call', self.call, imported['source_origin'])
         candidate = build_candidate()
-        candidate['source'].update(kind='phenomenon', evidence=[reference])
+        candidate['source'].update(evidence=[reference])
         destination.mutate(cli.OPERATIONS['problem-candidate'], candidate)
         destination.observe_bars()
+        destination.assert_error('problem_slate_review_required', destination.record_slate)
         assignment = destination.assign('slate', 'first')
         packet = json.loads(destination.artifacts.read(assignment['packet']))
         records = destination.store.snapshot()['records']
@@ -517,9 +521,10 @@ class FormingImportTests(unittest.TestCase):
         self.addCleanup(destination.doCleanups)
         imported = self.import_history(destination=destination, source=source)
         candidate = build_candidate()
-        candidate['source'].update(kind='phenomenon', evidence=[self.reference('forming_call', call, imported['source_origin'])])
+        candidate['source'].update(kind='computation', evidence=[self.reference('forming_call', call, imported['source_origin'])])
         destination.mutate(cli.OPERATIONS['problem-candidate'], candidate)
         destination.observe_bars()
+        destination.assert_error('problem_slate_review_required', destination.record_slate)
         packet = json.loads(destination.artifacts.read(destination.assign('slate', 'first')['packet']))
         delivered = [entry['artifact'] for entry in packet['evidence']]
         self.assertNotIn(intent['program'], delivered)

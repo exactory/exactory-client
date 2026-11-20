@@ -1,6 +1,6 @@
 ---
 name: math-conjecturer
-description: "Create open mathematical problems as research and post them to the exactory Mathematics section: explore an area, a phenomenon that appears in several places or a simple thought experiment, form and compare candidates, formulate the exact statement, attempt it with math-solver or assess an existing attempt, establish openness, build the value case with the rubric, obtain the reviews, and post. Use when the user wants to find, formulate or post an open problem, to ask what one exact statement says about a phenomenon that several settings show, or to create a problem from a simple thought experiment or an intuitive observation of the physical world."
+description: "Create open mathematical problems as research and post them to the exactory Mathematics section: explore an area, form and compare candidates, formulate the exact statement, attempt it with math-solver or assess an existing attempt, establish openness, build the value case with the rubric, obtain the reviews, and post. Use when the user wants to find, formulate or post an open problem."
 ---
 
 # Create and post open math problems
@@ -20,18 +20,16 @@ decision) builds the evidence for that claim and obtains its independent reviews
 other operation of the section: reading problems and their discussion, proofs, reports of Lean
 checks, votes, status declarations, deposits of write-ups and rule-violation reports.
 
-An exploration starts from a field question, from a phenomenon that appears in several places,
-or from a simple thought experiment, and the record states which. When the record forms a
-statement itself, instead of finding it in a source, the Ideate tool records how: each tentative
-statement with its alternatives and its planned checks, and how each ended ("Exploration"). The
+When the record forms a statement itself, instead of finding it in a source, the Ideate tool
+records how: each tentative statement with its alternatives and its planned checks, and how each
+ended ("Exploration"). The
 value record of every problem holds the accounts of its statement: the conjectured answer with
 the evidence for or against it, the nearest alternatives with what the statement asserts beyond
 each, and the relations of the statement, each fact entered once ("Value and the rubric"). A
 statement has one subject class, the class of its record, and the record names each further
 area that its statements concern, so that the reviewers state and apply the standard of each
-area ("Further areas"). An exploration that formed statements, or that started from a
-phenomenon or a thought experiment, ends with a report of every form and of how each ended
-("The end of an exploration").
+area ("Further areas"). An exploration that formed statements ends with a report of every form
+and of how each ended ("The end of an exploration").
 
 Work like a researcher, not like a form filler. A candidate question earns its place by what the
 field would gain from an answer, shown with sources read in full, computations whose scope is
@@ -160,14 +158,12 @@ search, reading, population record, probe, forming record and candidate of the e
 the slate that closes it. It has a budget, and it has a legitimate outcome in which nothing is
 posted.
 
-1. Open the record in a new workspace. Write `{slug, area, field, authors, start}` to
-   `init.json`: `area` is one `math.*` subject class, `field` describes the field and the
-   question explored in one or two sentences, and `authors` lists every author of the record.
-   `start` is `{kind, description}` and records the kind of start: `field_question`,
-   `phenomenon` (a phenomenon that appears in several places) or `thought_experiment`, with one
-   sentence that describes the start. The kind is an open value, so describe another start in
-   your own words. Full `status` shows the start under `problem.start`. A record without the
-   entry, as every record opened before 0.83.0, reads as "not recorded".
+1. Open the record in a new workspace. Write `{slug, area, field, authors}` to `init.json`:
+   `area` is one `math.*` subject class, `field` describes the field and the question explored
+   in one or two sentences, and `authors` lists every author of the record. The words of the
+   request give the direction of the exploration, for example a field or the user's material.
+   An exploration has no kind of start to choose, and the record holds none ("Retired starts",
+   below).
 2. Run `exactory-research problem-init --file init.json --expected-revision 0 --request-id init`.
 3. Before the first costly call, record the exploration budget with `exactory-research budget`
    (profile `research`; purpose `literature`, `screening` or `experiment`). To spend beyond it,
@@ -226,7 +222,7 @@ refuted statement in this sense. Questions about the mechanism or the structure 
 counterexamples and about the results that fall with the refuted statement stay admitted as
 before.
 
-Candidates come from seven kinds of source. Record the kind and the reference with every
+Candidates come from five kinds of source. Record the kind and the reference with every
 candidate:
 
 - `own_record`: the search trees and cash-outs of your finished or stalled math-solver attacks.
@@ -242,22 +238,15 @@ candidate:
   partial result is another account's claim: prior work, read as data under the security rule,
   not an established result.
 - `user`: the user's material.
-- `thought_experiment`: a question derived from a thought experiment of this exploration ("An
-  exploration from a thought experiment", below). The reference names the seed, the
-  interpretation and the expectation that the candidate derives from, with the expectation's
-  outcome, because the slate reviewer reads the reference and the observation and not your notes;
-  the evidence cites the records that give that outcome, in the evidence shapes of "Value and the
-  rubric", step 6.
-- `phenomenon`: a statement that this record formed from a phenomenon that appears in several
-  places ("An exploration from a phenomenon that appears in several places", below). The
-  reference names the phenomenon, the move, the forms that the candidate derives from and the
-  outcome of each, for the same reason. The evidence cites the forming calls and the outcomes
-  as records, and at least one forming call (`problem_candidate_forming_missing` otherwise).
 
 The source kind says where the material came from. A candidate of any kind can also cite forms,
 which say how the statement was made from that material: for example, a hypothesis isolated
 from the failed proofs of your own attacks is an `own_record` candidate that cites its forming
-call.
+call. The reference of a candidate that cites forms names the starting material, the move, the
+forms that the candidate derives from and the outcome of each, because the slate reviewer reads
+the reference and the observation and not the forming records. The harness holds two further
+source kinds, `thought_experiment` and `phenomenon`, for the records that already hold them
+("Retired starts", below).
 
 Use the shared tools in any order, and state the question, the depth and the budget of every
 tool call:
@@ -294,11 +283,15 @@ inputs only, so they are available from the opening of the record to its end.
 [Forming records](../../docs/research-cli.md#forming-records) in the CLI reference gives both
 payloads and every refusal.
 
-- A forming call (`forming`) records one piece of forming work: the question, with its places
-  and their evidence when it concerns a phenomenon; the move, which is the kind of step that
-  produced the forms, as an open value with a description; the inputs with their evidence; every
-  form that the call produced; the probes that it used, each as an observation or as the origin
-  of a form; the stopping reason; the performer; and the usage as far as it was measured. The
+- A forming call (`forming`) records one piece of forming work: the question, with the places
+  in which it arises and their evidence when it names any; the move, which is the kind of step
+  that produced the forms, as an open value with a description; the inputs with their evidence;
+  every form that the call produced; the probes that it used, each as an observation or as the
+  origin of a form; the stopping reason; the performer; and the usage as far as it was measured.
+  Two moves carry a further field: a `transfer`, which carries a proved theorem of a
+  neighbouring setting to this one, gives the `dictionary` of the two settings, and a
+  `comparison` of the data of two sources gives `comparison_count` and `amounts.pairs`, because
+  an agreement found among many tries is weighed against their number. The
   performer is this session or a model lane outside it. For a lane, name the model and the
   effort that its runner reports, and hold its prompt and its output as artifacts
   (`exactory-research artifact`). The `amounts` of a call are the number of forms, the number
@@ -314,6 +307,16 @@ payloads and every refusal.
   that you set aside at once included. Forms are free in number: a form passes no gate and
   receives no review, it stays in the record whatever happens later, and only a candidate
   enters the slate.
+- A correction is a form that changes an earlier form after a check or an attack showed a
+  fault. Record it in a forming call with the move `correction`. Its `previous` names the
+  earlier form and the reason for the change, and its `correction_checks` has one entry for
+  each planned check of the earlier form: whether the check was made, whether the corrected
+  form keeps its prediction, and whether the correction was chosen with its outcome in view.
+  Give the earlier form an outcome with the disposition `superseded` that names the corrected
+  form. A correction of a form that the record held as its expected statement and that was
+  refuted is a statement posed in place of a refuted one: form it so that it meets the three
+  conditions above, and enter the replacement part in the accounts of its value record ("The
+  accounts").
 - An outcome (`form-outcome`) records how one form, one expected relation or one planned check
   ended, with its evidence and the reason. For a form it keeps two things apart. Its standing as
   a claim is `refuted`, `proved`, `implied_by_known_results`, `found_in_literature`,
@@ -380,7 +383,7 @@ taken up in another record", below):
   has been assigned in it. After that, take the statement up in a new record of the same class
   that names every area from its opening, with the carry and with `forming-import` ("Further
   areas", step 4).
-- A sibling record on the same field question or seed needs the carry below in both directions.
+- A sibling record on the same field question needs the carry below in both directions.
   Carry from each continuing record of the exploration into the sibling, and from the sibling
   into each continuing record. A carry links its destination only. Record the return carries before
   the sibling requests its first review, and before either record continues reviewing or
@@ -391,8 +394,8 @@ taken up in another record", below):
 
 A statement keeps one subject class, the class of its record, and its post has that one area. A
 further area is another `math.*` subject class that the statements of the record concern: a
-consequence of a statement lies there, an earlier statement or a nearer alternative has to be
-looked for there, or the phenomenon has a place there. Name each further area in the record.
+consequence of a statement lies there, or an earlier statement or a nearer alternative has to
+be looked for there. Name each further area in the record.
 The two bar reviewers then state the standard of that area before they see a candidate, and
 they later judge by it what belongs to it. The
 [CLI reference](../../docs/research-cli.md#further-areas) gives the payload, the record and the
@@ -561,8 +564,7 @@ CLI reference gives the payloads, the records and the refusals.
    reference with another digest with `strategy_evidence_stale`.
 5. Record the candidate in the destination, and cite in its `source.evidence` the imported
    forming calls and outcomes that it derives from. Such a candidate is a candidate formed in
-   the record: a `phenomenon` candidate needs at least one forming call, its own or an imported
-   one, and a slate that selects the candidate cites a slate review ("Candidates and the
+   the record: a slate that selects the candidate cites a slate review ("Candidates and the
    slate", step 7). The packet of that review delivers the imported records.
 6. An outcome of a form of the destination and an entry of its accounts can cite a member as
    evidence. The item has the standing that the member has in the source: an outcome that
@@ -601,254 +603,32 @@ CLI reference gives the payloads, the records and the refusals.
    `sources`, establish the refutation in the destination, for example with a bounded solver
    objective on the refuted form, and give the entry its replacement entry.
 
-### An exploration from a thought experiment
+### Retired starts
 
-A thought experiment is a simple situation of the physical world, or an intuitive question about
-one, stated in plain words before any mathematics is chosen; turning a unit segment around in the
-plane, the start of the Kakeya needle problem, is the model. An exploration that starts from one
-is an exploration of this section, with its budget, its tools, its slate and its end, and a
-candidate derived from it meets the same thresholds as every candidate. This subsection gives the
-research that turns the situation into candidates and the rules that the shared sections do not
-state.
+Up to 0.91.2 a record stated a kind of start in a `start` entry, and this skill gave a procedure
+of its own for two kinds: `phenomenon`, a phenomenon that appears in several places, and
+`thought_experiment`, a simple thought experiment. Release 0.91.3 removed the kind of start.
+Every exploration is opened on an area and a field question, as this section states, and no
+step chooses or records a kind of start. `problem-init` refuses a `start` entry. In a record
+that does not hold them already, `problem-candidate` refuses the source kinds `phenomenon` and
+`thought_experiment`, and `forming` refuses them as the kind of a question. The code of the
+three refusals is `problem_start_kind_removed`.
 
-1. The seed is the situation and the naive question about it, in plain words. Describe both in
-   `field` when you open the record, and open it with `start: {kind: "thought_experiment",
-   description}`. A seed question is starting material, not a candidate by itself.
-2. The interpretations. A mathematical interpretation states precisely what the seed question
-   asks. For each interpretation, state its objects, the admissible motions or configurations,
-   the quantifiers, the regularity or convexity assumptions, the quantity asked about (a minimum
-   or an infimum, a measure or a dimension) and the subject class it lies in. A naive question
-   admits several interpretations, and each asks a different thing; the needle gives at least
-   three: the least area of a convex region in which the segment turns, the least area of an
-   unrestricted such region, and the size of a static set that contains a unit segment in every
-   direction. Record each interpretation as a form of a forming call ("Exploration") whose
-   `question.kind` is `thought_experiment` and whose move is `reading`, an exact reading of a
-   question that is not yet exact. Give the leading interpretation the purpose
-   `expected_statement` and every other interpretation the purpose `alternative` of it.
-3. The expectations. For each interpretation, write the expected answer as a precise proposition
-   with its assumptions and its grounds, before any test; a vague impression is not an
-   expectation until it is stated as such a proposition. Each expectation has one outcome:
-   confirmed, refuted (a reported refutation included), supported or unresolved. The outcome is
-   a fact about the expectation, not a calibration: calibrate each claim that the record makes
-   about the expectation on its own, as the calibration paragraph of "The rubric" states, and
-   treat a structural explanation without a proof as an experimental finding or a reasoned
-   judgment, never as an established result. Record each expectation as a form of a forming
-   call with the move `expectation`, with the purpose `expected_statement`, the other answers
-   that you weighed as its alternatives, and the tests of step 4 as its planned checks. The
-   inputs of that call cite the forming call of its interpretation.
-4. Test each interpretation with the shared exploration tools, iterating as needed. An
-   interpretation does not require its own solver attack. Record how each expectation ended
-   with `form-outcome`. Its four outcomes are standings of its form: confirmed is `proved`,
-   `implied_by_known_results` or `found_in_literature`, by what confirmed it; refuted is
-   `refuted`; `supported` and `unresolved` keep their names. An interpretation is a question,
-   and the outcome of its form says how that question stands and what the exploration did with
-   it: `found_in_literature` when the works read settle it, `proved` when an accepted result of
-   this record settles it, `supported` or `unresolved` otherwise, with its disposition.
-5. The derived candidates. An interpretation ends settled (its expectation confirmed or refuted,
-   by the literature or by this record), supported or unresolved, and candidates derive from each
-   of these outcomes. A settled interpretation is material for derived questions: the structure
-   of the examples that the result produced, the quantity it leaves open, the connection it
-   reveals. An expectation need not be refuted. Record each derived question as a candidate of
-   kind `thought_experiment`, and check every candidate of that kind against the rule of the kind
-   when you compare the candidates or resume the exploration. The candidate's evidence cites the
-   forming calls and the outcomes that it derives from, and each form that a candidate takes up
-   gets an outcome with the disposition `taken_up_as_candidate`. A candidate that cites a
-   forming call or a form outcome is a candidate formed in this record, so a slate that selects
-   it cites a slate review ("Candidates and the slate", step 7).
-6. The situation's naturalness or simplicity is not evidence of significance and earns no grade.
-7. A settled seed question alone does not end the exploration. When the exploration ends,
-   record its report ("The end of an exploration"): the report is due for every record that
-   starts from a thought experiment.
+The words of a request, for example `/exactory:math-conjecturer number theory`, are the user's
+direction for the exploration: a field, a subject or the user's material. They select no kind
+of start. When a request names one of the two retired starts, for example
+`/exactory:math-conjecturer phenomenon`, do not stop and do not ask. Say in one sentence that
+0.91.3 removed the kinds of start, and run the exploration in the direction that the rest of
+the request gives. When the request gives no other direction, choose the area and the field
+question yourself. A pattern or a situation that the user brings is the user's material, and a
+candidate that comes from it has the source kind `user`.
 
-A record that was opened before 0.83.0 keeps its interpretations and expectations as it holds
-them. Record the interpretations and expectations that it states from now on as forms.
-
-The absolute principle above and rubric item A7 also apply to expectations formed during this
-exploration. A vague impression, an unsuccessful attempt or a change of model is not a
-refutation. In the needle problem, the expected minimizer for unrestricted regions was the
-deltoid, of area pi/8, and Besicovitch (1928) showed that the area can be made arbitrarily small.
-A question about the size and structure of static measure-zero sets that contain a unit segment
-in every direction asks about the world that the refutation reveals when that is its purpose, and
-a change of the quantity asked about does not by itself make a question admissible; a question
-that asks for the class of regions in which the deltoid stays minimal, with a value case that
-depends on finding where the refuted expectation still holds, is of the excluded kind. The convex
-interpretation is not of that kind: it was posed in 1917, before the refutation, and Pál confirmed
-its expected answer, the equilateral triangle of unit height, in 1921.
-
-Openness for an elementary situation follows the shared standard of "Openness", with searches
-that cover both the plain description of the situation and its mathematical formulations:
-alternative terminology, equivalent formulations, older problem literature, and the neighbouring
-fields where the situation arises. The searches track the distinctions that decide whether an
-interpretation is settled: the admissible objects and motions, the quantifiers, convexity or
-regularity, dimension, measure, and a minimum against an infimum. Follow decisive citations under
-the shared openness requirements. The searches are adaptive and bounded: no fixed number of
-searches or exhaustive survey of all fields is required.
-
-The rule of "Exploration" that one record holds the exploration applies with these particulars:
-
-- Open the record with `area` set to the subject class of the leading interpretation: the
-  interpretation you initially expect to investigate most closely.
-- When that rule permits a restart because the leading interpretation belongs to another class,
-  apply the steps, the principle and the openness requirements of this subsection in the
-  successor.
-- Unless you restart, keep the interpretations of every class, their expectations and their
-  tests in this record. Record their derived candidates here and compare them on this record's
-  slate. A selected derived candidate of another class moves to a record of its class through
-  "Carry a reviewed candidate to another record", and its forms go with it through "The
-  forming history of a candidate taken up in another record".
-
-### An exploration from a phenomenon that appears in several places
-
-A phenomenon that appears in several places is a fact, a pattern or a method that the works you
-read state separately in several settings, each for reasons of its own. An exploration that
-starts from one asks what one exact statement says about all of those places. The abc
-conjecture is the model, in our reading of its history. It is one inequality about coprime
-integers with a + b = c. Hall's conjecture with epsilon, the strong form of Szpiro's conjecture
-and Fermat's last theorem for large exponents each follow from it, by applying it to a family
-of triples or through a proved translation. It is the counterpart for integers of a proved
-theorem on polynomials, and the translated inequality without epsilon is false. Such an
-exploration is an exploration of this section, with its budget, its tools, its slate and its
-end, and a candidate derived from it meets the same thresholds as every candidate. That a
-statement gathers others is no evidence for its answer, and the exploration can end without a
-statement. This subsection gives the research that forms statements from the phenomenon and
-the rules that the shared sections do not state.
-
-The exploration looks for a statement for which the record can establish a gain over the list
-of what it gathers. What it gathers includes statements or bodies of facts with separate
-grounds: the works read state or study each of them for reasons of its own and present none of
-them as a case, a refinement or a consequence of another. The gain has one of three forms, and
-a proof, a full reading or a computation within its scope establishes it:
-
-- A common structure. The gathered statements are each derived from one and the same assertion
-  of the statement, by applying it to a family of its instances or through a proved
-  translation. A statement from which each gathered statement follows through a clause of its
-  own, however it is written, gathers them as a list.
-- An explanatory relation. The statement determines facts of one body of knowledge from facts
-  of another, and the record shows this on cases in which both were known independently.
-- Another mathematical advantage that the record proves, such as a reduction under which a
-  named line of proofs reaches results that it does not reach without the statement.
-
-No statement has the gain by its form. A conjunction of known statements, a strengthening or a
-generalization of one named statement, a variant of a statement in one parameter, and a
-statement about an object that is defined so that it unpacks into known statements each need
-the established gain, like any other statement. Whether a statement has the gain is decided
-from the statement and its established relations, not from the aim of the exploration that
-formed it.
-
-1. The start. Open the record with `start: {kind: "phenomenon", description}`. Set `area` to the
-   subject class in which you expect the statement to lie, and describe in `field` the
-   phenomenon and the question of what one exact statement says about its places. The
-   phenomenon is starting material, not a candidate by itself.
-2. The places. Survey where the phenomenon appears with `search`, `read` and `expand`, and with
-   the population tool where the activity of a line matters. For each place, read in full the
-   work that states or studies it for reasons of its own. The places with separate grounds are
-   what a later statement can gather. Record the phenomenon and its places in the first forming
-   call: its `question.kind` is `phenomenon`, and each entry of `question.places` describes one
-   place and cites the evidence that shows it, in the evidence shapes of "Value and the
-   rubric", step 6. Every call whose `question.kind` is `phenomenon` names at least one place;
-   a later call can state a narrower question of its own under another kind.
-3. The move. Form statements by the move that fits the material, and name it in `move.kind`:
-   - `transfer`: a proved theorem of a neighbouring setting, carried to this setting by a stated
-     dictionary. Read the theorem and its proof in full first. Give the `dictionary` of the
-     call: the two settings and each term that is carried. A published heuristic or a
-     prediction from outside mathematics is carried in the same way, and the grounds of its
-     forms say that the derivation is conditional.
-   - `restatement`: a conjecture that exists in a form that no instance checks, stated in a
-     form that each instance checks.
-   - `isolation`: the weakest hypothesis that repairs each of several proofs that fail at the
-     same step, taken from your delivered solver attempts or from the works read.
-   - `comparison`: data of two sources, compared. Give `comparison_count` and `amounts.pairs`,
-     the number of comparisons made and of pairs compared, because an agreement found among
-     many tries is weighed against their number.
-   - `expectation`: an expected answer written as an exact proposition, for example the value
-     that an invariant computed at scale suggests.
-   - `correction`: a form changed after a check or an attack showed a fault (step 7).
-
-   The kind is an open value. Record another move, for example a generalization or a
-   dualization, in your own words.
-4. The forms. State each form before its checks, in the forming call of the move that produced
-   it, with its text, its purpose and its grounds. State beside it:
-   - its nearest alternatives, which are the statements that could be posed in its place: a
-     stronger form, a weaker form, the same assertion with another constant or exponent, or
-     another assertion about the same objects. Each is a form of its own with the purpose
-     `alternative`;
-   - the relations that you expect of it: what it would imply, what it would follow from, and
-     what it would be equivalent to or incompatible with. A relation stays expected until a
-     proof or a full reading establishes it, and an expected relation supports no premise of a
-     value case;
-   - its planned checks (step 5).
-
-   Give the numbers of forms, of alternatives and of expected relations in `amounts`.
-5. The checks, with what each can show. A check compares a form with a fact, by a computation or
-   a proof, on an instance, a family of instances, a consequence or an asymptotic regime. State
-   for each planned check the outcome that would contradict the form (`contradiction`), or the
-   reason that no outcome can (`no_contradiction_reason`). No finite set of triples contradicts
-   the abc inequality, because its constant is chosen after epsilon, so a computed triple is an
-   observation; a family of triples with unbounded ratio for one fixed epsilon would refute it.
-   A check without a contradicting outcome gives an observation. The data that suggested a form
-   are its origin: list each probe that a forming call used in `probes`, with the role `origin`
-   for a form that was chosen with its result in view and `observation` otherwise. A probe
-   recorded after a form is no origin of it (`problem_form_origin_late`), and no probe result
-   earns credit as a test. A run earns that credit for the statement of the record, and only
-   when its plan declared the test before the execution ("A run as a test of the statement").
-   A run exists for the current statement only, so a form is tested in this sense once it is
-   the statement of the record.
-6. The attacks. Attack each form that you expect to pose, and its stronger forms, before
-   anything is posed. Look for counterexamples with probes. With bounded solver objectives of
-   their own ("The attempt", "Objectives beside the attempt"), try to prove that a stronger form
-   fails, that the form implies a named statement or follows from one, or that it is equivalent
-   to one. Record how each form, each expected relation and each planned check ended with
-   `form-outcome`, with the evidence and its standing as "Exploration" states them. Keep every
-   refutation in the record as a fact about mathematics, with its counterexample.
-7. The corrections. When a check or an attack shows a fault in a form, record the corrected form
-   with the move `correction`. Its `previous` names the earlier form and the reason for the
-   change. Its `correction_checks` has one entry for each planned check of the earlier form:
-   whether the check was made (`was_made`), whether the corrected form keeps its prediction
-   (`keeps_prediction`), and whether the correction was chosen with its outcome in view
-   (`chosen_with_outcome`). A check whose outcome shaped the correction is the origin of the
-   corrected form. Record the other corrections that you compared as forms with the purpose
-   `alternative`, and give the earlier form an outcome with the disposition `superseded` that
-   names the corrected form. A correction of a form that the record held as its expected
-   statement and that was refuted is a statement posed in place of a refuted one: form it so
-   that it meets the three conditions of "Exploration", and enter the replacement part in the
-   accounts of its value record ("The accounts"). When a run made a planned check of the
-   earlier form, give the `execution_id` of that run in its `correction_checks` entry; a run
-   stays a test of the corrected statement only through that entry ("A run as a test of the
-   statement").
-8. The derived candidates. Candidates derive from every outcome. A form that stands after its
-   attacks is a candidate question. A refuted form is material for questions about what the
-   refutation reveals, under the absolute principle. A form that was proved, or that known
-   results imply, is a result and no open problem; what it gives can be a foothold of a
-   neighbouring question. A form found in the literature belongs to its source. Record each
-   derived question as a candidate of kind `phenomenon` whose evidence cites the forming calls
-   and the outcomes that it derives from, and give each form that a candidate takes up an
-   outcome with the disposition `taken_up_as_candidate` and the candidate's id. A slate that
-   selects such a candidate cites a slate review, and the slate gives priority by the expected
-   gain ("Candidates and the slate", steps 6 and 7).
-9. The end. Give every form an outcome: `set_aside` with the reason for a form that you leave,
-   and `not_examined` with the means that were lacking for a form that you could not examine.
-   When the exploration ends, record its report with `problem-report` ("The end of an
-   exploration"), and give in your summary the forms that it produced and how each ended, and
-   for each posted statement whether the record established a gain. An exploration that ends
-   without a candidate ends without a post, as "Exploration" states.
-
-The absolute principle of "Exploration" and rubric item A7 apply to every form of this
-exploration. The public text of a problem that comes from it states what the record
-established, and it makes no comparison with a named conjecture as a claim about the standing
-of the statement.
-
-The places of a phenomenon often lie in several subject classes. Open the record in the class
-in which you expect the statement to lie, and name as a further area each other class in which
-a statement of the record would have a consequence, an earlier statement or a nearer
-alternative ("Further areas").
-
-The forming records stay in the record that made them. When a restart or a carry under the
-rule of "Exploration" takes a formed candidate to another record, bring its forming history
-there with `forming-import`, and record the transfer in this record ("The forming history of a
-candidate taken up in another record"). The imported records keep their origin, their dates
-and their standing, so the destination states no form of this record again. A record that
-stated the forms of another record again under the text of 0.83.0 or 0.84.0 keeps those
-forming calls as it holds them.
+A record that an earlier release opened with one of the two starts keeps working, and so does a
+record that holds a candidate or a forming call of one of the two kinds. Its `start` entry
+stays, and full `status` shows it under `problem.start`. Before you continue such a record,
+read [Retired starts](../../docs/retired-starts.md). It holds the procedure of each start, the
+rules of its kinds, what the harness accepts in such a record, and how a new record takes up
+one of its candidates.
 
 ### The end of an exploration
 
@@ -874,7 +654,8 @@ the current revision, and it refuses a payload that enters a computed field. The
 [CLI reference](../../docs/research-cli.md#the-report-of-an-exploration) gives every field.
 The report holds:
 
-- the start that was explored and its kind, with the question of the first forming call;
+- the field question that was explored, the kind of start where the record holds one, and the
+  question of the first forming call;
 - every form with its move, its standing, its disposition and the evidence of its latest
   outcome, and each forming import with the forms and the counts of its source, apart from
   the record's own;
@@ -918,15 +699,16 @@ The last outcome takes precedence over the other five. A report that is recorded
 record holds no current slate takes its outcome from the posts, the statements and the forms
 that the record holds at that time.
 
-The report is due for a record whose start is `phenomenon` or `thought_experiment`, and for
-every record that holds a forming call, once the exploration has ended. `status` and `next`
+The report is due for every record that holds a forming call, and for every record whose
+`start` entry names a retired start ("Retired starts"), once the exploration has ended.
+`status` and `next`
 then carry an `advisories` entry with the code `problem_report_due`, until the record holds a
 report. The advisory changes no gate, no obligation and no next action, so a post does not
 wait for the report. Before you record a due report, give every form an outcome whose
 disposition is `superseded`, `taken_up_as_candidate` or `set_aside`: the command refuses a due
 report while a form has no outcome or the disposition `open` (`problem_report_forms_open`,
-with the form ids). A record that started from a field question and holds no forming call has
-no due report, and you can record one for it.
+with the form ids). A record that holds no forming call and no retired start has no due
+report, and you can record one for it.
 
 The report records its `cutoff`, the revision at which it was computed, and the digest of the
 records that it read. It is stale once a record of a kind that it read is added or changed
@@ -986,22 +768,14 @@ significance.
    `bar_review_ids`.
 6. Compare the candidates by their mathematical payoff, their neighbours, the tests that would
    distinguish them, their failure signals and their resource demand. Write that comparison; it
-   goes into the slate. An exploration opened on a phenomenon that appears in several places
-   gives priority to the candidates for which it expects to establish a gain ("An exploration
-   from a phenomenon that appears in several places"). Such a candidate states in its
-   `observation` the form of the gain, what the statement would gather, how the statement
-   would stand to the conjunction of what it gathers (equivalent, stronger in a stated respect,
-   or not known), and the work that would establish the gain. The number of statements that
-   would follow from a candidate gives no priority. This priority is a reasoned departure from
-   the preference for accessible advances (class `E-F` first, in "The rubric"); record it once
-   for the exploration, in the comparison.
+   goes into the slate.
 7. The harness requires a slate review in two cases. When a carry imported at least one
    objection, obtain a focused slate review of the current imported set before you record the
    slate. When the slate selects a candidate formed in this record, obtain a slate review of
    the current candidates before you record the slate (`problem_slate_review_required`
-   otherwise). A candidate formed in this record is one of kind `phenomenon`, or one whose
-   `source.evidence` cites a forming call or a form outcome; a reviewer judges such a statement
-   before a formulation, an attempt and an openness finding are spent on it. The prompt of
+   otherwise). A candidate formed in this record is one whose `source.evidence` cites a forming
+   call or a form outcome; a reviewer judges such a statement before a formulation, an attempt
+   and an openness finding are spent on it. The prompt of
    that slate review carries the slate paragraph (`exactory-problem-slate-forming-v1`). It asks
    the reviewer which form of gain the candidate expects, what the statement would gather and
    on which separate grounds, how the statement would stand to the conjunction of what it

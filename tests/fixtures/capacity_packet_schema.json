@@ -19771,7 +19771,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.problem_candidates": {
-      "ast_sha256": "cc113bb83b5768f19c7e8aeb1b53a25926f02ff8e079fede0a989786cc7a39f9",
+      "ast_sha256": "6b25bcc5b19ac81dcc62b44de531d251801ee857d215a02f84e2ad50b0a5cfbd",
       "functions": {
         "_collect_candidate_lineage": "b9e66fea5c7ada89ef2bf4e108ded6a50330ed9ff994eef32ae6cbf5a9ab0f11",
         "_is_current_review": "b13fc77f59709f42c66dffe084367ac593d9900cc1bde533d990152a36d3bc75",
@@ -19786,11 +19786,11 @@
         "find_current_slate": "cd63f5d2ef11e2c7d29b4f7873332906e1756172fb91970fd3c60272eccae675",
         "find_slate": "a2c45309610dcc173a3e6f0e0dfe2526bddf2e8c4dd70229cba813a90111742f",
         "project_slate_objection": "b5b6ce64d8cf6013f6ca1d38e315f9f73a9b036433abde7ce0a7f84b360d1cdd",
-        "record_candidate": "281137be1566127d766b16ac70daa41d428b3979db38369c52cd4d37514dd600",
+        "record_candidate": "49c5b5d153fb0c36ec2c7df65881e08b999b698c6c66dcb6067897f31c432943",
         "record_slate": "2318c4e2f032bdd7feec3260a928a664b68663a16155756474eefb7830acab00"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.91.3: record_candidate refuses the removed kind of start before any record is built; no packet field or shape changes."
     },
     "research_harness.problem_citation_metadata": {
       "ast_sha256": "32445d71db4d932ec24a5b584b171dbe2be5b1f6d43ec9df3f11f59fd11f49ec",
@@ -19810,7 +19810,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.problem_claims": {
-      "ast_sha256": "101b7146430c278967ec39c25bdead57a1f7476ab3b8705c907cc5fa12173eb9",
+      "ast_sha256": "5fab1373355f5c9b54631843793a22bf701c21379a5c5d7eb049775ae3da2b06",
       "functions": {
         "assess_assessment": "c76361c42d4646f58cde01126a23215e05c0bcaa5a8b5e84cda3e7c6c6f22600",
         "compute_problem_evidence_digest": "a3db49acd6cc12448c855b12c7f0cac6923493ae6aeb259a09577f8a0436c834",
@@ -19821,7 +19821,8 @@
         "find_current_statement": "1f2ac2a8a87dedf93a4c11f32c7c674b1b01d3510b4427a7d87f081eea343e39",
         "find_latest": "9b6b43dfabd018326d757a49312e155db0b492f915f7cd0f930b0f28574cfbea",
         "find_value": "886d73105aba50e22e7101cfff5321449afda845d7c8588065fdd22a1e6263db",
-        "initialize_problem": "ef0cf29ef209d0bf1305285b2db4bee22f58a7018d9aa49f043fb4dc8a72b198",
+        "has_retired_kind": "0c83aa565c874bf42ef105ef3875c32c40136e4b336d6bd6b61d9dccf452124d",
+        "initialize_problem": "f6d847d214ac141e666b280ce1e8511e729244a7b45e04606806f7b8739cf1ae",
         "record_assessment": "e7e433c59e41766bdef4c1a4c52c60151bc68bde4e26c941fc9d1b6f4c605f18",
         "record_decision": "e5c74364a8b3be9de54ca3fc45e2beeb5605cb17fe865b304c6c73a62f139e67",
         "record_formal_check": "f6ac1dd2a649667278fb34f238433687b3421fd30499c6f5618adb03a46bcf3a",
@@ -19835,7 +19836,7 @@
         "validate_area": "169a62a8bd4e54e05e164ae4ad900ff23b22296f199fbdb9f77f66ebae85a75a"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in describe_value_size; version 1 follows its existing projection. Reviewed 0.91.2 record_value accounts_version=2: result and adjudicator value schemas already declare accounts_version, and describe_value_size preserves the reviewed versioned account projection. No additional packet fields or shapes change."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in describe_value_size; version 1 follows its existing projection. Reviewed 0.91.2 record_value accounts_version=2: result and adjudicator value schemas already declare accounts_version, and describe_value_size preserves the reviewed versioned account projection. No additional packet fields or shapes change. Reviewed 0.91.3: initialize_problem refuses the removed kind of start before any record is built; no packet field or shape changes."
     },
     "research_harness.problem_delivery": {
       "ast_sha256": "c6e8c40b94f967970ce8cdab7296eaa8d09e1e3d354fce9973700f599e317f54",
@@ -19935,13 +19936,13 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.problem_forming": {
-      "ast_sha256": "6738043642506b68b56fea8549dc2a2c75e73a30f2d001b9050d3d66a6cc7628",
+      "ast_sha256": "fb43626ff477a201ddad21a3243f786e655afd7bd07b6b964418fc541d5effe1",
       "functions": {
         "collect_forms": "5649df3723d40d034643841819c46d6472e1f74a8995d5823d89faaeebfb2584",
         "count_forming": "0a19aea4596de0be2a5922234b1040f4eca6706dea227412d4be7490fcdc85ea",
         "find_form": "119f507548d9ffcb1836fdb4e4f7259e8031486b5cfbd462cd75b395e99b23e6",
         "record_form_outcome": "10e9b635cf1ba8b10d3a9c20ecf79a9d2b2923c7cd89a8319f073730ce9789bb",
-        "record_forming": "16023ba50282082a6fc855585d4e06351a463ab88169216db7ddd54ce1148a25",
+        "record_forming": "c4037cc6088dd4db34e6e5e63ee2fd3bfca28534b0cc40dc928389a9b0a70498",
         "validate_checks": "cd7bbc3a525e1baba6613949261e9ca2e4914447e4717ec1ed621da6bba05581",
         "validate_correction": "a80fdd730cbb28cb524e3975b590e5471ac076fde6afacfbc565e82a3efb75fd",
         "validate_count": "6b85fe4060fd67ca73017e1571a31e15fa49e0ea57d04c8ca06cb47b2f5ed3ba",
@@ -19954,7 +19955,7 @@
         "validate_performer": "b28478fb0349385a787acf4cfd74f193b21a3dde69f7bf020cf39b3191e66923"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.91.3: record_forming refuses the removed kind of start before any record is written; no packet field or shape changes."
     },
     "research_harness.problem_forming_import": {
       "ast_sha256": "52b39436ab537ac61b9c5fa58c545300036c3577e558820f648c1cd453254b75",

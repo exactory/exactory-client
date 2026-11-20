@@ -24,6 +24,36 @@ class ProblemCase(LiteratureCase):
             "slug": "bounded-sequences", "area": "math.CO", "field": "Extremal sequences and finite bounds",
             "authors": ["problem-author"]}, **changes))["result"]
 
+    def restore_start(self, kind, description="The record was opened with a kind of start."):
+        """Write the start entry into the stored marker, as problem-init recorded it from 0.83.0 to 0.91.2."""
+        marker = self.store.snapshot()["records"]["workspace"]["problem"]
+        return self.put("workspace", "problem", dict(marker, start={"kind": kind, "description": description}))
+
+    def hold_retired_kind(self, ground, kind, forming):
+        """Give the record the retired kind on one ground: the start, a candidate or a forming call. The candidate and
+        the forming call are recorded as 0.91.2 recorded them in every record, and both cite the given forming call."""
+        from research_harness import problem_candidates, problem_forming
+        from test_research_problem_candidates import build_candidate
+        from test_research_problem_forming import build_forming
+        if ground == "start":
+            self.restore_start(kind)
+        elif ground == "candidate":
+            with patch.object(problem_candidates, "RETIRED_KINDS", ()):
+                self.mutate(problem_candidates.record_candidate, build_candidate("earlier-" + kind, source={
+                    "kind": kind, "reference": "A candidate of an earlier release.", "evidence": [forming]}))
+        else:
+            with patch.object(problem_forming, "RETIRED_KINDS", ()):
+                self.mutate(problem_forming.record_forming, build_forming("earlier-" + kind, forms=[], question={
+                    "kind": kind, "description": "A forming call of an earlier release.",
+                    "places": [{"description": "The cited forming call.", "evidence": [forming]}]}))
+
+    def assert_retired_kind_refused(self, kind, function):
+        revision = self.store.revision
+        with self.assertRaises(ResearchError) as caught:
+            function()
+        self.assertEqual((caught.exception.code, caught.exception.details), ("problem_start_kind_removed", {"kind": kind}))
+        self.assertEqual(self.store.revision, revision)
+
     def build_statement(self, identifier="statement-1", **changes):
         return dict({"id": identifier, "title": "A finite bound problem", "area": "math.CO",
             "statement": r"For every $n$, does $B(n)\leq n^2$ hold?",
@@ -67,31 +97,25 @@ class ProblemCase(LiteratureCase):
 
 
 class ProblemRecordTests(ProblemCase):
-    def test_start_accepts_an_open_kind_and_description(self):
-        start = {"kind": "an unexpected obstruction in a proof",
-                 "description": "The same step fails in several independently studied constructions."}
-        marker = self.initialize_problem(start=start)
-        self.assertEqual(marker["start"], start)
-        self.assertEqual(self.store.snapshot()["records"]["workspace"]["problem"], marker)
-
-    def test_start_refuses_empty_or_nontext_kind_and_description(self):
-        for key in ("kind", "description"):
-            for invalid in ("", " \n\t", None, 3, True, [], {}, "contains\x00NUL"):
-                with self.subTest(key=key, value=invalid):
-                    start = {"kind": "field question", "description": "Determine the finite bound."}
-                    start[key] = invalid
-                    self.assert_error("invalid_input", lambda: self.initialize_problem(start=start))
-                    self.assertEqual(self.store.revision, 0)
-                    self.assertEqual(self.store.snapshot()["records"], {})
-
-    def test_start_refuses_a_malformed_entry(self):
-        for start in (None, "phenomenon", [], {}, {"kind": "phenomenon"},
+    def test_every_start_entry_is_refused_without_a_record(self):
+        for start in ({"kind": "an unexpected obstruction in a proof",
+                       "description": "The same step fails in several independently studied constructions."},
+                      {"kind": "field_question", "description": "Determine the finite bound."},
+                      {"kind": "phenomenon", "description": "The same values occur in several places."},
+                      {"kind": "thought_experiment", "description": "Imagine the sequence grows without a bound."},
+                      {"kind": "", "description": "Determine the finite bound."},
+                      {"kind": "field question", "description": None},
+                      None, "phenomenon", [], {}, {"kind": "phenomenon"},
                       {"description": "The same phenomenon appears in several places."},
                       {"kind": "phenomenon", "description": "Several places.", "places": []}):
             with self.subTest(start=start):
-                self.assert_error("invalid_input", lambda: self.initialize_problem(start=start))
+                with self.assertRaises(ResearchError) as caught:
+                    self.initialize_problem(start=start)
+                self.assertEqual(caught.exception.code, "problem_start_kind_removed")
+                self.assertIsNone(caught.exception.details)
                 self.assertEqual(self.store.revision, 0)
                 self.assertEqual(self.store.snapshot()["records"], {})
+        self.assertNotIn("start", self.initialize_problem())
 
     def test_marker_has_discriminator_immutable_authors_and_no_history(self):
         marker = self.initialize_problem()

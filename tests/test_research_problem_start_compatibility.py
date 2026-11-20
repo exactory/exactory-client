@@ -52,7 +52,14 @@ class ProblemStartCompatibilityTests(ProblemCase):
         self.assertEqual(self.store.snapshot()["records"], self.fixture["initial_records"])
         for candidate in self.fixture["candidates"]:
             payload = {key: value for key, value in candidate.items() if key != "recorded_revision"}
-            saved = self.mutate(problem_candidates.record_candidate, payload)["result"]
+            if payload["source"]["kind"] == "thought_experiment":
+                self.assert_retired_kind_refused("thought_experiment",
+                                                 lambda: self.mutate(problem_candidates.record_candidate, payload))
+                # 0.82.0 accepted the kind in every record; record this candidate as that release did.
+                with patch.object(problem_candidates, "RETIRED_KINDS", ()):
+                    saved = self.mutate(problem_candidates.record_candidate, payload)["result"]
+            else:
+                saved = self.mutate(problem_candidates.record_candidate, payload)["result"]
             self.assertEqual(saved, candidate)
             self.assertEqual(digest(saved), self.fixture["expected"]["candidate_digests"][saved["id"]])
         records = self.store.snapshot()["records"]

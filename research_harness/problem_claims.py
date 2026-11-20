@@ -18,6 +18,16 @@ from .principles import prepare_initialization
 from .strategy import find_orchestration
 from . import problem_rubric, strategy
 
+# Release 0.91.3 removed the kind of start; a record that holds one of these kinds keeps it.
+RETIRED_KINDS = ("phenomenon", "thought_experiment")
+
+
+def has_retired_kind(records, kind):
+    """Whether the record holds the kind as its start, as a candidate source or as a forming question."""
+    return (records["workspace"]["problem"].get("start", {}).get("kind") == kind
+            or any(row["source"]["kind"] == kind for row in records.get("problem_candidate", {}).values())
+            or any(row["question"]["kind"] == kind for row in records.get("forming_call", {}).values()))
+
 
 def find_current_statement(records):
     selection = records.get("problem_selection", {}).get("current")
@@ -48,17 +58,17 @@ def initialize_problem(store, payload, *, expected_revision, request_id):
     artifacts = store.build_artifact_store()
 
     def prepare(records, value):
-        fields(value, ("slug", "area", "field", "authors"), ("start",))
+        if "start" in value:
+            raise ResearchError("problem_start_kind_removed",
+                                "Leave start out of the payload. Release 0.91.3 removed the kind of start, and a new "
+                                "problem record holds none. Describe the field and the question explored in field")
+        fields(value, ("slug", "area", "field", "authors"))
         if find_orchestration(records) is not None:
             raise ResearchError("orchestration_conflict", "Keep each orchestration in its own research record")
         for key in ("slug", "field"):
             text(value[key], "Problem " + key)
         validate_area(value["area"])
         strings(value["authors"], "Problem authors", nonempty=True)
-        if "start" in value:
-            fields(value["start"], ("kind", "description"))
-            for key in ("kind", "description"):
-                text(value["start"][key], "Problem start " + key)
         config = records.get("configuration", {}).get("research")
         changes = []
         if config is None:
