@@ -818,7 +818,7 @@ beyond it. The states and their steps:
 | --- | --- | --- |
 | `running` | The capacity of the call is not released, there is no capture, and its owner or a transport process is alive. | `review-run` with `action: "reconcile"`, which succeeds once the processes have ended. |
 | `interrupted` | As `running`, and no process of the call is alive. | `review-run` with `action: "reconcile"`. For an ordinary call it records the unknown outcome as a failed attempt, probe or correction with the error `review_invocation_interrupted` and releases the capacity. For a staged task it marks the reservation `unknown` (a worker that ran) or `known_failure`, records no attempt and releases the capacity. |
-| `captured` | The observation of the call is retained, and its recording is pending. For an ordinary call the attempt is not recorded. For a staged task the capture has no acceptance and no refusal, and either its attempt is not recorded or its observation is completed. | For an ordinary call, the original command with, as `request_id`, its original request ID, which records the attempt from the capture without a reviewer call; the `payload` of the step is partial (below). For a staged task whose dispatch is recorded, the task's `review-run` under its original attempt id, with its original request ID as `request_id`. For another staged task, `review-run` with the task payload and `action: "accept"` when the observation is completed, and with `action: "reconcile"` when it is not; this step has no `request_id`. |
+| `captured` | The observation of the call is retained, and its recording is pending. For an ordinary call the attempt is not recorded. For a staged task the capture has no acceptance and no refusal, and either its attempt is not recorded or its observation is completed. | For an ordinary call, the original command with its original payload and, as `request_id`, its original request ID. This step records the attempt from the capture without a reviewer call. For a staged task whose dispatch is recorded, the task's `review-run` under its original attempt id, with its original request ID as `request_id`. For another staged task, `review-run` with the task payload and `action: "accept"` when the observation is completed, and with `action: "reconcile"` when it is not; this step has no `request_id`. |
 | `accepted` | The attempt is recorded, or the staged task is accepted or refused, and the capacity is not released. | `review-run` with `action: "reconcile"`, which releases the capacity. |
 | `settled` | The capacity of the call is released, or a call without a pool membership has its attempt. A staged reservation that was reconciled without an observation is settled without an attempt. | None. |
 | `historical` | A call of 0.69.x: an invocation without a pool membership and without an attempt. | For a run, `review-attempt` with the failed attempt of the `review-run` row. The harness cannot establish the end of its processes, so a stop is complete without this step. |
@@ -832,10 +832,13 @@ is not settled. A `now` stop whose result shows a call that is neither
 `settled` nor `historical` is not complete. Send the stop again with a new
 request ID: the command joins the standing stop and continues the settlement,
 and it reads the original payload of a captured call from the store. Or run
-the step of each such call and read the state again. The `payload` of a
-captured ordinary call holds only `id` and `assignment_id` or `route_id`, so
-restore every other member of the original payload before that replay, for
-example `capacity` of a capacity probe. A `historical` state does not
+the step of each such call and read the state again. Since 0.91.5 the
+`payload` of a captured ordinary call is the payload of its original command,
+with every member that the command received (for example `capacity` of a
+capacity probe). The payload needs no change before the step runs. From
+0.89.2 to 0.91.4 the step of a captured capacity probe did not hold
+`capacity`, and the store refused its replay with `request_id_conflict`. A
+`historical` state does not
 establish that the processes of that call ended. A repeat with the same request ID returns the first response
 unchanged. An attempt without a completed output whose call a `now` stop
 lists in `calls` is the outcome `stopped`. It counts as no failure of its turn
@@ -5845,10 +5848,11 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   turns once: as carried, as superseded, or under `source_changed` when its
   source unit changed or left the packet. A row with superseded entries also
   holds a `message`. `unavailable_chains` holds a row `{chain, code, details,
-  message}` for an earlier reading chain with the author and the route
-  identity of the new chain and another reviewer, when the store cannot give
-  its packet, or evidence of its native packet that the new packet does not
-  hold. `code` and `details` are those of the refusal of the store. The
+  message}` for an earlier reading chain with the author, the statement, the
+  formulations and the route identity of the new chain and another reviewer.
+  The row appears when the store cannot give the packet of that chain, or
+  evidence of its native packet that the new packet does not hold. `code` and
+  `details` are those of the refusal of the store. The
   report then cannot say whether that chain belongs under `passed_over`. The
   new chain carries none of its turns in either case, and the first
   assignment goes on. A missing native packet of such a chain refuses the
@@ -7390,15 +7394,14 @@ holds `operation`, `invocation_id` or `reservation_id`, `assignment_id`,
 | --- | --- | --- | --- |
 | `settled` | `true` | `review_call_closed` | None. The post closed the call, and nothing is owed. |
 | `interrupted` | `false` | `review_invocation_pending` | `review-run` with `{action: "reconcile", operation, invocation_id}`, or with the task payload and `action: "reconcile"` for a staged task. |
-| `captured` | `false` | `review_invocation_pending` | For an ordinary call, the original command with its original request ID as `request_id`; restore the members of the original payload that the row's `payload` leaves out. For a staged task: the task's `review-run` under its original attempt id and request ID, or the task payload with `action: "accept"` for a completed observation and `action: "reconcile"` for another. |
+| `captured` | `false` | `review_invocation_pending` | For an ordinary call, the original command with its original payload and its original request ID as `request_id`. For a staged task: the task's `review-run` under its original attempt id and request ID, or the task payload with `action: "accept"` for a completed observation and `action: "reconcile"` for another. |
 | `accepted` | `false` | `review_invocation_pending` | `review-run` with `action: "reconcile"`, which releases the capacity. |
 | `historical` | `false` | `review_invocation_pending` | For a run, `review-attempt` with the failed attempt of the `review-run` row. |
 | `running` | `false` | `review_invocation_pending` | `review-stop` with `{id: "post-close-call:<digest>", action: "stop", assignment_id, mode: "now", reason: "The post closed this review chain."}`, which ends the call. |
 
 Every step is administrative: it closes recorded work and makes no reviewer
 call. A step does not always settle its call: `review-stop` returns also when
-its settlement is not complete, and the row of a captured call names a partial
-payload (the stop, in
+its settlement is not complete (the stop, in
 [Review chains and `review-series`](#review-chains-and-review-series)). Read
 `after_post` again after each step, and take the step that the row then shows,
 until the call is absent from the list or its row is `settled`. A settled call stays listed, with `closed: true`
@@ -7775,6 +7778,9 @@ of the retired kind `phenomenon` whose evidence cites no forming call,
 `problem_start_kind_removed` when `problem-candidate` names a retired source
 kind in a record that does not hold it, and `problem_slate_review_required` when
 `problem-slate` selects a candidate formed in the record without a slate review.
+A record holds a retired kind when its start, one of its candidates or one of
+its forming calls already has that kind
+([The removed kind of start](#the-removed-kind-of-start)).
 
 A record that holds no forming record keeps the `status` report, the output
 folders and the digests of 0.82.0.

@@ -1394,8 +1394,9 @@ each of these refusals.
      The receipt of the first assignment carries `carried_readings`: the chains and
      turns that it took over, the ranges that remain, `passed_over`, the earlier chains
      that differ only in the `reviewer_id`, and `outputs`. When the store cannot give the
-     packet of an earlier chain under another `reviewer_id`, the report names that chain
-     under `unavailable_chains`, and the first assignment goes on. The same holds for
+     packet of an earlier chain with the same statement and formulations under another
+     `reviewer_id`, the report names that chain under `unavailable_chains`, and the first
+     assignment goes on. The same holds for
      evidence of its native packet that the new packet does not hold. The new chain carries
      nothing of such a chain in any case. A missing native packet of such a chain refuses the
      first assignment instead (below). Run `review-assignment --check`
@@ -1428,7 +1429,8 @@ each of these refusals.
      route identity, the selection also reads the packet of the first turn when the statement
      and the formulations are the same, and the evidence and the turns of the chains above.
      Neither reads an artifact of a single-turn review or of a chain on another route
-     identity. Restore the exact bytes of that artifact and assign again. When you cannot
+     identity. Restore the exact bytes of the artifact that `details.path` names, and assign
+     again. When you cannot
      restore them, report the refusal with its details. The owner then decides whether the
      review runs on a route of another route identity. A chain there carries no earlier turn
      and reads every unit.
@@ -2187,7 +2189,8 @@ accounts with the parts that the harness derives, and the records that their ent
      handoff then names a probe of the route of the assignment or a context repair. Probe the
      route record of the correction instead. When `review-output-correction` does not admit
      the head, the turn position is exhausted, and
-     the code names the step of the role of the head: `export`, kind `problem-openness`, for an
+     `review_slot_exhausted` names the step of the role of the head: `export`, kind
+     `problem-openness`, for an
      openness chain (Openness, steps 6 and 6b), `review-assignment` of a new eligible reviewer for a bar
      and for an adjudicator, and `review-assignment` of a context repair with the member
      `exhaustion` for a slate and for a result. `review_refusal_notice_metadata_too_large` names
