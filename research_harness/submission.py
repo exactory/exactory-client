@@ -16,9 +16,11 @@ from .verification import task_identity, validate_verdict
 
 # The message of an observation of a submission or a verdict that the store refused beyond the wait.
 SUBMISSION_OBSERVATION_STORE_BUSY_MSG = (
-    'The research store stayed busy, or kept changing the records that this write read, and what the task read '
-    'showed about this remote operation was not recorded. The read sent no write to the service. Run the same command '
-    'again. It reads the task again.')
+    'The research store stayed busy, or kept changing the records that this write read. What the task read showed '
+    'about this remote operation was not recorded. The read sent no write to the service. When the command ended with '
+    'this refusal, run the same command again. It reads the task again. When this text follows "Managed record '
+    'skipped", the command did not end. It went on to send its request directly, and its later output says how that '
+    'request ended.')
 
 
 def _observation(store, intent_id, status, response):

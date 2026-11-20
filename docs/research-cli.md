@@ -3181,6 +3181,25 @@ An earlier release did not check these bounds, so a store that it wrote can hold
 
 Some commands write to the store in more than one step. If the store refuses a later step, the earlier steps stay, so the revision changes although the command fails. For example, `reconcile-run` and `exactory-lab run` record the outcome of a run before its observation.
 
+Some writes do not depend on the revision of the whole store. A command makes them by itself, for work that is admitted or done:
+
+- For an admitted run: the record that releases its program, its outcome, its observation, and the receipt of its reconciliation.
+- For a managed deposit, submission or verdict: the answer of each step, the receipt, and the start of the step of a verdict. The same holds for a pending step that a read of the service settles or clears. It also holds for what a read of the task or of the deposition showed.
+- For a direct deposit: the record that the command writes at its end. For a version draft: its concept DOI.
+- For an acquisition: its result. For a cohort collection: each page. For a full-text job: each of its records.
+
+Such a write depends on the records that it read. A commit of another command that changes none of those records does not refuse it. Three of these writes commit at the revision that the store has at the time of their write lock. They are the receipt of a reconciliation, the result of an acquisition, and a page of a cohort collection. No commit of another command refuses them.
+
+One write reads the revision itself. The outcome of a run that pauses its cycle writes a checkpoint that names that revision. As a result, each commit of another command refuses an attempt of that write.
+
+After a refused attempt, the write is prepared again. This applies after a busy store (`store_busy`) and after a commit that changed a record that the write read. The write is tried at most 600 times, and no attempt starts later than 600 seconds after the first attempt. The wait applies to each record, so a command that writes several records can wait for longer.
+
+During an attempt, the write holds the write lock of the store and checks the history of the store once. A write of another command that starts in that time is refused with `store_busy` after 1 second. The commit of an attempt can meet a command that reads the store. The commit then waits for that read to end, inside the same 600 seconds, and the attempt keeps its work. A read or a write of another command that starts during that wait is refused with `store_busy` after 1 second. A write that is not in this list is rolled back after its commit waited 1 second for a reader, as before.
+
+When a record is still refused after the wait, the command is refused with `store_busy`. `details.cause` holds the last refusal. The message says what was recorded, what is kept, and which command goes on. That command is not always the refused command. The sections of the commands give the cases.
+
+Three cases have another form. When a record of a full-text job is still refused, its invocation ends. If the store also refuses the record that ends the invocation, the command is refused (see "Operation fields"). If not, the command returns a result. For the record of a direct deposit and for the concept DOI of a version draft, `exactory-draft` prints the message in its last lines (see "Review, publication, and verification").
+
 The recurring types are:
 
 | Type | Exact shape and interpretation |
@@ -3388,6 +3407,35 @@ a cohort definition or collection, a source URL or a job) holds a lock while
 it runs, so a second command for the same target is refused with
 `acquisition_in_progress`, whose details name the running operation; a replay
 of a committed request takes no lock.
+
+An acquisition records its result as "Inputs and receipts" describes for a
+write that does not depend on the revision of the store. A cohort collection
+records each page in the same way, and a full-text job each of its records.
+
+When the result of `acquire`, `expand`, `fulltext` or `visual` is still
+refused after the wait, the command is refused with `store_busy`. The
+operation then stays admitted and holds its request allowance, and no response
+of it is recorded. The same request ID returns the operation as incomplete
+(`operation_incomplete`). The same command with a new request ID replaces the
+operation, releases its allowance and sends the requests again.
+`import-fulltext` sends no request. After that refusal, the same command with
+a new request ID imports the file again.
+
+When a page of a collection is still refused after the wait, every earlier
+page is recorded. `resume` with a new request ID then requests that page
+again. When the end of a collection operation is still refused after the wait,
+every page is recorded. `resume` with a new request ID then ends the
+operation.
+
+When a record of a full-text job is still refused after the wait, the
+invocation ends. `fulltext-resume` then returns the job as pending, and an
+item of `pending` has the `code` `store_busy`. For a transfer unit, the item
+holds the last refusal as `cause`, and for an extraction page it holds `page`,
+`stage` and `recovery_action`. If the store also refuses the record that ends
+the invocation, `fulltext-resume` is refused with `store_busy`, and its
+operation stays admitted. In both cases, the job keeps every recorded unit.
+`fulltext-resume` with a new request ID then repeats at most the one unit
+whose record was refused.
 
 Source deferral requires an explicit authorization artifact and the actual retained
 retrieval evidence. It creates no HTTP failure, availability qualification or
@@ -4035,9 +4083,21 @@ Under an interpreter without a limit on integer string conversion, such as Pytho
 - A new `reconcile-run` request for such a run that an earlier release observed. A retry of `exactory-lab run` with the original request ID fails in the same way if that launch stopped before it reconciled the run.
 - `manuscript` of an otherwise ready study in which any cycle holds such an admission. The bundle holds the admissions of every cycle.
 
-For a local run, the launcher starts a worker process after the claim and waits until the worker reports that it is ready. The wait continues while the worker process is alive, for at most the binding's `timeout_seconds` plus 10 seconds. If the worker exits before it is ready, or is not ready in that time, the launch returns `execution_recovery_required` and the program does not run. If the worker process cannot start, for example at a limit on processes or open files, the launch also returns `execution_recovery_required`. Record that run with `reconcile-run`, giving `resolution: "interrupted"` and a reason. After the launcher releases its token to a ready worker, it waits for the worker to end for at most the binding's `timeout_seconds` plus 16 seconds. If the worker is still running then, the launch returns `execution_recovery_required` and the worker continues. After the worker ends, `reconcile-run` without a resolution records the run's outcome.
+For a local run, the launcher starts a worker process after the claim and waits until the worker reports that it is ready. The wait continues while the worker process is alive, for at most the binding's `timeout_seconds` plus 10 seconds. If the worker exits before it is ready, or is not ready in that time, the launch returns `execution_recovery_required` and the program does not run. If the worker process cannot start, for example at a limit on processes or open files, the launch also returns `execution_recovery_required`. In both cases no record released the program. The same `exactory-lab run` command with the same request ID then starts a worker for the claim, and the program runs. While a worker of the earlier launch is alive, that command can be refused with `execution_live`. If it is, run it again after that worker ends. To end the run instead, record it with `reconcile-run`, with `resolution: "interrupted"` and a reason. After the launcher releases its token to a ready worker, it waits for the worker to end for at most the binding's `timeout_seconds` plus 16 seconds. If the worker is still running then, the launch returns `execution_recovery_required` and the worker continues. After the worker ends, `reconcile-run` without a resolution records the run's outcome.
 
-After the launch, or after `reconcile-run`, the harness shows the run in `intermediate/lab/runs/<admission id>/`: `run.json` with every record of the run, `result.json` with the observation's summary and `log.txt` with the observed log; the run directory under `research/runs/` keeps the pinned files. Releases before 0.68.0 also wrote the summary and the log to `experiment/results/<node>.json` and `experiment/logs/<node>.log`; 0.68.0 does not. A retry returns/reconciles that run; it does not execute the same admission twice. Missing or lost results require `reconcile-run`. A dead local worker may be recorded interrupted after ownership checks. Unknown usage retains its full reservation. An interrupted process, timeout, missing output, or old modeled managed record cannot become current author readiness through a public result JSON label. An imported observation retains its actual provenance and chronological limits and does not consume or satisfy a prospective admission.
+After the claim, the launcher writes four records of a local run. The first record releases the program. The other three follow the program: the outcome, the observation, and the receipt of the reconciliation. "Inputs and receipts" describes how these writes commit and wait. The launcher reconciles its own run without a revision.
+
+When the record that releases the program is still refused after the wait, `exactory-lab run` is refused with `store_busy`. The program did not run, and the admission keeps its claim. Before each attempt of that record, the launcher looks at the worker. If the worker ended, the launch stops without the record and returns `execution_recovery_required`. In both cases, the same command with the same request ID starts the program.
+
+The same request starts the program of a claimed local run that no record released and that has no outcome. The folder of the run must hold no stream and no terminal outcome, and no worker of the run must be alive. A request with another ID is refused with `execution_recovery_required`, as before.
+
+When a record after the program is still refused after the wait, the command is refused with `store_busy`. Nothing false is recorded. The terminal outcome, the streams and the outputs stay under `research/runs/`. `reconcile-run` for the admission, or the same command with the same request ID, then records the run without a second execution.
+
+`reconcile-run` writes the same three records. Before it writes a new observation, it compares `--expected-revision` with the revision of the store. When a record of a resolution (`interrupted` or `not_released`) is still refused after the wait, `reconcile-run` is refused with `store_busy`. `reconcile-run` for the same admission, with the same resolution and reason and with the current revision, then records the resolution. For a claimed local run that no record released, `reconcile-run` without a resolution is refused with `execution_recovery_required`. The message of that refusal names the `exactory-lab run` command that starts the program.
+
+Each of these refusals holds `admission_id` and `request_id` in its details, except the refusal of a request with another ID. `request_id` is the request ID of the claim.
+
+After the launch, or after `reconcile-run`, the harness shows the run in `intermediate/lab/runs/<admission id>/`: `run.json` with every record of the run, `result.json` with the observation's summary and `log.txt` with the observed log; the run directory under `research/runs/` keeps the pinned files. Releases before 0.68.0 also wrote the summary and the log to `experiment/results/<node>.json` and `experiment/logs/<node>.log`; 0.68.0 does not. A retry returns or reconciles that run. When the program never started, a retry with the same request ID starts it. No retry executes the same admission twice. Missing or lost results require `reconcile-run`. A dead local worker may be recorded interrupted after ownership checks. Unknown usage retains its full reservation. An interrupted process, timeout, missing output, or old modeled managed record cannot become current author readiness through a public result JSON label. An imported observation retains its actual provenance and chronological limits and does not consume or satisfy a prospective admission.
 
 A second run of an assessed plan can change only the format of its outputs, for example the name of a file or the serialization of a JSON value. Give `admit` the optional field `format_only_of` with the id of the earlier execution. That execution must be a completed managed run of the same plan, with outputs, and an assessment of the cycle must list it (`format_only_reference_invalid` otherwise). Such an admission skips the reopening check and the closed-cycle refusal: the plan's recorded strategy failures stay as they are, and a `complete`, `failed` or `budget_paused` cycle keeps its status, so an ordinary admission after the conversion is still refused. Every other rule applies: the current decision, the other plan dependencies (`plan_dependencies_stale`), the pending run rule (`execution_pending`), the strategy budget (`strategy_budget_exhausted`) and the reviewed tranche (`research_tranche_exhausted`). Bind and launch the run as usual. Recording accepts the execution only when every output equals an earlier output of the same requirement: byte for byte, or, when both outputs declare a JSON media type, as equal strict JSON values, where a boolean never equals a number and key order and whitespace do not count. An output that keeps the id of an earlier output must equal that output, and every earlier output must be covered. Otherwise the recording fails with `format_only_output_mismatch`, no execution or outcome record is written, and the admission keeps its reservation under the ordinary reconciliation rules of this section. A recorded conversion carries `format_only_of: {execution_id, execution_digest}`. It leaves every earlier execution, assessment and failure in place, and its outputs do not count as changed evidence in a `reopening` entry. Its outputs need their own assessment before a candidate cites them. A figure redrawn in another image format, for example PNG to SVG, is not covered: its bytes differ and it is not JSON. Records without the field keep their earlier shape and behavior.
 
@@ -4377,6 +4437,22 @@ UUID, DOI, and arXiv routes all fetch the task-only target. The server supplies 
 Under `sampled-v1` `bind-verdict` also checks the verdict body's prediction against the sample. The percentile and both band ends are integers from 1 to 100. It refuses with `prediction_mismatch` when the sample places no member, when the body states a percentile other than the sample estimate, when the body's band does not contain the sample band, or when more than 20 sampled members are unplaced and the body's band is no wider than the sample band. The refusal carries both the sample prediction and the claimed one.
 
 The task endpoint may reveal only an own-verdict ID after a lost POST response; it cannot establish the exact body that was accepted. Such an intent remains pending even when that ID exists, and the managed path does not repeat the POST; `exactory verify` prints the `Managed record skipped` line and sends the verdict directly. A verification-level owner serializes the complete verdict decision and write, including distinct assessment IDs. Other verification targets retain independent owners. Known-success receipts and explicitly bound revisions remain supported. A stale task response cannot erase a locally confirmed prior verdict or permit a revision that omits the latest known predecessor. The server's `requestedByViewer` means the request opener, not the paper author, and supplies no authorship proof.
+
+A managed deposit, submission or verdict writes the records of its remote intent as "Inputs and receipts" describes. One write is an exception: the start of a step that follows a check. Before each step of a deposit, the command checks the manuscript and the reviews. Before the request of a submission, the command checks the published record. Such a step starts only at the revision of its check.
+
+When another command commits between the check and the start of the step, the command is refused with `stale_revision`. When the store is busy at that moment, the command is refused with `store_busy`. Both messages say that no request of the step was sent. The same command then checks again and continues from the confirmed steps. The step of a verdict has no such check, and its start takes the wait.
+
+When the store still refuses the answer of a step after the wait, the command is refused with `store_busy`. The request was then sent once, and the service answered. `details.intent_id` names the intent, and the intent keeps the step as pending. `details.response` holds the members of the answer that the step needs, and never the whole answer:
+
+- A step of a deposit: `id`, `record_id`, `conceptrecid`, `state`, `submitted`, `doi`, `conceptdoi`, `links.html`, `links.record_html` and `metadata.prereserve_doi.doi`. An upload: `key`, `checksum` and `size`. The preview: `id`.
+- A submission: `id`, `verificationId`, `status`, `doi`, `webUrl`, `createdAt`, `supersedes` and `supersededBy`.
+- A verdict: `id`, `status`, `stance`, `supersedesVerdictId` and `createdAt`.
+
+For a deposit, `exactory-draft reconcile INTENT_ID` reads the deposition and records the step. For a submission, `exactory reconcile INTENT_ID` reads the task and records the step. A verdict has no such read: report `details.response` to the user. Do not run `exactory submit` or `exactory verify` again for that request. While the step is pending, these two commands do not take the managed path. Without `--managed-only`, they then send the request directly, a second time.
+
+A read of the service can settle a pending step. When the store still refuses that record after the wait, the command sent no write to the service. The same command then reads the service again. When the receipt is still refused after the wait, every step is confirmed in the intent. The same command then records the receipt and sends no step a second time.
+
+The record that a direct deposit writes at its end takes the same wait. After that wait, the command reports that the store did not take the record.
 
 ### Deposit for a math problem
 

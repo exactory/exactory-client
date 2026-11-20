@@ -41,7 +41,7 @@ def validate_allowances(value, previous=None):
 
 # The message of a record of a full-text job that the store refused beyond the wait.
 FULLTEXT_JOB_STORE_BUSY_MSG = (
-    'The research store stayed busy, or kept changing the records that this write read, and a record of this '
+    'The research store stayed busy, or kept changing the records that this write read. A record of this '
     'full-text job was not written. Nothing false was recorded. The job keeps every unit that was recorded before. '
     'Continue the job with fulltext-resume and a new request ID. It repeats at most the one unit whose record was '
     'refused.')

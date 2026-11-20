@@ -93,7 +93,7 @@ def _recover_published_deposition(store, intent, client, *, reconcile):
 
 # The message of a publication read back from Zenodo that the store refused beyond the wait.
 READ_BACK_STORE_BUSY_MSG = (
-    'The research store stayed busy, or kept changing the records that this write read, and the publication that was '
+    'The research store stayed busy, or kept changing the records that this write read. The publication that was '
     'read back from Zenodo was not recorded. The read sent no write to Zenodo, and the record on Zenodo is published. '
     'Run the same command again. It reads the deposition again and records the publication.')
 

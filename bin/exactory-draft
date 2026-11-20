@@ -394,7 +394,7 @@ def _build_zenodo_client(environment: str, token: str, failure_advice: _FailureA
 # The message of the concept DOI of a version draft that the store refused beyond the wait. The command prints it as
 # the cause, followed by the command that goes on.
 _VERSION_DRAFT_CONCEPT_STORE_BUSY_MSG = ("The research store stayed busy, or kept changing the records that this"
-                                         " write read, and the concept DOI of this version draft was not recorded.")
+                                         " write read. The concept DOI of this version draft was not recorded")
 
 
 def _continue_deposit_and_track_publish(store: Store, identifier: str, client, *,
@@ -978,8 +978,8 @@ def _require_deposition_answer(answer, deposition_id, retry_msg: str, *, publish
 
 # The message of the record of a direct deposit that the store refused beyond the wait. The lines that follow it say
 # whether the store holds the record and where the local copy is.
-_DIRECT_DEPOSIT_STORE_BUSY_MSG = ("The research store stayed busy, or kept changing the records that this write read,"
-                                  " and the command did not confirm the record of this deposit in the store.")
+_DIRECT_DEPOSIT_STORE_BUSY_MSG = ("The research store stayed busy, or kept changing the records that this write read."
+                                  " The command did not confirm the record of this deposit in the store")
 
 
 def _save_deposit_state(store, store_open_error, state: dict) -> None:

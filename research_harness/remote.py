@@ -14,7 +14,7 @@ from .operations import immutable_record, prepared_mutation, prepared_task_mutat
 # The messages of a write of a remote intent that the store refused: before a request is sent, after its answer
 # arrived, after a read of the service, for a cleared step, and for the receipt.
 REMOTE_CLAIM_STORE_BUSY_MSG = (
-    'The research store stayed busy, or kept changing the records that this write read, and the step of this remote '
+    'The research store stayed busy, or kept changing the records that this write read. The step of this remote '
     'operation was not started. No request of this step was sent. The intent keeps every step that was confirmed '
     'before. Run the same command again. It continues from the confirmed steps.')
 REMOTE_CLAIM_STORE_CHANGED_MSG = (
@@ -22,24 +22,25 @@ REMOTE_CLAIM_STORE_CHANGED_MSG = (
     'request of this step was sent. The intent keeps every step that was confirmed before. Run the same command '
     'again. It checks the store again and continues from the confirmed steps.')
 REMOTE_ANSWER_STORE_BUSY_MSG = (
-    'The research store stayed busy, or kept changing the records that this write read, and the answer of the remote '
+    'The research store stayed busy, or kept changing the records that this write read. The answer of the remote '
     'service to this step was not recorded. The request was sent once, and the service answered. details.response '
     'holds the members of the answer that the step needs, and no record holds them. The intent keeps the step as '
-    'pending, so the managed command sends no further request for it. Do not send the request another way. For a '
-    'deposit, run exactory-draft reconcile with the intent ID in details.intent_id. For a submission, run exactory '
-    'reconcile with that intent ID. Each of them reads the service and records the step. A verdict has no such read: '
-    'give details.response to the user.')
+    'pending. While it is pending, exactory submit and exactory verify do not take their managed path. Without '
+    '--managed-only, they then send the request directly, a second time. Do not run them again for this request, and '
+    'do not send the request another way. For a deposit, run exactory-draft reconcile with the intent ID in '
+    'details.intent_id. For a submission, run exactory reconcile with that intent ID. Each of them reads the service '
+    'and records the step. A verdict has no such read: give details.response to the user.')
 REMOTE_READ_STORE_BUSY_MSG = (
-    'The research store stayed busy, or kept changing the records that this write read, and what a read of the '
+    'The research store stayed busy, or kept changing the records that this write read. What a read of the '
     'service showed about the pending step was not recorded. This command sent no write to the service. The intent '
     'keeps the step as pending. Run the same command again. It reads the service again and records the step.')
 REMOTE_DISCARD_STORE_BUSY_MSG = (
-    'The research store stayed busy, or kept changing the records that this write read, and the release of a pending '
+    'The research store stayed busy, or kept changing the records that this write read. The release of a pending '
     'step of this remote operation was not recorded. This command sent no request of this step. The intent keeps the '
     'step as pending. For a deposit, run the same command again. It checks the state of the step again before it '
     'sends a request. For a submission or a verdict, report this refusal to the user.')
 REMOTE_RECEIPT_STORE_BUSY_MSG = (
-    'The research store stayed busy, or kept changing the records that this write read, and the receipt of this '
+    'The research store stayed busy, or kept changing the records that this write read. The receipt of this '
     'remote operation was not recorded. Every step of the operation is confirmed and recorded in its intent, and no '
     'request is pending. Run the same command again. It records the receipt from the confirmed steps and sends no step '
     'a second time.')
