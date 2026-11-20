@@ -5880,6 +5880,20 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   `artifact_missing` and `artifact_corrupt`, restore the exact bytes of that
   artifact, and assign again. For `storage_io` and `unsafe_path`, follow the
   stop of that code
+  ([Stops and overrides](research-workflow.md#stops-and-overrides)). The
+  selection reads an earlier chain up to its latest turn first. When that
+  reading ends with `review_context_unverified` (one of the turns read has no
+  observed, authenticated output in a verified context) or with
+  `openness_reading_incomplete` (the turns read do not verify under the
+  protocol of the chain), the selection reads the chain again up to the turn
+  before. It goes back in this way until a reading succeeds or no turn is
+  left. The reading of an earlier chain can also raise a refusal that is
+  neither one of these two nor a refusal of the store. The first assignment
+  and its check then end with that refusal, and they record nothing. In the
+  verification of a chain (The verification of the carried selection, below),
+  such a refusal ends the verification with its code. A finding that the
+  chain recorded then becomes `problem_openness_stale` with that code as its
+  cause. For such a refusal, follow the stop of its code
   ([Stops and overrides](research-workflow.md#stops-and-overrides)).
 - The report of the carried turns. The receipt of the first assignment, also
   with `--check`, carries `carried_readings`: the chains and turns, the
@@ -5910,7 +5924,9 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   report then cannot say whether that chain belongs under `passed_over`. The
   new chain carries none of its turns in either case, and the first
   assignment goes on. A missing native packet of such a chain refuses the
-  first assignment instead (the admission of v7, above). The stored
+  first assignment instead (the admission of v7, above). A refusal of another
+  kind that the reading of such a chain raises ends the first assignment and
+  its check with that refusal, and they record nothing. The stored
   assignment holds
   `carried_selection` and not this report. The handoff `export` of a stopped
   chain gives the same report under `details.successor.carried_readings` when
@@ -5920,9 +5936,10 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   from which a v7 chain would carry turns), `passed_over` and `outputs`, which
   state what a v7 chain would carry, and with `unavailable_chains` when it
   holds a row. The harness makes the selection of a v7
-  chain for this report. When that selection ends with a refusal of the store,
-  the v6 chain still starts, and the report holds `refusal: {code, details}`
-  with three empty lists and without `outputs`. For a packet whose required
+  chain for this report. When that selection or this report ends with a
+  refusal, the v6 chain still starts. The report then holds
+  `refusal: {code, details}` with three empty lists and without `outputs`.
+  For a packet whose required
   evidence is not UTF-8 text, the report holds the three empty lists alone.
 - A turn that failed. For `output_over_cap`, `input_over_limit`,
   `response_over_limit`, `timeout` from the second timeout and
@@ -6024,7 +6041,14 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   of a successor gives an export step; otherwise they hold the answers that
   `details.decision` lists. A v7 turn whose input is over the limit at the
   lowest level of its position keeps the decision stop of its outcome, and its
-  verified turns stay for a later chain.
+  verified turns stay for a later chain. When the admission selects v7, the
+  harness makes the selection of the carried turns of the new chain (Carried
+  turns, above). When that selection ends with a refusal, the plan has the
+  code of that refusal. It then gives no handoff `export` and no decision
+  with an export answer. After a denser ratio, `review-assignment` and
+  `review-run` then end with that refusal too, in place of
+  `review_chain_projection_over_limit`. Follow the stop of that code
+  ([Stops and overrides](research-workflow.md#stops-and-overrides)).
 - The verification. `problem-openness` records the finding of a v7 final
   when the chain verifies from the stored records: the carried selection
   matches its reference and verifies under the protocol that it names, and
@@ -6039,7 +6063,9 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   one final that returns the finding; and the origin of each replacement
   that carries a refusal verifies. A chain that fails one of the first five
   conditions is refused with `openness_reading_incomplete`, whose message
-  names the condition. The record keeps `reading_turns`: the carried turns
+  names the condition. The first condition can also end the verification
+  with another code, which the next item names. The record keeps
+  `reading_turns`: the carried turns
   first, each with its `origin` (`chain`, `protocol`, `assignment_id` and
   `attempt_id`), then the turns of the chain.
 - The verification of the carried selection. The harness verifies a stored
@@ -6059,7 +6085,19 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   `exactory-openness-carried-selection-v1` has the second part alone, which
   also requires a range or a search in every stored turn. A chain that fails
   either part is refused with `openness_reading_incomplete`, and a finding
-  that it recorded becomes `problem_openness_stale` with that cause.
+  that it recorded becomes `problem_openness_stale` with that cause. Other
+  refusals end the verification with their own code instead, and that code
+  is then the cause of the stale finding. Three kinds are known. The first
+  is a refusal of the store in the first part (below). The second, in
+  either part, is a refusal that is neither a refusal of the store nor
+  `review_context_unverified` nor `openness_reading_incomplete`. The reading
+  of an earlier chain can raise such a refusal (Carried turns, above). The
+  third, for a selection of version 2, is `claim_reassessment_required`. It
+  occurs when the records were read without the history of the store. Its
+  message asks to reassess a bound record. That step belongs to managed
+  research and does not apply to a problem chain. For
+  `claim_reassessment_required`, run `record-check`, and then report the
+  refusal with its details.
   `review-series` still reports a chain with a recorded finding as done. The
   state shows in the obligation `problem_openness_stale` of `status`. Three
   later events are known to fail the second part, as they did before 0.91.4: a
@@ -7012,7 +7050,7 @@ example the population of the cohort tool. The post decision is
 | `problem_attempt_extension_unexplained` | Explain an attempt exceeding 24 moves, 24 runs, one admitted worker or 300 admitted timeout seconds; `totals` gives usage and admitted bounds, and `exceeded` lists the limit names. |
 | `problem_openness_missing`, `problem_openness_unresolved` | Obtain an observed supported openness finding with the audited minimum. |
 | `problem_already_solved` | Redirect to the named established result or record a new statement. |
-| `problem_openness_stale` | Refresh the finding for the changed formulation, search or reading. For the finding of a v7 chain whose `cause` is `openness_reading_incomplete`, `artifact_missing` or `artifact_corrupt`, first read the item "The verification of the carried selection" above. A completed probe of the route record of a carried chain makes such a finding current again when a failed probe caused it, and the restored bytes do when a lost artifact caused it. Neither needs a new export. A stale route record takes no probe, so the step is then a new export. |
+| `problem_openness_stale` | Refresh the finding for the changed formulation, search or reading. For the finding of a v7 chain whose `cause` is `openness_reading_incomplete`, `artifact_missing`, `artifact_corrupt` or another code that the verification of its carried selection raised, first read the item "The verification of the carried selection" above. A completed probe of the route record of a carried chain makes such a finding current again when a failed probe caused it, and the restored bytes do when a lost artifact caused it. Neither needs a new export. A stale route record takes no probe, so the step is then a new export. |
 | `problem_value_missing`, `problem_value_reading_missing`, `problem_value_computation_missing` | Supply a value record with the accounts of the statement and ordered value paragraphs, with valid full readings or admitted, reconciled, assessed computation support. |
 | `problem_value_stale` | The current value record holds accounts, and the record gained a later run on the current text, a later outcome of a form in the history of the statement, or a later delivered snapshot of a cited objective (`value_id`, `changes`). Record a new value record whose accounts take each change into account and cite the latest snapshot. The result reviews are then refreshed ([The accounts of a value record](#the-accounts-of-a-value-record)). |
 | The codes of the accounts, for example `problem_neighbour_role_missing` or `problem_test_run_invalid` | The current value record does not validate against the current records, for example after a revision of the statement changed its neighbours. Record a new value record. The table under [The accounts of a value record](#the-accounts-of-a-value-record) gives the repair for each code. |

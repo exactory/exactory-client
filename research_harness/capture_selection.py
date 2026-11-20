@@ -7,6 +7,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .operations import fields, normalized_text, prepared_mutation, text
 from .source_links import exact_work, fulltext_capture
+from .storage import overlay_kinds
 
 
 PROTOCOL = "exactory-main-capture-selection-v1"
@@ -61,14 +62,17 @@ def describe_capture_selections(records):
 
 
 def bind_packet_selections(records, packet, *, artifacts=None, review=None):
-    """Keep explicit bindings, or derive a legacy packet's captures from its own review."""
+    """Keep explicit bindings, or derive a legacy packet's captures from its own review.
+
+    The bound view keeps the history of the store, which the verification of a carried selection reads.
+    """
     if SELECTION_KIND not in records:
         return records
     inventory = packet.get("source_inventory", {})
     binding = packet.get(PACKET_KEY, inventory.get(PACKET_KEY, {}))
     choices = (binding.get("choices", []) if PACKET_KEY in packet or PACKET_KEY in inventory else
                derive_review_selections(records, packet, artifacts, review))
-    return dict(records, **{SELECTION_KIND: {
+    return overlay_kinds(records, {SELECTION_KIND: {
         digest([choice["version_id"], choice["original_sha256"]]): choice for choice in choices}})
 
 
