@@ -343,18 +343,11 @@ def check_authentication(store):
             corrections[identifier] = describe_correction_observation(records, artifacts, invocation, observation)
         captures = {}
         from .review_call_capture import read_call_observation
+        from .review_task_execution import read_call_kinds, rebuild_call_payload
         for identifier, captured in sorted(records.get('review_call_observation', {}).items()):
-            if captured['operation'] != 'review.invoke':
-                # Probe and correction captures still get their ownership and
-                # artifact bindings checked by their existing capture reader.
-                invocation_kind = captured['invocation']['kind']
-                invocation = records[invocation_kind][captured['invocation_id']]
-                keys = ('id', 'route_id') if captured['operation'] == 'review.route_probe' else (
-                    'id', 'assignment_id', 'route_id')
-            else:
-                invocation = records['review_invocation'][captured['invocation_id']]
-                keys = ('id', 'assignment_id')
-            payload = {key: invocation[key] for key in keys}
+            invocation_kind, _ = read_call_kinds(captured['operation'])
+            payload = rebuild_call_payload(captured['operation'],
+                                           records[invocation_kind][captured['invocation_id']])
             invocation, observation = read_call_observation(
                 records, artifacts, captured['operation'], payload, captured['request_id'])
             if captured['operation'] == 'review.invoke':

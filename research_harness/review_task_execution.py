@@ -256,6 +256,18 @@ def identify_call(operation, invocation_id):
     return "review-call:" + digest([operation, invocation_id])
 
 
+def rebuild_call_payload(operation, record):
+    """Give back the exact payload of a started owned call from the record that its start writes as
+    dict(payload, ...): the invocation record, or the dispatch record of a staged call. The definition that the start
+    check reads bounds the members, so a member that the start adds (route_id of an ordinary call) stays out."""
+    from . import review_output_correction as correction, review_protocol as protocol
+    required, optional = {"review.invoke": protocol.INVOKE_PAYLOAD_FIELDS,
+                          "review.route_probe": protocol.PROBE_PAYLOAD_FIELDS,
+                          "review.output_correction": correction.PAYLOAD_FIELDS}[operation]
+    members = required + tuple(key for key in optional if key in record)
+    return {key: record[key] for key in members}
+
+
 def has_call_terminated(records, operation, invocation_id):
     """Require owned termination while preserving documented historical failure closure."""
     lifecycle = records.get("review_pool_membership", {}).get(identify_call(operation, invocation_id))

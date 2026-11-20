@@ -149,7 +149,8 @@ class StagedReviewCliTests(unittest.TestCase):
             cli._review_run(store, payload, expected_revision=8, request_id="resume")
         mapped = invoke.call_args.args[1]
         self.assertEqual(mapped["assignment_id"], "child")
-        self.assertEqual(set(mapped), {"id", "assignment_id"})
+        # A run that starts a new dispatch sends the required members of the payload definition.
+        self.assertEqual(set(mapped), set(review_protocol.INVOKE_PAYLOAD_FIELDS[0]))
 
     def test_interrupted_retry_retains_the_same_default_attempt_id_on_request_replay(self):
         from research_harness import cli, review_protocol
