@@ -199,13 +199,6 @@ def _truncate_to_utf16_units(text: str, limit: int) -> str:
     return text
 
 
-def _count_utf16_units(text: str) -> int:
-    """Length in UTF-16 code units, the unit the server's bounds count.
-    surrogatepass counts a lone surrogate as one unit, the way a JavaScript
-    string does, instead of raising UnicodeEncodeError."""
-    return len(text.encode("utf-16-le", "surrogatepass")) // 2
-
-
 def _run_collect(args: argparse.Namespace) -> None:
     from research_harness.acquisition import collect_cohort, resume_cohort
     from research_harness.storage import Store

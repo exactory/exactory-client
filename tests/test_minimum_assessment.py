@@ -395,7 +395,10 @@ class MinimumAssessmentTests(ProblemCase):
         spec = cli.run(cli.build_parser().parse_args(["example", "problem-openness-export"]))
         binding = spec["minimum"]["searches"][0]
         search = self.search(gaps=["The example leaves a declared search gap."])
-        self.select_statement(identifier="example-statement", statement=binding["formulation"])
+        # The example holds a placeholder for the recorded statement; an agent writes the exact text in its place.
+        binding["formulation"] = self.select_statement(
+            identifier="example-statement",
+            statement="The exact recorded statement that the export example names in its spec.")["statement"]
         search = dict(search, id=binding["search_id"], question=binding["formulation"])
         self.put("literature_search", binding["search_id"], search)
         path = self.root / "export-spec.json"

@@ -963,7 +963,7 @@ class ProblemOpennessReviewTests(ProblemCase):
 
     def test_unresolved_output_cannot_rebind_an_old_packet_to_a_new_statement(self):
         def change(output):
-            revised = self.select_statement(identifier="statement-2", statement="A different exact proposition.")
+            revised = self.select_statement(identifier="statement-2", statement="A different exact proposition about every finite construction.")
             output["findings"]["openness"]["statement_digest"] = self.load_problem_module().compute_statement_digest(revised)
         self.observe_openness("unresolved", change_output=change)
         self.assert_openness_refused_at_run()
@@ -1009,7 +1009,7 @@ class ProblemOpennessReviewTests(ProblemCase):
         self.assertFalse(before["ready"], before["obligations"])
         self.assertIn("research_objection_unresolved", {item["code"] for item in before["obligations"]})
         changed = self.build_value([item], identifier="value-2")
-        changed["motivation"][0]["text"] = "The narrowed consequence connects these exact finite constructions."
+        changed["motivation"][0]["text"] = "The narrowed consequence connects these exact finite constructions, as the source of the place states for each of them."
         self.mutate(self.load_problem_module().record_value, changed)
         return before
 

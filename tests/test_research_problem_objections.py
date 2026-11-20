@@ -67,7 +67,7 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
 
     def refresh_reviews(self, status):
         changed = self.build_value([self.item], identifier="value-2")
-        changed["motivation"][0]["text"] = "A narrower implication follows from the supplied comparator."
+        changed["motivation"][0]["text"] = "A narrower implication follows from the supplied comparator, and the source of the place states the narrower case."
         self.mutate(self.load_problem_module().record_value, changed)
         for reviewer in ("first", "second"):
             output = self.build_review_output("result")
@@ -295,7 +295,7 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
     def test_a_repaired_result_reviewer_refreshes_with_the_current_bars(self):
         self.prepare_contested_repair()
         changed = self.build_value([self.item], identifier="value-2")
-        changed["motivation"][0]["text"] = "A narrower implication follows from the supplied comparator."
+        changed["motivation"][0]["text"] = "A narrower implication follows from the supplied comparator, and the source of the place states the narrower case."
         self.mutate(self.load_problem_module().record_value, changed)
         refreshed = self.assign("result", "repaired-second", identifier="repaired-refresh")
         packet = json.loads(self.artifacts.read(refreshed["packet"]))
@@ -876,7 +876,7 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         self.prepare_reviews(result_reviewer="first")
         # Only the resolutions cite this artifact, which each reviewer requested as a source (R51).
         changed = self.build_value([self.item], identifier="value-2")
-        changed["motivation"][0]["text"] = "A narrower implication follows from the supplied comparator."
+        changed["motivation"][0]["text"] = "A narrower implication follows from the supplied comparator, and the source of the place states the narrower case."
         self.mutate(self.load_problem_module().record_value, changed)
         for reviewer in ("first", "second"):
             resolution = self.cite_a_requested_source(reviewer, "refreshed-" + reviewer,

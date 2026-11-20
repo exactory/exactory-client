@@ -22,7 +22,7 @@ class ProblemSecondPostTests(ProblemDeliveryCase):
         claims = self.load_problem_module()
         self.initialize_problem()
         self.record_candidate()
-        second_text = r"For every $n$, does $C(n)\leq n^3$ hold?"
+        second_text = r"For every $n$, does the bound $C(n)\leq n^3$ hold?"
         self.record_candidate("candidate-2", statement=second_text)
         self.observe_bars()
         self.record_slate(selected=["candidate-1", "candidate-2"],

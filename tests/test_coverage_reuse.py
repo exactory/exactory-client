@@ -242,4 +242,4 @@ class PostAssessmentReuseTests(ProblemDeliveryCase):
         evaluation = Evaluation(records, self.artifacts)
         reports = {"post": problem_delivery.assess_post(records, evaluation),
                    "minimum": problem_delivery.assess_minimum(records, evaluation)}
-        self.assertEqual(digest(reports), "9e319475473ac79e5c494ba418440821279a4698fe1ca11a07fd6e7922f0ceed")
+        self.assertEqual(digest(reports), "44fe80e6efa53c1bbd2ec933f7a832dda60e5e217817f19fb22e1ef579557ef4")

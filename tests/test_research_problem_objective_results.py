@@ -253,7 +253,7 @@ class ProblemObjectiveResultTests(ProblemCase):
         legacy = {"kind": "result", "attempt_id": "attempt-1", "acceptance_id": "acceptance-1"}
         item = self.deliver_result()
         self.mutate(self.load_problem_module().record_value, self.build_value([legacy, item]))
-        self.select_statement(identifier="statement-2", statement="A second exact question.")
+        self.select_statement(identifier="statement-2", statement="A second exact question about every finite construction of the record.")
         for project in (problem_evidence.describe_binding, problem_evidence.describe_evidence):
             result = project(self.store.snapshot()["records"], self.artifacts)
             self.assertIsNone(result["attempt"])

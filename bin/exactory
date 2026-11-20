@@ -31,10 +31,10 @@ from research_harness.citation_report import report_citation_gate
 from research_harness.problem_evidence import POST_CITATION_LIMIT
 from research_harness.cli import add_identity, select_managed_path
 from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError, describe_tool_timeout
-from research_harness.exactory_api import (_DEFAULT_API_URL, CHANGES_IF_RESOLVED_MAX_UNITS,
-                                          CHANGES_IF_RESOLVED_MIN_UNITS, JAVASCRIPT_TRIM_CHARACTERS,
-                                          count_utf16_units, normalize_plain_text_line_breaks,
-                                          read_api_base_url)
+from research_harness.exactory_api import (_DEFAULT_API_URL, JAVASCRIPT_TRIM_CHARACTERS, POST_TEXT_BOUNDS,
+                                          count_utf16_units, find_non_plain_text_character,
+                                          normalize_plain_text_line_breaks, read_api_base_url,
+                                          split_statement_details)
 from research_harness.integration import command_identity, current_store
 from research_harness.output_views import render_views_after_command
 from research_harness.same_origin import (REQUEST_ERROR_TYPES, RefusedRedirectError,
@@ -78,16 +78,6 @@ _MATH_LEAN_CHECK_OUTCOMES = ("pass", "fail")
 # the authority; an older Python knows a few late-added format characters fewer than the server does.
 _MAX_LINK_UTF16_UNITS = 500
 _NON_TEXT_CHARACTER_CATEGORIES = ("Cc", "Cf", "Cs")
-# Mirrors plainTextSchema (apps/web/src/server/schemas/plain-text.ts in the exactory repository, design
-# 2026-10-12 §26.24), which the server applies to every free-text field: no control character except tab,
-# line feed, and no unpaired surrogate, after CRLF and lone CR become LF. Python holds a character beyond the basic plane
-# as one code point, and the json module joins an escaped surrogate pair into one, so every surrogate in the
-# text of an option is unpaired.
-_NON_PLAIN_TEXT_CHARACTER_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f\ud800-\udfff]")
-# The line breaks that plainTextSchema accepts: a carriage return and a line feed as a pair, and each of the two alone.
-_LINE_BREAK_RE = re.compile(r"\r\n|\r|\n")
-# The one line of a problem statement that divides the statement, shown in a box, from its details.
-_STATEMENT_DETAILS_SEPARATOR_RE = re.compile(r"^[ \t]*---[ \t]*$", re.MULTILINE)
 # The character that starts a terminal color code.
 _ESCAPE_CHARACTER = "\x1b"
 # The refusal of an unpaired surrogate names where it comes from. In a command argument, it is what Python makes of
@@ -670,16 +660,11 @@ def _require_plain_text(field_name: str, text: str,
     color code, and an unpaired surrogate comes from where `surrogate_refusal_template` says, so each of the two
     names its own remedy."""
     text = normalize_plain_text_line_breaks(text)
-    match = _NON_PLAIN_TEXT_CHARACTER_RE.search(text)
-    if match is None:
+    found = find_non_plain_text_character(text)
+    if found is None:
         return text
-    character = match.group()
-    if _LINE_BREAK_RE.search(text) is None:
-        place = f"position {match.start() + 1}"
-    else:
-        line_breaks = list(_LINE_BREAK_RE.finditer(text, 0, match.start()))
-        line_start = line_breaks[-1].end() if line_breaks else 0
-        place = f"line {len(line_breaks) + 1}, column {match.start() - line_start + 1}"
+    character, line, column = found
+    place = f"line {line}, column {column}" if "\n" in text else f"position {column}"
     found_msg = f"U+{ord(character):04X} at {place}"
     if character == _ESCAPE_CHARACTER:
         refusal_msg = (f"The {field_name} contains the control character {found_msg}. Terminal color codes start with"
@@ -1034,7 +1019,7 @@ def _run_problem_history(args: argparse.Namespace) -> None:
 
 def _split_statement_details(text: str) -> tuple[str, str | None]:
     """The text above and below the one line of a statement that holds only ---, or the whole text and no details."""
-    parts = _STATEMENT_DETAILS_SEPARATOR_RE.split(normalize_plain_text_line_breaks(text))
+    parts = split_statement_details(text)
     if len(parts) > 2:
         _exit_with_error("The statement has more than one line that holds only ---. Keep one such line, between the"
                          " statement and its details.")
@@ -1044,26 +1029,29 @@ def _split_statement_details(text: str) -> tuple[str, str | None]:
 def _run_post_problem(args: argparse.Namespace) -> None:
     statement, statement_details = _split_statement_details(_read_inline_or_file_text(args.statement, args.statement_file))
     body = {
-        "title": _require_plain_text_bounds("title", args.title, 8, 200, is_trim_required=True),
+        "title": _require_plain_text_bounds("title", args.title, *POST_TEXT_BOUNDS["title"], is_trim_required=True),
         "area": _require_math_area(args.area),
-        "statement": _require_plain_text_bounds("statement", statement, 50, 20000, is_trim_required=True),
+        "statement": _require_plain_text_bounds("statement", statement, *POST_TEXT_BOUNDS["statement"],
+                                                is_trim_required=True),
         "motivation": _require_plain_text_bounds(
-            "motivation", _read_inline_or_file_text(args.motivation, args.motivation_file), 100, 10000, is_trim_required=True),
+            "motivation", _read_inline_or_file_text(args.motivation, args.motivation_file),
+            *POST_TEXT_BOUNDS["motivation"], is_trim_required=True),
         "currentState": _require_plain_text_bounds(
-            "current state", _read_inline_or_file_text(args.current_state, args.current_state_file), 100, 10000, is_trim_required=True),
+            "current state", _read_inline_or_file_text(args.current_state, args.current_state_file),
+            *POST_TEXT_BOUNDS["current_state"], is_trim_required=True),
         "resolutionCriteria": _require_plain_text_bounds(
-            "resolution criteria",
-            _read_inline_or_file_text(args.resolution_criteria, args.resolution_criteria_file), 50, 5000, is_trim_required=True),
+            "resolution criteria", _read_inline_or_file_text(args.resolution_criteria, args.resolution_criteria_file),
+            *POST_TEXT_BOUNDS["resolution_criteria"], is_trim_required=True),
         "citations": _read_citations_file(args.citations_file),
     }
     if statement_details is not None:
         body["statementDetails"] = _require_plain_text_bounds(
-            "text below the --- line", statement_details, 1, 20000, is_trim_required=True)
+            "text below the --- line", statement_details, *POST_TEXT_BOUNDS["statement_details"], is_trim_required=True)
     if args.changes_if_resolved is not None or args.changes_if_resolved_file is not None:
         body["changesIfResolved"] = _require_plain_text_bounds(
             "text of what a resolution would change",
             _read_inline_or_file_text(args.changes_if_resolved, args.changes_if_resolved_file),
-            CHANGES_IF_RESOLVED_MIN_UNITS, CHANGES_IF_RESOLVED_MAX_UNITS, is_trim_required=True)
+            *POST_TEXT_BOUNDS["changes_if_resolved"], is_trim_required=True)
     if args.paper:
         _require_at_most(args.paper, "papers", _MAX_CREATION_PAPERS, "Attach the rest with link-problem-paper.")
         body["paperIdentifiers"] = args.paper
@@ -1618,15 +1606,19 @@ def _build_parser() -> argparse.ArgumentParser:
     post_problem = commands.add_parser(
         "post-problem", allow_abbrev=False,
         help="Post an open mathematical problem. Check every citation locator first.")
-    post_problem.add_argument("--title", required=True, help="The problem title, 8-200 characters.")
+    post_text_bounds = {field: f"{minimum}-{maximum}" for field, (minimum, maximum) in POST_TEXT_BOUNDS.items()}
+    post_problem.add_argument("--title", required=True,
+                              help=f"The problem title, {post_text_bounds['title']} characters.")
     post_problem.add_argument("--area", required=True, help="One math.* subject class, for example math.CO.")
-    for name, bounds in (("statement", "the precise problem in TeX, 50-20000 characters, shown in a box. To add"
-                                       " details under the box, add one line that holds only --- and then the"
-                                       " details, 1-20000"),
+    for name, bounds in (("statement", f"the precise problem in TeX, {post_text_bounds['statement']} characters, shown"
+                                       " in a box. To add details under the box, add one line that holds only --- and"
+                                       f" then the details, {post_text_bounds['statement_details']}"),
                          ("motivation", "where the question comes from, with the line of results that leads to it,"
-                                        " 100-10000"),
-                         ("current-state", "the prior work and why the problem is open, 100-10000"),
-                         ("resolution-criteria", "what a proof or a disproof must establish, 50-5000")):
+                                        f" {post_text_bounds['motivation']}"),
+                         ("current-state",
+                          f"the prior work and why the problem is open, {post_text_bounds['current_state']}"),
+                         ("resolution-criteria",
+                          f"what a proof or a disproof must establish, {post_text_bounds['resolution_criteria']}")):
         group = post_problem.add_mutually_exclusive_group(required=True)
         group.add_argument(f"--{name}", help=f"The {name.replace('-', ' ')}: {bounds} characters.")
         group.add_argument(f"--{name}-file", help=f"A file with the {name.replace('-', ' ')}.")
@@ -1634,8 +1626,7 @@ def _build_parser() -> argparse.ArgumentParser:
     changes_group.add_argument(
         "--changes-if-resolved",
         help="What a resolution would change: what a proof or a disproof decides or supplies for work that exists,"
-             f" and which next question it opens, {CHANGES_IF_RESOLVED_MIN_UNITS}-{CHANGES_IF_RESOLVED_MAX_UNITS}"
-             " characters. Optional.")
+             f" and which next question it opens, {post_text_bounds['changes_if_resolved']} characters. Optional.")
     changes_group.add_argument("--changes-if-resolved-file",
                                help="A file with the text of what a resolution would change.")
     post_problem.add_argument(

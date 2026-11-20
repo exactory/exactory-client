@@ -120,7 +120,7 @@ class OverrideReaderTests(OverrideReaderCase):
         self.assertEqual(condition["obligations"][0]["code"], "problem_openness_unresolved")
         self.record_finding()
         self.assertIsNone(self.check_transport())
-        self.selected = self.select_statement(identifier="changed", statement="Does a cubic bound hold?")
+        self.selected = self.select_statement(identifier="changed", statement="Does a cubic bound hold for every finite construction?")
         self.assert_condition_refused(self.check_transport)
         self.record_lift()
         with mock.patch("research_harness.problem_openness.assess_openness", side_effect=AssertionError("lifted check ran")):
@@ -188,7 +188,7 @@ class OverrideReaderTests(OverrideReaderCase):
 
     def test_new_statement_export_retains_earlier_condition_and_cites_current_cover(self):
         self.record_condition()
-        self.selected = self.select_statement(identifier="changed", statement="Does a cubic bound hold?")
+        self.selected = self.select_statement(identifier="changed", statement="Does a cubic bound hold for every finite construction?")
         reading = self.store.snapshot()["records"]["reading"]["read-full"]
         evidence = {"kind": "reading", "version_id": reading["version_id"], "reading_id": reading["id"]}
         self.mutate(problem_claims.record_value, dict(self.build_value([evidence], identifier="new-value"), statement_id=self.selected["id"]))

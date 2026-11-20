@@ -284,10 +284,12 @@ class CertificatePathExampleTests(WorkspaceTest):
             "evidence_ids": [], "argument": "The complete residue table excludes the class two when m is four."}]
         accounts["places"] = [build_place([place_reading])]
         return {"id": "certificate-value", "statement_id": "statement-1", "accounts": accounts,
-            "motivation": [{"text": "A classification must explain the excluded classes already proved modulo four.",
+            "motivation": [{"text": ("A classification must explain the excluded classes already proved modulo four, where "
+                                     "no square has the residue two."),
                             "evidence": [{"kind": "account", "id": "mod-four-boundary"}, {"kind": "account", "id": "place"}]}],
             "changes_if_resolved": [{"text": CHANGES_IF_RESOLVED_TEXT, "evidence": [{"kind": "account", "id": "place"}]}],
-            "current_state": [{"text": "The modulo-four boundary has an accepted certificate result.",
+            "current_state": [{"text": ("The modulo-four boundary has an accepted certificate result. The record holds no "
+                                        "classification for every integer m."),
                                "evidence": [{"kind": "account", "id": "mod-four-boundary"}]}]}
 
     def test_probe_certificate_reaches_delivered_boundary_accounts_with_four_assignments(self):

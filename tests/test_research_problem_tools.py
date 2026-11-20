@@ -68,7 +68,7 @@ class ProblemExecutionToolsTests(ProblemToolsCase):
     def test_execution_requires_the_current_statement(self):
         self.prepare_problem()
         plan = self.plan()
-        self.select_statement(identifier="statement-2", statement="Does the bound extend to every integer?")
+        self.select_statement(identifier="statement-2", statement="Does the bound extend to every integer and every finite construction?")
         self.assert_error("objective_mismatch", lambda: self.mutate(development.plan_cycle, plan))
 
     def test_empirical_assessment_retains_unfinished_objective_obligations(self):

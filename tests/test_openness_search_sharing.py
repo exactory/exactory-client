@@ -16,6 +16,8 @@ from research_harness.problem_openness import assess_openness, serialize_record
 import test_research_problem_openness_minimum as minimum_fixtures
 
 V5 = 'exactory-openness-reading-v5'
+# The first formulation is the statement, which has the 50 characters of the post (0.91.8).
+QUESTION_TEMPLATE = 'An exact formulation %d of the finite bound problem.'
 
 
 class SearchSharingCase(OpennessReadingCase):
@@ -71,11 +73,11 @@ class FifteenSearchChainTests(OpennessReadingCase):
     historical_v5 = True
 
     def build_statement(self, identifier='statement-1', **changes):
-        questions = ['Exact formulation %d of the finite bound problem.' % index for index in range(5)]
+        questions = [QUESTION_TEMPLATE % index for index in range(5)]
         return super().build_statement(identifier, statement=questions[0], neighbours=questions[1:], **changes)
 
     def record_searches(self):
-        searches = [binding['search'] for binding in build_fifteen_searches()]
+        searches = [binding['search'] for binding in build_fifteen_searches(QUESTION_TEMPLATE)]
         for search in searches:
             # The delivery-only fixture also declares the coverage assessed at export.
             search.update(captured_at='2026-10-15T12:00:00Z',

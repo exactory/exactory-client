@@ -62,7 +62,7 @@ class OverrideAuthorityTests(OverrideCommandMixin, ProblemCase):
 
     def test_condition_on_previous_statement_stands_after_new_statement_is_covered(self):
         self.record_user_override(condition=OPEN_CONDITION)
-        self.selected = self.select_statement(identifier="statement-2", statement="Does a cubic bound hold for every index?")
+        self.selected = self.select_statement(identifier="statement-2", statement="Does a cubic bound hold for every index of the finite construction?")
         self.assertFalse(self.assess_authority(kind="problem-override")["covered"])
         self.record_user_override("new-text")
         result = self.assess_authority(kind="problem-override")
@@ -161,7 +161,7 @@ class OverrideAuthorityTests(OverrideCommandMixin, ProblemCase):
                 self.assertEqual(condition["evidence"], [{"id": outcome, "digest": digest(finding)}])
             else:
                 self.assertEqual(condition["obligations"][0]["code"], "problem_openness_unresolved")
-        self.selected = self.select_statement(identifier="statement-2", statement="Does a cubic bound always hold?")
+        self.selected = self.select_statement(identifier="statement-2", statement="Does a cubic bound always hold for every finite construction?")
         condition, = self.assess_authority()["conditions"]
         self.assertEqual(condition["state"], "unmet")
         self.assertEqual(condition["obligations"][0]["code"], "problem_openness_stale")

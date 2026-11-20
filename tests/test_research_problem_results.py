@@ -56,7 +56,7 @@ class ProblemResultTests(ProblemCase):
     def test_previous_statement_attempt_and_results_are_not_projected(self):
         item = self.bind_result(build_acceptance())
         self.mutate(self.load_problem_module().record_value, self.build_value([item]))
-        self.select_statement(identifier="statement-2", statement="A second exact question.")
+        self.select_statement(identifier="statement-2", statement="A second exact question about every finite construction of the record.")
         records = self.store.snapshot()["records"]
         for project in (problem_evidence.describe_binding, problem_evidence.describe_evidence):
             evidence = project(records, self.artifacts)
@@ -117,7 +117,7 @@ class ProblemResultReviewTests(ProblemDeliveryCase):
         from test_research_problem_assessment import build_assessment
         self.prepare_ready()
         claims = self.load_problem_module()
-        other = self.select_statement(identifier="comparison", statement="A weaker comparison bound.")
+        other = self.select_statement(identifier="comparison", statement="A weaker comparison bound for every finite construction of the record.")
         self.select_statement(candidate_id="candidate-1")
         version = self.metadata(2)
         bundle = self.bundle(version, bundle_id="assessment-only-body")

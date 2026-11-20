@@ -887,6 +887,11 @@ exception.
    Keep the whole text, with the line and the details, in `statement`. The reviews, the openness
    finding, the attempt and a formal statement concern all of it.
 
+   `problem-statement` applies the rules of the post to these texts: the title has 8-200
+   characters and the resolution criteria 50-5000, each after trimming, and no text holds a
+   control character other than a tab or a line break (`problem_statement_post_text_invalid`,
+   with `field` and `rule`).
+
    Among equivalent forms of the statement, pose the one that allows a reader more derivations
    and more checks. Simplicity stays a preference.
 
@@ -1717,10 +1722,15 @@ public text.
      becomes askable or reachable under each answer. Either a work names it, and the sentence
      cites that place, or you argue it, and the sentence says that it is the argument of the
      record and names its premises. Where you can name nothing for an answer, say so. Say also
-     what stays as it is. The joined text has 100 to 5,000 characters
-     (`problem_changes_if_resolved_length`).
+     what stays as it is. The joined text has 100 to 5,000 characters.
    - The current state gives the prior work on the statement itself, what the attempt proved,
      left unresolved or demonstrated, and the limits of the record's knowledge.
+
+   `problem-value` applies the rules of the post to the joined text of each of the three
+   sections. The motivation and the current state have 100 to 10,000 characters each, and no
+   text holds a control character other than a tab or a line break
+   (`problem_value_post_text_invalid`, with `section` and `rule`). A text that the post would
+   refuse is so refused before the reviews.
 
    A result stands once in the public text: in the motivation when it leads to the question,
    in the current state when it bears on the status of the statement. In all three texts,

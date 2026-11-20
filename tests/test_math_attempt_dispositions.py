@@ -53,4 +53,4 @@ class AttemptDispositionConsumerTests(claims.ProblemCase):
         expected = Path(__file__).parent / "fixtures/math-attempt-without-dispositions.json"
         self.assertEqual(encoded, expected.read_bytes())
         self.assertEqual(compute_problem_evidence_digest(records, self.artifacts),
-                         "d3375ec415292f24404f2fd084cffae794e8f763bdd45b5bf9d4f19a4f1c336b")
+                         "b9c365eec1989cb7471be091c120ae9f5313b4adb45820537365aab2ea41156d")
