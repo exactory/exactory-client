@@ -108,6 +108,16 @@ class ReviewRequestParityTests(unittest.TestCase):
 
     def expect_current_result_report(self, name, field, expected):
         """Pin report presentation and Claude response metadata without changing the byte oracle."""
+        if name == 'contaminated' and field == 'states':
+            # 0.91.4 added a sentence on output corrections to the explanation of a contaminated context.
+            expected = copy.deepcopy(expected)
+            row = expected['assignment']['value']['obligations'][0]
+            self.assertEqual(row, dict(assignment_id='assignment', code='review_context_contaminated',
+                                       explanation='Independent approval requires this actual tested route and '
+                                                   'uncontaminated context.'))
+            row['explanation'] += (' When an output correction completed the output on another route record, '
+                                   'that route record must be verified too.')
+            return expected
         if name == 'claude-local' and field in ('attempts', 'selected'):
             expected = copy.deepcopy(expected)
             original = self.frozen['cases'][name]['attempts']['attempt']['response']
