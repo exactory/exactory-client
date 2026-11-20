@@ -7502,6 +7502,25 @@
         "test_problem_post_text_rules.ValuePostTextTests.test_each_section_is_refused_one_unit_outside_its_bounds_after_the_trim",
         "test_problem_post_text_rules.ValuePostTextTests.test_a_refused_character_is_named_with_its_line_and_its_column_in_the_joined_text"
       ]
+    },
+    {
+      "id": "declared-call-rows-not-compared-with-their-call-sites",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "closed-packet-inventory",
+      "summary": "No code compared a declared call row of the packet registry (an entry of callee_inventory, mapping_sites or non_packet_sites) with the source of its caller. A row whose call changed or left the source stayed in the registry, and packet_call_digests kept its digest, so the guard passed: on main at 0.91.7, six rows named no call of their caller, among them the row of the call from openness_carried._describe_chain to openness_reading.find_protocol, which 0.91.4 changed. A call that passes a packet needed no row once a lane renewed the digests of its module and its function: on main at 0.91.7, 211 such calls had no row, counted once for each caller and digest (the guard now reports 206 of them as missing and names the other 5 in its reports of the six rows above). The table certified_callers repeated the rows in another shape, and no production run read it.",
+      "expected": "Every declared call row names a call of its caller, or for mapping_sites a call or an assignment statement, and one list holds the rows of one call no more times than the caller holds the call, all of them equal. Every call in a function of a certified module that passes a packet, a part of it or a value computed from it has a row. A callee_inventory row whose call reaches a plugin function names that function. python3 -m ci.capacity_packet_inventory --write-call-rows adds the rows that the source determines and renews packet_call_digests. It removes a row that names nothing in the source of its caller, except when the caller still holds an undeclared call, or for mapping_sites an undeclared assignment statement, that names the callee of the row. The command keeps such a row and prints it with the digest and the line of each of those calls and statements for the reviewer. certified_callers leaves the registry, and the data-flow walk reads the caller edges from the rows.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_packet_call_rows.ProductionCallRowTests.test_the_changed_find_protocol_call_of_describe_chain_keeps_its_row",
+        "test_packet_call_rows.ProductionCallRowTests.test_a_stale_production_row_is_refused",
+        "test_packet_call_rows.ProductionCallRowTests.test_a_production_packet_call_without_its_row_is_refused",
+        "test_packet_call_rows.ProductionCallRowTests.test_a_new_packet_call_needs_a_row_after_the_certificate_is_renewed",
+        "test_packet_call_rows.ProductionCallRowTests.test_the_production_rows_and_call_sites_agree",
+        "test_packet_call_rows.CallRowTests.test_the_union_of_the_rows_of_two_versions_of_a_function_is_refused",
+        "test_packet_call_rows.CallRowTests.test_a_row_whose_call_changed_stays_for_the_reviewer_with_the_digest_of_the_new_call",
+        "test_packet_call_rows.CallRowCommandTests.test_the_command_writes_the_determined_rows_and_exits_with_zero"
+      ]
     }
   ]
 }
