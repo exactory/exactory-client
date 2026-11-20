@@ -25,7 +25,7 @@ class RemoteFinishingTests(unittest.TestCase):
             def read_remote(method, url):
                 reads.append((method, url))
                 return []
-            mutate, refusals = store.mutate, []
+            mutate, mutate_scoped, refusals = store.mutate, store.mutate_scoped, []
             def refuse(operation, *args, **kwargs):
                 if operation == 'remote.discard' and len(refusals) < 2:
                     code = 'store_busy' if not refusals else 'stale_revision'
@@ -34,8 +34,8 @@ class RemoteFinishingTests(unittest.TestCase):
                         mutate('fixture.writer', {}, lambda tx: tx.put('fixture', 'writer', {}),
                                expected_revision=store.revision, request_id='writer')
                     raise ResearchError(code, 'Concurrent writer')
-                return mutate(operation, *args, **kwargs)
-            with patch.object(store, 'mutate', side_effect=refuse), \
+                return mutate_scoped(operation, *args, **kwargs)
+            with patch.object(store, 'mutate_scoped', side_effect=refuse), \
                     patch('research_harness.storage._BUSY_TIMEOUT_SECONDS', 0.001):
                 intent = zenodo.reconcile_pending(store, 'remote', read_remote)
             self.assertIsNone(intent['pending'])
@@ -49,15 +49,15 @@ class RemoteFinishingTests(unittest.TestCase):
         from research_harness import submission, zenodo
         with tempfile.TemporaryDirectory() as directory:
             store = Store(Path(directory), create=True)
-            mutate, refused = store.mutate, set()
+            mutate_scoped, refused = store.mutate_scoped, set()
             operations = {'submission.observe', 'publication.read_back'}
             def refuse(operation, *args, **kwargs):
                 if operation in operations and operation not in refused:
                     refused.add(operation)
                     raise ResearchError('store_busy', 'Concurrent writer')
-                return mutate(operation, *args, **kwargs)
+                return mutate_scoped(operation, *args, **kwargs)
             receipt = {'environment': 'sandbox', 'deposition_id': 123, 'draft_url': 'https://example.org/123'}
-            with patch.object(store, 'mutate', side_effect=refuse), \
+            with patch.object(store, 'mutate_scoped', side_effect=refuse), \
                     patch('research_harness.storage._BUSY_TIMEOUT_SECONDS', 0.001):
                 observed = submission._observation(store, 'submit', 'matched', {'verificationId': 'confirmed'})
                 published = zenodo._record_read_back_publication(store, 'publish', receipt, {'doi': '10.1234/example'})
@@ -69,7 +69,7 @@ class RemoteFinishingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = Store(Path(directory), create=True)
             remote.begin_intent(store, 'fixture', {'id': 'item'}, expected_revision=0, request_id='remote')
-            mutate, refusals = store.mutate, []
+            mutate, mutate_scoped, refusals = store.mutate, store.mutate_scoped, []
             def refuse(operation, *args, **kwargs):
                 if operation in ('remote.resolve', 'remote.finish') and operation not in refusals:
                     refusals.append(operation)
@@ -78,9 +78,9 @@ class RemoteFinishingTests(unittest.TestCase):
                         mutate('fixture.writer', {}, lambda tx: tx.put('fixture', 'writer', {}),
                                expected_revision=store.revision, request_id='writer')
                     raise ResearchError(code, 'Concurrent writer')
-                return mutate(operation, *args, **kwargs)
+                return mutate_scoped(operation, *args, **kwargs)
             perform = Mock(return_value={'id': 'confirmed'})
-            with patch.object(store, 'mutate', side_effect=refuse), \
+            with patch.object(store, 'mutate_scoped', side_effect=refuse), \
                     patch('research_harness.storage._BUSY_TIMEOUT_SECONDS', 0.001):
                 response = remote.remote_step(store, 'remote', 'create', {}, perform)
                 receipt = remote.finish_intent(store, 'remote', 'fixture_receipt', response)

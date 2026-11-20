@@ -5,7 +5,7 @@ import os
 
 from .errors import ResearchError
 from .evidence import digest
-from .finishing import retry_store_write
+from .finishing import SCOPED_FINISH_ATTEMPT_COUNT, SCOPED_FINISH_WAIT_SECONDS, retry_store_write
 from .operations import immutable_record
 from .review_task_execution import _get, _mutate_current, _TransactionRecords, identify_call, read_call_kinds
 from .storage import _canonical
@@ -85,7 +85,8 @@ def capture_call(store, operation, payload, invocation, route, observation, *, r
         capture_request_id = request_id + ':capture' + (':' + str(suffix) if suffix else '')
         try:
             return retry_store_write(lambda: _mutate_current(store, 'review.call_capture', captured, apply,
-                request_id=capture_request_id), attempts=600, seconds=600.0)
+                request_id=capture_request_id), attempts=SCOPED_FINISH_ATTEMPT_COUNT,
+                seconds=SCOPED_FINISH_WAIT_SECONDS)
         except ResearchError as error:
             if error.code != 'request_id_conflict':
                 raise

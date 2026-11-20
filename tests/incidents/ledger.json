@@ -7471,6 +7471,27 @@
         "test_series_ending.SeriesEndingTests.test_capture_answer_names_each_pending_source",
         "test_series_ending.SeriesEndingTests.test_every_planned_decision_keeps_its_steps_in_the_ending"
       ]
+    },
+    {
+      "id": "finishing-write-gave-up-after-eight-seconds",
+      "record": "20261119223643-finishing-writes-give-up-after-eight-seconds",
+      "class": "concurrency",
+      "summary": "A record that finishes paid work was a compare-and-swap on the revision of the whole store, tried again for 8 seconds, while one write takes 4 to 48 seconds on a store of a study's size. Another command that wrote, or only read, refused it. exactory-lab run spent an admission before its program started, or ended refused after its program; a remote step kept an unknown outcome although the service had answered; an acquisition ended without the responses of its requests, a cohort collection without a page, and a direct deposit or the concept DOI of a version draft without its record.",
+      "expected": "The records of an admitted run, of a remote intent, of an acquisition, of a cohort page, of a full-text job, of a direct deposit and of the concept DOI of a version draft commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store for at most 600 seconds; within that wait a COMMIT that readers hold up keeps its transaction. A refusal after the wait is store_busy with a message that says what is kept and which command goes on, and the refusal of an answer of a remote step carries only the members that the step needs. The same exactory-lab run command starts a claimed local run whose program never started.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_finishing_write_commits.RunWriteTests.test_start_is_recorded_when_a_commit_meets_every_attempt",
+        "test_finishing_write_commits.RunWriteTests.test_run_is_recorded_when_a_commit_meets_every_write_after_the_program",
+        "test_finishing_write_commits.RemoteWriteTests.test_answer_of_a_step_is_recorded_when_a_commit_meets_every_attempt",
+        "test_finishing_write_commits.RemoteWriteTests.test_answer_refused_beyond_the_wait_carries_the_members_that_the_step_needs",
+        "test_finishing_write_commits.AcquisitionWriteTests.test_result_is_recorded_when_a_commit_meets_every_attempt",
+        "test_finishing_write_commits.AcquisitionWriteTests.test_pages_of_a_cohort_are_recorded_when_a_commit_meets_every_attempt",
+        "test_finishing_write_commits.DraftDepositWriteTests.test_direct_deposit_after_the_publish_is_recorded_when_a_commit_meets_every_attempt",
+        "test_finishing_write_commits.DraftDepositWriteTests.test_concept_of_a_version_draft_is_recorded_when_the_store_moves_once",
+        "test_finishing_write_commits.ReaderAtCommitTests.test_commit_of_a_finishing_write_that_a_reader_holds_up_is_tried_again_in_the_same_transaction",
+        "test_claimed_run_start.ClaimedRunStartTests.test_same_request_starts_a_claimed_run_whose_start_the_store_refused"
+      ]
     }
   ]
 }

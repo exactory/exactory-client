@@ -151,6 +151,6 @@ def acquire_visual_asset(store, link, url, *, request_id, expected_revision, htt
         work.setdefault("visual_asset_ids", []).append(request_id)
         transaction.put("work", link["version_id"], work)
 
-    return _finish(store, request_id, snapshot["revision"], {"status": "pending" if pending else "complete",
+    return _finish(store, request_id, {"status": "pending" if pending else "complete",
         "scope": "visual_asset_acquisition", "pending": pending, "capture": capture, "attempts_used": budget.used,
         "asset_link": {"url": url, "source_id": capture["source_id"], "artifact": capture["artifact"]} if not pending else None}, apply=commit)

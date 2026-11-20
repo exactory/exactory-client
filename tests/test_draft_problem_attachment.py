@@ -40,7 +40,7 @@ from test_draft import (
     _draft,
     _load_bin_module,
     _read_request,
-    _refuse_the_direct_deposit_record,
+    _refuse_the_direct_deposit_record_through_the_wait,
     _run_draft_command,
     _run_draft_command_on_split_streams,
 )
@@ -952,7 +952,7 @@ class TestDirectDepositForAProblem(_PendingAttachmentTests, _PlainWorkspaceDepos
                    "doi": "10.5281/zenodo.4000", "concept_doi": "10.5281/zenodo.3999",
                    "record_url": "https://zenodo.org/records/4000"}
         record_direct_deposit(store, earlier, expected_revision=store.revision, request_id="direct-deposit-earlier")
-        with unittest.mock.patch.object(_draft, "record_direct_deposit", _refuse_the_direct_deposit_record):
+        with _refuse_the_direct_deposit_record_through_the_wait():
             uploaded = self._lose_the_publish_response()
         # An export rewrites the deposit file from the store's earlier record. It never writes the journal.
         export_workspace(Store(self.workspace_dir))
@@ -2011,7 +2011,7 @@ class TestProblemDepositJournalStates(_PlainWorkspaceDepositTestCase):
 
     def test_a_store_that_refuses_the_record_after_the_publish_leaves_an_unsettled_journal_that_attach_problem_settles(self) -> None:
         # The crash point: published, record refused, attachment skipped.
-        with unittest.mock.patch.object(_draft, "record_direct_deposit", _refuse_the_direct_deposit_record):
+        with _refuse_the_direct_deposit_record_through_the_wait():
             output = self._deposit(_PROBLEM_DEPOSIT, expected_exit_code=1)
 
         self.assertEqual(_count_publishes(self.fake_api), 1)
@@ -2056,7 +2056,7 @@ class TestProblemDepositJournalStates(_PlainWorkspaceDepositTestCase):
         self.assertFalse((self.workspace_dir / ".exactory" / "problem-deposit.json").exists())
 
     def test_a_store_that_refuses_the_record_is_reported_once_on_the_publishing_path(self) -> None:
-        with unittest.mock.patch.object(_draft, "record_direct_deposit", _refuse_the_direct_deposit_record):
+        with _refuse_the_direct_deposit_record_through_the_wait():
             output = self._deposit(_PRODUCTION_PUBLISH, expected_exit_code=1)
 
         self.assertEqual(output.count("Managed record skipped (store_busy)"), 1)

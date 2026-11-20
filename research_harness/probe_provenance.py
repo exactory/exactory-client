@@ -9,7 +9,7 @@ import stat
 
 from .artifacts import ArtifactStore, describe_artifact, is_sealed_artifact
 from .errors import ResearchError
-from .finishing import SCOPED_FINISH_ATTEMPT_COUNT, SCOPED_FINISH_RETRY_CODES, SCOPED_FINISH_WAIT_SECONDS, retry_store_write
+from .finishing import retry_finishing_write, retry_store_write
 from .operations import _read_preparation, fields, immutable_record, prepared_mutation, prepared_task_mutation, text
 from .storage import Store
 from .workspace import checked_parent, read_file, strict_json
@@ -58,19 +58,6 @@ PROBE_STORE_BUSY_MSG = (
     'the kept files and does not run the program again. Do not use a new id for the same run.')
 
 
-def retry_probe_write(write, busy_msg):
-    """Call write until the store takes it, for at most SCOPED_FINISH_WAIT_SECONDS. A probe write commits against the
-    records that it read, so a busy store or a commit that changes one of those records refuses an attempt. When the
-    refusals last beyond the wait, the write is refused with store_busy, busy_msg and the last refusal as cause."""
-    try:
-        return retry_store_write(write, attempts=SCOPED_FINISH_ATTEMPT_COUNT, seconds=SCOPED_FINISH_WAIT_SECONDS,
-                                 codes=SCOPED_FINISH_RETRY_CODES)
-    except ResearchError as error:
-        if error.code not in SCOPED_FINISH_RETRY_CODES:
-            raise
-        raise ResearchError('store_busy', busy_msg, {'cause': error.as_dict()}) from error
-
-
 def record_probe_artifact_origin(root, probe_id, sha256, role):
     """Commit an exploratory identity before its captured bytes become importable. The commit depends on the intent
     and on this origin record alone, and no other write changes them once they exist."""
@@ -88,7 +75,7 @@ def record_probe_artifact_origin(root, probe_id, sha256, role):
         if probe_id not in records.get("probe_intent", {}):
             raise ResearchError("probe_intent_missing", "Pin exploratory output only after its immutable probe intent")
         return [immutable_record(records, "probe_artifact", identifier, value)], value
-    return retry_probe_write(lambda: prepared_task_mutation(store, "research.probe_artifact", payload, prepare,
+    return retry_finishing_write(lambda: prepared_task_mutation(store, "research.probe_artifact", payload, prepare,
         request_id="probe-artifact:" + identifier), PROBE_STORE_BUSY_MSG)
 
 

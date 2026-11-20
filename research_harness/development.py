@@ -24,7 +24,8 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .execution_accounting import require_accounted_usage
 from .graph import obligation
-from .operations import fields, immutable_record, is_finite_number, prepared_mutation, strings, text, timestamp
+from .operations import (fields, immutable_record, is_finite_number, prepared_mutation, prepared_task_mutation, strings,
+                         text, timestamp)
 from .operations import normalized_text as _normalized
 from .principles import objective_changes
 from .probe_provenance import find_probe_artifact_origins
@@ -1160,7 +1161,10 @@ def _checkpoint_record(records, artifacts, dependencies, identifier, cycle, asse
 
 
 def record_execution(store, payload, *, expected_revision, request_id, _observation=None, _snapshot=None):
-    """Retain the actual outcome of one admitted run, or explicitly imported history."""
+    """Retain the actual outcome of one admitted run, or explicitly imported history. With an expected revision the
+    commit is the compare-and-swap on the revision of the store that every command makes. With None, which the
+    launcher passes for the outcome of its own run, the commit depends on the records that the preparation read, and
+    the record holds the revision of its commit."""
     artifacts = store.build_artifact_store()
 
     def prepare(records, value):
@@ -1224,23 +1228,29 @@ def record_execution(store, payload, *, expected_revision, request_id, _observat
             from .execution_evidence import validate_probe_execution_observation
             if validate_probe_execution_observation(records, artifacts, value, _observation):
                 probe_origins = []
+        cycle = records["cycle"][plan["id"]]
+        account = records["strategy_account"][plan["strategy_key"]]
+        if admission:
+            overrun = max(0, units - admission["reserved_units"]) if units is not None else 0
+            account = dict(account, charged_units=account["charged_units"] + overrun)
+        paused = earlier is None and admission is not None and _exhausted(account) and value["status"] != "completed"
+        commit_revision = None if expected_revision is None else expected_revision + 1
+        if paused and commit_revision is None:
+            # The checkpoint of a paused cycle is an artifact that names the revision of this commit. Reading the
+            # revision makes the commit depend on it, so the store commits this write only at that revision.
+            commit_revision = records.read_revision() + 1
         record = {"id": value["id"], "payload": value, "plan_digest": plan["digest"],
-                  "recorded_revision": expected_revision + 1, "request_id": request_id,
+                  "recorded_revision": commit_revision, "request_id": request_id,
                   "admitted_revision": admission["admitted_revision"] if admission else None}
         if earlier is not None:
             record["format_only_of"] = {"execution_id": earlier["id"], "execution_digest": earlier["digest"]}
         if probe_origins:
             record["probe_origins"] = probe_origins
         record["digest"] = digest(record)
-        cycle = records["cycle"][plan["id"]]
         changes = [immutable_record(records, "execution", value["id"], record)]
-        account = records["strategy_account"][plan["strategy_key"]]
         if admission:
-            overrun = max(0, units - admission["reserved_units"]) if units is not None else 0
-            account = dict(account, charged_units=account["charged_units"] + overrun)
             changes.extend([("strategy_account", plan["strategy_key"], account),
                             ("execution_outcome", admission["id"], {"execution_id": value["id"]})])
-        paused = earlier is None and admission is not None and _exhausted(account) and value["status"] != "completed"
         if earlier is None:
             cycle = dict(cycle, execution_ids=cycle["execution_ids"] + [value["id"]],
                          status="budget_paused" if paused else "executed")
@@ -1251,12 +1261,23 @@ def record_execution(store, payload, *, expected_revision, request_id, _observat
             # snapshot must survive later unavailable/corrupt literature. It
             # makes no current eligibility decision and is never selected.
             checkpoint = _checkpoint_record(projected, artifacts, admission["dependencies"], "interrupted:" + value["id"], cycle, None,
-                "The incomplete run retains its charged reservation and exhausted strategy budget.", None, expected_revision + 1, request_id)
+                "The incomplete run retains its charged reservation and exhausted strategy budget.", None, commit_revision, request_id)
             changes.append(immutable_record(records, "checkpoint", checkpoint["id"], checkpoint))
         return changes, record
 
-    return prepared_mutation(store, "development.execution", payload, prepare, expected_revision=expected_revision,
-                             request_id=request_id, _snapshot=_snapshot)
+    if expected_revision is not None:
+        return prepared_mutation(store, "development.execution", payload, prepare, expected_revision=expected_revision,
+                                 request_id=request_id, _snapshot=_snapshot)
+
+    def stamp_commit_revision(changes, result, revision):
+        if result["recorded_revision"] is None:
+            body = {key: item for key, item in result.items() if key != "digest"}
+            body["recorded_revision"] = revision
+            result = dict(body, digest=digest(body))
+            changes = [(kind, key, result if kind == "execution" else item) for kind, key, item in changes]
+        return changes, result
+    return prepared_task_mutation(store, "development.execution", payload, prepare, request_id=request_id,
+                                  finalize=stamp_commit_revision)
 
 
 def _assessed_checks(evidence, values, expected, identity, target_claim=None):

@@ -28,7 +28,7 @@ class AcquisitionTests(unittest.TestCase):
 
     def test_acquisition_finish_retries_busy_and_stale_without_refetch(self):
         self.metadata()
-        mutate = self.store.mutate
+        mutate, mutate_serialized = self.store.mutate, self.store.mutate_serialized
         raw = b"<article class='ltx_document'><section class='ltx_section'><h2>Results</h2><p>The original body.</p></section></article>"
         for index, acquire in enumerate(('metadata', 'fulltext')):
             with self.subTest(acquire=acquire):
@@ -43,9 +43,9 @@ class AcquisitionTests(unittest.TestCase):
                             mutate('fixture.writer', {}, lambda tx: tx.put('fixture', 'writer', {}),
                                    expected_revision=self.store.revision, request_id='writer-' + acquire)
                         raise ResearchError(code, 'Concurrent writer')
-                    return mutate(operation, *args, **kwargs)
+                    return mutate_serialized(operation, *args, **kwargs)
                 revision = self.store.revision
-                with patch.object(self.store, 'mutate', side_effect=refuse), \
+                with patch.object(self.store, 'mutate_serialized', side_effect=refuse), \
                         patch('research_harness.storage._BUSY_TIMEOUT_SECONDS', 0.001):
                     if acquire == 'metadata':
                         result = acquire_work(self.store, '2601.00001v1', request_id='retry-metadata',

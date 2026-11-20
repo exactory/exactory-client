@@ -171,7 +171,7 @@ def launch_colab(store, claim):
     while True:
         released = _release(store, claim, root, job, read_store=read_polling_store)
         if released is not _POLLING_READ_BUSY and (root / "results" / job["job_id"] / "DONE").exists():
-            return reconcile_execution(store, {"admission_id": claim["admission_id"]}, expected_revision=store.revision,
+            return reconcile_execution(store, {"admission_id": claim["admission_id"]}, expected_revision=None,
                 request_id="remote-observe-" + digest(claim), owned=True)
         if time.monotonic() >= deadline:
             raise ResearchError("execution_recovery_required", "The Colab runner has no confirmed terminal outcome. Check RUNNER_ALIVE heartbeat and reconcile the same admitted identity; its reservation remains charged.", {"job_id": job["job_id"]})

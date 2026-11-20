@@ -28,16 +28,12 @@ if __package__ in (None, ""):
 from . import probe_supervision
 from .errors import ResearchError
 from .evidence import digest
-from .finishing import retry_store_write
+from .finishing import SCOPED_FINISH_ATTEMPT_COUNT, SCOPED_FINISH_WAIT_SECONDS, retry_store_write
 from .review_call_admission import check_launch
 from .review_task_execution import (_check_references, _get, _mutate_current, _TransactionRecords,
                                      _transition, capture_observation)
 from .storage import Store
 from .workspace import checked_parent
-
-
-_CAPTURE_ATTEMPTS = 600
-_CAPTURE_SECONDS = 600.0
 
 
 def _directory(reservation_id):
@@ -410,7 +406,7 @@ def run_worker(root, reservation_id, token, descriptor):
                                      "message": str(error)}}
         retry_store_write(lambda: capture_observation(store, reservation_id, observation,
             request_id="review-capture:" + reservation_id, _authority=authority),
-            attempts=_CAPTURE_ATTEMPTS, seconds=_CAPTURE_SECONDS)
+            attempts=SCOPED_FINISH_ATTEMPT_COUNT, seconds=SCOPED_FINISH_WAIT_SECONDS)
     finally:
         os.close(descriptor)
 

@@ -97,7 +97,7 @@ from pathlib import Path
 
 from .artifacts import ArtifactStore, describe_artifact
 from .errors import ResearchError
-from .finishing import retry_store_write
+from .finishing import retry_finishing_write
 from .evidence import derived_id, digest, media_type as response_media_type, prepare_sources, prepare_work, put_sources, put_work
 from .fulltext import GENERIC_BINARY_MEDIA_TYPES, XML_MEDIA_TYPES, parse_base_media_type, extract, extraction_measures
 from .http import DEFAULT_MAX_RESPONSE_BYTES, HttpClient, HttpFailure, RequestBudget, safe_url
@@ -116,6 +116,28 @@ SUPPLIED_TEXT_NOTE = (
     "A person saved this text. The harness did not fetch it and did not verify its origin. "
     "A finding states when a decisive judgment rests on this supplied text.")
 SUPPORTED_PROVIDERS_MESSAGE = "Expected arxiv, openalex, crossref or datacite"
+# The messages of a write of an acquisition that the store refused beyond the wait: for the result of an operation
+# that sends requests, for the result of an import of a supplied file, and for a page and for the end of a cohort
+# collection.
+ACQUISITION_RESULT_STORE_BUSY_MSG = (
+    'The research store stayed busy, and the result of this acquisition was not recorded. Nothing false was recorded. '
+    'No response and no extracted text of this operation is recorded. The operation stays admitted and holds its '
+    'request allowance. The same request ID returns it as incomplete and does not finish it. Run the command again '
+    'with a new request ID. The new operation replaces this one, releases its allowance and sends its requests again.')
+IMPORT_RESULT_STORE_BUSY_MSG = (
+    'The research store stayed busy, and the result of this import was not recorded. Nothing false was recorded. The '
+    'operation stays admitted. The same request ID returns it as incomplete and does not finish it. Run the command '
+    'again with a new request ID. The new operation replaces this one and imports the file again.')
+COHORT_PAGE_STORE_BUSY_MSG = (
+    'The research store stayed busy, and a page of this cohort collection was not recorded. Nothing false was '
+    'recorded. Every page before it is recorded. The request of this page was sent, and its response is not '
+    'recorded. The collection keeps its position and still names this operation as its active operation. Continue the '
+    'collection with resume and a new request ID. The collection then requests this page again and goes on from there.')
+COHORT_END_STORE_BUSY_MSG = (
+    'The research store stayed busy, and the end of this cohort operation was not recorded. Every page that the '
+    'operation requested is recorded. The operation stays admitted and holds its request allowance, and the collection '
+    'still names it as its active operation. Continue the collection with resume and a new request ID. The new '
+    'operation replaces this one and releases its allowance.')
 
 
 @contextmanager
@@ -235,14 +257,19 @@ def _begin(store, operation, payload, request_id, expected_revision, *, target=N
     return receipt["result"] if record is None else record["result"]
 
 
-def _finish(store, request_id, revision, result, *, apply=None):
-    return retry_store_write(lambda: _finish_once(store, request_id, store.revision, result, apply=apply))
+def _finish(store, request_id, result, *, apply=None, busy_msg=ACQUISITION_RESULT_STORE_BUSY_MSG):
+    """Record the result of an admitted operation after its requests, at the revision that the write lock finds. The
+    result, and what apply writes, come from what this command read before, while the operation holds the lock of
+    its target; the commit checks that the operation is still admitted. A busy store is waited for, and busy_msg is
+    the message of the refusal after the wait."""
+    return retry_finishing_write(lambda: _finish_once(store, request_id, None, result, apply=apply), busy_msg)
 
 
 def _finish_once(store, request_id, revision, result, *, apply=None):
-    final = dict(result, request_id=request_id, revision=revision + 1)
-
-    def commit(transaction):
+    """With a revision the commit is the compare-and-swap on it, and the result names the next revision. With None
+    the result names the revision of its commit."""
+    def commit(transaction, commit_revision):
+        final = dict(result, request_id=request_id, revision=commit_revision)
         if apply:
             apply(transaction)
         operation = transaction.get("acquisition_operation", request_id)
@@ -258,7 +285,11 @@ def _finish_once(store, request_id, revision, result, *, apply=None):
             transaction.put(*change)
         return final
 
-    return store.mutate("acquisition.finish", {"operation_id": request_id, "result": final}, commit,
+    if revision is None:
+        return store.mutate_serialized("acquisition.finish", {"operation_id": request_id, "result": dict(result, request_id=request_id)},
+                                       commit, request_id=derived_id(request_id, "finish"))["result"]
+    return store.mutate("acquisition.finish", {"operation_id": request_id, "result": dict(result, request_id=request_id, revision=revision + 1)},
+                        lambda transaction: commit(transaction, revision + 1),
                         expected_revision=revision, request_id=derived_id(request_id, "finish"))["result"]
 
 
@@ -588,10 +619,11 @@ def _run_collection(store, collection_id, request_id, budget, http):
         sources = prepare_sources(artifacts, attempts, "arxiv", request_id, start=collection["source_count"])
         if page is not None:
             prepared = [prepare_work(artifacts, w, sources[-1]["id"]) for w in page.works]
-        result = retry_store_write(lambda: store.mutate("cohort.page", {"collection_id": collection_id, "sequence": collection["sequence"],
-                              "source_ids": [s["id"] for s in sources], "failure": failure.code if failure else None},
-            lambda tx: _page_update(tx, copy.deepcopy(collection), partition["id"], page, prepared, sources, failure, request_id),
-            expected_revision=store.revision, request_id=derived_id(request_id, "page", collection["sequence"])))
+        result = retry_finishing_write(lambda: store.mutate_serialized("cohort.page",
+            {"collection_id": collection_id, "sequence": collection["sequence"],
+             "source_ids": [s["id"] for s in sources], "failure": failure.code if failure else None},
+            lambda tx, revision: _page_update(tx, copy.deepcopy(collection), partition["id"], page, prepared, sources, failure, request_id),
+            request_id=derived_id(request_id, "page", collection["sequence"])), COHORT_PAGE_STORE_BUSY_MSG)
         if result["result"]["disposition"] == "pending":
             continue
     result = _collection_summary(snapshot["records"], collection)
@@ -604,7 +636,7 @@ def _run_collection(store, collection_id, request_id, budget, http):
         collection["active_operation"] = None
         transaction.put("collection", collection_id, collection)
 
-    return _finish(store, request_id, snapshot["revision"], result, apply=finish)
+    return _finish(store, request_id, result, apply=finish, busy_msg=COHORT_END_STORE_BUSY_MSG)
 
 
 def _next_eligible(records, identifier):
@@ -686,7 +718,7 @@ def acquire_work(store, identifier, *, request_id, expected_revision, http=None,
         for item in prepared:
             put_work(transaction, item)
 
-    return _finish(store, request_id, snapshot["revision"],
+    return _finish(store, request_id,
                    {"status": "pending" if pending else "complete", "scope": "metadata", "pending": pending, "warnings": warnings,
                     "work_ids": [w["id"] for w in works], "source_ids": [s["id"] for s in sources], "attempts_used": budget.used},
                    apply=commit)
@@ -800,9 +832,9 @@ def import_fulltext(store, identifier, file, origin, *, request_id, expected_rev
         work['fulltexts'].append(capture)
         transaction.put('work', identifier, work)
 
-    return _finish(store, request_id, snapshot['revision'],
+    return _finish(store, request_id,
         {'status': 'pending' if pending else 'complete', 'scope': 'fulltext_acquisition', 'pending': pending,
-         'work_id': identifier, 'capture': capture, 'attempts_used': 0}, apply=commit)
+         'work_id': identifier, 'capture': capture, 'attempts_used': 0}, apply=commit, busy_msg=IMPORT_RESULT_STORE_BUSY_MSG)
 
 
 def describe_supplied_texts(records):
@@ -929,7 +961,7 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
         work["fulltexts"].append(capture)
         transaction.put("work", identifier, work)
 
-    return _finish(store, request_id, snapshot["revision"],
+    return _finish(store, request_id,
                    {"status": "pending" if pending else "complete", "scope": "fulltext_acquisition", "pending": pending,
                     "work_id": identifier, "capture": capture, "attempts_used": budget.used}, apply=commit)
 
