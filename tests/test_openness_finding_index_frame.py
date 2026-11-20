@@ -753,7 +753,9 @@ class FindingUnitsTests(unittest.TestCase):
                 first = v7.measure_turn_frames(route, native)['reading']
                 second = v7.measure_turn_frames(route, native, fixed_bounds=inventory['fixed_bounds'],
                     finding_index=plan['finding_index'], inventory=inventory)['reading']
-                self.assertEqual(second, dict(first, finding_units=v7.FINDING_UNITS_CHARACTERS))
+                # The frame counts the reserve for a chain whose final names a value. A chain whose final holds
+                # the complete index keeps the reading frame of finding version 1.
+                self.assertEqual(second, dict(first, finding_units=v7.FINDING_UNITS_CHARACTERS) if reason else first)
                 self.assertEqual(plan['frame']['reading']['fields'], second)
                 self.assertNotIn('finding_units', v7.measure_turn_frames(route, native, finding_index=None)['final'])
 
@@ -811,6 +813,40 @@ class FindingUnitsTests(unittest.TestCase):
                     self.assertIn(0, (fixed_bounds['statement'], fixed_bounds['formulations']))
                 else:
                     self.assertEqual((admission['state'], admission['details']['reason']), ('stop', 'fixed_frame'))
+
+
+class ReserveInTheLoopTests(unittest.TestCase):
+    """G8.11: the reading frame counts the reserve in the pass of the admission loop whose inventory names a value."""
+
+    def test_g8_the_reading_frame_counts_the_reserve_when_the_index_gives_up_values_in_the_loop(self):
+        route, artifacts = build_route('codex_cli_v1', 'gpt-6-astra'), MemoryArtifacts()
+        change = measure_version_change(route)
+        native, built = build_admission_native(artifacts, [build_search(number, build_reason(str(number), 30000))
+                                                           for number in range(2)])
+        frames = v7.measure_turn_frames(route, native)
+        reading_frame, final_frame = (sum(frames[kind].values()) for kind in ('reading', 'final'))
+        # The complete index fits its stated size: no value is named and nothing is reserved, on the route as it is
+        # and on a route whose reading frame can hold the reading frame of finding version 1 and no more.
+        for bounds in ({}, dict(frame_bound=final_frame + change + 120000, reading_bound=reading_frame)):
+            with self.subTest(bounds=sorted(bounds)):
+                admission = admit(route, artifacts, native, built, **bounds)
+                self.assertEqual(admission['state'], 'record')
+                self.assertNotIn('finding_units', admission['inventory']['inventory'])
+                self.assertEqual(admission['capacity_plan']['frame']['reading']['characters'], reading_frame)
+        # A final frame over its bound lets the index give up values; the plan of that admission counts the reserve.
+        final_bound = dict(frame_bound=final_frame + change + 20000)
+        admission = admit(route, artifacts, native, built,
+                          reading_bound=reading_frame + v7.FINDING_UNITS_CHARACTERS, **final_bound)
+        self.assertEqual(admission['state'], 'record')
+        inventory, plan = admission['inventory']['inventory'], admission['capacity_plan']
+        self.assertLess(inventory['fixed_bounds']['finding_index'], STATED_CHARACTERS)
+        self.assertTrue(inventory['finding_units'])
+        self.assertEqual(plan['frame']['reading']['fields']['finding_units'], v7.FINDING_UNITS_CHARACTERS)
+        self.assertEqual(plan['frame']['reading']['characters'], reading_frame + v7.FINDING_UNITS_CHARACTERS)
+        # With one character less for the reading frame, the chain has no field to move and is refused.
+        refused = admit(route, artifacts, native, built,
+                        reading_bound=reading_frame + v7.FINDING_UNITS_CHARACTERS - 1, **final_bound)
+        self.assertEqual((refused['state'], refused['details']['reason']), ('stop', 'fixed_frame'))
 
 
 class ExcludedWorkLongTests(unittest.TestCase):

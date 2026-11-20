@@ -706,11 +706,7 @@ class UnreadPagingTests(UnreadFinalSupport):
 
 
 class IncidentUnreadTests(UnreadFinalSupport):
-    # The reading frame of a chain with a finding index reserves 1,500 characters for the finding-units paragraph
-    # (G8.11 of 0.92.0). On this route the reading task at the material level of 120,000 then passes the measured task
-    # level of 240,000, so a reading turn delivers at most 60,000 characters; nine texts of 40,000 characters keep the
-    # shape of the incident: six completed turns leave one text partly unread.
-    text_sizes = (40000,) * 9
+    text_sizes = (80000,) * 9
     completed_prefix = 6
 
     def test_g1_k7_six_completed_turns_survive_refusal_at_turn_seven_and_next_export_reads_one_text(self):
