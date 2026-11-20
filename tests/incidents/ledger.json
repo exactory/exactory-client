@@ -7413,6 +7413,30 @@
         "test_call_payload_rebuild.CallPayloadRebuildTests.test_staged_start_check_reads_the_definition",
         "test_research_cli.StagedReviewCliTests.test_accept_requires_a_committed_capture_and_maps_to_the_child_assignment"
       ]
+    },
+    {
+      "id": "evidence-shape-refusal-names-one-array-without-its-entries",
+      "record": "20261115234509-bar-slot-ends-on-evidence-form-and-route-input-limit",
+      "class": "refusal notice of an evidence array",
+      "summary": "A study bar reviewer wrote the artifact member of a packet evidence entry and the citation of a prior_context passage as evidence entries. The check evidence.shape stopped at the first refused entry and gave only the path of the array and its message, and the notice of each replacement had empty details. The prompt of a study review states no form of an evidence entry, so the two replacements returned refused forms again: 45 of 45, 45 of 45 and 15 of 15 entries of every evidence array were refused, and the slot position ended without a bar. The path of a refusal also did not name the array in two places: the evidence of a reassessment finding was refused under the path /reassessment or under no path, and the evidence of an adjudication under no path.",
+      "expected": "The check evidence.shape checks every entry of the array and raises the code and the message of the first refused entry. Its details add refused_indexes (the positions of the refused entries in the array of the answer, at most 100), refused_count and notice, the accepted forms of an evidence entry, in the form of record reference that the call accepts. An array of the three forms that is refused as a whole gets notice alone, and an array of another grammar gets the positions of its refused entries and never notice. Every caller of the three forms names its array in path, the notice of a replacement shows the three details, and a stored refusal or replacement keeps its details and stays verified.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_study_evidence_forms.IncidentSessionTests.test_a_bar_refused_for_the_incident_forms_is_replaced_with_their_positions_and_recorded",
+        "test_study_evidence_forms.ShapeRefusalTests.test_the_notice_of_a_wrapped_descriptor_names_its_position_and_the_three_forms",
+        "test_study_evidence_forms.ShapeRefusalTests.test_every_refused_entry_is_named_with_the_forms_of_its_binding",
+        "test_study_evidence_forms.ShapeRefusalTests.test_a_refused_array_gets_the_forms_alone",
+        "test_study_evidence_forms.ShapeRefusalTests.test_the_positions_stop_at_their_limit_and_the_count_does_not",
+        "test_study_evidence_forms.ShapeRefusalTests.test_a_malformed_entry_after_a_refused_entry_keeps_the_first_refusal",
+        "test_study_evidence_forms.OtherGrammarTests.test_a_verification_final_names_the_refused_link_of_its_check",
+        "test_study_evidence_forms.OtherGrammarTests.test_a_v3_study_result_names_the_position_of_a_source_link_after_typed_references",
+        "test_study_evidence_forms.OtherGrammarTests.test_a_readiness_series_names_the_refused_reference_of_its_check",
+        "test_study_evidence_forms.ArrayPathTests.test_a_reassessment_finding_of_a_review_names_its_evidence_array",
+        "test_study_evidence_forms.ArrayPathTests.test_a_staged_final_names_the_array_of_a_reassessment_finding_and_of_an_adjudication",
+        "test_study_evidence_forms.ArrayPathTests.test_a_problem_adjudication_names_its_evidence_array",
+        "test_study_evidence_forms.StoredShapeRefusalTests.test_a_stored_replacement_without_shape_details_stays_verified_with_the_same_fingerprint"
+      ]
     }
   ]
 }

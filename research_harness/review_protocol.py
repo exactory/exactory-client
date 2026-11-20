@@ -22,7 +22,7 @@ from collections.abc import Mapping
 from contextlib import ExitStack
 
 from .artifacts import ArtifactStore, describe_artifact, validate_reference
-from .errors import ResearchError
+from .errors import ResearchError, describe_error_at
 from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, prepared_task_mutation, text
@@ -4768,7 +4768,8 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
             raise ResearchError('invalid_review_adjudication', 'Correction admissibility is null when no correction is assigned')
         text(output['reason'], 'Adjudication reason')
         if packet.get('subject', {}).get('kind') == 'problem':
-            validate_evidence_contract(records, artifacts, output['evidence'], packets=packets)
+            with describe_error_at('/evidence'):
+                validate_evidence_contract(records, artifacts, output['evidence'], packets=packets)
         else:
             # Generic focused findings retain their existing recursive artifact-evidence contract.
             # Artifact availability is still checked by _evidence when recording.

@@ -1207,24 +1207,32 @@ checks permits for the check (`notice_fields` in `CONTRACT_CHECKS`,
 `review_refusal.py`); every other detail is replaced by `{sha256}`, its digest.
 An entry has at most 6,000 characters in its JSON form, and details longer than
 4,000 characters keep their start as `{head, sha256, characters, complete:
-false}`. A notice therefore holds only values of the reviewer's own output, of
-the packets of its own chain, and values computed from them. The form `whole`
-adds `output`, the latest refused output in full. The form `bounded` adds
-`output_ref: {artifact, characters}`, the stored output and its length, and
-`refused_part: {path, value, complete}`, the part of that output at the `path`
-of the latest refusal, at most 20,000 characters and cut in the same way.
-`review-assignment` chooses the form by measurement. It tries `whole` and then
-`bounded`; a head with a correction invocation, or a reassessment whose
-correction request does not fit the route, tries `bounded` only. A form is
-chosen when its request passes the measurement and the preflight of the route,
-the sent packet holds the notice unchanged, and the task stays within its
-character allowance. When no form passes, the replacement is tried as the
-smaller task that the capacity recovery names, with the packet and the base
-prompt of that task and the bounded notice. When there is no smaller task, or
-it does not pass either, the refusal is `review_input_too_large` with the
-trials in its details and the position is exhausted. The prompt is the base
-prompt of the refused turn with the paragraph of the chosen form, which takes
-the place of an earlier refusal paragraph
+false}`. A notice holds values of the reviewer's own output, values of the
+packets of its own chain, values computed from them, and the fixed text
+`notice` that a check gives. The check `evidence.shape` names the refused
+evidence array in `path` and gives `refused_indexes` (the positions, counted
+from 0, of the refused entries in that array, at most 100), `refused_count`
+(their number) and `notice` (the accepted forms of an evidence entry). When it
+refuses the array itself, because it is not an array or is empty, it gives
+`notice` alone. For an array of another grammar, which is the evidence of a
+readiness check in the `support` member of a study result review or the
+evidence of a verification, it gives the two numbers when it refuses entries,
+and it never gives `notice`. The form `whole` adds `output`, the latest refused
+output in full. The form `bounded` adds `output_ref: {artifact, characters}`,
+the stored output and its length, and `refused_part: {path, value, complete}`,
+the part of that output at the `path` of the latest refusal, at most 20,000
+characters and cut in the same way. `review-assignment` chooses the form by
+measurement. It tries `whole` and then `bounded`; a head with a correction
+invocation, or a reassessment whose correction request does not fit the route,
+tries `bounded` only. A form is chosen when its request passes the measurement
+and the preflight of the route, the sent packet holds the notice unchanged, and
+the task stays within its character allowance. When no form passes, the
+replacement is tried as the smaller task that the capacity recovery names, with
+the packet and the base prompt of that task and the bounded notice. When there
+is no smaller task, or it does not pass either, the refusal is
+`review_input_too_large` with the trials in its details and the position is
+exhausted. The prompt is the base prompt of the refused turn with the paragraph
+of the chosen form, which takes the place of an earlier refusal paragraph
 (`exactory-review-output-refusal-whole-v1` or
 `exactory-review-output-refusal-bounded-v1`, recorded under
 `problem_paragraphs`), and the request is a fresh input: the prompt and the
@@ -2918,8 +2926,12 @@ of a reading response carry only `path` and `message`;
 and the checks of bars, work items, objections and candidates keep the
 identities they gave before. A check that runs on the items of a list names the
 item by its index or by its valid id, and the first failed check is the one
-reported. A refusal recorded before 0.67.0 keeps its `details` as recorded,
-`null` when its validator gave none, and its receipt is not rewritten. A `native_math`
+reported. The check `evidence.shape` checks every entry of an evidence array:
+`path` names the array, the code and the message are those of the first refused
+entry, and the details add `refused_indexes`, `refused_count` and `notice`,
+which are described with the member `output_refusal`. A refusal recorded before
+0.67.0 keeps its `details` as recorded, `null` when its validator gave none,
+and its receipt is not rewritten. A `native_math`
 review is recorded by `exactory-math`, not by this harness, so `review-run`
 checks its output when an authenticated run completes. A proposal review and an
 approval of a result or a recovery have the closed fields of the native review,

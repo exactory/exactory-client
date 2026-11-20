@@ -453,12 +453,13 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
             for index, check in enumerate(support['checks']):
                 if not isinstance(check, dict) or not isinstance(check.get('evidence'), list):
                     continue
-                sources = [reference for reference in check['evidence']
-                           if isinstance(reference, dict) and reference.get('kind') == 'source']
+                positions = [position for position, reference in enumerate(check['evidence'])
+                             if isinstance(reference, dict) and reference.get('kind') == 'source']
+                sources = [check['evidence'][position] for position in positions]
                 if sources:
                     path = '/support/checks/' + str(index) + '/evidence'
                     with describe_error_at(path):
-                        contract_evidence(records, artifacts, sources)
+                        contract_evidence(records, artifacts, sources, positions=positions, forms_notice=False)
                     evidence_rows.append((path, sources))
     if problem or readiness_parts or source_only and any(evidence for _, evidence in evidence_rows):
         from .review_delivered_evidence import project_delivery_view
