@@ -691,13 +691,13 @@
       ]
     },
     {
-      "ast_sha256": "cfc5bf828841f17b1983b93d83b220358a85ac97f1867ecffe4c3bbc067def84",
-      "callee": "dict",
+      "ast_sha256": "b4e3cf4a9ec253659cd38f195dd63308af0e56daca1ca56fed4486f759f9f7ed",
+      "callee": "research_harness.storage.overlay_kinds",
       "caller": "research_harness.capture_selection.bind_packet_selections",
-      "classification": "standard library",
-      "reason": "Reviewed standard-library constructor or encoding function does not mutate its packet arguments.",
+      "classification": "listed module",
+      "reason": "Reviewed carry-handler-states (record 20261113110022, ruling 53): the bound view of the packet keeps the history of the store; overlay_kinds copies the mapping with the bound selections of the packet and changes no packet member.",
       "targets": [
-        "dict"
+        "research_harness.storage.overlay_kinds"
       ]
     },
     {
@@ -19834,9 +19834,9 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.capture_selection": {
-      "ast_sha256": "2f53323ba7a5605fe5d12f0b3db589211ea5eaa776e7b26794f8e9a5480a9250",
+      "ast_sha256": "9c5af62fd5c6cc43841f8709dfafb17435629c01609716f6f8d7d432a7413680",
       "functions": {
-        "bind_packet_selections": "92e3aa465eec306c616182a818fc7095c71b51074a6870c614a02e1e9728b26b",
+        "bind_packet_selections": "752e7305791d02837eb05d3f02289512e258e1e784ab3416b9791384607d25ed",
         "derive_review_selections": "5d897703dbc0721b3d9b3a56c5e7bd9743526b99e19f4f5599f6b11c717f9a5c",
         "describe_capture_selections": "992c19e7b07787a26dabe0d97953a2094f84dc6f899107f7acc76e9642141d5b",
         "find_capture_selections": "1228c0e77936fe6535238e0e55e9b46fa7eae79630e643f0849c83b9d70f6e33",
@@ -19853,13 +19853,13 @@
         "7b151b51ec167ba46a052de49fefcc49b5c134554cfe48463f88a58d23ed11ab",
         "9323aca23181c32ea685eb1abd1166b08189ef2791ee8a80cfd6e9127c095430",
         "af46c281ffe38dc32f9bed869a76be1fae37f310020ac25e0bad54d2dd7d1f25",
+        "b4e3cf4a9ec253659cd38f195dd63308af0e56daca1ca56fed4486f759f9f7ed",
         "c580d9efe1545da7c4bbb7401a4a670e8492a34d3e234381e7da935d4b95a2b3",
         "c59f4a9044dadc888c319a986e198cf7e5ca77c8c04ee8dada9cb270aeec7558",
-        "cfc5bf828841f17b1983b93d83b220358a85ac97f1867ecffe4c3bbc067def84",
         "e987af54e5895b5ac5a10b860ba59289bba65e2d9bc55cb4a2ae7ac01e50a2f6",
         "fbb668aab22bb3f545b4bddb09735d5f88b73a5a7056dad99fbf2e366d374dad"
       ],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed carry-handler-states (record 20261113110022, ruling 53): bind_packet_selections builds the bound view of a packet with storage.overlay_kinds, which keeps the history of the store that the verification of a carried selection reads (test N9 of the content-change design), and the module imports overlay_kinds; no packet argument or member changes."
     },
     "research_harness.challenge": {
       "ast_sha256": "311cdab694e04723169cc25eb587c1b4d8b2f39150a497c6c9993038c45a813a",
@@ -19938,7 +19938,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.cli": {
-      "ast_sha256": "cb8e1c8512c089202a10b897cf31443c84e7640a8563183c7ecfe7351cba4fe9",
+      "ast_sha256": "1aedb251971e1284244ff5faa58723e02e38eab8160ff7569f918693dd729e7c",
       "functions": {
         "_build_status_report": "d66e55cb0dab6385c501dd53ebe53f6d1348d3c3d9c469ca8c53a79050987e9b",
         "_is_recording_command": "05655a0a1dadde896d4de40e67283b9eedfc8feb68651142be7c2b6f25c9a43c",
@@ -19962,7 +19962,7 @@
         "read_payload_receipt": "2d1c12371fc8c034e9045344fdc1f109a3cf44474a8842f20f88df7461b3df71",
         "run": "e874ae0b72033ac2861ded4c3f6985ce7c0e60d034326910dd17822bd4c23245",
         "select_managed_path": "307453796f4641a08002dc73f36400a17479404432fa704bba73667ce93bc6a6",
-        "status_report": "cb4919418def8917a5c941ade4db82d7558069ee5b20f515d5b7c91cb8049068"
+        "status_report": "0405a7a673fac354d8e0f7ed96ca62b6f148bf9e106cac58abcef1cf8fc18f11"
       },
       "packet_call_digests": [
         "249cf162f1fe2c07e6cf69cf4208a9b8ee08752e0f99baeeb8ebb0c92215de66",
@@ -19972,7 +19972,7 @@
         "a0d2e18c7c5c2e6ad274fcf82b2917d3698924188278b78fbfd66ff1946cbe5a",
         "a3a9cf9b5882f596f3cf0a522f43748f07b3a4927f02d6368cb87171ac89d5db"
       ],
-      "reason": "Reviewed one authoritative planner projection for the conservative refusal diagnostic; replacements stay actionable, actual terminal codes remain, executable handoffs remain visible, and posted/independent blockers are unchanged. Changed AST requires declaration review. Reviewed 0.91.2 after_start view callbacks and main docstring: calls render views with no packet arguments; packet construction, fields and wire shapes are unchanged. Reviewed 0.91.5 call payload definition: _review_run sends the whole payload of a recorded dispatch through rebuild_call_payload when a task run resumes it, and the id and assignment_id of a run that starts a new dispatch as before; no packet argument or member changes."
+      "reason": "Reviewed one authoritative planner projection for the conservative refusal diagnostic; replacements stay actionable, actual terminal codes remain, executable handoffs remain visible, and posted/independent blockers are unchanged. Changed AST requires declaration review. Reviewed 0.91.2 after_start view callbacks and main docstring: calls render views with no packet arguments; packet construction, fields and wire shapes are unchanged. Reviewed 0.91.5 call payload definition: _review_run sends the whole payload of a recorded dispatch through rebuild_call_payload when a task run resumes it, and the id and assignment_id of a run that starts a new dispatch as before; no packet argument or member changes. Reviewed carry-handler-states (record 20261113110022, ruling 53): for review finding C1, status_report builds the inspection view and the projected view of a damaged context with storage.overlay_kinds, which keeps the history of the store that the verification of a carried selection reads; no packet argument or member changes."
     },
     "research_harness.cohort_evidence": {
       "ast_sha256": "370f882ea407c0840704ab00a56a423dc92514a67f7aaf19bedc662ad2a7ab19",
@@ -20670,7 +20670,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.openness_carried": {
-      "ast_sha256": "d89efcc0d71a428f4c1da565a412acfc3de5b536f20cfcdbb1035e76979528f4",
+      "ast_sha256": "0913e17d010446f3285480d61efaffc56461c4d3b459a4ea641bff1ead170a55",
       "functions": {
         "_count_characters": "e2a2bd30a7064019751f71e6460089f6113944250985699cc26032e713767abf",
         "_describe_chain": "fc068e64a166394eeee2ba2989019220c978af83f3073b827a72fd69a0d9a979",
@@ -20687,11 +20687,11 @@
         "credit_carried_turn": "6be211ff3069c5e68aa726fc407b1c04566499c355c76f95971a02e6f7f41bad",
         "derive_carried_turns": "c535128a6198daa5eb056a7ecd1926518c70bb5fe7878623e38678d7b3f54b16",
         "describe_carried_selection": "bd58abe485d9d15f4746132125d2483b0fe1d00cefc90e098dc71150620776eb",
-        "list_passed_over_chains": "a47f278ca10b404055a67a69571771164e180d40bc95ca3ddf3ac2555f083434",
-        "list_qualifying_chains": "96de655febd098d5482fb638b65b22ed2dd7af1046cb8194a997071dd61fe17c",
-        "observe_qualifying_chain": "a2d7194bdb3fd8305c02b585d90fd94d5b7138114b2f36fcdeb956bba7185393",
+        "list_passed_over_chains": "95b055653536349d3ce63e5363737dc3f346456c652fdd132fff49e34c0abdd7",
+        "list_qualifying_chains": "1a91f994b9f4fbca9574ba4423ecd5494c6ef58166a2d13caa3304dbc9d822fd",
+        "observe_qualifying_chain": "39ab891de5e852e4d04c6f92e08f6669d6c1f0c63b846f257a8337b8cf908ecd",
         "select_carried_readings": "af0e5d10923019eaa6ee8afc101353cbaf21b6b60010395055b925da0af1c83e",
-        "verify_carried_selection": "3a6b8096476e9fbff5d1622c9e61f20a2b7b73618cbcf71ba20f67a6e6808539",
+        "verify_carried_selection": "ca9f4b3e1423a3d3093d548f3c46164bcd9d159688f710f62dceae4ed9053919",
         "verify_stored_selection": "8143962072c19e86d4bf57e99c6628f7122c206c044f200164675a6402a8e823"
       },
       "packet_call_digests": [
@@ -20733,7 +20733,7 @@
         "f65f41c115db40c21f6b899d6fa72e740d3ae631642fb647f16ccdce77aea283",
         "fc3140397252aa4c89048c885b9f6dd0d1d7c2f2842dae7387ca129a7e05dc9a"
       ],
-      "reason": "Reviewed complete selection/successor module: selection and planning collections stay in digest-bound artifacts or planner receipts; logical native packet and projected minimum fields use the existing closed native declarations. Whole source and functions are pinned, including unexecuted branches. Reviewed 0.91.4: _select_recorded_attempts: Preserve the authenticated record history when filtering attempts and invocations. select_carried_readings: Select through a fresh evaluation that records and rethrows the first artifact-store refusal. derive_carried_turns: Carry every ready own turn of a credited or contributing chain; supersede entries only by later credited spans or searches. verify_carried_selection: Accept both protocol names and retain the nonempty-credit condition only for version 1. verify_stored_selection: Compare version 2 turns to the selection on the historical cutoff before authenticating current origins. _describe_outputs: Count each qualifying chain output as carried, superseded or source changed, with a message for supersession. describe_carried_selection: Add per-chain output accounting to the receipt without adding reviewer packet members. Reviewed descriptor refusal handling: the selection evaluation records unsafe_path before observer fallback can absorb it, through both byte and JSON reads; observe_qualifying_chain preserves that evaluation type. Reviewed 0.91.4 writer pass: the module docstring; the syntax tree is unchanged with every string blanked. Reviewed 0.91.4 lane carry-read-scope (rules C9 to C11): _describe_chain compares the records first (role, first assignment of a reading chain named by its own reading_chain, cutoff, author, route identity), then the native packet as strict JSON, then the packet, then the envelope, so it reads an artifact only when its result can depend on it; list_qualifying_chains returns the list of chains under the same reviewer and reads no assignment under another reviewer; list_passed_over_chains (new) builds passed_over and unavailable_chains for the report and keeps a store refusal of such a chain in a row; select_carried_readings takes the list; describe_carried_selection adds unavailable_chains when it holds a row; STORE_REFUSAL_CODES holds the four store codes once. No stored selection, packet member, write or closed shape changes. Reviewed 0.91.4 decision 14 (lane carry-step4): _describe_chain decides the digests and the formulations once, on the strict JSON of the native packet, and an openness_minimum that is no object makes the assignment no candidate there instead of raising TypeError; after load_packet it tests is_openness_packet alone and repeats no comparison. The module pin changes with that function alone; the packet call digests and the cross-module calls stay, and no stored selection, packet member, write or closed shape changes. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked."
+      "reason": "Reviewed complete selection/successor module: selection and planning collections stay in digest-bound artifacts or planner receipts; logical native packet and projected minimum fields use the existing closed native declarations. Whole source and functions are pinned, including unexecuted branches. Reviewed 0.91.4: _select_recorded_attempts: Preserve the authenticated record history when filtering attempts and invocations. select_carried_readings: Select through a fresh evaluation that records and rethrows the first artifact-store refusal. derive_carried_turns: Carry every ready own turn of a credited or contributing chain; supersede entries only by later credited spans or searches. verify_carried_selection: Accept both protocol names and retain the nonempty-credit condition only for version 1. verify_stored_selection: Compare version 2 turns to the selection on the historical cutoff before authenticating current origins. _describe_outputs: Count each qualifying chain output as carried, superseded or source changed, with a message for supersession. describe_carried_selection: Add per-chain output accounting to the receipt without adding reviewer packet members. Reviewed descriptor refusal handling: the selection evaluation records unsafe_path before observer fallback can absorb it, through both byte and JSON reads; observe_qualifying_chain preserves that evaluation type. Reviewed 0.91.4 writer pass: the module docstring; the syntax tree is unchanged with every string blanked. Reviewed 0.91.4 lane carry-read-scope (rules C9 to C11): _describe_chain compares the records first (role, first assignment of a reading chain named by its own reading_chain, cutoff, author, route identity), then the native packet as strict JSON, then the packet, then the envelope, so it reads an artifact only when its result can depend on it; list_qualifying_chains returns the list of chains under the same reviewer and reads no assignment under another reviewer; list_passed_over_chains (new) builds passed_over and unavailable_chains for the report and keeps a store refusal of such a chain in a row; select_carried_readings takes the list; describe_carried_selection adds unavailable_chains when it holds a row; STORE_REFUSAL_CODES holds the four store codes once. No stored selection, packet member, write or closed shape changes. Reviewed 0.91.4 decision 14 (lane carry-step4): _describe_chain decides the digests and the formulations once, on the strict JSON of the native packet, and an openness_minimum that is no object makes the assignment no candidate there instead of raising TypeError; after load_packet it tests is_openness_packet alone and repeats no comparison. The module pin changes with that function alone; the packet call digests and the cross-module calls stay, and no stored selection, packet member, write or closed shape changes. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked. Reviewed carry-handler-states (record 20261113110022, ruling 53): PREFIX_STATE_CODES holds review_context_unverified and openness_reading_incomplete, observe_qualifying_chain tries the turn before for these two codes alone, list_qualifying_chains has no handler, list_passed_over_chains raises every refusal outside STORE_REFUSAL_CODES, and verify_carried_selection gives the selection refusal for the two codes, for a refusal of the store and for a value of the wrong shape and passes every other refusal through; the packet calls, packet members, writes and closed shapes are unchanged."
     },
     "research_harness.openness_minimum": {
       "ast_sha256": "fbd57555c16ef3d15e17a839e39295183278727515d33e10092307bdfaa8a274",
@@ -21115,7 +21115,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the activation of 0.91.0 (ruling 37): NEW_PROBLEM_CHAIN_PROTOCOLS becomes (PROTOCOL_V7, PROTOCOL_V6); no packet member, call, write or closed shape changes. Reviewed 0.91.1: a math openness packet that fits one turn stays a single native turn under (v7, v6); the condition reads the packet kind only, and no packet member, call, write or closed shape changes."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "df2a61c0810810a5dc353d1a0f973a7e7f86648f50a56802918ff3d26a891e1d",
+      "ast_sha256": "2129c81e2c192bc6064497950f252b6d8799447c628e6af8b16900972b7b8b62",
       "functions": {
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
         "_append_unit": "f6cb4ac11ffc0db1bbc01ecf87ec1ca4e26a2ccc64a24c9aebe0b2c8d2ce16a7",
@@ -21125,12 +21125,12 @@
         "_describe_identity": "9bb7503add880d286c1090f5e1c17b70f16c710c36367bf548a1fb11dd75b8cb",
         "_describe_json": "7c6004e53039a80228d53341ea102c68af46e1cc51855d15c96893ebef98c919",
         "_require_selected": "1756d3596364595c60b215e7b5399de39b723df692cf0f0fc491826408282dbb",
-        "_verify_carried_origins": "bc10d968a6cae2387c5afce1238ae338799f80a0a0cea89b7d88e0ce33c6306f",
+        "_verify_carried_origins": "26cad3932d31c6e88a2054c8929f3803a996bc0991bf230c4497019a37d6d7bc",
         "build_chain_state": "1ad5728da1cef9433124d25c51598ce80e77c9b76ba59ec74a4f15cd48569330",
         "build_inventory": "543bab306bae3a905a1169963dd36f45157da878818d28597eb1ec34f091f24f",
         "compute_allowance_rows_bound": "43cedd0b96e55219fc11fc700beb8044053e677919c8c6088032814fc1e4703e",
         "describe_carried_pool": "b8c0046b42a8d1d5d4d96483e43f2c49afbc294acad7e86f5b965bc922646932",
-        "describe_uncarried_chains": "d8f838c0a165c993ac57d6da1fdca12ae8fa498b93792612e5ef09faf5b82b1d",
+        "describe_uncarried_chains": "eff862cdaf8cdedbaeb297bb7a388618ab901731fc82dc3dc37309a7eaddd45e",
         "describe_visual_text_stop": "927e68cb236d962c4335fe26aa56b413360d4b6490ec47b1cb2e0f1fd35775fc",
         "measure_turn_frames": "ec89831789d8b1abeee86896ea5b6df38d787b7758fac76f930ec46b7c0b5f98",
         "observe_carried_chain": "7830acc80f56e928029aec9390682f3131b0401efcfae5710bc27f826ef9fe5c",
@@ -21286,7 +21286,7 @@
         "f6e80c1a9819779c8e04204f633df1b78674da5d6bb778bfa84ea449203cb01d",
         "ff7f469c5f27ed27ce06d3e529aa01c0ef1c0963ac796278b83ecb1c57f196a8"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.4: describe_uncarried_chains: Expose supersession rows and artifact refusals in a v6 planning receipt without preventing its assignment. _verify_carried_origins: Match the reference protocol and digest, prove the first-assignment commit stamp, and verify version 2 against its historical cutoff. verify_problem_coverage: Pass the stored evaluation beside the planning overlay so origin verification shares authenticated historical reads. Reviewed malformed selection refusal: the reference predicate checks a JSON object before its protocol member. Reviewed 0.91.4 writer pass: the texts of SELECTION_MISMATCH_MESSAGE, ORIGIN_VERIFICATION_MESSAGE and SUPERSEDED_TEXT; the syntax tree is unchanged with every string blanked. Reviewed 0.91.4 lane carry-read-scope: describe_uncarried_chains passes the report member unavailable_chains on when the report holds it and takes the store codes from openness_carried.STORE_REFUSAL_CODES; UNAVAILABLE_CHAIN_TEXT is the message of such a row. No packet member, write or closed shape changes. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.4: describe_uncarried_chains: Expose supersession rows and artifact refusals in a v6 planning receipt without preventing its assignment. _verify_carried_origins: Match the reference protocol and digest, prove the first-assignment commit stamp, and verify version 2 against its historical cutoff. verify_problem_coverage: Pass the stored evaluation beside the planning overlay so origin verification shares authenticated historical reads. Reviewed malformed selection refusal: the reference predicate checks a JSON object before its protocol member. Reviewed 0.91.4 writer pass: the texts of SELECTION_MISMATCH_MESSAGE, ORIGIN_VERIFICATION_MESSAGE and SUPERSEDED_TEXT; the syntax tree is unchanged with every string blanked. Reviewed 0.91.4 lane carry-read-scope: describe_uncarried_chains passes the report member unavailable_chains on when the report holds it and takes the store codes from openness_carried.STORE_REFUSAL_CODES; UNAVAILABLE_CHAIN_TEXT is the message of such a row. No packet member, write or closed shape changes. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked. Reviewed carry-handler-states (record 20261113110022, ruling 53): describe_uncarried_chains states every refusal of the selection in refusal and no longer imports STORE_REFUSAL_CODES, and _verify_carried_origins reads the cutoff before it checks the stamp of the first assignment, so records without a history end with claim_reassessment_required, and ORIGIN_VERIFICATION_MESSAGE names the two cases that remain; the packet calls, packet members, writes and closed shapes are unchanged."
     },
     "research_harness.openness_successor": {
       "ast_sha256": "61f2e4dec733c963200e4952066823c00823007c4fc222cc997aa79cc2db56de",
@@ -21418,7 +21418,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.91.2 render lock wait, two-pass rendering, dirty markers and failure ordering: only derived output views and their existing marker fields change; reviewer packet shapes are unchanged."
     },
     "research_harness.overrides": {
-      "ast_sha256": "b735f18316b1f7f8f1658e95d6ac0159e07ce36f673e0aa4af267371152108e7",
+      "ast_sha256": "d9595a34d8427a54371278c3cb9a4f6d91762ff7db02ee77c7558f143fd93fed",
       "functions": {
         "_valid_public_action": "ad18d4f224dc8a7f6ce155acec9997adef84e3ed685d215855b40b2d254fd109",
         "append_unrecorded_override": "1ed7ff2c349258536d7798473e520e420b8738a32e43cf0c0e00c13ede81f50c",
@@ -21430,7 +21430,7 @@
         "covers_public_write": "36ecbdecbc11728f9d97e2d99b66788ae8b77bf3b71cdaad8e36fd06e2186749",
         "describe_deposit_overrides": "0720f11aa7b237f1322a53eddbd62dcb30aed11a1f94994b972db42c07f8525b",
         "describe_instruction": "8dd5708fff767c5a8f33f79ee487c972e4de52298580cc559386a35daa27384d",
-        "describe_override_write_authorities": "e82754ebb7a6e48e3928efe27eca35447d34d2f430d2d4db223479c2333d6724",
+        "describe_override_write_authorities": "bcbd133a3cbf3f068011c08cc13751fbb00ab0ab89506ff5a9dbbdcbf082a612",
         "describe_overrides": "68b51787dd28ef63c622bd2c830f68f524476d366d8335683946b2b823adf491",
         "list_passed_gates": "f9a565006e1eaa42c5be605104fa234317cf05939626bd46bf5aace904f0bd0f",
         "parse_override_instruction": "791da6540b461589fa1473003302a1fb15d56037a9b547c67497133a1646ac72",
@@ -21446,7 +21446,7 @@
         "verify_override_instructions": "a86de4e6ef0219c536b1f96fad4f72fe7d3cc694c4510155a20125d68c1a82a2"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed carry-handler-states (record 20261113110022, ruling 53): describe_override_write_authorities builds the view with the proposed instruction with storage.overlay_kinds, which keeps the history of the store that the openness check of a condition reads through the verification of a carried selection, and the module imports overlay_kinds; no packet argument or member changes."
     },
     "research_harness.payload_paths": {
       "ast_sha256": "86b7c57c8179c51420a4c7f46b8be2b7fdda9ece7018c3a3e7d34b8a9f28ec75",
@@ -24517,7 +24517,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged."
     },
     "research_harness.review_refusal_replacement": {
-      "ast_sha256": "346f4b1b8d118a38af68923a438b6f1f82a4fa36e43faa6f1b171facc9e580c1",
+      "ast_sha256": "3b4a43ae3bc3bbda8fe5a44e0cc15f8d9adc9fd2b0bd9c1ddfa200dc2d73fd62",
       "functions": {
         "admits_route_renewal": "77afbc4fcc2dafa41019d850afb898731df98f254431dbbeccea8c0caac22016",
         "describe_route_renewal": "01243bf4e5bc191b8a283ec87e645cb8998453ca24b54a68b3ca650548e8b33f",
@@ -24528,7 +24528,7 @@
         "read_position_context": "cdede8c28f9431efad8671676884d4e166ee1d9ad3e3728ac4414cc53cf87d32",
         "read_replacement_link": "c532b998f7ab3e173deea48b4d2b41ab8df7bcba6534694b9be6e35a17e27160",
         "require_selected_output": "c51358ab7d4eb8e8c97d27385ff001226126fdd7bf36960bf619db74ec1e1211",
-        "select_renewal_probe": "e705de0cd8ebf299651fb5017554549ec6a82fdb06a3aefaa516e37cf7c77204",
+        "select_renewal_probe": "d9c64abe57f36c5020e5738e9e6139920a388dedf597b3fb291d549dec20832c",
         "validate_replacement_origin": "f1d7916f6526559bf6bbccb15b0f11d78d8c2b108f3ff50d6e9f942af3f4a8f8"
       },
       "packet_call_digests": [
@@ -24551,7 +24551,7 @@
         "f39814fa03694fc06afd107a8e76d88a1044a005183edc72cd8ea55b0d57508f",
         "f94bff00439cfb92fe19efa32bf359ad60d305548b0148aaad4243cb4d2ea818"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless successor ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed 0.91.4 route renewal: is_session_turn, admits_route_renewal, read_latest_refusal_revision, describe_route_renewal and select_renewal_probe read stored records and measure requests; they write nothing. prepare_replacement: Admit a replacement on a renewed route record of the same identity, measure the notice and the smaller task on that record, and take its route digest and context state; on the route of the replaced assignment the record, packet, prompt and request are those of 0.91.2. validate_replacement_origin: Accept a differing route record only for two stored records of one identity with different pinned runtimes and a session turn. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked. Reviewed 0.91.5 writer pass: the text of REPLACEMENT_ROUTE_MSG; the syntax tree is unchanged with every string blanked."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless successor ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed 0.91.4 route renewal: is_session_turn, admits_route_renewal, read_latest_refusal_revision, describe_route_renewal and select_renewal_probe read stored records and measure requests; they write nothing. prepare_replacement: Admit a replacement on a renewed route record of the same identity, measure the notice and the smaller task on that record, and take its route digest and context state; on the route of the replaced assignment the record, packet, prompt and request are those of 0.91.2. validate_replacement_origin: Accept a differing route record only for two stored records of one identity with different pinned runtimes and a session turn. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked. Reviewed 0.91.5 writer pass: the text of REPLACEMENT_ROUTE_MSG; the syntax tree is unchanged with every string blanked. Reviewed carry-handler-states (record 20261113110022, ruling 53): for review finding C1, select_renewal_probe builds the view of a capacity trial with storage.overlay_kinds, which keeps the history of the store that the verification of a carried selection reads, and the module imports overlay_kinds; no packet argument or member changes."
     },
     "research_harness.review_request_evaluation": {
       "ast_sha256": "0907cb21fc2c40c98f294d1c49ce2f9712aee0ecaa3f8401ad9d201a9c81179b",

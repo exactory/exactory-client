@@ -27,7 +27,7 @@ from .output_views import (PROBLEM_EXPORTS_FOLDER, find_view_advisories, find_wo
                            render_views_after_command, render_workspace_views)
 from .report_views import (annotate_parts_obligations, current_obligations, next_summary, obligations_page,
                            order_obligations, status_summary)
-from .storage import Store, check_command_bounds
+from .storage import Store, check_command_bounds, overlay_kinds
 from .source_deferrals import defer_source, resume_source, assess_deferrals
 from .publication_scope import record_publication_scope, select_publication_scope, record_scoped_readiness_review
 from .workspace import find_workspace, strict_json
@@ -718,8 +718,9 @@ def status_report(store, *, counters=False):
             failures.append(initial_failure)
         list_chain_heads(records, evaluation, context_failures=failures)
         excluded = {row['assignment_id'] for row in failures if 'assignment_id' in row}
-        inspection_records = dict(records, review_assignment={identifier: row
-            for identifier, row in records.get('review_assignment', {}).items() if identifier not in excluded})
+        # Both views keep the history of the store, which the verification of a carried selection reads.
+        inspection_records = overlay_kinds(records, dict(review_assignment={identifier: row
+            for identifier, row in records.get('review_assignment', {}).items() if identifier not in excluded}))
         evaluation = Evaluation(inspection_records, store.build_artifact_store())
         report = annotate_review_obligations(inspection_records, evaluation, report, context_failures=failures)
         if not any(row['code'] == initial_failure['code'] for row in failures):
@@ -736,7 +737,8 @@ def status_report(store, *, counters=False):
                          for kind, rows in records.items()}
             try:
                 report = _build_status_report(store, counters=counters, context_failures=failures,
-                                              snapshot=dict(snapshot, records=projected), started=started)
+                                              snapshot=dict(snapshot, records=overlay_kinds(records, projected)),
+                                              started=started)
             except (ResearchError, json.JSONDecodeError) as projection_error:
                 failure = describe_context_failure(projection_error)
                 if failure not in failures:

@@ -6,6 +6,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .operations import fields, immutable_record, normalized_text, text
 from . import review_refusal_notice as notices
+from .storage import overlay_kinds
 
 KEY = 'output_refusal'
 INELIGIBLE_REPLACEMENT_MSG = (
@@ -158,12 +159,13 @@ def select_renewal_probe(records, artifacts, value, revision, trials):
     for form, measure in short if key is not None else ():
         needed = measure['tokens_upper'] + measure['output_reservation_tokens']
         # A view with verified evidence of this size under the key; it holds no route digest and no runtime, so the
-        # route state does not take it for a probe of the record. Nothing is written.
+        # route state does not take it for a probe of the record. The view keeps the history of the store, which the
+        # verification of a carried selection reads. Nothing is written.
         evidence = dict(id='renewal-capacity-evidence', route_id=route['id'], capacity=dict(input_tokens=needed),
                         capacity_verified=True, capacity_evidence=dict(key=key, input_tokens=needed),
                         recorded_revision=revision)
-        view = dict(records, review_route_probe=dict(records.get('review_route_probe', {}),
-                                                     **{evidence['id']: evidence}))
+        view = overlay_kinds(records, dict(review_route_probe=dict(records.get('review_route_probe', {}),
+                                                                   **{evidence['id']: evidence})))
         try:
             prepare_replacement(view, artifacts, value, revision)
         except ResearchError as error:
