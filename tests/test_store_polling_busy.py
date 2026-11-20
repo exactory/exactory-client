@@ -7,8 +7,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from development_fixtures import DevelopmentCase
+from finishing_write_fixtures import WaitlessTime
 from integration_fixtures import admit_lab
-from research_harness import execution, remote_execution, review_staged_protocol, review_worker
+from research_harness import execution, finishing, remote_execution, review_staged_protocol, review_worker
 from research_harness.errors import ResearchError
 from test_review_task_execution import TaskExecutionFixture
 import test_review_task_execution_worker as worker_tests
@@ -183,36 +184,54 @@ class RemotePollingTests(DevelopmentCase):
         self.check_remote_retry('snapshot')
 
     def test_remote_release_retries_busy_reauthorization_snapshots(self):
-        self.check_remote_retry('reauthorization')
+        # A release that an earlier launcher recorded without its signal is checked again on a guarded read before
+        # the signal. That read is a polling read of the launch.
+        claim = self.make_remote_claim()
+        root, job = remote_execution._publish_job(self.store, claim)
+        self.assertFalse(remote_execution.serve_scan_once(self.sync))
+        with patch.object(remote_execution, '_immutable', side_effect=OSError('Lost first GO write')):
+            with self.assertRaises(OSError):
+                remote_execution._release(self.store, claim, root, job)
+        thread, errors = self.runner()
+        guarded_snapshot, reads = self.store.guarded_snapshot, []
 
-    def test_remote_release_retries_busy_revision_reads(self):
-        self.check_remote_retry('revision')
+        def read():
+            reads.append(None)
+            if len(reads) <= 2:
+                raise ResearchError('store_busy', 'Synthetic concurrent writer')
+            return guarded_snapshot()
+        clock = PollClock()
+
+        def sleep(seconds):
+            clock.sleep(seconds)
+            time.sleep(seconds)
+        with patch.object(self.store, 'guarded_snapshot', side_effect=read), \
+                patch.object(remote_execution, 'time', SimpleNamespace(monotonic=clock.monotonic, sleep=sleep, time=time.time)):
+            result = remote_execution.launch_colab(self.store, claim)
+        thread.join(10)
+        self.assertEqual(errors, [])
+        self.assertTrue(result['ok'])
+        self.assertEqual(len(reads), 3)
+        self.assertEqual(len(self.store.snapshot()['records']['execution']), 1)
 
     def test_remote_release_retries_busy_preparation_reads(self):
-        self.check_remote_retry('_read_preparation')
+        # The release write reads its scoped preparation in each attempt and waits for a busy store.
+        self.check_remote_retry('_read_scoped_preparation')
 
-    def check_remote_retry(self, read_kind):
+    def check_remote_retry(self, attribute):
         claim = self.make_remote_claim()
         remote_execution._publish_job(self.store, claim)
         self.assertFalse(remote_execution.serve_scan_once(self.sync))
         thread, errors = self.runner()
         snapshot = self.store.snapshot
-        read_revision = type(self.store).revision.fget
-        read_store = (lambda: read_revision(self.store)) if read_kind == 'revision' else getattr(
-            self.store, '_read_preparation' if read_kind == '_read_preparation' else 'snapshot')
+        read_store = getattr(self.store, attribute)
         reads = []
 
         def read():
             reads.append(None)
-            if len(reads) in ((2, 4) if read_kind == 'reauthorization' else (1, 2)):
+            if len(reads) in (1, 2):
                 raise ResearchError('store_busy', 'Synthetic concurrent writer')
             return read_store()
-
-        if read_kind == 'revision':
-            patched_read = patch.object(type(self.store), 'revision', property(lambda store: read()))
-        else:
-            attribute = '_read_preparation' if read_kind == '_read_preparation' else 'snapshot'
-            patched_read = patch.object(self.store, attribute, side_effect=read)
         clock = PollClock()
 
         def sleep(seconds):
@@ -220,8 +239,10 @@ class RemotePollingTests(DevelopmentCase):
             time.sleep(seconds)
 
         polling_time = SimpleNamespace(monotonic=clock.monotonic, sleep=sleep, time=time.time)
-        with patched_read, patch.object(remote_execution, 'time', polling_time):
+        with patch.object(self.store, attribute, side_effect=read), patch.object(remote_execution, 'time', polling_time), \
+                patch.object(finishing, 'time', WaitlessTime()):
             result = remote_execution.launch_colab(self.store, claim)
+        self.assertGreater(len(reads), 2)
         thread.join(10)
         self.assertEqual(errors, [])
         self.assertTrue(result['ok'])
@@ -230,16 +251,21 @@ class RemotePollingTests(DevelopmentCase):
         self.assertEqual(len(snapshot()['records']['execution']), 1)
 
     def test_remote_busy_write_refusals_are_not_treated_as_polling_reads(self):
+        # The release write waits for a busy store by itself; after its wait the launch ends with the refusal of the
+        # write, and no polling sleep happened.
         claim = self.make_remote_claim()
         remote_execution._publish_job(self.store, claim)
         self.assertFalse(remote_execution.serve_scan_once(self.sync))
         error = ResearchError('store_busy', 'Synthetic refused write')
         clock = PollClock()
-        with patch.object(self.store, 'mutate', side_effect=error), \
-                patch.object(remote_execution, 'time', clock):
+        with patch.object(self.store, 'mutate_scoped', side_effect=error), \
+                patch.object(remote_execution, 'time', clock), \
+                patch.object(finishing, 'time', WaitlessTime(ticking=True)):
             with self.assertRaises(ResearchError) as caught:
                 remote_execution.launch_colab(self.store, claim)
-        self.assertIs(caught.exception, error)
+        self.assertEqual((caught.exception.code, caught.exception.message),
+                         ('store_busy', remote_execution.REMOTE_RELEASE_STORE_BUSY_MSG))
+        self.assertEqual(caught.exception.details['cause'], error.as_dict())
         self.assertEqual(clock.intervals, [])
 
     def test_persistent_busy_remote_read_keeps_its_recovery_deadline(self):

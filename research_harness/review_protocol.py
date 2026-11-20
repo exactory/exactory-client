@@ -26,7 +26,7 @@ from .errors import ResearchError, describe_error_at
 from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, prepared_task_mutation, text
-from .finishing import SCOPED_FINISH_ATTEMPT_COUNT, SCOPED_FINISH_RETRY_CODES, SCOPED_FINISH_WAIT_SECONDS, retry_store_write
+from .finishing import SCOPED_FINISH_ATTEMPT_COUNT, SCOPED_FINISH_WAIT_SECONDS, retry_finishing_write, retry_store_write
 from . import review_transport as transport
 from .review_answer_recovery import derive_output, extract_answer_text, recover_answer
 from . import bar_sources
@@ -2691,6 +2691,14 @@ def _observed(artifacts, route, request, credential, *, capacity_probe=False):
     return record
 
 
+# The message of the record that finishes a reviewer call from its capture when the store refused it beyond the wait.
+CALL_FINISH_STORE_BUSY_MSG = (
+    'The research store stayed busy, or kept changing the records that this write read, and the result of this '
+    'reviewer call was not recorded. The call ended, and the store holds what it returned. Run the same command again '
+    'with the same payload and request ID. It records the result from what the store holds and does not call the '
+    'reviewer again.')
+
+
 # Retain the live observation through busy-store retries; committed captures can finish in a later process.
 def _finish_call(store, payload, operation, finish, *, request_id):
     from .review_call_capture import read_call_observation
@@ -2707,8 +2715,7 @@ def _finish_call(store, payload, operation, finish, *, request_id):
             return _prepare_review_mutation(store, operation, payload, prepare,
                 request_id=request_id, _snapshot=finishing, scoped=True,
                 validate_commit=lambda tx, result, revision: release_call(tx, lifecycle_id, termination, revision))
-    return retry_store_write(commit, attempts=SCOPED_FINISH_ATTEMPT_COUNT, seconds=SCOPED_FINISH_WAIT_SECONDS,
-                             codes=SCOPED_FINISH_RETRY_CODES)
+    return retry_finishing_write(commit, CALL_FINISH_STORE_BUSY_MSG)
 
 
 def _invoke_once(store, payload, operation, start, finish, *, expected_revision, request_id, credential,
@@ -2765,19 +2772,20 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
         request = _read_json(artifacts, invocation['request'])
         packet = _read_json(artifacts, assignment['packet']) if operation == 'review.invoke' else None
         observation_options = dict(capacity_probe=True) if operation == 'review.route_probe' and 'capacity' in payload else {}
-        with _own_transport_processes(authority) if route['adapter'] in transport.LOCAL_ADAPTERS else nullcontext():
-            try:
+        try:
+            # A refused record of a process that starts the reviewer program leaves this block as its ResearchError.
+            with _own_transport_processes(authority) if route['adapter'] in transport.LOCAL_ADAPTERS else nullcontext():
                 observation = _observed(artifacts, route, request, credential, **observation_options)
-            except (ResearchError, ReviewStopSignal) as error:
-                if error.code != 'review_chain_stopped':
-                    raise
-                if (error.details or {}).get('stop_request') is not None:
-                    from .review_stop import record_signal_boundary
-                    record_signal_boundary(store, error)
-                error_row = error.as_dict() if isinstance(error, ResearchError) else error.describe_error()
-                observation = dict(status='failed', output=None, response=None, request=invocation['request'],
-                    request_digest=digest(request), route_digest=digest(route), runtime=route.get('runtime'),
-                    usage={}, error=error_row)
+        except (ResearchError, ReviewStopSignal) as error:
+            if error.code != 'review_chain_stopped':
+                raise
+            if (error.details or {}).get('stop_request') is not None:
+                from .review_stop import record_signal_boundary
+                record_signal_boundary(store, error)
+            error_row = error.as_dict() if isinstance(error, ResearchError) else error.describe_error()
+            observation = dict(status='failed', output=None, response=None, request=invocation['request'],
+                request_digest=digest(request), route_digest=digest(route), runtime=route.get('runtime'),
+                usage={}, error=error_row)
         if packet is not None:
             observation = review_handles.record_handle_output(packet, observation, artifacts, assignment=assignment)
         capture_call(store, operation, payload, invocation, route, observation,
@@ -4329,15 +4337,17 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
     result = _invoke_once(store, payload, 'review.invoke', start, finish,
                           expected_revision=expected_revision, request_id=request_id, credential=credential,
                           after_start=after_start)
-    assignment = store.snapshot()['records']['review_assignment'][payload['assignment_id']]
+    # The run is recorded. This read and the refusal record below wait for a busy store, so that the refusal of an
+    # output that fails its contract is not lost to a busy store.
+    assignment = retry_store_write(store.snapshot, codes=('store_busy',), attempts=SCOPED_FINISH_ATTEMPT_COUNT,
+        seconds=SCOPED_FINISH_WAIT_SECONDS)['records']['review_assignment'][payload['assignment_id']]
     if 'preflight' in result.get('result', {}):
         result = dict(result, preflight=result['result']['preflight'])
     if (review_handles.HANDLE_TABLE in _read_json(store_artifacts, assignment['packet'])
             or review_parts.KEY in assignment or assignment['role'] == 'native_math' or assignment['prompt'].get('parameters', {}).get('evidence_parts')
             == review_problem_parts.PROTOCOL + '/part'):
         from .review_refusal import record_native_refusal
-        record_native_refusal(store, assignment['id'], request_id=request_id)
-        refusal = store.snapshot()['records'].get('review_output_refusal', {}).get(payload['id'])
+        refusal = record_native_refusal(store, assignment['id'], payload['id'], request_id=request_id)
         if refusal is not None:
             # The refusal is the run's last mutation: the receipt names it and the revision after it, also on replay.
             return dict(result, revision=refusal['recorded_revision'],

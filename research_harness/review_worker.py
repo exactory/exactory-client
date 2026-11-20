@@ -2,7 +2,8 @@
 
 Lock order: controller ownership, worker ownership, short Store transactions.
 The inherited worker lock covers the spawn/identity handshake gap. Each local
-CLI passes through a guardian that records its group before exec, retaining the
+CLI passes through a guardian: the owner of the call records the guardian's
+process group, and only then lets the guardian exec the CLI, which keeps the
 lock until it exits. Disposable files never authenticate a reviewer response.
 """
 
@@ -11,6 +12,7 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import signal
 import stat
 import subprocess
 from subprocess import Popen as _SYSTEM_POPEN
@@ -28,12 +30,47 @@ if __package__ in (None, ""):
 from . import probe_supervision
 from .errors import ResearchError
 from .evidence import digest
-from .finishing import SCOPED_FINISH_ATTEMPT_COUNT, SCOPED_FINISH_WAIT_SECONDS, retry_store_write
+from .finishing import LOCK_RETRY_CODES, SCOPED_FINISH_WAIT_SECONDS, retry_finishing_write, retry_store_write
 from .review_call_admission import check_launch
 from .review_task_execution import (_check_references, _get, _mutate_current, _TransactionRecords,
                                      _transition, capture_observation)
 from .storage import Store
 from .workspace import checked_parent
+
+# The messages of the records before a reviewer program starts, and of the capture of a staged worker, when the store
+# refused one of them beyond the wait: the record of the process that starts the program (for a call that a command
+# owns, and for the worker of a staged review task), the launch claim and the authorization that the launching command
+# writes, and the records with which the worker takes and starts its reservation and captures its call.
+CALL_CHILD_STORE_BUSY_MSG = (
+    'The research store stayed busy, and the process that starts the reviewer program was not recorded. The reviewer '
+    'program did not start, and no request was sent to the reviewer. The call has no outcome yet. Run review-series on '
+    'its assignment, or review-run with action reconcile for the call. Each of them records the call as interrupted. '
+    'The next run then starts the reviewer.')
+WORKER_CHILD_STORE_BUSY_MSG = (
+    'The research store stayed busy, and the process that starts the reviewer program of this review task was not '
+    'recorded. The reviewer program did not start, and no request was sent to the reviewer. The worker captures this '
+    'refusal as a failed observation, and its reservation ends as a known failure. The task then takes its next attempt '
+    'when it has an attempt left.')
+WORKER_CLAIM_STORE_BUSY_MSG = (
+    'The research store stayed busy, and the launch of the worker of this review task was not claimed. No worker and '
+    'no reviewer program started, and the reservation is unchanged. Run the same command again.')
+WORKER_AUTHORIZE_STORE_BUSY_MSG = (
+    'The research store stayed busy, and the start of the worker of this review task was not authorized. The reviewer '
+    'program did not start, and no request was sent to the reviewer. The worker gets no token and ends. Run '
+    'review-series on the controller assignment. It reconciles the reservation as a known failure and plans the next '
+    'attempt of the task when the task has an attempt left.')
+WORKER_READY_STORE_BUSY_MSG = (
+    'The research store stayed busy, and the worker of this review task did not record that it is ready. The reviewer '
+    'program did not start, and no request was sent to the reviewer. The worker ends here. The reconciliation of its '
+    'reservation records a known failure, and the task then takes its next attempt when it has an attempt left.')
+WORKER_RUNNING_STORE_BUSY_MSG = (
+    'The research store stayed busy, and the worker of this review task did not record its start. The reviewer '
+    'program did not start, and no request was sent to the reviewer. The worker ends here. The reconciliation of its '
+    'reservation records a known failure, and the task then takes its next attempt when it has an attempt left.')
+WORKER_CAPTURE_STORE_BUSY_MSG = (
+    'The research store stayed busy, and the worker of this review task did not capture what its reviewer call '
+    'returned, so no record holds it. The worker ends here. The reconciliation of its reservation records an unknown '
+    'outcome, and the task then takes its next attempt when it has an attempt left.')
 
 
 def _directory(reservation_id):
@@ -260,17 +297,21 @@ def read_polling_store(read):
         return None
 
 
-def launch_worker(store, reservation_id, *, handshake_timeout=60.0):
-    """Allow a loaded worker to start, retaining a reconcilable claim on refusal."""
-    if not isinstance(handshake_timeout, (int, float)) or not 0 < handshake_timeout <= 60:
-        raise ResearchError("invalid_input", "Worker handshake timeout must be positive and at most 60 seconds")
+def launch_worker(store, reservation_id, *, handshake_timeout=SCOPED_FINISH_WAIT_SECONDS):
+    """Allow a loaded worker to start, retaining a reconcilable claim on refusal. The handshake waits for the record
+    of the worker as long as the worker waits for a busy store, and ends when the worker ends."""
+    if not isinstance(handshake_timeout, (int, float)) or not 0 < handshake_timeout <= SCOPED_FINISH_WAIT_SECONDS:
+        raise ResearchError("invalid_input", "Worker handshake timeout must be positive and at most %d seconds"
+                            % SCOPED_FINISH_WAIT_SECONDS)
     with _owner(store.root, reservation_id):
         snapshot = retry_store_write(store.snapshot, codes=("store_busy",))
         current = _get(snapshot["records"], "review_reservation", reservation_id)
         if current["launch"] is not None or current["state"] != "reserved" or current["released"]:
             raise ResearchError("review_invocation_pending", "Resume the original worker reservation instead of relaunching")
         with _owner(store.root, reservation_id, worker=True) as descriptor:
-            reservation = _claim_launch(store, reservation_id)
+            reservation = retry_finishing_write(lambda: _claim_launch(store, reservation_id),
+                                                WORKER_CLAIM_STORE_BUSY_MSG, kept={"reservation_id": reservation_id},
+                                                codes=LOCK_RETRY_CODES)
             relative = _directory(reservation_id) + "/worker.log"
             with checked_parent(store.root, relative, create=True) as (directory, name):
                 log_descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=directory)
@@ -295,7 +336,9 @@ def launch_worker(store, reservation_id, *, handshake_timeout=60.0):
                         if identity is not None:
                             if identity["pid"] != process.pid or identity["pgid"] != process.pid or identity != _identity(process.pid):
                                 raise ResearchError("review_worker_reconciliation_required", "The detached worker did not establish its process identity")
-                            _authorize_launch(store, reservation_id, identity)
+                            retry_finishing_write(lambda: _authorize_launch(store, reservation_id, identity),
+                                                  WORKER_AUTHORIZE_STORE_BUSY_MSG,
+                                                  kept={"reservation_id": reservation_id}, codes=LOCK_RETRY_CODES)
                             process.stdin.write((reservation["token"] + "\n").encode())
                             return process
                     time.sleep(.01)
@@ -330,21 +373,17 @@ def _start_worker(store, authority):
                            request_id="review-worker-running:" + authority.reservation_id)["result"]
 
 
-def _register_child(root, reservation_id, token, descriptor, *, call=False):
-    """The guardian commits its identity before executing any external command."""
-    store = Store(root)
-    identity = _identity()
+def _register_child(authority, process):
+    """The owner of a call records the process group of a transport child (its guardian) before that child starts its
+    program. The record waits for a busy store here, before the transport starts the time limit of the program."""
+    is_call = isinstance(authority, _CallAuthority)
+    reservation_id, token = authority.reservation_id, authority.token
+    identity = _identity(process.pid)
     if identity["pid"] != identity["pgid"]:
         raise ResearchError("review_worker_reconciliation_required", "A transport child must own its process group")
-    # Verify the inherited lock's inode before registering the child.
-    with checked_parent(root, _directory(reservation_id) + "/worker.lock") as (directory, name):
-        lock_info = os.stat(name, dir_fd=directory, follow_symlinks=False)
-    descriptor_info = os.fstat(descriptor)
-    if (lock_info.st_dev, lock_info.st_ino) != (descriptor_info.st_dev, descriptor_info.st_ino):
-        raise ResearchError("review_worker_reconciliation_required", "Transport child lost its ownership lock")
     def apply(tx, value, revision):
         records = _TransactionRecords(tx)
-        if call:
+        if is_call:
             current = _get(records, "review_pool_membership", reservation_id)
             check_launch(records, "review.call_child", current, token=token, read_identity=_identity)
             tx.put("review_pool_membership", reservation_id, dict(current, children=current["children"] + [identity], recorded_revision=revision))
@@ -352,15 +391,42 @@ def _register_child(root, reservation_id, token, descriptor, *, call=False):
         reservation = _get(records, "review_reservation", reservation_id)
         check_launch(records, "review.worker_child", reservation, token=token, read_identity=_identity)
         return _transition(tx, reservation, revision, children=reservation["children"] + [identity])
-    retry_store_write(lambda: _mutate_current(store, "review.call_child" if call else "review.worker_child",
-        {"reservation_id": reservation_id, "child": identity}, apply,
-        request_id=("review-call-child:" if call else "review-worker-child:") + digest([reservation_id, identity])))
+    # Opening the store is part of each attempt, so a store that is busy at that moment is waited for as well.
+    retry_finishing_write(lambda: _mutate_current(Store(authority.root),
+        "review.call_child" if is_call else "review.worker_child", {"reservation_id": reservation_id, "child": identity},
+        apply, request_id=("review-call-child:" if is_call else "review-worker-child:") + digest([reservation_id, identity])),
+        CALL_CHILD_STORE_BUSY_MSG if is_call else WORKER_CHILD_STORE_BUSY_MSG, kept={"reservation_id": reservation_id},
+        codes=LOCK_RETRY_CODES)
     return identity
+
+
+def _stop_unreleased_child(process):
+    """End a guardian that never received its release, so that it starts no program."""
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    for stream in (process.stdin, process.stdout, process.stderr):
+        if stream is not None:
+            stream.close()
+    process.wait()
+
+
+class _ChildRecordRefused(BaseException):
+    """A refused record of a transport child. A transport turns a ResearchError raised while it sends into a failed
+    observation, so the refusal passes the transports in this form, and _own_transport_processes raises the
+    ResearchError again where its block ends."""
+
+    def __init__(self, error):
+        super().__init__(str(error))
+        self.error = error
 
 
 @contextmanager
 def _own_transport_processes(authority):
-    """Guard local transport launches for a detached worker or an owned inline call."""
+    """Guard local transport launches for a detached worker or an owned inline call. The owner records each transport
+    child before the child starts its program; a refused record leaves this block as its ResearchError, and no program
+    of that child runs."""
     original = subprocess.Popen
     def owned_popen(command, *args, **kwargs):
         if isinstance(authority, _CallAuthority):
@@ -368,17 +434,48 @@ def _own_transport_processes(authority):
             kwargs.setdefault("start_new_session", True)
         if not isinstance(command, (list, tuple)) or kwargs.get("shell") or not kwargs.get("start_new_session"):
             raise ResearchError("review_worker_reconciliation_required", "Owned transports require an explicit new process group")
-        inherited = tuple(kwargs.get("pass_fds", ()))
-        kwargs["pass_fds"] = tuple(dict.fromkeys(inherited + (authority.descriptor,)))
-        guardian = [sys.executable, str(Path(__file__).resolve()),
-                    "--call-child" if isinstance(authority, _CallAuthority) else "--child", str(authority.root),
-                    authority.reservation_id, authority.token, str(authority.descriptor), "--"] + list(command)
-        return original(guardian, *args, **kwargs)
+        # The guardian starts its program after one byte on this pipe, which the owner writes after the record. Only
+        # the owner holds the write end, and the guardian inherits the read end alone.
+        release, grant = os.pipe()
+        try:
+            inherited = tuple(kwargs.get("pass_fds", ()))
+            kwargs["pass_fds"] = tuple(dict.fromkeys(inherited + (authority.descriptor, release)))
+            guardian = [sys.executable, str(Path(__file__).resolve()), "--child", str(authority.root),
+                        authority.reservation_id, str(authority.descriptor), str(release), "--"] + list(command)
+            process = original(guardian, *args, **kwargs)
+            try:
+                _register_child(authority, process)
+                os.write(grant, b"1")
+            except ResearchError as error:
+                _stop_unreleased_child(process)
+                raise _ChildRecordRefused(error) from error
+            except BaseException:
+                _stop_unreleased_child(process)
+                raise
+            return process
+        finally:
+            os.close(release)
+            os.close(grant)
     subprocess.Popen = owned_popen
     try:
         yield
+    except _ChildRecordRefused as refused:
+        raise refused.error
     finally:
         subprocess.Popen = original
+
+
+def _await_release(root, reservation_id, descriptor, release):
+    """The guardian keeps the inherited ownership lock and starts its program only after its owner recorded it."""
+    with checked_parent(root, _directory(reservation_id) + "/worker.lock") as (directory, name):
+        lock_info = os.stat(name, dir_fd=directory, follow_symlinks=False)
+    descriptor_info = os.fstat(descriptor)
+    if (lock_info.st_dev, lock_info.st_ino) != (descriptor_info.st_dev, descriptor_info.st_ino):
+        raise ResearchError("review_worker_reconciliation_required", "Transport child lost its ownership lock")
+    granted = os.read(release, 1)
+    os.close(release)
+    if granted != b"1":
+        raise ResearchError("review_worker_reconciliation_required", "The owner of this transport child did not record it")
 
 
 def _observe_live(store, route, request):
@@ -387,14 +484,19 @@ def _observe_live(store, route, request):
 
 
 def run_worker(root, reservation_id, token, descriptor):
-    """Worker entry point: handshake, observe once, retry capture only, then exit."""
-    store = Store(Path(root))
+    """Worker entry point: handshake, observe once, retry capture only, then exit. Each record of the worker waits for
+    a busy store; the worker writes a refusal after the wait to its log."""
+    kept = {"reservation_id": reservation_id}
+    store = retry_finishing_write(lambda: Store(Path(root)), WORKER_READY_STORE_BUSY_MSG, kept=kept,
+                                  codes=LOCK_RETRY_CODES)
     authority = _WorkerAuthority(store, reservation_id, token, descriptor)
     try:
-        retry_store_write(lambda: _bind_worker(store, reservation_id, token, authority.identity))
+        retry_finishing_write(lambda: _bind_worker(store, reservation_id, token, authority.identity),
+                              WORKER_READY_STORE_BUSY_MSG, kept=kept, codes=LOCK_RETRY_CODES)
         if sys.stdin.readline().strip() != token:
             return
-        plan = retry_store_write(lambda: _start_worker(store, authority))
+        plan = retry_finishing_write(lambda: _start_worker(store, authority), WORKER_RUNNING_STORE_BUSY_MSG, kept=kept,
+                                     codes=LOCK_RETRY_CODES)
         route = plan["route"]
         request = json.loads(store.build_artifact_store().read(plan["request"]))
         try:
@@ -404,20 +506,20 @@ def run_worker(root, reservation_id, token, descriptor):
             observation = {"status": "failed", "request": plan["request"], "response": None, "output": None,
                            "error": {"code": error.code if isinstance(error, ResearchError) else "review_worker_failed",
                                      "message": str(error)}}
-        retry_store_write(lambda: capture_observation(store, reservation_id, observation,
-            request_id="review-capture:" + reservation_id, _authority=authority),
-            attempts=SCOPED_FINISH_ATTEMPT_COUNT, seconds=SCOPED_FINISH_WAIT_SECONDS)
+        retry_finishing_write(lambda: capture_observation(store, reservation_id, observation,
+            request_id="review-capture:" + reservation_id, _authority=authority), WORKER_CAPTURE_STORE_BUSY_MSG,
+            kept=kept, codes=LOCK_RETRY_CODES)
     finally:
         os.close(descriptor)
 
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
-    if argv and argv[0] in ("--child", "--call-child"):
+    if argv and argv[0] == "--child":
         if len(argv) < 7 or argv[5] != "--":
             raise ResearchError("invalid_input", "Malformed owned transport launch")
-        root, reservation_id, token, descriptor = Path(argv[1]), argv[2], argv[3], int(argv[4])
-        _register_child(root, reservation_id, token, descriptor, call=argv[0] == "--call-child")
+        descriptor = int(argv[3])
+        _await_release(Path(argv[1]), argv[2], descriptor, int(argv[4]))
         # The descriptor intentionally remains inherited by the CLI process.
         os.set_inheritable(descriptor, True)
         os.execvpe(argv[6], argv[6:], os.environ)

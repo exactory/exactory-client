@@ -217,7 +217,7 @@ class RemoteExecutionTests(DevelopmentCase):
         self.assertEqual(len(list((self.sync / "jobs").iterdir())), 1)
         self.assertFalse(remote_execution.serve_scan_once(self.sync))
 
-    def test_preparation_change_during_missing_go_check_prevents_dispatch(self):
+    def test_preparation_change_waits_for_the_missing_go_check(self):
         admission = admit_lab(self, backend="colab", body="print('{\"metric\": 17}')\n")
         claim = execution._claim(self.store, admission["id"], self.store.revision, "changing-original")["result"]
         root, job = remote_execution._publish_job(self.store, claim)
@@ -226,24 +226,26 @@ class RemoteExecutionTests(DevelopmentCase):
             with self.assertRaises(OSError):
                 remote_execution._release(self.store, claim, root, job)
         before = self.store.snapshot()["records"]
-        actual = execution._files
+        actual, outcomes = execution._files, []
 
         def change_during_validation(store, admitted, binding):
             result = actual(store, admitted, binding)
-            self.refresh_synthesis("during-current-go-check")
-            return result
 
-        refused = None
+            def change():
+                try:
+                    self.refresh_synthesis("during-current-go-check")
+                    outcomes.append("changed")
+                except execution.ResearchError as error:
+                    outcomes.append(error.code)
+            writer = threading.Thread(target=change)
+            writer.start()
+            writer.join(30)
+            return result
+        # The check of a retained release runs on a guarded read: no commit of another writer lands until it ends.
         with mock.patch.object(execution, "_files", side_effect=change_during_validation):
-            try:
-                remote_execution._release(self.store, claim, root, job)
-            except execution.ResearchError as error:
-                refused = error
-        self.assertFalse(remote_execution.serve_scan_once(self.sync), "A revision changed during authorization but the job executed")
-        self.assertIsNotNone(refused)
-        self.assertEqual(refused.code, "stale_revision")
+            remote_execution._release(self.store, claim, root, job)
+        self.assertEqual(outcomes, ["store_busy"])
         after = self.store.snapshot()["records"]
-        self.assertEqual(after["strategy_account"], before["strategy_account"])
-        self.assertEqual(after["execution_claim"], before["execution_claim"])
+        self.assertEqual(after["synthesis_selection"], before["synthesis_selection"])
         self.assertEqual(after["execution_remote_release"], before["execution_remote_release"])
-        self.assertFalse(list((self.sync / "jobs" / job["job_id"]).glob("GO-*")))
+        self.assertEqual(len(list((self.sync / "jobs" / job["job_id"]).glob("GO-*"))), 1)

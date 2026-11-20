@@ -5,13 +5,18 @@ import os
 
 from .errors import ResearchError
 from .evidence import digest
-from .finishing import SCOPED_FINISH_ATTEMPT_COUNT, SCOPED_FINISH_WAIT_SECONDS, retry_store_write
+from .finishing import LOCK_RETRY_CODES, retry_finishing_write
 from .operations import immutable_record
 from .review_task_execution import _get, _mutate_current, _TransactionRecords, identify_call, read_call_kinds
 from .storage import _canonical
 
 
 PROTOCOL = 'review-call-observation-v1'
+# The message of the capture of a reviewer call that a command owns when the store refused it beyond the wait.
+CALL_CAPTURE_STORE_BUSY_MSG = (
+    'The research store stayed busy, and what this reviewer call returned was not captured, so no record holds it. Run '
+    'review-series on its assignment, or review-run with action reconcile for the call. Each of them records the call '
+    'as interrupted. The next run then calls the reviewer again.')
 
 
 def _check_bindings(records, artifacts, captured, operation, payload, request_id):
@@ -84,9 +89,8 @@ def capture_call(store, operation, payload, invocation, route, observation, *, r
     while True:
         capture_request_id = request_id + ':capture' + (':' + str(suffix) if suffix else '')
         try:
-            return retry_store_write(lambda: _mutate_current(store, 'review.call_capture', captured, apply,
-                request_id=capture_request_id), attempts=SCOPED_FINISH_ATTEMPT_COUNT,
-                seconds=SCOPED_FINISH_WAIT_SECONDS)
+            return retry_finishing_write(lambda: _mutate_current(store, 'review.call_capture', captured, apply,
+                request_id=capture_request_id), CALL_CAPTURE_STORE_BUSY_MSG, codes=LOCK_RETRY_CODES)
         except ResearchError as error:
             if error.code != 'request_id_conflict':
                 raise

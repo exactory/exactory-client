@@ -7,8 +7,9 @@ from functools import partial, wraps
 from .artifacts import ArtifactStore, _CheckEffectRequired, validate_reference
 from .errors import ResearchError, describe_error_at
 from .evidence import digest
+from .finishing import retry_finishing_write
 from .fulltext import GENERIC_BINARY_MEDIA_TYPES, parse_base_media_type
-from .operations import immutable_record, prepared_mutation
+from .operations import immutable_record, prepared_task_mutation
 
 PROTOCOL = 'exactory-review-output-refusal-v1'
 SOURCE_LINK_ACCEPTED_FORMS_NOTICE = (
@@ -58,6 +59,24 @@ REVIEW_BOUND_EVIDENCE_FORMS_NOTICE = (
     'citations, write each citation as a handle in the form that those instructions state.')
 # The positions that a refusal of evidence.shape lists; refused_count gives the number of every refused entry.
 REFUSED_INDEX_LIMIT = 100
+# The messages of the record of a refused reviewer output when the store refused that record beyond the wait: after a
+# run, and after a recording command that was refused.
+OUTPUT_REFUSAL_AFTER_RUN_STORE_BUSY_MSG = (
+    'The research store stayed busy, and no refusal of this reviewer output was recorded. The run and its output are '
+    'recorded. details.refusal names the check that the output fails, so the assignment has no result. details.refusal '
+    'is absent when the store could not be read to check the output. Until the refusal of a failing output is recorded, '
+    'the assignment takes no second run and no replacement that carries the refusal. Run review-run again for the same '
+    'attempt: the payload holds the attempt ID in details.attempt_id as id and the assignment ID in '
+    'details.assignment_id, and the request ID is the one in details.request_id. It returns the recorded run, calls no '
+    'reviewer, checks the output and records its refusal when the output fails. When review-series sent the run, it '
+    'runs that request again by itself.')
+OUTPUT_REFUSAL_AFTER_RECORDING_STORE_BUSY_MSG = (
+    'The research store stayed busy, and no refusal of this reviewer output was recorded. The recording command was '
+    'refused, and details.recording_refusal holds its refusal. details.refusal names the check that the output fails. '
+    'details.refusal is absent when the store could not be read to check the output. Until the refusal of a failing '
+    'output is recorded, the assignment takes no second run and no replacement that carries the refusal. Run the same '
+    'recording command again with the current revision. It is refused as before, checks the output and records its '
+    'refusal when the output fails.')
 
 # Only output values, frozen packet values, and measurements computed from them belong here.
 # In particular, an existing review's scientific text is never a notice detail.
@@ -453,12 +472,16 @@ def refused_attempts(records, artifacts, completed):
 
 
 def record_refusal_on_error(record_function):
-    """Keep command tables unchanged and preserve the recording call's original exception."""
+    """Keep command tables unchanged and raise the recording call's original exception, or store_busy when the store
+    stays busy beyond the wait for the refusal record of the output."""
     @wraps(record_function)
     def wrapped(store, payload, *, expected_revision, request_id):
         try:
             return record_function(store, payload, expected_revision=expected_revision, request_id=request_id)
         except ResearchError as error:
+            if error.code in ('stale_revision', 'store_busy'):
+                # The store refused the recording before it read the output, or after the output passed its checks.
+                raise
             if error.code == 'source_link_not_fulltext':
                 from .review_reading import collect_missing_readings
                 try:
@@ -469,53 +492,77 @@ def record_refusal_on_error(record_function):
                     # Optional store-state details cannot replace a pure refusal
                     # or prevent its independent certificate attempt below.
                     pass
+            assignment_id = payload.get('assignment_id') if isinstance(payload, dict) else None
             try:
-                _record_refusal(store, payload, expected_revision=expected_revision, request_id=request_id + ':refusal')
-            except (_CheckEffectRequired, ResearchError, ValueError, TypeError, KeyError):
-                # A stale revision or unavailable provenance cannot change the original refusal.
+                _record_refusal(store, assignment_id, None, request_id=request_id + ':refusal',
+                                busy_msg=OUTPUT_REFUSAL_AFTER_RECORDING_STORE_BUSY_MSG,
+                                kept=dict(recording_refusal=error.as_dict()))
+            except ResearchError as unrecorded:
+                # A store that stayed busy beyond the wait is reported, because the refusal of the output is what
+                # admits the next run or replacement. Any other refusal of that record leaves the original refusal.
+                if unrecorded.code == 'store_busy':
+                    raise unrecorded from error
+            except (_CheckEffectRequired, ValueError, TypeError, KeyError):
                 pass
             raise
     return wrapped
 
 
-def record_native_refusal(store, assignment_id, *, request_id):
-    """Record the refusal of a native review output when the run completes: the native controller records the review
-    in another program, so the run is the harness's only chance to refuse it and let the assignment run again."""
-    try:
-        _record_refusal(store, {'assignment_id': assignment_id}, expected_revision=store.revision,
-                        request_id=request_id + ':refusal')
-    except (ResearchError, ValueError, TypeError, KeyError):
-        # A stale revision or unavailable provenance leaves the completed run as it was.
-        pass
+def record_native_refusal(store, assignment_id, attempt_id, *, request_id):
+    """Record the refusal of the output of a native review run when the run completes: the native controller records
+    the review in another program, so the run is where the harness refuses it and lets the assignment run again.
+    Return the refusal record of that output, or None when the output passes its checks or its provenance is
+    unavailable. A store that stays busy beyond the wait refuses the run command with store_busy, and the same request
+    records the refusal."""
+    return _record_refusal(store, assignment_id, attempt_id, request_id=request_id + ':refusal',
+                           busy_msg=OUTPUT_REFUSAL_AFTER_RUN_STORE_BUSY_MSG,
+                           kept=dict(request_id=request_id, assignment_id=assignment_id, attempt_id=attempt_id))
 
 
-def _record_refusal(store, payload, *, expected_revision, request_id):
+def _record_refusal(store, assignment_id, attempt_id, *, request_id, busy_msg, kept):
+    """Record the refusal of an output of an assignment that fails a contract check, and return the refusal record that
+    the store then holds for that output, or None. The output is that of attempt_id, or the selected output of the
+    assignment when attempt_id is None. The record commits against the records that its check read and waits for a
+    busy store as the finish of a review call does; kept gains what the refusal names, for a refusal after the wait."""
     from .evaluation import Evaluation
     from .review_protocol import assignment_state
-    artifacts = store.build_artifact_store()
-    snapshot = store.snapshot()
-    records = snapshot['records']
-    artifacts = Evaluation.of(records, artifacts)
-    assignment_id = payload.get('assignment_id') if isinstance(payload, dict) else None
-    if not isinstance(assignment_id, str) or assignment_id not in records.get('review_assignment', {}):
-        return
-    state = assignment_state(records, artifacts, assignment_id)
-    attempt_id = state['attempt_id']
-    if attempt_id is None or attempt_id in records.get('review_output_refusal', {}):
-        return
-    failure = classify_observed_output(records, artifacts, attempt_id)
-    if failure is None:
-        return
-    attempt = records['review_attempt'][attempt_id]
-    value = dict(id=attempt_id, assignment_id=assignment_id, attempt_id=attempt_id,
-                 output_digest=digest(json.loads(artifacts.read(attempt['output']))),
-                 request_digest=attempt['request_digest'], protocol=PROTOCOL, **failure)
+    if not callable(getattr(store, '_read_scoped_preparation', None)):
+        # A check prepares no second mutation.
+        return None
 
-    def prepare(current, submitted):
-        existing = current.get('review_output_refusal', {}).get(attempt_id)
-        if existing is not None:
-            return [], existing
-        record = dict(submitted, recorded_revision=expected_revision + 1)
-        return [immutable_record(current, 'review_output_refusal', attempt_id, record)], record
-    return prepared_mutation(store, 'review.refusal', value, prepare,
-                             expected_revision=expected_revision, request_id=request_id)
+    def write():
+        preparation = store._read_scoped_preparation()
+        records = preparation.records
+        if not isinstance(assignment_id, str) or assignment_id not in records.get('review_assignment', {}):
+            return None
+        artifacts = Evaluation.of(records, store.build_artifact_store())
+        try:
+            output_id = assignment_state(records, artifacts, assignment_id)['attempt_id'] if attempt_id is None else attempt_id
+            if output_id is None:
+                return None
+            existing = records.get('review_output_refusal', {}).get(output_id)
+            if existing is not None:
+                return existing
+            failure = classify_observed_output(records, artifacts, output_id)
+            if failure is None:
+                return None
+            attempt = records['review_attempt'][output_id]
+            value = dict(id=output_id, assignment_id=assignment_id, attempt_id=output_id,
+                         output_digest=digest(json.loads(artifacts.read(attempt['output']))),
+                         request_digest=attempt['request_digest'], protocol=PROTOCOL, **failure)
+        except (_CheckEffectRequired, ResearchError, ValueError, TypeError, KeyError):
+            # Unavailable provenance is no finding about the output.
+            return None
+        kept.update(assignment_id=assignment_id, attempt_id=output_id,
+                    refusal={key: value[key] for key in ('code', 'check', 'details')})
+
+        def prepare(current, submitted):
+            record = dict(submitted, recorded_revision=None)
+            return [immutable_record(current, 'review_output_refusal', output_id, record)], record
+
+        def stamp_commit_revision(changes, result, revision):
+            record = dict(result, recorded_revision=revision)
+            return [('review_output_refusal', output_id, record)], record
+        return prepared_task_mutation(store, 'review.refusal', value, prepare, request_id=request_id,
+                                      finalize=stamp_commit_revision, _snapshot=preparation)['result']
+    return retry_finishing_write(write, busy_msg, kept=kept)
