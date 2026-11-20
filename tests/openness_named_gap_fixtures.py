@@ -19,7 +19,7 @@ from test_openness_finding_answer import build_answer
 from test_research_problem_openness_minimum import ProblemOpennessMinimumTests
 
 FIXED_PACKET_NAMES = ('variant-search', 'excluded-work', 'related-unread-work',
-                      'index-only', 'unsearched-term', 'read-settling-work')
+                      'index-only', 'unsearched-term', 'read-settling-work', 'excluded-work-long')
 REQUEST_FORMS = ('v6-final', 'v7-final', 'page', 'single')
 FIXTURE_DIRECTORY = Path(__file__).parent / 'fixtures'
 
@@ -97,9 +97,13 @@ def build_fixed_answer(packet, *, outcome=None, ground=None):
     return build_answer(packet, outcome, [] if ground is None else [ground])
 
 
-def record_fixed_search(case, formulation, found, dispositions):
-    """Capture two searches with identical queries and supported disposition rows."""
-    queries = case.descriptor['queries']
+def record_fixed_search(case, formulation, found, dispositions, *, queries=None, reasons=None):
+    """Capture two searches with identical queries and supported disposition rows.
+
+    queries replaces the queries of the descriptor; reasons maps a found work to the reason of its disposition row.
+    """
+    queries = queries or case.descriptor['queries']
+    reasons = reasons or {}
     titles = {case.versions[0]: case.descriptor['read_title']}
     titles.update({version: 'Infinite minor models: results for infinite graphs only'
                    for version in found if version != case.versions[0]})
@@ -119,8 +123,8 @@ def record_fixed_search(case, formulation, found, dispositions):
         scope=case.descriptor['scope'], queries=list(queries), responses=responses,
         captured_at='2026-10-15T12:00:00Z', found_work_ids=list(found), verdict='nothing-new', cited_work_ids=[],
         dispositions=[dict(work_id=version, disposition=dispositions.get(version, 'relevant'),
-            reason='The delivered row concerns infinite graphs only.' if version in dispositions
-                   else 'The planar partial case bears on both formulations.') for version in found],
+            reason=reasons.get(version, 'The delivered row concerns infinite graphs only.' if version in dispositions
+                               else 'The planar partial case bears on both formulations.')) for version in found],
         resolved=[], impact='Evidence for the exact synthetic formulation.', gaps=[]))
     return case.store.snapshot()['records']['literature_search'][identifier]
 
@@ -188,6 +192,11 @@ class NamedGapStoreCase(OpennessReadingCase):
         # All searches remain bound to their exact records, now under the selected formulations.
         self.searches = self.record_searches()
         self.search = self.searches[0]
+        # The reading stub keeps these texts as excerpts wherever a delivered body holds them: the delivered sentence
+        # and, in the long excluded case, the recorded judgment row of the excluded work.
+        self.kept_texts = [self.descriptor['sentence']]
+        if self.packet_name == 'excluded-work-long':
+            self.kept_texts.append(serialize_record(self.search['dispositions'][1]).decode('utf-8'))
 
     def build_text(self, number):
         sentence = self.descriptor['sentence']
@@ -209,14 +218,17 @@ class NamedGapStoreCase(OpennessReadingCase):
             return [ProblemOpennessMinimumTests.search(self, self.versions,
                         query=self.descriptor['queries'][0])]
         found = self.versions
-        dispositions = None
-        if self.packet_name == 'excluded-work':
-            excluded = self.metadata(2)
-            found = list(found) + [excluded]
-            dispositions = {excluded: 'out_of_scope'}
+        dispositions, reasons = {}, {}
+        if self.packet_name in ('excluded-work', 'excluded-work-long'):
+            # Every disposition row of the descriptor after the first judges one more found work.
+            rows = self.descriptor['dispositions'][1:]
+            excluded = [self.metadata(2 + number) for number in range(len(rows))]
+            found = list(found) + excluded
+            dispositions = {work: row['disposition'] for work, row in zip(excluded, rows)}
+            reasons = {work: row['reason'] for work, row in zip(excluded, rows)}
         result = []
         for formulation in (self.descriptor['statement'], self.descriptor['neighbour']):
-            row = record_fixed_search(self, formulation, found, dispositions or {})
+            row = record_fixed_search(self, formulation, found, dispositions, reasons=reasons)
             result.append(row)
         return result
 
@@ -231,9 +243,10 @@ class NamedGapStoreCase(OpennessReadingCase):
     def build_reading_response(self, packet, excerpts=None, passages=()):
         if packet.get('reading_turn', {}).get('protocol') == 'exactory-openness-reading-v7' or self.request_form in ('v7', 'page'):
             binding = packet['reading_turn']
-            entries = [row for row in packet.get('evidence', []) if self.descriptor['sentence'] in row.get('content', '')]
-            excerpts = [dict(unit=row['handle'], text=self.descriptor['sentence'],
-                             purpose='The delivered scientific basis.', targets=['t1', 't2']) for row in entries]
+            excerpts = [dict(unit=row['handle'], text=text, purpose='The delivered scientific basis.',
+                             targets=['t1', 't2'])
+                        for row in packet.get('evidence', []) for text in self.kept_texts
+                        if text in row.get('content', '')]
             return dict(schema_version=2, stage='reading', notes='Read the complete partial example.',
                 excerpts=excerpts, gaps=[], passage_requests=[],
                 **{key: binding[key] for key in ('subject_digest', 'claim_digest', 'reviewer')})
@@ -263,5 +276,45 @@ def fixture_case(name, protocol='single'):
     case = NamedGapStoreCase()
     case.packet_name = name
     case.request_form = protocol
+    case.setUp()
+    return case
+
+
+def build_reason(label, characters):
+    """Return an authored recorded judgment of exactly the given length."""
+    sentence = 'Recorded judgment %s: the delivered row concerns infinite graphs only. ' % label
+    return (sentence * (characters // len(sentence) + 1))[:characters]
+
+
+def build_query(label, characters):
+    """Return an authored bound query of exactly the given length."""
+    words = 'Hadwiger colouring minor variant %s ' % label
+    return (words * (characters // len(words) + 1))[:characters].strip() + ' ' + label
+
+
+class IndexStoreCase(NamedGapStoreCase):
+    """A store whose bound searches follow search_shapes: rows {formulation, queries?, reason?}.
+
+    formulation 0 is the statement and 1 the neighbour. Equal reasons give two searches one shared dispositions value.
+    """
+
+    search_shapes = ()
+
+    def record_searches(self):
+        if self.selected['statement'] != self.descriptor['statement']:
+            return super().record_searches()
+        formulations = (self.descriptor['statement'], self.descriptor['neighbour'])
+        return [record_fixed_search(self, formulations[shape['formulation']], self.versions, {},
+                                    queries=shape.get('queries'),
+                                    reasons={self.versions[0]: shape['reason']} if shape.get('reason') else None)
+                for shape in self.search_shapes]
+
+
+def index_case(shapes, protocol='v7', name='variant-search'):
+    """Create a disposable store of IndexStoreCase; the caller must call doCleanups()."""
+    case = IndexStoreCase()
+    case.packet_name = name
+    case.request_form = protocol
+    case.search_shapes = shapes
     case.setUp()
     return case

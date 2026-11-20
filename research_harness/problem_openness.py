@@ -131,12 +131,18 @@ def prepare_openness(records, artifacts, value, revision):
     from .review_protocol import assignment_state
     assignment = records.get("review_assignment", {}).get(value["assignment_id"])
     from .native_review import find_finding_version
-    from .openness_reading import find_stage
+    from .openness_reading import BOUNDED_CHAIN_PROTOCOLS, find_protocol, find_stage
     packet, supplied = None, None
     if assignment is not None and assignment['role'] == 'native_math' and find_finding_version(assignment) == 2:
         packet = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
         supplied = json.loads(artifacts.read(assignment["packet"]))
-        if find_stage(supplied) in (None, 'final', 'closing'):
+        if find_protocol(supplied) in BOUNDED_CHAIN_PROTOCOLS:
+            from .openness_reading_v7 import verify_packet_finding_index
+            from .review_route_capacity import read_chain_capacity_plan
+            verify_packet_finding_index(records, artifacts, packet, read_chain_capacity_plan(artifacts, assignment),
+                json.loads(artifacts.read(assignment['reading_chain']['inventory'])),
+                records['review_route'][assignment['route_id']], supplied)
+        elif find_stage(supplied) in (None, 'final', 'closing'):
             from .review_search_delivery import verify_finding_index
             verify_finding_index(records, artifacts, packet, supplied.get('finding_index'))
     state = assignment_state(records, artifacts, value["assignment_id"])

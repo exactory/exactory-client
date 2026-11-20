@@ -7728,6 +7728,36 @@
         "test_review_output_correction_visual.VisualCorrectionTests.test_original_visual_delivery_and_negative_science_survive_observed_text_delta",
         "test_review_effective_consumers.EffectiveConsumerTests.test_selected_graph_revalidates_raw_receipts_and_sibling_actual_inputs"
       ]
+    },
+    {
+      "id": "finding-index-over-the-frame",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "A frame field over its stated size",
+      "summary": "The finding index of a version 2 final copied every field value of the bound searches into the fixed frame. In a stored store two bound searches share one dispositions value of about 290,000 characters, so the final frame exceeded its bound of 200,000, v7 refused with fixed_frame and v6 started, which loses the carried readings; the latest openness packet of 7 of 14 live records gives the same result.",
+      "expected": "The index of a final has one stated size, recorded in the inventory of its chain. Within it the index is complete; beyond it the longest values other than queries leave, the largest first, and the index names the body of each by its handle and length; an index that fits in no such form is one unit of the inventory. v7 is admitted for every size of the index, answers are checked against the complete index of the plan, and a chain that started before the index existed ends with a version 1 final.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_continuity_selection.StoredCaptureJourneyTests.test_g8_c8_chosen_and_stopped_capture_new_export_records_and_verifies",
+        "test_openness_finding_index_frame.LongValueChainTests.test_g8_shared_and_own_long_dispositions_leave_the_final_and_name_their_bodies",
+        "test_openness_finding_index_frame.LongValueChainTests.test_g8_eighteen_searches_keep_their_shortest_values_within_the_stated_size",
+        "test_openness_finding_index_frame.LongValueChainTests.test_g8_twenty_nine_searches_keep_every_query_and_read_work_in_a_form_with_references"
+      ]
+    },
+    {
+      "id": "carried-credit-covers-a-named-value",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "A carried credit covers a body that the final names",
+      "summary": "A final of a bounded chain names the longest field values of its bound searches by their bodies. A new chain that carried the turns of an earlier chain took the credit of each search that the earlier chain completed for every body of that search, so in the stored store of the G8 journey the shared dispositions value of 290,071 characters that the final names was never delivered to the reviewer, and the reading turns had no sentence about such values.",
+      "expected": "The inventory of a chain whose final names values by their bodies lists the span of each value, and its reading turns hold their number and a registered paragraph. A span counts as delivered only when a reading turn of the chain itself delivered it: the chain reads the named values in its own turns, the report of the carried selection lists them as remaining work, the carried credit stays for the searches and for every other part of their bodies, and the verification refuses a final before those deliveries.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_finding_index_frame.CarriedChainTests.test_g8_a_carried_chain_reads_the_value_that_its_final_names_in_its_own_turns",
+        "test_openness_finding_index_frame.CarriedChainTests.test_g8_a_value_that_one_carried_search_holds_alone_is_read_as_its_span",
+        "test_openness_finding_index_frame.FindingUnitsTests.test_g8_reading_turns_hold_the_count_and_the_paragraph_and_the_inventory_the_spans",
+        "test_openness_finding_index_frame.ExcludedWorkLongTests.test_g8_the_long_excluded_work_judgment_is_read_kept_and_settles_the_final"
+      ]
     }
   ]
 }

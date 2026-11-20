@@ -54,6 +54,12 @@ SELECTION_MISMATCH_MESSAGE = (
     'chain read itself.')
 ALLOWANCES_CHARACTERS = 30000
 TARGET_LABELS_CHARACTERS = 100000
+# The largest finding index in the frame of a final, in the measure of the route. A chain records its size in
+# inventory.fixed_bounds at its first assignment and uses that size to its end; beyond it the longest values other
+# than queries stay in the bodies of their bound searches, and the index names those bodies.
+FINDING_INDEX_CHARACTERS = 100000
+# The label of the inventory unit that holds a finding index too long for any form with unit references.
+FINDING_INDEX_LABEL = 'Finding index'
 DECISIVE_WORK_IDS_CHARACTERS = 10000
 LIST_ROW_CHARACTERS = 2000
 PURPOSE_CHARACTERS = 200
@@ -238,6 +244,9 @@ def list_target_labels(native):
 
 UNREAD_PACKET_CHARACTERS = 30000
 UNREAD_CORE_CHARACTERS = 1500
+# The reading frame of every chain with a finding index holds this many characters for the member
+# reading_turn.finding_units and the paragraph finding-units (G8.11), whether or not its final names a value.
+FINDING_UNITS_CHARACTERS = 1500
 # One text for the planned step (details.message) and for the refusal of any other payload with context.unread.
 UNREAD_FINAL_MESSAGE = (
     'A final over unread ranges is admitted only as the step that review-series plans. It plans that step when the '
@@ -564,8 +573,33 @@ def compute_allowance_rows_bound(route, handles):
             passages=dict(characters=100000, used=100000))) + 512)
 
 
-def measure_turn_frames(route, native, *, fixed_bounds=None, finding_index=None):
-    """Measure each fixed field independently; growing bodies are inventory units."""
+def measure_finding_descriptor(route):
+    """Measure the descriptor form of a finding index at its widest."""
+    return capacity.measure_capacity_value(route, dict(unit='u999999999', characters=999999999,
+                                                       searches=999999999, read_works=999999999))
+
+
+def measure_finding_index_frame(route, finding_index, inventory, stated_characters, final_pages):
+    """Measure the largest finding_index member that a final packet of the chain can hold (G8.6).
+
+    The complete form within the stated size, else the stated size, else the descriptor: when the stated size is 0,
+    or when the last form of the complete index is over it and the chain cannot end in pages.
+    """
+    from .review_search_delivery import build_last_finding_form
+    complete = capacity.measure_capacity_value(route, finding_index)
+    if complete <= stated_characters:
+        return complete
+    if stated_characters > 0 and (final_pages or capacity.measure_capacity_value(
+            route, build_last_finding_form(finding_index, inventory)) <= stated_characters):
+        return stated_characters
+    return measure_finding_descriptor(route)
+
+
+def measure_turn_frames(route, native, *, fixed_bounds=None, finding_index=None, inventory=None):
+    """Measure each fixed field independently; growing bodies are inventory units.
+
+    A finding index needs fixed_bounds['finding_index'] and the inventory whose bodies its references name.
+    """
     from .review_protocol import canonical_prompt
     labels = list_target_labels(native)
     fixed_bounds = fixed_bounds or dict(statement=100000, formulations=TARGET_LABELS_CHARACTERS, native_frame=100000,
@@ -602,7 +636,8 @@ def measure_turn_frames(route, native, *, fixed_bounds=None, finding_index=None)
             for key, value in description['final_minimum_bounds'].items():
                 fields['minimum.' + key] = capacity.measure_capacity_value(route, {key: value})
             if finding_index is not None:
-                fields['finding_index'] = capacity.measure_capacity_value(route, finding_index)
+                fields['finding_index'] = measure_finding_index_frame(route, finding_index, inventory,
+                    fixed_bounds['finding_index'], 'pages' in description['list_final_forms']())
             fields['material_envelope'] = capacity.measure_capacity_value(route, {
                 key: '' if key == 'notes' else [] for key in FINAL_MATERIAL_FIELDS})
             handles = [row['handle'] for row in labels]
@@ -611,6 +646,8 @@ def measure_turn_frames(route, native, *, fixed_bounds=None, finding_index=None)
                           refusal_paragraph=NOTICE_PARAGRAPH_CHARACTERS, unread=UNREAD_CORE_CHARACTERS)
         else:
             fields['affected_notes_index'] = AFFECTED_INDEX_CHARACTERS * 2
+            if finding_index is not None:
+                fields['finding_units'] = FINDING_UNITS_CHARACTERS
         # Bound envelope keys, capacity/allowance scalars, handles and counters;
         # evidence rows and plan.now are charged as material with their text.
         fields.update(envelope=3000, instructions=len(canonical_prompt(
@@ -697,7 +734,7 @@ def _check_v7_admission(records, artifacts, route, native, *, include_largest, f
         return dict(state='stop', protocol=chain_protocol, reason='text_route_required',
                     code=VISUAL_TEXT_ROUTE_CODE, details=stop['details'])
     overlay = _PlanningArtifacts(artifacts)
-    from .review_search_delivery import build_finding_index
+    from .review_search_delivery import build_finding_index, build_last_finding_form
     finding_index = build_finding_index(records, artifacts, native) if finding_version == 2 else None
     if has_binary_native_evidence(records, artifacts, native):
         return dict(state='stop', protocol=chain_protocol, reason='binary_required_evidence',
@@ -710,9 +747,11 @@ def _check_v7_admission(records, artifacts, route, native, *, include_largest, f
     labels = list_target_labels(native)
     fixed_bounds = dict(statement=100000, formulations=TARGET_LABELS_CHARACTERS, native_frame=100000,
         decisive_work_ids=DECISIVE_WORK_IDS_CHARACTERS)
+    if finding_index is not None:
+        fixed_bounds['finding_index'] = FINDING_INDEX_CHARACTERS
     try:
         while True:
-            built = prepare_inventory(original, native, route, fixed_bounds=fixed_bounds)
+            built = prepare_inventory(original, native, route, fixed_bounds=fixed_bounds, finding_index=finding_index)
             overlay.bodies.update(built['bodies'])
             inventory = built['inventory']
             # No source row is retained before an own excerpt exists. Each
@@ -722,7 +761,8 @@ def _check_v7_admission(records, artifacts, route, native, *, include_largest, f
                 source_rows=0)
                 for index, row in enumerate(labels)]
             measure = _describe_plan_measure(records, overlay, native, route, inventory)
-            frames = measure_turn_frames(route, native, fixed_bounds=fixed_bounds, finding_index=finding_index)
+            frames = measure_turn_frames(route, native, fixed_bounds=fixed_bounds, finding_index=finding_index,
+                                         inventory=inventory)
             declaration = dict(kind='reading', frames=frames,
                 inventory=[{key: row[key] for key in ('handle', 'kind', 'characters', 'sha256')}
                            for row in inventory['material']], targets=targets, measure=measure,
@@ -737,13 +777,26 @@ def _check_v7_admission(records, artifacts, route, native, *, include_largest, f
                     artifact=_put_json(overlay, plan))
             if not any(row['unit_fields'] for row in plan['frame'].values()):
                 break
-            movable = [field for field in fixed_bounds if fixed_bounds[field] > 0
+            # G8.6. A final frame over its bound first lets the index give up values, then moves one of the other
+            # fixed fields to a unit, the largest first, and last reduces the index to its descriptor. A reading
+            # frame over its bound takes the middle step alone.
+            final_frame = plan['frame']['final']
+            room = final_frame['bound'] - final_frame['characters'] + final_frame['fields'].get('finding_index', 0)
+            if (final_frame['unit_fields'] and finding_index is not None and room >= capacity.measure_capacity_value(
+                    route, build_last_finding_form(finding_index, inventory))):
+                fixed_bounds['finding_index'] = room
+                continue
+            movable = [field for field in fixed_bounds if field != 'finding_index' and fixed_bounds[field] > 0
                        and max(row['fields'].get(field, 0) for row in plan['frame'].values()) > 1000]
-            if not movable:
+            if movable:
+                field = max(movable, key=lambda name: max(row.get(name, 0) for row in frames.values()))
+                fixed_bounds[field] = 0
+            elif (final_frame['unit_fields'] and finding_index is not None and fixed_bounds['finding_index'] > 0
+                    and final_frame['fields']['finding_index'] > measure_finding_descriptor(route)):
+                fixed_bounds['finding_index'] = 0
+            else:
                 raise ResearchError('review_route_capacity_below_floor', capacity.BELOW_FLOOR_MESSAGE,
                     dict(reason='fixed_frame', frames=plan['frame'], room=plan['limits']['input_text_characters']['value']))
-            field = max(movable, key=lambda name: max(row.get(name, 0) for row in frames.values()))
-            fixed_bounds[field] = 0
     except ResearchError as error:
         if error.code != 'review_route_capacity_below_floor':
             raise
@@ -1139,8 +1192,13 @@ def build_chain_state(inventory, turns, *, route, plan, initial_state=None):
                 inventory_artifact=inventory_artifact, bodies=bodies)
 
 
-def prepare_inventory(built, native, route, *, fixed_bounds=None):
-    """Add oversized fixed fields as first-delivered units, retaining every byte."""
+def prepare_inventory(built, native, route, *, fixed_bounds=None, finding_index=None):
+    """Add oversized fixed fields as first-delivered units, retaining every byte.
+
+    With the complete finding index of a chain, the last form of that index is one more such unit when it measures
+    more than fixed_bounds['finding_index'] (G8.5); it is added after the handles are final, so that it names them.
+    When the final names values of the index by their bodies, finding_units lists the span of each (G8.11).
+    """
     result = copy.deepcopy(built)
     inventory, bodies = result['inventory'], result['bodies']
     fixed_bounds = fixed_bounds or dict(formulations=TARGET_LABELS_CHARACTERS, statement=100000, native_frame=100000,
@@ -1177,6 +1235,21 @@ def prepare_inventory(built, native, route, *, fixed_bounds=None):
         for row in inventory['material']:
             row.update(handle=physical[row['handle']], units=[logical[handle] for handle in row['units']])
         inventory['packet_handles'] = True
+    if finding_index is not None:
+        from .review_search_delivery import FINDING_INDEX_UNIT_FIELD, build_last_finding_form, list_finding_units
+        last = build_last_finding_form(finding_index, inventory)
+        if capacity.measure_capacity_value(route, last) > fixed_bounds['finding_index']:
+            content = serialize_record(last)
+            reference = describe_artifact(content, 'application/json')
+            unit = _append_unit(inventory, dict(kind='fixed_field', field=FINDING_INDEX_UNIT_FIELD,
+                label=FINDING_INDEX_LABEL, artifact=reference), content)
+            _bind_body(inventory, {row['sha256']: row for row in inventory['material']}, unit, reference, content,
+                       'fixed_field')
+            bodies[reference['sha256']] = content
+        named = list_finding_units(finding_index, inventory, bodies,
+                                   fit_packet_finding_index(route, inventory, finding_index))
+        if named is not None:
+            inventory['finding_units'] = named
     units = {row['handle']: row for row in inventory['units']}
     for row in inventory['material']:
         shared = sorted({field['field'] for field in inventory['search_delivery']['shared_fields']
@@ -1225,6 +1298,25 @@ def describe_allowances(route, state, answer_bound):
     return result
 
 
+def remove_finding_spans(inventory, body, spans):
+    """Return the parts of spans of the body that lie outside every span of inventory.finding_units (G8.12).
+
+    A value that the final names by its body counts as delivered only when a reading turn of the chain itself
+    delivered it, so a carried credit covers the rest of the body alone.
+    """
+    named = sorted((row['start'], row['end']) for row in inventory.get('finding_units', []) if row['unit'] == body)
+    result = []
+    for left, right in spans:
+        for start, end in named:
+            if start < right and left < end:
+                if left < start:
+                    result.append((left, start))
+                left = end
+        if left < right:
+            result.append((left, right))
+    return result
+
+
 def _find_remaining_ranges(inventory, state):
     deliveries = {}
     for row in state['deliveries']:
@@ -1240,10 +1332,13 @@ def _find_remaining_ranges(inventory, state):
         if row['kind'] == 'carried_reading' and row['handle'] not in priority:
             continue
         start = 0
-        # Own deliveries name physical bodies, carried projections logical units.
+        # Own deliveries name physical bodies, carried projections logical units. A carried credit does not cover a
+        # span that the final names (G8.12), so the receipts of a carried search whose body holds such a span wait
+        # for an own turn to deliver it (_collect_completed_searches). In a final over unread ranges with such a
+        # span unread, the search therefore drops out of the verified searches of the finding.
         spans = list(deliveries.get(row['handle'], []))
-        for unit in row['units']:
-            spans.extend(deliveries.get(unit, []))
+        spans.extend(remove_finding_spans(inventory, row['handle'],
+                                          [span for unit in row['units'] for span in deliveries.get(unit, [])]))
         for left, right in sorted(spans):
             if left > start:
                 result.append((row, start, left))
@@ -1358,11 +1453,13 @@ def _pack_deliveries(artifacts, route, inventory, state, allowance, requests, *,
 
 def build_turn_packet(artifacts, route, logical, chain, number, inventory, state, plan, limits, kind,
                       *, requests=(), notice=None, finding_version=None):
-    """Render a bounded v7 turn from its pinned artifacts and current allowance."""
+    """Render a bounded v7 turn from its pinned artifacts and current allowance.
+
+    A final holds the finding index exactly when the plan of its chain froze one (G8.8), in the form that the stated
+    size of the chain admits.
+    """
     native = logical['native']
-    finding_index = logical.get('finding_index', plan.get('finding_index'))
-    if finding_version == 1:
-        finding_index = None
+    finding_index = None if finding_version == 1 else plan.get('finding_index')
     binding = _describe_binding(native, chain, number, inventory, state, plan)
     packet = {key: logical[key] for key in ('protocol', 'role', 'reviewer_id', 'dossier_id')}
     bounds = dict(output_tokens=plan['limits']['output_tokens']['value'], answer_bound=limits['answer_bound'],
@@ -1379,6 +1476,8 @@ def build_turn_packet(artifacts, route, logical, chain, number, inventory, state
             characters=sum(row['characters'] for row in optional_notes))
         if number == 1:
             binding['affected_notes']['index'] = _describe_affected_note_index(plan, state)
+        if 'finding_units' in inventory:
+            binding['finding_units'] = len(inventory['finding_units'])
         labels = list_target_labels(native)
         fixed_bounds = inventory.get('fixed_bounds', dict(formulations=TARGET_LABELS_CHARACTERS, statement=100000))
         binding['formulations'] = (labels if capacity.measure_capacity_value(route, labels) <= fixed_bounds['formulations']
@@ -1465,9 +1564,16 @@ def build_turn_packet(artifacts, route, logical, chain, number, inventory, state
             binding['plan'] = dict(now=now)
         packet.update(native=frame, reading_final=binding, evidence=evidence)
         if finding_index is not None:
-            packet['finding_index'] = copy.deepcopy(finding_index)
+            packet['finding_index'] = fit_packet_finding_index(route, inventory, finding_index)
     packet['digest'] = digest(packet)
     return packet
+
+
+def fit_packet_finding_index(route, inventory, finding_index, *, formulations=None):
+    """Return the finding_index member of a final packet in the form that the chain's stated size admits (G8.4)."""
+    from .review_search_delivery import fit_finding_index
+    return fit_finding_index(finding_index, inventory, inventory['fixed_bounds']['finding_index'],
+                             lambda value: capacity.measure_capacity_value(route, value), formulations=formulations)
 
 
 def _measure_final_material(route, material):
@@ -1659,9 +1765,10 @@ def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
                 finding_version=find_finding_version(assignment))
         return
     if output.get('stage') != 'reading' and 'reading_final' in packet:
-        if artifacts is not None:
-            native = json.loads(artifacts.read(assignment['context']['native_packet']))
-            packet = dict(packet, native=native)
+        # The answer is checked against the complete native packet and the complete finding index of the plan (G8.7).
+        packet = dict(packet, native=json.loads(artifacts.read(assignment['context']['native_packet'])))
+        if 'finding_index' in packet:
+            packet['finding_index'] = capacity.read_chain_capacity_plan(artifacts, assignment)['finding_index']
         describe_protocol(packet=packet)['validate_final'](packet, output, artifacts=artifacts, assignment=assignment)
         return
     required = {'schema_version', 'stage', 'subject_digest', 'claim_digest', 'reviewer',
@@ -2084,11 +2191,6 @@ def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_
     if handoff is not None:
         raise ResearchError(reading.PROJECTION_STOP, RATIO_EXPORT_MESSAGE, handoff['details'])
     plan, inventory, before = read_bound_state(artifacts, prior, frozen)
-    if plan.get('finding_index') is not None:
-        logical = dict(logical, finding_index=copy.deepcopy(plan['finding_index']))
-    elif 'finding_index' not in logical and reading.is_openness_packet(logical['native']):
-        from .review_search_delivery import build_finding_index
-        logical = dict(logical, finding_index=build_finding_index(records, artifacts, logical['native']))
     if replacement:
         state = before
         kind = 'reading' if 'reading_turn' in frozen else 'final'
@@ -2173,10 +2275,6 @@ def prepare_refusal_assignment(records, artifacts, value, revision, prior, froze
     logical = dict(protocol=protocol.PROTOCOL, role=prior['role'], reviewer_id=prior['reviewer_id'],
                    dossier_id=prior['dossier_id'], native=load_packet(
                        artifacts, prior['context']['native_packet'], prior['reviewer_id']))
-    if kind in ('final', 'page', 'closing') and describe_protocol(packet=frozen)['final_rule'] == 'finding':
-        from .review_search_delivery import build_finding_index
-        logical['finding_index'] = (copy.deepcopy(plan['finding_index']) if 'finding_index' in plan
-            else build_finding_index(records, artifacts, logical['native']))
     parameters = paragraphs.read_paragraph_parameters(prior['prompt'])
     versions = [version for version in parameters.get(paragraphs.PARAMETER, [])
                 if version not in paragraphs.REFUSAL_PARAGRAPH_VERSIONS.values()]
@@ -2405,16 +2503,15 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
         if error.code == 'review_route_capacity_below_floor':
             return None
         raise
+    from . import review_prompt_paragraphs as paragraphs
     from .openness_final_pages import read_binding
+    # A replacement keeps the paragraphs of a refused prompt; otherwise its packet selects them, as at assignment.
+    versions = (paragraphs.read_paragraph_parameters(assignment['prompt']).get(paragraphs.PARAMETER, [])
+                if packet.get('output_refusal') else
+                paragraphs.select_prompt_parameters('native_math', packet).get(paragraphs.PARAMETER, []))
     prompt = review_protocol.canonical_prompt('native_math', reading_stage=reading.find_stage(packet), reading_protocol=reading.find_protocol(packet),
-        capacity=read_binding(packet)['capacity'],
+        capacity=read_binding(packet)['capacity'], problem_paragraphs=versions or None,
         finding_version=2 if 'finding_index' in packet else 1)
-    if packet.get('output_refusal'):
-        from . import review_prompt_paragraphs as paragraphs
-        prompt['parameters'].pop('capacity', None)
-        versions = paragraphs.read_paragraph_parameters(assignment['prompt']).get(paragraphs.PARAMETER, [])
-        prompt = paragraphs.append_prompt_paragraphs(prompt, 'native_math', versions=versions)
-        prompt['parameters']['capacity'] = read_binding(packet)['capacity']
     candidate = dict(value, prompt=prompt, packet=overlay.put(serialize_record(packet), 'application/json'),
                      reading_chain=chain, capacity_plan=assignment['capacity_plan'], capacity_plan_kind=kind)
     request = review_protocol.transport.request_body(route, prompt['text'], packet)
@@ -2546,19 +2643,7 @@ def _verify_turn_binding(records, artifacts, first, assignment, packet, native, 
     from .native_review import find_finding_version
     finding_version = find_finding_version(assignment)
     if finding_version == 2:
-        from .review_search_delivery import build_finding_index, verify_finding_index
-        formulations = None
-        if stage in ('page', 'final') and 'page_plan_digest' in binding:
-            labels = {row['handle']: row['formulation'] for row in list_target_labels(native)}
-            formulations = [labels[handle] for handle in binding['page']['targets']]
-        verify_finding_index(records, artifacts, native, packet.get('finding_index'), formulations=formulations)
-        finding_index = copy.deepcopy(plan.get('finding_index'))
-        if finding_index is None:
-            finding_index = build_finding_index(records, artifacts, native)
-            # A legacy plan did not freeze these display identities. The new
-            # assignment did; scientific ids/digests are checked above.
-            finding_index['read_works'] = copy.deepcopy(packet['finding_index']['read_works'])
-        logical['finding_index'] = finding_index
+        verify_packet_finding_index(records, artifacts, native, plan, inventory, route, packet)
     if 'page_plan_digest' in binding:
         from .openness_final_pages import verify_final_turn_binding
         verify_final_turn_binding(records, artifacts, assignment, packet, logical, inventory, state, plan, limits)
@@ -2575,6 +2660,21 @@ def _verify_turn_binding(records, artifacts, first, assignment, packet, native, 
         and assignment['prompt']['parameters'].get('reading_stage') == stage
         and assignment['prompt']['parameters'].get('capacity') == binding['capacity'],
         BINDING_VERIFICATION_MESSAGE, assignment_id=assignment['id'])
+
+
+def verify_packet_finding_index(records, artifacts, native, plan, inventory, route, packet):
+    """Require the complete index of the plan to rebuild from the bound originals, with the display fields of
+    read_works fixed at the assignment, and the member of a final packet to be its form for that packet (G8.9)."""
+    from .review_search_delivery import FINDING_INDEX_MESSAGE, verify_finding_index
+    verify_finding_index(records, artifacts, native, plan['finding_index'])
+    binding = packet['reading_final']
+    formulations = None
+    if 'page_plan_digest' in binding and 'page' in binding:
+        labels = {row['handle']: row['formulation'] for row in list_target_labels(native)}
+        formulations = [labels[handle] for handle in binding['page']['targets']]
+    if packet.get('finding_index') != fit_packet_finding_index(route, inventory, plan['finding_index'],
+                                                                formulations=formulations):
+        raise ResearchError('openness_reading_incomplete', FINDING_INDEX_MESSAGE)
 
 
 def _verify_replacement_origin(records, artifacts, assignment, packet):
@@ -2658,7 +2758,7 @@ def verify_problem_coverage(records, artifacts, assignment, *, final=False):
     base = read_carried_inventory(overlay, first)
     # Inventory reconstruction authenticates its native source bindings; no capacity plan is computed.
     built = prepare_inventory(build_inventory(records, overlay, native, review=first), native, route,
-                              fixed_bounds=base['fixed_bounds'])
+                              fixed_bounds=base['fixed_bounds'], finding_index=plan.get('finding_index'))
     _publish_bodies(overlay, built['bodies'])
     _require_verification(built['inventory'] == base, STATE_VERIFICATION_MESSAGE)
     selection, projections = _verify_carried_origins(records, overlay, first, native, route, plan,

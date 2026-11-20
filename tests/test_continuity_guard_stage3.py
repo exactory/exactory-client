@@ -76,7 +76,13 @@ class Stage3MatrixTests(unittest.TestCase):
         self.assertTrue(all(row['outcome'] == 'provider_refused' for row in attempts))
         from collections import Counter
         counts = Counter(row['sequence'] for row in attempts)
-        self.assertEqual(counts[1], failures.PROVIDER_REFUSAL_ATTEMPT_LIMIT + 3)
+        # The first sequence steps down once to every reading level below the one the turn starts at. Since G8.11
+        # of 0.92.0 the reading frame of this chain reserves 1,500 characters for the finding-units paragraph, so on
+        # this route the turn starts at 60,000 characters rather than 120,000.
+        reading_task = capacity.read_chain_capacity_plan(case.artifacts, final)['task']['reading']
+        lower = [row for row in reading_task['levels'] if row['material_allowance'] < reading_task['material_allowance']]
+        self.assertEqual(reading_task['material_allowance'], 60000)
+        self.assertEqual(counts[1], failures.PROVIDER_REFUSAL_ATTEMPT_LIMIT + len(lower))
         self.assertTrue(all(counts[sequence] == failures.PROVIDER_REFUSAL_ATTEMPT_LIMIT
                             for sequence in range(2, failures.SEQUENCE_LIMIT + 1)))
         result = case.record_final(final, packet)

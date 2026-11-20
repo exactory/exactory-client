@@ -22,7 +22,6 @@ from research_harness.artifacts import ArtifactStore
 from research_harness.evidence import digest
 from research_harness.native_review import load_packet
 from research_harness.review_continuation import plan_next
-from research_harness.review_search_delivery import build_finding_index
 from research_harness.storage import Store
 from research_harness import openness_reading as reading
 from research_harness import openness_reading_v7 as v7
@@ -201,23 +200,28 @@ class StoredFindingCompatibilityTests(unittest.TestCase):
         continued = after[payload['id']]
         packet = json.loads(artifacts.read(continued['packet']))
         self.assertEqual(reading.find_stage(packet), 'final')
-        self.assertEqual(continued['prompt']['parameters']['finding_version'], 2)
-        self.assertIn('finding_index', packet)
-        native = load_packet(artifacts, continued['context']['native_packet'], continued['reviewer_id'])
-        self.assertEqual(packet['finding_index'], build_finding_index(store.snapshot()['records'], artifacts, native))
+        # G8.8: a chain keeps the finding version of its first assignment, so this final is the version 1 final
+        # that the release builds for the same state.
+        self.assertNotIn('finding_version', continued['prompt']['parameters'])
+        self.assertNotIn('finding_index', packet)
+        records = store.snapshot()['records']
+        if fixture['protocol'] == reading.PROTOCOL_V6:
+            self.assertEqual(packet, rebuild_v6_final(records, artifacts, continued, packet))
+        else:
+            self.assertEqual(packet, rebuild_v7_final(records, artifacts, continued))
         self.assertTrue(protocol._prompt_matches(continued, packet))
         for identifier, saved in before.items():
             self.assertEqual(after[identifier], saved)
             self.assertEqual(artifacts.read(after[identifier]['packet']), saved_packets[identifier])
             self.assertNotIn('finding_version', saved['prompt']['parameters'])
 
-    def test_0900_reading_prefix_continues_to_a_finding_v2_final(self):
+    def test_0900_reading_prefix_continues_to_a_finding_v1_final(self):
         self.assert_legacy_prefix_continues('0.90.0')
 
-    def test_0910_reading_prefix_continues_to_a_finding_v2_final(self):
+    def test_0910_reading_prefix_continues_to_a_finding_v1_final(self):
         self.assert_legacy_prefix_continues('0.91.0')
 
-    def test_0910_pending_final_refusal_replaces_with_a_finding_v2_final(self):
+    def test_0910_pending_final_refusal_replaces_with_a_finding_v1_final(self):
         _, fixture, artifacts = next(row for row in self.fixtures if row[0] == '0.91.0')
         original = fixture['records']
         final = original['review_assignment'][fixture['final_assignment_id']]
@@ -255,11 +259,14 @@ class StoredFindingCompatibilityTests(unittest.TestCase):
         replacement = records['review_assignment'][payload['id']]
         packet = json.loads(artifacts.read(replacement['packet']))
         self.assertEqual(reading.find_stage(packet), 'final')
-        self.assertEqual(replacement['prompt']['parameters']['finding_version'], 2)
+        self.assertNotIn('finding_version', replacement['prompt']['parameters'])
+        self.assertNotIn('finding_index', packet)
         native = load_packet(artifacts, replacement['context']['native_packet'], replacement['reviewer_id'])
-        self.assertEqual(packet['finding_index'], build_finding_index(records, artifacts, native))
         self.assertTrue(protocol._prompt_matches(replacement, packet))
         self.assertIn('output_refusal', packet)
+        from research_harness.review_refusal_notice import attach_refusal_notice
+        self.assertEqual(packet, attach_refusal_notice(rebuild_v7_final(records, artifacts, replacement),
+                                                       packet['output_refusal']))
         chain = replacement['reading_chain']
         v7._verify_turn_binding(records, artifacts, records['review_assignment'][chain['first_assignment_id']],
             replacement, packet, native, route, json.loads(artifacts.read(chain['inventory'])),

@@ -585,20 +585,25 @@ class SessionAllowancePlanTests(unittest.TestCase):
         from research_harness import openness_reading_v7 as v7
         from test_openness_reading_v7_turns import MemoryArtifacts, build_native
         # Pin the admission frames of 0.92.0, including the unread-final reserve. They differ from 0.91.1 only by
-        # finding version 2: the plan and the final frame gain finding_index, and the final instructions grow.
+        # finding version 2: the plan and the final frame gain finding_index, and the final instructions grow. G8
+        # adds the sentences on finding_index.units and the descriptor form to the rules of version 2 (563
+        # characters), which every final frame, room and task size of these plans follows. G8.11 adds the reserve
+        # finding_units (1,500 characters) to the reading frame of every chain with a finding index, and the reading
+        # room, task sizes and task levels follow it: with one target the reading task passes 240,000 characters, so
+        # its level becomes 480,000, which the Codex profile has not measured.
         cases = [
             ('claude_cli_v1', 'claude-opus-5-5', 1,
-             'dfcf78f7efd4e4af3cc39df1980d9bb34ae8d8ebd40e8faa51eb8ed4eabf0ab8',
-             'd5f847a18426df3b7ce29b3c8a4cd88ceb7749b4c0cac4cbbef016d3684c5744'),
+             'f5b9d14870cdb0763f9682ee0674547b43d954e4570ee9380086d89f2168a3d2',
+             '32633c3f172f84b6544116a4b5c9f0e5e89431dd4f2af59a9fbae096df5914bb'),
             ('claude_cli_v1', 'claude-opus-5-5', 2,
-             '60a30e88146dec281972772da13d6d76026e63ab63fd90203812afe234f109a1',
-             '6aabf2c2267a8b06189b015776ae4897fe94acc6f8c35c8a7c78e65b9d2b27d6'),
+             'df5eb05213dce286d53a2a4fee8e209da1e52eaa5d49e2468ebc84940255f9be',
+             '6451b8c7337b7b0ec6682628db05a94698634146636a049ef1c01fe186a0f063'),
             ('codex_cli_v1', 'gpt-6-astra', 1,
-             '162de10e79ace533bbb33d6336358c24295f50056b9bf97a006b007453c92602',
-             'd1c3429246c8aebce238b5cf6b8a960c26904dac9cf6a7644685be0d6b436eac'),
+             '117ba5b03d1fea6336a581dfd2e08dac13cb37063cf442686b5c20cf27c76da1',
+             '2667eb349c1254633cf4359587ad6bb006841dd89e3f55107cdeb1e88848e6e0'),
             ('codex_cli_v1', 'gpt-6-astra', 8,
-             'b0e2abcbee6e076b3984317856eb5dafa82e9316d4f36fae7238d2134453800d',
-             '46a11d5b3e7adb25f7889a210b641fee4d3094e483cfbd49c3e9a1c1be8eb2d5')]
+             'b3926f0a01cd3d0b0ba3cddb877aef0388c7411176cd3c0866611b4f654fcf86',
+             '0aa762d1375594df1fe33ba970a231fb6dce5ea6a1d6e5e906d213af89fefdf3')]
         for adapter, model, targets, expected, expected_artifact in cases:
             with self.subTest(adapter=adapter, targets=targets), patch.object(v7, 'build_inventory',
                     return_value=v7.plan_inventory([], {})):
