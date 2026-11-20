@@ -7,7 +7,7 @@
       "class": "carried selection",
       "summary": "The selection of a new v7 chain carried a turn only when a range or a completed search was taken from it. A turn that delivered shared search fields or an earlier part of a search record was left out with its notes, excerpts and passage answers: on the store of record 12 at revision 1646, 12 of the 57 turns of the stopped chain with 164 entries. The verifier required a range or a search of every stored turn, so it agreed.",
       "expected": "Every ready reading turn of a chain that the selection takes anything from is carried with its notes. An excerpt or a passage answer is carried when its own source is unchanged, unless the selection takes the reading of that unit from other chains, and the receipt counts every entry as carried, superseded or with a changed source. A selection of version 2 that lacks a turn, the end of a chain, a chain or an entry does not verify.",
-      "fixed_in": "0.91.3",
+      "fixed_in": "0.91.4",
       "test_kind": "real_shape",
       "tests": [
         "test_openness_carried.V5PartialSearchTests.test_turn_with_an_earlier_part_of_a_search_is_carried_with_its_entries",
@@ -7321,7 +7321,7 @@
       "class": "successor admission",
       "summary": "The admission of the next export upgraded the version 1 minimum of a v5 packet to version 2 and kept the evidence of the old packet. Where a bound search names a reading, the upgraded minimum binds that reading as a supporting reading, the projected packet did not carry it, and the stopped chain ended with openness_reading_incomplete in place of the handoff export.",
       "expected": "The projected packet carries every record that its minimum binds, built by the function that the export uses, and a chain of v5 or v6 whose next request cannot fit ends with the handoff export when a protocol admits the projected packet.",
-      "fixed_in": "0.91.3",
+      "fixed_in": "0.91.4",
       "test_kind": "real_shape",
       "tests": [
         "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_v5_head_whose_search_names_a_reading_exports_to_v7_and_records",
@@ -7338,7 +7338,7 @@
       "class": "refusal replacement across a route renewal",
       "summary": "A refused turn whose route record pins an earlier reviewer runtime got its replacement on that record. The call ended with review_route_runtime_stale, the assignment stayed as the head of the position, and review-assignment refused the same replacement on a new route record with the same adapter, model, endpoint and configuration. On the store of record 7 at revision 200 the series of bar B ended with the handoff review-route and no reviewer call.",
       "expected": "No command records an assignment on a route record that pins another reviewer runtime. The plan of a refused session turn on such a record is the replacement on a verified route record of the same identity with the installed runtime, or the handoff that names what such a record lacks, or the step of the role when no such record can carry the replacement, each before any assignment is recorded. The replacement keeps the reviewer, the slot and the position, its notice lists every refusal of the position, and its origin verifies from stored records.",
-      "fixed_in": "0.91.3",
+      "fixed_in": "0.91.4",
       "test_kind": "real_shape",
       "tests": [
         "test_review_route_renewal.RouteRenewalRegressionTests.test_refused_final_on_a_stale_route_is_recorded_through_a_replacement_on_a_renewed_route",
@@ -7357,7 +7357,7 @@
       "class": "authentication of a stored observation",
       "summary": "An accepted output correction was authenticated against the installed reviewer runtime. After an update of the reviewer CLI or of a transport module, after a change of the program path, or without the reviewer program, the correction was not selected and its assignment showed review_output_refused. A correction call on a stale route record, or on a route whose reviewer program was not installed, recorded a failed correction without an answer and used the one correction of the assignment.",
       "expected": "A correction authenticates against the runtime that its route record pins, when its call finishes and at every later read, whatever runtime is installed. A correction that records another runtime than the pinned one is not selected. A correction call is refused before any record, and the correction stays available, when the route record is stale and when the reviewer program of a Codex or a Claude route is not installed.",
-      "fixed_in": "0.91.3",
+      "fixed_in": "0.91.4",
       "test_kind": "real_shape",
       "tests": [
         "test_review_correction_recorded_runtime.RecordedRuntimeTests.test_accepted_correction_stays_selected_under_every_other_installed_runtime",
@@ -7376,7 +7376,7 @@
       "class": "authentication of a stored observation",
       "summary": "An accepted output correction was admitted again at every read, on the records of that time. A record that was written after it took its selection away: a retirement of the route of the assignment or of the correction, a later probe that did not verify, a contamination event, a later contamination in the lineage of the repair, or a later assignment in the slot. The assignment then showed review_output_refused with no output; the refusal planner planned, and the harness recorded, a refusal replacement that discarded the accepted correction; a context repair that followed carried the refused raw outputs in place of the corrected output; and a record that arrived during the correction call turned its answer into an invalid correction.",
       "expected": "A correction is authenticated against the review records as they stood before its invocation was recorded, when its call finishes and at every later read. A later record leaves it selected and acts in the state of the assignment as it acts on an accepted attempt: no obligation after a retirement of either route that names no assignment in the exposure lineage of the repair, the context obligation after a probe that does not verify or after a contamination, review_context_repair_stale after a later cause event of the repair (a contamination or a retirement that names an assignment in that lineage), and review_assignment_replaced after a successor, which takes the corrected output as its history. A new correction call keeps every condition on the records of today.",
-      "fixed_in": "0.91.3",
+      "fixed_in": "0.91.4",
       "test_kind": "real_shape",
       "tests": [
         "test_review_correction_origin.LaterRecordTests.test_retirement_of_the_route_keeps_the_corrected_output_ready",
