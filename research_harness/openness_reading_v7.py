@@ -2237,16 +2237,16 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
 
 # The verification of a v7 chain has five conditions, and a chain that fails one gives no finding. Each condition has
 # its own refusal message. Condition 1 also refuses with SELECTION_MISMATCH_MESSAGE, with a refusal of the artifact
-# store, with claim_reassessment_required for records without a history, and with every refusal of an earlier chain
-# outside openness_carried.PREFIX_STATE_CODES, which passes through unchanged.
+# store, and with claim_reassessment_required for records without a history. Every other refusal of an earlier chain
+# passes through unchanged. In the second part of condition 1, a refusal of the artifact store and a refusal in
+# openness_carried.PREFIX_STATE_CODES give SELECTION_MISMATCH_MESSAGE.
 ORIGIN_VERIFICATION_MESSAGE = (
-    'The harness cannot verify the carried selection of this chain from its first assignment. One of three cases is '
+    'The harness cannot verify the carried selection of this chain from its first assignment. One of two cases is '
     'the cause. First, the reference carried_selection of that assignment names a protocol or a digest other than '
-    'those of the stored selection. Second, under exactory-openness-carried-selection-v2, the records give no '
-    'history from which the harness reads the store as it stood before the first assignment. Third, under the same '
-    'protocol, recorded_revision of the first assignment is not the revision at which the history of the store '
-    'shows that assignment recorded. The chain gives no finding. Check the record with record-check. When '
-    'record-check reports the record ready, report this refusal.')
+    'those of the stored selection. Second, under exactory-openness-carried-selection-v2, recorded_revision of the '
+    'first assignment is not the revision at which the history of the store shows that assignment recorded. The '
+    'chain gives no finding. Check the record with record-check. When record-check reports the record ready, '
+    'report this refusal.')
 STATE_VERIFICATION_MESSAGE = (
     'A stored inventory or state of this chain differs from what the harness rebuilds from the native packet, the '
     'carried selection and the authenticated turns, or the state_digest in the packet of a turn does not name the '

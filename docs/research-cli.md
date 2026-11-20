@@ -5830,15 +5830,16 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   selection reads an earlier chain up to its latest turn first. When that
   reading ends with `review_context_unverified` (one of the turns read has no
   observed, authenticated output in a verified context) or with
-  `openness_reading_incomplete` (the protocol of the chain does not verify the
-  turns read), the selection reads the chain again up to the turn before. It
-  goes back in this way until a reading succeeds or no turn is left. Any other
-  refusal that the reading of an earlier chain raises ends the first
-  assignment and its check with that refusal, and they record nothing. In the
+  `openness_reading_incomplete` (the turns read do not verify under the
+  protocol of the chain), the selection reads the chain again up to the turn
+  before. It goes back in this way until a reading succeeds or no turn is
+  left. The reading of an earlier chain can also raise a refusal that is
+  neither one of these two nor a refusal of the store. The first assignment
+  and its check then end with that refusal, and they record nothing. In the
   verification of a chain (The verification of the carried selection, below),
-  such a refusal ends the verification with its code, and a finding that the
-  chain recorded becomes `problem_openness_stale` with that code as its cause.
-  For such a refusal, follow the stop of its code
+  such a refusal ends the verification with its code. A finding that the
+  chain recorded then becomes `problem_openness_stale` with that code as its
+  cause. For such a refusal, follow the stop of its code
   ([Stops and overrides](research-workflow.md#stops-and-overrides)).
 - The report of the carried turns. The receipt of the first assignment, also
   with `--check`, carries `carried_readings`: the chains and turns, the
@@ -5881,9 +5882,10 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   from which a v7 chain would carry turns), `passed_over` and `outputs`, which
   state what a v7 chain would carry, and with `unavailable_chains` when it
   holds a row. The harness makes the selection of a v7
-  chain for this report. When that selection ends with a refusal, the v6
-  chain still starts, and the report holds `refusal: {code, details}`
-  with three empty lists and without `outputs`. For a packet whose required
+  chain for this report. When that selection or this report ends with a
+  refusal, the v6 chain still starts. The report then holds
+  `refusal: {code, details}` with three empty lists and without `outputs`.
+  For a packet whose required
   evidence is not UTF-8 text, the report holds the three empty lists alone.
 - A turn that failed. For `output_over_cap`, `input_over_limit`,
   `response_over_limit`, `timeout` from the second timeout and
@@ -5987,9 +5989,11 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   lowest level of its position keeps the decision stop of its outcome, and its
   verified turns stay for a later chain. When the admission selects v7, the
   harness makes the selection of the carried turns of the new chain (Carried
-  turns, above). When that selection ends with a refusal, the plan ends with
-  that refusal, in place of the handoff `export` or of a decision with an
-  export answer. Follow the stop of its code
+  turns, above). When that selection ends with a refusal, the plan has the
+  code of that refusal. It then gives no handoff `export` and no decision
+  with an export answer. After a denser ratio, `review-assignment` and
+  `review-run` then end with that refusal too, in place of
+  `review_chain_projection_over_limit`. Follow the stop of that code
   ([Stops and overrides](research-workflow.md#stops-and-overrides)).
 - The verification. `problem-openness` records the finding of a v7 final
   when the chain verifies from the stored records: the carried selection
@@ -6027,16 +6031,19 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   `exactory-openness-carried-selection-v1` has the second part alone, which
   also requires a range or a search in every stored turn. A chain that fails
   either part is refused with `openness_reading_incomplete`, and a finding
-  that it recorded becomes `problem_openness_stale` with that cause. Three
-  kinds of refusal end the verification with their own code instead, and
-  that code is then the cause of the stale finding: a refusal of the store in
-  the first part (below); in either part, a refusal that the reading of an
-  earlier chain raises, other than a refusal of the store,
-  `review_context_unverified` and `openness_reading_incomplete` (Carried
-  turns, above); and, for a selection of version 2,
-  `claim_reassessment_required` when the records were read without the
-  history of the store. For `claim_reassessment_required`, run
-  `record-check`, and then report the refusal.
+  that it recorded becomes `problem_openness_stale` with that cause. Other
+  refusals end the verification with their own code instead, and that code
+  is then the cause of the stale finding. Three kinds are known. The first
+  is a refusal of the store in the first part (below). The second, in
+  either part, is a refusal that is neither a refusal of the store nor
+  `review_context_unverified` nor `openness_reading_incomplete`. The reading
+  of an earlier chain can raise such a refusal (Carried turns, above). The
+  third, for a selection of version 2, is `claim_reassessment_required`. It
+  occurs when the records were read without the history of the store. Its
+  message asks to reassess a bound record. That step belongs to managed
+  research and does not apply to a problem chain. For
+  `claim_reassessment_required`, run `record-check`, and then report the
+  refusal with its details.
   `review-series` still reports a chain with a recorded finding as done. The
   state shows in the obligation `problem_openness_stale` of `status`. Three
   later events are known to fail the second part, as they did before 0.91.4: a
