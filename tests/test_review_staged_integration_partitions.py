@@ -11,6 +11,7 @@ from research_harness import review_protocol as protocol
 from research_harness import review_staged as staged
 from research_harness import review_staged_protocol as producer
 from research_harness.evidence import digest
+from codex_route_fixtures import install_codex_runtime
 from test_review_staged_fixtures import epoch, full_card, observation, profile, task
 
 
@@ -27,6 +28,9 @@ class IntegrationPartitionTests(unittest.TestCase):
         self.observed = observation(self.epoch, self.reading, dict(cards=self.cards))
         self.route = dict(id='route', adapter='codex_cli_v1', model='fixture', endpoint='codex://local',
                           configuration=dict(max_output_tokens=10000, timeout_seconds=600))
+        # A stored route record pins the runtime that record_route reads; the test installs that runtime.
+        install_codex_runtime(self)
+        self.route['runtime'] = protocol.transport.runtime(self.route)
         self.controller = dict(id=self.epoch['controller_assignment_id'], route_id='route',
             prompt=protocol.canonical_prompt('result', orchestration='problem_creation'),
             role='result', reviewer_id='reviewer-A', author_id='author', dossier_id=None,

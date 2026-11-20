@@ -42,7 +42,7 @@ def build_imported_slate(characters):
                            prompt=prompt, output=artifact)))['result']
         imported = source.import_history(destination=case)
         reference = source.reference('forming_call', call, imported['source_origin'])
-        case.record_candidate(source=dict(kind='phenomenon', reference='An imported observation.', evidence=[reference]))
+        case.record_candidate(source=dict(kind='computation', reference='An imported observation.', evidence=[reference]))
         case.observe_bars()
         # Rebuild the historical packet form that carried the import's bodies.
         with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL):

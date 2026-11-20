@@ -172,8 +172,8 @@ describes probe provenance through native imports and `exploratory_evidence`.
 
 In a problem record the Ideate tool records how a statement was formed and how
 it ended. A forming call (`forming`) is one piece of forming work. It states
-its own question: a phenomenon with the places where it appears, a thought
-experiment, or another start. That question takes the place that the intent has
+its own question, for example the field question of the record or a narrower
+question of one step. That question takes the place that the intent has
 in a study. An outcome (`form-outcome`) records how one form, or one expected
 relation or planned check of a form, ended. A third command, `forming-import`,
 gives a problem record the forming history of another problem record whose
@@ -195,8 +195,12 @@ record on.
 
 A forming call records:
 
-- the question, as `{kind, description, places}`. For the kind `phenomenon`,
-  `places` lists each place with its evidence;
+- the question, as `{kind, description, places}`. The kind is an open value in
+  the author's words, and `places` lists each place in which the question
+  arises, with its evidence, and can be empty. The kinds `phenomenon` and
+  `thought_experiment` are retired: `forming` accepts them only in a record
+  that already holds them
+  ([The removed kind of start](research-cli.md#the-removed-kind-of-start));
 - the move, the kind of step that produced the forms, as an open value with a
   description. A `transfer` carries its dictionary, and a `comparison` carries
   the number of comparisons made;

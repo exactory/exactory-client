@@ -1505,7 +1505,9 @@ def describe_final_projection(final, reading, *, entries=520000, minimums=12400)
 
 
 def read_installed_cli_version(route):
-    """Read the local version only when comparing an actual pinned plan."""
+    """Read the version of the installed CLI of a local route, as its sender reads it. An HTTPS route has none.
+    The admission of an output correction calls this after its comparison of the route runtime, which on a Codex route
+    already starts the program once. The second start is accepted, so that every adapter takes the same code path."""
     adapter = transport._local_adapter(route)
     if adapter is None:
         return None

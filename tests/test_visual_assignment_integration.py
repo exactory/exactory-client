@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from capacity_evidence_fixtures import build_capacity_runtime
 from research_harness import review_protocol as protocol, review_transport as transport
+from research_harness import review_claude_transport as claude, review_codex_visual_transport as visual
 from research_harness import review_visual_route as bridge
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
@@ -22,6 +23,7 @@ class VisualAssignmentIntegrationTests(unittest.TestCase):
         self.records = self.case.records
         route = self.records['review_route']['visual']
         route['runtime'] = build_capacity_runtime(route['adapter'], fixture='visual-bridge-test')
+        self.install_runtime(visual, route['runtime'])
         from visual_capacity_fixtures import install_bounded_visual_backend
         install_bounded_visual_backend(self, [route])
         self.records['workspace'] = {'problem': {'orchestration': 'problem_creation', 'authors': ['Author']}}
@@ -47,6 +49,12 @@ class VisualAssignmentIntegrationTests(unittest.TestCase):
             active = patch.object(protocol, name, **options)
             active.start()
             self.addCleanup(active.stop)
+
+    def install_runtime(self, adapter, runtime):
+        """Install the runtime that the route record pins, whether or not this machine has the reviewer CLI."""
+        active = patch.object(adapter, 'runtime', return_value=copy.deepcopy(runtime))
+        active.start()
+        self.addCleanup(active.stop)
 
     def assign(self):
         return protocol.record_assignment(self.store, self.value, expected_revision=1, request_id='visual-assignment')
@@ -94,7 +102,10 @@ class VisualAssignmentIntegrationTests(unittest.TestCase):
         self.assertEqual(failure.exception.code, 'review_visual_route_mismatch')
 
     def test_unrelated_route_change_keeps_the_original_refusal(self):
-        self.records['review_route']['visual']['adapter'] = 'claude_cli_v1'
+        # A route record of another adapter pins that adapter's runtime.
+        runtime = build_capacity_runtime(claude.ADAPTER, fixture='visual-bridge-test')
+        self.records['review_route']['visual'].update(adapter=claude.ADAPTER, runtime=runtime)
+        self.install_runtime(claude, runtime)
         with self.assertRaises(ResearchError) as failure:
             self.assign()
         self.assertEqual(failure.exception.code, 'review_source_continuation_mismatch')

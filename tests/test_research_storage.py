@@ -34,6 +34,83 @@ def build_nested_value(levels, container=list):
 
 
 class ResearchStorageTests(unittest.TestCase):
+    def test_store_with_a_selection_of_version_2_gives_its_records_at_the_cutoff(self):
+        protocol = "exactory-openness-carried-selection-v2"
+        store = Store(self.workspace, create=True)
+        self.add(store)
+        before = store.snapshot()
+        assignment = {"recorded_revision": 2, "carried_selection": {"protocol": protocol}}
+        def assign(tx):
+            tx.put("review_assignment", "chain", assignment)
+            tx.put("review_attempt", "attempt", {"assignment_id": "chain"})
+        store.mutate("assign", {}, assign, expected_revision=1, request_id="assign")
+        records = store.snapshot()["records"]
+        self.assertTrue(hasattr(records, "read_snapshot"))
+        cutoff = records.read_snapshot(assignment["recorded_revision"] - 1)
+        self.assertEqual({kind: {key: digest(row) for key, row in rows.items()}
+                          for kind, rows in cutoff.items()},
+                         {kind: {key: digest(row) for key, row in rows.items()}
+                          for kind, rows in before["records"].items()})
+        self.assertNotIn("review_assignment", cutoff)
+        self.assertNotIn("review_attempt", cutoff)
+        self.assertTrue(records.verify_record_version("review_assignment", "chain", 2, digest(assignment)))
+        self.assertFalse(records.verify_record_version("review_assignment", "chain", 1, digest(assignment)))
+        self.add(store, title="Replaced later", revision=2, request="replace")
+        current = store.snapshot()["records"]
+        self.assertEqual(current["work"]["paper"], {"title": "Replaced later"})
+        self.assertEqual(current.read_snapshot(1)["work"]["paper"], {"title": "Original"})
+        self.assertEqual(current.read_snapshot(2)["review_assignment"]["chain"], assignment)
+
+        legacy = {"carried_selection": {"protocol": "exactory-openness-carried-selection-v1"}}
+        unrelated = {"reviewer_id": protocol}
+        for index, assignments in enumerate(((legacy,), (unrelated,), (legacy, unrelated))):
+            with self.subTest(assignments=assignments):
+                other = Store(self.workspace / str(index), create=True)
+                def assign_other(tx):
+                    for ordinal, value in enumerate(assignments):
+                        tx.put("review_assignment", str(ordinal), value)
+                other.mutate("assign", {}, assign_other, expected_revision=0, request_id="assign")
+                self.assertFalse(hasattr(other.snapshot()["records"], "read_snapshot"))
+
+    def test_kind_overlays_preserve_historical_reads_across_snapshot_views(self):
+        from research_harness import storage
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.evaluation import Evaluation
+        store = Store(self.workspace, create=True)
+        self.add(store, managed=True)
+        self.add(store, title="Revised", revision=1, request="replace")
+        self.add(store, key="later", title="Later", revision=2, request="later")
+        records = store.snapshot()["records"]
+        prepared = store._read_preparation()
+        scoped = store._read_scoped_preparation()
+        sources = (("snapshot", records, 3), ("revision", records.read_snapshot(2), 2),
+                   ("prepared", prepared.records, 3), ("scoped", scoped.records, 3))
+        replacements = {"work": {"overlay": {"title": "Unrecorded"}}, "extra": {"entry": {"value": 1}}}
+        for name, source, revision in sources:
+            with self.subTest(view=name):
+                overlay = storage.overlay_kinds(source, replacements)
+                self.assertEqual(overlay["work"], replacements["work"])
+                self.assertEqual(overlay["extra"], replacements["extra"])
+                self.assertEqual(source["work"]["paper"], {"title": "Revised"})
+                self.assertEqual(overlay.read_revision(), revision)
+                self.assertEqual(overlay.read_snapshot(1)["work"]["paper"], {"title": "Original"})
+                self.assertNotIn("extra", overlay.read_snapshot(revision))
+                self.assertTrue(overlay.verify_record_version("work", "paper", 1, digest({"title": "Original"})))
+                self.assertFalse(overlay.verify_record_version("work", "paper", 2, digest({"title": "Original"})))
+                self.assert_error("claim_reassessment_required", lambda: overlay.read_snapshot(revision + 1))
+                evaluation = Evaluation(overlay, ArtifactStore(self.workspace))
+                with mock.patch.object(storage.zlib, "decompress", side_effect=AssertionError("Use the current source")):
+                    self.assertEqual(evaluation.read_snapshot(2).records["work"]["paper"], {"title": "Revised"})
+                nested = storage.overlay_kinds(overlay, {"extra": {}})
+                self.assertEqual(nested.read_revision(), revision)
+                self.assertEqual(nested.read_snapshot(1)["work"]["paper"], {"title": "Original"})
+
+        plain = {"work": {"paper": {"title": "Original"}}, "other": {"entry": {"value": 2}}}
+        overlay = storage.overlay_kinds(plain, replacements)
+        self.assertIs(type(overlay), dict)
+        self.assertEqual(overlay, dict(plain, **replacements))
+        self.assertEqual(plain["work"], {"paper": {"title": "Original"}})
+
     def test_recorded_snapshots_replay_authenticated_inputs_without_another_connection(self):
         store = Store(self.workspace, create=True)
         self.add(store, managed=True)

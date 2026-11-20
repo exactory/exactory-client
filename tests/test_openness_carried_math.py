@@ -8,7 +8,7 @@ from unittest.mock import patch
 import test_research_problem_openness_minimum as minimum_fixtures
 from openness_reading_fixtures import OpennessReadingCase
 from research_harness import openness_carried as carried, openness_reading as reading
-from research_harness import openness_reading_v7 as v7
+from research_harness import openness_reading_v7 as v7, review_protocol as protocol
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from research_harness.problem_openness import serialize_record
@@ -25,8 +25,9 @@ class MathCarriedCase(OpennessReadingCase):
         super().setUp()
         self.limit_input(1300000)
 
-    def build_math_packet(self, name='math-export', assignment_id='math-1'):
-        native = json.loads(self.artifacts.read(self.export(name=name, assignment_id=assignment_id)))
+    def build_math_packet(self, name='math-export', assignment_id='math-1', exported=None):
+        """The math form of an openness export of this record: exported, or the export of the fixture."""
+        native = json.loads(self.artifacts.read(exported or self.export(name=name, assignment_id=assignment_id)))
         native['contract'].pop('orchestration')
         native['scientific_context'].pop('openness_delivery', None)
         records = self.store.snapshot()['records']
@@ -128,7 +129,7 @@ class MathCarriedSelectionTests(MathCarriedCase):
             with self.subTest(change=change):
                 identity = dict(inputs[2], **change)
                 self.assertEqual(self.build_selection((inputs[0], inputs[1], identity))['turns'], [])
-                passed = carried.list_qualifying_chains(inputs[0], self.artifacts, identity)['passed_over']
+                passed = carried.list_passed_over_chains(inputs[0], self.artifacts, identity)['passed_over']
                 self.assertEqual(passed, [dict(chain='math-1', protocol=reading.MATH_PROTOCOL,
                     recorded_revision=first['recorded_revision'], reason='reviewer_id')]
                     if 'reviewer_id' in change else [])
@@ -256,7 +257,7 @@ class MathPassageDependencyTests(MathCarriedCase):
         native = self.build_math_packet()
         first = self.run_turn(native)
         records, _, identity = self.build_selection_inputs(native, first)
-        self.assertTrue(carried.list_qualifying_chains(records, self.artifacts, identity)['chains'])
+        self.assertTrue(carried.list_qualifying_chains(records, self.artifacts, identity))
         self.assertIn(reading.MATH_PROTOCOL_V2, carried.CHAIN_OBSERVERS)
         # A later math protocol qualifies once its row is registered, as math v2 is.
         successor = 'exactory-openness-reading-math-v3'
@@ -265,10 +266,10 @@ class MathPassageDependencyTests(MathCarriedCase):
         reading._find_record(packet)['protocol'] = successor
         packet['reading_turn']['protocol'] = successor
         records['review_assignment']['math-1']['packet'] = self.artifacts.put(serialize_record(packet), 'application/json')
-        self.assertEqual(carried.list_qualifying_chains(records, self.artifacts, identity)['chains'], [])
+        self.assertEqual(carried.list_qualifying_chains(records, self.artifacts, identity), [])
         with patch.object(carried, 'CHAIN_OBSERVERS', dict(carried.CHAIN_OBSERVERS,
                           **{successor: carried.CHAIN_OBSERVERS[reading.MATH_PROTOCOL]})):
-            self.assertEqual(carried.list_qualifying_chains(records, self.artifacts, identity)['chains'],
+            self.assertEqual(carried.list_qualifying_chains(records, self.artifacts, identity),
                              [dict(chain='math-1', protocol=successor, recorded_revision=first['recorded_revision'])])
 
 
@@ -393,3 +394,144 @@ class MathSearchPartsTests(MathCarriedCase):
             prior = identifier
         self.assertTrue(saw_partial)
         self.assertEqual(completions, [search['sha256']])
+
+
+class MathReadScopeTests(MathCarriedCase):
+    """V19 and R6 to R9 of the carried read scope for packet_kind math: the selection reads an artifact of an earlier
+    assignment only when its result can depend on it, and a math chain has the math prefix in step 3 and a math
+    openness packet in step 4."""
+
+    def assign_math(self, identifier, *, reviewer_id='openness-reviewer', route_id='route', bindings=None):
+        """Record the first turn of a math chain over an export of this record for the reviewer and the bindings."""
+        from test_openness_carried_integration import export_bindings
+        bindings = bindings or [dict(formulation=self.selected['statement'], search_id=self.search['id'])]
+        native = self.build_math_packet(exported=export_bindings(self, identifier, bindings, reviewer_id))
+        return self.mutate(protocol.record_assignment, dict(id=identifier, route_id=route_id, dossier_id=None,
+            role='native_math', reviewer_id=reviewer_id, author_id='problem-author',
+            context=dict(native_packet=native)))['result']
+
+    def start_math_chain(self):
+        native = self.build_math_packet()
+        first = self.run_turn(native)
+        return (first,) + self.build_selection_inputs(native, first)
+
+    def describe_selection(self, records, inventory, identity):
+        selection = self.build_selection((records, inventory, identity))
+        return carried.describe_carried_selection(records, self.artifacts, inventory, identity, selection)
+
+    def test_selection_reads_the_artifacts_that_its_result_depends_on(self):
+        from codex_route_fixtures import record_codex_route
+        from research_harness import review_excerpts
+        from test_openness_carried_integration import bind_statement_searches
+        native = self.build_math_packet()
+        first = self.run_turn(native)
+        self.assign_math('other-reviewer', reviewer_id='another-reviewer')
+        record_codex_route(self, 'other-route', model=self.route_model, output_tokens=64000)
+        self.assign_math('other-route', route_id='other-route')
+        # One request holds every text, so this review stays a single turn.
+        with patch.object(review_excerpts, 'TURN_FULLTEXT_CHARACTERS', 2 * sum(self.text_sizes)):
+            self.assign('single', self.build_math_packet('single-export', 'single'))
+        self.run_turn(self.export(name='problem-export', assignment_id='problem'), 'problem')
+        self.assign_math('other-statement', bindings=bind_statement_searches(self, 'other-statement', ['Neighbour 0.']))
+        records, inventory, identity = self.build_selection_inputs(native, first)
+        assignments = records['review_assignment']
+        self.assertNotIn('reading_chain', assignments['single'])
+        with patch.object(self.artifacts, 'read', wraps=self.artifacts.read) as read:
+            with patch.object(carried, 'load_packet', wraps=carried.load_packet) as loaded:
+                turns = carried.select_carried_readings(records, self.artifacts, inventory, identity)
+        paths = {call.args[0]['path'] for call in read.call_args_list}
+        names = ('other-reviewer', 'other-route', 'single', 'problem', 'other-statement', 'math-1')
+        self.assertEqual({identifier: [name for name, reference in (
+                              ('packet', assignments[identifier]['packet']),
+                              ('native_packet', assignments[identifier]['context']['native_packet']))
+                              if reference['path'] in paths]
+                          for identifier in names},
+                         {'other-reviewer': [], 'other-route': [], 'single': [], 'problem': ['packet', 'native_packet'],
+                          'other-statement': ['native_packet'], 'math-1': ['packet', 'native_packet']})
+        # The problem chain ends at the math prefix of step 3, so only the math chain loads its envelope.
+        self.assertEqual({call.args[1]['path'] for call in loaded.call_args_list},
+                         {first['context']['native_packet']['path']})
+        self.assertIn(records['review_attempt']['attempt-math-1']['output']['path'], paths)
+        self.assertEqual([row['origin']['assignment_id'] for row in turns], ['math-1'])
+        # The commands record no math chain over a problem openness packet, so this record is built in memory: the
+        # packet of math-1 over the native packet of the problem chain passes steps 1 to 3 and fails the kind in step 4.
+        swapped = copy.deepcopy(records)
+        problem_native = assignments['problem']['context']['native_packet']
+        swapped['review_assignment']['math-1']['context']['native_packet'] = problem_native
+        with patch.object(carried, 'load_packet', wraps=carried.load_packet) as loaded:
+            self.assertIsNone(carried._describe_chain(swapped, self.artifacts, swapped['review_assignment']['math-1'],
+                                                      identity))
+        self.assertEqual([call.args[1] for call in loaded.call_args_list], [problem_native])
+
+    def test_lost_packet_of_a_chain_under_another_reviewer_does_not_refuse_the_selection(self):
+        from test_openness_carried_integration import remove_artifact
+        first, records, inventory, identity = self.start_math_chain()
+        other = dict(identity, reviewer_id='another-reviewer')
+        with remove_artifact(self, first['packet']):
+            self.assertEqual(carried.select_carried_readings(records, self.artifacts, inventory, other), [])
+            report = self.describe_selection(records, inventory, other)
+            self.assertEqual((report['chains'], report['passed_over'], report['outputs']), ([], [], []))
+            self.assertEqual(report['unavailable_chains'], [dict(chain='math-1', code='artifact_missing',
+                details=dict(path=first['packet']['path']), message=v7.UNAVAILABLE_CHAIN_TEXT.format(chain='math-1'))])
+        report = self.describe_selection(records, inventory, other)
+        self.assertEqual(report['passed_over'], [dict(chain='math-1', protocol=reading.MATH_PROTOCOL,
+            recorded_revision=first['recorded_revision'], reason='reviewer_id')])
+        self.assertNotIn('unavailable_chains', report)
+
+    def test_lost_artifact_of_a_chain_on_another_route_identity_does_not_refuse_the_selection(self):
+        from codex_route_fixtures import record_codex_route
+        from test_openness_carried_integration import remove_artifact
+        first, records, inventory, identity = self.start_math_chain()
+        record_codex_route(self, 'other-route', model=self.route_model, output_tokens=64000)
+        other = dict(identity, route=self.store.snapshot()['records']['review_route']['other-route'])
+        for name, reference in (('packet', first['packet']), ('native_packet', first['context']['native_packet'])):
+            with self.subTest(artifact=name), remove_artifact(self, reference):
+                report = self.describe_selection(records, inventory, other)
+                self.assertEqual((report['chains'], report['outputs']), ([], []))
+                self.assertNotIn('unavailable_chains', report)
+                self.assertEqual(carried.list_passed_over_chains(records, self.artifacts,
+                                                                 dict(other, reviewer_id='another-reviewer')),
+                                 dict(passed_over=[], unavailable_chains=[]))
+
+    def test_lost_artifact_of_a_chain_on_another_statement_does_not_refuse_the_selection(self):
+        from test_openness_carried_integration import remove_artifact
+        first, records, inventory, identity = self.start_math_chain()
+        other = dict(identity, formulations=dict(statement='Another statement.', neighbours=['Neighbour 0.']))
+        held = {row['artifact']['path'] for row in inventory['units'] + inventory['material']}
+        evidence = next(row['artifact'] for row in
+                        json.loads(self.artifacts.read(first['context']['native_packet']))['evidence']
+                        if row['artifact']['path'] not in held)
+        for name, reference in (('packet', first['packet']), ('evidence', evidence)):
+            with self.subTest(artifact=name), remove_artifact(self, reference):
+                report = self.describe_selection(records, inventory, other)
+                self.assertEqual((report['chains'], report['outputs']), ([], []))
+                self.assertNotIn('unavailable_chains', report)
+                # The chain of the statement reads the same artifact, and the store refuses it.
+                with self.assertRaises(ResearchError) as caught:
+                    carried.select_carried_readings(records, self.artifacts, inventory, identity)
+                self.assertEqual(caught.exception.code, 'artifact_missing')
+
+    def test_replacement_of_a_first_turn_has_no_row_of_its_own(self):
+        first, records, inventory, identity = self.start_math_chain()
+        expected = self.build_selection((records, inventory, identity))
+        self.assertEqual([row['origin']['chain'] for row in expected['turns']], ['math-1'])
+        # A math v1 chain reruns a refused first turn and stops a first turn over the output limit, so the commands
+        # record no replacement of a first turn here. Each replacement is built in memory in the form that a v7
+        # chain records: it names math-1 as the first assignment of its reading chain.
+        for replacement in (dict(capacity_replacement_of='math-1'),
+                            dict(context=dict(first['context'], output_refusal=dict(assignment_id='math-1')))):
+            with self.subTest(replacement=sorted(replacement)):
+                changed = copy.deepcopy(records)
+                member = dict(copy.deepcopy(first), id='replacement',
+                              recorded_revision=identity['recorded_revision'] - 1,
+                              reading_chain=dict(first_assignment_id='math-1', turn=1), **replacement)
+                changed['review_assignment']['replacement'] = member
+                self.assertIsNone(carried._describe_chain(changed, self.artifacts, member, identity))
+                self.assertEqual(carried.list_qualifying_chains(changed, self.artifacts, identity),
+                                 [dict(chain='math-1', protocol=reading.MATH_PROTOCOL,
+                                       recorded_revision=first['recorded_revision'])])
+                passed = carried.list_passed_over_chains(changed, self.artifacts,
+                                                         dict(identity, reviewer_id='another-reviewer'))
+                self.assertEqual([row['chain'] for row in passed['passed_over']], ['math-1'])
+                report = self.describe_selection(changed, inventory, identity)
+                self.assertEqual([row['chain'] for row in report['outputs']], ['math-1'])

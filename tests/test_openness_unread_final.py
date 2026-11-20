@@ -286,11 +286,22 @@ class UnreadFinalTests(UnreadFinalSupport):
                    if fresh['handle'] in row['units']]
         self.assertEqual(pending, [(0, fresh['characters'])])
         self.assertEqual(fresh['sha256'], capture['text']['sha256'])
-        self.invoke('recaptured', self.build_v7_answer(supplied))
-        request = self.read_sent_packet('recaptured')[1]
-        sent = [row for row in request['reading_turn']['plan']['now']
-                if row['kind'] == 'fulltext' and row['sha256'] == fresh['sha256']]
-        self.assertEqual([(row['start'], row['end']) for row in sent], [(0, fresh['characters'])])
+        head, spans = 'recaptured', []
+        for number in range(20):
+            self.invoke(head, self.build_v7_answer(self.read_packet(head)))
+            request = self.read_sent_packet(head)[1]
+            spans.extend((row['start'], row['end']) for row in request['reading_turn']['plan']['now']
+                         if row['kind'] == 'fulltext' and row['sha256'] == fresh['sha256'])
+            if sum(end - start for start, end in spans) == fresh['characters']:
+                break
+            following = 'recaptured-%d' % (number + 2)
+            self.assign(following, native, prior=head)
+            head = following
+        else:
+            self.fail('The later chain must read the entire new capture.')
+        self.assertEqual(spans[0][0], 0)
+        self.assertEqual(spans[-1][1], fresh['characters'])
+        self.assertTrue(all(left[1] == right[0] for left, right in zip(spans, spans[1:])))
 
 
     def test_unread_finding_with_carried_readings_stales_if_a_carried_turn_stops_verifying(self):

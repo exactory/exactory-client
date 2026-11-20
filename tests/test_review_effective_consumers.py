@@ -410,13 +410,26 @@ class EffectiveConsumerTests(unittest.TestCase):
             self.assertEqual(len(graph['packets']), 2)
             self.assertEqual(len(graph['selection']['observations']), 2)
             self.assertTrue(graph['completion']['complete'], graph['completion']['issues'])
-            self.records['review_output_correction_invocation'] = {'correction': {'assignment_id': tasks[0]['id']}}
-            with patch('research_harness.review_output_correction.selected_correction',
-                       return_value={'id': 'corrected-page', 'requires_reauthorization': True}):
-                with self.assertRaises(ResearchError) as corrected:
+            # A pending or a stored accepted correction of a child invalidates the composition, whatever it
+            # authenticates as today.
+            invocation = dict(id='correction', assignment_id=tasks[0]['id'], route_id='route', recorded_revision=1)
+            self.records['review_output_correction_invocation'] = {'correction': invocation}
+            for status in ('failed', 'declined', 'invalid'):
+                self.records['review_output_correction'] = {'correction': dict(
+                    invocation, correction_status=status, recorded_revision=2)}
+                graph = direction_reviews.collect_selected_task_graph(self.records, self.artifacts, controller['id'])
+                self.assertTrue(graph['completion']['complete'], status)
+            accepted = dict(invocation, correction_status='accepted', recorded_revision=2)
+            for stored, next_step in (({}, 'Reconcile it'), ({'correction': accepted}, 'authorize a new root')):
+                self.records['review_output_correction'] = stored
+                with self.assertRaises(ResearchError, msg=next_step) as corrected:
                     direction_reviews.collect_selected_task_graph(self.records, self.artifacts, controller['id'])
                 self.assertEqual(corrected.exception.code, 'review_composition_pending')
-            self.records.pop('review_output_correction_invocation')
+                self.assertEqual(corrected.exception.details['output_correction_id'], 'correction')
+                # A pending call can still fail, so only the accepted correction asks for a new root.
+                self.assertIn(next_step, str(corrected.exception))
+            for kind in ('review_output_correction_invocation', 'review_output_correction'):
+                self.records.pop(kind)
             next(iter(raw.values()))['raw_output_digest'] = digest('altered capture')
             with self.assertRaises(ResearchError):
                 direction_reviews.collect_selected_task_graph(self.records, self.artifacts, controller['id'])

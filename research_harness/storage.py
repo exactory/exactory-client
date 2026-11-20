@@ -542,8 +542,8 @@ class _PostCreationSnapshot(dict):
 class _RecordedSnapshot(_PostCreationSnapshot):
     """Current JSON records or a shallow historical overlay with authenticated inputs.
 
-    Only managed research retains indexed history. Copies share its immutable
-    compressed values; historical reads require no connection or full replay.
+    Managed research and v2 carried selections retain indexed history. Copies
+    share its immutable compressed values; historical reads need no connection.
     """
 
     def __init__(self, records=(), *, history, revision, current_source=None):
@@ -568,8 +568,18 @@ class _RecordedSnapshot(_PostCreationSnapshot):
         return _HistoricalSnapshot(self._history, self._revision).verify_record_version(kind, key, revision, identity)
 
 
+def overlay_kinds(records, kinds):
+    """Replace kinds while retaining authenticated history and its current rows."""
+    overlay = dict(records, **kinds)
+    if getattr(records, "read_snapshot", None) is None:
+        return overlay
+    source = records if records._current_source is None else records._current_source
+    return _RecordedSnapshot(overlay, history=records._history, revision=records.read_revision(), current_source=source)
+
+
 def _read_snapshot(connection: sqlite3.Connection, *, fingerprint=None, requests=None) -> dict:
     from .claim_dependencies import uses_claim_dependencies
+    from .openness_carried import SELECTION_PROTOCOL
     # This untrusted precheck controls allocation only. _validate authenticates
     # every event and current record before any history or snapshot is returned.
     markers = {}
@@ -581,7 +591,15 @@ def _read_snapshot(connection: sqlite3.Connection, *, fingerprint=None, requests
         markers[row["kind"]] = {row["key"]: {}}
     records = {}
     creation_revisions = {}
-    history = _RecordHistory(creation_revisions) if uses_claim_dependencies(markers) else None
+    retain_history = uses_claim_dependencies(markers)
+    if not retain_history:
+        for row in connection.execute("SELECT value FROM records WHERE kind = 'review_assignment' AND instr(value, ?) > 0",
+                                      (SELECTION_PROTOCOL,)):
+            selection = _load(row["value"], dict).get("carried_selection")
+            if isinstance(selection, dict) and selection.get("protocol") == SELECTION_PROTOCOL:
+                retain_history = True
+                break
+    history = _RecordHistory(creation_revisions) if retain_history else None
     revision = _validate(connection, records=records, history=history, fingerprint=fingerprint, requests=requests,
                          creation_revisions=creation_revisions)
     if history is None:

@@ -1,0 +1,209 @@
+{
+  "inventory_digest": "22f3fe95365c6a94df03dcb924849965623970d11d25124ce8b2bf819dbcab8b",
+  "protocol": "exactory-openness-carried-selection-v2",
+  "turns": [
+    {
+      "entries": [
+        {
+          "index": 1,
+          "kind": "excerpt"
+        },
+        {
+          "index": 2,
+          "kind": "excerpt"
+        }
+      ],
+      "notes": {
+        "classification": "current",
+        "units": [
+          {
+            "current_sha256": "84653a10b7c6a5ed8c675cc31b2a73d3c342e0282a471f5b7facc9e8094431aa",
+            "identity": {
+              "kind": "fulltext",
+              "text_sha256": "84653a10b7c6a5ed8c675cc31b2a73d3c342e0282a471f5b7facc9e8094431aa",
+              "version_id": "text-a"
+            },
+            "sha256": "84653a10b7c6a5ed8c675cc31b2a73d3c342e0282a471f5b7facc9e8094431aa"
+          },
+          {
+            "current_sha256": "1b810bade023f30012ee6580b577704bfa73eee1cea154410190bacd789d557e",
+            "identity": {
+              "kind": "fulltext",
+              "text_sha256": "1b810bade023f30012ee6580b577704bfa73eee1cea154410190bacd789d557e",
+              "version_id": "text-b"
+            },
+            "sha256": "1b810bade023f30012ee6580b577704bfa73eee1cea154410190bacd789d557e"
+          }
+        ]
+      },
+      "origin": {
+        "assignment_id": "older",
+        "attempt_id": "attempt-older",
+        "chain": "older",
+        "protocol": "exactory-openness-reading-v5"
+      },
+      "ranges": [
+        {
+          "end": 74,
+          "part": 1,
+          "parts": 1,
+          "sha256": "84653a10b7c6a5ed8c675cc31b2a73d3c342e0282a471f5b7facc9e8094431aa",
+          "start": 0,
+          "unit": "u1"
+        },
+        {
+          "end": 80,
+          "part": 1,
+          "parts": 1,
+          "sha256": "1b810bade023f30012ee6580b577704bfa73eee1cea154410190bacd789d557e",
+          "start": 0,
+          "unit": "u2"
+        }
+      ],
+      "searches": []
+    },
+    {
+      "entries": [],
+      "notes": {
+        "classification": "current",
+        "units": [
+          {
+            "current_sha256": "84653a10b7c6a5ed8c675cc31b2a73d3c342e0282a471f5b7facc9e8094431aa",
+            "identity": {
+              "kind": "fulltext",
+              "text_sha256": "84653a10b7c6a5ed8c675cc31b2a73d3c342e0282a471f5b7facc9e8094431aa",
+              "version_id": "text-a"
+            },
+            "sha256": "84653a10b7c6a5ed8c675cc31b2a73d3c342e0282a471f5b7facc9e8094431aa"
+          },
+          {
+            "current_sha256": "1b810bade023f30012ee6580b577704bfa73eee1cea154410190bacd789d557e",
+            "identity": {
+              "kind": "fulltext",
+              "text_sha256": "1b810bade023f30012ee6580b577704bfa73eee1cea154410190bacd789d557e",
+              "version_id": "text-b"
+            },
+            "sha256": "1b810bade023f30012ee6580b577704bfa73eee1cea154410190bacd789d557e"
+          }
+        ]
+      },
+      "origin": {
+        "assignment_id": "older-2",
+        "attempt_id": "attempt-older-2",
+        "chain": "older",
+        "protocol": "exactory-openness-reading-v5"
+      },
+      "ranges": [],
+      "searches": []
+    },
+    {
+      "entries": [
+        {
+          "index": 0,
+          "kind": "passage"
+        }
+      ],
+      "notes": {
+        "classification": "current",
+        "units": [
+          {
+            "current_sha256": "84653a10b7c6a5ed8c675cc31b2a73d3c342e0282a471f5b7facc9e8094431aa",
+            "identity": {
+              "kind": "fulltext",
+              "text_sha256": "84653a10b7c6a5ed8c675cc31b2a73d3c342e0282a471f5b7facc9e8094431aa",
+              "version_id": "text-a"
+            },
+            "sha256": "84653a10b7c6a5ed8c675cc31b2a73d3c342e0282a471f5b7facc9e8094431aa"
+          }
+        ]
+      },
+      "origin": {
+        "assignment_id": "newer",
+        "attempt_id": "attempt-newer",
+        "chain": "newer",
+        "protocol": "exactory-openness-reading-v5"
+      },
+      "ranges": [
+        {
+          "end": 40,
+          "part": 1,
+          "parts": 1,
+          "sha256": "19104792cd3a1137333b1fde9b03d2eb2e89955ad444ba34a56a3abd2d9d7c5b",
+          "start": 0,
+          "unit": "u1"
+        }
+      ],
+      "searches": []
+    },
+    {
+      "entries": [],
+      "notes": {
+        "classification": "current",
+        "units": [
+          {
+            "current_sha256": "84653a10b7c6a5ed8c675cc31b2a73d3c342e0282a471f5b7facc9e8094431aa",
+            "identity": {
+              "kind": "fulltext",
+              "text_sha256": "84653a10b7c6a5ed8c675cc31b2a73d3c342e0282a471f5b7facc9e8094431aa",
+              "version_id": "text-a"
+            },
+            "sha256": "84653a10b7c6a5ed8c675cc31b2a73d3c342e0282a471f5b7facc9e8094431aa"
+          },
+          {
+            "current_sha256": "1b810bade023f30012ee6580b577704bfa73eee1cea154410190bacd789d557e",
+            "identity": {
+              "kind": "fulltext",
+              "text_sha256": "1b810bade023f30012ee6580b577704bfa73eee1cea154410190bacd789d557e",
+              "version_id": "text-b"
+            },
+            "sha256": "1b810bade023f30012ee6580b577704bfa73eee1cea154410190bacd789d557e"
+          }
+        ]
+      },
+      "origin": {
+        "assignment_id": "newer-2",
+        "attempt_id": "attempt-newer-2",
+        "chain": "newer",
+        "protocol": "exactory-openness-reading-v5"
+      },
+      "ranges": [],
+      "searches": [
+        "2d150216ad10c1ecc455753985e63318c5104fd7279c8765150a8f764856ab5b"
+      ]
+    },
+    {
+      "entries": [],
+      "notes": {
+        "classification": "current",
+        "units": [
+          {
+            "current_sha256": "84653a10b7c6a5ed8c675cc31b2a73d3c342e0282a471f5b7facc9e8094431aa",
+            "identity": {
+              "kind": "fulltext",
+              "text_sha256": "84653a10b7c6a5ed8c675cc31b2a73d3c342e0282a471f5b7facc9e8094431aa",
+              "version_id": "text-a"
+            },
+            "sha256": "84653a10b7c6a5ed8c675cc31b2a73d3c342e0282a471f5b7facc9e8094431aa"
+          },
+          {
+            "current_sha256": "1b810bade023f30012ee6580b577704bfa73eee1cea154410190bacd789d557e",
+            "identity": {
+              "kind": "fulltext",
+              "text_sha256": "1b810bade023f30012ee6580b577704bfa73eee1cea154410190bacd789d557e",
+              "version_id": "text-b"
+            },
+            "sha256": "1b810bade023f30012ee6580b577704bfa73eee1cea154410190bacd789d557e"
+          }
+        ]
+      },
+      "origin": {
+        "assignment_id": "newer-3",
+        "attempt_id": "attempt-newer-3",
+        "chain": "newer",
+        "protocol": "exactory-openness-reading-v5"
+      },
+      "ranges": [],
+      "searches": []
+    }
+  ]
+}

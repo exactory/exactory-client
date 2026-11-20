@@ -24,7 +24,7 @@ def build_form(identifier="form-1", **changes):
 
 def build_forming(identifier="forming-1", forms=None, **changes):
     forms = [build_form()] if forms is None else forms
-    return dict({"id": identifier, "question": {"kind": "thought_experiment", "description": "How large can B(n) be?",
+    return dict({"id": identifier, "question": {"kind": "field_question", "description": "How large can B(n) be?",
         "places": []}, "move": {"kind": "expectation", "description": "State the expected size as a proposition."},
         "inputs": [], "amounts": {"forms": len(forms), "nearest_alternatives": {form["id"]: len(form["nearest_alternatives"]) for form in forms},
             "expected_relations": {form["id"]: len(form["expected_relations"]) for form in forms}, "pairs": None},
@@ -105,6 +105,7 @@ class ProblemFormingTests(ProblemCase):
             amounts={"forms": 0, "nearest_alternatives": {}, "expected_relations": {}, "pairs": 20}, comparison_count=20))
 
     def test_question_places_inputs_grounds_and_probes_validate_evidence(self):
+        self.restore_start("phenomenon")
         self.record_probe()
         evidence = [self.cite_record("probe", "probe-1")]
         payload = build_forming(question={"kind": "phenomenon", "description": "The same values occur in two settings.",
@@ -135,6 +136,7 @@ class ProblemFormingTests(ProblemCase):
             self.assert_error("problem_form_correction_incomplete", lambda: self.record_forming(bad))
 
     def test_forming_refuses_bad_fields_counts_and_shapes(self):
+        self.restore_start("phenomenon")
         changes = [lambda p: p.update(extra=True), lambda p: p.pop("question"), lambda p: p.update(id=""),
             lambda p: p["question"].update(kind=""),
             lambda p: p["question"].update(kind="phenomenon"),
@@ -162,6 +164,46 @@ class ProblemFormingTests(ProblemCase):
             parent = bad["question"] if key == "places" else bad
             parent[key] = [{"description": "A place or input", "evidence": []}]
             self.assert_error("invalid_strategy", lambda: self.record_forming(bad))
+
+    def test_a_record_without_a_retired_kind_refuses_forming_calls_of_either_kind(self):
+        self.record_forming()
+        places = [{"description": "The recorded forming call.", "evidence": [self.cite_record("forming_call", "forming-1")]}]
+        for kind in ("phenomenon", "thought_experiment"):
+            with self.subTest(kind=kind):
+                payload = build_forming("retired", forms=[], question={"kind": kind, "description": "How large can B(n) be?",
+                                                                       "places": places})
+                self.assert_retired_kind_refused(kind, lambda: self.record_forming(payload))
+        self.assertEqual(list(self.store.snapshot()["records"]["forming_call"]), ["forming-1"])
+
+    def test_a_record_without_the_kind_refuses_a_phenomenon_call_before_its_places_rule(self):
+        payload = build_forming("retired", forms=[], question={"kind": "phenomenon", "description": "How large can B(n) be?",
+                                                               "places": []})
+        self.assert_retired_kind_refused("phenomenon", lambda: self.record_forming(payload))
+
+    def assert_ground_admits_forming_calls_of_its_own_kind(self, ground):
+        self.record_forming()
+        forming = self.cite_record("forming_call", "forming-1")
+        self.hold_retired_kind(ground, "phenomenon", forming)
+        for kind, other in (("phenomenon", "thought_experiment"), ("thought_experiment", None)):
+            payload = build_forming("forming-" + kind, forms=[], question={"kind": kind, "description": "How large can B(n) be?",
+                "places": [{"description": "The recorded forming call.", "evidence": [forming]}]})
+            revision = self.store.revision
+            saved = self.record_forming(payload)
+            self.assertEqual(saved, dict(payload, recorded_revision=revision + 1, recorded_at=saved["recorded_at"]))
+            self.assertEqual(self.store.snapshot()["records"]["forming_call"][payload["id"]], saved)
+            if other is not None:
+                refused = build_forming("refused", forms=[], question=dict(payload["question"], kind=other))
+                self.assert_retired_kind_refused(other, lambda: self.record_forming(refused))
+                self.hold_retired_kind(ground, other, forming)
+
+    def test_a_restored_start_admits_forming_calls_of_its_own_kind_only(self):
+        self.assert_ground_admits_forming_calls_of_its_own_kind("start")
+
+    def test_a_stored_candidate_admits_forming_calls_of_its_own_kind_only(self):
+        self.assert_ground_admits_forming_calls_of_its_own_kind("candidate")
+
+    def test_a_stored_forming_call_admits_forming_calls_of_its_own_kind_only(self):
+        self.assert_ground_admits_forming_calls_of_its_own_kind("forming_call")
 
     def test_forming_refuses_duplicate_missing_and_nonhistorical_form_references(self):
         self.record_forming()
@@ -252,14 +294,13 @@ class ProblemFormingTests(ProblemCase):
         evidence = [self.cite_record("forming_call", "forming-1"), self.cite_record("form_outcome", "outcome-1")]
         candidate = build_candidate(source={"kind": "own_record", "reference": "The recorded expectation and its outcome.", "evidence": evidence})
         self.mutate(problem_candidates.record_candidate, candidate)
-        # A3 owns the source-kind vocabulary; exercise A2's condition with that literal accepted.
-        with patch.object(problem_candidates, "SOURCE_KINDS", problem_candidates.SOURCE_KINDS + ("phenomenon",)):
-            candidate["source"]["kind"] = "phenomenon"
-            candidate["id"] = "phenomenon"
-            self.mutate(problem_candidates.record_candidate, candidate)
-            candidate["id"] = "missing-provenance"
-            candidate["source"]["evidence"] = evidence[1:]
-            self.assert_error("problem_candidate_forming_missing", lambda: self.mutate(problem_candidates.record_candidate, candidate))
+        self.restore_start("phenomenon")
+        candidate["source"]["kind"] = "phenomenon"
+        candidate["id"] = "phenomenon"
+        self.mutate(problem_candidates.record_candidate, candidate)
+        candidate["id"] = "missing-provenance"
+        candidate["source"]["evidence"] = evidence[1:]
+        self.assert_error("problem_candidate_forming_missing", lambda: self.mutate(problem_candidates.record_candidate, candidate))
         candidate["source"]["kind"] = "own_record"
         candidate["source"]["evidence"][0]["digest"] = "0" * 64
         self.assert_error("strategy_evidence_stale", lambda: self.mutate(problem_candidates.record_candidate, candidate))

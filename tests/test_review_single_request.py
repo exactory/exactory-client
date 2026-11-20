@@ -285,8 +285,10 @@ class SingleEntryTests(unittest.TestCase):
                 attempt = dict(id='over-cap', assignment_id='first', origin='instrumented',
                     status='failed', response=None, output=None, error=None,
                     usage=dict(output_tokens=128000), recorded_revision=1)
+                # A stored route record pins the runtime that record_route reads, and the assignment command reads it.
+                route = dict(self.route, runtime=protocol.transport.runtime(self.route))
                 def seed(records, value):
-                    return [('review_route', 'route', self.route), ('review_assignment', 'first', assignment),
+                    return [('review_route', 'route', route), ('review_assignment', 'first', assignment),
                             ('review_attempt', 'over-cap', attempt),
                             ('research_intent', 'intent', dict(payload=dict(authors=['author']))),
                             ('strategy_dossier', 'dossier', dict(payload=dict(intent_id='intent')))], {}

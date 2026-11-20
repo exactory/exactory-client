@@ -124,7 +124,7 @@ class SlateSeriesTests(unittest.TestCase):
         imported = fixture.import_history(destination=case)
         cite = fixture.reference('forming_call', call, imported['source_origin'])
         for identifier in ('candidate-2', 'candidate-3'):
-            case.record_candidate(identifier, source=dict(kind='phenomenon',
+            case.record_candidate(identifier, source=dict(kind='computation',
                 reference='The imported finite computations.', evidence=[cite]))
         # Retain the incident's pre-descriptor packet shape with a real imported
         # snapshot. Its synthetic record and bodies come from the ordinary builder.
