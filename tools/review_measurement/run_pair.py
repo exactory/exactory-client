@@ -316,12 +316,20 @@ def build_workspace(case, root, configuration, dry_run):
             scope='The local implications in these two notes only.', date='unknown', evidence=readings, evidence_ids=[], answer_argument=None)],
         strength=[dict(id='strength-' + head, head=head, description='The local implication under ' + head + '.',
             alternative_ids=[], no_alternative_reason='No relaxation is claimed by this calibration fixture.')
-            for head in STRENGTH_HEADS])
+            for head in STRENGTH_HEADS],
+        places=[dict(id='local-notes', fact='The supplied synthetic notes state the local implication.',
+            scope='The local implications in these two notes only.', role=dict(kind='stated',
+            description='The synthetic notes state the implication that this case assesses.'),
+            relation_ids=[], date='unknown', evidence=readings, evidence_ids=[])])
     value_evidence = [dict(kind='account', id='local-arguments')]
+    place_evidence = [dict(kind='account', id='local-notes')]
     workspace.execute('problem-value', dict(id='value', statement_id='statement', accounts=accounts,
         motivation=[dict(text=('Check the local argument and its exact scope; '
                                'this is not a claim of research significance.'),
-                         evidence=value_evidence)],
+                         evidence=value_evidence + place_evidence)],
+        changes_if_resolved=[dict(text=('A proof or a counterexample settles the local implication of the supplied '
+                                        'notes; this calibration fixture names no further work that it would change.'),
+                                  evidence=place_evidence)],
         current_state=[dict(text='The supplied elementary examples do not establish openness.', evidence=value_evidence)]))
     workspace.execute('problem-attempt', dict(
         id='attempt', statement_id='statement', kind='literature', solver=None,

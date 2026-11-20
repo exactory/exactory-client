@@ -33,6 +33,11 @@ class ProblemObjectiveResultTests(ProblemCase):
         super().setUp()
         self.initialize_problem()
         self.statement = self.select_statement()
+        # The place of a new value record rests on a full reading; the evidence of these values is results.
+        self.place_reading = self.record_full_reading()
+
+    def build_value(self, evidence, identifier="value-1"):
+        return super().build_value(evidence, identifier, place_evidence=[self.place_reading])
 
     def deliver_result(self, native=None, **changes):
         native = build_objective_native() if native is None else native
@@ -264,7 +269,8 @@ class ProblemObjectiveResultReviewTests(ProblemDeliveryCase):
         legacy = {"kind": "result", "attempt_id": "result-attempt", "acceptance_id": "acceptance-1"}
         objective = build_objective_native("counterexample")
         item = build_objective_result(put_native_attempt(self, objective))
-        self.mutate(self.load_problem_module().record_value, self.build_value([legacy, item], "both-results"))
+        self.mutate(self.load_problem_module().record_value, self.build_value(
+            [legacy, item], "both-results", place_evidence=[self.full_reading]))
         for reviewer in ("first", "second"):
             identifier = "both-results-" + reviewer
             self.observe("result", reviewer, identifier=identifier)

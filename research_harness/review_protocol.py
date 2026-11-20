@@ -1536,6 +1536,8 @@ def add_problem_candidates(records, packet):
     """Give a slate reviewer every current candidate and bind the review to that exact candidate set."""
     from .problem_candidates import compute_candidate_set_digest, describe_candidates, find_current_candidates
     packet.update(candidates=describe_candidates(records), candidate_set_digest=compute_candidate_set_digest(records))
+    # The condition of the slate places paragraph reads this member. A recorded slate packet does not hold it.
+    packet[prompt_paragraphs.PLACE_REVIEW_KEY] = {'protocol': prompt_paragraphs.SLATE_PLACES_PROTOCOL}
     current = find_current_candidates(records)
     for candidate in packet['candidates']:
         forming = [item for item in current[candidate['id']]['source']['evidence']
@@ -2207,6 +2209,8 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                     'review_ids': [review['id'] for review in historical]}
             elif problem and role == 'slate':
                 packet.update({key: previous[key] for key in ('bar_ids', 'candidates', 'candidate_set_digest')})
+                if prompt_paragraphs.PLACE_REVIEW_KEY in previous:
+                    packet[prompt_paragraphs.PLACE_REVIEW_KEY] = previous[prompt_paragraphs.PLACE_REVIEW_KEY]
                 packet['material_objections'] = collect_historical_bar_objections(records, artifacts)
             elif problem and role == 'bar' and refreshed:
                 packet['problem_refresh'] = {'assignment_id': prior['id'],

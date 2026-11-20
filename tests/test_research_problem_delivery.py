@@ -172,16 +172,16 @@ class ProblemDeliveryCase(ProblemCase):
         self.record_slate()
         self.selected = self.select_statement(candidate_id="candidate-1",
             formal_statement={"language": "Lean", "text": "theorem bound : True := by trivial"} if formal else None)
-        item = self.record_full_reading()
+        self.full_reading = self.record_full_reading()
         from research_harness.problem_attempt import record_attempt
         from test_research_problem_attempt import build_attempt, record_solver_attempt
         if solver:
             record_solver_attempt(self, self.selected)
         else:
-            self.mutate(record_attempt, build_attempt(reading=item))
+            self.mutate(record_attempt, build_attempt(reading=self.full_reading))
         self.observe_openness()
         self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
-        self.mutate(self.load_problem_module().record_value, self.build_value([item]))
+        self.mutate(self.load_problem_module().record_value, self.build_value([self.full_reading]))
         from test_research_problem_assessment import build_assessment
         self.mutate(self.load_problem_module().record_assessment, build_assessment(self.selected))
         for reviewer in ("first", "second"):
@@ -350,7 +350,8 @@ class ProblemDeliveryTests(ProblemDeliveryCase):
         self.assertEqual(manifest["statement_digest"], self.load_problem_module().compute_statement_digest(self.selected))
         self.assertEqual(manifest["formal_statement_language"], "Lean")
         self.assertEqual(set(manifest["files"]), {"title.txt", "statement.md", "motivation.md", "state.md", "criteria.md",
-                                                "citations.json", "citation-refs.json", "formal-statement.txt"})
+                                                "changes-if-resolved.md", "citations.json", "citation-refs.json",
+                                                "formal-statement.txt"})
         self.assertEqual((destination / "statement.md").read_text(), self.selected["statement"] + "\n")
         self.assertTrue(json.loads((destination / "citations.json").read_text())[0]["locator"].startswith("2601."))
         post = self.mutate(self.load_problem_module().record_posted, {"problem_id": "posted-id", "export_directory": str(destination)})["result"]

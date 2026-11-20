@@ -25,13 +25,15 @@ records how: each tentative statement with its alternatives and its planned chec
 ended ("Exploration"). The
 value record of every problem holds the accounts of its statement: the conjectured answer with
 the evidence for or against it, the nearest alternatives with what the statement asserts beyond
-each, and the relations of the statement, each fact entered once ("Value and the rubric"). A
+each, and the relations of the statement, each fact entered once ("Value and the rubric"). It
+also holds the places of the statement, which are the works of its field that state it, need it
+or stop at it, and the public section on what a resolution would change. A
 statement has one subject class, the class of its record, and the record names each further
 area that its statements concern, so that the reviewers state and apply the standard of each
 area ("Further areas"). An exploration that formed statements ends with a report of every form
 and of how each ended ("The end of an exploration").
 
-Work like a researcher, not like a form filler. A candidate question earns its place by what the
+Work like a researcher, not like a form filler. A candidate question is worth posing for what the
 field would gain from an answer, shown with sources read in full, computations whose scope is
 stated, and attempts whose outcome is told honestly. The harness records what you did and refuses
 what the evidence does not support; it does not supply the judgment. The milestones
@@ -222,12 +224,39 @@ refuted statement in this sense. Questions about the mechanism or the structure 
 counterexamples and about the results that fall with the refuted statement stay admitted as
 before.
 
+A second principle governs where a problem comes from. A problem has no importance of its own
+when it is posed. Its value is the value that its place in a line of work gives it: it arises
+at a step of a question that the works of a field study, a work states it, needs it or stops at
+it, and its resolution changes something for the work that follows. So look for the statement
+that the work needs, and pose that statement. Do not widen, strengthen or generalize a
+statement so that more follows from it. A statement that this record formed itself, for example
+a theorem carried to another setting, has the standing that the works of that setting give it,
+and no more. The product of this skill is a problem that is not resolved now and whose
+resolution changes something for work that exists.
+
+A place of a statement is a work, or a group of works on one question, in which the statement
+arises. The work states the statement as open, needs it as a hypothesis or as a missing step,
+stops at it in an argument, or states an open item that an answer would decide. Results that
+the statement only continues, as a next case, as an analogue in another setting or as a wider
+class, are a place too, and they show no need. The record enters the places in the accounts of
+its value record ("The accounts"), and the reading of "The rubric" grades significance by
+them. This principle excludes no question, unlike the absolute principle. A statement without a
+place that counts stays at level 1 of significance, and evidence can raise it: a work that
+states it, needs it or stops at it. When both principles apply, the absolute one decides first,
+and the places of a question about a refuted conjecture are the refuting work and the works
+that used the conjecture.
+
+The harness does not judge that a statement is natural on its face. The evidence of that is a
+work that states the statement or the question.
+
 Candidates come from five kinds of source. Record the kind and the reference with every
 candidate:
 
 - `own_record`: the search trees and cash-outs of your finished or stalled math-solver attacks.
   Footholds come from the partial results that the controller accepted, unfinished questions
-  from unresolved attempts, scoped obstructions from demonstrated limitations.
+  from unresolved attempts, scoped obstructions from demonstrated limitations. The step at
+  which an attack on a question that a work states stopped is a candidate with a place: the
+  work states the question, and the accepted reduction ties the step to it.
 - `literature`: problem lists and surveys, questions that authors state as open, the gap between
   the best bound and the best construction in an active line, and conditional theorems whose
   hypothesis is the question.
@@ -255,7 +284,10 @@ tool call:
   the area that a counterexample or another proof has refuted and the works that refute them,
   the neighbours of a candidate, the decisive prior and settling works, and the community
   evidence of an active line. Read every decisive work in full, including each refuting work;
-  an abstract settles nothing.
+  an abstract settles nothing. While you read a work in full, note three things with their
+  passages: what the work states as open (a question, a conjecture, a case, a bound), what it
+  assumes or says would suffice (a hypothesis, a missing step), and where it says that its
+  argument stops. These are the places of later candidates.
 - The population tool (`exactory-cohort`) gives bounded evidence of activity in a line (ground
   B1). Use it only where standing evidence is needed and does not exist yet, and never as
   evidence of significance by itself.
@@ -682,7 +714,9 @@ gain was established` when the accounts of that value record claim a gain: both 
 judged that claim before the gate accepted the post. It is `ordinary` when they claim none. It
 is `kind unassessed` for a post that was recorded with `problem-post-external`, and for a post
 whose covered value record holds no accounts. A later value record does not change the
-classification; the report shows it under what changed after the post.
+classification; the report shows it under what changed after the post. The classification says
+whether a gain was claimed and reviewed. It is no grade of the value of a post: a post has its
+value from the places of its statement, with or without a gain.
 
 The outcome is one of six:
 
@@ -739,12 +773,24 @@ significance.
    cites its forming calls and the outcomes of its forms in `source.evidence`, each as
    `{kind: "record", record_kind, id, digest}` with the record kind `forming_call` or
    `form_outcome`; the CLI reference says how to compute the digest.
+   In the `observation` of a new candidate, say in three sentences where the candidate arises:
+   the natural question and the works that study it; the step of that question at which the
+   candidate arises; and its place, which is the work that states it, needs it or stops at it,
+   or the results that it only continues. Cite the full readings of those works in
+   `source.evidence`. When no work that you read states the candidate, needs it or stops at it,
+   run one bounded search before the selection, with three questions: who states it as open,
+   who assumes it or says that it would suffice, and who stops at it. Read each work that the
+   search finds in full.
 2. Grade `potential` as `{significance: {B1, B2}, priority, readiness}` with the levels of the
    rubric in "Value and the rubric" and a readiness verdict `pass` or `fail`. Grade what the
    question would be if it holds up; the slate and the attempt test whether it does. For a
    candidate whose case rests on relations that are expected and not yet established, grade
    what the record would establish if those relations are proved, and name each expected
-   relation in the `observation` as work that the selection authorizes.
+   relation in the `observation` as work that the selection authorizes. A place is a fact of
+   works read, and no expectation. Grade a ground at level 2 only when a work that you read in
+   full states the candidate, needs it or stops at it, or states an open item that an answer
+   would decide. Only the relation that ties the candidate to that item can still be expected
+   at this stage.
 3. Record a revised candidate as a new candidate whose `previous` names the earlier one. The
    earlier one is then no longer current.
 4. Obtain two blind problem bars from distinct reviewers on distinct review slots before any
@@ -768,7 +814,9 @@ significance.
    `bar_review_ids`.
 6. Compare the candidates by their mathematical payoff, their neighbours, the tests that would
    distinguish them, their failure signals and their resource demand. Write that comparison; it
-   goes into the slate.
+   goes into the slate. Compare the candidates first on their places: for each one, the work
+   that states it, needs it or stops at it, and what an answer would decide or supply for that
+   work. Between a statement and a form of it that a work states, prefer the stated form.
 7. The harness requires a slate review in two cases. When a carry imported at least one
    objection, obtain a focused slate review of the current imported set before you record the
    slate. When the slate selects a candidate formed in this record, obtain a slate review of
@@ -792,7 +840,13 @@ significance.
    such an objection follows the candidate into the result reviews and the post gate of this
    record until it is resolved with evidence or found not upheld. When the candidate moves to
    another record, the carry takes the objection with it ("Carry a reviewed candidate to another
-   record" in "Exploration").
+   record" in "Exploration"). A new slate review carries the places paragraph
+   (`exactory-problem-slate-places-v1`). The paragraph asks the reviewer where each candidate
+   arises in the works of the field, whatever the kind of its source, and to give level 1 on
+   both grounds to a candidate whose places show no need. A continuation or a repair of a
+   slate review that a release before 0.91.6 assigned keeps the paragraphs of that review.
+   Obtain a slate review by choice also when the place of a selected candidate rests on a
+   relation that is still expected.
 8. Record the selection with `exactory-research problem-slate`. Give every current candidate
    exactly one disposition: `selected`, `deferred` with the evidence that raises it, or
    `rejected` with the reason. A candidate of the excluded kind is `rejected` with the
@@ -802,7 +856,9 @@ significance.
    `comparison`, and a `reason` when nothing is selected.
 9. Select only a candidate whose potential reaches `max(B1, B2) >= 2` with readiness `pass`.
    Defer a candidate at level 1 with the evidence that would raise it, and reconsider it when
-   that evidence is recorded.
+   that evidence is recorded. For a candidate that only continues results, that evidence is a
+   work that states it, needs it or stops at it: name the search for such a work in
+   `evidence_needed`.
 10. When a new or revised candidate is recorded, the slate is stale (`problem_slate_stale`):
     record a new slate that disposes of every current candidate. When the candidates or the bars
     change after a slate review, assign the slate review again to the same reviewer before you
@@ -833,6 +889,10 @@ exception.
 
    Among equivalent forms of the statement, pose the one that allows a reader more derivations
    and more checks. Simplicity stays a preference.
+
+   Pose the item as the works state it or need it, in their objects and their terms. A wider
+   or a stronger form is an alternative with the role `stronger`: record it, and do not pose
+   it because more follows from it.
 2. Declare in `neighbours` every neighbouring formulation that openness and value must cover:
    strengthenings, relaxations, model versions, siblings and the next parameter. A neighbour
    you do not declare is a neighbour the openness finding does not check. The declared
@@ -932,6 +992,12 @@ candidate off the open-problem path (`problem_attempt_resolved`), and it stays o
 when a later attempt is recorded. When a solver attempt resolves the statement, deliver the result
 through math-solver's own delivery. When the literature resolves it, redirect to the established
 result and its source; start no solver work to reproduce an established result.
+
+Where the recorded routes stop is material for the public section on what a resolution would
+change ("Value and the rubric", step 5). The `description` of a literature attempt says where
+each published route stops, and `unresolved` and `obstructions` say it for the routes of a
+solver attempt. Report each stop with its source and its scope. The failure of your own attempt
+shows no place of the statement and no difficulty.
 
 ### Objectives beside the attempt
 
@@ -1574,19 +1640,24 @@ each of these refusals.
 
 ## Value and the rubric
 
-The value case says why a resolution matters and where the question stands, with every material
-premise bound to evidence. Its accounts say what the record established about the statement:
-what each answer would settle, what speaks for the answer that the record expects, and why this
-statement was posed and not one of its nearest alternatives. The rubric is how the harness
-grades its own case before the reviewers grade it; the codes and grades stay in the assessment
-record, out of the public text.
+The value case says where the question comes from, what a resolution would change and where the
+question stands, with every material premise bound to evidence. Its accounts say what the record
+established about the statement: what each answer would settle, what speaks for the answer that
+the record expects, why this statement was posed and not one of its nearest alternatives, and in
+which works of the field the statement arises. The rubric is how the harness grades its own case
+before the reviewers grade it; the codes and grades stay in the assessment record, out of the
+public text.
 
 1. Record the value case with `exactory-research problem-value`:
-   `{id, statement_id, accounts, motivation, current_state}`. `accounts` holds the accounts of
-   the statement ("The accounts", below). `motivation` and `current_state` are ordered
-   paragraphs `{text, evidence}`. Every new value record holds accounts
-   (`problem_accounts_required` otherwise). A value record of an earlier release has none and
-   stays valid as it is.
+   `{id, statement_id, accounts, motivation, changes_if_resolved, current_state}`. `accounts`
+   holds the accounts of the statement ("The accounts", below). `motivation`,
+   `changes_if_resolved` and `current_state` are ordered paragraphs `{text, evidence}`. Every
+   new value record holds accounts (`problem_accounts_required` otherwise), the part `places`
+   of the accounts (`problem_places_required`) and `changes_if_resolved`
+   (`problem_changes_if_resolved_required`). A value record of an earlier release lacks some of
+   them and stays valid as it is. For a record whose value record predates 0.91.6 and whose
+   statement is not posted, record a new value record with all three before the decision. The
+   result reviews are then refreshed in their slots.
 2. Give the entries of the accounts evidence of these kinds:
    - `reading`: a full reading of this store.
    - `computation`: an admitted, reconciled and assessed computation. Run it through `cycle`,
@@ -1610,18 +1681,21 @@ record, out of the public text.
      imported full reading, an assessed run, a solver snapshot whose accepted result an
      outcome of the source cites and an outcome with admissible evidence are admissible, and
      an imported probe is exploratory.
-3. A paragraph of the motivation or of the current state cites the entries of the accounts that
-   carry what it says, each as `{kind: "account", id}`. The harness derives the delivered
-   evidence of the paragraph from those entries. A paragraph whose cited entries are all
-   expected relations is refused (`problem_value_expected_only`). A paragraph cites a full
-   reading directly, as `{kind: "reading", version_id, reading_id}`, only for a fact about the
-   field that no part of the accounts holds, such as the activity of a line: set
-   `field_fact: true` in that paragraph (`problem_value_account_required` otherwise). Do not
-   cite a probe as evidence of a fact; a probe explores, it does not support.
+3. A paragraph of the motivation, of `changes_if_resolved` or of the current state cites the
+   entries of the accounts that carry what it says, each as `{kind: "account", id}`. The
+   harness derives the delivered evidence of the paragraph from those entries. A paragraph
+   whose cited entries are all expected relations is refused (`problem_value_expected_only`).
+   A paragraph cites a full reading directly, as `{kind: "reading", version_id, reading_id}`,
+   only for a fact about the field that no part of the accounts holds, such as the activity of
+   a line: set `field_fact: true` in that paragraph (`problem_value_account_required`
+   otherwise). Do not cite a probe as evidence of a fact; a probe explores, it does not
+   support. What a work states, needs or stops at is no field fact: enter it in `places`. At
+   least one paragraph of the motivation and at least one of `changes_if_resolved` cite an
+   entry of `places` (`problem_value_place_uncited`).
 4. Support every material factual premise with one of these kinds of evidence, within its
    demonstrated scope. Name the premises and the inferential steps of every conceptual argument;
    a reader must be able to see where the argument could fail.
-5. Explain the mathematics and its evidential limits in the motivation and the current state:
+5. Explain the mathematics and its evidential limits in the three texts:
    the ground and the criterion that carry the primary account, the strongest objection and its
    answer, what the attempt proved, left unresolved or demonstrated, and the accessibility.
    These paragraphs are the public text, and they explain in prose what the accounts hold: the
@@ -1629,7 +1703,31 @@ record, out of the public text.
    can show, the stronger forms that are known to fail, and the conjectured answer with its
    grounds, kept apart from the question. State only what a cited entry carries. Do not use the
    name "conjecture of the abc kind", and do not compare the statement with a named conjecture
-   as a claim about its standing. The accounts stay in the record.
+   as a claim about its standing. The accounts stay in the record. Each text has its task:
+   - The motivation says where the question comes from. It opens with the past line: the
+     natural question, the results that lead to the step in the order of their dates, each
+     with its year and its work, and the step at which the statement arises. A cited entry
+     carries each result, and the years are the dates of those entries. The line names the
+     results that the record read and claims no completeness. The motivation then says why
+     this statement was posed and not one of its nearest alternatives.
+   - `changes_if_resolved` is the section "What a resolution would change". It holds three
+     things. First, for each answer, what a resolution decides or supplies, and for which
+     work. Second, what a resolution would supply at the step where the recorded arguments
+     stop. Third, what a resolution would open: the next question or step of the line that
+     becomes askable or reachable under each answer. Either a work names it, and the sentence
+     cites that place, or you argue it, and the sentence says that it is the argument of the
+     record and names its premises. Where you can name nothing for an answer, say so. Say also
+     what stays as it is. The joined text has 100 to 5,000 characters
+     (`problem_changes_if_resolved_length`).
+   - The current state gives the prior work on the statement itself, what the attempt proved,
+     left unresolved or demonstrated, and the limits of the record's knowledge.
+
+   A result stands once in the public text: in the motivation when it leads to the question,
+   in the current state when it bears on the status of the statement. In all three texts,
+   report where a recorded route stops with its source and its scope, and report what a work
+   says about the reason as the statement of that work. State no difficulty, importance or
+   duration of your own, no opinion of a community, nothing that rests on the absence of
+   attempts in print, and no forecast of what people will do with a resolution.
 6. Record the self-assessment with `exactory-research problem-assessment`: `grades` for every
    rubric item, and for each item in `items` an evidence reference and a note. Use one of three
    evidence shapes: a held artifact descriptor `{path, sha256, size, media_type}`,
@@ -1735,6 +1833,34 @@ Every problem holds the first tier:
   evidence shapes of step 6, and it can be empty only for `author`. `evidence_ids` cites the
   entries that hold the refuting evidence. Give an empty list when the question concerns no
   refuted conjecture.
+
+Since 0.91.6 every new value record also holds the places of the statement
+(`problem_places_required` otherwise):
+
+- `places`: one entry `{id, fact, scope, role, relation_ids, evidence, evidence_ids}`, with the
+  optional `date`, for each work, or group of works on one question, in which the statement
+  arises. `fact` says what the works do: the question that they study, the result that they
+  reach, and the item that they state, need or stop at. `scope` is the range within which they
+  state it. `role` is an open value `{kind, description}` that says how the statement stands
+  to that item. The described kinds are `stated` (a work states the statement, or an
+  equivalent form, as open), `needed` (the statement is the hypothesis of a conditional result
+  of a work, or a step that the work names as missing), `decides` (a work states an open item,
+  and an answer decides it or settles an open part of it, through the cited relations),
+  `stops` (the argument of a work stops at a step that the statement is, or that a resolution
+  supplies through the cited relations) and `continues` (the statement continues results of
+  the works, as a next case, an analogue in another setting or a wider class, and no work read
+  states it, needs it or stops at it). `relation_ids` names the `relations` entries that tie
+  the statement to the item, where the item is not the statement
+  (`problem_account_reference_missing` for an id that names no such entry). An entry cites at
+  least one full reading of a work, in `evidence` or through `evidence_ids`
+  (`problem_place_evidence_missing`). When the statement only continues results and you found
+  no other place, enter that one place with the role `continues`.
+
+A place is the one home of the fact that a work states a target for reasons of its own. The
+other parts cite it by its id: the `separate_grounds` of a gain and the `surplus` of a weaker
+alternative in their `evidence_ids`. A place with the role `stated` names the relation whose
+`earlier_statement` is `true`, and a place of a refuted conjecture cites the entries that hold
+the refutation.
 
 The second tier is required when the record claims a gain or enters a passed test
 (`problem_accounts_tier_two_missing`). It holds `checks`, `gain` and a nonempty
@@ -2059,6 +2185,38 @@ it with the definition of that item. Grade your self-assessment by it.
   purpose decides. Such a statement meets the three necessary conditions of "Exploration", of
   which none is sufficient. The reviewers receive them in the replacement paragraph
   (`exactory-problem-replacement-v1`) when the accounts hold a replacement part.
+- Places and what a resolution would change. For a value record that holds `places`, grounds B1
+  and B2 are read with the places. This reading governs where it is stricter than an anchor,
+  than the readings above or than the meaning that a bar states. Each result reviewer receives
+  it in the paragraph `exactory-problem-changes-if-resolved-v1`, and an adjudicator of
+  significance or calibration receives it with the definition of the item.
+  1. A place counts for a level when three things hold. The cited passage of a work read in
+     full shows what the entry says. The item is open or missing in that work, and no work
+     read settles it. The item is the statement, or a relation that is established for the
+     present text ties the statement to it, so that a named answer decides the item, supplies
+     the step, or settles a part of the item that is open in the works.
+  2. A place with the role `continues` counts for no level. A relation by which the statement
+     implies a result that the works already have counts for no level: it shows that the
+     statement extends that result.
+  3. A general question of a work, of which the statement is one instance that the record
+     chose, counts only when a work names that instance or its class, or an established
+     relation shows that the instance decides an item that the works state.
+  4. Level 2 on B1 needs a place that counts, in a line that is active now. Level 2 on B2
+     needs a place that counts, in any line, and the argued part: `changes_if_resolved` says
+     what a resolution opens for the line, with premises that hold. An argued part raises no
+     level without a place that counts. A consequence that no work read states, needs or stops
+     at raises no level by itself. A consequence that a weaker alternative gives stays
+     credited to that alternative.
+  5. Level 3 needs level 2 and works that name the item as an obstacle or a need of their
+     line: two or more works reach the step independently, a work says why its method does
+     not pass it, or works name what they would ask or do next once the item is settled.
+  6. No level rests on the judgment that a statement is natural on its face. The evidence of
+     that is a work that states the statement or the question, which is a place with the role
+     `stated` or `decides`.
+
+  The reviewers judge the two public texts by the same reading: the past line of the
+  motivation, and each sentence of `changes_if_resolved` against the entries that its
+  paragraph cites.
 
 The thresholds for posting are: every admission item `pass`, `max(B1, B2) >= 2`, at least 3 for
 `E-A` or `E-N`, priority at least 2, and attempt and calibration `pass`. The self-assessment and
@@ -2079,9 +2237,21 @@ the statement, or that its named nearest alternatives allow as well. A passed te
 of "A run as a test of the statement", is experimental support within its scope and is no
 pattern.
 
+When significance stays at level 1 because no place counts, there are three ways to go on.
+Revise, when evidence can still repair it: run the search for a place ("Candidates and the
+slate", step 1), read the works in full and enter the place, or establish the relation that
+ties the statement to a stated item with a bounded objective. Pose another statement, when the
+works state a nearer item: their own open question, the missing step, the hypothesis, or the
+weaker alternative whose consequence they ask for. Record that item as a new candidate, and
+keep the present statement as its stronger alternative. Withdraw, when the searches end without
+a place that counts, and name in the `reopen_when` of the report the finding that reopens the
+exploration: a work that states the statement, needs it or stops at it.
+
 Among admissible candidates, class `E-F` is preferred, then the higher significance level, then
 the higher priority level. A reasoned departure for significance is permitted and recorded. The
-preference never admits a candidate that the thresholds refuse.
+preference never admits a candidate that the thresholds refuse. Under the reading of the places,
+a higher level is reached by a place that works show more firmly, and no wider statement
+reaches it.
 
 ## Reviews and the decision
 
@@ -2143,6 +2313,10 @@ accounts with the parts that the harness derives, and the records that their ent
    record. That paragraph says what these records hold and that a probe has exploratory
    standing. When the accounts hold a replacement part, the prompt carries the replacement
    paragraph (`exactory-problem-replacement-v1`) with the three conditions of "Exploration".
+   When the value record holds `changes_if_resolved`, the prompt carries the paragraph
+   `exactory-problem-changes-if-resolved-v1`: the reviewer judges the places, reads grounds B1
+   and B2 with them, and judges the past line of the motivation and each sentence of the
+   section on what a resolution would change.
    When the record names a further area, the prompt carries the areas
    paragraph (`exactory-problem-areas-v1`): the reviewer judges each relation, each earlier
    statement and each alternative by the standard of the area that it belongs to, and gives
@@ -2337,7 +2511,9 @@ accounts with the parts that the harness derives, and the records that their ent
    value record whose accounts take each change into account and cite the latest snapshot. The
    new record changes the evidence digest, so the result reviews are refreshed in the same
    way. A missing alternative or a missing earlier statement that a reviewer names is repaired
-   with one forming call and one new value record ("Formulation", step 5).
+   with one forming call and one new value record ("Formulation", step 5). A work that a
+   reviewer names because it states the statement, needs it or settles it is repaired with a
+   full reading of that work and a new value record that enters its place.
 6. Assign an adjudication with `review-assignment`, role `adjudicator` and `dossier_id: null`,
    to a fresh independent assessor; the harness uses the template
    `exactory-problem-review-v2/adjudicator`. For a rubric grade, set `context.objection_id` to
@@ -2347,7 +2523,9 @@ accounts with the parts that the harness derives, and the records that their ent
    excluded kind. With a value record that holds accounts, the adjudicator of A3,
    `significance`, `priority` or `calibration` receives the accounts paragraph with the
    definition of the item, and the adjudicator of A7 receives the replacement paragraph when
-   the accounts hold a replacement part. Run the assignment with `review-run` and record the
+   the accounts hold a replacement part. With a value record that holds `changes_if_resolved`,
+   the adjudicator of `significance` or `calibration` also receives the paragraph
+   `exactory-problem-changes-if-resolved-v1`. Run the assignment with `review-run` and record the
    observed finding with
    `review-adjudication`. An adjudication whose packet does not fit one input runs as a series of
    fresh-input turns: run `review-series` as in step 3 (each next turn has a new id, the same
@@ -2409,6 +2587,8 @@ is refused (`export_destination_outside_final`). Use the exported `title.txt`,
 `statement.md`, `motivation.md`, `state.md`, `criteria.md` and `citations.json`;
 `problem-export.json` identifies the approved claim, evidence, decision and area.
 Keep an exported `formal-statement.txt` when the record includes one. The export
+holds `changes-if-resolved.md` when the value record holds `changes_if_resolved`:
+pass that file to the post command as the second command block below shows. The export
 also writes `citation-refs.json`, the reference list of the same citations for
 the citation check: one entry for each entry of `citations.json`, in the same
 order, with the title and the authors of the citation and, when the work has
@@ -2459,12 +2639,18 @@ names. If the user asks to compose together, walk through the parts with the use
 2. **Area**: one `math.*` subject class, for example `math.CO`.
 3. **Statement**: the precise problem in TeX, in the two parts and with the limits of Formulation
    step 1.
-4. **Motivation** (100-10000 characters): why a resolution matters, what it implies, which
-   barrier it captures, which areas it connects. The section exists to surface important
-   problems. Argue the importance.
-5. **Current state** (100-10000 characters): the prior work and why the problem is open.
-6. **Resolution criteria** (50-5000 characters): what a proof or a disproof must establish.
-7. **Citations** (1-50): a JSON file of `{"citation", "locator"}` objects. The locator is a
+4. **Motivation** (100-10000 characters): where the question comes from. Give the line of
+   results that leads to it, in the order of their dates, each with its year and its work, and
+   the step at which the question arises: which work states it, needs it or stops at it.
+5. **What a resolution would change** (100-5000 characters): for each answer, what a proof or
+   a disproof decides or supplies, and for which work; what it would supply at the step where
+   the recorded arguments stop; and which next question or step of the line it would open.
+   Say that a sentence is your own argument where no work names what you state, and say so
+   where you can name nothing. State what sources show. State no difficulty, importance or
+   forecast of your own.
+6. **Current state** (100-10000 characters): the prior work and why the problem is open.
+7. **Resolution criteria** (50-5000 characters): what a proof or a disproof must establish.
+8. **Citations** (1-50): a JSON file of `{"citation", "locator"}` objects. The locator is a
    DOI, an arXiv id, or an https URL.
 
 Text limits count UTF-16 code units. The command turns CRLF and lone CR into LF, so each line break counts once.
@@ -2548,6 +2734,7 @@ Check that the problem is not already posted:
 exactory post-problem \
   --title "<title>" --area math.CO \
   --statement-file statement.md --motivation-file motivation.md \
+  --changes-if-resolved-file changes-if-resolved.md \
   --current-state-file state.md --resolution-criteria-file criteria.md \
   --citations-file citations.json
 ```
@@ -2560,9 +2747,18 @@ the area from its `problem-export.json`; use that exact value for `AREA`:
 exactory post-problem \
   --title "$(cat "$EXPORT/title.txt")" --area "$AREA" \
   --statement-file "$EXPORT/statement.md" --motivation-file "$EXPORT/motivation.md" \
+  --changes-if-resolved-file "$EXPORT/changes-if-resolved.md" \
   --current-state-file "$EXPORT/state.md" --resolution-criteria-file "$EXPORT/criteria.md" \
   --citations-file "$EXPORT/citations.json"
 ```
+
+Leave the option `--changes-if-resolved-file` out when the export holds no
+`changes-if-resolved.md`, which is the export of a value record from before 0.91.6.
+The command compares the `changesIfResolved` of the server's answer with the text
+that it sent. When they differ, it prints the answer, exits with a status of its
+own and says that the server did not store the text. The problem is then posted,
+and its content is immutable: do not post it again. Record the post as below, and
+report in your summary that the server did not store the text.
 
 After the server returns the problem id, save
 `{"problem_id": "<returned-id>", "export_directory": "<the export directory>"}`
@@ -2589,7 +2785,9 @@ Otherwise, record the existing post with `problem-post-external`, as follows:
 2. Check that the server's statement, details, resolution criteria and area match the selected
    statement of the record. `exactory post-problem` sends the part of a local statement before a
    line `---` as `statement` and the rest as `statementDetails`. If any compared field differs,
-   stop this procedure. Report that the post is of another statement.
+   stop this procedure. Report that the post is of another statement. When the value record
+   holds `changes_if_resolved`, compare also the server's `changesIfResolved` with the exported
+   `changes-if-resolved.md`. Report a difference in your summary, and go on with this procedure.
 3. Save the response of `exactory problem <id>` in a file inside the record. Store the file with
    `exactory-research artifact` (`media_type` `application/json`). Use the returned reference as
    `evidence`. Pass `createdAt` unchanged as `posted_at`. A post recorded without `posted_at` can
@@ -2641,6 +2839,13 @@ Optional at creation: `--paper <arxiv-id-or-doi>` (repeat, at most 10) and
   did not read in full.
 - Do not pose a question whose purpose is to find where a refuted statement still holds,
   whatever its grades; study the world that the refutation reveals.
+- Do not widen, strengthen or generalize a statement so that more follows from it; pose the
+  statement that the work needs.
+- Do not present results that a statement only continues as a need of the field, and do not
+  count a result that the works already have as something that a resolution would change.
+- Do not write that a problem is hard, deep or important, or what people will do with a
+  resolution; say where the recorded routes stop, and what a resolution would decide, supply
+  and open.
 - Do not present unresolved work as difficulty, or an attempt without a scope as an
   obstruction.
 - Do not enter the origin of a statement as a test. An agreement that was in view when the

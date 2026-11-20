@@ -4660,7 +4660,7 @@ since 0.73.0, and is checked, not refused.
 | `problem-statement` | `{id, title, area, statement, resolution_criteria, neighbours, formal_statement, candidate_id}` and the optional `revises_statement_id` | `problem_statement/<id>` and `problem_selection/current = {statement_id}`. Statement and criteria are nonempty text with TeX mathematics. Write `statement` in the two parts of [math-conjecturer Formulation step 1](../skills/math-conjecturer/SKILL.md#formulation), with the optional `---` line and the details in the same field. Neighbours are formulation texts, possibly empty. Formal statement is optional, null or `{language, text}`. `candidate_id` is optional, null or the id of a current candidate that the statement formulates (`problem_candidate_missing`). The area must equal the immutable problem record's area (`problem_area_mismatch`); for another subject class, the rule of [math-conjecturer Exploration](../skills/math-conjecturer/SKILL.md#exploration) applies. Any other changed field requires a new statement id and moves the selection. `revises_statement_id` is optional: the id of the statement record that this one revises (`problem_statement_missing` when the store holds no statement record with that id). The harness reads these references to list the runs on the earlier texts of a statement beside the runs on its current text ([The accounts of a value record](#the-accounts-of-a-value-record)). The statement digest covers `statement` and `resolution_criteria`, so a revision that changes only the neighbours keeps the digest. A record without the field keeps the bytes of 0.82.0. |
 | `problem-attempt` | `{id, statement_id, kind, solver, literature, outcomes, proportion}` | Appends `problem_attempt/<id>`, adding `recorded_revision`. Binds the current statement to a solver attempt delivered in this store or a critically assessed full-reading literature attempt. The latest record by recorded revision is current; a resolved attempt blocks posting as an open problem. |
 | `problem-openness` | `{assignment_id}` | Records `problem_openness/<id>` from the observed native result review. Every supplied minimum must pass the shared closed-schema validation. `supported_open` advances the claim; `unresolved` records the gap without an evidence audit; `already_solved` redirects to the settling result and blocks posting as open. |
-| `problem-value` | `{id, statement_id, accounts, motivation, current_state}` | `problem_value/<id>` holds the accounts of the statement and two ordered paragraph arrays. Each paragraph is `{text, evidence}` with the optional `field_fact`, and its nonempty evidence cites entries of the accounts. `accounts` is required (`problem_accounts_required` otherwise). The record adds `recorded_revision`, the dates that the harness derives and, since 0.91.2, `accounts_version: 2`, which a payload cannot set. [The accounts of a value record](#the-accounts-of-a-value-record) gives the parts, the rules, the derived parts and the refusals. A value record that an earlier release recorded has no accounts and keeps its contract. Since 0.89.2 the response of a new `problem-value` carries `size_report`; [Imported forming history](#imported-forming-history) gives its scope and its fields (the size report). The stored receipt holds none. |
+| `problem-value` | `{id, statement_id, accounts, motivation, changes_if_resolved, current_state}` | `problem_value/<id>` holds the accounts of the statement and three ordered paragraph arrays. Each paragraph is `{text, evidence}` with the optional `field_fact`, and its nonempty evidence cites entries of the accounts. `accounts` is required (`problem_accounts_required` otherwise). Since 0.91.6 a new value record also holds the part `places` of the accounts (`problem_places_required` otherwise) and the paragraph array `changes_if_resolved` (`problem_changes_if_resolved_required` otherwise), the public section "What a resolution would change". The record adds `recorded_revision`, the dates that the harness derives and, since 0.91.2, `accounts_version: 2`, which a payload cannot set. [The accounts of a value record](#the-accounts-of-a-value-record) gives the parts, the rules, the derived parts and the refusals. A value record that an earlier release recorded has no accounts, or has accounts without `places` and no `changes_if_resolved`, and keeps its contract. Since 0.89.2 the response of a new `problem-value` carries `size_report`; [Imported forming history](#imported-forming-history) gives its scope and its fields (the size report). The stored receipt holds none. |
 | `problem-citation-metadata` | `{id, version_id, title, authors, year, evidence}` | Appends `problem_citation_metadata/<id>`, adding `provenance` and `recorded_revision`, for an existing `url:` work with no DOI and no arXiv identity among its id, its aliases and its metadata (`problem_citation_work_ineligible` otherwise) that a valid full reading of this store covers (`problem_value_reading_missing` otherwise). `title` is nonblank text, `authors` is a nonempty ordered array of nonblank names, and `year`, optional, is four ASCII digits; a record without a year is cited without one, with no fallback to the work's year. `evidence` is `{title: span, authors: [span, ...], year: span}`: one span for the title, one span per author in the same order, and a year span exactly when `year` is given. A span is `{kind, source_id, sha256, start, end}`. `kind` is `fulltext`, the extracted text of a `fulltext` capture of this exact version, or `response`, the captured response of a `source` record; `source_id` names that source record; `sha256` is the hash of the retained object, the `text.sha256` of the capture or the `response.sha256` of the source record; `start` and `end` are zero-based UTF-8 byte offsets into that object, end exclusive, with `0 <= start < end <= size`. The selected bytes must equal the UTF-8 encoding of the field value exactly (`problem_citation_span_mismatch` otherwise): no JSON escape is decoded, no whitespace is normalized and no fragments are combined, so a line-wrapped title in a PDF text needs another retained capture that holds the clean title. An offset inside a multibyte character, or an object that is not valid UTF-8, is `invalid_input`. Every object is resolved through the stored records and the artifact store, never through a caller path: an absent source record is `unknown_source`; a source whose response is not a complete capture, or a capture that is not available and extracted, is `source_pending`; a `sha256` that is not the response of that source, a full text that no capture of this version with that source holds, or a retained object that is missing is `problem_citation_evidence_unbound`; retained bytes that fail their integrity check are `artifact_corrupt`. The record keeps the resolved provenance of every span: the source record's identity fields and digest, the response hash and, for a full text, the capture digest with the text and original hashes. The latest record for a version by `(recorded_revision, id)` is selected and revalidated at every projection. A correction is a new id with the complete replacement payload; a changed payload under an existing id is `record_conflict`. The selected record supplies the citation text alone; the locator does not change. |
 | `problem-citation-locator` | `{id, version_id, reading_id, original_sha256, url, source_id}` | Appends `citation_locator/<id>`, adding `reading_digest`, `source_digest` and `recorded_revision`: the HTTPS location of the exact original that an existing reading read. It supplies the locator of a read work that has no DOI, no arXiv id and no bundle HTTPS URL, for example a manuscript PDF in a GitHub repository, after those three in the locator order of `export --kind problem` (below); the citation text does not change. Every field is nonblank text. A payload that fails any of these conditions is refused with `problem_citation_locator_unbound`: `url` is an absolute `https` URL with a host, without a user name, a password, a fragment, whitespace or the port 0; `reading_id` names a reading of `version_id`; the bundle of that reading has `original_sha256`; `source_id` names a `source` record with this exact `url`, status `captured`, a complete response and a verified origin, whose response has the hash `original_sha256`; for a `url:` work, the text after `url:` equals `url`; a full-text capture of the work names this source and this original. The reading itself must still be valid (its own codes). Retained bytes that fail their integrity check are `artifact_corrupt`. The reading, its bundle and the work stay unchanged, and no new reading is needed. The latest record of a reading by `(recorded_revision, id)` is selected and revalidated at every projection; a selected record whose reading or source record changed after it was made is refused with `problem_citation_locator_unbound`. A correction is a new id; a changed payload under an existing id is `record_conflict`. |
 | `problem-assessment` | `{id, statement_id, grades, items, primary}` | `problem_assessment/<id>` binds the rubric self-assessment to the current statement, adding `recorded_revision`. Each item has evidence and a note; `primary` names its significance ground and criterion. |
@@ -7066,7 +7066,10 @@ folder, in the details); its message names the default.
 An unready export returns `readiness_required`. The deterministic projection is
 `title.txt`, `statement.md`, `motivation.md`, `state.md`, `criteria.md`,
 `citations.json`, `citation-refs.json`, optional `formal-statement.txt`, and
-`problem-export.json`.
+`problem-export.json`. Since 0.91.6 it also holds `changes-if-resolved.md` when
+the value record holds `changes_if_resolved`: the texts of its paragraphs, with
+one empty line between them. An export of a value record without that part
+keeps its file set and its digest.
 The manifest contains `{schema, statement_id, statement_digest,
 problem_evidence_digest, decision_id, area, formal_statement_language,
 files: {name: sha256}}`, with `schema` set to `exactory-problem-export-v2`.
@@ -8025,10 +8028,20 @@ alternatives ([math-conjecturer The accounts](../skills/math-conjecturer/SKILL.m
 recorded has no accounts. It is validated, digested, projected and gated under
 the contract of its release, and it needs no change.
 
+Since 0.91.6 `problem-value` also requires two things in every new value
+record: the part `places` of the accounts (`problem_places_required`
+otherwise), and the paragraph array `changes_if_resolved`
+(`problem_changes_if_resolved_required` otherwise). `places` records in which
+works of the field the statement arises. `changes_if_resolved` is the public
+section "What a resolution would change". Both are described below, after
+`replacement`. A value record without them, which an earlier release recorded,
+is validated, digested, projected and gated as before. Its export keeps its
+file set, and its prompts keep their bytes.
+
 The payload of `problem-value` is `{id, statement_id, accounts, motivation,
-current_state}`. `statement_id` names the current statement
+changes_if_resolved, current_state}`. `statement_id` names the current statement
 (`problem_statement_missing` otherwise). `exactory-research example
-problem-value` prints a payload of the first tier.
+problem-value` prints a payload of the first tier with one place.
 
 The version of the accounts. Since 0.91.2 `problem-value` writes
 `accounts_version: 2` into each new value record. The member names the rules
@@ -8050,7 +8063,8 @@ The accounts have two tiers. Every problem holds the first tier: `answer`,
 `relations` and `refuted_conjectures`. The second tier, `checks`, `gain` and a
 nonempty `search_coverage`, is required when the record claims a gain or enters
 a passed test (`problem_accounts_tier_two_missing`). `replacement` is required
-in its two cases (below). A key outside these twelve is `invalid_input`.
+in its two cases (below). `places` is required in a new value record (below).
+A key outside these thirteen is `invalid_input`.
 
 Rules that hold for the entries of every part:
 
@@ -8070,9 +8084,9 @@ Rules that hold for the entries of every part:
   An id that no entry holds is `problem_account_reference_missing`, and
   references that lead back to their entry are
   `problem_account_reference_cycle`.
-- `scope`, in `answer_evidence`, `boundaries`, `explanatory_use` and
-  `relations`, is nonempty text: the scope within which the fact holds.
-- `date`, in those four parts and in `checks`, is the day on which the fact
+- `scope`, in `answer_evidence`, `boundaries`, `explanatory_use`, `relations`
+  and `places`, is nonempty text: the scope within which the fact holds.
+- `date`, in those five parts and in `checks`, is the day on which the fact
   became available: `unknown`, `YYYY`, `YYYY-MM`, `YYYY-MM-DD` or a timestamp
   with a timezone. When every reference that the entry rests on gives a date,
   the harness records the latest of them as `date`, also in place of a value
@@ -8202,8 +8216,29 @@ cites and the forms that these change, through `previous`. The second is every
 entry of `refuted_conjectures`. A refuted form of the purpose `alternative`
 enters `boundaries` and needs no replacement entry.
 
-A paragraph of `motivation` or `current_state` is `{text, evidence}` with the
-optional `field_fact`. `evidence` is nonempty. Each reference is
+`places` is a list of `{id, fact, scope, role, relation_ids, evidence,
+evidence_ids}` with the optional `date`: the places of the statement in the
+work of its field. A place is a work, or a group of works on one question, in
+which the statement arises. `fact` says what the works do: the question that
+they study, the result that they reach, and the item that they state, need or
+stop at. `role` is an open value `{kind, description}` with two nonempty
+texts: how the statement stands to that item. The described kinds are
+`stated`, `needed`, `decides`, `stops` and `continues`
+([math-conjecturer The accounts](../skills/math-conjecturer/SKILL.md#the-accounts)),
+and the harness accepts every kind. `relation_ids` is a list, possibly empty,
+of the ids of `relations` entries: the relations that tie the statement to
+the item, where the item is not the statement
+(`problem_account_reference_missing` for another id). These relations add no
+evidence to the place. The entry rests on at least one full reading, in
+`evidence` or through `evidence_ids`, and an imported full reading counts
+(`problem_place_evidence_missing` otherwise). A new value record holds the
+part with at least one entry (`problem_places_required` otherwise). The harness
+checks the form of an entry and its reading. It does not check that a passage
+of the work shows what the entry says. The reviewers judge that.
+
+A paragraph of `motivation`, `changes_if_resolved` or `current_state` is
+`{text, evidence}` with the optional `field_fact`. `evidence` is nonempty.
+Each reference is
 `{kind: "account", id}`, the id of an entry of the accounts. A paragraph with
 `field_fact: true` can also cite a full reading directly, as `{kind:
 "reading", version_id, reading_id}`, for a fact about the field that no part of
@@ -8211,6 +8246,16 @@ the accounts holds; another direct reference is
 `problem_value_account_required`. A paragraph whose cited entries are all
 expected relations is refused (`problem_value_expected_only`). The delivered
 evidence of a paragraph is the evidence that its cited entries rest on.
+
+In a new value record, `changes_if_resolved` is a nonempty list of such
+paragraphs. At least one paragraph of `motivation` and at least one of
+`changes_if_resolved` cite an entry of `places`
+(`problem_value_place_uncited`, with `section`). The post sends the texts of
+`changes_if_resolved` with one empty line between them, and the server accepts
+100 to 5,000 UTF-16 code units after the trim. `problem-value` applies the same
+count to the joined text (`problem_changes_if_resolved_length`, with
+`characters`, `minimum` and `maximum`), so that a text of another length is
+refused before the reviews and not at the post.
 
 Some entries are shortfalls that the harness records without a refusal: a
 surplus with the status `neither`, a derivation with the status
@@ -8323,20 +8368,27 @@ under both versions ([Imported forming history](#imported-forming-history)).
 In a review delivered in fresh parts, the value part travels whole in every
 frame. The result coverage check requires the request of a review to carry
 `value` and `account_records` with their current values
-(`problem_evidence_unassessed` with the keys under `missing`).
+(`problem_evidence_unassessed` with the keys under `missing`). For a value
+record that holds them, `places` stands in the delivered `accounts`, and the
+value part carries `changes_if_resolved`, each paragraph with its
+`delivered_evidence`. An adjudicator packet lists each paragraph of
+`changes_if_resolved` among its targets, as `value:changes_if_resolved:<index>`.
 
 Reviewer paragraphs. A prompt carries an optional paragraph only when its
 packet carries the material or continues a packet that carried it. The
 registry is `PARAGRAPHS` in
 `research_harness/review_prompt_paragraphs.py`, and the order is fixed: the
-carry paragraph, the accounts paragraph, the probes paragraph, the slate
+carry paragraph, the accounts paragraph, the probes paragraph, the paragraph on
+what a resolution would change, the slate paragraph, the slate places
 paragraph, the replacement paragraph and the areas paragraph.
 
 | Paragraph | Roles | Present when |
 | --- | --- | --- |
 | `exactory-problem-accounts-v1` | Result, in every turn of a series; adjudicator of `A3`, `priority`, `calibration` or `significance`, with the definition of the item | The delivered value record holds accounts. |
 | `exactory-problem-account-probes-v1` | Result, in every turn of a series; adjudicator of `A3`, `priority`, `calibration` or `significance`, with the definition of the item | The accounts paragraph is present, the delivered value record states `accounts_version: 2`, and `account_records` holds a `probe` record of this store. |
+| `exactory-problem-changes-if-resolved-v1` | Result, in every turn of a series; adjudicator of `significance` or `calibration`, with the definition of the item | The delivered value record holds `changes_if_resolved`. |
 | `exactory-problem-slate-forming-v1` | Slate | A current candidate has the retired source kind `phenomenon`, or its `source.evidence` cites a forming call or a form outcome. The slate packet then keeps those references in the candidate's `source.evidence`. |
+| `exactory-problem-slate-places-v1` | Slate | The slate packet holds `place_review`. The packet of a new slate assignment holds it since 0.91.6, also when the assignment refreshes an earlier review in its slot. A continuation or a repair holds it when its parent does. |
 | `exactory-problem-replacement-v1` | Result; adjudicator of `A7`, with the definition of the item | The accounts hold a nonempty `replacement`. |
 | `exactory-problem-areas-v1` | Bar; result | The record names a further area, so the packet carries `problem_areas` ([Further areas](#further-areas)). |
 
@@ -8364,6 +8416,25 @@ paragraph, for example `/accounts-v1/replacement-v1`, and its
 envelope keeps them, so an assignment rebuilds from its own envelope after a
 later version of a paragraph is registered. An assignment whose packet calls
 for no paragraph keeps the prompt bytes of 0.82.0.
+
+Two paragraphs are registered since 0.91.6. The paragraph on what a resolution
+would change says what `places` and `changes_if_resolved` hold, when a place
+counts for a level of ground B1 or B2, what the section and the past line of
+the motivation say, what the record can report about the step at which a route
+stops, and where each judgment goes. It governs where it is stricter than an
+anchor, than the accounts paragraph or than a bar. Its template suffix is
+`/changes-if-resolved-v1`. The slate places paragraph asks, for every candidate
+of a slate review, in which work the candidate arises, and it asks for level 1
+on both grounds of significance for a candidate whose places show no need. Its
+condition
+reads a member of the slate packet: the packet of a new slate assignment
+carries `place_review: {protocol: "exactory-problem-slate-places-v1"}` since
+0.91.6. A recorded slate packet holds no such member, so a recorded slate
+review keeps its prompt and stays verified. A continuation or a repair takes
+the member from the packet of its parent, so the continuation or the repair of
+such a recorded review holds no member and keeps the paragraphs of its parent.
+The template suffix is `/slate-places-v1`. Both paragraphs leave the response
+shapes as they are.
 
 Refusals of `problem-value` for the accounts, beside the codes of the cited
 evidence:
@@ -8400,6 +8471,11 @@ evidence:
 | `problem_form_missing` | `form_id` of a `replacement` entry names no form with the standing `refuted`. Record that outcome with `form-outcome` first. |
 | `problem_value_account_required` | A paragraph cites a reference that is no account entry, and it is not a full reading in a paragraph with `field_fact: true`. Enter the fact in its account, and cite the entry. |
 | `problem_value_expected_only` | Every entry that a paragraph cites is an expected relation. Establish a relation, or cite an entry that holds a fact. |
+| `problem_places_required` | The accounts of a new value record hold no `places`, or an empty list. Add one entry for each work in which the statement arises. When no work read states the statement, needs it or stops at it, enter one place with the role `continues`. |
+| `problem_place_evidence_missing` | A place rests on no full reading (`id`). Cite a full reading of the work in `evidence`, or cite in `evidence_ids` an entry that holds one. |
+| `problem_changes_if_resolved_required` | The payload of a new value record has no `changes_if_resolved`. Add the paragraphs of the section "What a resolution would change". |
+| `problem_value_place_uncited` | No paragraph of `motivation`, or no paragraph of `changes_if_resolved`, cites an entry of `places` (`section`). Cite a place in that section, as `{kind: "account", id}`. |
+| `problem_changes_if_resolved_length` | The joined text of `changes_if_resolved` is outside the length that the post accepts (`characters`, `minimum`, `maximum`). Make the paragraphs shorter or longer. |
 
 ### Further areas
 

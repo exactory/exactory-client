@@ -17,6 +17,14 @@ from test_research_problem_delivery import ProblemDeliveryCase
 class ProblemComputationTests(ProblemToolsCase):
     build_provider_response = review_fixtures.ProblemReviewTests.build_provider_response
 
+    def setUp(self):
+        super().setUp()
+        # The place of a new value record rests on a full reading; the evidence of these values is computations.
+        self.place_reading = self.record_full_reading()
+
+    def build_value(self, evidence, identifier="value-1"):
+        return super().build_value(evidence, identifier, place_evidence=[self.place_reading])
+
     def build_computation_evidence(self, observed):
         return {"kind": "computation", "execution_id": observed["id"], "output_id": "result", "formal_check": None}
 
@@ -199,8 +207,13 @@ class ProblemComputationTests(ProblemToolsCase):
 
 
 class ProblemFormalGateTests(ProblemToolsCase, ProblemDeliveryCase):
+    def build_value(self, evidence, identifier="value-1"):
+        return super().build_value(evidence, identifier, place_evidence=[self.full_reading])
+
     def prepare_requested_support(self, requested=True):
         plan, observed = self.run_problem()
+        # The place of a new value record rests on a full reading; the evidence of these values is computations.
+        self.full_reading = self.record_full_reading()
         self.selected = self.load_problem_module().find_current_statement(self.store.snapshot()["records"])
         from test_research_problem_attempt import record_solver_attempt
         record_solver_attempt(self, self.selected)
