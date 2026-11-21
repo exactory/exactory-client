@@ -15,6 +15,7 @@ from strategy_fixtures import StrategyCase
 import test_review_session_v4_turns as turn_fixtures
 from research_harness import bar_sources, research_decisions as decisions, review_context_repair as repair
 from research_harness import review_continuation as continuation, review_excerpts
+from research_harness import review_parts as parts, review_parts_v3 as parts_v3
 from research_harness import review_prompt_paragraphs as paragraphs, review_protocol as protocol
 from research_harness import review_route_capacity as capacity, review_session_v4 as session
 from research_harness import review_transport as transport
@@ -244,6 +245,29 @@ class SessionRolePromptTests(unittest.TestCase):
         self.finish(final, [dict(ref=unit['handle'])])
         plan = continuation.plan_next(self.case.read_records(), self.case.artifacts, final['id'])
         self.assertEqual(plan['state'], 'done', plan)
+
+
+class StudySeriesBelowFloorTests(unittest.TestCase):
+    """A new study result that the v4 admission stops for capacity (the scope of rule V5)."""
+
+    def test_v5_new_study_result_below_the_v4_floor_starts_a_series_of_the_parts_protocol_v3(self):
+        """The readiness packet is larger than the input of the route, so the base path starts a series."""
+        import test_review_parts_study as study_fixtures
+        from development_fixtures import DevelopmentCase
+        case = study_fixtures.ReadinessPartsTests()
+        self.addCleanup(case.doCleanups)
+        # The probe of the route observes 255,000 input tokens, 127,000 after the output reserve: below the floor of
+        # a v4 request turn of this packet and above that of a parts v3 turn.
+        with patch.object(DevelopmentCase, 'capacity_probe_tokens', 255000, create=True):
+            case.setUp()
+        case.enlarge_readiness()
+        with patch.object(protocol, 'NEW_SESSION_RULES', (session.PROTOCOL, bar_sources.PROTOCOL_V3)), \
+                patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts_v3.PROTOCOL, parts.PROTOCOL)):
+            first = case.assign()
+        self.assertEqual(first['session_admission']['reason'], 'below_floor')
+        self.assertNotIn('session_chain', first)
+        self.assertEqual({key: first[parts.KEY][key] for key in ('protocol', 'adapter', 'kind', 'series_assignment_id')},
+                         dict(protocol=parts_v3.PROTOCOL, adapter='study_readiness', kind='read', series_assignment_id='first'))
 
 
 class StudyBarFormsTests(StrategyCase):

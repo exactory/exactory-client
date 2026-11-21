@@ -209,9 +209,31 @@ class SessionEntryTests(unittest.TestCase):
     def test_clean_exhaustion_changed_reviewer_reads_bodies_again(self):
         self.check_exhaustion_credit(reviewer='replacement-reviewer')
 
-    def check_capacity_stop(self, payload):
-        """Rule V5: an assignment that the v4 admission stops for capacity ends before any write, with the stop of a
-        first request that does not fit; under the rules v3 alone the same payload still takes the base path."""
+    def check_base_path(self, payload):
+        """A context repair that the v4 admission stops for capacity is recorded as under the rules v3 alone."""
+        responses = []
+        for preference in ((bar_sources.PROTOCOL_V3,), (session.PROTOCOL, bar_sources.PROTOCOL_V3)):
+            with patch.object(protocol, 'NEW_SESSION_RULES', preference):
+                responses.append(check_mutation(self.case.store, protocol.record_assignment, payload,
+                    expected_revision=self.case.store.revision, request_id='check-' + payload['id'], bounded_payload=payload))
+        self.assertEqual(responses[1].pop('session_admission')['reason'], 'below_floor')
+        # The observed artifacts also hold those that the refused admission read.
+        self.assertLessEqual(set(responses[0].pop('artifact_digests')), set(responses[1].pop('artifact_digests')))
+        self.assertEqual(responses[0], responses[1])
+        saved = self.case.mutate(protocol.record_assignment, payload)['result']
+        self.assertNotIn('session_chain', saved)
+        self.assertTrue(saved['reassessment_required'])
+        self.assertEqual(self.read_packet(saved)['context_repair']['assignment_id'],
+                         payload['context']['context_repair']['assignment_id'])
+        return saved
+
+    def test_new_slot_below_the_v4_floor_stops_and_a_context_repair_takes_the_next_rule_set(self):
+        """Rule V5 and its scope: a new slot ends before any write with the stop and step 14 on the serving route,
+        and a context repair of a v4 chain on the same route takes the next rule set."""
+        self.add_sources([2000])
+        record_codex_route(self.case, 'small-route', model='gpt-6-astra', output_tokens=1500)
+        payload = dict(id='small-slot', route_id='small-route', dossier_id=None, role='bar', reviewer_id='second',
+                       author_id='author', context={})
         with patch.object(protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,)):
             checked = check_mutation(self.case.store, protocol.record_assignment, payload,
                 expected_revision=self.case.store.revision, request_id='check-' + payload['id'], bounded_payload=payload)
@@ -219,18 +241,11 @@ class SessionEntryTests(unittest.TestCase):
         revision = self.case.store.revision
         with self.assertRaises(ResearchError) as caught:
             self.case.mutate(protocol.record_assignment, payload)
-        self.assertEqual((caught.exception.code, caught.exception.details['reason']),
-                         ('review_route_capacity_below_floor', session.SESSION_BELOW_FLOOR_REASON))
-        self.assertEqual(caught.exception.details['admission']['reason'], 'below_floor')
+        details = caught.exception.details
+        self.assertEqual((caught.exception.code, details['reason'], details['admission']['reason']),
+                         ('review_route_capacity_below_floor', session.SESSION_BELOW_FLOOR_REASON, 'below_floor'))
         self.assertEqual(self.case.store.revision, revision)
-        return caught.exception.details
-
-    def test_slot_and_repair_that_v4_admission_stops_for_capacity_end_before_their_first_call(self):
-        self.add_sources([2000])
-        record_codex_route(self.case, 'small-route', model='gpt-6-astra', output_tokens=1500)
-        slot = self.check_capacity_stop(dict(id='small-slot', route_id='small-route', dossier_id=None, role='bar',
-                                             reviewer_id='second', author_id='author', context={}))
-        self.assertEqual([(answer['route_id'], [step['id'] for step in answer['steps']]) for answer in slot['then']],
+        self.assertEqual([(answer['route_id'], [step['id'] for step in answer['steps']]) for answer in details['then']],
                          [('route', [14])])
         head = self.case.assign('bar', 'first', identifier='predecessor')
         self.assertIn('session_chain', head)
@@ -238,9 +253,18 @@ class SessionEntryTests(unittest.TestCase):
         self.case.mutate(protocol.record_context_event, dict(id='cause', assignment_id=head['id'], kind='contamination',
             source='author_history', reason='A recorded exposure.', evidence=[self.case.supporting]))
         probe_codex_route(self.case, 'repair-probe', 'small-route')
-        repaired = self.check_capacity_stop(self.build_repair_payload(head, 'small-route'))
-        self.assertEqual([(answer['route_id'], [step['id'] for step in answer['steps']]) for answer in repaired['then']],
-                         [('route', [8, 7, 1])])
+        self.check_base_path(self.build_repair_payload(head, 'small-route'))
+
+    def test_repair_of_a_v3_chain_that_v4_stops_for_capacity_is_recorded_under_the_rules_v3(self):
+        self.add_sources([2000])
+        record_codex_route(self.case, 'small-route', model='gpt-6-astra', output_tokens=1500)
+        with patch.object(protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,)):
+            head = self.case.assign('bar', 'first', identifier='predecessor')
+        self.assertEqual(self.read_packet(head)['source_rules'], bar_sources.PROTOCOL_V3)
+        self.case.mutate(protocol.record_context_event, dict(id='cause', assignment_id=head['id'], kind='contamination',
+            source='author_history', reason='A recorded exposure.', evidence=[self.case.supporting]))
+        probe_codex_route(self.case, 'repair-probe', 'small-route')
+        self.check_base_path(self.build_repair_payload(head, 'small-route'))
 
 
 class LegacySessionBytesTests(unittest.TestCase):

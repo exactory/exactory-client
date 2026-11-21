@@ -3928,7 +3928,6 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 if admission['state'] == 'record':
                     return review_session_v4.prepare_session_assignment(records, artifacts, value, route,
                         expected_revision + 1, logical=logical, admission=admission, slot=slot_identifier)
-                review_session_v4.require_session_capacity(records, planning, value, logical, admission)
         diagnostics = {}
         reading_logical = None
         carried_report = None
@@ -4184,6 +4183,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             if 'source_rules' not in packet:
                 base_prompt_parameters.pop('source_rules', None)
             prompt = review_parts.build_turn_prompt(value['role'], base_prompt_parameters, packet[review_parts.KEY])
+        elif session_admission is not None and repair is None:
+            # Rule V5: the one place where a new chain that v4 did not admit starts as a session of an older rule set.
+            review_session_v4.require_session_capacity(records, artifacts, value, logical, session_admission)
         restart = None
         try:
             history = review_problem_history.bound_history(

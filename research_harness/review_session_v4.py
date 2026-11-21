@@ -605,17 +605,16 @@ def list_session_serving_routes(records, artifacts, value, logical):
 
 
 def require_session_capacity(records, artifacts, value, logical, admission):
-    """Rule V5: a new chain that the admission of the rules v4 stops for capacity ends before its first call, with
-    the stop that a first request which does not fit gets and the routes that serve the chain. It does not start
-    under the next rule set, whose turns have no capacity plan. A stop for another reason takes the next rule set."""
+    """Rule V5: a new chain that the admission of the rules v4 stops for capacity, and that would start as a session
+    of an older rule set, which has no capacity plan, ends before its first call, with the stop that a first request
+    which does not fit gets and the routes that serve the chain. A stop for another reason takes the next rule set."""
     if admission['state'] != 'stop' or admission['reason'] != 'below_floor':
         return
     from .errors import ResearchError
     from .review_route_capacity import CAPACITY_STOP_MESSAGE, CAPACITY_OWNER_DECISION, UNSERVED_REVIEW_MESSAGE
     from .review_plan_steps import describe_capacity_steps
     serving = list_session_serving_routes(records, artifacts, value, logical)
-    # A new chain of v4 continues no session of its own bar, so its steps start it on a serving route; a context
-    # repair names its predecessor in its context and gets the steps of a repair.
+    # A new chain of v4 continues no session of its own bar, so its steps start it on a serving route.
     details = dict(reason=SESSION_BELOW_FLOOR_REASON, admission={key: copy.deepcopy(admission[key])
                    for key in ('protocol', 'reason', 'code', 'details') if key in admission},
                    serving_routes=serving, owner_decides=CAPACITY_OWNER_DECISION,
