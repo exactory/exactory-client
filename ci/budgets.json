@@ -1,5 +1,5 @@
 {
-  "test_processes": 8,
+  "test_processes": 12,
   "runs": {
     "implementer_run": {"wall_seconds": 600},
     "must_pass_run": {"wall_seconds": 2700},
