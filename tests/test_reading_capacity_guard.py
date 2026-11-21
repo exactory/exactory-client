@@ -156,8 +156,9 @@ class ReadingCapacityGuardTests(unittest.TestCase):
                 changed = copy.deepcopy(row)
                 changed['evidence']['tests'] = []
                 self.assertTrue(capacity_guard.validate_entry(changed))
+        # 0.92.0 completes Q5, Q7 and Q8 (capacity-guard-3); their evidence keeps the executed v7 part.
         for identifier in ('Q5', 'Q7', 'Q8'):
-            self.assertEqual(rows[identifier]['coverage'], 'stop_before_call')
+            self.assertEqual(rows[identifier]['coverage'], 'constructed')
             self.assertTrue(any('v7' in test or 'unread' in test for test in rows[identifier]['evidence']['tests']))
         self.assertEqual(rows['A13']['coverage'], 'stop_before_call')
         self.assertIn('floor', rows['A13']['coverage_scope'])

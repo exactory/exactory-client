@@ -11,6 +11,11 @@ from ci.evidence_tests import require_evidence_tests
 from research_harness import review_budget, review_route_capacity as capacity, review_transport
 
 ROOT = Path(__file__).resolve().parents[1]
+# Requirement AR20.4: the entries with the coverage stop_before_call after 0.92.0, which 0.93.0 and 0.94.0 complete.
+LATER_RELEASE_GAPS = ('A10a', 'A10b', 'A18', 'A20', 'A22', 'A23', 'A26', 'Q14')
+# The entries that 0.92.0 completes and whose evidence the unit lanes executed to a recorded review.
+STAGE3_CONSTRUCTED = ('A1', 'A2', 'A5', 'A6', 'A7', 'A8', 'A12', 'A14', 'A15', 'A17', 'A25',
+                      'Q2', 'Q5', 'Q7', 'Q8', 'Q10', 'Q13', 'Q17')
 
 
 class CapacityGuardTests(unittest.TestCase):
@@ -123,10 +128,57 @@ class CapacityGuardTests(unittest.TestCase):
                 changed = copy.deepcopy(self.matrix)
                 next(entry for entry in changed['entries'] if entry['id'] == identifier)['evidence']['tests'] = []
                 self.assertTrue(guard.validate_matrix(changed))
-        for identifier in ('A5', 'A7', 'A25'):
-            self.assertEqual(rows[identifier]['coverage'], 'stop_before_call')
-            self.assertIn('pending:', rows[identifier]['coverage_scope'])
-            self.assertTrue(rows[identifier]['evidence']['tests'])
+
+    def test_stage3_constructions_have_installed_units_and_named_acceptance_evidence(self):
+        rows = {row['id']: row for row in self.matrix['entries']}
+        for identifier in STAGE3_CONSTRUCTED:
+            with self.subTest(entry=identifier):
+                row = rows[identifier]
+                self.assertEqual(row['coverage'], 'constructed')
+                self.assertTrue(set(row['units']['construction']) <= set(self.matrix['installed_units']))
+                changed = copy.deepcopy(self.matrix)
+                next(entry for entry in changed['entries'] if entry['id'] == identifier)['evidence']['tests'] = []
+                self.assertIn(identifier + ': ' + guard.EVIDENCE_MESSAGE, guard.validate_matrix(changed))
+        floor = next(stop for stop in rows['A5']['required_stops'] if stop['code'] == 'review_route_capacity_below_floor')
+        self.assertIn('test_continuity_guard.ContinuityGuardTests.test_final_minimum_floor_stops_before_call_even_with_final_pages',
+                      floor['tests'])
+
+    def test_stage3_gap_table_is_the_later_releases_and_the_named_missing_evidence(self):
+        self.assertEqual(guard.inspect_gap_table(self.matrix, LATER_RELEASE_GAPS), [])
+        table = guard.build_gap_table(self.matrix)
+        self.assertEqual(table['without_construction'], ['A10c', 'T3'])
+        self.assertTrue(all(row['missing_evidence'] for row in table['rows'] if row['id'] not in LATER_RELEASE_GAPS))
+        # A constructed entry that loses its coverage without a statement of what is missing leaves the table wrong.
+        changed = copy.deepcopy(self.matrix)
+        next(row for row in changed['entries'] if row['id'] == 'A5')['coverage'] = 'stop_before_call'
+        self.assertEqual(guard.inspect_gap_table(changed, LATER_RELEASE_GAPS), [guard.GAP_TABLE_MESSAGE])
+        # A statement of missing evidence for an entry that has its evidence is refused as well.
+        changed = copy.deepcopy(self.matrix)
+        changed['missing_evidence']['A1'] = 'An entry that has its evidence.'
+        self.assertEqual(guard.inspect_gap_table(changed, LATER_RELEASE_GAPS), [guard.GAP_TABLE_MESSAGE])
+
+    def test_stage3_roles_turn_kinds_and_composition_exceptions_are_complete(self):
+        from research_harness import review_composition, review_field_classes, review_protocol
+        from unittest.mock import patch
+        arguments = (self.inventory, capacity.list_capacity_recovery_rows(), review_protocol.ROLES,
+                     review_composition.ROLES_WITHOUT_RULES, review_field_classes.FIELD_CLASSES)
+        self.assertEqual(guard.inspect_stage3_tables(*arguments), [])
+        # Finding 6 of part c: a role of this release in the list of roles without a rule fails the guard.
+        for role in ('slate', 'native_math'):
+            with self.subTest(role=role):
+                listed = dict(review_composition.ROLES_WITHOUT_RULES, **{role: {}})
+                self.assertTrue(guard.inspect_stage3_tables(*arguments[:3], listed, arguments[4]))
+        rows = [row for row in arguments[1] if (row['kind'], row['protocol']) != ('combine', 'exactory-independent-review-sources-v4')]
+        self.assertTrue(guard.inspect_stage3_tables(arguments[0], rows, *arguments[2:]))
+        self.assertTrue(guard.inspect_stage3_tables(*arguments[:4], {}))
+        # Every prompt of a new version records the capacity of its turn.
+        from research_harness import review_parts, review_session_v4
+        bounds = dict(answer_bound=1000, request_bound=20000)
+        prompt = review_session_v4.build_turn_prompt('bar', 'request', bounds, orchestration='problem_creation')
+        self.assertEqual(prompt['parameters']['capacity'], bounds)
+        header = dict(adapter='problem_result', kind='read', protocol='exactory-review-parts-v3', capacity=bounds)
+        with patch.object(review_protocol, 'canonical_prompt', side_effect=lambda role, **parameters: parameters):
+            self.assertEqual(review_parts.build_turn_prompt('result', {}, header)['review_parts']['capacity'], bounds)
 
     def test_v6_and_v7_constructions_keep_their_unit_evidence(self):
         rows = {row['id']: row for row in self.matrix['entries']}

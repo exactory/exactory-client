@@ -128,6 +128,42 @@ QUANTITY_NOT_SCALED = ('The canonical factory did not grow packet property {path
                        'Scale the input of the factory until the property reaches that size.')
 OPAQUE_VALUE_INVALID = ('Packet member {path} must be a JSON value within its declared serialized character bound. '
                         'A request-bound value requires the measured route allowance as validation context.')
+OPEN_MEMBER_PRESENT = ('Packet member {path} has the bound open. Give it the class and the bound of its field class, '
+                       'or the bound request_admission, in tests/fixtures/capacity_packet_schema.json.')
+MEMBER_BOUND_INVALID = ('The bound of packet member {path} differs from the row of review_field_classes that it inherits, '
+                        'or its request admission names no required stop of its closure entry. Write the class and the '
+                        'bound that the table gives, or name the entry, the rule and a required stop with tests.')
+MEMBER_FRAME_UNBOUNDED = ('Packet member {path}, one character above the size of its field class, stays in the frame '
+                          'above that size. Correct its row in review_field_classes or the frame builder.')
+# The growing members under the value accounts keep the bound open until lane record-copies declares the accounts
+# (REC/reviews/opus-record-copies.md, finding F3): 23 members under each prefix, 69 in all. That lane empties this.
+RECORD_COPY_OPEN_PREFIXES = (
+    'result/exactory-problem-review-v2:problem_evidence.value.accounts.',
+    'adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.',
+    'adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.')
+# A packet of these roles is sent as one request: no parts adapter, chain family or session serves it in this
+# release. The request is sent only when its measure admits it; otherwise the stop ends it before a call.
+PAPER_REQUEST_ADMISSION = dict(entry='A23', rule='research_harness.review_route_capacity.require_covered_assignment',
+                               stop='review_route_capacity_below_floor')
+REQUEST_ADMISSION_RULES = {
+    'manuscript': PAPER_REQUEST_ADMISSION,
+    'standalone': PAPER_REQUEST_ADMISSION,
+    'round': PAPER_REQUEST_ADMISSION,
+    'correction': dict(entry='Q11', rule='research_harness.review_output_correction.build_request',
+                       stop='review_input_too_large'),
+}
+# The members of the reading turn of an openness chain that the turns of protocols v1 to v6 build. No series or
+# session takes a packet with a reading turn, and a v7 turn holds them inside its own capacity plan. The stop of
+# entry A4 ends a chain of an earlier protocol whose projection passes the limit before a call.
+CHAIN_STOP_RULES = {
+    'native_math/exactory-independent-review-v1:reading_turn.': dict(
+        protocols=['exactory-openness-reading-v' + str(version) for version in range(1, 7)], entry='A4',
+        stop='review_chain_projection_over_limit'),
+}
+MEMBER_CLASSES = ('fixed', 'collection', 'body', 'carried', 'reference')
+# The frame builder of the field classes measures with the local text envelope, as review_field_classes does.
+FRAME_MEASURE_ROUTE = dict(adapter='claude_cli_v1', model='field-measurement', endpoint='claude://local',
+                           configuration=dict(max_output_tokens=1, timeout_seconds=1))
 
 
 def read_packet_registry(path=None):
@@ -274,11 +310,20 @@ def validate_open_members(registry):
     digest = hashlib.sha256(json.dumps(sorted(baseline), separators=(',', ':')).encode('utf-8')).hexdigest()
     if registry.get('certificates') and digest != OPEN_MEMBER_BASELINE_SHA256:
         return [OPEN_MEMBERS_CHANGED]
-    actual = {role + '/' + protocol + ':' + '.'.join(path)
-              for role, protocol, schema in iter_packet_schemas(registry)
-              for path, member in _walk_declarations(schema, registry, ())
-              if member.get('bound') == 'open'}
-    return [] if actual <= set(baseline) else [OPEN_MEMBERS_CHANGED]
+    actual = list_open_members(registry)
+    if not actual <= set(baseline):
+        return [OPEN_MEMBERS_CHANGED]
+    if registry.get('certificates'):
+        return [OPEN_MEMBER_PRESENT.format(path=identity) for identity in sorted(actual)
+                if not identity.startswith(RECORD_COPY_OPEN_PREFIXES)]
+    return []
+
+
+def list_open_members(registry):
+    return {role + '/' + protocol + ':' + '.'.join(path)
+            for role, protocol, schema in iter_packet_schemas(registry)
+            for path, member in _walk_declarations(schema, registry, ())
+            if member.get('bound') == 'open'}
 
 
 def read_quantity_allowance(registry, name):
@@ -414,12 +459,13 @@ def inspect_quantity_factories(registry, matrix, factories):
                 unit = gap.get('closing_unit')
                 if (identity not in initial_open
                         or not entry or gap.get('declared_entry') != member['entry']
-                        or unit not in entry['units']['construction'] or unit in installed
+                        or unit not in entry['units']['construction']
+                        or unit in installed and not identity.startswith(RECORD_COPY_OPEN_PREFIXES)
                         or gap.get('guard') not in ('capacity-guard-2', 'capacity-guard-3')
                         or gap.get('property') != identity
                         or gap.get('property_kind') not in ('frame_metadata', 'parts_frame_metadata', 'identifier_turn_lineage', 'reference_rows', 'session_metadata', 'historical_review_growth')):
                     errors.append(QUANTITY_COVERAGE_MISSING.format(path=identity))
-            else:
+            elif not is_member_bound(member):
                 errors.append(QUANTITY_COVERAGE_MISSING.format(path=identity))
     scheduled = {identity for values in jobs.values() for identity, _, _, _ in values}
     if not set(shipped) <= scheduled:
@@ -486,6 +532,83 @@ def build_quantity_shape_packet(shape, registry):
     elif shape['protocol']:
         packet.setdefault('protocol', shape['protocol'])
     return packet
+
+
+def is_member_bound(member):
+    """Tell whether a growing member is bounded by its field class or by the admission of its request."""
+    return isinstance(member.get('bound'), dict) and bool(
+        set(member['bound']) & {'field_class', 'request_admission', 'chain_stop'})
+
+
+def _find_packet_path(packet, path):
+    actual, value = (), packet
+    for component in path:
+        if component == '*':
+            component = next(iter(value)) if isinstance(value, dict) else 0
+        actual += (component,)
+        value = value[component]
+    return actual
+
+
+def _classify_member(registry, role, protocol, path, value):
+    """Return the classified row of the member and the characters that it takes in the frame, if it is there."""
+    from research_harness.review_field_classes import classify_packet
+    from research_harness.review_route_capacity import measure_capacity_value
+    packet = build_quantity_shape_packet(dict(role=role, protocol=protocol, path=path, value=value), registry)
+    actual = _find_packet_path(packet, path)
+    classified = classify_packet(FRAME_MEASURE_ROUTE, role, packet)
+    field = next(row for row in classified['fields'] if row['path'] == actual)
+    if field['travel'] != 'frame':
+        return field, None
+    # A member under a reference travels inside the digest of that reference: measure the nearest framed value.
+    framed = classified['frame']
+    for component in actual:
+        if not isinstance(framed, (dict, list)) or isinstance(framed, dict) and component not in framed:
+            break
+        framed = framed[component]
+    return field, measure_capacity_value(FRAME_MEASURE_ROUTE, framed)
+
+
+def inspect_member_bounds(registry, matrix):
+    """Assertion K5 for the bounds field_class, request_admission and chain_stop.
+
+    A field_class bound is the review_field_classes row that the member inherits, with its class. Given one
+    character above the size of a fixed row, the frame builder moves the member into a unit; a collection, a body
+    and a carried member travel as units at every size; a reference stays within its size. A request_admission
+    bound names the rule of its role, and a chain_stop bound the protocols whose chains build the member; each names
+    a required stop of its closure entry with tests. Those tests execute the stop before a call, and K9 requires
+    them to pass in the same run.
+    """
+    errors = validate_open_members(registry)
+    stops = {entry['id']: {stop['code']: stop for stop in entry['required_stops']} for entry in matrix['entries']}
+    for role, protocol, schema in iter_packet_schemas(registry):
+        for path, member in _walk_declarations(schema, registry, ()):
+            if not is_member_bound(member):
+                continue
+            identity = role + '/' + protocol + ':' + '.'.join(path)
+            invalid = MEMBER_BOUND_INVALID.format(path=identity)
+            if 'chain_stop' in member['bound']:
+                rule = member['bound']['chain_stop']
+                stop = stops.get(rule.get('entry'), {}).get(rule.get('stop'), {})
+                expected = next((value for prefix, value in CHAIN_STOP_RULES.items() if identity.startswith(prefix)), None)
+                if rule != expected or not stop.get('tests') or member.get('class') not in MEMBER_CLASSES:
+                    errors.append(invalid)
+                continue
+            if 'request_admission' in member['bound']:
+                rule = member['bound']['request_admission']
+                stop = stops.get(rule.get('entry'), {}).get(rule.get('stop'), {})
+                row = _classify_member(registry, role, protocol, path, 'x')[0]['row']
+                if member.get('class') != row['class'] or rule != REQUEST_ADMISSION_RULES.get(role) or not stop.get('tests'):
+                    errors.append(invalid)
+                continue
+            # The row does not depend on the value, so one classification at the declared size checks both.
+            declared = dict(member['bound']['field_class'], **{'class': member.get('class')})
+            field, framed = _classify_member(registry, role, protocol, path, 'x' * (declared.get('characters', 0) + 1))
+            if field['row'] != declared:
+                errors.append(invalid)
+            elif field['travel'] != 'unit' and (declared['class'] != 'reference' or framed > declared['characters']):
+                errors.append(MEMBER_FRAME_UNBOUNDED.format(path=identity))
+    return sorted(set(errors))
 
 
 def _resolve_name(node):
