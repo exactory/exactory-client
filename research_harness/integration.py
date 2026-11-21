@@ -284,9 +284,13 @@ def adopt_workspace(store, payload, *, expected_revision, request_id):
                              expected_revision=expected_revision, request_id=request_id)
 
 
+def command_request_id(args):
+    """The request ID that the user of a command gave, or a new one."""
+    return getattr(args, "request_id", None) or ("cli-" + uuid.uuid4().hex)
+
+
 def command_identity(store, args):
     """Legacy commands support explicit CAS and idempotency without inventing gates."""
     revision = getattr(args, "expected_revision", None)
-    request = getattr(args, "request_id", None)
     return {"expected_revision": store.revision if revision is None else revision,
-            "request_id": request or ("cli-" + uuid.uuid4().hex)}
+            "request_id": command_request_id(args)}

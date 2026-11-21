@@ -74,7 +74,8 @@ def check_submission_preconditions(store, body):
     return binding, deduplication_key
 
 
-def submit_managed(store, body, client, *, expected_revision, request_id, scope_contract_id=None, scope_target_digest=None):
+def submit_managed(store, body, client, *, expected_revision=None, request_id, scope_contract_id=None,
+                   scope_target_digest=None):
     binding, deduplication_key = check_submission_preconditions(store, body)
     validate_caller_scope(binding.get("publication_scope"), scope_contract_id, scope_target_digest)
     intent = begin_intent(store, "submit", binding, expected_revision=expected_revision, request_id=request_id,
@@ -122,7 +123,7 @@ def continue_submission(store, identifier, client):
         return finish_intent(store, identifier, "submission_receipt", receipt)
 
 
-def send_verdict(store, task, body, client, *, expected_revision, request_id):
+def send_verdict(store, task, body, client, *, expected_revision=None, request_id):
     # Ownership covers the target-level decision before any distinct intent can
     # be prepared. Per-intent ownership alone permits two concurrent senders.
     try:
@@ -169,7 +170,7 @@ def check_verdict_preconditions(store, task, body):
     return report, binding
 
 
-def _send_verdict(store, task, body, client, *, expected_revision, request_id):
+def _send_verdict(store, task, body, client, *, expected_revision=None, request_id):
     report, binding = check_verdict_preconditions(store, task, body)
     intent = begin_intent(store, "verdict", binding, expected_revision=expected_revision, request_id=request_id)
     with _owner(store.root, "remote:" + intent["id"]):

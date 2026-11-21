@@ -11,13 +11,21 @@ from .errors import ResearchError
 # commits against the records that it read, or at the revision that the write lock finds, and waits this long for a
 # busy store or a changed record, because a refusal can cost that work. retry_finishing_write applies the three
 # values; a write without a read set gives it LOCK_RETRY_CODES in place of the third. The finish of a review call
-# (review_protocol._finish_call) and the captures of a review call and of a staged review task use it too.
+# (review_protocol._finish_call) and the captures of a review call and of a staged review task use it too. A read or a
+# COMMIT of a command waits as long for a lock of the store (wait_for_store_in_command).
 SCOPED_FINISH_ATTEMPT_COUNT = 600
 SCOPED_FINISH_WAIT_SECONDS = 600.0
 SCOPED_FINISH_RETRY_CODES = ('store_busy', 'stale_revision', 'review_task_dependency_changed')
 # The refusals of the store for a write without a read set: a locked store, and a database file that was replaced
 # between the two steps of the write.
 LOCK_RETRY_CODES = ('store_busy', 'stale_revision')
+
+
+def wait_for_store_in_command():
+    """The store wait of a command, which each command entry enters once around the whole command: a read of the store
+    waits for a COMMIT in progress, and a COMMIT for the readers that hold the store, each for at most
+    SCOPED_FINISH_WAIT_SECONDS (storage.wait_for_store_locks)."""
+    return storage.wait_for_store_locks(SCOPED_FINISH_WAIT_SECONDS)
 
 
 def retry_store_write(write, *, attempts=8, seconds=8.0, codes=('store_busy', 'stale_revision')):

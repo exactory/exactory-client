@@ -1,9 +1,11 @@
 """Revisioned SQLite records, immutable event patches, and request receipts.
 
-Every mutation holds a BEGIN IMMEDIATE transaction, checks its request receipt
-before its expected revision, and commits records, original changes, the result,
-and the next revision together. Connections are short-lived. Reads open in
-SQLite read-only mode and never initialize or migrate storage.
+Every mutation first looks for its request receipt in a read transaction, and a
+committed request returns its original response from that read, without a write
+lock. Any other mutation holds a BEGIN IMMEDIATE transaction, checks its request
+receipt before its expected revision, and commits records, original changes, the
+result, and the next revision together. Connections are short-lived. Reads open
+in SQLite read-only mode and never initialize or migrate storage.
 
 The SQL metadata row holds schema_version and revision. Scientific configuration
 is the ordinary configuration/research record, owned by domain services.
@@ -36,9 +38,12 @@ from .errors import ResearchError
 _SCHEMA_VERSION = 1
 _BUSY_TIMEOUT_SECONDS = 1.0
 # The deadline (a time.monotonic value) until which a COMMIT that readers keep busy is tried again. A finishing write
-# sets it for its whole wait (retry_busy_commits_until); every other write rolls back when its COMMIT has waited the
-# busy timeout.
+# sets it for its whole wait (retry_busy_commits_until); every other write of a command tries its COMMIT for the store
+# wait, and a write outside a command rolls back when its COMMIT has waited the busy timeout.
 _BUSY_COMMIT_DEADLINE_VAR = contextvars.ContextVar("busy_commit_deadline", default=None)
+# The store wait in seconds (wait_for_store_locks): how long a read waits for a COMMIT in progress, and a COMMIT for
+# the readers of the store. None outside a command, where each of them waits the busy timeout.
+_STORE_WAIT_SECONDS_VAR = contextvars.ContextVar("store_wait_seconds", default=None)
 _DATABASE = "research.sqlite3"
 _MAX_REVISION = (1 << 63) - 1
 # Every supported Python (3.9 to 3.14) must read back what the store writes. Only writes check these bounds,
@@ -213,10 +218,30 @@ def retry_busy_commits_until(deadline):
         _BUSY_COMMIT_DEADLINE_VAR.reset(token)
 
 
+@contextmanager
+def wait_for_store_locks(seconds):
+    """Within this block, a read and a COMMIT of the store each wait up to seconds for a lock; with None they wait the
+    busy timeout. A read waits for a COMMIT in progress: while that COMMIT waits for the readers of the store, its
+    PENDING lock admits no new reader, and the read is admitted when the COMMIT has ended
+    (https://www.sqlite.org/lockingv3.html, section 3.0). A COMMIT waits for the readers that hold the store and keeps
+    the replay of its transaction (https://www.sqlite.org/lang_transaction.html, section 2.3). The write lock (BEGIN
+    IMMEDIATE) always waits the busy timeout. A command sets the wait once for all of its store access; a polling read
+    and the render of the output views set None for themselves."""
+    token = _STORE_WAIT_SECONDS_VAR.set(seconds)
+    try:
+        yield
+    finally:
+        _STORE_WAIT_SECONDS_VAR.reset(token)
+
+
 def _commit(connection: sqlite3.Connection):
-    """Commit the transaction of connection. Each COMMIT waits the busy timeout for the readers of the store; within
-    retry_busy_commits_until, a COMMIT that they still keep busy is tried again until the deadline."""
+    """Commit the transaction of connection. Each COMMIT waits the busy timeout for the readers of the store. A COMMIT
+    that they still keep busy is tried again until the deadline of retry_busy_commits_until, or else for the store
+    wait of wait_for_store_locks; outside both it is refused."""
     deadline = _BUSY_COMMIT_DEADLINE_VAR.get()
+    store_wait = _STORE_WAIT_SECONDS_VAR.get()
+    if deadline is None and store_wait is not None:
+        deadline = time.monotonic() + store_wait
     while True:
         try:
             connection.commit()
@@ -258,6 +283,17 @@ def _read_original_response(original, operation, encoded_payload, request_id):
         raise ResearchError("request_id_conflict", "Request ID was already committed with different inputs",
                             {"request_id": request_id})
     return _load(original["response"], dict)
+
+
+def _replay_in_write_transaction(connection, operation, encoded_payload, request_id):
+    """The original response when the write transaction of connection finds request_id committed with this operation
+    and payload, else None. Such a transaction changed nothing, so it ends here with ROLLBACK, which frees the write
+    lock at once; its COMMIT would wait for every reader of the store (https://www.sqlite.org/lockingv3.html, section
+    5.0). Store._connection then commits a connection that holds no transaction, which does nothing."""
+    original = _read_original_response(_request_row(connection, request_id), operation, encoded_payload, request_id)
+    if original is not None:
+        connection.rollback()
+    return original
 
 
 def _encode_mutation_input(operation, payload, apply, expected_revision, request_id):
@@ -805,6 +841,7 @@ _FILTER_FIELDS = {
     'review_output_correction': {'assignment_id', 'origin'},
     'review_output_correction_invocation': {'assignment_id'},
     'review_selection': {'controller_assignment_id'},
+    'remote_intent': {'fingerprint'},
 }
 
 
@@ -1140,7 +1177,10 @@ class Store:
             with self._workspace.directory(".exactory", create=True) as directory:
                 with self._locked(directory):
                     self._create(directory)
-        with self._connection(writable=create) as connection:
+        # The structural check reads the store and writes nothing, so it takes no write lock. With create, its
+        # connection can write, so that SQLite rolls back a hot journal before the read
+        # (https://www.sqlite.org/lockingv3.html, section 4.1).
+        with (self._connection(writable=True, write_lock=False) if create else self._connection()) as connection:
             _validate(connection, replay=False)
 
     @contextmanager
@@ -1249,7 +1289,12 @@ class Store:
         return connection
 
     @contextmanager
-    def _connection(self, *, writable: bool = False):
+    def _connection(self, *, writable: bool = False, write_lock: bool = True):
+        """A transaction on a new connection. A connection that can write takes the write lock at once (BEGIN
+        IMMEDIATE), unless write_lock is False; every other transaction reads only. A transaction that reads only
+        waits for its lock for the store wait of wait_for_store_locks, and the write lock waits the busy timeout."""
+        takes_write_lock = writable and write_lock
+        store_wait = None if takes_write_lock else _STORE_WAIT_SECONDS_VAR.get()
         caller_failure = None
         try:
             with self._workspace.directory(".exactory") as directory:
@@ -1260,7 +1305,11 @@ class Store:
                         connection = self._open(self._path, writable=writable)
                         # Recheck managed names before SQLite can mutate.
                         self._check_files(directory)
-                        connection.execute("BEGIN IMMEDIATE" if writable else "BEGIN")
+                        if store_wait is not None:
+                            # The busy timeout of this connection becomes the store wait, in milliseconds
+                            # (https://www.sqlite.org/c3ref/busy_handler.html).
+                            connection.execute("PRAGMA busy_timeout = " + str(int(store_wait * 1000)))
+                        connection.execute("BEGIN IMMEDIATE" if takes_write_lock else "BEGIN")
                         try:
                             try:
                                 yield connection
@@ -1424,16 +1473,31 @@ class Store:
             return {"operation": original["operation"], "payload": _load(original["payload"], dict),
                     "response": _load(original["response"], dict)}
 
+    def _read_committed_response(self, operation, encoded_payload, request_id):
+        """The original response when request_id is committed with this operation and payload, from a read of the
+        store, else None. A replay is a read: it takes no write lock, so a writer that has not reached its COMMIT and
+        every reader go on beside it. The look for the request row replays no history; a row that exists is answered
+        only after this read has replayed the history, as every authoritative read does."""
+        with self._connection() as connection:
+            _validate(connection, replay=False)
+            original = _request_row(connection, request_id)
+            if original is None:
+                return None
+            _validate(connection)
+            return _read_original_response(original, operation, encoded_payload, request_id)
+
     def mutate(self, operation: str, payload: dict, apply, *, expected_revision: int, request_id: str,
                _preparation=None) -> dict:
         encoded_payload = _encode_mutation_input(operation, payload, apply, expected_revision, request_id)
+        original = self._read_committed_response(operation, encoded_payload, request_id)
+        if original is not None:
+            return original
         with self._connection(writable=True) as connection:
             fingerprint = hashlib.sha256() if _preparation is not None else None
             identity = self._read_database_identity() if _preparation is not None else None
             creation_revisions = {}
             revision = _validate(connection, fingerprint=fingerprint, creation_revisions=creation_revisions)
-            original = _read_original_response(_request_row(connection, request_id), operation, encoded_payload,
-                                               request_id)
+            original = _replay_in_write_transaction(connection, operation, encoded_payload, request_id)
             if original is not None:
                 return original
             if revision != expected_revision:
@@ -1460,10 +1524,13 @@ class Store:
         """Revalidate an owned task proof, then apply(tx, actual_commit_revision)."""
         encoded_payload = _encode_mutation_input(operation, payload, apply,
                                                  0 if expected_revision is None else expected_revision, request_id)
+        original = self._read_committed_response(operation, encoded_payload, request_id)
+        if original is not None:
+            return original
         with self._connection(writable=True) as connection:
             creation_revisions = {}
             revision = _validate(connection, creation_revisions=creation_revisions)
-            original = _read_original_response(_request_row(connection, request_id), operation, encoded_payload, request_id)
+            original = _replay_in_write_transaction(connection, operation, encoded_payload, request_id)
             if original is not None:
                 return original
             _revalidate_scoped(self, connection, _preparation, revision)
@@ -1478,10 +1545,13 @@ class Store:
         earlier read of the store, so no commit of another writer refuses it; what the caller read before belongs to
         work that it owns while it runs."""
         encoded_payload = _encode_mutation_input(operation, payload, apply, 0, request_id)
+        original = self._read_committed_response(operation, encoded_payload, request_id)
+        if original is not None:
+            return original
         with self._connection(writable=True) as connection:
             creation_revisions = {}
             revision = _validate(connection, creation_revisions=creation_revisions)
-            original = _read_original_response(_request_row(connection, request_id), operation, encoded_payload, request_id)
+            original = _replay_in_write_transaction(connection, operation, encoded_payload, request_id)
             if original is not None:
                 return original
             return _apply_at_revision(connection, operation, payload, encoded_payload, apply, revision,

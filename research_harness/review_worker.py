@@ -30,11 +30,12 @@ if __package__ in (None, ""):
 from . import probe_supervision
 from .errors import ResearchError
 from .evidence import digest
-from .finishing import LOCK_RETRY_CODES, SCOPED_FINISH_WAIT_SECONDS, retry_finishing_write, retry_store_write
+from .finishing import (LOCK_RETRY_CODES, SCOPED_FINISH_WAIT_SECONDS, retry_finishing_write, retry_store_write,
+                        wait_for_store_in_command)
 from .review_call_admission import check_launch
 from .review_task_execution import (_check_references, _get, _mutate_current, _TransactionRecords,
                                      _transition, capture_observation)
-from .storage import Store
+from .storage import Store, wait_for_store_locks
 from .workspace import checked_parent
 
 # The messages of the records before a reviewer program starts, and of the capture of a staged worker, when the store
@@ -290,9 +291,11 @@ def _authorize_launch(store, reservation_id, identity):
 
 
 def read_polling_store(read):
-    """Return no value for a busy read; the polling caller owns its wait and deadline."""
+    """Return no value for a busy read; the polling caller owns its wait and deadline, so the read waits the busy
+    timeout and not the store wait of its command."""
     try:
-        return read()
+        with wait_for_store_locks(None):
+            return read()
     except ResearchError as error:
         if error.code != "store_busy":
             raise
@@ -531,4 +534,6 @@ def main(argv=None):
     else:
         if len(argv) != 4:
             raise ResearchError("invalid_input", "Worker needs root, reservation, token and ownership descriptor")
-        run_worker(Path(argv[0]), argv[1], argv[2], int(argv[3]))
+        # The worker is a command of its own: its store access waits for a busy store within the store wait.
+        with wait_for_store_in_command():
+            run_worker(Path(argv[0]), argv[1], argv[2], int(argv[3]))

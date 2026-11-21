@@ -376,7 +376,7 @@ def validate_deposit(store, pdf, abstract, sources, *, new_version, environment)
     return report
 
 
-def begin_deposit(store, binding, *, expected_revision, request_id):
+def begin_deposit(store, binding, *, expected_revision=None, request_id):
     """Check a managed deposit and save its intent before any remote write. The same request
     saved earlier returns that intent, so an interrupted deposit resumes on it."""
     _current(store, binding)
@@ -385,7 +385,7 @@ def begin_deposit(store, binding, *, expected_revision, request_id):
     return begin_intent(store, "deposit", binding, expected_revision=expected_revision, request_id=request_id)
 
 
-def deposit(store, binding, client, *, expected_revision, request_id):
+def deposit(store, binding, client, *, expected_revision=None, request_id):
     intent = begin_deposit(store, binding, expected_revision=expected_revision, request_id=request_id)
     # An interrupted deposit continues from its saved intent: a fresh intent has
     # no claimed step, so reconciliation returns at once and nothing changes.

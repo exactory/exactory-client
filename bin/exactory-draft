@@ -45,9 +45,9 @@ from typing import BinaryIO, NamedTuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError, describe_tool_timeout
 from research_harness.file_streams import freeze_file
-from research_harness.finishing import retry_finishing_write
+from research_harness.finishing import retry_finishing_write, wait_for_store_in_command
 from research_harness.exactory_api import UUID_RE, read_api_base_url
-from research_harness.integration import (command_identity, current_store, export_workspace,
+from research_harness.integration import (command_identity, command_request_id, current_store, export_workspace,
                                           initialization_payload, initialize_workspace, record_direct_deposit)
 from research_harness.operations import prepared_task_mutation
 from research_harness.same_origin import (REQUEST_ERROR_TYPES, RefusedRedirectError,
@@ -723,11 +723,10 @@ def _deposit_managed(store, report: dict, args: argparse.Namespace, base_url: st
     validate_caller_scope(scope, getattr(args, "scope_contract_id", None), getattr(args, "scope_target_digest", None))
     if scope is not None:
         binding["publication_scope"] = scope
-    identity = command_identity(store, args)
-    # CAS validates the snapshot that supplied the exact upload bytes.
-    if args.expected_revision is None:
-        identity["expected_revision"] = report["revision"]
-    intent = begin_deposit(store, binding, **identity)
+    # The intent sends nothing: each step of the deposit checks the manuscript and the reviews again, and claims the
+    # step at the revision of that check. A revision that the user gives makes the intent a compare-and-swap on it.
+    intent = begin_deposit(store, binding, expected_revision=args.expected_revision,
+                           request_id=command_request_id(args))
     journal = None
     if problem_target is not None and args.publish:
         # The intent's id is the operation's identity, so a rerun settles this intent whatever
@@ -1798,7 +1797,7 @@ def main(render_views=render_views_after_command) -> None:
         if getattr(args, "check", False):
             raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects",
                                 {"command": args.command})
-        with describe_tool_timeout():
+        with describe_tool_timeout(), wait_for_store_in_command():
             args.handler(args)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))

@@ -28,6 +28,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from research_harness.errors import ResearchError
+from research_harness.finishing import wait_for_store_in_command
 from research_harness.output_views import render_views_after_command
 
 _ARXIV_API_URL = "https://export.arxiv.org/api/query"
@@ -264,7 +265,8 @@ def main(render_views=render_views_after_command) -> None:
     lock."""
     args = _build_parser().parse_args()
     try:
-        args.handler(args)
+        with wait_for_store_in_command():
+            args.handler(args)
     except ResearchError as error:
         print(json.dumps({"error": error.as_dict()}, ensure_ascii=False), file=sys.stderr)
         sys.exit(1)
