@@ -2227,7 +2227,7 @@ def _find_session_bodies(records, artifacts, prior, *, evaluate_states=True):
 def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
     """Build the role allowlist; caller-authored prompts and narrative substitutes are rejected."""
     canonical_prompt(role)
-    fields(context, (), ('artifact_refs', 'bundle', 'objection_id', 'review_ids', 'correction', 'prior_assignment_id', 'source_links', 'context_repair', 'verification_task_id', 'native_packet', 'source_delivery', 'reading_replacement', 'unread'))
+    fields(context, (), ('artifact_refs', 'bundle', 'objection_id', 'review_ids', 'correction', 'prior_assignment_id', 'source_links', 'context_repair', 'verification_task_id', 'native_packet', 'source_delivery', 'reading_replacement', 'unread', 'session_refresh'))
     if 'source_delivery' in context:
         from .review_source_complete import MODE
         if context['source_delivery'] != MODE or role != 'result' or 'prior_assignment_id' not in context:
@@ -2243,7 +2243,10 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
             packet['problem_areas'] = list(records['problem_area'].values())
     projected = False
     if role in bar_sources.ROLES:
-        fields(context, (), ('source_links', 'prior_assignment_id') if role == 'bar' else ('prior_assignment_id', 'source_delivery'), code='invalid_review_context')
+        fields(context, (), ('source_links', 'prior_assignment_id', 'session_refresh') if role == 'bar'
+               else ('prior_assignment_id', 'source_delivery', 'session_refresh'), code='invalid_review_context')
+        if 'session_refresh' in context:
+            return _build_session_refresh_packet(records, artifacts, dossier_id, role, reviewer_id, context)
         packet['protocol'] = _PROBLEM_PROTOCOL if problem else bar_sources.PROTOCOL
         if bar_sources.SESSION_PROTOCOL == bar_sources.PROTOCOL_V3:
             packet['source_rules'] = bar_sources.PROTOCOL_V3
@@ -3571,7 +3574,9 @@ def _is_problem_refresh(records, artifacts, prior, previous):
 
 
 def _find_problem_refresh_parent(records, artifacts, value):
-    """Continue the same reviewer when its completed problem review no longer binds the current record."""
+    """The context that continues the same reviewer when its completed problem review no longer binds the current
+    record: the next turn of its session, or for a review that a chain of the session rules v4 recorded, a new chain
+    in its slot (rule F4). None when no refresh applies."""
     if value['role'] not in bar_sources.ROLES or value.get('subject', {}).get('kind') != 'problem' or value['context']:
         return None
     prior = max((saved for saved in read_filtered_records(records, 'review_assignment',
@@ -3581,7 +3586,89 @@ def _find_problem_refresh_parent(records, artifacts, value):
                 key=lambda saved: saved['recorded_revision'], default=None)
     if prior is None or not any(review['assignment_id'] == prior['id'] for review in records.get('value_review', {}).values()):
         return None
-    return prior['id'] if _is_problem_refresh(records, artifacts, prior, _read_json(artifacts, prior['packet'])) else None
+    if prior.get('session_chain'):
+        if is_session_refresh(records, artifacts, prior):
+            return {'session_refresh': {'assignment_id': prior['id']}}
+        return None
+    if _is_problem_refresh(records, artifacts, prior, _read_json(artifacts, prior['packet'])):
+        return {'prior_assignment_id': prior['id']}
+    return None
+
+
+def is_session_refresh(records, artifacts, prior):
+    """Rule F4: whether this assignment ended a chain of the session rules v4 with a recorded problem review that no
+    longer binds the current record. The refresh of that review is a new chain in the slot of this assignment. The
+    evaluation of one command keeps the result, so a command evaluates the refresh check of an assignment once."""
+    if (not prior.get('session_chain') or prior.get('subject', {}).get('kind') != 'problem'
+            or not any(review['assignment_id'] == prior['id'] for review in records.get('value_review', {}).values())):
+        return False
+    from .evaluation import Evaluation
+    evaluation = Evaluation.of(records, artifacts)
+    return evaluation.once(('session_refresh', prior['id']), lambda: _is_problem_refresh(
+        records, evaluation, prior, _read_json(evaluation, prior['packet'])))
+
+
+def _read_session_refresh(records, artifacts, binding, dossier_id, reviewer_id, role):
+    """Rule F4: the assignment that holds the recorded review which a new chain refreshes, named by the member
+    session_refresh of its context. It is the same phase, reviewer and dossier, and its refresh check holds."""
+    fields(binding, ('assignment_id',), code='invalid_review_context')
+    text(binding['assignment_id'], 'Refreshed assignment ID', code='invalid_review_context')
+    prior = _get(records, 'review_assignment', binding['assignment_id'])
+    if (prior['role'] != role or prior['dossier_id'] != dossier_id
+            or normalized_text(prior['reviewer_id']) != normalized_text(reviewer_id)):
+        raise ResearchError('review_source_continuation_mismatch', 'Continue the exact same phase, reviewer and dossier')
+    if not is_session_refresh(records, artifacts, prior):
+        raise ResearchError('review_resampling_forbidden', 'A final phase assessment cannot be continued or sampled again')
+    return prior
+
+
+def _build_session_refresh_packet(records, artifacts, dossier_id, role, reviewer_id, context):
+    """Rule F2: the packet of a first review of the role on the record as it is now, with the members of a refresh.
+
+    A bar keeps the source links of the first assignment of the earlier chain that holds some. historical_reviews
+    holds the entries of the first packet, then each review of the slot that they do not hold. problem_refresh holds
+    the members that the role gets on a refresh of an older rule set, without the members of a change of template;
+    the values of the earlier review come from the logical packet of the earlier chain."""
+    fields(context, ('session_refresh',), code='invalid_review_context')
+    prior = _read_session_refresh(records, artifacts, context['session_refresh'], dossier_id, reviewer_id, role)
+    earlier = _read_json(artifacts, prior['session_chain']['logical'])
+    first = {}
+    if role == 'bar':
+        links = next((row['context']['source_links'] for row in context_repair._lineage(records, prior)
+                      if row.get('context', {}).get('source_links')), None)
+        if links:
+            first['source_links'] = links
+    packet = build_packet(records, artifacts, dossier_id, role, reviewer_id, **first)
+    packet.pop('evidence')
+    packet.pop('digest')
+    historical = context_repair.collect_problem_review_history(records, prior)
+    delivered = {entry.get('review', entry)['id'] for entry in packet.get('historical_reviews', [])}
+    packet['historical_reviews'] = packet.get('historical_reviews', []) + [
+        deliver_review(records, _payload(review)) for review in historical if review['id'] not in delivered]
+    refresh = {'assignment_id': prior['id']}
+    if role != 'bar':
+        add_problem_bars(records, artifacts, packet, reviewer_id, slot=context_repair.slot_id(records, prior))
+        refresh['review_ids'] = [review['id'] for review in historical]
+    if role == 'slate':
+        refresh.update(previous_candidate_set_digest=earlier['candidate_set_digest'],
+                       candidate_set_digest=packet['candidate_set_digest'],
+                       previous_bar_ids=earlier['bar_ids'], bar_ids=packet['bar_ids'])
+    elif role == 'result':
+        refresh.update(previous_problem_evidence_digest=earlier['problem_evidence_digest'],
+                       problem_evidence_digest=packet['problem_evidence_digest'],
+                       previous_problem_review_currency=earlier.get('problem_review_currency'),
+                       problem_review_currency=packet['problem_review_currency'])
+    unsupported = [review['id'] for review in historical if review['assignment_id'] == prior['id']
+                   and _is_evidence_refresh_needed(records, artifacts, review)]
+    if unsupported:
+        named = refresh.get('review_ids', [])
+        refresh.update(reason='evidence_undelivered', review_ids=named + [i for i in unsupported if i not in named])
+    packet['problem_refresh'] = refresh
+    if packet.get('source_rules') == bar_sources.PROTOCOL_V3:
+        packet['source_artifacts'] = bar_sources.collect_record_artifacts(packet)
+    packet['evidence'] = _evidence(artifacts, packet, records=records)
+    packet['digest'] = digest(packet)
+    return packet
 
 
 def _initial_size_failure(records, artifacts, prior, value):
@@ -3749,8 +3836,10 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                     # chain even though its own subject has no statement ID.
                     context = value['context']
                     repair, upgrade = context.get('context_repair'), context.get('staged_upgrade')
+                    refresh = context.get('session_refresh')
                     predecessor_id = ((repair.get('assignment_id') if isinstance(repair, dict) else None)
                                       or context.get('prior_assignment_id')
+                                      or (refresh.get('assignment_id') if isinstance(refresh, dict) else None)
                                       or (upgrade.get('assignment_id') if isinstance(upgrade, dict) else None))
                     predecessor = (records.get('review_assignment', {}).get(predecessor_id)
                                    if isinstance(predecessor_id, str) else None)
@@ -3804,14 +3893,15 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 inherited = {key: prior['context'][key] for key in ('review_ids', 'objection_id', 'correction')
                              if key in prior['context']}
                 value = dict(value, context=dict(inherited, **value['context']))
-        refresh_parent = _find_problem_refresh_parent(records, artifacts, value) if problem and upgrade is None else None
-        if refresh_parent is not None:
-            value = dict(value, context={'prior_assignment_id': refresh_parent})
+        refresh_context = _find_problem_refresh_parent(records, artifacts, value) if problem and upgrade is None else None
+        if refresh_context is not None:
+            value = dict(value, context=refresh_context)
         repair_records = _read_context_records(records, value)
         repair = (context_repair.prepare_repair(repair_records, Evaluation.of(repair_records, artifacts), value)
                   if value['role'] in bar_sources.ROLES or
                   value['role'] == 'adjudicator' and 'context_repair' in value['context'] else None)
         parent = None
+        refreshed = None
         visual_transition = False
         if value['role'] == 'verification' and 'prior_assignment_id' in value['context']:
             parent = _get(records, 'review_assignment', value['context']['prior_assignment_id'])
@@ -3867,6 +3957,19 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 from .review_source_complete import MARKER as COMPLETE_MARKER, MODE
                 if COMPLETE_MARKER in _read_json(artifacts, parent['packet']):
                     value = dict(value, context=dict(value['context'], source_delivery=MODE))
+        elif value['role'] in bar_sources.ROLES and 'session_refresh' in value['context']:
+            # Rules F1, F3 and F4: the refresh of a review that a chain of the session rules v4 recorded is a new chain
+            # in the slot of that chain, on any verified route record. It keeps the author of its predecessor, and one
+            # recorded review takes one refresh.
+            refreshed = _read_session_refresh(records, artifacts, value['context']['session_refresh'],
+                                              value['dossier_id'], value['reviewer_id'], value['role'])
+            if normalized_text(refreshed['author_id']) != normalized_text(value['author_id']):
+                raise ResearchError('review_source_continuation_mismatch', 'Continue the exact same route and author boundary')
+            if any(later['recorded_revision'] > refreshed['recorded_revision'] and later['role'] == refreshed['role']
+                   and not has_ended_without_output(records, later['id']) and not is_dead_assignment(records, later)
+                   for later in read_filtered_records(records, 'review_assignment',
+                       slot_id=context_repair.slot_id(records, refreshed)).values()):
+                raise ResearchError('review_source_continuation_fork', 'Continue the latest source turn without forking the reviewer session')
         if value['context'].get('source_delivery') and route['adapter'] not in ('codex_cli_v1', 'codex_cli_visual_v1'):
             raise ResearchError('review_complete_source_route', 'Complete visible source input retains the existing Codex local route')
         staged_repair = repair is not None and repair['predecessor'].get('staged_review') is not None
@@ -3888,7 +3991,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         if upgrade_parent is not None:
             slot_identifier = context_repair.slot_id(records, upgrade_parent)
         elif value['role'] in bar_sources.ROLES or repair is not None or repair_adjudicator:
-            slot_identifier = (context_repair.slot_id(records, parent) if parent is not None else
+            slot_identifier = (context_repair.slot_id(records, parent or refreshed) if parent or refreshed else
                                repair['slot_id'] if repair is not None else _initial_slot(records, artifacts, value))
         if (slot_identifier is None and value['role'] in ('verification', 'manuscript', 'standalone')
                 and not value['context'].get('prior_assignment_id')):
@@ -4149,7 +4252,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 {'role': 'assistant', 'content': json.dumps(state['output'], sort_keys=True)}]
             session_id = history_parent['session_id']
             history_assignment_id = history_parent['id']
-        elif (value['role'] == 'slate' or (problem and value['role'] == 'result')) and repair is None:
+        # A new slate or result continues the session of its own bar. A refresh of a chain of the session rules v4
+        # starts its own session without history (rule F1).
+        elif (value['role'] == 'slate' or (problem and value['role'] == 'result')) and repair is None and refreshed is None:
             own = packet['own_bars'][-1]
             prior = _get(records, 'review_assignment', own['assignment_id'])
             prior_state = assignment_state(records, artifacts, prior['id'])

@@ -394,7 +394,8 @@ def prepare_repair(records, artifacts, assignment_payload):
     from .review_protocol import assignment_state, route_state
 
     context = assignment_payload['context']
-    fields(context, (), ('context_repair', 'prior_assignment_id', 'source_links', 'source_delivery'), code='invalid_review_context')
+    fields(context, (), ('context_repair', 'prior_assignment_id', 'source_links', 'source_delivery', 'session_refresh'),
+           code='invalid_review_context')
     if 'context_repair' not in context:
         return None
     fields(context, ('context_repair',), code='invalid_review_context')

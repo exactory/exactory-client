@@ -343,6 +343,12 @@ SESSION_BASE_SHAPE_PROMPT = (
 SESSION_PART_SHAPE_PROMPT = (
     ' The response shape stated above belongs to the whole final answer. This turn returns only the part of it '
     'that this turn owns.')
+# The turn text of a refresh chain (rule F2), whose logical packet holds problem_refresh. A working text: the
+# writer's pass of task T5.1 gives the final words. The turn prompt records it in its parameter REFRESH_PARAMETER.
+SESSION_REFRESH_PROMPT = (
+    ' This chain reviews the record as it is now. Your earlier review of this slot is in historical_reviews; '
+    'problem_refresh states what changed since it.')
+REFRESH_PARAMETER = 'session_refresh'
 # The accepted forms of an evidence entry of a study review (rule S1 of the study forms), for its final, page and
 # closing turns. A study review validates its evidence without a review binding (review_refusal.EVIDENCE_FORMS_NOTICE).
 STUDY_HANDLE_PROMPT = ' Cite each evidence entry of the answer by its handle, in the citation form stated above.'
@@ -405,11 +411,13 @@ def build_base_prompt(role, orchestration, *, common_version=None, repair_suffix
     return descriptor, dict(canonical, text=text, template_hash=digest(text), rendered_prompt_hash=digest(text))
 
 
-def build_turn_prompt(role, kind, bounds, *, orchestration, paragraphs=None, common_version=None, repair_suffix=None):
+def build_turn_prompt(role, kind, bounds, *, orchestration, paragraphs=None, common_version=None, repair_suffix=None,
+                      refresh=False):
     """The base prompt of the role, then the turn text of v4, then the paragraphs that the logical packet selects
     (rules V1 and V2). paragraphs holds problem_paragraphs and problem_objection_carry as
     review_prompt_paragraphs.select_prompt_parameters gives them; a refusal turn adds its refusal paragraph.
-    repair_suffix is the context-repair suffix of review_context_repair that the base of a repair chain holds."""
+    repair_suffix is the context-repair suffix of review_context_repair that the base of a repair chain holds.
+    refresh adds the turn text of a refresh chain (rule F2)."""
     from . import review_protocol as protocol, review_prompt_paragraphs as selection
     descriptor, base = build_base_prompt(role, orchestration, common_version=common_version, repair_suffix=repair_suffix)
     prompts = dict(bar=dict(request=BAR_REQUEST_PROMPT, final=BAR_FINAL_PROMPT),
@@ -418,6 +426,8 @@ def build_turn_prompt(role, kind, bounds, *, orchestration, paragraphs=None, com
     for name in prompts:
         prompts[name].update(protocol.SESSION_FINAL_PROMPTS[name])
     text = base['text'] + '\n\n' + prompts[role][kind]
+    if refresh:
+        text += SESSION_REFRESH_PROMPT
     if kind in ('request', 'combine'):
         text += SESSION_BASE_SHAPE_PROMPT
     elif kind in ('page', 'closing'):
@@ -429,6 +439,8 @@ def build_turn_prompt(role, kind, bounds, *, orchestration, paragraphs=None, com
         text += STUDY_FORMS_PROMPT
     template = PROTOCOL + '/' + role + '/' + kind + ('/context-repair' if repair_suffix is not None else '')
     parameters = dict(source_rules=PROTOCOL, session_stage=kind, base_prompt=descriptor)
+    if refresh:
+        parameters[REFRESH_PARAMETER] = True
     # The parameters name the repair suffix as the base does.
     parameters.update((key, base['parameters'][key]) for key in ('context_repair', 'context_repair_exhaustion')
                       if key in base['parameters'])
@@ -474,9 +486,10 @@ def matches_turn_prompt(assignment, packet=None, logical=None):
     if common_version is None:
         return False
     recorded = {key: parameters[key] for key in (selection.PARAMETER, selection.CARRY_PARAMETER) if key in parameters}
+    refresh = parameters.get(REFRESH_PARAMETER) is True
     try:
         expected = build_turn_prompt(assignment['role'], kind, bounds, orchestration=find_base_orchestration(assignment),
-            paragraphs=recorded, common_version=common_version, repair_suffix=suffix)
+            paragraphs=recorded, common_version=common_version, repair_suffix=suffix, refresh=refresh)
     except ResearchError:
         # An unregistered or reordered paragraph version.
         return False
@@ -484,6 +497,8 @@ def matches_turn_prompt(assignment, packet=None, logical=None):
         return False
     if logical is None:
         return True
+    if refresh != ('problem_refresh' in logical):
+        return False
     refusals = set(selection.REFUSAL_PARAGRAPH_VERSIONS.values())
     own = dict(recorded, **{selection.PARAMETER: [version for version in recorded.get(selection.PARAMETER, [])
                                                   if version not in refusals]})
@@ -1086,7 +1101,7 @@ def prepare_session_assignment(records, artifacts, value, route, revision, *, lo
     prompt = build_turn_prompt(value['role'], find_session_form(packet), read_session_binding(packet)['capacity'],
         orchestration=find_base_orchestration(value), paragraphs=select_prompt_parameters(value['role'], logical),
         common_version=protocol.find_common_prompt_version(parent['prompt']) if parent else None,
-        repair_suffix=_select_repair_suffix(logical))
+        repair_suffix=_select_repair_suffix(logical), refresh='problem_refresh' in logical)
     for entry in packet['evidence']:
         artifacts.put(entry['content'].encode('utf-8'), entry['artifact']['media_type'])
     record = dict(value, packet=protocol._put_json(artifacts, packet), packet_digest=packet['digest'], prompt=prompt,
@@ -1297,7 +1312,7 @@ def prepare_refusal_assignment(records, artifacts, value, revision, prior, froze
         prompt = build_turn_prompt(prior['role'], find_session_form(packet), read_session_binding(packet)['capacity'],
                                     orchestration=find_base_orchestration(prior), paragraphs=chosen,
                                     common_version=protocol.find_common_prompt_version(prior['prompt']),
-                                    repair_suffix=_select_repair_suffix(logical))
+                                    repair_suffix=_select_repair_suffix(logical), refresh='problem_refresh' in logical)
         return packet, prompt
     selected = notices.select_refusal_notice(records, artifacts, attempt_ids, diagnoses=diagnoses, route=route,
         role=prior['role'], prompt=None, packet=None, prepare_turn=prepare_turn, task_characters=None,
