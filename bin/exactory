@@ -42,7 +42,8 @@ from research_harness.same_origin import (REQUEST_ERROR_TYPES, RefusedRedirectEr
                                           describe_request_error_cause, get_origin, is_read_method,
                                           open_url_within_origin, read_error_detail, is_request_known_unsent)
 from research_harness.submission import (check_submission_preconditions, check_verdict_preconditions,
-                                         continue_submission, send_verdict, submit_managed)
+                                         continue_submission, record_verdict_answer, require_current_predecessor,
+                                         send_verdict, submit_managed)
 from research_harness.verification import record_task
 from research_harness.workspace import find_workspace, strict_json
 
@@ -130,6 +131,19 @@ _SEARCH_AND_FILTER_QUERY_ERR_MSGS = {**_HTTP_ERR_MSGS, 422: _LIST_QUERY_REFUSAL_
     query_parts="the search text, a filter, the sort, the limit, or the cursor")}
 _FILTER_QUERY_ERR_MSGS = {**_HTTP_ERR_MSGS, 422: _LIST_QUERY_REFUSAL_TEMPLATE.format(
     query_parts="a filter, the sort, the limit, or the cursor")}
+# The server files a verdict only when its supersedesVerdictId names the current verdict of the account (none for a
+# first verdict). A command that sent a verdict reads the task first when it runs again, so a refused verdict sends
+# the user to that command and not to a corrected body.
+_VERDICT_ERR_MSGS = {
+    **_HTTP_ERR_MSGS,
+    409: "The server filed nothing. This account has a current verdict on this verification, and the verdict file"
+         " names none in supersedesVerdictId. Run the same exactory verify or exactory reconcile command again."
+         " It reads the task first, names the current verdict, and says what to do next.",
+    422: "The server filed nothing. The verdict file is not a valid verdict, or its supersedesVerdictId does not"
+         " name the current verdict of this account on this verification. Run the same exactory verify or"
+         " exactory reconcile command again. When the task shows another current verdict, the command names it"
+         " and says what to do next. Otherwise correct the verdict file.",
+}
 
 # The login routes carry no key, so their failures mean other things than the ones above.
 _LOGIN_ERR_MSGS = {
@@ -565,17 +579,21 @@ def _run_verify(args: argparse.Namespace) -> None:
     task, _ = _send_request("GET", "/api/v1/tasks/" + _quote_identifier_path(identifier))
 
     # The workspace records a receipt when it bound this exact verdict; otherwise
-    # the verdict goes out directly, and the user reads why on stderr.
+    # the verdict goes out directly, and the user reads why on stderr. On both
+    # paths a verdict goes out only when the task shows, as the current verdict
+    # of the account, the verdict that the file supersedes: the server files no
+    # other verdict file.
     # The verdict keeps no local copy of itself, so a store that does not open
     # changes nothing here.
     store, verdict_report, _ = select_managed_path(
         lambda workspace_store: check_verdict_preconditions(workspace_store, task, body), public_gate="verification",
         public_action="POST /api/v1/verifications/" + urllib.parse.quote(task["verificationId"], safe="") + "/verdicts")
     if verdict_report is not None:
-        payload = send_verdict(store, task, body, _send_request,
+        payload = send_verdict(store, task, body, _send_verdict_request,
                                expected_revision=args.expected_revision, request_id=command_request_id(args))
     else:
-        payload, _ = _send_request(
+        require_current_predecessor(task, body)
+        payload, _ = _send_verdict_request(
             "POST",
             "/api/v1/verifications/" + urllib.parse.quote(task["verificationId"], safe="") + "/verdicts",
             body,
@@ -583,19 +601,33 @@ def _run_verify(args: argparse.Namespace) -> None:
     _print_json(payload)
 
 
+def _send_verdict_request(method: str, path: str, body: dict | None = None) -> tuple[dict, int]:
+    """Send a request of a verdict command, its task read or its verdict, with the messages of a refused verdict."""
+    return _send_request(method, path, body, error_messages=_VERDICT_ERR_MSGS)
+
+
+_VERDICT_ID_FOR_A_SUBMISSION_ERR_MSG = ("The option --verdict-id applies to a verdict intent, and this intent is a"
+                                        " submission. Run exactory reconcile with the intent ID alone.")
+
+
 def _run_reconcile(args: argparse.Namespace) -> None:
     store = current_store(find_workspace())
     from research_harness.remote import get_intent
     intent = get_intent(store, args.intent_id)
-    if intent["kind"] == "submit":
-        _print_json(continue_submission(store, args.intent_id, _send_request))
-        return
     if intent["kind"] == "verdict":
+        if args.verdict_id is not None:
+            _print_json(record_verdict_answer(store, intent["id"], args.verdict_id, _send_verdict_request))
+            return
         identity = intent["binding"]["verification_id"]
         task, _ = _send_request("GET", "/api/v1/tasks/" + _quote_identifier_path(identity))
-        _print_json(send_verdict(store, task, intent["binding"]["body"], _send_request, request_id=intent["id"]))
+        _print_json(send_verdict(store, task, intent["binding"]["body"], _send_verdict_request,
+                                 request_id=intent["id"]))
         return
-    raise ResearchError("remote_intent_mismatch", "Use exactory-draft reconcile for a Zenodo deposit")
+    if intent["kind"] != "submit":
+        raise ResearchError("remote_intent_mismatch", "Use exactory-draft reconcile for a Zenodo deposit")
+    if args.verdict_id is not None:
+        raise ResearchError("remote_intent_mismatch", _VERDICT_ID_FOR_A_SUBMISSION_ERR_MSG)
+    _print_json(continue_submission(store, args.intent_id, _send_request))
 
 
 def _resolve_paper_identifier(identifier: str) -> str:
@@ -1429,8 +1461,16 @@ def _build_parser() -> argparse.ArgumentParser:
     verify.set_defaults(handler=_run_verify)
     add_identity(verify, required=False)
     reconcile = commands.add_parser("reconcile", allow_abbrev=False,
-        help="Observe a pending submit/verdict intent through task-only reads. The existing API cannot confirm an unknown verdict body; it remains pending without repeating POST.")
+        help="Continue a saved submit or verdict intent. For a pending step, the command reads the task first and"
+             " records what the task shows. If the task shows that the server holds no verdict from the request, the"
+             " command sends the verdict again. If the server shows no task of the record, the command sends the"
+             " submission again.")
     reconcile.add_argument("intent_id")
+    reconcile.add_argument("--verdict-id", metavar="VERDICT_ID",
+                           help="For a verdict intent whose answer is not recorded: the id of the verdict that the"
+                                " server filed for it. The task must show this id as the current verdict of the"
+                                " account. The command then records the step and the receipt, and it sends no"
+                                " request.")
     reconcile.set_defaults(handler=_run_reconcile)
 
     vote = commands.add_parser(

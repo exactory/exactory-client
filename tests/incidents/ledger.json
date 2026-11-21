@@ -7748,6 +7748,55 @@
         "test_openness_reading_v7_turns.V7CommandTests.test_the_receipt_and_the_check_of_a_replacement_turn_hold_the_forecast_over_the_inputs_that_remain",
         "test_openness_reading_v7_turns.V7CommandTests.test_status_and_preflight_give_the_forecast_over_the_inputs_that_remain"
       ]
+    },
+    {
+      "id": "pending-step-sent-a-second-request",
+      "record": "20261120122159-verify-sends-a-verdict-again-while-its-answer-step-is-pending",
+      "class": "concurrency",
+      "summary": "With a pending step of a verdict or of a submission, exactory verify and exactory submit left the managed path. They sent the request directly, a second time. A step stayed pending in four cases: the store refused the record of the answer, the response was lost, the request did not arrive, or the server refused the request. The server answered the second verdict with 409 or 422. The text of the 422 refusal told the user to correct the body and send it again. The workspace kept no receipt, and its intent stayed pending for good. With --managed-only, a submission whose request never arrived had no command that sent it.",
+      "expected": "With a pending step, exactory verify, exactory submit and exactory reconcile read the task before they send a request, and the read that decides a pending verdict step is taken while the command owns the verification. On both paths, the commands send only a verdict file that names the verdict that the task shows as current. A pending verdict step whose predecessor is still current is cleared and sent once on the managed path, with its receipt. A pending step of the same verdict with a newer verdict of the account ends the command with verdict_reconciliation_pending. exactory reconcile with --verdict-id then records the answer. A pending submission is recorded from the task. If the server shows no task of the record, the submission is sent again on the managed path. A submission of the same record with other declarations is refused on the managed path with submission_declarations_mismatch. A verdict that the server refuses names the command that reads the task.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verify_after_a_refused_answer_record_sends_no_second_verdict",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verify_after_a_lost_response_sends_no_second_verdict_that_the_task_shows",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verify_decides_a_pending_step_by_a_task_read_taken_while_it_owns_the_verification",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verify_after_a_request_that_never_arrived_sends_it_once_and_writes_the_receipt",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_reconcile_with_the_verdict_id_records_the_answer_and_sends_nothing",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_reconcile_with_the_verdict_id_after_a_refused_receipt_records_the_receipt",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_reconcile_with_the_verdict_id_reads_nothing_while_another_sender_owns_the_verification",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verdict_id_for_a_submission_or_a_deposit_intent_is_refused",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_reconcile_after_a_request_that_never_arrived_sends_it_once",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_a_refused_observation_of_an_unrecorded_answer_ends_the_command_without_a_request",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_a_prepared_verdict_is_not_sent_while_the_task_shows_a_newer_verdict",
+        "test_pending_remote_requests.TestVerifyOnTheDirectPath.test_a_first_verdict_is_not_sent_while_the_task_shows_a_verdict_of_the_account",
+        "test_pending_remote_requests.TestVerifyOnTheDirectPath.test_a_revision_is_not_sent_while_the_task_shows_another_current_verdict",
+        "test_pending_remote_requests.TestVerifyOnTheDirectPath.test_a_verdict_is_not_sent_beside_a_store_that_does_not_open",
+        "test_pending_remote_requests.TestRefusedVerdictMessages.test_a_refused_verdict_on_the_direct_path_names_the_command_that_reads_the_task",
+        "test_pending_remote_requests.TestRefusedVerdictMessages.test_a_refused_verdict_on_the_managed_path_names_the_command_that_reads_the_task",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_after_a_refused_answer_record_reads_the_task_and_writes_the_receipt",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_with_another_spelling_of_the_record_continues_the_same_intent",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_while_the_service_shows_no_task_sends_the_request_on_the_managed_path",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_managed_only_submit_while_the_service_shows_no_task_sends_the_request",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_after_a_lost_response_joins_the_open_request_and_records_its_answer",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_with_other_declarations_than_a_pending_request_sends_them_directly",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_managed_only_submit_with_other_declarations_than_a_pending_request_is_refused",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_with_other_declarations_than_a_complete_request_sends_them_directly"
+      ]
+    },
+    {
+      "id": "submission-answer-read-for-a-member-the-server-never-sends",
+      "record": "20261120073605-continue-submission-reads-a-member-the-server-does-not-send",
+      "class": "identity (server and plugin)",
+      "summary": "continue_submission looked for verificationId in the answer of POST /api/v1/verifications. The server answers with the summary of the request (id, status, doi, createdAt, webUrl, supersedes, supersededBy) and never sends verificationId, so every path read the task by the concept DOI of the record. Three test stand-ins answered with verificationId and hid the dead read. No path failed.",
+      "expected": "The task of a submission is read by the concept DOI of the record, or its DOI, on every path, and no code reads a member of the answer that the server does not send. The test stand-ins answer the submission with the schema of the server, and two tests pin the DOI read after a 201 and after a 200 answer that hold only id.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_reads_the_task_by_the_concept_doi_after_the_answer_of_a_new_request",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_reads_the_task_by_the_concept_doi_after_the_answer_of_the_open_request",
+        "test_transport.TestSubmitDecision.test_submit_in_a_ready_study_writes_the_receipt"
+      ]
     }
   ]
 }

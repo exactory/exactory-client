@@ -34,7 +34,8 @@ class SourceLimitedCommandTests(unittest.TestCase):
 
     def remote(self, method, path, *args, **kwargs):
         self.calls.append((method, path))
-        return {"verificationId": "fixture"}, 201
+        return {"id": "fixture", "status": "open", "doi": "10.5281/zenodo.100", "createdAt": "2026-01-01T00:00:00.000Z",
+                "webUrl": "https://www.exactory.ai/verifications/fixture", "supersedes": None, "supersededBy": None}, 201
 
     def invoke(self, module, arguments):
         stdout, stderr = io.StringIO(), io.StringIO()
@@ -119,7 +120,9 @@ class SourceLimitedLifecycleTests(SourceLimitedCase):
     def server(self, method, path, *args, **kwargs):
         if method != "GET":
             self.writes.append(("server", method, path))
-            return {"verificationId": "test-verification"}, 201
+            return {"id": "test-verification", "status": "open", "doi": "10.5281/zenodo.90",
+                    "createdAt": "2026-01-01T00:00:00.000Z", "webUrl": "https://www.exactory.ai/verifications/x",
+                    "supersedes": None, "supersededBy": None}, 201
         return {"verificationId": "test-verification", "doi": "10.5281/zenodo.90",
                 "source": "zenodo", "sourceId": "91", "sourceVersion": None, "url": "https://zenodo.org/records/91"}, 200
 

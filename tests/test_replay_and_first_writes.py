@@ -749,7 +749,10 @@ class SubmitCommandTests(ManagedCommandCase):
 
     def answer(self, method):
         if method == "POST":
-            return {"verificationId": self.TASK["verificationId"], "doi": self.TASK["doi"]}, 201
+            # The answer of the service: verificationSummarySchema, which names the request by its id.
+            return {"id": self.TASK["verificationId"], "status": "open", "doi": self.TASK["doi"],
+                    "createdAt": "2026-11-20T00:00:00.000Z", "webUrl": "https://www.exactory.ai/verifications/x",
+                    "supersedes": None, "supersededBy": None}, 201
         return dict(self.TASK), 200
 
     def submit(self, *options):

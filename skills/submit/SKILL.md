@@ -85,6 +85,9 @@ When `exactory submit` is refused with `store_busy`, read its message and take t
 that it names. A message that says that the request was sent once names
 `exactory reconcile` with the intent ID in `details.intent_id`. That command reads the
 task and records the submission. `details.response` holds the members of the answer of
-the server that the step needs. Do not run `exactory submit` again before that. With a
-pending step, the command without `--managed-only` sends the request directly, a second
-time.
+the server that the step needs. `exactory submit` run again with the same `--challenge`
+and `--math-problem` values does the same: it continues the saved intent and reads the
+task first. When the server shows no task of the record, it sends the request again, and
+the server keeps one open request for the paper. When the command is refused with
+`verification_ingest_pending`, the request is recorded and the paper is not ingested.
+Run `exactory reconcile` with the intent ID later.

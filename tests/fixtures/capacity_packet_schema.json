@@ -22461,7 +22461,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.4 origin authentication: describe_correction_observation passes the origin view of the records to _authenticate_observation; no packet argument or member changes. Reviewed 0.91.5 call payload definition: check_authentication rebuilds the payload of each committed call capture through review_task_execution.rebuild_call_payload, with the optional members that the invocation holds, in place of fixed key lists; no packet argument or member changes."
     },
     "research_harness.remote": {
-      "ast_sha256": "155331da7c1434e5eff8ca2cbf255262816f6c14bab455ebcb4e6bea2d59f3b6",
+      "ast_sha256": "8604e6cb88dff78fd7627c94650c574a03ca97d56e5cedce96defe716252d668",
       "functions": {
         "_select_answer_members": "92f1798231f491c0e0f753a8e4984cba8fd30f216ecd04e2234f3a2bb5ec6a38",
         "_change": "4b0684c358442d85218a613eca9593aa48cc686e18b3db02f0b06deaf5c4d6d5",
@@ -22477,7 +22477,7 @@
         "resolve_step": "d9fd010e3cc275d0e24988b8f9e6bc73ebcfd8b52fa028870ae041b5b8cd6ff5"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (0.91.11): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed replay-first-writes, part 2 (0.91.11): the admission of an acquisition commits at the revision that the write lock finds when the store is at the caller's revision or a later one, reads the reservation of its operation inside its write, and waits for a busy store through finishing.retry_finishing_write; visual keeps the compare-and-swap; the start of a full-text job commits against the records of its check with the same condition and wait; the saved intent of a remote operation without a revision of the user commits against the saved intents and waits the same way, and a check answers the committed admission of an acquisition; no packet argument or member changes."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (0.91.11): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed replay-first-writes, part 2 (0.91.11): the admission of an acquisition commits at the revision that the write lock finds when the store is at the caller's revision or a later one, reads the reservation of its operation inside its write, and waits for a busy store through finishing.retry_finishing_write; visual keeps the compare-and-swap; the start of a full-text job commits against the records of its check with the same condition and wait; the saved intent of a remote operation without a revision of the user commits against the saved intents and waits the same way, and a check answers the committed admission of an acquisition; no packet argument or member changes. Reviewed pending remote steps (0.91.12): exactory verify, exactory submit and exactory reconcile read the task before they send a request of a pending step, a verdict is sent only when the task shows its predecessor as current, and a pending step is cleared, recorded from the read or left pending; a submission whose declarations differ from the saved request of its record is refused on the managed path; no packet argument or member changes."
     },
     "research_harness.remote_execution": {
       "ast_sha256": "0db14e6162fd34828a903b5283ea2e7f8d66b93f94f544c125e87529893a7c43",
@@ -26158,19 +26158,32 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.submission": {
-      "ast_sha256": "7318855e7dfbe7ad53c1c405e31a284ceaacac5de76040b19fd85074e7f3b94e",
+      "ast_sha256": "3c0541efd41e9a774135ee3651f4ee68ba7620727c1e00b0a19f30dee80dd65f",
       "functions": {
+        "_find_task": "89a65aaadb42692d89261d3421afb7e33638ce1ffbf3d227b03853dc6941443c",
+        "_find_unrecorded_answer": "909572680d5f26de7db0d098bb61d98e86c9aaff99f07e27004798e9d855e608",
+        "_fold_verdict_id": "48567357ababc4d241ae96c56f6f889055eefc8ddb3405c2680cb659bd4ede76",
+        "_hold_verification": "2a9f6112ece59a912ff5561fb2a1e6af8208b1f732991657f46e36edc6823180",
+        "_is_predecessor_current": "f41e1e49bdcf957b810588a5eef58cbd76a41e355a40f4cdf7c9d81765a55450",
+        "_is_publication_named": "fdac456fa8315a1d8f5f1c57f2eb7bc3fea4c43ef1ba87fd873b7283d8d54aeb",
+        "_list_pending_verdicts": "6255558d0a218a58fd7bc129440399d7660e48fb2c086531a4ea55a23cd89406",
         "_observation": "5cb23ed0270920906c85d251bc238dc79e0225846d912375955eec7bef2c859e",
-        "_send_verdict": "a1e2fd0bc587ab3b2cc165009dfdcbc2b12931bb7f47213550777c36baaa9ffc",
-        "check_submission_preconditions": "bbb5793c108b8211100d4750b23a5f1766220addbfebd0f730eed9a38d8133d3",
-        "check_verdict_preconditions": "12cc25ab249c3120c782e908f83a5073ec9749265f28cc24ee04ae806248b7d4",
-        "continue_submission": "c39a7055cc79c460129ed424ede9090321bfba923568b90df63c4b336f4faf5f",
-        "send_verdict": "652dc059ed229d18fd5959c42cbc6574073ed40d1fea9d598062182e022ae312",
+        "_read_verdict_task": "056afa5f65752aa9304aaf3e0b85c80f311b3543d134254bbbb1eccd07f5cc36",
+        "_refuse_unrecorded_answer": "ed8427e94465a10fbb57e75d668551c44f03f3f2fde9aa1d49615e3d83153adc",
+        "_release_unapplied_verdicts": "72e4f8efbb485a44fa90dbdcd21cc1096c0d2396da8d7e916104ec1902d8a442",
+        "_require_same_declarations": "75a0c52a315afa57404eeafd58ca79a2a644b1095d8ac9cb69cc782c2dca2a54",
+        "_send_verdict": "91a81908632fadfaadca4f1e7e6d2d7362f740adcbef6faa17503f795186f5ab",
+        "check_submission_preconditions": "85a2830f546a8342e2800b1ec5bd49bb23f1a3ae3793548ea3fd23c0226372a0",
+        "check_verdict_preconditions": "8f1e061ce0362a21a634ba25ca9c0393144a1a4dd0d7b848172aa190785a1169",
+        "continue_submission": "0affbf5d9ea3807f54d210aa6183446ee5ea595e844e6ec51614b3e553540e94",
+        "record_verdict_answer": "e6743a24a323d53a0167ddb24f5170e22ae34281b81ffd87e6a6c42712f88ee5",
+        "require_current_predecessor": "b2d45f48c7b6f53efbd660e295d192c088f63e455bb22254049710671dad6980",
+        "send_verdict": "2b2603fefc706ac04dd8c74942b999d6fb4bd98eb4270bca838fb1af0aa3f35a",
         "submit_managed": "85abd821aadcfcfb36b2922fcf063346aba57804e1245f66f3de7397e5f9507d",
-        "validate_submission": "f798de8b24d62fcea02c9ba861ab3108adab670c8cd977adf2add120726db8b9"
+        "validate_submission": "9e2fb2f59446d2d4d31bce20fda878161cf6bd71cf8def5eee4e664430b46130"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (0.91.11): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed replay-first-writes, part 2 (0.91.11): the admission of an acquisition commits at the revision that the write lock finds when the store is at the caller's revision or a later one, reads the reservation of its operation inside its write, and waits for a busy store through finishing.retry_finishing_write; visual keeps the compare-and-swap; the start of a full-text job commits against the records of its check with the same condition and wait; the saved intent of a remote operation without a revision of the user commits against the saved intents and waits the same way, and a check answers the committed admission of an acquisition; no packet argument or member changes."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (0.91.11): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed replay-first-writes, part 2 (0.91.11): the admission of an acquisition commits at the revision that the write lock finds when the store is at the caller's revision or a later one, reads the reservation of its operation inside its write, and waits for a busy store through finishing.retry_finishing_write; visual keeps the compare-and-swap; the start of a full-text job commits against the records of its check with the same condition and wait; the saved intent of a remote operation without a revision of the user commits against the saved intents and waits the same way, and a check answers the committed admission of an acquisition; no packet argument or member changes. Reviewed pending remote steps (0.91.12): exactory verify, exactory submit and exactory reconcile read the task before they send a request of a pending step, a verdict is sent only when the task shows its predecessor as current, and a pending step is cleared, recorded from the read or left pending; a submission whose declarations differ from the saved request of its record is refused on the managed path; no packet argument or member changes."
     },
     "research_harness.synthesis": {
       "ast_sha256": "c6fa820431e1c4fd7875723e3d45f05495d3700651ae2e984dacb26e500c17be",
@@ -115254,6 +115267,7 @@
     "superseded_by",
     "superseded_claim_ids",
     "supersedes",
+    "supersedesVerdictId",
     "supervisor",
     "supplement",
     "supplements",
