@@ -1465,7 +1465,8 @@ class NoticeRoomTests(unittest.TestCase):
         prompt = paragraphs.append_prompt_paragraphs(prompt, 'native_math',
             versions=[paragraphs.REFUSAL_PARAGRAPH_VERSIONS['bounded']])
         prompt['parameters']['capacity'] = supplied['reading_turn']['capacity']
-        assignment = dict(id='chain', role='native_math', route_id='route', prompt=prompt,
+        # The assignment holds every member of a recorded one, the context included, as the fixture assigned it.
+        assignment = dict(fixture.value, prompt=prompt,
             reading_chain=chain, capacity_plan=chain['capacity_plan'], capacity_plan_kind='reading',
             packet=fixture.artifacts.put_json(supplied))
         records = dict(review_route=dict(route=fixture.route))
