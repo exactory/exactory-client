@@ -166,6 +166,18 @@ deposit when a later read settles that step. Report the record to the user and
 ask before another run. A deposit that saved no intent took the direct path, and
 "What not to do" names its recovery.
 
+When `exactory-draft deposit` is refused with `stale_revision`, another command
+wrote to the store between a check of the command and the write that follows it.
+The request after that check was not sent. Run the same command again. When the
+command is refused with `store_busy`, read its message. When the refusal has
+`details.cause`, the message says whether a request of the step was sent and
+which command goes on. Take that command. After a request was sent, that command
+is `exactory-draft reconcile` with the intent ID in `details.intent_id`.
+`details.response` then holds the members of the answer of Zenodo that the step
+needs. A `store_busy` without `details.cause` came from a read of the store or
+from the first write of the command. No request is then without its record. Run
+the same command again.
+
 ## Publishing a revised version
 
 When the paper has already been deposited and the improvement loop produced a

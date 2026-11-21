@@ -26,6 +26,11 @@ OUTDATED_PACKET_MESSAGE = ("The records changed after this packet was exported: 
                            "a new packet with export --kind problem-openness and start a new chain over it. The "
                            "verified reading turns of this chain stay verified.")
 
+UNCHECKED_FINDING_MESSAGE = ("The answer of this assignment fails its output check, and the store holds no "
+                             "refusal record for it. The harness records no finding from it. details.refusal "
+                             "gives the code, the check and the details of the failure. Run review-series on the "
+                             "assignment and take the step that it plans.")
+
 
 FAMILY_READING_REPORT_FIELD = "derived_family_readings"
 FAMILY_READING_LINK_FIELD = "link"
@@ -133,17 +138,26 @@ def prepare_openness(records, artifacts, value, revision):
     assignment = records.get("review_assignment", {}).get(value["assignment_id"])
     if not state["ready"] or assignment is None or assignment["role"] != "native_math":
         raise ResearchError("review_context_unverified", "Obtain the observed native_math openness result", {"obligations": state["obligations"]})
+    if uses_finding_contract(assignment):
+        # The run checks the observed answer against this assignment's immutable contract and records a refusal for
+        # an answer that fails. That record can be missing, so the check runs again before the answer is read.
+        from .review_refusal import classify_observed_output
+        failure = classify_observed_output(records, artifacts, state["attempt_id"])
+        if failure is not None:
+            raise ResearchError("review_context_unverified", UNCHECKED_FINDING_MESSAGE,
+                                {"assignment_id": assignment["id"], "attempt_id": state["attempt_id"],
+                                 "refusal": failure})
     packet = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
     output = state["output"]
     from .openness_reading import PROTOCOL_V5, PROTOCOL_V6, PROTOCOL_V7, find_protocol, find_stage, verify_chain, verify_problem_coverage
     supplied = json.loads(artifacts.read(assignment["packet"]))
     stage = find_stage(supplied)
-    if stage == "reading" or (stage == "final" and output.get("stage") == "reading"):
+    if stage == "reading" or (stage == "final" and output.get("stage") in ("reading", "material")):
         raise ResearchError("openness_reading_incomplete", "This turn of the reading chain returned no native result; "
                             "continue the chain to a final turn that returns it", {"assignment_id": assignment["id"]})
     finding_contract = uses_finding_contract(assignment)
     if finding_contract:
-        # The observed answer was checked against this assignment's immutable contract at ingestion.
+        # The check above found no failure of the observed answer under this assignment's immutable contract.
         finding = copy.deepcopy(output["findings"]["openness"])
         context = packet["scientific_context"]
         finding.update(statement_digest=packet["claim_digest"],
@@ -283,6 +297,23 @@ def assess_openness(records, artifacts):
         except ResearchError as error:
             return [obligation("problem_openness_stale", "Reassess changed or unavailable observed openness evidence.",
                                cause=error.code, **affected)]
+    assignment = records.get("review_assignment", {}).get(finding.get("assignment_id"))
+    if "reading_turns" not in finding and assignment is not None and uses_finding_contract(assignment):
+        # A finding of a single review under the finding contract has no chain whose verification checks its answer.
+        # The gate checks that the recorded answer is still the selected answer of the review and that it passes its
+        # output check: 0.90.0 to 0.91.10 recorded the finding of a refused answer when its refusal record was missing.
+        from .review_protocol import assignment_state
+        from .review_refusal import classify_observed_output
+        try:
+            state = assignment_state(records, artifacts, finding["assignment_id"])
+            unverified = (state["output"] != finding["review"]
+                          or classify_observed_output(records, artifacts, state["attempt_id"]) is not None)
+            cause = "openness_native_review_unverified" if unverified else None
+        except ResearchError as error:
+            cause = error.code
+        if cause is not None:
+            return [obligation("problem_openness_stale", "Reassess changed or unavailable observed openness evidence.",
+                               cause=cause, **affected)]
     grounds = [dict(ground, next=GROUND_NEXT_STEPS[ground["kind"]]) for ground in finding.get("grounds", [])]
     minimum = finding.get("minimum")
     if minimum is None:

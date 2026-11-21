@@ -9,7 +9,7 @@ from unittest.mock import patch
 import test_research_review_protocol as fixtures
 import test_research_context_repair_integration as repair_fixtures
 from literature_fixtures import LiteratureCase
-from research_harness import operations, review_protocol as protocol, storage
+from research_harness import finishing, operations, review_protocol as protocol, storage
 from research_harness import review_request_evaluation
 from research_harness.errors import ResearchError
 from research_harness.evaluation import Evaluation
@@ -324,7 +324,7 @@ store.mutate('other-process', row, lambda tx: tx.put('review_attempt', row['id']
         self.assertEqual(observed, [True])
         self.assertEqual(self.records()['review_attempt']['attempt']['recorded_revision'], result['revision'])
 
-    def test_exhausted_scoped_finish_keeps_dependency_error_explicit(self):
+    def test_exhausted_scoped_finish_names_the_dependency_error_as_its_cause(self):
         self.run_probe()
         self.assign()
         commit = self.store.mutate_scoped
@@ -338,11 +338,15 @@ store.mutate('other-process', row, lambda tx: tx.put('review_attempt', row['id']
 
         with patch.object(self.store, 'mutate_scoped', side_effect=intervene), \
                 patch.object(storage, '_BUSY_TIMEOUT_SECONDS', .001), \
-                patch.object(protocol, 'SCOPED_FINISH_ATTEMPT_COUNT', 2), \
+                patch.object(finishing, 'SCOPED_FINISH_ATTEMPT_COUNT', 2), \
                 patch.object(protocol, '_observed', return_value=dict(status='failed', output=None)):
-            self.refuse('review_task_dependency_changed', lambda: protocol.invoke_assignment(self.store,
-                dict(id='attempt', assignment_id='assignment'), expected_revision=self.store.revision,
-                request_id='race-finish', credential=None))
+            with self.assertRaises(ResearchError) as raised:
+                protocol.invoke_assignment(self.store, dict(id='attempt', assignment_id='assignment'),
+                                           expected_revision=self.store.revision, request_id='race-finish',
+                                           credential=None)
+        self.assertEqual((raised.exception.code, raised.exception.message),
+                         ('store_busy', protocol.CALL_FINISH_STORE_BUSY_MSG))
+        self.assertEqual(raised.exception.details['cause']['code'], 'review_task_dependency_changed')
         self.assertEqual(refused, [True, True])
         self.assertNotIn('attempt', self.records().get('review_attempt', {}))
 

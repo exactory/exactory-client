@@ -17,10 +17,11 @@ import uuid
 from . import resources
 from .artifacts import ArtifactStore, is_sealed_artifact
 from .errors import ResearchError
+from .finishing import retry_finishing_write
 from .operations import fields, immutable_record, is_finite_number, prepared_mutation, prepared_task_mutation, text
 from .probe_worker import capture_probe_outcome, find_probe_stream_origins
 from .probe_provenance import (PROBE_INTENT_STORE_BUSY_MSG, PROBE_LAUNCH_STORE_BUSY_MSG, PROBE_STORE_BUSY_MSG,
-                               pin_probe_artifact, retry_probe_write)
+                               pin_probe_artifact)
 from .probe_supervision import find_probe_group_members, find_probe_process_identity, read_probe_clock
 from .program_probes import build_program_run, format_utc_now, validate_program_run, validate_program_run_context
 from .workspace import checked_parent, json_projection, read_file, strict_json, write_projection
@@ -174,7 +175,8 @@ def commit_probe_mutation(store, operation, payload, request_id, *, busy_msg=PRO
     """Commit a record that the launcher writes for a probe. The commit depends on the records that its preparation
     read and not on the revision of the store. A busy store is waited for, and busy_msg is the message of the refusal
     after the wait."""
-    return retry_probe_write(lambda: operation(store, payload, expected_revision=None, request_id=request_id), busy_msg)
+    return retry_finishing_write(lambda: operation(store, payload, expected_revision=None, request_id=request_id),
+                                 busy_msg)
 
 
 def build_probe_directory(identifier):

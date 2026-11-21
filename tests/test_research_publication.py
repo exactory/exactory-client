@@ -495,7 +495,7 @@ class ResearchPublicationTests(DevelopmentCase):
         receipt without a DOI. The read of the same deposition supplies the publication that the
         deposited gate and the submission need, and the first receipt stays as it was written."""
         import hashlib
-        from research_harness.remote import finish_intent, resolve_step
+        from research_harness.remote import ANSWER_MEMBERS, REMOTE_ANSWER_STORE_BUSY_MSG, finish_intent, resolve_step
         from research_harness.submission import validate_submission
         from research_harness.zenodo import continue_deposit, deposit
         binding = self.remote_binding()
@@ -518,7 +518,8 @@ class ResearchPublicationTests(DevelopmentCase):
             return {}
         self.assert_error("remote_reconciliation_required", lambda: deposit(
             self.store, binding, client, expected_revision=self.store.revision, request_id="deposit-1"))
-        resolve_step(self.store, "deposit-1", "publish", None, {"kind": "direct_response"})
+        resolve_step(self.store, "deposit-1", "publish", None, {"kind": "direct_response"},
+                     answer_members=ANSWER_MEMBERS[("deposit", "publish")], busy_msg=REMOTE_ANSWER_STORE_BUSY_MSG)
         state = {"environment": "production", "deposition_id": 91, "draft_url": "https://zenodo.org/deposit/91"}
         legacy = dict(state, intent_id="deposit-1", bundle_digest=binding["bundle_digest"], uploads=binding["uploads"],
                       published_response=None, prepared_revision=binding["prepared_revision"])

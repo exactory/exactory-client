@@ -336,6 +336,39 @@ def _plan_capacity(records, assignment, action, artifacts=None):
                 details=dict(calls_before=len(active) + len(ahead), reservations=[row['id'] for row in active], **capacity))
 
 
+UNRECORDED_REFUSAL_MESSAGE = (
+    'The answer of this turn fails the output check of its turn, and the store holds no refusal record for it. The '
+    'write of that record did not commit when the run ended. details.refusal gives the code, the check and the '
+    'details of the failure. This step runs the recorded review-run request of that answer again, with its request '
+    'ID. It calls no reviewer: it returns the recorded run and records the refusal. The next plan is the step for a '
+    'refused answer.')
+
+
+def _plan_unrecorded_refusal(records, artifacts, assignment, state, packet):
+    """Plan the recorded run request again for a native answer that fails its output check without a refusal record.
+
+    The run of such a turn records the refusal, and the same request records it when that write did not commit.
+    A turn of protocol v7 and an answer under the finding contract are read only after this check, so their head
+    gets this step in place of a continuation or a recording that the command would refuse. The check fails only for
+    an authenticated attempt, and the run writes the invocation and the capture of such an attempt before the attempt
+    itself, so both records are read directly."""
+    from .native_review import uses_finding_contract
+    if openness_reading.find_protocol(packet) != openness_reading.PROTOCOL_V7 and not uses_finding_contract(assignment):
+        return None
+    attempt_id = state['attempt_id']
+    if attempt_id in records.get('review_output_refusal', {}):
+        return None
+    from .review_refusal import classify_observed_output
+    failure = classify_observed_output(records, artifacts, attempt_id)
+    if failure is None:
+        return None
+    captured = records['review_call_observation'][identify_call('review.invoke', attempt_id)]
+    return dict(state='resume', command='review-run', request_id=captured['request_id'],
+                payload=rebuild_call_payload('review.invoke', records['review_invocation'][attempt_id]),
+                details=dict(assignment_id=assignment['id'], attempt_id=attempt_id, refusal=failure,
+                             message=UNRECORDED_REFUSAL_MESSAGE))
+
+
 def _plan_recording(records, artifacts, assignment, state):
     if _list_recorded_finals(records, {assignment['id']}):
         return dict(state='done')
@@ -619,6 +652,10 @@ def _plan_head(records, artifacts, assignment):
         return _plan_capacity(records, assignment, dict(state='run', command='review-run',
                               payload=_build_run_payload(records, assignment)), artifacts)
     packet = protocol._read_json(artifacts, assignment['packet'])
+    if assignment['role'] == 'native_math' and not _list_recorded_finals(records, {assignment['id']}):
+        unrecorded = _plan_unrecorded_refusal(records, artifacts, assignment, state, packet)
+        if unrecorded is not None:
+            return unrecorded
     is_parts = review_parts.KEY in assignment
     continuing = (is_parts and (assignment[review_parts.KEY]['kind'] != 'final'
                                 or state['output'].get('kind') == 'requests')

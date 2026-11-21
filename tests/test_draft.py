@@ -21,6 +21,7 @@ import zipfile
 from pathlib import Path
 
 from integration_fixtures import prepare_research, prepare_manuscript
+from research_harness import finishing
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
 from research_harness.storage import Store
@@ -439,6 +440,29 @@ def _refuse_the_direct_deposit_record(store, state, *, expected_revision, reques
     """Stand in for record_direct_deposit when the store cannot take the write."""
     raise ResearchError("store_busy", "Research store is busy; retry the same"
                                       " request after the writer finishes")
+
+
+class _ElapsedWaitTime:
+    """What research_harness.finishing sees as the time module: it never sleeps, and each reading of its clock passes
+    ten seconds, so that the wait of a finishing write for a busy store ends without real time."""
+
+    def __init__(self):
+        self.now = 0.0
+
+    def sleep(self, seconds):
+        pass
+
+    def monotonic(self):
+        self.now += 10.0
+        return self.now
+
+
+@contextlib.contextmanager
+def _refuse_the_direct_deposit_record_through_the_wait():
+    """The store refuses the record of a direct deposit as busy for the whole wait of a finishing write."""
+    with unittest.mock.patch.object(_draft, "record_direct_deposit", _refuse_the_direct_deposit_record), \
+            unittest.mock.patch.object(finishing, "time", _ElapsedWaitTime()):
+        yield
 
 
 class TestInit(unittest.TestCase):
@@ -1563,8 +1587,7 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         self.assertEqual(self.fake_api.requests, [])
 
     def test_a_store_that_refuses_the_record_names_the_only_local_copy_and_stops(self) -> None:
-        with unittest.mock.patch.object(_draft, "record_direct_deposit",
-                                        _refuse_the_direct_deposit_record):
+        with _refuse_the_direct_deposit_record_through_the_wait():
             output = self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"],
                                    expected_exit_code=1)
         # The DOI reaches the user before the command reports the refused record.
@@ -1578,8 +1601,7 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
 
     def test_a_refused_record_replaces_a_deposit_state_symlink_instead_of_following_it(self) -> None:
         elsewhere_path = _link_deposit_state_elsewhere(self.workspace_dir)
-        with unittest.mock.patch.object(_draft, "record_direct_deposit",
-                                        _refuse_the_direct_deposit_record):
+        with _refuse_the_direct_deposit_record_through_the_wait():
             self._deposit(["--publish", "--creator", "Shiroshita, Ryosuke"], expected_exit_code=1)
         self.assertFalse((self.workspace_dir / ".exactory" / "deposit.json").is_symlink())
         self.assertEqual(elsewhere_path.read_text(encoding="utf-8"), "untouched\n")

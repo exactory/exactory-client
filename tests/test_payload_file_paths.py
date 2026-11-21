@@ -109,8 +109,9 @@ class PayloadFilePathTests(CheckCommandMixin, unittest.TestCase):
                     if command == 'adopt':
                         expected[0] = (False, 0)  # Explicit adoption opens a writable store.
                     elif command in ('artifact', 'import-fulltext'):
-                        # Registration commits its CAS; a full-text import admits in a write transaction.
-                        expected.append((True, 0))
+                        # Registration commits its CAS; a full-text import admits in a write transaction. Each first
+                        # looks for its request in a read, which checks the structure.
+                        expected += [(False, 1), (True, 0)]
                     elif command == 'import-response':
                         # Response imports already read their receipt before W2.
                         expected *= 2
@@ -148,7 +149,9 @@ class PayloadFilePathTests(CheckCommandMixin, unittest.TestCase):
                 with mock.patch.object(storage, '_validate', side_effect=count_validation):
                     replay = cli.run(args)
                 self.assertEqual(replay, json.loads(written[1]))
-                self.assertEqual(calls, [(False, 1), (True, 1), (True, 0)])
+                # The replay is answered from a read: the look for the request checks the structure, and the
+                # second full validation runs on a read-only connection.
+                self.assertEqual(calls, [(False, 1), (True, 1), (False, 1), (True, 1)])
                 self.assertEqual(self.store.snapshot(), before)
 
     def test_absolute_and_relative_artifact_paths_store_identical_payload_record_and_check_digest(self):

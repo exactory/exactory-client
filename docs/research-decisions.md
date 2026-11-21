@@ -691,8 +691,9 @@ The finishing write, the write that records the reviewer's answer, reads the
 committed capture and is tried again after `store_busy`, `stale_revision` or
 `review_task_dependency_changed`, at most 600 times within 600 seconds, and
 never calls the reviewer again. Every attempt computes its change from the
-current records. The run that waited exits with the last of those refusals,
-and the capture stays. A file in the workspace is no evidence of what the
+current records. The run that waited exits with `store_busy`, whose
+`details.cause` holds the last of those refusals, and the capture stays. A
+file in the workspace is no evidence of what the
 reviewer returned: no command accepts an observation file, and the harness
 completes a pending invocation only from the committed capture. When the
 process stopped after the capture committed, or when the finishing write
@@ -1389,8 +1390,9 @@ number of subdivisions, calls and reread rounds, a day of elapsed time, an
 unknown outcome of a worker that died before its capture, a binary original
 that the route cannot deliver, or a frame that no call can carry. One
 reviewer call runs at a time by default, counted together with the ordinary
-reviewer calls, probes and corrections of the store; a worker has 60 seconds to
-bind its process identity to its reservation, and a handshake that does not
+reviewer calls, probes and corrections of the store; a worker has at most 600
+seconds to bind its process identity to its reservation, and a handshake that
+does not
 complete leaves the reservation to be reconciled
 (`review_worker_reconciliation_required`), never a lost call; a worker's
 capture is the committed observation; an acceptance resumes after an

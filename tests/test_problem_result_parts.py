@@ -409,7 +409,7 @@ class ProblemResultPartsTests(ResultPartsCase):
         from research_harness import review_problem_parts
         self.oversized()
         first = self.assign()
-        with patch.object(review_refusal, 'record_native_refusal'):
+        with patch.object(review_refusal, 'record_native_refusal', return_value=None):
             self.invoke(first, dict(self.output(first), notes=[]))
         self.assertNotIn('review_output_refusal', self.case.read_records())
         self.assertEqual(review_problem_parts.collect_series_packets(self.case.read_records(), self.case.artifacts,

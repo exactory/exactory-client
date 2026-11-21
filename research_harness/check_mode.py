@@ -66,6 +66,18 @@ class _CheckingStore:
 
     committed_request = read_committed_request
 
+    def mutate_serialized(self, operation, payload, apply, *, request_id):
+        """A check answers the committed request of a write at the revision of the write lock, such as the admission
+        of an acquisition. A new one belongs to a command with external effects, which a check does not prepare."""
+        if request_id != self._request_id:
+            raise ResearchError("check_unsupported", "Check mode cannot prepare an operation requiring staged commits")
+        encoded_payload = _encode_mutation_input(operation, payload, apply, 0, request_id)
+        self._read_preparation()
+        original = _read_original_response(self._snapshot._original_request, operation, encoded_payload, request_id)
+        if original is None:
+            raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects")
+        raise _CheckComplete(original)
+
     def mutate(self, operation, payload, apply, *, expected_revision, request_id, _preparation=None):
         if request_id != self._request_id or operation == "workspace.probe_artifact_intent":
             raise ResearchError("check_unsupported", "Check mode cannot prepare an operation requiring staged commits")

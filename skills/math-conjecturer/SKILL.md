@@ -1344,6 +1344,10 @@ each of these refusals.
      (`review_source_continuation_unverified`), and do not assign a sibling turn
      (`review_source_continuation_fork`): run `review-series`, take the handoff or report the
      decision stop that it gives, and keep the diagnostics of both refusals in your report.
+   - When a step of `review-series` has the state `resume` and its `details` hold `refusal`,
+     the answer of that turn failed its check. Its refusal record was not written. The step
+     runs the recorded `review-run` request again, without a reviewer call, and records the
+     refusal. `review-series` takes the step itself. Take no step of your own for it.
    - The assignment after the last reading turn is the final turn (prompt template
      `exactory-openness-reading-v5/final`, or `exactory-openness-reading-v4/final` in a v4
      chain): the native packet with the reading record of the earlier turns. A v5 final turn
@@ -2411,7 +2415,10 @@ accounts with the parts that the harness derives, and the records that their ent
      `details`; the harness cannot continue the chain. A refused action of the chain ends the
      command this way with the refusal's code (for example `review_input_too_large` or a
      `review_parts_*` code); when the refusal recorded an output refusal, or its code is
-     `review_invocation_pending`, the command plans again instead. Read `code`, `details` and
+     `review_invocation_pending`, the command plans again instead. After `store_busy` the
+     command also plans again by itself, at most 8 times in a row. When `review-series` or
+     `review-run` still ends with `store_busy`, read the message of that refusal. It names the
+     command that goes on, which is not always the refused command. Read `code`, `details` and
      `stop_class`. In a problem record no stop passes automatically: the stop binds no study
      stage, and `gate-auto-pass` refuses it with `gate_override_internal_only`, so report a
      `harness_defect` stop like a decision stop, and resume a `waiting` stop on its schedule as

@@ -1,9 +1,11 @@
 """Pinned one-time local/remote execution and recovery over domain admissions.
 
 Lock order is execution-owner lock, then a short research Store operation. The
-worker owns a different run lock and never opens Store. A claimed run is never
-relaunched. A lost launcher response stays pending until its actual outcome is
-reconciled, retaining every reservation.
+worker owns a different run lock and never opens Store. The program of an
+admission runs at most once: the same request starts a claimed local run whose
+program never started (_is_unstarted_local_run), and every other claimed run is
+reconciled, not launched again. A lost launcher response stays pending until its
+actual outcome is reconciled, retaining every reservation.
 """
 
 from contextlib import contextmanager
@@ -19,13 +21,50 @@ import uuid
 from .artifacts import ArtifactStore, _relative_parts
 from .development import record_execution, validate_admitted_execution
 from .errors import ResearchError
-from .finishing import retry_store_write
+from .finishing import retry_finishing_write
 from .evidence import digest
 from .execution_outputs import log_bytes, output_metric, output_path, read_sealed_outputs, seal_outputs
-from .operations import _read_preparation, fields, immutable_record, is_finite_number, prepared_mutation, text
+from .operations import (_read_preparation, fields, immutable_record, is_finite_number, prepared_mutation,
+                         prepared_task_mutation, text)
 from .scientific_json import is_json_media_type
 from .storage import _canonical
 from .workspace import checked_parent, json_projection, read_file, strict_json, write_projection
+
+
+# The messages of a record of an admitted run that the store refused beyond the wait: the record that releases the
+# program, a record of a run with a terminal outcome, and a record of a resolution that reconcile-run gave.
+RUN_START_STORE_BUSY_MSG = (
+    'The research store stayed busy, or kept changing the records that this write read. The start of this '
+    'admitted run was not recorded. The program did not run, and the admission keeps its claim. Run the same '
+    'exactory-lab run command again with the request ID in details.request_id. It starts the program of this '
+    'admission. If it is refused with execution_live, the earlier worker is still ending. Run it again after a minute.')
+RUN_RECORD_STORE_BUSY_MSG = (
+    'The research store stayed busy, or kept changing the records that this write read. A record of this run was '
+    'not written. Nothing false was recorded. The program ran once, and its terminal outcome, its streams and its '
+    'output files are kept under research/runs. Run exactory-research reconcile-run for the admission ID in '
+    'details.admission_id, or the same exactory-lab run command with the request ID in details.request_id. Each of '
+    'them records the run from the kept files and does not run the program again.')
+RUN_RESOLUTION_STORE_BUSY_MSG = (
+    'The research store stayed busy, or kept changing the records that this write read. A record of this '
+    'resolution was not written. Nothing false was recorded. Run exactory-research reconcile-run for the admission ID '
+    'in details.admission_id, with the same resolution and reason and with the current revision in '
+    '--expected-revision. It records the resolution.')
+# The messages of a claimed local run whose program did not start: its worker did not start, its worker ended while
+# the record that releases the program waited, or reconcile-run finds no record that released it.
+RUN_WORKER_NOT_STARTED_MSG = (
+    'The worker process did not start, so the program did not run, and the admission keeps its claim. Run the same '
+    'exactory-lab run command again with the request ID in details.request_id. It starts a worker for this admission. '
+    'To end the run instead, record it with exactory-research reconcile-run, with resolution "interrupted" and a '
+    'reason.')
+RUN_WORKER_ENDED_MSG = (
+    'The worker process ended before the start of this admitted run was recorded, so the program did not run, and the '
+    'admission keeps its claim. Run the same exactory-lab run command again with the request ID in details.request_id. '
+    'It starts a new worker for this admission.')
+RUN_NOT_RELEASED_MSG = (
+    'No terminal outcome is available, and no record released the program of this claimed run, so the program did not '
+    'run. Run the exactory-lab run command of this admission again with the request ID in details.request_id. It '
+    'starts the program. To end the run instead, record it with exactory-research reconcile-run, with resolution '
+    '"interrupted" and a reason.')
 
 
 def _directory(admission_id):
@@ -225,7 +264,12 @@ def _claim(store, admission_id, expected_revision, request_id):
                              expected_revision=expected_revision, request_id=request_id)
 
 
-def _prelaunch(store, admission_id, claim):
+def _name_launch(claim):
+    """What a refusal of a record of a run carries, so that its message can name the command that goes on."""
+    return {"admission_id": claim["admission_id"], "request_id": claim["request_id"]}
+
+
+def _prelaunch(store, admission_id, claim, worker):
     artifacts = store.build_artifact_store()
     def prepare(records, value):
         admission = validate_admitted_execution(records, artifacts, admission_id)
@@ -233,15 +277,35 @@ def _prelaunch(store, admission_id, claim):
         if binding["digest"] != claim["binding_digest"]:
             raise ResearchError("execution_identity_mismatch", "The run binding differs from the durable claim")
         _files(store, admission, binding)
-        result = {"admission_id": admission_id, "binding_digest": binding["digest"], "revision": store_revision}
+        result = {"admission_id": admission_id, "binding_digest": binding["digest"], "revision": None}
+        return [("execution_prelaunch", admission_id, result)], result
+    def stamp_checked_revision(changes, result, revision):
+        # The check held on the store as it stood before this commit: the revision that this record has always named.
+        result = dict(result, revision=revision - 1)
         return [("execution_prelaunch", admission_id, result)], result
     def commit():
-        nonlocal store_revision
-        store_revision = store.revision
-        return prepared_mutation(store, "execution.prelaunch", {"admission_id": admission_id, "claim": claim["config_artifact"]["sha256"]},
-            prepare, expected_revision=store_revision, request_id="prelaunch-" + digest(claim))
-    store_revision = None
-    return retry_store_write(commit)
+        # A worker that ended cannot read its token, so a record that released its program would stand for a run that
+        # never happens, and the same request could not start the program again.
+        if worker.poll() is not None:
+            raise ResearchError("execution_recovery_required", RUN_WORKER_ENDED_MSG, _name_launch(claim))
+        return prepared_task_mutation(store, "execution.prelaunch",
+            {"admission_id": admission_id, "claim": claim["config_artifact"]["sha256"]}, prepare,
+            request_id="prelaunch-" + digest(claim), finalize=stamp_checked_revision)
+    # The commit depends on the records that the check read. The worker waits for its token meanwhile.
+    return retry_finishing_write(commit, RUN_START_STORE_BUSY_MSG, kept=_name_launch(claim))
+
+
+def _is_unstarted_local_run(store, records, claim):
+    """Whether the program of a claimed local run never started: no record released it, the run has no outcome, and
+    its folder holds no stream and no terminal outcome. The caller holds the worker lock, so no worker of this claim
+    reads its token now. A worker starts the program only after it has read its token, which its launcher sends only
+    after the record that releases the program, and it creates both streams before the program; the launcher holds
+    the client lock from the claim to the token, so no other launch of the admission runs meanwhile."""
+    admission_id = claim["admission_id"]
+    directory = store.root / _directory(admission_id)
+    return (claim["config"]["backend"] == "local" and admission_id not in records.get("execution_prelaunch", {})
+            and admission_id not in records.get("execution_outcome", {})
+            and not any((directory / name).exists() for name in ("terminal.json", "stdout", "stderr")))
 
 
 def launch_execution(store, admission_id, *, expected_revision, request_id):
@@ -253,26 +317,36 @@ def launch_execution(store, admission_id, *, expected_revision, request_id):
                 raise ResearchError("execution_recovery_required", "An admitted identity is launched once; reconcile the original run")
             store.mutate("execution.claim", {"admission_id": admission_id}, lambda tx: None,
                          expected_revision=expected_revision, request_id=request_id)
-            reconciliation_id = ("remote-observe-" + digest(old) if old["config"]["backend"] == "colab"
-                                 else "reconcile-" + request_id)
-            return reconcile_execution(store, {"admission_id": admission_id}, expected_revision=store.revision,
-                                       request_id=reconciliation_id, owned=True)
-        claim = _claim(store, admission_id, expected_revision, request_id)["result"]
+            with _owner(store.root, admission_id, worker=True):
+                unstarted = _is_unstarted_local_run(store, before, old)
+                if unstarted:
+                    # The notice of a worker of the earlier launch names no worker of this one.
+                    (store.root / _directory(admission_id) / "ready.json").unlink(missing_ok=True)
+            if not unstarted:
+                reconciliation_id = ("remote-observe-" + digest(old) if old["config"]["backend"] == "colab"
+                                     else "reconcile-" + request_id)
+                return reconcile_execution(store, {"admission_id": admission_id}, expected_revision=None,
+                                           request_id=reconciliation_id, owned=True)
+            # The launch that made this claim ended before the program was released, so this launch releases it.
+            claim = old
+        else:
+            claim = _claim(store, admission_id, expected_revision, request_id)["result"]
         if claim["config"]["backend"] == "colab":
             from .remote_execution import launch_colab
             return launch_colab(store, claim)
         directory = store.root / _directory(admission_id)
         json_projection(store.root, _directory(admission_id) + "/config.json", claim["config"])
         try:
-            with (directory / "launcher.log").open("wb") as diagnostics:
+            # Appended, so that a second start of the same claim keeps what the earlier worker wrote.
+            with (directory / "launcher.log").open("ab") as diagnostics:
                 worker = subprocess.Popen([sys.executable, str(Path(__file__).with_name("launcher.py")),
                     str(directory), claim["config_artifact"]["sha256"], claim["token"]],
                     stdin=subprocess.PIPE, bufsize=0, stdout=diagnostics, stderr=diagnostics, start_new_session=True)
         except OSError as error:
             # At a limit on processes or open files, no worker holds the claimed token, so the program never runs.
-            raise ResearchError("execution_recovery_required", "The worker process did not start. Use exactory-research "
-                                "reconcile-run to record the claimed run as interrupted, with a reason.",
-                                {"errno": error.errno}) from error
+            raise ResearchError("execution_recovery_required", RUN_WORKER_NOT_STARTED_MSG,
+                                dict(_name_launch(claim), errno=error.errno)) from error
+        is_worker_ready = token_sent = False
         try:
             # A loaded machine starts the worker slowly. While the worker is alive, the launch waits for it to become
             # ready as long as it waits below for the run to end: the run's timeout plus 10 seconds.
@@ -285,11 +359,13 @@ def launch_execution(store, admission_id, *, expected_revision, request_id):
             ready = strict_json(read_file(store.root, _directory(admission_id) + "/ready.json"))
             if ready != {"pid": worker.pid, "token": claim["token"], "config_sha256": claim["config_artifact"]["sha256"]}:
                 raise ResearchError("execution_identity_mismatch", "The launcher did not establish the claimed identity")
-            _prelaunch(store, admission_id, claim)
+            is_worker_ready = True
+            _prelaunch(store, admission_id, claim, worker)
             try:
                 # The worker's input is unbuffered (bufsize=0), so this one write sends the token and leaves nothing for
                 # the close to flush.
                 worker.stdin.write((claim["token"] + "\n").encode())
+                token_sent = True
             except BrokenPipeError:
                 # A worker that ended before it read its token never ran the program, and reconciliation reports that.
                 pass
@@ -309,26 +385,33 @@ def launch_execution(store, admission_id, *, expected_revision, request_id):
                 try:
                     worker.wait(timeout=6)
                 except subprocess.TimeoutExpired:
-                    # Do not relabel a running or unobserved producer as failed.
-                    raise ResearchError("execution_recovery_required", "The worker is still live or its outcome is unknown")
-        return reconcile_execution(store, {"admission_id": admission_id}, expected_revision=store.revision,
+                    # A ready worker that never received its token ends on its closed input without the program, so the
+                    # refusal that ended this launch stands. Do not relabel a running or unobserved producer as failed.
+                    if token_sent or not is_worker_ready:
+                        raise ResearchError("execution_recovery_required", "The worker is still live or its outcome is unknown")
+        return reconcile_execution(store, {"admission_id": admission_id}, expected_revision=None,
                                    request_id="reconcile-" + request_id, owned=True)
 
 
 def record_reconciliation(store, payload, summary, *, expected_revision, request_id):
+    """Replay the receipt of a reconciliation for a check of the reconcile-run command."""
     return store.mutate("execution.reconcile", payload, lambda tx: summary,
                         expected_revision=expected_revision, request_id=request_id)
 
 
-def _finish_reconciliation(store, payload, observation, expected_revision, request_id):
-    first = True
-    def commit():
-        nonlocal first
-        revision = expected_revision if first else store.revision
-        first = False
-        return record_reconciliation(store, payload, observation["summary"],
-                                     expected_revision=revision, request_id=request_id)
-    receipt = retry_store_write(commit)
+def _select_record_busy_msg(store, admission_id):
+    """The message of a record of a claimed run that the store refused beyond the wait. A run with a terminal outcome
+    is recorded from its kept files, and a claim without one from the resolution that reconcile-run gave."""
+    if (store.root / _directory(admission_id) / "terminal.json").exists():
+        return RUN_RECORD_STORE_BUSY_MSG
+    return RUN_RESOLUTION_STORE_BUSY_MSG
+
+
+def _finish_reconciliation(store, payload, observation, request_id, claim, busy_msg):
+    """Record the receipt of a reconciliation. The write reads nothing, so it depends on no revision."""
+    receipt = retry_finishing_write(lambda: store.mutate_serialized(
+        "execution.reconcile", payload, lambda transaction, revision: observation["summary"],
+        request_id=request_id), busy_msg, kept=_name_launch(claim))
     summary = observation["summary"]
     directory = _directory(payload["admission_id"])
     json_projection(store.root, directory + "/summary.json", summary)
@@ -343,8 +426,10 @@ def _reconcile(store, payload, expected_revision, request_id):
         raise ResearchError("execution_not_claimed", "No launcher claimed this admitted run")
     prior = records.get("execution_observation", {}).get(admission_id)
     if prior is not None:
-        return _finish_reconciliation(store, payload, prior, expected_revision, request_id)
-    if store.revision != expected_revision:
+        return _finish_reconciliation(store, payload, prior, request_id, claim,
+                                      _select_record_busy_msg(store, admission_id))
+    # The revision is the input of the reconcile-run command. The launcher reconciles its own run without one.
+    if expected_revision is not None and store.revision != expected_revision:
         raise ResearchError("stale_revision", "Read the current revision before reconciling a new execution observation")
     binding = _binding(records, admission_id)
     admission = records["execution_admission"][admission_id]
@@ -361,6 +446,8 @@ def _reconcile(store, payload, expected_revision, request_id):
         terminal = store.root / directory / "terminal.json"
         if not terminal.exists():
             if not unreleased and (payload.get("resolution") != "interrupted" or not payload.get("reason") or binding["backend"] != "local"):
+                if _is_unstarted_local_run(store, records, claim):
+                    raise ResearchError("execution_recovery_required", RUN_NOT_RELEASED_MSG, _name_launch(claim))
                 raise ResearchError("execution_recovery_required", "No terminal outcome is available; preserve the claim and reconcile. A dead local owner may be recorded interrupted with a reason.")
             observed = {"status": "interrupted", "exit_code": None, "duration_s": None, "binding_digest": binding["digest"],
                         "config_sha256": claim["config_artifact"]["sha256"], "reason": payload["reason"]}
@@ -404,6 +491,7 @@ def _reconcile(store, payload, expected_revision, request_id):
                        "terminal": artifacts.put(_canonical(observed).encode(), "application/json"), "log": log_ref, "summary": summary,
                        "files": [{"path": path, "artifact": artifacts.put(data, output_media_types.get(path, "application/octet-stream"))}
                                  for path, data in files.items()]}
+        busy_msg = _select_record_busy_msg(store, admission_id)
         outcome = records.get("execution_outcome", {}).get(admission_id)
         if outcome is not None:
             if records["execution"][outcome["execution_id"]]["payload"] != execution:
@@ -412,19 +500,24 @@ def _reconcile(store, payload, expected_revision, request_id):
             from .probe_provenance import find_probe_artifact_origins
             observed_origin = {"_observation": observation} if find_probe_artifact_origins(
                 records, [item["artifact"] for item in outputs], artifacts=artifacts) else {}
-            retry_store_write(lambda: record_execution(store, execution, expected_revision=store.revision,
-                request_id="launcher-outcome-" + digest(claim), **observed_origin))
-        retry_store_write(lambda: prepared_mutation(store, "execution.observe", {"admission_id": admission_id},
+            retry_finishing_write(lambda: record_execution(store, execution, expected_revision=None,
+                request_id="launcher-outcome-" + digest(claim), **observed_origin), busy_msg, kept=_name_launch(claim))
+        retry_finishing_write(lambda: prepared_task_mutation(store, "execution.observe", {"admission_id": admission_id},
             lambda current, value: ([immutable_record(current, "execution_observation", admission_id, observation)], observation),
-            expected_revision=store.revision, request_id=request_id + ":observation"))
+            request_id=request_id + ":observation"), busy_msg, kept=_name_launch(claim))
         # Rebuild familiar operational views even after a lost projection write.
         # Their bytes never supply execution authority.
-        return _finish_reconciliation(store, payload, observation, store.revision, request_id)
+        return _finish_reconciliation(store, payload, observation, request_id, claim, busy_msg)
 
 
 def reconcile_execution(store, payload, *, expected_revision, request_id, owned=False):
+    """Record the outcome of a claimed run: from its terminal outcome and its kept files, or, for a claim without a
+    terminal outcome, from the resolution of the payload. The reconcile-run command gives the revision that it read;
+    the launcher, which reconciles its own run, gives None."""
     fields(payload, ("admission_id",), ("resolution", "reason"))
     text(payload["admission_id"], "Admission ID")
+    if expected_revision is not None and (type(expected_revision) is not int or expected_revision < 0):
+        raise ResearchError("invalid_input", "Expected revision must be a nonnegative integer")
     if owned:
         return _reconcile(store, payload, expected_revision, request_id)
     with _owner(store.root, payload["admission_id"]):
