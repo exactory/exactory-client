@@ -1906,12 +1906,15 @@ class Record12ShapeTests(OpennessReadingCase):
                 output = self.answer_v7(packet)
             else:
                 binding = packet['reading_final']
+                # The final of a new chain takes finding version 2, where a reviewer_gap needs the fields of a
+                # named gap; an own argument keeps the outcome unresolved, as in finish_chain.
                 output = dict(schema_version=3,
                     **{key: binding[key] for key in ('subject_digest', 'claim_digest', 'reviewer')},
                     findings=dict({key: 'Assessed the supplied formulation.' for key in
                         ('statement', 'assumptions', 'scope', 'dependencies', 'policy')},
                         openness=dict(outcome='unresolved', coverage='Reviewed the bound material.',
-                            reason='A remaining literature gap.', grounds=[dict(kind='reviewer_gap', text='A remaining gap.')])) )
+                            reason='A remaining literature gap.', grounds=[dict(kind='own_argument',
+                                text='The reviewer argument requires further checking.')])) )
             return build_codex_response(route, request, output)
         steps = []
         with patch.object(protocol.transport, 'send_request', side_effect=respond):
