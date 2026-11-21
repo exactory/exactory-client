@@ -3892,6 +3892,15 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             intent = _payload(_get(records, 'research_intent', d['intent_id']))
             if normalized_text(value['reviewer_id']) in {normalized_text(a) for a in intent.get('authors', [])}:
                 raise ResearchError('review_not_independent', 'An intent author cannot provide an independent assessment')
+        # A replacement sends the turn of the assignment that it replaces again, so that turn is compared with the
+        # installed renderer before the replacement is built.
+        refusal = value['context'].get('output_refusal')
+        replaced_id = value['context'].get('capacity_replacement') or (
+            refusal.get('assignment_id') if isinstance(refusal, dict) else None)
+        replaced = records.get('review_assignment', {}).get(replaced_id) if isinstance(replaced_id, str) else None
+        if replaced is not None:
+            from .review_visual_sources import require_installed_renderer
+            require_installed_renderer(records, artifacts, replaced)
         if 'capacity_replacement' in value['context']:
             previous = _get(records, 'review_assignment', value['context']['capacity_replacement'])
             if previous.get('session_chain'):
@@ -4326,6 +4335,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 records, artifacts, value, route, packet, prompt, history, history_assignment_id)
             if route['adapter'] == 'codex_cli_visual_v1':
                 from . import review_visual_sources, review_visual_route
+                review_visual_sources.require_installed_renderer(
+                    records, artifacts, dict(value, history_assignment_id=history_assignment_id))
                 review_visual_sources.prepare_packet(records, artifacts, packet, history=history)
                 if visual_transition:
                     packet[review_visual_route.MARKER] = review_visual_route.validate_transition(
@@ -4610,6 +4621,8 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
             handoff = describe_ratio_handoff(records, artifacts, assignment)
             if handoff is not None:
                 raise ResearchError(openness_reading.PROJECTION_STOP, RATIO_EXPORT_MESSAGE, handoff['details'])
+        from .review_visual_sources import require_installed_renderer
+        require_installed_renderer(records, artifacts, assignment)
         from .review_source_complete import validate
         validate(records, artifacts, assignment, packet)
         if assignment.get('session_chain'):

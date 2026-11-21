@@ -1188,6 +1188,8 @@ def prepare_child(records, artifacts, value, revision):
     if composition_plan is not None:
         record['composition_plan_id'] = digest(composition_plan)
         changes.append(immutable_record(records, 'review_composition_plan', record['composition_plan_id'], composition_plan))
+    from .review_visual_sources import require_installed_renderer
+    require_installed_renderer(records, artifacts, record)
     protocol.build_assignment_request(records, artifacts, record)
     return changes + [immutable_record(records, 'review_assignment', value['id'], record)], record
 
@@ -1407,6 +1409,8 @@ def invoke_task(store, payload, *, expected_revision, request_id):
             raise ResearchError('review_task_dependency_changed', 'Replan this task under the current discovered claim closure')
         if not replaying_capture:
             protocol._require_route_runtime(route)
+            from .review_visual_sources import require_installed_renderer
+            require_installed_renderer(records, store.build_artifact_store(), assignment)
         request = protocol.build_assignment_request(records, store.build_artifact_store(), assignment)
         epoch = protocol._get(records, 'review_epoch', binding['epoch_id'])
         head = protocol._get(records, 'review_slot_head', epoch['slot_id'])

@@ -1118,6 +1118,8 @@ def prepare_session_assignment(records, artifacts, value, route, revision, *, lo
         record[INVOCATION_KEY] = INVOCATION_PROTOCOL
     if replay:
         return [], record
+    from .review_visual_sources import require_installed_renderer
+    require_installed_renderer(records, artifacts, record)
     request = protocol.transport.request_body(route, prompt['text'], packet, [], order=())
     from .review_preflight import build_report, check_request
     preflight = check_request(build_report(records, artifacts, route, value['role'], prompt, packet, request,
