@@ -49,6 +49,7 @@ DECLARED_SITES = {
     'review_failure_class.plan_refusal_recovery': 'plan',
     'review_route_plan.read_route_standing': 'plan',
     'review_route_plan.list_current_routes': 'plan',
+    'review_session_v4.list_session_serving_routes': 'plan',
     'review_state_evaluation.runtime_scope': 'memo_key',
     'review_state_evaluation.evaluate_state': 'memo_key',
     'review_route_capacity.describe_open_route_reports': 'report',

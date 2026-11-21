@@ -3,8 +3,9 @@
 
 The set has three parts. The first two make its near part, the third its far part.
 
-Always: the modules of ALWAYS. They compare the harness with frozen values, or they pin a fixture, a version or a
-release file, so a change far from them can break them. When the diff changes a file of research_harness/ or of
+Always: the modules of ALWAYS. They compare the harness with frozen values, they pin a fixture, a version or a
+release file, or they read every source file of the harness against a declared table, so a change far from them
+can break them. When the diff changes a file of research_harness/ or of
 tests/fixtures/, the modules of HARNESS_PINS join them: they pin the certificates of the changed code and take
 long.
 
@@ -66,9 +67,9 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 # The modules that compare with frozen values or pin a fixture, a version or a release file.
-ALWAYS = ("test_capacity_packet_inventory", "test_codex", "test_incident_ledger", "test_manifest",
-          "test_packet_call_rows", "test_release_records", "test_research_guidance", "test_review_request_parity",
-          "test_series_code_reach")
+ALWAYS = ("test_capacity_packet_inventory", "test_capture_classes", "test_codex", "test_incident_ledger",
+          "test_installed_runtime_readers", "test_manifest", "test_packet_call_rows", "test_release_records",
+          "test_research_guidance", "test_review_request_parity", "test_series_code_reach")
 # The slow modules that pin the certificates of the harness code. The list prints them first.
 HARNESS_PINS = ("test_capacity_guard", "test_continuity_guard", "test_continuity_guard_stage3",
                 "test_capacity_guard_fixes")
