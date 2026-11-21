@@ -1,0 +1,9 @@
+{
+  "test_processes": 8,
+  "runs": {
+    "implementer_run": {"wall_seconds": 600},
+    "must_pass_run": {"wall_seconds": 2700},
+    "full_suite_run": {"wall_seconds": 10800, "shard_wall_seconds": 9000}
+  },
+  "core_operations": {}
+}

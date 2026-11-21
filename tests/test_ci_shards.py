@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 from ci.reviewer_program_guard import take_machine_reads
@@ -122,6 +123,135 @@ class CIShardTests(unittest.TestCase):
             self.assertEqual(report["tests_run"], 1)
             self.assertEqual(len(report["errors"]), 1)
 
+    def test_each_executed_test_has_its_wall_time_and_processor_time_with_its_class_fixture(self):
+        class Slow(unittest.TestCase):
+            @classmethod
+            def setUpClass(cls):
+                time.sleep(0.2)
+
+            def test_a(self):
+                pass
+
+            def test_b(self):
+                pass
+
+        report = self.api().run_shard(unittest.TestSuite([Slow("test_a"), Slow("test_b")]), 0, 1, {},
+                                      stream=io.StringIO(), take_machine_reads=take_machine_reads)
+        self.assertEqual([row[0] for row in report["test_seconds"]], report["executed_test_ids"])
+        # The class fixture runs before the first test, so its time counts for that test.
+        self.assertGreaterEqual(report["test_seconds"][0][1], 0.2)
+        for _, wall_seconds, processor_seconds in report["test_seconds"]:
+            self.assertGreaterEqual(wall_seconds, 0)
+            self.assertGreaterEqual(processor_seconds, 0)
+        self.assertGreaterEqual(report["wall_seconds"], 0.2)
+        self.assertGreaterEqual(report["processor_seconds"], 0)
+
+    def test_a_group_keeps_the_tests_of_its_modules_in_the_order_of_its_shard(self):
+        def make_tests(module):
+            case = type("Case", (unittest.TestCase,),
+                        dict({"test_%d" % index: lambda self: None for index in range(3)}, __module__=module))
+            return [case("test_%d" % index) for index in range(3)]
+
+        suite = unittest.TestSuite(make_tests("test_one") + make_tests("test_two") + make_tests("test_three"))
+        report = self.api().run_shard(suite, 1, 2, {}, modules={"test_one", "test_three"}, stream=io.StringIO(),
+                                      take_machine_reads=take_machine_reads)
+        # Tests 0 to 8 in the order of discovery; shard 1 of 2 holds 1, 3, 5 and 7.
+        self.assertEqual(report["selected_indices"], [1, 7])
+        self.assertEqual(report["executed_test_ids"], ["test_one.Case.test_1", "test_three.Case.test_1"])
+        self.assertTrue(report["success"])
+
+    def test_a_group_keeps_the_discovery_failure_of_its_module(self):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "test_broken_import.py").write_text("raise RuntimeError('broken import')\n")
+            Path(directory, "test_fine.py").write_text(
+                "import unittest\nclass Fine(unittest.TestCase):\n    def test_a(self): pass\n")
+            suite = unittest.TestLoader().discover(directory)
+            api = self.api()
+            kept = api.run_shard(suite, 0, 1, {}, modules={"test_broken_import"}, stream=io.StringIO(),
+                                 take_machine_reads=take_machine_reads)
+            self.assertEqual(kept["errors"], ["unittest.loader._FailedTest.test_broken_import"])
+            other = api.run_shard(unittest.TestLoader().discover(directory), 0, 1, {}, modules={"test_fine"},
+                                  stream=io.StringIO(), take_machine_reads=take_machine_reads)
+            self.assertEqual(other["executed_test_ids"], ["test_fine.Fine.test_a"])
+            self.assertTrue(other["success"])
+
+    def test_the_module_of_each_kind_of_test_id(self):
+        api = self.api()
+        for test_id in ("test_x.Case.test_a", "test_x.Case.test_a (cause='a.b')", "setUpClass (test_x.Case)",
+                        "setUpModule (test_x)", "tearDownClass (test_x.Case)", "unittest.loader._FailedTest.test_x"):
+            with self.subTest(test_id=test_id):
+                self.assertEqual(api.read_test_module(test_id), "test_x")
+
+    def test_the_shard_count_is_the_count_of_the_ci_workflow(self):
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        count = self.api().SHARD_COUNT
+        self.assertIn("shard: %s" % list(range(count)), workflow)
+        # The run of each shard and the verification of the receipts.
+        self.assertEqual(workflow.count("--shard-count %d\n" % count), 2)
+
+    def test_the_budgets_file_holds_every_run_budget(self):
+        budgets = self.api().read_budgets()
+        self.assertEqual(set(budgets), {"test_processes", "runs", "core_operations"})
+        self.assertEqual({run: set(members) for run, members in budgets["runs"].items()},
+                         {"implementer_run": {"wall_seconds"}, "must_pass_run": {"wall_seconds"},
+                          "full_suite_run": {"wall_seconds", "shard_wall_seconds"}})
+        self.assertIsInstance(budgets["core_operations"], dict)
+
+    def test_a_budgets_file_without_a_run_budget_or_with_an_invalid_value_is_refused(self):
+        api = self.api()
+        budgets = api.read_budgets()
+        broken = []
+        for run, member in api.RUN_BUDGET_MEMBERS:
+            for value in (None, 0, True, 1.5):
+                variant = copy.deepcopy(budgets)
+                if value is None:
+                    del variant["runs"][run][member]
+                else:
+                    variant["runs"][run][member] = value
+                broken.append(variant)
+        broken += [dict(budgets, test_processes=0), dict(budgets, core_operations=[]), {"runs": budgets["runs"]}]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory, "budgets.json")
+            for variant in broken:
+                with self.subTest(variant=variant):
+                    path.write_text(json.dumps(variant), encoding="utf-8")
+                    with self.assertRaises(ValueError):
+                        api.read_budgets(path)
+
+    def test_a_run_over_its_budget_prints_one_more_line_with_both_numbers(self):
+        api = self.api()
+        self.assertEqual(len(api.format_budget_report("must_pass_run", 2700, 2700.0, 4000.0)), 1)
+        over = api.format_budget_report("must_pass_run", 2700, 2800.5, 4000.0)
+        self.assertEqual(len(over), 2)
+        self.assertIn("2800.5", over[1])
+        self.assertIn("2700", over[1])
+
+    def test_cli_run_reports_both_times_and_compares_with_the_shard_budget(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            client = base / "client"
+            self.copy_runner(client)
+            (client / "tests").mkdir()
+            (client / "tests/test_sample.py").write_text(
+                "import unittest\nclass Sample(unittest.TestCase):\n"
+                "    def test_a(self): pass\n    def test_b(self): pass\n")
+            self.git_fixture(client)
+            self.git_fixture(base / "marketplace")
+            result = base / "result.json"
+            run = subprocess.run([sys.executable, str(client / "ci/unittest_shards.py"), "run", "--shard-index", "0",
+                                  "--shard-count", "1", "--marketplace", str(base / "marketplace"),
+                                  "--result", str(result)], cwd=client, capture_output=True, text=True, timeout=60)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            report = json.loads(result.read_text())
+            self.assertEqual([row[0] for row in report["test_seconds"]], report["executed_test_ids"])
+            self.assertGreater(report["wall_seconds"], 0)
+            self.assertGreater(report["processor_seconds"], 0)
+            self.assertIn("full_suite_run.shard_wall_seconds", run.stderr)
+            self.assertIn("9000", run.stderr)
+            summary = json.loads(run.stdout)
+            self.assertNotIn("test_seconds", summary)
+            self.assertEqual(sorted(row[0] for row in summary["slowest_tests"]), sorted(report["executed_test_ids"]))
+
     def git_fixture(self, path):
         path.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "init", "-q", str(path)], check=True)
@@ -136,7 +266,7 @@ class CIShardTests(unittest.TestCase):
 
     def copy_runner(self, client):
         (client / "ci").mkdir(parents=True)
-        for name in ("unittest_shards.py", "reviewer_program_guard.py"):
+        for name in ("unittest_shards.py", "reviewer_program_guard.py", "budgets.json"):
             shutil.copyfile(ROOT / "ci" / name, client / "ci" / name)
 
     def write_guarded_sample(self, path):
