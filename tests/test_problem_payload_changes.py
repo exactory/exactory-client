@@ -8,6 +8,7 @@ evaluation, so that the full reading of the fixture is assessed once and not onc
 
 import copy
 import itertools
+import sys
 import unittest
 
 from payload_changes import REPLACEMENT_VALUES, build_member_additions, find_unrefused_changes
@@ -107,6 +108,24 @@ class ValuePayloadChangeTests(PayloadChangeCase):
         additions = [change for members in [KIND_MEMBERS] + [dict.fromkeys(KIND_MEMBERS, value) for value in REPLACEMENT_VALUES]
                      for change in build_member_additions(case.value, members)]
         self.assert_value_changes(case, additions)
+
+    def test_a_chain_of_references_longer_than_the_recursion_limit_is_accepted(self):
+        case = self.set_up_case(test_problem_accounts.ProblemAccountsTests)
+        records = case.store.snapshot()["records"]
+        evaluation = Evaluation.of(records, case.artifacts)
+        length = sys.getrecursionlimit() + 100
+        value = copy.deepcopy(case.value)
+        last = value["accounts"]["explanatory_use"][0]["id"]
+        value["accounts"]["boundaries"].extend(
+            {"id": "chain-%d" % index, "fact": "A fact.", "scope": "A scope.", "argument": None, "evidence": [],
+             "evidence_ids": ["chain-%d" % (index + 1) if index + 1 < length else last]}
+            for index in range(length))
+        problem_claims.prepare_value(records, evaluation, copy.deepcopy(value), case.store.revision + 1)
+        # A reference from the end of the chain back to its start is a cycle, at any length.
+        value["accounts"]["boundaries"][-1]["evidence_ids"] = ["chain-0"]
+        with self.assertRaises(ResearchError) as refusal:
+            problem_claims.prepare_value(records, evaluation, value, case.store.revision + 1)
+        self.assertEqual(refusal.exception.code, "problem_account_reference_cycle")
 
 
 class StatementPayloadChangeTests(PayloadChangeCase):

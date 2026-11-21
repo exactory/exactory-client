@@ -77,13 +77,8 @@ def resolve_entry(entries, identifier):
     return entries[identifier]
 
 
-def collect_entry_evidence(entries, identifier, trail=()):
-    if identifier in trail:
-        raise ResearchError("problem_account_reference_cycle",
-                            "The references of this entry lead back to the entry itself. Remove one reference of the cycle, so that the "
-                            "entry reaches its evidence", {"id": identifier})
-    entry = resolve_entry(entries, identifier)
-    evidence = list(entry.get("evidence", []))
+def list_entry_references(entries, entry):
+    """The IDs of the entries that an entry cites, in the order in which the walk of the references takes them."""
     identifiers = list(entry.get("evidence_ids", []))
     identifiers.extend(entry.get("alternative_ids", []))
     if "role" in entry and entry.get("relation_id") in entries:
@@ -97,8 +92,32 @@ def collect_entry_evidence(entries, identifier, trail=()):
         identifiers.extend(ground["id"] for ground in entry["separate_grounds"])
     if entry.get("consequence") is not None:
         identifiers.extend(comparison["id"] for comparison in entry["consequence"]["weaker_derivations"])
-    for reference in identifiers:
-        evidence.extend(collect_entry_evidence(entries, reference, trail + (identifier,)))
+    return identifiers
+
+
+def collect_entry_evidence(entries, identifier):
+    """The evidence of an entry and of every entry that it reaches through its references, each reference once. The
+    walk takes an entry before the entries that it cites."""
+    evidence = []
+    # The walk keeps its own stack, so a long chain of references does not meet the recursion limit of Python.
+    path, pending = [], [iter((identifier,))]
+    on_path = set()
+    while pending:
+        reference = next(pending[-1], None)
+        if reference is None:
+            pending.pop()
+            if pending:
+                on_path.remove(path.pop())
+            continue
+        entry = resolve_entry(entries, reference)
+        if reference in on_path:
+            raise ResearchError("problem_account_reference_cycle",
+                                "The references of this entry lead back to the entry itself. Remove one reference of the cycle, so that the "
+                                "entry reaches its evidence", {"id": reference})
+        evidence.extend(entry.get("evidence", []))
+        path.append(reference)
+        on_path.add(reference)
+        pending.append(iter(list_entry_references(entries, entry)))
     return list({digest(reference): reference for reference in evidence}.values())
 
 
