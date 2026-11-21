@@ -477,6 +477,58 @@ class RoutePlanGuardTests(RoutePlanCase):
         self.assertEqual(refused, {})
 
 
+class RetiredRouteStateTests(RoutePlanCase):
+    """The joint tests J1 to J4 of this rule and rule RS1 (lane retired-route-state, decision D14 of the design of
+    this module): a head on the retired route record "route", whose latest probe has no answer and whose earlier
+    probe verified it."""
+
+    def fail_probe_without_an_answer(self):
+        with patch.object(transport, 'send_request',
+                          side_effect=ResearchError('review_provider_failure', 'A provider error.')):
+            failed = self.probe('route', 'probe-without-an-answer')
+        self.assertEqual((failed['status'], failed['response']), ('failed', None))
+
+    def test_observed_answer_on_a_retired_route_is_recorded(self):
+        """J1, row C of the design of this module."""
+        head = self.build_answered_head()
+        self.fail_probe_without_an_answer()
+        self.retire(head, 'retire-route')
+        # On the base the plan is the handoff review_context_unverified with the probe of the retired record.
+        self.assertEqual(self.plan(head['id'])['state'], 'record')
+
+    def test_observed_answer_on_a_stale_route_is_recorded_after_the_retirement(self):
+        """J2, row D of the design of this module."""
+        head = self.build_answered_head()
+        self.fail_probe_without_an_answer()
+        self.make_stale()
+        plan = self.plan(head['id'])
+        self.assertEqual((plan['state'], plan['code']), ('handoff', 'review_route_runtime_stale'))
+        self.assertEqual(list_steps(plan), [(8, 'review-context', None), (None, 'review-series', None)])
+        self.take_retirement(plan['details']['steps'][0])
+        # On the base the plan after the retirement is the handoff review_route_retired with steps 7 and 1.
+        self.assertEqual(self.plan(head['id'])['state'], 'record')
+
+    def test_answer_that_asks_for_a_source_on_a_retired_route_takes_the_repair(self):
+        """J3, row E of the design of this module."""
+        head = self.build_next_turn_head()
+        self.fail_probe_without_an_answer()
+        self.retire(head, 'retire-route')
+        plan = self.plan(head['id'])
+        # On the base the plan is the handoff review_context_unverified with the probe of the retired record.
+        self.assertEqual((plan['state'], plan['code'], list_steps(plan)),
+                         ('handoff', 'review_route_retired', [(1, 'review-assignment', None)]))
+
+    def test_head_recorded_while_its_route_was_unverified_takes_the_repair_after_the_retirement(self):
+        """J4, row A of the design of this module."""
+        self.fail_probe_without_an_answer()
+        head = self.assign_first_turn()
+        self.assertEqual(head['context_state']['context_status'], 'unverified')
+        self.retire(head, 'retire-route')
+        plan = self.plan(head['id'])
+        self.assertEqual((plan['state'], plan['code'], list_steps(plan)),
+                         ('handoff', 'review_route_retired', [(1, 'review-assignment', None)]))
+
+
 class CorrectionRouteTests(unittest.TestCase):
     """The handoff of an output correction, with the store of tests/test_review_correction_origin.py."""
 

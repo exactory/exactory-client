@@ -2997,7 +2997,10 @@ def route_state(records, artifacts, route_id):
 
 
 def _route_state(records, artifacts, route_id):
-    from .review_codex_invocation import has_supported_binding
+    """The state of a route record: the state that its latest probe gives. On a retired route record a probe without
+    an answer decides nothing, so a latest probe that gives unverified without an answer leaves the state of the
+    latest probe with an answer. A retired record takes no assignment and no run, so such a probe has no new work to
+    hold back."""
     route = records.get('review_route', {}).get(route_id)
     status, proof = 'unverified', None
     if route:
@@ -3008,32 +3011,58 @@ def _route_state(records, artifacts, route_id):
             records, evaluation, 'review_route_probe', 'route_id', route_id, order='recorded_revision')
             if saved['route_id'] == route_id and saved.get('route_digest') == route_digest
             and saved.get('runtime') == route['runtime']]
-        for saved in matching[-1:]:
-            try:
-                request = _read_json(artifacts, saved['request'])
-                output = _read_json(artifacts, saved['output']) if saved['output'] else {}
-                controls = _read_json(artifacts, saved['controls'])
-                positive = saved['positive_controls']
-                no_excluded = not any(token in json.dumps(request) for token in controls.values())
-                if not no_excluded or any(token in json.dumps(output) for token in controls.values()):
-                    status = 'contaminated'
-                complete_sources = set(controls) == set(transport.EXCLUDED_SOURCES)
-                positives = all(output.get(key) == positive[key] for key in ('allowed_control', 'evidence_control'))
-                bounded = request.get('tools') == [] and request.get('store') is False and 'previous_response_id' not in request
-                if (has_supported_binding(saved) and saved['status'] == 'completed'
-                        and saved['request_digest'] == digest(request) and no_excluded
-                        and complete_sources and positives and bounded and output.get('excluded_controls') == []
-                        and derive_output(dict(saved, output=output), _read_json(artifacts, saved['response'])) == output
-                        and verify_route_context(artifacts, route, request, _read_json(artifacts, saved['response']),
-                                                 required=saved.get('codex_invocation') is not None)):
-                    status, proof = 'verified_for_route', saved['id']
-            except (ResearchError, ValueError, TypeError, KeyError):
-                continue
+        if matching:
+            status, proof = _judge_route_probe(artifacts, route, matching[-1])
+            if status == 'unverified' and not _has_probe_answer(artifacts, matching[-1]):
+                # The retirement is read only when an earlier probe holds an answer.
+                answered = next((saved for saved in reversed(matching[:-1])
+                                 if _has_probe_answer(artifacts, saved)), None)
+                if answered is not None and route_id in retired_routes(records):
+                    status, proof = _judge_route_probe(artifacts, route, answered)
     return {'context_status': status, 'probe_id': proof,
             'author_history_isolation': status, 'prior_assessment_isolation': status,
             'identity_arm_masking': 'not_established',
             'residual_exposures': ['Provider training knowledge and internal service configuration are not audited.',
                                   'The packet can identify published work; no model-family independence is claimed.']}
+
+
+def _judge_route_probe(artifacts, route, saved):
+    """The context status that one probe record gives its route record, and the probe id when the probe verifies
+    the record. A control of an excluded source in the request or in the output gives contaminated."""
+    from .review_codex_invocation import has_supported_binding
+    status = 'unverified'
+    try:
+        request = _read_json(artifacts, saved['request'])
+        output = _read_json(artifacts, saved['output']) if saved['output'] else {}
+        controls = _read_json(artifacts, saved['controls'])
+        positive = saved['positive_controls']
+        no_excluded = not any(token in json.dumps(request) for token in controls.values())
+        if not no_excluded or any(token in json.dumps(output) for token in controls.values()):
+            status = 'contaminated'
+        complete_sources = set(controls) == set(transport.EXCLUDED_SOURCES)
+        positives = all(output.get(key) == positive[key] for key in ('allowed_control', 'evidence_control'))
+        bounded = request.get('tools') == [] and request.get('store') is False and 'previous_response_id' not in request
+        verified = (has_supported_binding(saved) and saved['status'] == 'completed'
+                    and saved['request_digest'] == digest(request) and no_excluded
+                    and complete_sources and positives and bounded and output.get('excluded_controls') == []
+                    and derive_output(dict(saved, output=output), _read_json(artifacts, saved['response'])) == output
+                    and verify_route_context(artifacts, route, request, _read_json(artifacts, saved['response']),
+                                             required=saved.get('codex_invocation') is not None))
+    except (ResearchError, ValueError, TypeError, KeyError):
+        verified = False
+    return ('verified_for_route', saved['id']) if verified else (status, None)
+
+
+def _has_probe_answer(artifacts, saved):
+    """Whether the reviewer answered this probe: its response holds answer text, parsed or not. A response that
+    cannot be read counts as an answer."""
+    if saved.get('response') is None:
+        return False
+    try:
+        answer = extract_answer_text(_read_json(artifacts, saved['response']))
+    except (ResearchError, ValueError, TypeError, KeyError):
+        return True
+    return bool((answer or '').strip())
 
 
 def previous_problem_result_prompt(repair=False, repair_prompt=None, common_version=1):

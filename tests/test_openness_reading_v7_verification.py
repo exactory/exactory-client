@@ -5,10 +5,12 @@ import json
 import unittest
 from unittest.mock import patch
 
+from codex_route_fixtures import probe_codex_route, record_codex_route
 from openness_reading_fixtures import OpennessReadingCase
 from test_openness_carried_integration import CarriedIntegrationSupport
 from research_harness import openness_carried, openness_reading as reading, openness_reading_v7 as v7
 from research_harness import problem_openness, review_protocol as protocol
+from research_harness import review_codex_transport as codex, review_transport as transport
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from research_harness.evaluation import Evaluation
@@ -162,6 +164,63 @@ class V6VerificationTests(VerificationCases, OpennessReadingCase):
 
 class V5VerificationTests(VerificationCases, OpennessReadingCase):
     historical_v5 = True
+
+
+class RetiredRouteVerificationTests(CarriedIntegrationSupport, OpennessReadingCase):
+    def test_carried_chain_on_a_retired_stale_route_record_verifies_again(self):
+        """Rule RS1 (requirement R3.2), row 1 of section 4.4 of its design. Chain A has two reading turns on the
+        route record "route", and chain B carries both from "second-route" and records its finding. Then a probe of
+        "route" fails without an answer, and the reviewer runtime changes, so no probe can verify "route" again. The
+        retirement of "route" makes B verify and its finding current, and a new chain on a renewed route record
+        carries the turns of A and of B. The test needs the size of a carried chain: two reading turns of A, the
+        turns of B and the first assignment of the new chain."""
+        record_codex_route(self, 'second-route', model=self.route_model, output_tokens=self.route_output_tokens)
+        self.complete_earlier_readings()
+        native = self.export(name='new-export', assignment_id='new')
+        self.mutate(protocol.record_assignment, dict(id='new', route_id='second-route', dossier_id=None,
+            role='native_math', reviewer_id='openness-reviewer', author_id='problem-author',
+            context=dict(native_packet=native)))
+        packets = self.finish_chain(native)
+        final = 'new-%d' % len(packets)
+        self.mutate(self.load_problem_module().record_openness, dict(assignment_id=final))
+        with patch.object(transport, 'send_request', side_effect=ResearchError('review_provider_failure', 'No answer.')):
+            protocol.probe_route(self.store, dict(id='no-answer', route_id='route'), credential='test-only',
+                                 expected_revision=self.store.revision, request_id='no-answer')
+        pinned = self.store.snapshot()['records']['review_route']['route']['runtime']
+        runtime = patch.object(codex, 'runtime', return_value=dict(pinned, implementation_sha256='2' * 64))
+        runtime.start()
+        self.addCleanup(runtime.stop)
+        records = self.store.snapshot()['records']
+        with self.assertRaises(ResearchError) as refused:
+            reading.verify_chain(records, self.artifacts, records['review_assignment'][final])
+        self.assertEqual(refused.exception.code, 'openness_reading_incomplete')
+        self.assertIn('problem_openness_stale',
+                      [row['code'] for row in problem_openness.assess_openness(records, self.artifacts)])
+        with self.assertRaises(ResearchError) as refused:
+            probe_codex_route(self, 'probe-of-the-stale-record', 'route')
+        self.assertEqual(refused.exception.code, 'review_route_runtime_stale')
+        self.mutate(protocol.record_context_event, dict(id='retire-route', assignment_id='earlier-2',
+            kind='route_retired', source='owner', reason='The route record pins a runtime that is not installed.',
+            evidence=[self.artifacts.put(b'The owner retired this route record.', 'text/plain')]))
+        records = self.store.snapshot()['records']
+        # On the base the verification stays refused with openness_reading_incomplete.
+        turns = reading.verify_chain(records, self.artifacts, records['review_assignment'][final])
+        self.assertEqual([row['origin']['assignment_id'] for row in turns if row.get('origin')],
+                         ['turn-1', 'earlier-2'])
+        self.assertNotIn('problem_openness_stale',
+                         [row['code'] for row in problem_openness.assess_openness(records, self.artifacts)])
+        # Both route records pin the runtime of before, so the new chain takes a renewed route record.
+        self.mutate(protocol.record_route, {'id': 'renewed', 'adapter': 'codex_cli_v1', 'model': self.route_model,
+            'endpoint': 'codex://local', 'configuration': {'max_output_tokens': self.route_output_tokens,
+                                                           'timeout_seconds': 5}})
+        probe_codex_route(self, 'probe-renewed', 'renewed')
+        receipt = self.mutate(protocol.record_assignment, dict(id='following', route_id='renewed', dossier_id=None,
+            role='native_math', reviewer_id='openness-reviewer', author_id='problem-author',
+            context=dict(native_packet=self.export(name='following-export', assignment_id='following'))))['result']
+        report = receipt['carried_readings']
+        self.assertEqual({row['chain']: [turn['origin']['assignment_id'] for turn in row['turns']]
+                          for row in report['chains']}, {'turn-1': ['turn-1', 'earlier-2'], 'new': ['new']})
+        self.assertEqual(report['remaining_characters'], 0)
 
 
 class EmptySelectionVerificationTests(OpennessReadingCase):
