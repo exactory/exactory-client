@@ -12,21 +12,44 @@ From the files of tests/ that the diff changes: each changed test module, and ea
 changed file of tests/ through the imports between the files of tests/. So a test that uses a changed fixture
 builder through two other test modules is in the set.
 
-From the other files that the diff changes: each test module that imports a changed module of research_harness,
-ci or tools, and each test module whose text names a changed file of another kind (the file name of a document or
-of a fixture, the quoted name of a command of bin/). This part takes the direct users only. The full suites of the
-CI cover the rest.
+From the other files that the diff changes: each test module that uses a changed module of research_harness, ci or
+tools, and each test module whose text names a changed file of another kind (its file name, the folder of
+tests/fixtures that holds it, or the quoted name of a command of bin/). A test module uses a module when it imports
+it, at the top or inside a function, or when a string of it holds the dotted name or the path of the module: the
+target of mock.patch, the argument of importlib.import_module, a path with a function name. A change also reaches
+the tests through the files that read for them: a file of tests/fixtures, compressed or not, or a module of ci or
+tools that uses a changed file in the same way, or uses another such file, counts as changed. In this way the
+checksum pins of a fixture that a module of ci checks select the test modules that import that module of ci. This
+part takes the direct users only. The full suites of the CI cover the rest. They are also the check for a change of
+the runner or of the reviewer program guard, which can change the result of every test.
 
-    python3 ci/must_pass.py list [--base origin/main]
-    python3 ci/must_pass.py run [--base origin/main] [--python EXECUTABLE ...] [--jobs N] [--logs DIRECTORY]
+    python3 ci/must_pass.py list [--base origin/main] [--head REVISION]
+    python3 ci/must_pass.py run [--base origin/main] [--head REVISION] [--module NAME ...] [--python EXECUTABLE ...]
+                                [--jobs N] [--logs DIRECTORY]
 
-run starts one process for each module and each Python executable, through ci/unittest_shards.py run-modules, so
-each result is the result of a CI shard. It ends with status 1 when a module fails. The tests of
-skills/math-solver/harness have their own command and are not in the set.
+Without --head, the diff is the working tree, with its untracked files, against the merge base of HEAD and the
+base. With --head, it is that commit against the merge base of the head and the base, for example to replay a
+release.
+
+run groups the tests into processes as the full suite of the CI does. For each Python executable and each shard of
+the CI, one process (ci/unittest_shards.py run-group) runs the tests of the set that the shard holds, in the order
+of the shard. So a test that leaves state behind breaks the later tests of its group as it does in the CI. With
+--module, run takes the named test modules in place of the set: this is the run that an implementer repeats.
+
+run prints each group when it ends, then a table of the modules with the wall time, the processor time and the
+status of each module for each Python executable, the slowest tests, the times of the run, and the comparison of
+the wall time of the run with its budget in ci/budgets.json: implementer_run with --module, must_pass_run without.
+It writes the same report, with the time of each test, as must-pass-report.json into the log directory. It ends
+with status 1 when a group fails; the budget does not change the status. --jobs is at most test_processes of
+ci/budgets.json. The tests of skills/math-solver/harness have their own command and are not in the set.
 """
 import argparse
 import ast
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import gzip
+import json
+import lzma
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -40,49 +63,97 @@ ROOT = Path(__file__).resolve().parents[1]
 ALWAYS = ("test_capacity_packet_inventory", "test_codex", "test_incident_ledger", "test_manifest",
           "test_packet_call_rows", "test_release_records", "test_research_guidance", "test_review_request_parity",
           "test_series_code_reach")
-# The slow modules that pin the certificates of the harness code. They run first, because they end last.
+# The slow modules that pin the certificates of the harness code. The list prints them first.
 HARNESS_PINS = ("test_capacity_guard", "test_continuity_guard", "test_continuity_guard_stage3",
                 "test_capacity_guard_fixes")
 MODULE_PACKAGES = ("research_harness", "ci", "tools")
+# The packages whose modules read files for the tests. A module of research_harness carries no change: the modules
+# of research_harness import each other, so the change of one would reach most of the suite.
+CARRIER_PACKAGES = ("ci", "tools")
+# A dotted name or a path of a module of MODULE_PACKAGES in a text, with the names that follow it: an import, the
+# target of mock.patch, the argument of importlib.import_module, or a path with a function name.
+MODULE_NAME_PATTERN = re.compile(r"\b(?:" + "|".join(MODULE_PACKAGES) + r")(?:[./][A-Za-z_]\w*)+")
+# The readers of the compressed fixtures, by file suffix.
+DECOMPRESSORS = {".gz": gzip.decompress, ".xz": lzma.decompress}
+REPORT_FILE_NAME = "must-pass-report.json"
 
 
-def list_changed_files(root, base):
-    """The files that differ from the merge base with the base, committed or not, and the untracked files."""
+def list_changed_files(root, base, head=None):
+    """The files that differ from the merge base with the base: those of the head commit, or without a head those
+    of the working tree, committed or not, and the untracked files."""
     def read_git(*arguments):
         return subprocess.run(("git",) + arguments, cwd=root, check=True, text=True,
                               stdout=subprocess.PIPE).stdout.split("\n")
-    merge_base = read_git("merge-base", base, "HEAD")[0]
-    names = read_git("diff", "--name-only", merge_base) + read_git("ls-files", "--others", "--exclude-standard")
+    if head:
+        names = read_git("diff", "--name-only", read_git("merge-base", base, head)[0], head)
+    else:
+        merge_base = read_git("merge-base", base, "HEAD")[0]
+        names = read_git("diff", "--name-only", merge_base) + read_git("ls-files", "--others", "--exclude-standard")
     return sorted({name for name in names if name})
 
 
-def read_imported_names(source):
-    """Each module that the source imports, and each name that it imports from a module, as dotted names."""
-    names = set()
+def read_python_names(source):
+    """Each module that the source imports, at the top or inside a function, and each name that it imports from a
+    module, as dotted names; and the strings of the source other than its docstrings."""
+    imports, strings, docstrings = set(), [], set()
+    # ast.walk visits a node before its children, so a docstring is known before its turn comes.
     for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Import):
-            names.update(alias.name for alias in node.names)
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.body \
+                and isinstance(node.body[0], ast.Expr):
+            docstrings.add(id(node.body[0].value))
+        elif isinstance(node, ast.Import):
+            imports.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-            names.add(node.module)
-            names.update(node.module + "." + alias.name for alias in node.names)
-    return names
+            imports.add(node.module)
+            imports.update(node.module + "." + alias.name for alias in node.names)
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings:
+            strings.append(node.value)
+    return imports, strings
+
+
+def describe_file(path):
+    """The text of a file, decompressed when it is a compressed fixture, the names that it imports when it is Python
+    source, and the dotted names of the modules that it uses: those that it imports and those that it names. A
+    Python file names a module in a string, not in a comment or a docstring."""
+    data = path.read_bytes()
+    if path.suffix in DECOMPRESSORS:
+        data = DECOMPRESSORS[path.suffix](data)
+    source = data.decode("utf-8", errors="replace")
+    imports, strings = read_python_names(source) if path.suffix == ".py" else (set(), [source])
+    named = {name.replace("/", ".") for text in strings for name in MODULE_NAME_PATTERN.findall(text)}
+    return {"source": source, "imports": imports, "names": imports | named}
 
 
 def describe_test_files(root):
-    """The text and the imported names of each Python file of tests/, by its module name."""
-    files = {}
-    for path in sorted((root / "tests").glob("*.py")):
-        source = path.read_text(encoding="utf-8")
-        files[path.stem] = {"source": source, "imports": read_imported_names(source)}
-    return files
+    """The Python files of tests/, by their module name."""
+    return {path.stem: describe_file(path) for path in sorted((root / "tests").glob("*.py"))}
+
+
+def describe_tree(root):
+    """The Python files of tests/ by module name, and by their path in the tree the files that can carry a change to
+    a test without an import: the files of tests/fixtures and the modules of CARRIER_PACKAGES."""
+    paths = [path for path in sorted((root / "tests" / "fixtures").rglob("*"))
+             if path.is_file() and "__pycache__" not in path.parts]
+    paths += [path for package in CARRIER_PACKAGES for path in sorted((root / package).rglob("*.py"))]
+    return {"tests": describe_test_files(root),
+            "carriers": {path.relative_to(root).as_posix(): describe_file(path) for path in paths}}
 
 
 def changes_test_file(name, changed):
     return "tests/" + name + ".py" in changed
 
 
+def list_file_references(path):
+    """The strings by which a text names a file that is not a module: its file name, and for a file in a folder of
+    tests/fixtures, that folder as fixtures/<folder>."""
+    references = [path.name]
+    if path.parts[:2] == ("tests", "fixtures") and len(path.parts) > 3:
+        references.append("fixtures/" + path.parts[2])
+    return references
+
+
 def uses_changed_file(file, changed):
-    """Whether a file of tests/ imports a changed module, or names in its text a changed file of another kind."""
+    """Whether a file uses a changed module (it imports it or names it), or names a changed file of another kind."""
     for changed_name in changed:
         path = Path(changed_name)
         if path.parent == Path("tests") and path.suffix == ".py":
@@ -90,15 +161,28 @@ def uses_changed_file(file, changed):
         if path.suffix == ".py" and path.parts[0] in MODULE_PACKAGES:
             parts = path.with_suffix("").parts
             module = ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
-            if any(imported == module or imported.startswith(module + ".") for imported in file["imports"]):
+            if any(name == module or name.startswith(module + ".") for name in file["names"]):
                 return True
         elif path.parts[0] == "bin":
-            # A test loads a command of bin/ by its file name, which the text holds as a string of its own.
-            if re.search("[\"']" + re.escape(path.name) + "[\"']", file["source"]):
+            # A test loads a command of bin/ by its file name, which the text holds as a string of its own. The
+            # plain search first keeps the pattern off the large fixtures that do not hold the name at all.
+            if path.name in file["source"] and re.search("[\"']" + re.escape(path.name) + "[\"']", file["source"]):
                 return True
-        elif path.name in file["source"]:
+        elif any(reference in file["source"] for reference in list_file_references(path)):
             return True
     return False
+
+
+def find_carriers(carriers, changed):
+    """The fixtures and the modules of CARRIER_PACKAGES that use a changed file, directly or through other such
+    files. Each file is checked against each name once."""
+    found = set()
+    pending = list(changed)
+    while pending:
+        reached = {path for path, file in carriers.items() if path not in found and uses_changed_file(file, pending)}
+        found |= reached
+        pending = sorted(reached)
+    return found
 
 
 def find_touched_modules(files, changed):
@@ -121,39 +205,106 @@ def find_touched_modules(files, changed):
     return {name for name in reached if name.startswith("test_")}
 
 
-def select_modules(root, changed):
+def select_modules(tree, changed):
     """The must-pass set for a diff, with the slow pins first: the fixed modules and the modules of the diff."""
-    files = describe_test_files(root)
-    missing = [name for name in ALWAYS + HARNESS_PINS if name not in files]
+    tests = tree["tests"]
+    missing = [name for name in ALWAYS + HARNESS_PINS if name not in tests]
     if missing:
         raise SystemExit("ALWAYS or HARNESS_PINS names test modules that tests/ does not hold: " + ", ".join(missing))
     pins = HARNESS_PINS if any(name.startswith(("research_harness/", "tests/fixtures/")) for name in changed) else ()
-    return list(pins) + sorted((set(ALWAYS) | find_touched_modules(files, changed)) - set(pins))
+    touched = find_touched_modules(tests, list(changed) + sorted(find_carriers(tree["carriers"], changed)))
+    return list(pins) + sorted((set(ALWAYS) | touched) - set(pins))
 
 
-def run_module(root, executable, module, log_path):
+def run_group(root, executable, shard_index, modules, directory):
+    """Run the tests of the modules that one CI shard holds, in one process, and measure the wall time and the
+    processor time (user and system) of the process and of the child processes that it waited for."""
+    log_path = directory / ("shard-%d.log" % shard_index)
+    result_path = directory / ("shard-%d.json" % shard_index)
+    command = (executable, "ci/unittest_shards.py", "run-group", "--shard-index", str(shard_index),
+               "--result", str(result_path)) + tuple(modules)
     started = time.monotonic()
-    with log_path.open("w", encoding="utf-8") as log:
-        status = subprocess.run((executable, "ci/unittest_shards.py", "run-modules", "tests." + module), cwd=root,
-                                stdout=log, stderr=subprocess.STDOUT).returncode
-    return executable, module, status, time.monotonic() - started
+    with log_path.open("w", encoding="utf-8") as log, \
+            subprocess.Popen(command, cwd=root, stdout=log, stderr=subprocess.STDOUT) as process:
+        # os.wait4 gives the resource use of this child alone, while the other groups run.
+        _, status, usage = os.wait4(process.pid, 0)
+        # The child is reaped, so the context manager must not wait for it again.
+        process.returncode = os.waitstatus_to_exitcode(status)
+    return {"python": executable, "shard_index": shard_index, "exit_status": process.returncode,
+            "wall_seconds": round(time.monotonic() - started, 3),
+            "processor_seconds": round(usage.ru_utime + usage.ru_stime, 3),
+            "log": str(log_path), "result": str(result_path)}
 
 
-def run_modules(root, executables, modules, jobs, logs):
-    """Run each module with each executable, one process each, and return the count of failed runs."""
+def run_groups(root, executables, modules, shard_count, jobs, logs):
+    """Run each shard group with each executable, at most jobs at the same time, and print each group when it ends.
+    Each group gets its tests, their times and its failures from its result file."""
     runs = []
     for index, executable in enumerate(executables):
         directory = logs / ("python-%d" % index)
         directory.mkdir(parents=True, exist_ok=True)
-        runs.extend((executable, module, directory / (module + ".log")) for module in modules)
-    failed_count = 0
+        runs.extend((executable, shard_index, directory) for shard_index in range(shard_count))
+    groups = []
     with ThreadPoolExecutor(max_workers=jobs) as pool:
-        # Each result is printed when its run ends, so the slow pins that start first do not hold back the others.
-        for finished in as_completed([pool.submit(run_module, root, *run) for run in runs]):
-            executable, module, status, seconds = finished.result()
-            failed_count += status != 0
-            print("%s  %s  %s  %.0f s" % ("ok    " if status == 0 else "FAILED", module, executable, seconds), flush=True)
-    return failed_count
+        for finished in as_completed([pool.submit(run_group, root, executable, shard_index, modules, directory)
+                                      for executable, shard_index, directory in runs]):
+            group = finished.result()
+            result_path = Path(group["result"])
+            result = json.loads(result_path.read_text(encoding="utf-8")) if result_path.is_file() else {}
+            group.update(
+                status="ok" if group["exit_status"] == 0 and result.get("success") is True else "FAILED",
+                tests_run=result.get("tests_run", 0), test_seconds=result.get("test_seconds", []),
+                failed_tests=sorted(set(result.get("failures", []) + result.get("errors", [])
+                                        + [row[0] for row in result.get("skipped", [])]
+                                        + result.get("expected_failures", [])
+                                        + result.get("unexpected_successes", []))))
+            print("%-6s  shard %d  %s  %d tests  wall %.1f s  processor %.1f s"
+                  % (group["status"], group["shard_index"], group["python"], group["tests_run"],
+                     group["wall_seconds"], group["processor_seconds"]), flush=True)
+            groups.append(group)
+    return sorted(groups, key=lambda group: (executables.index(group["python"]), group["shard_index"]))
+
+
+def sum_module_times(groups, modules, read_test_module):
+    """The tests, the wall time, the processor time and the status of each module for each executable: the sums of
+    the times of its tests over the groups."""
+    rows = {(group["python"], module): {"python": group["python"], "module": module, "tests": 0, "wall_seconds": 0.0,
+                                        "processor_seconds": 0.0, "status": "ok"}
+            for group in groups for module in modules}
+    for group in groups:
+        for test_id, wall_seconds, processor_seconds in group["test_seconds"]:
+            row = rows[group["python"], read_test_module(test_id)]
+            row.update(tests=row["tests"] + 1, wall_seconds=round(row["wall_seconds"] + wall_seconds, 3),
+                       processor_seconds=round(row["processor_seconds"] + processor_seconds, 3))
+        for test_id in group["failed_tests"]:
+            rows[group["python"], read_test_module(test_id)]["status"] = "FAILED"
+    return sorted(rows.values(), key=lambda row: (row["module"], row["python"]))
+
+
+def print_report(report, format_budget_report):
+    """Print the table of the modules, the slowest tests, the times of each executable and of the run, and the
+    comparison with the budget."""
+    print("%-60s %-32s %6s %10s %12s  %s" % ("Module", "Python", "Tests", "Wall s", "Processor s", "Status"))
+    for row in report["module_times"]:
+        print("%-60s %-32s %6d %10.1f %12.1f  %s" % (row["module"], row["python"], row["tests"],
+                                                     row["wall_seconds"], row["processor_seconds"], row["status"]))
+    print("Slowest tests:")
+    for python, test_id, wall_seconds, processor_seconds in report["slowest_tests"]:
+        print("  wall %8.1f s  processor %8.1f s  %s  %s" % (wall_seconds, processor_seconds, python, test_id))
+    for python in report["python"]:
+        groups = [group for group in report["groups"] if group["python"] == python]
+        print("Python %s: %d groups, %d tests, wall %.1f s and processor %.1f s, summed over the groups."
+              % (python, len(groups), sum(group["tests_run"] for group in groups),
+                 sum(group["wall_seconds"] for group in groups), sum(group["processor_seconds"] for group in groups)))
+    run = report["run"]
+    print("%d modules, %d Python executables, %d groups, %d failed groups. Run: wall %.1f s, processor %.1f s."
+          % (len(report["modules"]), len(report["python"]), len(report["groups"]),
+             sum(group["status"] != "ok" for group in report["groups"]), run["wall_seconds"],
+             run["processor_seconds"]))
+    budget = report["budget"]
+    for line in format_budget_report(budget["name"], budget["wall_seconds"], run["wall_seconds"],
+                                     run["processor_seconds"]):
+        print(line)
 
 
 def main():
@@ -162,24 +313,56 @@ def main():
     for name in ("list", "run"):
         command = commands.add_parser(name)
         command.add_argument("--base", default="origin/main", help="The branch that the release merges into.")
+        command.add_argument("--head", help="A commit whose diff selects the set, in place of the working tree.")
     run = commands.choices["run"]
+    run.add_argument("--module", action="append",
+                     help="A test module of tests/ to run in place of the set, such as test_must_pass. Give the "
+                          "option once for each module.")
     run.add_argument("--python", action="append", help="A Python executable. Give the option once for each version.")
     run.add_argument("--jobs", type=int, default=4, help="The count of test processes at the same time.")
-    run.add_argument("--logs", type=Path, help="The directory for one log file of each run.")
+    run.add_argument("--logs", type=Path, help="The directory for the logs, the result files and the report.")
     args = parser.parse_args()
-    changed = list_changed_files(ROOT, args.base)
-    modules = select_modules(ROOT, changed)
-    if any(name.startswith("skills/math-solver/harness/") for name in changed):
-        print("The diff changes skills/math-solver/harness. Run its tests with their own command.", file=sys.stderr)
+    # The runner is the one home of the shards, the budgets and the clock; this script runs it as a module of ci.
+    sys.path.insert(0, str(ROOT))
+    from ci import unittest_shards
+    started = unittest_shards.read_process_clock()
+    budgets = unittest_shards.read_budgets()
+    if args.command == "run" and not 1 <= args.jobs <= budgets["test_processes"]:
+        parser.error("--jobs must be between 1 and %d, the limit test_processes of ci/budgets.json."
+                     % budgets["test_processes"])
+    if args.command == "run" and args.module:
+        unknown = [name for name in args.module
+                   if not (name.startswith("test_") and (ROOT / "tests" / (name + ".py")).is_file())]
+        if unknown:
+            parser.error("--module names no test module of tests/: " + ", ".join(unknown))
+        modules, budget_name = sorted(set(args.module)), "implementer_run"
+    else:
+        changed = list_changed_files(ROOT, args.base, args.head)
+        modules, budget_name = select_modules(describe_tree(ROOT), changed), "must_pass_run"
+        if any(name.startswith("skills/math-solver/harness/") for name in changed):
+            print("The diff changes skills/math-solver/harness. Run its tests with their own command.", file=sys.stderr)
     if args.command == "list":
         print("\n".join(modules))
         return 0
     logs = args.logs or Path(tempfile.mkdtemp(prefix="must-pass-"))
     executables = args.python or [sys.executable]
-    failed_count = run_modules(ROOT, executables, modules, args.jobs, logs)
-    print("%d modules, %d Python executables, %d failed runs. Logs: %s"
-          % (len(modules), len(executables), failed_count, logs))
-    return 1 if failed_count else 0
+    groups = run_groups(ROOT, executables, modules, unittest_shards.SHARD_COUNT, args.jobs, logs)
+    ended = unittest_shards.read_process_clock()
+    tests = [[group["python"]] + row for group in groups for row in group["test_seconds"]]
+    report = {
+        "base": args.base, "head": args.head, "modules": modules, "python": executables, "jobs": args.jobs,
+        "groups": [{key: value for key, value in group.items() if key != "test_seconds"} for group in groups],
+        "module_times": sum_module_times(groups, modules, unittest_shards.read_test_module),
+        "test_seconds": tests,
+        "slowest_tests": sorted(tests, key=lambda row: -row[2])[:unittest_shards.SLOWEST_TEST_COUNT],
+        "run": {"wall_seconds": round(ended[0] - started[0], 3), "processor_seconds": round(ended[1] - started[1], 3)},
+        "budget": {"name": budget_name, "wall_seconds": budgets["runs"][budget_name]["wall_seconds"]},
+    }
+    report["budget"]["over"] = report["run"]["wall_seconds"] > report["budget"]["wall_seconds"]
+    unittest_shards.write_json(logs / REPORT_FILE_NAME, report)
+    print_report(report, unittest_shards.format_budget_report)
+    print("Logs and report: %s" % logs)
+    return 1 if any(group["status"] != "ok" for group in groups) else 0
 
 
 if __name__ == "__main__":

@@ -226,10 +226,26 @@ class ActualInputProjectionTests(unittest.TestCase):
         request['input'][0]['content'].append({'type': 'input_text', 'text': 'Unbound extra instructions.'})
         with self.assertRaises(ResearchError):
             packets_from_request(request, native_attachments=True)
-        for text in ('[]', '{"evidence":[],"evidence":[]}'):
+        # A packet that is not an object, or whose review_parts member is not an object, is refused as unreadable.
+        for text in ('[]', '{"evidence":[],"evidence":[]}', '{"review_parts":[]}', '{"review_parts":"v3"}'):
             with self.subTest(text=text):
                 with self.assertRaises(ResearchError):
                     packets_from_request({'input': [{'role': 'user', 'content': transport.PACKET_LABEL + text}]})
+
+    def test_a_planned_native_packet_whose_native_member_is_not_an_object_is_refused(self):
+        from research_harness.evidence import digest
+        reference = describe_artifact(b'{}', 'application/json')
+        names = ('inventory', 'logical_packet', 'state')
+        header = dict({name: reference for name in names}, **{name + '_digest': reference['sha256'] for name in names},
+                      protocol='exactory-review-parts-v3', adapter='native_math', kind='read', turn=1,
+                      series_assignment_id='series')
+        for native in ([], 'native'):
+            with self.subTest(native=native):
+                packet = dict(protocol='exactory-independent-review-v1', role='native_math', reviewer_id='reviewer',
+                              dossier_id=None, evidence=[], native=native, review_parts=header)
+                packet['digest'] = digest(packet)
+                with self.assertRaises(ResearchError):
+                    packets_from_request({'input': [self.message(packet)]})
 
     def test_native_repeated_parts_supply_only_the_actual_later_content(self):
         from research_harness.research_decisions import find_undelivered_bar_ids

@@ -1,15 +1,28 @@
 """Ruling 22 verification reads every declared start and its stored attempts."""
 
+from contextlib import redirect_stdout
 import copy
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from ci import route_capacity_profile as profile
+from research_harness import bar_sources, cli, research_decisions as decisions, review_claude_transport as claude
+from research_harness import review_composite as composite, review_failure_class as failures
+from research_harness import review_protocol as protocol, review_route_capacity as capacity
+from research_harness import review_session_v4 as session
 from research_harness.artifacts import ArtifactStore
+from research_harness.evaluation import Evaluation
 from research_harness.evidence import digest
+from research_harness.provenance import plugin_version
+from test_research_claude_transport import clean_stream, completed
+import test_research_problem_reviews as problem_fixtures
 from test_review_route_capacity import build_route
+import test_review_session_v4_pages as pages
+import test_review_session_v4_turns as turns
 
 
 class VerificationCriterionTests(unittest.TestCase):
@@ -19,16 +32,17 @@ class VerificationCriterionTests(unittest.TestCase):
         self.artifacts = ArtifactStore(Path(directory.name))
         self.records = dict(review_route={'route': build_route()}, review_assignment={},
                             review_attempt={}, value_review={})
-        self.declaration = dict(clone='synthetic-clone', route_id='route', max_calls=60,
+        self.declaration = dict(clone='synthetic-clone', route_ids=['route'], max_calls=60,
                                 recorded_revision=1)
 
     def put(self, value):
         return self.artifacts.put(json.dumps(value).encode(), 'application/json')
 
     def add_chain(self, count, over=(), *, identifier='chain', recorded=True):
-        plan = dict(policy='exactory-route-capacity-policy-v1', profile=dict(
-            request=dict(state='fits', share_at_or_over_limit=0.02)),
-            task=dict(request=dict(material_allowance=120000, state='fits')))
+        plan = dict(policy='exactory-route-capacity-policy-v1', profile=dict(rows=[]),
+            task=dict(request=dict(material_allowance=120000, state='fits',
+                at_or_over_limit_share=0.02, levels=[dict(material_allowance=value)
+                    for value in (120000, 60000, 30000, 15000)])))
         plan_ref = dict(protocol='exactory-route-capacity-plan-v1', digest=digest(plan),
                         artifact=self.put(plan))
         previous = None
@@ -37,7 +51,7 @@ class VerificationCriterionTests(unittest.TestCase):
             assignment = dict(id=key, role='bar', route_id='route', reviewer_id=identifier,
                 author_id='author', dossier_id=None, context=dict(prior_assignment_id=previous) if previous else {},
                 recorded_revision=2 + 4 * number, capacity_plan=plan_ref,
-                packet=self.put(dict(source_inventory=dict(protocol='exactory-independent-review-sources-v4'))))
+                packet=self.put(dict(source_rules='exactory-independent-review-sources-v4')))
             self.records['review_assignment'][key] = assignment
             attempt = dict(id=key, assignment_id=key, status='completed', origin='instrumented',
                 output=self.put({}), response=None, task=dict(kind='request', characters=160000, material_allowance=120000),
@@ -172,6 +186,14 @@ class VerificationCriterionTests(unittest.TestCase):
         self.records['review_assignment']['chain-2']['packet'] = self.put({})
         self.assertIn('session_rules_are_not_v4', self.assess()['chains'][0]['reasons'])
 
+    def test_incomplete_diagnostic_output_is_counted_as_failure_without_becoming_recorded_answer(self):
+        self.add_chain(19, (0,))
+        attempt = self.records['review_attempt']['chain-0']
+        attempt['output'] = self.put(dict(diagnostic='The provider stopped at the output limit.'))
+        result = self.assess()
+        self.assertEqual((result['result'], result['calls'], result['at_or_over_limit']), ('pass', 20, 1))
+        self.assertFalse(result['chains'][0]['attempts'][0]['recorded'])
+
     def test_real_shape_three_historical_over_cap_turns_fail_and_list_tokens(self):
         # Source: 20261112043216-bar-turn-over-output-cap-at-effort-max.
         self.add_chain(20, (0, 4, 7))
@@ -217,7 +239,7 @@ class VerificationCriterionTests(unittest.TestCase):
         self.add_chain(19, (0,))
         first = self.records['review_assignment']['chain-0']
         plan = json.loads(self.artifacts.read(first['capacity_plan']['artifact']))
-        plan['task']['request'] = dict(material_allowance=120000, state='fits')
+        plan['task']['request']['material_allowance'] = 120000
         reference = dict(first['capacity_plan'], digest=digest(plan), artifact=self.put(plan))
         for assignment in self.records['review_assignment'].values():
             assignment['capacity_plan'] = reference
@@ -242,3 +264,253 @@ class VerificationCriterionTests(unittest.TestCase):
                 assignment['route_id'] = route['id']
         result = self.assess()
         self.assertEqual((result['calls'], len(result['chains']), result['result']), (21, 2, 'fail'))
+
+
+class StoredSessionVerificationTests(unittest.TestCase):
+    """The real commands drive bar chains of the rules v4 on a route at max; a Claude stream stub answers."""
+    read_packet = pages.SessionPagesTests.read_packet
+    answer = pages.SessionPagesTests.answer
+    start = pages.SessionPagesTests.start
+    respond = pages.SessionPagesTests.respond
+    add_sources = pages.SessionPagesTests.add_sources
+    advance = pages.SessionPagesTests.advance
+    fail_capacity = pages.SessionPagesTests.fail_capacity
+
+    def setUp(self):
+        self.case = problem_fixtures.ProblemReviewTests()
+        self.case.setUp()
+        self.addCleanup(self.case.doCleanups)
+        self.case.supporting = self.case.artifacts.put(b'A synthetic field standard.', 'text/plain')
+        self.sizes = []
+        self.sequence = 0
+        # The borrowed helpers of the session tests answer through the same stub.
+        for patcher in (patch.object(protocol, 'NEW_SESSION_RULES', (session.PROTOCOL, bar_sources.PROTOCOL_V3)),
+                        patch.object(pages, 'invoke_codex', side_effect=self.invoke_stub),
+                        patch.object(turns, 'invoke_codex', side_effect=self.invoke_stub),
+                        patch.object(pages, 'build_codex_response', side_effect=self.build_response)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.add_route('route')
+        self.add_sources([1000])
+        self.declaration = dict(clone='synthetic-clone', route_ids=['route'], max_calls=60,
+                                recorded_revision=self.case.store.revision)
+
+    def build_response(self, route, request, output, tokens=1200):
+        """Run the real Claude transport on a clean stream; only the CLI process is replaced."""
+        events = clean_stream(request, json.dumps(output), model=route['model'])
+        events[-1]['usage']['output_tokens'] = tokens
+        with patch.object(claude, '_cli', return_value=('fixture-claude', 'fixture-cli')), \
+                patch.object(claude, '_run_owned', return_value=completed(events)):
+            return claude.send_request(route, request)
+
+    def add_route(self, identifier):
+        self.case.mutate(protocol.record_route, dict(build_route(), id=identifier))
+        def respond(route, request, credential):
+            packet = json.loads(request['input'][0]['content'][len(protocol.transport.PACKET_LABEL):])
+            output = {key: packet[key] for key in ('allowed_control', 'evidence_control')}
+            return self.build_response(route, request, dict(output, excluded_controls=[]))
+        with patch.object(protocol.transport, 'send_request', side_effect=respond):
+            self.case.mutate(protocol.probe_route, dict(id='probe-' + identifier, route_id=identifier), credential='test-only')
+
+    def invoke_stub(self, case, assignment_id, output, attempt_id=None, tokens=1200):
+        self.sequence += 1
+        with patch.object(protocol.transport, 'send_request', side_effect=lambda route, request, credential:
+                          self.build_response(route, request, output, tokens)):
+            return self.case.mutate(protocol.invoke_assignment,
+                dict(id=attempt_id or 'attempt-%d' % self.sequence, assignment_id=assignment_id), credential='test-only')
+
+    def assign(self, reviewer, identifier, route='route', prior=None):
+        context = dict(prior_assignment_id=prior['id']) if prior else self.case.deliver_supporting(reviewer)
+        return self.case.mutate(protocol.record_assignment, dict(id=identifier, role='bar', route_id=route,
+            dossier_id=None, reviewer_id=reviewer, author_id='author', context=context))['result']
+
+    def finish_chain(self, current, calls=12):
+        """Request the source once, pad with inventory pages, and record the bar on the last of the calls."""
+        root = current['session_chain']['first_assignment_id']
+        for number in range(80):
+            records = self.case.read_records()
+            members = {row['id'] for row in records['review_assignment'].values()
+                       if row.get('session_chain', {}).get('first_assignment_id') == root}
+            count = sum(row['assignment_id'] in members for row in records.get('review_attempt', {}).values())
+            _, inventory, state = session.read_bound_session(self.case.artifacts, current)
+            unit = next(row for row in inventory['units'] if row['kind'] == 'fulltext')
+            if 'session_turn' not in self.read_packet(current) and count >= calls - 1:
+                turns.SessionTurnsTests.finish(self, current, [dict(ref=unit['handle'])])
+                return current
+            requests = [dict(id='inventory-%d' % number, kind='inventory_page', page=0)] if count < calls - 2 else []
+            if (not any(row['unit'] == unit['handle'] for row in state['deliveries'])
+                    and not any(row.get('unit') == unit['handle'] for row in state['pending_requests'])):
+                requests = [dict(id='full-source', kind='unit', unit=unit['handle'])]
+            self.invoke_stub(self.case, current['id'], dict(schema_version=1, stage='request', notes='Bounded notes.',
+                excerpts=[], requests=requests, settled_requests=[]))
+            checked = protocol.assignment_state(self.case.read_records(), self.case.artifacts, current['id'])
+            self.assertTrue(checked['ready'], checked['obligations'])
+            current = self.assign(current['reviewer_id'], root + '-turn-%d' % number, current['route_id'], current)
+        self.fail('The fixture session did not complete')
+
+    def finish_pages(self, current):
+        for number in range(100):
+            binding = session.read_session_binding(self.read_packet(current))
+            self.invoke_stub(self.case, current['id'], self.answer(current))
+            records = self.case.read_records()
+            evaluation = Evaluation.of(records, self.case.artifacts)
+            state = protocol.assignment_state(records, evaluation, current['id'])
+            self.assertTrue(state['ready'], state['obligations'])
+            if 'closing' in binding:
+                output, record = composite.read_final_output(records, evaluation, current)
+                self.assertIsNotNone(record)
+                self.case.mutate(decisions.record_value_review,
+                    dict(output, id='review-pages', dossier_id=None, assignment_id=current['id']))
+                return current
+            current = self.assign(current['reviewer_id'], 'final-%d' % self.case.store.revision,
+                                  current['route_id'], current)
+        self.fail('The final did not close')
+
+    def pad_request(self, current, count):
+        for number in range(count):
+            self.invoke_stub(self.case, current['id'], dict(schema_version=1, stage='request', notes='Bounded notes.',
+                excerpts=[], requests=[dict(id='padding-%d' % number, kind='inventory_page', page=0)], settled_requests=[]))
+            current = self.assign(current['reviewer_id'], 'padding-%d-%d' % (self.sequence, number), current['route_id'], current)
+        return current
+
+    def assess(self):
+        return profile.assess_verification_chain(self.case.read_records(), self.case.artifacts, self.declaration)
+
+    def test_two_real_v4_bars_in_24_calls_report_actual_plan_and_routes(self):
+        self.add_route('second-route')
+        self.declaration['route_ids'].append('second-route')
+        first = self.assign('first', 'first')
+        self.invoke_stub(self.case, first['id'], {})
+        replacement = failures.plan_after_failure(self.case.read_records(), self.case.artifacts, first['id'])
+        self.assertEqual(replacement['state'], 'replace', replacement)
+        first = self.case.mutate(protocol.record_assignment, replacement['payload'])['result']
+        self.finish_chain(first, 12)
+        self.finish_chain(self.assign('second', 'second', 'second-route'), 12)
+        result = self.assess()
+        self.assertEqual((result['result'], result['calls'], len(result['chains'])), ('pass', 24, 2))
+        self.assertEqual(result['chains'][0]['attempts'][0]['position'], result['chains'][0]['attempts'][1]['position'])
+        self.assertEqual(result['plugin_version'], plugin_version())
+        self.assertEqual(set(result['routes']), {'route', 'second-route'})
+        self.assertEqual(result['routes']['route']['digest'], digest(self.case.read_records()['review_route']['route']))
+        self.assertEqual(len(result['policy_digest']), 64)
+        for chain in result['chains']:
+            self.assertIn(chain['initial_profile']['request']['state'], ('unmeasured', 'fits', 'over_limit_expected'))
+            self.assertIn('share_at_or_over_limit', chain['initial_profile']['request'])
+        self.declaration['route_ids'].remove('second-route')
+        self.assertEqual(self.assess()['reasons'], ['verification_route_changed'])
+
+    def test_real_request_limit_uses_next_level_in_twenty_calls(self):
+        turns.SessionTurnsTests.install_measured_profile(self)
+        current = self.assign('first', 'start')
+        self.invoke_stub(self.case, current['id'], {}, tokens=128000)
+        step = failures.plan_after_failure(self.case.read_records(), self.case.artifacts, current['id'])
+        self.assertEqual(step['state'], 'replace', step)
+        current = self.case.mutate(protocol.record_assignment, step['details']['recovery']['payload'])['result']
+        self.finish_chain(current, 20)
+        result = self.assess()
+        self.assertEqual((result['result'], result['calls'], result['at_or_over_limit']), ('pass', 20, 1),
+                         result['chains'][0]['reasons'])
+        attempts = result['chains'][0]['attempts']
+        self.assertEqual((attempts[0]['level'], attempts[1]['level']), (120000, 60000))
+        self.assertEqual(attempts[0]['position'], attempts[1]['position'])
+
+    def test_real_floor_one_extra_run_is_one_failure_and_second_fails_position(self):
+        route = self.case.read_records()['review_route']['route']
+        initial = capacity.read_output_profile({}, route, priors=[])
+        with patch.object(capacity, 'read_output_profile', return_value=initial):
+            current = self.assign('first', 'start')
+        self.invoke_stub(self.case, current['id'], {}, tokens=128000)
+        step = failures.plan_after_failure(self.case.read_records(), self.case.artifacts, current['id'])
+        self.assertEqual(step['state'], 'run', step)
+        self.finish_chain(current, 20)
+        result = self.assess()
+        self.assertEqual((result['result'], result['calls'], result['at_or_over_limit']), ('pass', 20, 1),
+                         result['chains'][0]['reasons'])
+        with patch.object(capacity, 'read_output_profile', return_value=initial):
+            current = self.assign('second', 'second-floor')
+        self.invoke_stub(self.case, current['id'], {}, tokens=128000)
+        self.invoke_stub(self.case, current['id'], {}, tokens=128000)
+        chain = next(row for row in self.assess()['chains'] if row['id'] == current['id'])
+        self.assertIn('position_output_count_above_bound', chain['reasons'])
+        self.assertEqual(self.assess()['result'], 'fail')
+        output = io.StringIO()
+        with redirect_stdout(output), self.assertRaises(SystemExit) as exited:
+            cli.main(['review-series', '--workspace', str(self.case.store.root), '--assignment', current['id']],
+                     render_views=lambda workspace: None)
+        self.assertEqual(exited.exception.code, 3)
+        self.assertEqual(json.loads(output.getvalue().splitlines()[-1])['code'], 'review_output_over_cap')
+        chain = next(row for row in self.assess()['chains'] if row['id'] == current['id'])
+        self.assertIn('size_decision_stop', chain['reasons'])
+
+    def split_page_twice(self, padding):
+        current = self.pad_request(self.start(targets=9), padding)
+        for _ in range(2):
+            step = self.fail_capacity(current)
+            self.assertEqual(step['state'], 'replace', step)
+            current = self.case.mutate(protocol.record_assignment, step['details']['recovery']['payload'])['result']
+        self.finish_pages(current)
+        return self.assess()
+
+    def test_real_page_split_and_nested_split_keep_new_positions(self):
+        result = self.split_page_twice(15)
+        self.assertEqual(result['result'], 'pass', result['chains'][0]['reasons'])
+        rows = [row for row in result['chains'][0]['attempts'] if row['at_or_over_limit']]
+        self.assertEqual(len(rows), 2)
+        self.assertNotEqual(rows[0]['position'], rows[1]['position'])
+        self.assertEqual(len(result['chains'][0]['positions']), 2)
+        self.assertEqual(result['calls'], len(self.case.read_records()['review_attempt']))
+        records = self.case.read_records()
+        review = records['value_review']['review-pages']
+        self.assertEqual(result['chains'][0]['recorded_bar'], review['id'])
+        review.pop('composite')
+        self.assertEqual(profile.assess_verification_chain(records, self.case.artifacts, self.declaration)['result'],
+                         'incomplete')
+
+    def test_real_parent_and_child_page_failures_both_count_in_the_bounds(self):
+        result = self.split_page_twice(0)
+        chain = result['chains'][0]
+        self.assertLessEqual(result['calls'], 20)
+        self.assertEqual((chain['at_or_over_limit'], len(chain['positions']), chain['bound']), (2, 2, 1))
+        self.assertEqual(chain['reasons'], ['chain_output_share_above_bound'])
+        self.assertEqual((result['result'], result['reasons']), ('fail', ['verification_output_share_above_bound']))
+
+    def test_real_page_answer_at_the_limit_is_replaced_and_not_a_recorded_answer(self):
+        current = self.pad_request(self.start(targets=9), 15)
+        self.invoke_stub(self.case, current['id'], self.answer(current), tokens=128000)
+        step = failures.plan_after_failure(self.case.read_records(), self.case.artifacts, current['id'])
+        self.assertEqual(step['state'], 'replace', step)
+        self.finish_pages(self.case.mutate(protocol.record_assignment, step['details']['recovery']['payload'])['result'])
+        result = self.assess()
+        self.assertEqual(result['result'], 'pass', result['chains'][0]['reasons'])
+        limit = next(row for row in result['chains'][0]['attempts'] if row['at_or_over_limit'])
+        self.assertEqual((limit['outcome'], limit['recorded']), ('output_over_cap', False))
+        self.assertNotIn(limit['id'], self.case.read_records().get('review_output_refusal', {}))
+
+    def test_real_closing_split_gives_each_condensing_turn_a_position(self):
+        current = self.pad_request(self.start(targets=9), 15)
+        while 'closing' not in self.read_packet(current).get('session_final', {}):
+            current = self.advance(current)
+        step = self.fail_capacity(current)
+        self.assertEqual(step['state'], 'replace', step)
+        current = self.case.mutate(protocol.record_assignment, step['details']['recovery']['payload'])['result']
+        self.assertIn('session_combine', self.read_packet(current))
+        self.finish_pages(current)
+        result = self.assess()
+        self.assertEqual(result['result'], 'pass', result['chains'][0]['reasons'])
+        combines = [row for row in result['chains'][0]['attempts'] if row['kind'] == 'combine']
+        self.assertGreaterEqual(len(combines), 2)
+        self.assertEqual(len({row['position'] for row in combines}), len(combines))
+        self.assertIn('combine', result['chains'][0]['initial_profile'])
+
+    def test_real_v3_fails_and_unfinished_start_counts(self):
+        with patch.object(protocol, 'NEW_SESSION_RULES', (bar_sources.PROTOCOL_V3,)):
+            old = self.assign('first', 'legacy')
+        self.assertEqual(self.read_packet(old)['source_rules'], bar_sources.PROTOCOL_V3)
+        result = self.assess()
+        self.assertIn('session_rules_are_not_v4', result['chains'][0]['reasons'])
+        self.assertEqual(result['result'], 'fail')
+        # A second reviewer starts under the rules v4 and never reaches a recorded bar.
+        self.respond(self.assign('second', 'unfinished'))
+        result = self.assess()
+        self.assertEqual(len(result['chains']), 2)
+        self.assertEqual([chain['calls'] for chain in result['chains']], [0, 1])

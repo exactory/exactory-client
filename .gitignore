@@ -1,2 +1,5 @@
 __pycache__/
 .coverage*
+
+# Scratch folder of a lane or of a review
+.lane-tmp/

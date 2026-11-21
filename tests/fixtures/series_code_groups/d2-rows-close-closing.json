@@ -27,6 +27,16 @@
           "environment"
         ]
       },
+      "composite_missing": {
+        "research_harness/review_parts_v3.py:verify_series#1": [
+          "entry"
+        ]
+      },
+      "final_pending": {
+        "research_harness/review_parts_v3.py:verify_series#1": [
+          "entry"
+        ]
+      },
       "gate_override_instruction": {
         "research_harness/overrides.py:parse_override_instruction#1": [
           "content"
@@ -327,6 +337,99 @@
         "research_harness/resources.py:charge#1": [
           "form"
         ],
+        "research_harness/review_condensing.py:_validate_size#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_condensing.py:cut_condensing_blocks#1": [
+          "limit"
+        ],
+        "research_harness/review_condensing.py:plan_condensing#1": [
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:_build_page#1": [
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:_forecast_final_turns#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:_plan_condensing#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_plan_condensing#2": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:_read_forecast#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:_replace_blocks#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_completed#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_entries#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:_validate_entries#2": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_final_inputs#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:_validate_final_inputs#2": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_final_inputs#3": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_progress#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_replacement_cause#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_replacement_cause#2": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:allocate_final_targets#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:prepare_final_turn#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:prepare_final_turn#2": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:split_final_turn#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:split_final_turn#2": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:split_final_turn#3": [
+          "form"
+        ],
+        "research_harness/review_parts_v3.py:_read_turn_bound#1": [
+          "form"
+        ],
+        "research_harness/review_parts_v3.py:size_read_turn#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_parts_v3.py:size_read_turn#2": [
+          "limit"
+        ],
         "research_harness/review_protocol.py:_prepare_review_mutation#1": [
           "payload"
         ],
@@ -338,6 +441,12 @@
           "content"
         ],
         "research_harness/review_route_capacity.py:prepare_assignment_capacity#10": [
+          "content"
+        ],
+        "research_harness/review_route_capacity.py:prepare_assignment_capacity#11": [
+          "content"
+        ],
+        "research_harness/review_route_capacity.py:prepare_assignment_capacity#12": [
           "content"
         ],
         "research_harness/review_route_capacity.py:prepare_assignment_capacity#2": [
@@ -437,6 +546,82 @@
           "harness"
         ],
         "research_harness/storage.py:_text#1": [
+          "form"
+        ],
+        "research_harness/review_condensing.py:_validate_size#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_condensing.py:cut_condensing_blocks#1": [
+          "limit"
+        ],
+        "research_harness/review_condensing.py:plan_condensing#1": [
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:_build_page#1": [
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:_forecast_final_turns#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:_plan_condensing#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_plan_condensing#2": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_read_forecast#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_replace_blocks#1": [
+          "content",
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_completed#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_entries#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_entries#2": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_final_inputs#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_final_pages.py:_validate_final_inputs#2": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_final_inputs#3": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_progress#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_replacement_cause#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:_validate_replacement_cause#2": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:allocate_final_targets#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:prepare_final_turn#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:prepare_final_turn#2": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:split_final_turn#1": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:split_final_turn#2": [
+          "form"
+        ],
+        "research_harness/review_final_pages.py:split_final_turn#3": [
           "form"
         ]
       },
@@ -555,6 +740,36 @@
         "research_harness/review_transport.py:validate_route#4": [
           "form",
           "limit"
+        ]
+      },
+      "invalid_review_session_turn": {
+        "research_harness/review_session_v4.py:_require_turn#1": [
+          "form",
+          "limit"
+        ],
+        "research_harness/review_session_v4.py:validate_request_output#1": [
+          "form"
+        ],
+        "research_harness/review_session_v4.py:validate_request_output#2": [
+          "form"
+        ],
+        "research_harness/review_session_v4.py:validate_request_output#3": [
+          "form"
+        ],
+        "research_harness/review_session_v4.py:validate_request_output#4": [
+          "form"
+        ],
+        "research_harness/review_session_v4.py:validate_request_output#5": [
+          "form"
+        ],
+        "research_harness/review_session_v4.py:validate_request_output#6": [
+          "form"
+        ],
+        "research_harness/review_session_v4.py:validate_request_output#7": [
+          "form"
+        ],
+        "research_harness/review_session_v4.py:validate_request_output#8": [
+          "form"
         ]
       },
       "invalid_target": {
@@ -717,6 +932,11 @@
           "content"
         ]
       },
+      "requested_range_not_delivered": {
+        "research_harness/review_parts_v3.py:verify_series#1": [
+          "entry"
+        ]
+      },
       "review_context_repair_history_unrecorded": {
         "research_harness/review_context_repair.py:collect_scientific_history#1": [
           "record"
@@ -833,6 +1053,25 @@
         "research_harness/review_output_correction.py:validate_output#1": [
           "record"
         ],
+        "research_harness/review_session_v4.py:_authenticate_session_binding#1": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:_authenticate_session_binding#2": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:_authenticate_session_binding#3": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:_authenticate_session_binding#4": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:_authenticate_session_binding#5": [
+          "content"
+        ],
+        "research_harness/review_session_v4.py:rebuild_session_state#1": [
+          "content",
+          "record"
+        ],
         "research_harness/review_staged_protocol.py:_collect_successor_findings#1": [
           "content",
           "record"
@@ -858,6 +1097,16 @@
       "review_parts_target_label_missing": {
         "research_harness/review_parts_problem_result.py:list_targets#1": [
           "form"
+        ]
+      },
+      "series_invalid": {
+        "research_harness/review_parts_v3.py:verify_series#1": [
+          "entry"
+        ]
+      },
+      "unit_not_delivered": {
+        "research_harness/review_parts_v3.py:verify_series#1": [
+          "entry"
         ]
       },
       "unknown_assessment": {
@@ -886,6 +1135,11 @@
         ],
         "research_harness/development.py:_inheritance#2": [
           "record"
+        ]
+      },
+      "unobserved_turn": {
+        "research_harness/review_parts_v3.py:verify_series#1": [
+          "entry"
         ]
       },
       "unsafe_path": {

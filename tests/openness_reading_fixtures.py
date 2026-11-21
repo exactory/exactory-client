@@ -182,8 +182,9 @@ class OpennessReadingCase(ProblemCase):
                     'reviewer': native['reviewer'],
                     'findings': dict({key: 'Assessed the exact supplied subject.' for key in RESULT_FINDINGS},
                         openness=dict({key: openness[key] for key in ('outcome', 'coverage', 'reason')},
-                            grounds=[] if outcome != 'unresolved' else [dict(kind='reviewer_gap',
-                                text='The reviewer identifies a remaining literature gap.')]))}
+                            grounds=[] if outcome != 'unresolved' else [dict(kind='own_argument' if 'finding_index' in packet else 'reviewer_gap',
+                                text='The reviewer identifies an argument to check.' if 'finding_index' in packet
+                                     else 'The reviewer identifies a remaining literature gap.')]))}
         if outcome != 'unresolved':
             openness['minimum'] = native['scientific_context']['openness_minimum']
         return {'schema_version': 2, 'subject_digest': native['subject_digest'], 'claim_digest': native['claim_digest'],

@@ -1,6 +1,7 @@
 """Authenticated output-contract refusals and bounded recovery audit records."""
 
 import json
+from collections import ChainMap
 from contextlib import contextmanager
 from functools import partial, wraps
 
@@ -392,6 +393,17 @@ def _validate_staged_pages(records, assignment, epoch, task, output):
         validate_answer_pages(task, output, plan)
 
 
+def _build_observation_view(records, assignment_id, attempt_id):
+    """The records with attempt_id as the only attempt of its assignment and without a refusal of it, for the composite
+    of a closing answer. The view reaches records for every other kind and never iterates them, so a scoped
+    preparation binds only the kinds that the check reads."""
+    return ChainMap(dict(
+        review_attempt={key: row for key, row in records['review_attempt'].items()
+                        if row['assignment_id'] != assignment_id or key == attempt_id},
+        review_output_refusal={key: row for key, row in records.get('review_output_refusal', {}).items()
+                               if key != attempt_id}), records)
+
+
 def classify_observed_output(records, artifacts, attempt_id):
     """Return the first pure failure of an authenticated attempt's own saved output."""
     from . import review_parts, review_protocol as protocol
@@ -426,6 +438,16 @@ def classify_observed_output(records, artifacts, attempt_id):
                 scientific = _project_staged_final(assignment['role'], output)
                 if scientific is not None:
                     _validate_staged_final(records, artifacts, assignment, packet, epoch, scientific)
+        elif packet.get('review_parts', {}).get('page_plan_digest'):
+            with contract_check('review.shape'):
+                review_parts.validate_turn_output(records, artifacts, assignment, packet, output, attempt=attempt)
+            if packet['review_parts']['final_form'] == 'closing' and output.get('kind') != 'requests':
+                from .review_composite import build_composite
+                from .review_parts_v3 import list_composite_turns, validate_composite_output
+                observed = _build_observation_view(records, assignment['id'], attempt_id)
+                composite, artifact = build_composite(observed, artifacts, assignment)
+                validate_composite_output(observed, artifacts, assignment,
+                    list_composite_turns(observed, artifacts, assignment)['packet'], json.loads(artifact[1]))
         elif (review_parts.find_kind(packet) is not None
               and (review_parts.find_kind(packet) != 'final'
                    or isinstance(output, dict) and output.get('kind') == 'requests')):
@@ -433,6 +455,13 @@ def classify_observed_output(records, artifacts, attempt_id):
                 review_parts.validate_turn_output(records, artifacts, assignment, packet, output, attempt=attempt)
         elif assignment['role'] in ('bar', 'slate', 'result'):
             validate_review_contract(records, artifacts, assignment, output, attempt=attempt)
+            if 'closing' in packet.get('session_final', {}) and output.get('stage') not in ('request', 'material'):
+                from .review_composite import build_composite
+                from .review_session_v4 import list_composite_turns, validate_composite_output
+                observed = _build_observation_view(records, assignment['id'], attempt_id)
+                composite, artifact = build_composite(observed, artifacts, assignment)
+                envelope = list_composite_turns(observed, artifacts, assignment)['packet']
+                validate_composite_output(observed, artifacts, assignment, envelope, json.loads(artifact[1]))
         elif assignment['role'] == 'adjudicator':
             packet = json.loads(artifacts.read(assignment['packet']))
             validate_adjudication_contract(records, artifacts, assignment, packet, output, attempt=attempt)
@@ -441,18 +470,27 @@ def classify_observed_output(records, artifacts, attempt_id):
             with contract_check('verification.parts'):
                 validate_verification_final(records, artifacts, assignment, output, attempt=attempt)
         elif assignment['role'] == 'native_math':
-            from .native_review import uses_finding_contract, validate_finding, validate_output
+            from .native_review import uses_finding_contract, validate_finding, validate_output, find_finding_version
             from .openness_reading import (INVALID_RESPONSE, PASSAGE_PROGRESS_ERR_MSG, find_stage,
                                            has_deliverable_passage, validate_turn_output)
             with contract_check('native.output'):
                 packet = json.loads(artifacts.read(assignment['packet']))
                 if find_stage(packet) is None:
                     if uses_finding_contract(assignment):
-                        validate_finding(packet, output)
+                        validate_finding(packet, output, finding_version=find_finding_version(assignment), artifacts=artifacts)
                     else:
                         validate_output(packet['native'], output)
                 else:
                     validate_turn_output(packet, output, artifacts=artifacts, assignment=assignment)
+                    if 'closing' in packet.get('reading_final', {}) and output.get('stage') not in ('reading', 'material'):
+                        from .review_composite import build_composite
+                        from .openness_final_pages import list_composite_turns, validate_composite_output
+                        # Classify this exact observation. Effective selection
+                        # would recheck its refusal while building the composite.
+                        observed = _build_observation_view(records, assignment['id'], attempt_id)
+                        composite, artifact = build_composite(observed, artifacts, assignment)
+                        envelope = list_composite_turns(observed, artifacts, assignment)['packet']
+                        validate_composite_output(observed, artifacts, assignment, envelope, json.loads(artifact[1]))
             # Reading the bound bodies stays outside the contract check: an unavailable body is not an output failure.
             if not has_deliverable_passage(records, artifacts, packet, output, assignment=assignment, attempt=attempt):
                 with contract_check('native.output'):

@@ -4,6 +4,7 @@ import copy
 import json
 import shutil
 import tempfile
+import unittest
 from contextlib import ExitStack, nullcontext
 from unittest.mock import patch
 
@@ -35,6 +36,38 @@ class MatrixReadingCase(OpennessReadingCase):
     text_sizes = (80000, 80000)
 
 
+class MatrixSlateCase(unittest.TestCase):
+    """An imported slate over the local Codex input limit, reviewed as a parts v3 series."""
+
+    def setUp(self):
+        from research_harness import bar_sources
+        from test_review_parts_slate import SlateSeriesTests
+        self.series = SlateSeriesTests()
+        self.series.setUp()
+        self.addCleanup(self.series.doCleanups)
+        self.case = self.series.make_case()
+        # Every turn keeps the pre-descriptor packet that carries the imported bodies.
+        rules = patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL)
+        rules.start()
+        self.addCleanup(rules.stop)
+
+    def oversized(self):
+        self.series.make_imported_packet(self.case, body_characters=1400000, record_characters=1000)
+
+    def assign(self):
+        return self.series.assign(self.case)
+
+    def packet(self, assignment):
+        return json.loads(self.case.artifacts.read(assignment['packet']))
+
+    def output(self, assignment):
+        from test_review_parts_v3 import make_turn_output
+        return make_turn_output(self.packet(assignment))
+
+    def invoke(self, assignment, output):
+        return invoke_codex(self.case, assignment['id'], output)
+
+
 def execute(case, command, payload):
     return cli.OPERATIONS[command](case.store, payload,
         expected_revision=case.store.revision,
@@ -56,14 +89,19 @@ def execute_additional_refusal_chain(owner, chain):
         from test_review_parts_adjudication_journey import AdjudicationPartsCase
         fixture = owner.prepare(AdjudicationPartsCase)
         fixture.oversized()
+    elif chain == 'parts_v2:problem_slate':
+        fixture = owner.prepare(MatrixSlateCase)
+        fixture.oversized()
     else:
         raise ValueError(chain)
+    # parts v1 and the v3 slate series answer in their own shapes; make_output writes v2 turns.
+    has_own_output = chain in ('parts_v1', 'parts_v2:problem_slate')
     case = fixture.case
     head = fixture.assign()
     from research_harness.review_continuation import _describe_chain
     owner.assertEqual(_describe_chain(head), chain)
     packet = fixture.packet(head)
-    good = fixture.output(head) if chain == 'parts_v1' else make_output(packet)
+    good = fixture.output(head) if has_own_output else make_output(packet)
     bad = copy.deepcopy(good)
     bad.pop('stage' if chain == 'parts_v1' else 'kind')
     fixture.invoke(head, bad)
@@ -77,7 +115,7 @@ def execute_additional_refusal_chain(owner, chain):
     owner.assertIn('output_refusal', supplied)
     owner.assertEqual(supplied['output_refusal']['refused'][-1]['assignment_id'], head['id'])
     preflight = check_preflight(case, replacement)
-    corrected = fixture.output(replacement) if chain == 'parts_v1' else make_output(supplied)
+    corrected = fixture.output(replacement) if has_own_output else make_output(supplied)
     fixture.invoke(replacement, corrected)
     state = protocol.assignment_state(case.store.snapshot()['records'], case.artifacts, replacement['id'])
     owner.assertTrue(state['ready'], state)
@@ -98,8 +136,10 @@ def fail_size_request(outcome, detail):
                 output=[dict(type='message', content=[dict(type='output_text', text='{}')])]))
         response['status'] = 'incomplete'
         if outcome == 'output_over_cap':
-            response['usage']['output_tokens'] = route['configuration']['max_output_tokens']
+            # The answer states the maximum that bounded the output: the route's limit, or the lower maximum of
+            # reduced_by_context (D1 11.1). The output tokens reach that maximum.
             maximum = route['configuration']['max_output_tokens'] // (2 if detail else 1)
+            response['usage']['output_tokens'] = maximum
             response['output'][0]['content'][0]['text'] = (
                 "API Error: Claude's response exceeded the %d output token maximum." % maximum)
         elif outcome == 'timeout':

@@ -84,6 +84,9 @@ def compute_replacement_key(packet):
 def validate_final(records, artifacts, assignment, output, *, attempt=None):
     from .workspace import strict_json
     packet = strict_json(artifacts.read(assignment['packet']))
+    if packet.get('review_parts', {}).get('page_plan_digest'):
+        from .review_parts import read_logical_packet
+        packet = read_logical_packet(artifacts, packet['review_parts'])
     return native_review.validate_output(packet['native'], output)
 
 
@@ -100,7 +103,7 @@ def read_prior_assignment(records, artifacts, value):
     if find_replacement(records, prior) is not None:
         raise ResearchError('review_assignment_replaced', 'Continue the replacement of this native turn')
     binding = prior.get(KEY, {})
-    if (prior['role'] != 'native_math' or binding.get('protocol') != PROTOCOL
+    if (prior['role'] != 'native_math' or binding.get('protocol') not in (PROTOCOL, 'exactory-review-parts-v3')
             or binding.get('adapter') != 'native_math'
             or prior['context']['native_packet'] != value['context']['native_packet']
             or prior['dossier_id'] != value['dossier_id'] or prior['route_id'] != value['route_id']
@@ -117,7 +120,11 @@ def read_prior_assignment(records, artifacts, value):
     state = assignment_state(records, artifacts, prior_id)
     if not state['ready']:
         raise ResearchError('review_source_continuation_unverified', 'The native predecessor needs a ready output')
-    if binding['kind'] == 'final' and state['output'].get('kind') != 'requests':
+    from .workspace import strict_json
+    page = (binding.get('protocol') == 'exactory-review-parts-v3' and
+            strict_json(artifacts.read(prior['packet']))[KEY].get('final_form') == 'page')
+    if (binding['kind'] == 'final' and not page
+            and state['output'].get('kind') != 'requests' and state['output'].get('stage') != 'material'):
         raise ResearchError('review_resampling_forbidden', 'A native final ends its review series')
     return prior
 

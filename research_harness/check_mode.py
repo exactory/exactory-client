@@ -110,6 +110,8 @@ class _CheckingStore:
         elif operation == 'review.assignment' and 'capacity_plan' in result:
             from .review_route_capacity import describe_assignment_capacity
             response.update(describe_assignment_capacity(self._records, self._artifacts, result))
+        if operation == 'review.assignment' and 'session_admission' in result:
+            response['session_admission'] = result['session_admission']
         if operation == 'review.assignment' and 'protocol_selection' in result:
             response['protocol_selection'] = result['protocol_selection']
         if operation == 'review.assignment':

@@ -87,12 +87,12 @@ def require_selected_output(records, assignment):
 
 
 def is_session_turn(artifacts, assignment):
-    """A turn of a bar, slate, result or adjudicator session outside a staged review, a reading chain, a series in
-    parts and the first turn of a context repair, by its stored form."""
+    """A turn of a bar, slate, result or adjudicator session outside a staged review, a reading chain, a session
+    chain, a series in parts and the first turn of a context repair, by its stored form."""
     from . import review_protocol as protocol, review_parts
     return (assignment['role'] in protocol.bar_sources.ROLES + ('adjudicator',)
-            and not any(assignment.get(key) for key in ('staged_review', 'reading_chain', 'capacity_plan',
-                                                        review_parts.KEY))
+            and not any(assignment.get(key) for key in ('staged_review', 'reading_chain', 'session_chain',
+                                                        'capacity_plan', review_parts.KEY))
             and review_parts.find_kind(protocol._read_json(artifacts, assignment['packet'])) is None
             and 'context_repair' not in assignment.get('context', {}))
 
@@ -227,7 +227,7 @@ def prepare_replacement(records, artifacts, value, revision):
         raise ResearchError('review_refusal_replacement_ineligible', INELIGIBLE_REPLACEMENT_MSG)
     packet = protocol._read_json(artifacts, prior['packet'])
     from . import openness_reading_v7 as v7
-    is_v7 = protocol.openness_reading.find_protocol(packet) == v7.PROTOCOL
+    is_v7 = protocol.openness_reading.find_protocol(packet) in v7.PROTOCOL_DESCRIPTIONS
     if (prior.get('staged_review') or prior.get('reading_chain') and not is_v7
             or prior['role'] == 'native_math' and review_parts.KEY not in prior and not is_v7
             or prior['role'] not in protocol.bar_sources.ROLES + ('adjudicator',) and review_parts.KEY not in prior and not is_v7
@@ -262,6 +262,12 @@ def prepare_replacement(records, artifacts, value, revision):
                    or not protocol.authenticate_attempt(records, artifacts, prior, attempt)
                    or diagnoses.get(attempt['id']) is None for attempt in completed)):
         raise ResearchError('review_refusal_replacement_ineligible', INELIGIBLE_REPLACEMENT_MSG)
+    if prior.get('session_chain'):
+        from .review_session_v4 import prepare_refusal_assignment
+        return prepare_refusal_assignment(records, artifacts, value, revision, prior, packet, refused_ids, diagnoses)
+    if packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+        from .review_parts_v3 import prepare_refusal_assignment
+        return prepare_refusal_assignment(records, artifacts, value, revision, prior, packet, refused_ids, diagnoses)
     if is_v7:
         return v7.prepare_refusal_assignment(records, artifacts, value, revision, prior, packet,
                                              refused_ids, diagnoses)
@@ -402,3 +408,23 @@ def validate_replacement_origin(records, artifacts, assignment, packet=None):
                 and digest(protocol._read_json(artifacts, attempt['output'])) == entry['output_digest']
                 and attempt['request_digest'] == certificate['request_digest'])
     require(entries[-1]['assignment_id'] == prior['id'] and entries[-1]['status'] == 'refused')
+    if assignment.get('reading_chain', {}).get('final_page_plan'):
+        from .openness_final_pages import describe_composed_refusal
+        from .review_route_capacity import measure_capacity_value
+        route = records['review_route'][assignment['route_id']]
+        context = describe_composed_refusal(records, artifacts, records['review_attempt'][entries[-1]['attempt_id']],
+                                           entries[-1]['check'], entries[-1]['path'])
+        if context is not None:
+            context['closing_answer'] = notices._retain_value(context['closing_answer'], notices.COMPOSED_CLOSING_ANSWER_CHARACTERS,
+                lambda value: measure_capacity_value(route, value))
+        require(notice.get('composed_finding') == context)
+    if assignment.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+        from .review_parts_v3 import describe_composed_refusal
+        from .review_route_capacity import measure_capacity_value
+        route = records['review_route'][assignment['route_id']]
+        context = describe_composed_refusal(records, artifacts, records['review_attempt'][entries[-1]['attempt_id']],
+                                           entries[-1]['check'], entries[-1]['path'])
+        if context is not None:
+            context['closing_answer'] = notices._retain_value(context['closing_answer'], notices.COMPOSED_CLOSING_ANSWER_CHARACTERS,
+                lambda value: measure_capacity_value(route, value))
+        require(notice.get('composed_finding') == context)

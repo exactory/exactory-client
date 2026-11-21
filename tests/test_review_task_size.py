@@ -116,6 +116,11 @@ class RecoveryRowsTests(unittest.TestCase):
                     and re.fullmatch(r'exactory-openness-reading-(?:v[0-9]+|math-v[0-9]+)', value)}
         for version in versions:
             expected.update((kind, version) for kind in ('reading', 'final'))
+        expected.update(('combine', version) for version in reading.BOUNDED_CHAIN_PROTOCOLS)
+        from research_harness.review_parts_v3 import PROTOCOL as PARTS_V3
+        expected.update((kind, PARTS_V3) for kind in parts.KINDS)
+        from research_harness.review_session_v4 import PROTOCOL as SESSION_V4
+        expected.update((kind, SESSION_V4) for kind in ('request', 'final', 'combine'))
         expected.update((kind, parts.PROTOCOL) for kind in parts.KINDS)
         expected.update((kind, review_problem_parts.PROTOCOL) for kind in ('read', 'request'))
         expected.update(('request', value) for value in
@@ -132,7 +137,8 @@ class RecoveryRowsTests(unittest.TestCase):
         self.assertEqual({kind for kind, _ in actual}, set(capacity.TURN_KINDS))
         for row in rows:
             self.assertIn(row['handler'], ('nothing', 'parts_v2_read', 'context_repair',
-                                          'single_request_series', 'staged_controller', 'reading_v7', 'final_v7'))
+                                          'single_request_series', 'staged_controller', 'reading_v7', 'final_v7',
+                                          'request_session_v4', 'final_session_v4', 'parts_v3'))
         self.assertIs(failures.plan_capacity_recovery, capacity.plan_capacity_recovery)
 
     def test_legacy_reading_and_final_decisions_include_profile_attempts_and_migration(self):
@@ -155,8 +161,10 @@ class RecoveryRowsTests(unittest.TestCase):
                     self.assertEqual(recovery['details']['attempts'][0]['output_tokens'], 138371)
                     self.assertEqual(recovery['details']['effort'], 'max')
                     self.assertTrue(recovery['details']['effort_message'])
-                    self.assertEqual(recovery['details']['required_unit'],
-                                     'reading-math-v2' if version == reading.MATH_PROTOCOL else 'reading-v7-turns')
+                    if version == reading.MATH_PROTOCOL:
+                        self.assertNotIn('required_unit', recovery['details'])
+                    else:
+                        self.assertEqual(recovery['details']['required_unit'], 'reading-v7-turns')
                     self.assertEqual(case.records, before)
 
     def test_a19_reduced_context_cap_replaces_a_read_and_real_assignment_halves_it(self):

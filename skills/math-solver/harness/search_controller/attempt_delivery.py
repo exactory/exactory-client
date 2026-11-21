@@ -107,6 +107,12 @@ def build_acceptance_review_links(controller, state, records):
                      review={"assignment_id": assignment_id, "final_assignment_id": final_id,
                              "attempt_id": observed["attempt_id"], "output_digest": observed["output_digest"]},
                      provenance=controller.provenance("deliver-attempt"))
+        if 'composite' in acceptance:
+            from research_harness.review_composite import read_final_output
+            output, composite = read_final_output(records, artifacts, final_id)
+            s.require(composite is not None and acceptance['composite'] == dict(id=composite['id'], digest=s.digest(composite)),
+                      'The native acceptance must keep its composed review', 'review_parts_incomplete')
+            value['review'].update(output_digest=s.digest(output), composite=acceptance['composite'])
         links.append(immutable_record(records, "native_acceptance_review", s.digest(key), value))
     return links
 

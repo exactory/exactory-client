@@ -279,6 +279,9 @@ def find_safeguard_notice(response):
 def classify_attempt(records, artifacts, attempt):
     """Return the first decided failure layer, or None for a usable completed output."""
     from .review_refusal import refused_attempts
+    final_capacity = classify_final_capacity_attempt(records, artifacts, attempt)
+    if final_capacity is not None:
+        return final_capacity
     if not (attempt['status'] == 'completed' and attempt.get('output') is not None):
         for stop in records.get('review_stop', {}).values():
             if stop['mode'] == 'now' and any(
@@ -360,6 +363,30 @@ def classify_attempt(records, artifacts, attempt):
     return dict(outcome=outcome, signal=signal, reset_at=reset_at)
 
 
+def classify_final_capacity_attempt(records, artifacts, attempt):
+    """A final at capacity needs reduction even when its returned JSON is valid."""
+    assignment = records['review_assignment'][attempt['assignment_id']]
+    if assignment.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+        signal = find_output_cap_signal(records, artifacts, assignment, attempt)
+        return dict(outcome='output_over_cap', signal=signal, reset_at=None) if signal is not None else None
+    if assignment.get('session_chain') and assignment.get('capacity_plan_kind') == 'final':
+        signal = find_output_cap_signal(records, artifacts, assignment, attempt)
+        return dict(outcome='output_over_cap', signal=signal, reset_at=None) if signal is not None else None
+    if assignment.get('capacity_plan_kind') != 'final' or not assignment.get('reading_chain'):
+        return None
+    from . import openness_reading_v7 as v7
+    packet = protocol._read_json(artifacts, assignment['packet'])
+    version = protocol.openness_reading.find_protocol(packet)
+    if (version not in v7.PROTOCOL_DESCRIPTIONS
+            or 'pages' not in v7.describe_protocol(packet=packet)['list_final_forms']()
+            and not assignment['reading_chain'].get('final_page_plan')):
+        return None
+    signal = find_output_cap_signal(records, artifacts, assignment, attempt)
+    if signal is not None:
+        return dict(outcome='output_over_cap', signal=signal, reset_at=None)
+    return None
+
+
 def read_position_origin(records, assignment):
     """The first assignment of a turn position, reached by following the refusal links back."""
     from .review_refusal_replacement import KEY
@@ -377,7 +404,16 @@ def list_turn_assignments(records, assignment):
     """Group replacements of the same initial context or the same continuation parent. A first-turn position also
     holds every assignment that a refusal link ties to one of its members, whatever route record it names."""
     from .review_refusal_replacement import KEY, read_position_context
-    capacity_chain = assignment.get('capacity_plan') and assignment.get('reading_chain')
+    position = assignment.get('reading_chain', {}).get('final_position')
+    if position is not None:
+        chain = assignment['reading_chain']['first_assignment_id']
+        return [other['id'] for other in records.get('review_assignment', {}).values()
+                if other.get('reading_chain', {}).get('first_assignment_id') == chain
+                and (other['reading_chain'].get('final_position') == position
+                     or position == 1 and other['reading_chain'].get('final_position') is None
+                     and not other['reading_chain'].get('final_page_plan')
+                     and other.get('capacity_plan_kind') == 'final')]
+    capacity_chain = assignment.get('capacity_plan') and (assignment.get('reading_chain') or assignment.get('session_chain'))
     if capacity_chain:
         while assignment.get('capacity_replacement_of'):
             assignment = records['review_assignment'][assignment['capacity_replacement_of']]
@@ -421,6 +457,24 @@ def list_turn_assignments(records, assignment):
     return result
 
 
+def list_capacity_chain_assignments(records, assignment):
+    """Retain capacity observations across position splits and refusal replacements."""
+    from .openness_reading import _list_chain
+    remaining = [member['id'] for member in _list_chain(records, assignment)]
+    identifiers = set()
+    while remaining:
+        identifier = remaining.pop()
+        if identifier in identifiers:
+            continue
+        identifiers.add(identifier)
+        member = assignment if identifier == assignment['id'] else records['review_assignment'][identifier]
+        remaining.extend(list_turn_assignments(records, member))
+        link = member.get('capacity_replacement_of') or member.get('context', {}).get('output_refusal', {}).get('assignment_id')
+        if link is not None:
+            remaining.append(link)
+    return identifiers if assignment['id'] in records.get('review_assignment', {}) else identifiers - {assignment['id']}
+
+
 def plan_output_replacement(records, artifacts, assignment, *, allow_single=True, include_packet=False,
                             outcome='output_over_cap', replacement_id=None):
     """Prove the existing handler produces a smaller request that passes preflight."""
@@ -429,6 +483,15 @@ def plan_output_replacement(records, artifacts, assignment, *, allow_single=True
     from .review_problem_parts import _measure
 
     packet = protocol._read_json(artifacts, assignment['packet'])
+    if packet.get(parts.KEY, {}).get('protocol') == 'exactory-review-parts-v3':
+        from .review_parts_v3 import build_replacement
+        from .review_staged_protocol import ControllerArtifacts
+        replacement = build_replacement(records, artifacts if include_packet else ControllerArtifacts(artifacts),
+                                        assignment, outcome=outcome, identifier=replacement_id)
+        if replacement is None:
+            return None
+        return dict(replacement, state='replace', handler='parts_v3', code=OUTCOME_CODES[outcome],
+                    context=replacement['payload']['context'])
     from .review_route_capacity import describe_task_kind
     from .review_single_request import build_output_replacement, is_first_output_read
     single = describe_task_kind(assignment['role'], packet) == 'single'
@@ -589,9 +652,36 @@ def has_smaller_task(artifacts, previous, assignment):
     """
     old = protocol._read_json(artifacts, previous['packet'])
     new = protocol._read_json(artifacts, assignment['packet'])
-    if assignment.get('capacity_plan') and assignment.get('reading_chain'):
-        before = old.get('reading_turn', old.get('reading_final', {})).get('capacity', {})
-        after = new.get('reading_turn', new.get('reading_final', {})).get('capacity', {})
+    if (assignment.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3'
+            and old.get(parts.KEY, {}).get('protocol') == 'exactory-review-parts-v3'):
+        old_header, new_header = old[parts.KEY], new[parts.KEY]
+        if old_header['kind'] == 'final' and new_header.get('page_plan_digest'):
+            if new_header['kind'] == 'combine':
+                return True
+            before = old_header.get('page', {}).get('targets', old_header['targets'])
+            after = new_header.get('page', {}).get('targets', new_header['targets'])
+            if len(after) < len(before):
+                return True
+        if old_header['kind'] in ('combine', 'check'):
+            before = old_header.get('block', {}).get('characters', old_header.get('block_characters'))
+            after = new_header.get('block', {}).get('characters', new_header.get('block_characters'))
+            return after is not None and before is not None and after < before
+        before, after = old_header['capacity'], new_header['capacity']
+        if old_header['kind'] == 'final':
+            return after['answer_bound'] < before['answer_bound']
+        return after['material_allowance'] < before['material_allowance']
+    if assignment.get('session_chain'):
+        from .review_session_v4 import read_session_binding
+        before, after = read_session_binding(old), read_session_binding(new)
+        if 'page' in after and len(after['page']['targets']) < len(before.get('page', {}).get('targets', [])):
+            return True
+        if 'block' in before and 'block' in after and after['block']['characters'] < before['block']['characters']:
+            return True
+        return (after['capacity']['material_allowance'] < before['capacity']['material_allowance']
+                or after['capacity']['answer_bound'] < before['capacity']['answer_bound'])
+    if assignment.get('capacity_plan') and (assignment.get('reading_chain') or assignment.get('session_chain')):
+        before = old.get('session_turn', old.get('session_final', old.get('reading_turn', old.get('reading_final', old.get('reading_combine', {}))))).get('capacity', {})
+        after = new.get('session_turn', new.get('session_final', new.get('reading_turn', new.get('reading_final', new.get('reading_combine', {}))))).get('capacity', {})
         return (after.get('material_allowance', float('inf')) < before.get('material_allowance', 0)
                 or after.get('answer_bound', float('inf')) < before.get('answer_bound', 0))
     if parts.find_kind(new) != 'read':
@@ -621,7 +711,9 @@ def count_position(records, artifacts, assignment):
     for member in members:
         if member['id'] == min(members, key=lambda row: row.get('recorded_revision', 0))['id']:
             continue
-        reason, _ = read_replacement_link(member)
+        reason, link = read_replacement_link(member)
+        if assignment.get('reading_chain', {}).get('final_position') is not None and link is None:
+            continue
         replacements[reason] += 1
     counts, provider_count, eligible = {}, 0, False
     sequence_ends, attempt_rows = {}, []
@@ -759,7 +851,7 @@ def plan_refusal_recovery(records, artifacts, assignment):
     payload['id'] = assignment['id'] + '-refusal'
     while payload['id'] in records.get('review_assignment', {}):
         payload['id'] += '-next'
-    if assignment.get('capacity_plan') and assignment.get('reading_chain'):
+    if assignment.get('capacity_plan') and (assignment.get('reading_chain') or assignment.get('session_chain')):
         from .review_continuation import _find_unused_id
         payload['id'] = _find_unused_id(records, assignment['id'] + '-refusal',
                                        maximum=protocol.openness_reading.RESERVED_IDENTIFIER_CHARACTERS)
@@ -867,7 +959,7 @@ def plan_after_failure(records, artifacts, assignment_id):
             allowance = calculate_over_cap_allowance(recovery['details']['at_or_over_limit_share'])
             if recovery['kind'] == 'replace' and (position['failed_attempts'] >= TURN_FAILURE_LIMIT
                     or outcome == 'output_over_cap' and len(position['over_cap_by_level']) >= allowance
-                    and recovery['details']['handler'] not in ('reading_v7', 'final_v7')):
+                    and recovery['details']['handler'] not in ('reading_v7', 'final_v7', 'request_session_v4', 'final_session_v4', 'parts_v3')):
                 from .review_route_capacity import describe_capacity_decision
                 recovery = describe_capacity_decision(records, artifacts, assignment, outcome,
                     dict(recovery['details'], over_cap_allowance=allowance,
@@ -896,6 +988,10 @@ def plan_after_failure(records, artifacts, assignment_id):
                 result.update(state='stop', code=recovery.get('code', OUTCOME_CODES[outcome]))
                 if recovery['kind'] == 'decision':
                     details['decision'] = {key: recovery[key] for key in ('owner_decides', 'then')}
+                details.update(recovery['details'], recovery=recovery)
+                return result
+            if recovery['details']['handler'] in ('request_session_v4', 'final_session_v4', 'parts_v3'):
+                # Earlier reductions do not spend the identical retry at this floor.
                 details.update(recovery['details'], recovery=recovery)
                 return result
     if position['sequence_ended']:

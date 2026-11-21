@@ -52,6 +52,12 @@ NEW_PROBLEM_CHAIN_TEXT = ('A new problem openness chain starts under the first o
 # The protocol of a math-solver result review's chain: the units of v3 in the math order, no statement record, and a
 # final passage request that must deliver characters.
 MATH_PROTOCOL = 'exactory-openness-reading-math-v1'
+# The chain of a math-solver result review in the form of protocol v7 (D1 9; unit reading-math-v2).
+MATH_PROTOCOL_V2 = 'exactory-openness-reading-math-v2'
+# A new math chain starts under the first of these whose admission accepts its packet. A chain keeps its protocol.
+NEW_MATH_CHAIN_PROTOCOLS = (MATH_PROTOCOL,)
+# The protocols of a chain with a stored capacity plan, built by openness_reading_v7.
+BOUNDED_CHAIN_PROTOCOLS = (PROTOCOL_V7, MATH_PROTOCOL_V2)
 # The protocols whose units carry the identities of review_excerpts.IDENTITY_FIELDS.
 GENERIC_UNIT_PROTOCOLS = (PROTOCOL, PROTOCOL_V4, PROTOCOL_V5, PROTOCOL_V6, MATH_PROTOCOL)
 TURN_KEY = 'reading_turn'
@@ -689,20 +695,23 @@ def find_chain_protocol(native, prior_protocol=None):
 
 def require_reserved_identifier(identifier, protocol):
     """Refuse an identifier that exceeds the length reserved by a finite v6 projection."""
-    if protocol in (PROTOCOL_V6, PROTOCOL_V7) and len(identifier) > RESERVED_IDENTIFIER_CHARACTERS:
+    if protocol in (PROTOCOL_V6,) + BOUNDED_CHAIN_PROTOCOLS and len(identifier) > RESERVED_IDENTIFIER_CHARACTERS:
         raise ResearchError('invalid_input', IDENTIFIER_LIMIT_MESSAGE,
                             {'characters': len(identifier), 'maximum_characters': RESERVED_IDENTIFIER_CHARACTERS})
 
 
 def find_stage(packet):
     """The reading-chain stage of a native_math packet: 'reading', 'final', or None for a single-turn packet."""
-    return 'reading' if TURN_KEY in packet else 'final' if RECORD_KEY in packet or 'reading_final' in packet else None
+    return ('reading' if TURN_KEY in packet else 'combine' if 'reading_combine' in packet else
+            'closing' if 'closing' in packet.get('reading_final', {}) else
+            'page' if 'page_plan_digest' in packet.get('reading_final', {}) else
+            'final' if RECORD_KEY in packet or 'reading_final' in packet else None)
 
 
 def find_binding(packet):
     """The reviewer binding of a native_math packet: its native packet, or a reading turn's copy of the subject,
     claim and reviewer of that native packet."""
-    return packet[TURN_KEY] if TURN_KEY in packet else packet['native']
+    return packet[TURN_KEY] if TURN_KEY in packet else packet['reading_combine'] if 'reading_combine' in packet else packet['native']
 
 
 def _find_record(packet):
@@ -714,6 +723,8 @@ def find_protocol(packet):
     """The reading protocol under which a reading or final turn's packet was built; None for a single-turn packet."""
     if TURN_KEY in packet:
         return packet[TURN_KEY]['protocol']
+    if 'reading_combine' in packet:
+        return packet['reading_combine']['protocol']
     if 'reading_final' in packet:
         return packet['reading_final']['protocol']
     return packet[RECORD_KEY]['protocol'] if RECORD_KEY in packet else None
@@ -727,8 +738,9 @@ def choose_chain_protocol(records, artifacts, route, native, *, packet=None, ass
         packet = dict(protocol='native', role='native_math', reviewer_id=native['reviewer'], dossier_id=None,
                       native=native, evidence=[])
     admissions = []
-    for protocol in NEW_PROBLEM_CHAIN_PROTOCOLS:
-        if protocol == PROTOCOL_V7:
+    protocols = NEW_MATH_CHAIN_PROTOCOLS if is_math_openness_packet(native) else NEW_PROBLEM_CHAIN_PROTOCOLS
+    for protocol in protocols:
+        if protocol in BOUNDED_CHAIN_PROTOCOLS:
             result = v7.check_v7_admission(records, artifacts, route, native)
         elif protocol == PROTOCOL_V6:
             if transport.local_input_limit(route) is None:
@@ -744,11 +756,15 @@ def choose_chain_protocol(records, artifacts, route, native, *, packet=None, ass
                 eligible_texts=_classify_final_texts(records, artifacts, native, rows, PROTOCOL_V6))
             result = dict(admit_reading_chain(route, projection, records=records, artifacts=artifacts,
                                               assignment=assignment), protocol=PROTOCOL_V6)
+        elif protocol == MATH_PROTOCOL:
+            result = dict(state='record', protocol=MATH_PROTOCOL)
         else:
-            raise ResearchError('invalid_input', 'A new problem chain needs an installed admission protocol.')
+            raise ResearchError('invalid_input', 'A new reading chain needs an installed admission protocol.')
         report = {key: copy.deepcopy(value) for key, value in result.items()
                   if key not in ('inventory', 'capacity_members', 'capacity_plan', 'forecast')}
         admissions.append(report)
+        if result.get('details', {}).get('reason') == 'output_floor' and protocol == PROTOCOL_V7:
+            break
         if result['state'] == 'record':
             refusals = '; '.join(row['protocol'] + ': ' + row.get('reason', row.get('details', {}).get('reason', 'refused'))
                                  for row in admissions if row['state'] != 'record') or 'none'
@@ -1206,7 +1222,7 @@ def project_reading_chain(route, packet, rows, record, *, artifacts, records=Non
     from .review_protocol import canonical_prompt
     prompt_protocol = protocol if protocol in PROMPTS else PROTOCOL_V5
     prompts = prompts or {stage: canonical_prompt('native_math', reading_stage=stage,
-        reading_protocol=prompt_protocol)['text'] for stage in STAGES}
+        reading_protocol=prompt_protocol, finding_version=2 if 'finding_index' in packet else 1)['text'] for stage in STAGES}
     delivery_rows = list_delivery_rows(rows, record['search_delivery']) if 'search_delivery' in record else rows
     units = list_reading_units(artifacts, delivery_rows)
     projected = _build_projection_record(artifacts, delivery_rows, record, units,
@@ -1319,9 +1335,21 @@ def _raise_projection_stop(record, details, *, records=None, artifacts=None, ass
     details.setdefault('limit', details.get('input_limit_characters'))
     details['unbounded_kinds'] = [kind for kind, bound in describe_reading_entry_bounds(record).items()
                                 if bound['count'] is None or bound['serialized_characters'] is None]
-    details['decision'] = describe_projection_decision(protocol, records=records, artifacts=artifacts,
-                                                      assignment=assignment)
+    details['decision'] = describe_stop_decision(protocol, details, records=records, artifacts=artifacts,
+                                                 assignment=assignment)
     raise ResearchError(PROJECTION_STOP, PROJECTION_STOP_MESSAGE, details)
+
+
+def describe_stop_decision(protocol, details, *, records=None, artifacts=None, assignment=None):
+    """The decision of a projection stop. A recorded math v1 chain gains the step of its admitted successor once
+    v2 starts new math chains; details.successor receives that admission."""
+    decision = describe_projection_decision(protocol, records=records, artifacts=artifacts, assignment=assignment)
+    if (protocol == MATH_PROTOCOL and MATH_PROTOCOL_V2 in NEW_MATH_CHAIN_PROTOCOLS
+            and assignment is not None and assignment.get('packet')):
+        from .openness_successor import describe_math_decision
+        decision, details['successor'] = describe_math_decision(records, artifacts, assignment, decision,
+                                                                estimate=bool(details.get('estimate')))
+    return decision
 
 
 def _find_delivery_turns(unit, turns):
@@ -1369,7 +1397,8 @@ def measure_final_input(route, packet, rows, record, *, eligible_texts=(), readi
                  -lengths.get(sha256, row['artifact']['size'])))
         ranked.append((rank, review_excerpts.find_identity(row), sha256, identifiers or ['']))
     bodies = [(sha256, identifiers) for _, _, sha256, identifiers in sorted(ranked)]
-    prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'])['text']
+    prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'],
+        finding_version=2 if 'finding_index' in packet else 1)['text']
     candidate, request = _fit_turn(route, prompt, candidate, bodies, refuse=False)
     report = _measure_parts(route, prompt, candidate)
     from .review_route_capacity import measure_request
@@ -1476,7 +1505,7 @@ def forecast_reading_chain(records, artifacts, route, packet, rows, record, *, r
 
 def describe_reading_receipt(records, artifacts, assignment, route, logical, packet, request, *, admit_turn=True):
     """Attach forecasts to receipts only; saved assignments, prompts and requests keep their bytes."""
-    if find_protocol(packet) == PROTOCOL_V7:
+    if find_protocol(packet) in BOUNDED_CHAIN_PROTOCOLS:
         from .openness_reading_v7 import describe_turn_receipt
         return describe_turn_receipt(records, artifacts, assignment, route, packet, request)
     record = _find_record(packet)
@@ -1624,10 +1653,12 @@ def _build_reading_turn(artifacts, route, packet, record, delivered, candidates,
     reading budget and whose request, with the earliest notes withheld as far as needed, fits the route and delivers
     each of them complete."""
     from .review_protocol import canonical_prompt
-    prompt = canonical_prompt('native_math', reading_stage='reading', reading_protocol=record['protocol'])['text']
+    prompt = canonical_prompt('native_math', reading_stage='reading', reading_protocol=record['protocol'],
+        finding_version=2 if 'finding_index' in packet else 1)['text']
     if not candidates:
         final = dict(packet, **{RECORD_KEY: record})
-        final_prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'])['text']
+        final_prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'],
+        finding_version=2 if 'finding_index' in packet else 1)['text']
         _raise_projection_stop(record, _measure_parts(route, final_prompt, final))
     chosen, characters = None, 0
     for count, unit in enumerate(candidates, 1):
@@ -1701,7 +1732,8 @@ def preflight_final_input(route, input_limit, packet, rows, record, *, eligible_
     candidate[RECORD_KEY] = {key: copy.deepcopy(record[key]) for key in ('protocol', 'excerpts', 'passages')}
     if record['protocol'] in (PROTOCOL_V5, PROTOCOL_V6):
         candidate[RECORD_KEY]['search_delivery'] = copy.deepcopy(record['search_delivery'])
-    prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'])['text']
+    prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'],
+        finding_version=2 if 'finding_index' in packet else 1)['text']
     request = _render(route, prompt, candidate)
     # Inspect construction's actual alternative/contained and binary projections for the component inventory.
     supplied = review_excerpts.read_sent_packet(request)
@@ -1721,6 +1753,8 @@ def preflight_final_input(route, input_limit, packet, rows, record, *, eligible_
                 'encoding': entry.get('encoding'), 'delivery': entry.get('delivery')})
     components = [('final_prompt', prompt), ('native_context', json.dumps(candidate['native'], sort_keys=True,
                                                                          ensure_ascii=False))]
+    if 'finding_index' in candidate:
+        components.append(('finding_index', json.dumps(candidate['finding_index'], sort_keys=True, ensure_ascii=False)))
     if v5:
         components.append(('search_manifest', json.dumps(record['search_delivery'], sort_keys=True,
                                                         ensure_ascii=False)))
@@ -1790,7 +1824,8 @@ def _build_final_turn(route, packet, record, rows, spans, observations, eligible
         value = copy.deepcopy(value)
         _project_search_delivery(value, record)
     bodies = _list_withholdable_bodies(value, rows, spans, observations, eligible_texts)
-    prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'])['text']
+    prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'],
+        finding_version=2 if 'finding_index' in packet else 1)['text']
     return _fit_turn(route, prompt, value, bodies)[0]
 
 
@@ -1835,7 +1870,7 @@ def _read_prior(records, artifacts, value, prior_id):
                             'The earlier turn needs an observed, authenticated output in a verified context',
                             {'obligations': state['obligations']})
     prior_packet = json.loads(artifacts.read(prior['packet']))
-    validate_turn_output(prior_packet, state['output'])
+    validate_turn_output(prior_packet, state['output'], artifacts=artifacts, assignment=prior)
     _require(has_deliverable_passage(records, artifacts, prior_packet, state['output'],
                                       assignment=prior, attempt=records['review_attempt'][state['attempt_id']]), PASSAGE_PROGRESS_ERR_MSG,
              path='/passage_requests')
@@ -2160,6 +2195,23 @@ def prepare_packet(records, artifacts, value, route, packet):
     saving the chain and returns them separately from the scientific packet."""
     native = packet['native']
     prior_id = value['context'].get('prior_assignment_id')
+    prior = records.get('review_assignment', {}).get(prior_id)
+    prior_packet = json.loads(artifacts.read(prior['packet'])) if prior is not None else None
+    # The finding version of a chain is fixed at its first assignment (G8.8). The first turn builds the finding index;
+    # a later v6 turn carries the index that the first turn froze, and every other later turn holds none.
+    if (is_openness_packet(native) and native['scientific_context']['openness_minimum'].get('schema_version') == 2
+            and (prior_id is None or prior_packet is not None and find_protocol(prior_packet) == PROTOCOL_V6
+                 and 'finding_index' in _find_record(prior_packet))):
+        from .review_search_delivery import build_finding_index
+        packet = dict(packet, finding_index=build_finding_index(records, artifacts, native))
+        # A one-request finding has no reading record. Name the delivered units
+        # using the same identities as excerpts of a chain.
+        identities = {row['artifact']['sha256']: _describe_identity(row)
+                      for row in list_reading_rows(records, artifacts, native)}
+        packet['evidence'] = [dict(row, identity=identities[row['artifact']['sha256']])
+            if row['artifact']['sha256'] in identities else row for row in packet['evidence']]
+        packet.pop('digest', None)
+        packet['digest'] = digest(packet)
     if prior_id is None and is_openness_packet(native):
         context = native['scientific_context']
         if (context['openness_minimum'].get('schema_version') != 2
@@ -2169,7 +2221,7 @@ def prepare_packet(records, artifacts, value, route, packet):
     records = bind_packet_selections(records, native['scientific_context'], artifacts=artifacts, review=value)
     if prior_id is not None and not value['context'].get('unread'):
         prior = records.get('review_assignment', {}).get(prior_id)
-        if prior is not None and find_protocol(json.loads(artifacts.read(prior['packet']))) == PROTOCOL_V7:
+        if prior is not None and find_protocol(json.loads(artifacts.read(prior['packet']))) in BOUNDED_CHAIN_PROTOCOLS:
             from .openness_reading_v7 import prepare_next_assignment
             return prepare_next_assignment(records, artifacts, value, route, packet)
     if value['context'].get('unread') and not value['context'].get('reading_replacement'):
@@ -2186,9 +2238,19 @@ def prepare_packet(records, artifacts, value, route, packet):
         from .review_protocol import canonical_prompt
         rows = list_reading_rows(records, artifacts, native, review=value)
         characters = sum(len(artifacts.read(row['artifact']).decode('utf-8')) for row in rows)
+        if is_math_openness_packet(native) and MATH_PROTOCOL_V2 in NEW_MATH_CHAIN_PROTOCOLS:
+            # A math review that v2 admits runs as a v2 chain; one that v2 refuses takes the path of v1.
+            selection = choose_chain_protocol(records, artifacts, route, native, packet=packet, assignment=value)
+            if selection['protocol'] == MATH_PROTOCOL_V2:
+                from .openness_reading_v7 import prepare_carried_assignment
+                prepared, chain = prepare_carried_assignment(records, artifacts, value, route, packet,
+                                                             selection['result'])
+                chain['protocol_selection'] = {key: item for key, item in selection.items() if key != 'result'}
+                return prepared, chain
         if ((PROTOCOL_V7 not in NEW_PROBLEM_CHAIN_PROTOCOLS or is_math_openness_packet(native))
                 and characters <= review_excerpts.TURN_FULLTEXT_CHARACTERS
-                and _fits(route, canonical_prompt('native_math', version=7 if is_openness_packet(native) else 6)['text'],
+                and _fits(route, canonical_prompt('native_math', version=7 if is_openness_packet(native) else 6,
+                    finding_version=2 if 'finding_index' in packet else 1)['text'],
                           packet, [row['artifact'] for row in rows])):
             return packet, None
         protocol = find_chain_protocol(native)
@@ -2213,6 +2275,9 @@ def prepare_packet(records, artifacts, value, route, packet):
                 artifacts.put(content, 'application/json')
         record = _create_record(protocol, plan['manifest'] if plan is not None else None,
                                 excerpt_protocol=review_excerpts.SESSION_PROTOCOL)
+        if protocol == PROTOCOL_V6 and 'finding_index' in packet:
+            from .problem_openness import serialize_record
+            record['finding_index'] = artifacts.put(serialize_record(packet['finding_index']), 'application/json')
         chain = {'first_assignment_id': value['id'], 'turn': 1}
         if selection is not None:
             chain['protocol_selection'] = {key: item for key, item in selection.items() if key != 'result'}
@@ -2259,6 +2324,9 @@ def prepare_packet(records, artifacts, value, route, packet):
                 error.details = dict(error.details or {}, handoff='export')
             raise
     record = _extend_record(records, artifacts, prior_packet, state, rows, observations, protocol)
+    if 'finding_index' in _find_record(prior_packet):
+        record['finding_index'] = _find_record(prior_packet)['finding_index']
+        packet['finding_index'] = json.loads(artifacts.read(record['finding_index']))
     chain = dict(prior['reading_chain'], turn=prior['reading_chain']['turn'] + 1)
     selected = _classify_final_texts(records, artifacts, native, rows, protocol)
     delivered_bodies = (select_delivered_bodies(_collect_delivered_bodies(delivery_rows, spans, observations).values())
@@ -2353,7 +2421,7 @@ def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
     """The output contract of a reading-chain turn under the protocol of its packet. A reading turn returns a reading
     response. A final turn returns the native result review, or a reading response with at least one passage request
     while the passage allowance has characters left."""
-    if find_protocol(packet) == PROTOCOL_V7:
+    if find_protocol(packet) in BOUNDED_CHAIN_PROTOCOLS:
         from .openness_reading_v7 import validate_turn_output as validate_v7
         return validate_v7(packet, output, artifacts=artifacts, assignment=assignment)
     from .native_review import validate_output
@@ -2361,7 +2429,8 @@ def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
     if final and not (isinstance(output, dict) and output.get('stage') == 'reading'):
         if find_protocol(packet) == PROTOCOL_V6:
             from .native_review import validate_finding
-            validate_finding(packet, output)
+            from .native_review import find_finding_version
+            validate_finding(packet, output, finding_version=find_finding_version(assignment), artifacts=artifacts)
         else:
             validate_output(packet['native'], output)
         return
@@ -2377,7 +2446,7 @@ def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
 
 def has_deliverable_passage(records, artifacts, packet, output, *, assignment=None, attempt=None, turn=None):
     """A final reading response must retain a delivered passage after all preceding output entries and its receipt."""
-    if find_protocol(packet) == PROTOCOL_V7:
+    if find_protocol(packet) in BOUNDED_CHAIN_PROTOCOLS:
         from .openness_reading_v7 import has_deliverable_requests
         return has_deliverable_requests(artifacts, packet, output, assignment)
     if (find_stage(packet) != 'final' or packet[RECORD_KEY]['protocol'] not in
@@ -2413,14 +2482,18 @@ def has_deliverable_passage(records, artifacts, packet, output, *, assignment=No
 
 def find_final_assignment(records, artifacts, identifier):
     """The effective terminal turn of the reading chain whose first turn is the given assignment. A continuation that
-    ended without output and that a later continuation of the same turn replaced is history, not a branch; any other
-    second continuation is a fork. The terminal turn is a final turn whose observed output is the native result."""
+    ended without output and that a later continuation of the same turn replaced is history, not a branch, and so is
+    a turn that a capacity replacement took over; any other second continuation is a fork. The terminal turn is a
+    final turn, or the closing page of a final in pages, whose observed output is the native result."""
     from .review_protocol import assignment_state, find_replacement, has_ended_without_output, is_dead_assignment
     assignments = records.get('review_assignment', {})
+    replaced = {saved['capacity_replacement_of'] for saved in assignments.values()
+                if saved.get('capacity_replacement_of')}
     current = assignments[identifier]
     while True:
         live = [saved for saved in assignments.values()
                 if saved['role'] == 'native_math' and saved['context'].get('prior_assignment_id') == current['id']
+                and saved['id'] not in replaced
                 and not ((has_ended_without_output(records, saved['id']) or is_dead_assignment(records, saved))
                          and find_replacement(records, saved))]
         if len(live) > 1:
@@ -2430,8 +2503,8 @@ def find_final_assignment(records, artifacts, identifier):
             break
         current = live[0]
     output = assignment_state(records, artifacts, current['id'])['output']
-    if (find_stage(json.loads(artifacts.read(current['packet']))) != 'final' or not isinstance(output, dict)
-            or output.get('stage') == 'reading'):
+    if (find_stage(json.loads(artifacts.read(current['packet']))) not in ('final', 'closing') or not isinstance(output, dict)
+            or output.get('stage') in ('reading', 'material')):
         raise ResearchError('openness_reading_incomplete', 'Continue the reading chain to a final turn that returns '
                             'the native result', {'assignment_id': current['id']})
     return current
@@ -2548,6 +2621,10 @@ def _require_math_continuity(records, artifacts, native, chain, rows, spans, obs
         packet, output = json.loads(artifacts.read(assignment['packet'])), observation['output']
         stage = find_stage(packet)
         if stage == 'final':
+            from .native_review import find_finding_version
+            if find_finding_version(assignment) == 2:
+                from .review_search_delivery import verify_finding_index
+                verify_finding_index(records, artifacts, native, packet.get('finding_index'))
             bound = packet['native'] == native
         else:
             turn = packet[TURN_KEY]
@@ -2561,7 +2638,8 @@ def _require_math_continuity(records, artifacts, native, chain, rows, spans, obs
                 or assignment.get('reading_chain') != {'first_assignment_id': first['id'], 'turn': index + 1}
                 or assignment['prompt'] != canonical_prompt(
                     'native_math', reading_stage=stage, reading_protocol=MATH_PROTOCOL,
-                    common_version=find_common_prompt_version(assignment['prompt']))):
+                    common_version=find_common_prompt_version(assignment['prompt']),
+                    finding_version=assignment['prompt'].get('parameters', {}).get('finding_version', 1))):
             raise ResearchError('openness_reading_incomplete', 'Every turn of a math reading chain keeps the binding, '
                                 'protocol and prompt of its first turn', {'assignment_id': assignment['id']})
         carried = _find_record(packet)
@@ -2570,7 +2648,7 @@ def _require_math_continuity(records, artifacts, native, chain, rows, spans, obs
                                 'outputs of the earlier turns do not give', {'assignment_id': assignment['id']})
         if stage == 'final':
             _require_withheld_bodies(packet, rows, spans, observations[:index])
-        validate_turn_output(packet, output)
+        validate_turn_output(packet, output, artifacts=artifacts, assignment=assignment)
         last = index + 1 == len(chain)
         if last != (stage == 'final' and output.get('stage') != 'reading'):
             raise ResearchError('openness_reading_incomplete', 'A math reading chain ends at its first final turn that '
@@ -2624,6 +2702,8 @@ def _require_problem_continuity(records, artifacts, native, chain, rows, observa
     protocol = find_protocol(first_packet)
     record = _create_record(protocol, manifest,
                             excerpt_protocol=_find_record(first_packet).get('excerpt_protocol'))
+    if 'finding_index' in _find_record(first_packet):
+        record['finding_index'] = _find_record(first_packet)['finding_index']
     if protocol == PROTOCOL_V6:
         record['allowances']['record'] = dict(
             characters=_find_record(first_packet)['allowances']['record']['characters'], used=0, not_retained={})
@@ -2638,6 +2718,10 @@ def _require_problem_continuity(records, artifacts, native, chain, rows, observa
         packet, output = json.loads(artifacts.read(assignment['packet'])), observation['output']
         stage = find_stage(packet)
         if stage == 'final':
+            from .native_review import find_finding_version
+            if find_finding_version(assignment) == 2:
+                from .review_search_delivery import verify_finding_index
+                verify_finding_index(records, artifacts, native, packet.get('finding_index'))
             bound = packet['native'] == native
         else:
             turn = packet[TURN_KEY]
@@ -2653,7 +2737,8 @@ def _require_problem_continuity(records, artifacts, native, chain, rows, observa
                 or assignment.get('reading_chain') != {'first_assignment_id': first['id'], 'turn': index + 1}
                 or assignment['prompt'] != canonical_prompt(
                     'native_math', reading_stage=stage, reading_protocol=protocol,
-                    common_version=find_common_prompt_version(assignment['prompt']))):
+                    common_version=find_common_prompt_version(assignment['prompt']),
+                    finding_version=assignment['prompt'].get('parameters', {}).get('finding_version', 1))):
             raise ResearchError('openness_reading_incomplete', 'Every turn of a v5 problem chain keeps the binding, '
                                 'protocol and prompt of its first turn', {'assignment_id': assignment['id']})
         carried = _find_record(packet)
@@ -2675,7 +2760,7 @@ def _require_problem_continuity(records, artifacts, native, chain, rows, observa
                                     'frozen manifest exactly')
             selected = _classify_final_texts(records, artifacts, native, rows, protocol)
             _require_withheld_bodies(packet, rows, spans, observations[:index], selected)
-        validate_turn_output(packet, output)
+        validate_turn_output(packet, output, artifacts=artifacts, assignment=assignment)
         terminal = stage == 'final' and output.get('stage') != 'reading'
         if terminal != (final and index + 1 == len(chain)):
             raise ResearchError('openness_reading_incomplete', 'A v5 problem chain ends at its first native final result')
@@ -2697,8 +2782,12 @@ def verify_problem_coverage(records, artifacts, assignment, *, final=False):
     if find_protocol(json.loads(artifacts.read(assignment['packet']))) == PROTOCOL_V7:
         from .openness_reading_v7 import verify_problem_coverage as verify_v7_coverage
         return verify_v7_coverage(records, artifacts, assignment, final=final)
-    from .native_review import load_packet
+    from .native_review import load_packet, find_finding_version
     native = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
+    if find_finding_version(assignment) == 2:
+        from .review_search_delivery import verify_finding_index
+        verify_finding_index(records, artifacts, native,
+                             json.loads(artifacts.read(assignment['packet'])).get('finding_index'))
     rows = list_reading_rows(records, artifacts, native, review=assignment)
     manifest = _plan_search_delivery(artifacts, native)['manifest']
     delivery_rows = list_delivery_rows(rows, manifest)
@@ -2736,7 +2825,7 @@ def verify_chain(records, artifacts, assignment):
     _require_math_continuity states. A final turn that 0.64.2 to 0.66.2 built is verified by the rules of those
     releases."""
     packet = json.loads(artifacts.read(assignment['packet']))
-    if find_protocol(packet) == PROTOCOL_V7:
+    if find_protocol(packet) in BOUNDED_CHAIN_PROTOCOLS:
         from .openness_reading_v7 import verify_chain as verify_v7_chain
         return verify_v7_chain(records, artifacts, assignment)
     if packet[RECORD_KEY]['protocol'] in (PROTOCOL_V5, PROTOCOL_V6):

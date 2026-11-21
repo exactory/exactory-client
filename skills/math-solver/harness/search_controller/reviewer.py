@@ -450,7 +450,7 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
     from research_harness.artifacts import ArtifactStore
     from research_harness.errors import ResearchError
     from research_harness.native_review import load_packet
-    from research_harness.openness_reading import find_final_assignment, verify_chain
+    from research_harness.openness_reading import MATH_PROTOCOL_V2, find_final_assignment, find_protocol, verify_chain
     from research_harness.operations import normalized_text
     from research_harness.review_protocol import assignment_state, find_replacement
     from research_harness import review_parts
@@ -476,8 +476,13 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
                   "Native approval requires its native mathematical assignment", "review_assignment_mismatch")
         if "reading_chain" in assignment:
             assignment = find_final_assignment(records, artifacts, identifier)
+            turns = verify_chain(records, artifacts, assignment)
+            if find_protocol(json.loads(artifacts.read(assignment['packet']))) == MATH_PROTOCOL_V2:
+                # The chain authenticates coverage; native records retain their receipt schema.
+                turns = [dict(assignment_id=turn['assignment_id'], attempt_id=turn['attempt_id'],
+                              delivered_units=[]) for turn in turns]
             current = dict(assignment_state(records, artifacts, assignment["id"]),
-                           reading_turns=verify_chain(records, artifacts, assignment))
+                           reading_turns=turns)
         elif review_parts.KEY in assignment or capacity_series:
             from research_harness import review_parts_native
             assignment = review_parts_native.find_final_assignment(records, artifacts, identifier)
@@ -486,15 +491,26 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
                       'review_parts_incomplete')
             current = assignment_state(records, artifacts, assignment['id'])
             header = verified['packets'][-1][review_parts.KEY]
-            receipts = header['receipts'] + [dict(assignment_id=assignment['id'], attempt_id=current['attempt_id'])]
+            if header['protocol'] == 'exactory-review-parts-v3':
+                receipts = verified['state']['receipts']
+            else:
+                receipts = header['receipts'] + [dict(assignment_id=assignment['id'], attempt_id=current['attempt_id'])]
             # Native parts have no openness reading units; the verified series supplies their coverage.
             current = dict(current, reading_turns=[dict(assignment_id=receipt['assignment_id'],
                 attempt_id=receipt['attempt_id'], delivered_units=[]) for receipt in receipts])
+        if 'reading_chain' in assignment or review_parts.KEY in assignment:
+            from research_harness.review_composite import read_final_output
+            output, composite = read_final_output(records, artifacts, assignment)
+            if composite is not None:
+                current = dict(current, output=output, output_digest=s.digest(output),
+                               composite=dict(id=composite['id'], digest=s.digest(composite)))
         s.require(current["output"] == value, "Use the observed native review without author changes", "review_output_mismatch")
         if record is not None:
             s.require(record.get("reading_turns") == current.get("reading_turns"),
                       "The recorded reading turns changed",
                       "review_parts_incomplete" if review_parts.KEY in assignment else "openness_reading_incomplete")
+            s.require(record.get('composite') == current.get('composite'),
+                      'The recorded composite changed', 'review_parts_incomplete')
         supplied = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
         if review_parts.KEY in assignment:
             logical = review_parts.read_logical_packet(artifacts, header)
@@ -530,6 +546,9 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
             artifacts.read(entry["artifact"])
         if supplied["kind"] == "result" and value.get("schema_version") == 2:
             delivered = {entry["digest"] for entry in supplied["evidence"]}
+            if assignment.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+                from research_harness.review_parts_v3 import list_native_citation_digests
+                delivered.update(list_native_citation_digests(records, artifacts, assignment, current))
             s.require(set(value["findings"]["openness"]["evidence"]) <= delivered,
                       "Openness evidence must be delivered in the observed review packet", "review_packet_mismatch")
             if new and value["findings"]["openness"]["outcome"] != "unresolved":
@@ -618,6 +637,8 @@ def validate_submitted(controller, state, spec, candidate, content, locks):
                 key = {"result_accepted": "acceptance", "objective_completed": "closure"}.get(operation["kind"])
                 if key is not None and operation["payload"][key]["review"] == value:
                     operation["payload"][key]["reading_turns"] = checked["reading_turns"]
+                    if 'composite' in checked:
+                        operation['payload'][key]['composite'] = checked['composite']
                     operation["payload"]["digest"] = content.put_blob(operation["payload"][key])
         if command == "review" and checked.get("context_drift"):
             for operation in candidate["operations"]:

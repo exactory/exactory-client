@@ -678,6 +678,12 @@ _NAMED_CAUSE_CODES_RECOVERY = (
     'xml_timeout',
 )
 _NAMED_CAUSE_CODES_CLOSING = (
+    'composite_missing',
+    'final_pending',
+    'requested_range_not_delivered',
+    'series_invalid',
+    'unit_not_delivered',
+    'unobserved_turn',
     'artifact_sealed',
     'execution_observation_mismatch',
     'extractor_missing',
@@ -686,6 +692,7 @@ _NAMED_CAUSE_CODES_CLOSING = (
     'invalid_input',
     'invalid_native_review_packet',
     'invalid_review_material',
+    'invalid_review_session_turn',
     'invalid_review_route',
     'invalid_target',
     'malformed_pdf',
@@ -719,6 +726,7 @@ _STORED_STATE_CODES_RECOVERY = (
     'review_route_changed',
 )
 _STORED_STATE_CODES_CLOSING = ()
+_STORED_STATE_CODES_COMPOSITE = ('review_composite_unverified',)
 
 
 STOP_GROUPS = {
@@ -769,6 +777,7 @@ for _group, _codes in (
         ('stored_state', _STORED_STATE_CODES_CONDITIONS),
         ('stored_state', _STORED_STATE_CODES_RECOVERY),
         ('stored_state', _STORED_STATE_CODES_CLOSING),
+        ('stored_state', _STORED_STATE_CODES_COMPOSITE),
         ('stored_state', _STORED_STATE_CODES_FIRST),
         ('stored_state', _STORED_CONTENT_CODES_REVIEW_A),
         ('stored_state', _STORED_CONTENT_CODES_REVIEW_B),

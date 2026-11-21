@@ -141,7 +141,9 @@ class CarriedIntegrationSupport:
                     findings=dict({key: 'Assessed the supplied subject.' for key in
                         ('statement', 'assumptions', 'scope', 'dependencies', 'policy')},
                         openness=dict(outcome='unresolved', coverage='Reviewed the required units.',
-                            reason='A remaining gap.', grounds=[dict(kind='reviewer_gap', text='Further work is needed.')])) )
+                            reason='A remaining gap.', grounds=[dict(kind='own_argument' if 'finding_index' in packet else 'reviewer_gap',
+                                text='The reviewer argument requires further checking.' if 'finding_index' in packet
+                                     else 'Further work is needed.')])) )
                 self.invoke(current, output)
                 records = self.store.snapshot()['records']
                 observed = protocol.assignment_state(records, self.artifacts, current)

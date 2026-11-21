@@ -39,7 +39,7 @@ STAGE2_EVIDENCE = (
     dict(id='verification-parts-refusal', requirement='scientific_refused', chains=('parts_v2:study_verification',), tests=(
         'test_review_refusal_planner.PlannerChainRowsTests.test_verification_parts_executes_the_planned_row',)),
     dict(id='other-installed-parts-refusals', requirement='scientific_refused',
-        chains=('parts_v1', 'parts_v2:problem_adjudicator', 'parts_v2:study_readiness'), tests=(
+        chains=('parts_v1', 'parts_v2:problem_adjudicator', 'parts_v2:study_readiness', 'parts_v2:problem_slate'), tests=(
         'test_continuity_guard.ContinuityGuardTests.test_other_installed_parts_execute_the_refusal_replacement',)),
     dict(id='role-exhaustion', requirement='exhaustion', chains=(), tests=(
         'test_d2_outcomes.OutcomeTests.test_exhausted_bar_continuation_accepts_a_new_blind_reviewer',

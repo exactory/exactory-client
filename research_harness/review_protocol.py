@@ -30,7 +30,10 @@ from .finishing import SCOPED_FINISH_ATTEMPT_COUNT, SCOPED_FINISH_WAIT_SECONDS, 
 from . import review_transport as transport
 from .review_answer_recovery import derive_output, extract_answer_text, recover_answer
 from . import bar_sources
+from . import review_session_v4
+
 from . import openness_reading
+from .openness_reading import BOUNDED_CHAIN_PROTOCOLS
 from .openness_reading_v7 import (PROTOCOL as READING_V7_PROTOCOL, TARGET_PAGE_SENTENCE,
                                   LIST_PAGE_SENTENCE, NOTES_COST_TEXT, CARRIED_READINGS_TEXT,
                                   CARRIED_KEEP_TEXT, AFFECTED_NOTES_TEXT)
@@ -64,6 +67,27 @@ V7_MATERIAL_TEXT = (
     'final turn lists a completed argument under reading_final.material, where a ground can cite it. A '
     'row for the argument is charged to the allowance of every target, and an argument that an allowance '
     'cannot hold is not listed and cannot be cited.')
+# The stage templates of exactory-openness-reading-math-v2. Each is a placeholder for the writer's pass.
+MATH_V2_READING_PROMPT = (
+    'This is one reading turn of a math-solver result review under exactory-openness-reading-math-v2. Read what '
+    'this turn delivers and return {schema_version:2,stage:"reading",subject_digest,claim_digest,reviewer,notes,'
+    'excerpts,gaps,passage_requests} within the allowances of reading_turn.')
+MATH_V2_FINAL_PROMPT = (
+    'This is the final turn of a math-solver result review under exactory-openness-reading-math-v2. Return the '
+    'native result review. In findings.openness.evidence, cite each delivered unit that the review rests on as '
+    '{ref:<handle>}. The harness supplies findings.openness.minimum.')
+MATH_V2_PAGE_PROMPT = (
+    'Read this page of the final of exactory-openness-reading-math-v2. Return {targets:[{formulation,coverage,sentence}]} '
+    'for exactly reading_final.page.targets in order: coverage is one line of at most 800 characters, sentence has at '
+    'most 300 characters.')
+MATH_V2_CLOSING_PROMPT = (
+    'Read the decision rows of the final of exactory-openness-reading-math-v2. For an approval, return {decision,'
+    'findings:{statement,assumptions,scope,dependencies,policy,openness:{outcome,reason,searched_at,evidence}}}, with '
+    'evidence as {ref:<handle>} citations. Otherwise return {decision,reason,objections}.')
+MATH_V2_COMBINE_PROMPT = (
+    'Read reading_combine.block and return {block,summary,refs} within capacity.answer_bound and one quarter of the '
+    'block.')
+
 V7_READING_PROMPT = (
     'This is one reading turn of an openness review under exactory-openness-reading-v7, a fresh input without '
     'earlier conversation. The review asks what the evidence establishes about whether the exact statement of '
@@ -225,6 +249,24 @@ V7_READING_PROMPT = (
     'scientific text and is no gap. The acceptance is a fact about the solver objective. It is no finding '
     'about the openness of the statement under review: read the result and note what it proves.'
     + openness_reading.SEARCH_FIELD_GUIDE_TEXT + openness_reading.SEARCH_COMPLETION_SENTENCE)
+V7_PAGE_PROMPT = (
+    'Read this page of the v7 final. Return {targets:[{formulation,coverage,grounds,sentence}]} for exactly '
+    'reading_final.page.targets in order. coverage has at most 800 characters; sentence at most 300; '
+    'a ground is {kind,text,work_id?,refs?}, with text at most 600 characters and citations by recorded handle. '
+    'A passage request may replace this answer. An argument may be written as '
+    '{stage:"material",title,part,text,more}; resume this page afterwards and cite the completed m handle.')
+V7_CLOSING_PROMPT = (
+    'Read the decision rows of this v7 final. Return {statement,assumptions,scope,dependencies,policy,outcome,reason,grounds}. '
+    'The first five fields and reason are nonempty text; reason has at most 4000 characters. '
+    'grounds holds grounds belonging to no single target, with the same kind,text,work_id?,refs? fields as a page. '
+    'outcome is supported_open, already_solved or unresolved and must agree with the forecast and every page ground. '
+    'A passage request or a material part may replace this answer; resume the closing page afterwards.')
+V7_COMBINE_PROMPT = (
+    'Read reading_combine.block and return {block,summary,refs}. block is its handle. '
+    'summary condenses its entries; refs is a nonempty list of distinct entry handles. '
+    'The complete serialized answer fits capacity.answer_bound and one quarter of the block. '
+    'Original entries remain available by handle and through a list_page request for the block.')
+
 V7_FINAL_PROMPT = (
     'This is the final turn of an openness review under exactory-openness-reading-v7. It answers one '
     'question: what does the evidence that this chain read establish about whether the exact statement in '
@@ -320,6 +362,21 @@ V7_FINAL_PROMPT = (
     'it is another final turn. The harness refuses a reading response in which no request can deliver anything. '
     'When no text can help you judge, return the finding.'
     + V7_LIMITS_TEXT + V7_HANDLES_TEXT + V7_MATERIAL_TEXT)
+# Plain placeholders; each role/form is owned by the writer's pass.
+BAR_SESSION_PAGE_PROMPT = 'Assess only this bar page targets. Return the composition rule page answer with handle citations, or a request or material part.'
+BAR_SESSION_CLOSING_PROMPT = 'Read the bar decision rows and return the composition rule closing answer with handle citations.'
+BAR_SESSION_COMBINE_PROMPT = 'Condense this bar block into {block, summary, refs} within the complete combination bound.'
+SLATE_SESSION_PAGE_PROMPT = 'Assess only this slate page targets. Return the composition rule page answer with handle citations, or a request or material part.'
+SLATE_SESSION_CLOSING_PROMPT = 'Read the slate decision rows and return the composition rule closing answer with handle citations.'
+SLATE_SESSION_COMBINE_PROMPT = 'Condense this slate block into {block, summary, refs} within the complete combination bound.'
+RESULT_SESSION_PAGE_PROMPT = 'Assess only this result page targets. Return the composition rule page answer with handle citations, or a request or material part.'
+RESULT_SESSION_CLOSING_PROMPT = 'Read the result decision rows and return the composition rule closing answer with handle citations.'
+RESULT_SESSION_COMBINE_PROMPT = 'Condense this result block into {block, summary, refs} within the complete combination bound.'
+SESSION_PAGE_REQUESTS_PROMPT = ' A list_page request can name a recorded block handle in list. A unit request can name an original entry handle from that block; its entries remain available after further condensation.'
+SESSION_FINAL_PROMPTS = dict(
+    bar=dict(page=BAR_SESSION_PAGE_PROMPT, closing=BAR_SESSION_CLOSING_PROMPT, combine=BAR_SESSION_COMBINE_PROMPT),
+    slate=dict(page=SLATE_SESSION_PAGE_PROMPT, closing=SLATE_SESSION_CLOSING_PROMPT, combine=SLATE_SESSION_COMBINE_PROMPT),
+    result=dict(page=RESULT_SESSION_PAGE_PROMPT, closing=RESULT_SESSION_CLOSING_PROMPT, combine=RESULT_SESSION_COMBINE_PROMPT))
 from . import review_excerpts
 from . import review_problem_parts, review_parts
 from . import review_handles
@@ -331,6 +388,8 @@ from . import problem_rubric
 from . import review_prompt_paragraphs as prompt_paragraphs
 from .review_refusal import record_refusal_on_error
 from .storage import _canonical, read_filtered_records, select_record_groups
+
+NEW_SESSION_RULES = (bar_sources.PROTOCOL_V3,)
 
 ROLES = ('bar', 'slate', 'result', 'adjudicator', 'manuscript', 'standalone', 'verification', 'native_math')
 PAPER_ROLES = ('manuscript', 'standalone')
@@ -1148,9 +1207,17 @@ def find_common_prompt_version(prompt):
     return value if type(value) is int and value != 1 and value in _COMMON_PROMPTS else None
 
 
+# The stage templates of each bounded reading protocol, by protocol (openness_reading_v7.PROTOCOL_DESCRIPTIONS).
+BOUNDED_STAGE_PROMPTS = {
+    READING_V7_PROTOCOL: dict(reading=V7_READING_PROMPT, final=V7_FINAL_PROMPT, page=V7_PAGE_PROMPT,
+                              closing=V7_CLOSING_PROMPT, combine=V7_COMBINE_PROMPT),
+    openness_reading.MATH_PROTOCOL_V2: dict(reading=MATH_V2_READING_PROMPT, final=MATH_V2_FINAL_PROMPT,
+        page=MATH_V2_PAGE_PROMPT, closing=MATH_V2_CLOSING_PROMPT, combine=MATH_V2_COMBINE_PROMPT)}
+
+
 def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestration=None, repair_prompt=None,
                      adjudicator_prompt=None, excerpts=False, reading_stage=None, excerpt_rules=None,
-                     reading_protocol=None, common_version=None, evidence_parts=None, part_suffix=None,
+                     reading_protocol=None, common_version=None, finding_version=1, evidence_parts=None, part_suffix=None,
                      staged_task=None, composed=False, claim_range=False, review_parts=None,
                      problem_objection_carry=None, problem_paragraphs=None, capacity=None, source_rules=None):
     """The canonical prompt of a role. A previous version (version 1) keeps the context-repair suffix it was recorded
@@ -1162,9 +1229,9 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
     reading or final turn of a native openness reading chain, and reading_protocol the
     protocol of its prompts, by default the current one. common_version names the common text that opens the prompt,
     by default the current one; it is independent of version, which names the scientific contract."""
-    if reading_protocol == READING_V7_PROTOCOL and capacity is not None:
+    if reading_protocol in BOUNDED_CHAIN_PROTOCOLS and capacity is not None:
         result = canonical_prompt(role, reading_stage=reading_stage, reading_protocol=reading_protocol,
-                                  common_version=common_version, problem_paragraphs=problem_paragraphs)
+                                  common_version=common_version, finding_version=finding_version, problem_paragraphs=problem_paragraphs)
         result['parameters']['capacity'] = copy.deepcopy(capacity)
         return result
     if problem_objection_carry is not None or problem_paragraphs is not None or capacity is not None:
@@ -1174,7 +1241,7 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
         base = canonical_prompt(role, legacy=legacy, repair=repair, version=version, orchestration=orchestration,
             repair_prompt=repair_prompt, adjudicator_prompt=adjudicator_prompt, excerpts=excerpts,
             reading_stage=reading_stage, excerpt_rules=excerpt_rules, reading_protocol=reading_protocol,
-            common_version=common_version, evidence_parts=evidence_parts, part_suffix=part_suffix,
+            common_version=common_version, finding_version=finding_version, evidence_parts=evidence_parts, part_suffix=part_suffix,
             staged_task=staged_task, composed=composed, claim_range=claim_range, review_parts=review_parts,
             source_rules=source_rules)
         return prompt_paragraphs.append_prompt_paragraphs(base, role, problem_objection_carry, problem_paragraphs, capacity)
@@ -1184,13 +1251,29 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
         base = canonical_prompt(role, legacy=legacy, repair=repair, version=version, orchestration=orchestration,
             repair_prompt=repair_prompt, adjudicator_prompt=adjudicator_prompt, excerpts=excerpts,
             reading_stage=reading_stage, excerpt_rules=excerpt_rules, reading_protocol=reading_protocol,
-            common_version=common_version, evidence_parts=evidence_parts, part_suffix=part_suffix,
+            common_version=common_version, finding_version=finding_version, evidence_parts=evidence_parts, part_suffix=part_suffix,
             staged_task=staged_task, composed=composed, claim_range=claim_range, review_parts=review_parts)
         rendered = base['text'].replace(bar_sources.PROMPT, bar_sources.SESSION_PROMPT)
         return dict(base, template_id=base['template_id'] + bar_sources.SESSION_TEMPLATE_SUFFIX,
                     template_hash=digest(rendered),
                     rendered_prompt_hash=digest(rendered), text=rendered,
                     parameters=dict(base['parameters'], source_rules=source_rules))
+    if finding_version != 1:
+        if type(finding_version) is not int or finding_version != 2:
+            raise ResearchError('invalid_review_context', 'Use finding version 1 or 2.')
+        base = canonical_prompt(role, legacy=legacy, repair=repair, version=version, orchestration=orchestration,
+            repair_prompt=repair_prompt, adjudicator_prompt=adjudicator_prompt, excerpts=excerpts,
+            reading_stage=reading_stage, excerpt_rules=excerpt_rules, reading_protocol=reading_protocol,
+            common_version=common_version, evidence_parts=evidence_parts, part_suffix=part_suffix,
+            staged_task=staged_task, composed=composed, claim_range=claim_range, review_parts=review_parts,
+            problem_objection_carry=problem_objection_carry, problem_paragraphs=problem_paragraphs,
+            capacity=capacity, source_rules=source_rules)
+        from .native_review import uses_finding_contract, FINDING_V2_TEXT
+        if uses_finding_contract(dict(prompt=base)):
+            rendered = base['text'] + FINDING_V2_TEXT
+            return dict(base, text=rendered, template_hash=digest(rendered), rendered_prompt_hash=digest(rendered),
+                        parameters=dict(base['parameters'], finding_version=2))
+        return base
     if version is None:
         version = 7 if role == 'verification' else 6
     if review_parts is not None:
@@ -1211,7 +1294,12 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
             staged_task=staged_task, composed=composed, claim_range=claim_range)
         base = canonical_prompt(role, **base_parameters)
         answer = kind == 'final' and bool(review_parts.get('answer'))
-        binding = dict(adapter=adapter, kind=kind, protocol=parts.PROTOCOL, answer=answer)
+        parts_protocol = review_parts.get('protocol', parts.PROTOCOL)
+        binding = dict(adapter=adapter, kind=kind, protocol=parts_protocol, answer=answer)
+        if parts_protocol == 'exactory-review-parts-v3':
+            binding['capacity'] = copy.deepcopy(review_parts['capacity'])
+            if 'final_form' in review_parts:
+                binding['final_form'] = review_parts['final_form']
         entry = review_parts.get('entry')
         if entry is not None:
             binding['entry'] = entry
@@ -1225,11 +1313,23 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
                 sections.append(texts.FINAL_ANSWER)
             final_prompt = get_adapter(adapter)['final_prompt']
             sections.append(final_prompt(role, base_parameters) if callable(final_prompt) else final_prompt)
+        if parts_protocol == 'exactory-review-parts-v3':
+            sections = [base['text'], texts.PARTS_V3_COMMON, texts.PARTS_V3_PROMPTS[kind]]
+            if review_parts.get('final_form') in ('page', 'closing'):
+                sections = [base['text'], texts.PARTS_V3_COMMON,
+                    texts.PARTS_V3_PAGE if review_parts['final_form'] == 'page' else texts.PARTS_V3_CLOSING]
+            elif review_parts.get('final_form') == 'combine':
+                sections = [base['text'], texts.PARTS_V3_COMMON, texts.PARTS_V3_CONDENSE]
+            if kind == 'final':
+                final_prompt = get_adapter(adapter)['final_prompt']
+                sections.append(final_prompt(role, base_parameters) if callable(final_prompt) else final_prompt)
         rendered = '\n\n'.join(sections)
         variant = 'final-answer' if answer else kind
+        if parts_protocol == 'exactory-review-parts-v3' and 'final_form' in review_parts:
+            variant = review_parts['final_form']
         if entry is not None:
             variant += '-capacity-v1'
-        return _build_prompt(parts.PROTOCOL + '/' + adapter + '/' + variant,
+        return _build_prompt(parts_protocol + '/' + adapter + '/' + variant,
                              rendered, parameters,
                              COMMON_VERSION if common_version is None else common_version)
     common_version = COMMON_VERSION if common_version is None else common_version
@@ -1251,12 +1351,12 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
             or not excerpts or repair or evidence_parts not in review_problem_parts.STAGES):
         raise ResearchError('invalid_review_context', 'Problem evidence parts require a result session with excerpt rules')
     if reading_stage is not None:
-        if role != 'native_math' or reading_stage not in openness_reading.STAGES:
+        if role != 'native_math' or reading_stage not in openness_reading.STAGES + (('page', 'closing', 'combine') if reading_protocol in BOUNDED_CHAIN_PROTOCOLS else ()):
             raise ResearchError('invalid_review_context', 'A reading stage belongs to a native openness reading chain')
         from .native_review import PROMPT
         reading_protocol = reading_protocol or openness_reading.PROTOCOL
-        if reading_protocol == 'exactory-openness-reading-v7':
-            prompt = common + (V7_READING_PROMPT if reading_stage == 'reading' else V7_FINAL_PROMPT)
+        if reading_protocol in BOUNDED_CHAIN_PROTOCOLS:
+            prompt = common + BOUNDED_STAGE_PROMPTS[reading_protocol][reading_stage]
             return _build_prompt(reading_protocol + '/' + reading_stage, prompt,
                                  {'role': role, 'reading_stage': reading_stage}, common_version)
         texts = openness_reading.PROMPTS[reading_protocol]
@@ -1408,6 +1508,8 @@ def validate_problem_bars(records, artifacts, bars):
     for review in bars:
         assignment = _get(records, 'review_assignment', review['assignment_id'])
         packet = _read_json(artifacts, assignment['packet'])
+        if assignment.get('session_chain'):
+            packet = _read_json(artifacts, assignment['session_chain']['logical'])
         if any(packet.get(key) != marker[key] for key in ('area', 'field')):
             raise ResearchError('review_bar_mismatch', 'Use problem bars for the current area and field',
                                 {'review_id': review['id']})
@@ -2145,6 +2247,9 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
             fields(context, ('prior_assignment_id',), ('source_delivery',), code='invalid_review_context')
             prior, state = _source_parent(records, artifacts, context['prior_assignment_id'], dossier_id, reviewer_id, role)
             previous = source_delivery_packet(records, artifacts, prior)
+            if previous.get(review_parts.KEY, {}).get('protocol') == 'exactory-review-parts-v3':
+                previous = dict(review_parts.read_logical_packet(artifacts, previous[review_parts.KEY]),
+                                review_parts=previous[review_parts.KEY])
             if 'source_rules' not in previous:
                 packet.pop('source_rules', None)
             packet.update(bar_sources.continuation(records, artifacts, previous, review_parts.project_source_output(state['output'], role),
@@ -2209,6 +2314,8 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                     'review_ids': [review['id'] for review in historical]}
             elif problem and role == 'slate':
                 packet.update({key: previous[key] for key in ('bar_ids', 'candidates', 'candidate_set_digest')})
+                if previous.get(review_parts.KEY, {}).get('adapter') == 'problem_slate':
+                    packet.update({key: previous[key] for key in ('bars', 'own_bars')})
                 if prompt_paragraphs.PLACE_REVIEW_KEY in previous:
                     packet[prompt_paragraphs.PLACE_REVIEW_KEY] = previous[prompt_paragraphs.PLACE_REVIEW_KEY]
                 packet['material_objections'] = collect_historical_bar_objections(records, artifacts)
@@ -3021,6 +3128,8 @@ def is_version_2_problem_result(assignment):
 
 def has_problem_result_rubric(assignment):
     """Whether the problem result template requires rubric grades; authentication is checked separately."""
+    if assignment.get('prompt', {}).get('parameters', {}).get('source_rules') == review_session_v4.PROTOCOL:
+        return True
     prompt = prompt_paragraphs.strip_prompt_paragraphs(assignment['prompt'], assignment['role'])
     if (prompt is not None and prompt.get('parameters', {}).get('source_rules') == bar_sources.PROTOCOL_V3
             and prompt['template_id'].endswith(bar_sources.SESSION_TEMPLATE_SUFFIX)):
@@ -3084,10 +3193,12 @@ def _strip_source_rules(envelope):
 
 def _prompt_matches(assignment, packet=None):
     envelope = assignment['prompt']
+    if envelope.get('parameters', {}).get('source_rules') == review_session_v4.PROTOCOL:
+        return review_session_v4.matches_turn_prompt(assignment, packet)
     source_rules = envelope.get('parameters', {}).get('source_rules')
     if source_rules is not None and packet is not None and packet.get('source_rules') != source_rules:
         return False
-    if envelope.get('template_id', '').startswith(READING_V7_PROTOCOL + '/'):
+    if any(envelope.get('template_id', '').startswith(value + '/') for value in BOUNDED_CHAIN_PROTOCOLS):
         from .openness_reading_v7 import matches_turn_prompt
         return matches_turn_prompt(assignment, packet)
     base = prompt_paragraphs.strip_prompt_paragraphs(envelope, assignment['role'])
@@ -3109,7 +3220,8 @@ def _prompt_matches(assignment, packet=None):
     parts_parameters = parameters.get(review_parts.KEY)
     if parts_parameters is not None:
         binding = assignment.get(review_parts.KEY, {})
-        if (binding.get('protocol') != review_parts.PROTOCOL
+        if (binding.get('protocol') not in (review_parts.PROTOCOL, 'exactory-review-parts-v3')
+                or binding.get('protocol') != parts_parameters.get('protocol')
                 or any(binding.get(key) != parts_parameters.get(key) for key in ('adapter', 'kind'))):
             return False
         descriptor = parameters.get('base_prompt')
@@ -3153,8 +3265,10 @@ def _prompt_matches(assignment, packet=None):
                    for suffix in ((None, review_problem_parts.PART_PROMPT_0691) if stage == 'part' else (None,)))
     stage = assignment['prompt'].get('parameters', {}).get('reading_stage')
     if assignment['role'] == 'native_math' and stage in openness_reading.STAGES:
+        from .native_review import find_finding_version
         return any(assignment['prompt'] == canonical_prompt('native_math', reading_stage=stage, reading_protocol=rules,
-                                                            common_version=common_version)
+                                                            common_version=common_version,
+                                                            finding_version=find_finding_version(assignment))
                    for rules in openness_reading.PROMPTS)
     context = assignment.get('context', {})
     problem = assignment.get('subject', {}).get('kind') == 'problem'
@@ -3185,8 +3299,10 @@ def _prompt_matches(assignment, packet=None):
             or is_previous_prompt(assignment) or _uses_previous_repair_suffix(assignment)):
         return True
     # The problem finding contract and older native result contracts remain independently verifiable.
+    from .native_review import find_finding_version
     return assignment['role'] == 'native_math' and any(assignment['prompt'] == canonical_prompt(
-        'native_math', common_version=common_version, **parameters) for parameters in (dict(version=7), dict(legacy=True)))
+        'native_math', common_version=common_version, finding_version=find_finding_version(assignment),
+        **parameters) for parameters in (dict(version=7), dict(legacy=True)))
 
 
 def _repair_packet(records, artifacts, value, repair):
@@ -3213,6 +3329,10 @@ def _repair_packet(records, artifacts, value, repair):
     last_turn = repair['scientific_history'][-1]
     output = review_parts.project_source_output(
         last_turn['observed_output'] or last_turn.get('intermediate_output') or {}, value['role'])
+    if repair['predecessor'].get('session_chain'):
+        # V4 request responses belong to their bound session state, not the
+        # legacy source-request vocabulary used to reconstruct older repairs.
+        output = {}
     epoch = records.get('review_epoch', {}).get(repair['predecessor'].get('staged_review', {}).get('epoch_id'), {})
     requested = bar_sources.pending(repair['packet'], output, manifest=epoch.get('manifest'))
     if packet.get('source_rules') == bar_sources.PROTOCOL_V3:
@@ -3376,6 +3496,11 @@ def _source_parent(records, artifacts, identifier, dossier_id, reviewer_id, role
     if not state['ready']:
         raise ResearchError('review_source_continuation_unverified', 'Source requests require an observed uncontaminated parent response')
     previous = source_delivery_packet(records, artifacts, prior)
+    if prior.get('session_chain'):
+        if (state['output'].get('stage') not in ('request', 'material')
+                and not prior['session_chain'].get('final_page_plan')):
+            raise ResearchError('review_resampling_forbidden', 'A final phase assessment cannot be continued or sampled again')
+        return prior, state
     if prior.get('subject', {}).get('kind') == 'problem':
         if role == 'result' and prior['subject'] != build_problem_subject(records):
             raise ResearchError('review_source_continuation_mismatch', 'Continue the exact problem statement')
@@ -3389,14 +3514,17 @@ def _source_parent(records, artifacts, identifier, dossier_id, reviewer_id, role
     refresh = (final and prior.get('subject', {}).get('kind') == 'problem'
                and _is_problem_refresh(records, artifacts, prior, previous))
     parts_pending = parts_turn and (review_parts.find_kind(previous) != 'final'
-                                    or state['output'].get('kind') == 'requests')
+                                    or previous[review_parts.KEY].get('final_form') == 'page'
+                                    or state['output'].get('kind') == 'requests'
+                                    or state['output'].get('stage') == 'material')
     part = review_problem_parts.find_stage(previous) == 'part' or parts_pending
     if part and not parts_turn:
         review_problem_parts.validate_part_output(previous, state['output'])
     if not refresh and (final or not part and not bar_sources.pending(previous, state['output'])
                         and not state['output'].get('settled_requests')):
         raise ResearchError('review_resampling_forbidden', 'A final phase assessment cannot be continued or sampled again')
-    if 'source_inventory' not in previous and not repair_adjudicator:
+    if ('source_inventory' not in previous and not repair_adjudicator
+            and previous.get(review_parts.KEY, {}).get('protocol') != 'exactory-review-parts-v3'):
         raise ResearchError('review_source_continuation_mismatch', 'A legacy packet has no immutable source-request inventory')
     return prior, state
 
@@ -3417,6 +3545,8 @@ def _is_problem_refresh(records, artifacts, prior, previous):
     slate's candidates or bars changed, or a bar lacks rubric calibration or an added area's standard. An exact
     superseded result prompt also permits one prospective contract refresh. Undelivered evidence permits
     reassessment in the same session and slot."""
+    if previous.get(review_parts.KEY, {}).get('adapter') == 'problem_slate':
+        previous = review_parts.read_logical_packet(artifacts, previous[review_parts.KEY])
     if any(review['assignment_id'] == prior['id'] and _is_evidence_refresh_needed(records, artifacts, review)
            for review in records.get('value_review', {}).values()):
         return True
@@ -3548,7 +3678,8 @@ def _require_focused_identity(previous, value):
 
 def prepare_capacity_notice(records, route, role, packet):
     """Add fixed capacity metadata only to a prospective profiled problem assignment."""
-    if packet.get('subject', {}).get('kind') != 'problem' or role not in bar_sources.ROLES:
+    if (packet.get('subject', {}).get('kind') != 'problem' or role not in bar_sources.ROLES
+            or packet.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3'):
         return packet
     from .review_route_capacity import (describe_route_capacity, describe_task_kind,
                                         read_output_profile, select_task_limits)
@@ -3637,6 +3768,13 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             if normalized_text(value['reviewer_id']) in {normalized_text(a) for a in intent.get('authors', [])}:
                 raise ResearchError('review_not_independent', 'An intent author cannot provide an independent assessment')
         if 'capacity_replacement' in value['context']:
+            previous = _get(records, 'review_assignment', value['context']['capacity_replacement'])
+            if previous.get('session_chain'):
+                return review_session_v4.prepare_capacity_assignment(records, artifacts, value, expected_revision + 1, previous)
+            capacity_prior = records.get('review_assignment', {}).get(value['context']['capacity_replacement'], {})
+            if capacity_prior.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+                from .review_parts_v3 import prepare_capacity_assignment
+                return prepare_capacity_assignment(records, artifacts, value, expected_revision + 1)
             from .review_single_request import prepare_replacement as prepare_capacity_replacement
             return prepare_capacity_replacement(records, artifacts, value, expected_revision + 1)
         if 'output_refusal' in value['context']:
@@ -3683,7 +3821,10 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             state = assignment_state(records, artifacts, parent['id'])
             if not state['ready']:
                 raise ResearchError('review_context_unverified', 'Continue an observed uncontaminated verification turn')
-            if review_parts.find_kind(previous) == 'final' and state['output'].get('kind') != 'requests':
+            if (review_parts.find_kind(previous) == 'final' and state['output'].get('kind') != 'requests'
+                    and not (previous[review_parts.KEY].get('page_plan_digest') and
+                             state['output'].get('stage') == 'material')
+                    and previous[review_parts.KEY].get('final_form') != 'page'):
                 raise ResearchError('review_resampling_forbidden', 'A final verification cannot be continued')
             if any(prior.get('context', {}).get('prior_assignment_id') == parent['id']
                    and not has_ended_without_output(records, prior['id'])
@@ -3754,6 +3895,32 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 key=lambda prior: prior['recorded_revision'], default=None)
             if latest is not None and is_dead_assignment(records, latest):
                 slot_identifier = context_repair.slot_id(records, latest)
+        session_admission = None
+        if parent is not None and parent.get('session_chain'):
+            return review_session_v4.prepare_session_assignment(records, artifacts, value, route,
+                expected_revision + 1, parent=parent, slot=slot_identifier)
+        if (parent is None and upgrade is None and value['role'] in bar_sources.ROLES
+                and review_session_v4.PROTOCOL in NEW_SESSION_RULES):
+            planning = artifacts
+            if repair is None:
+                logical = build_packet(records, artifacts, value['dossier_id'], value['role'], value['reviewer_id'], **value['context'])
+            else:
+                # The rendered history stays in memory until the session publishes its units, so a refused
+                # admission writes none of it. The refusal notice of a predecessor turn has no place in a new chain.
+                from .openness_reading_v7 import _PlanningArtifacts
+                from .review_parts_repair import prepare_history
+                planning = _PlanningArtifacts(artifacts)
+                logical = _repair_packet(records, artifacts, value, repair)
+                logical.pop('output_refusal', None)
+                logical = prepare_history(records, planning, logical, history=repair['scientific_history'])
+            for rules in NEW_SESSION_RULES:
+                if rules != review_session_v4.PROTOCOL:
+                    break
+                admission = review_session_v4.check_v4_admission(records, planning, route, value['role'], logical)
+                session_admission = {key: value for key, value in admission.items() if key not in ('inventory', 'bodies', 'capacity_members')}
+                if admission['state'] == 'record':
+                    return review_session_v4.prepare_session_assignment(records, artifacts, value, route,
+                        expected_revision + 1, logical=logical, admission=admission, slot=slot_identifier)
         diagnostics = {}
         reading_logical = None
         carried_report = None
@@ -3785,8 +3952,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                     except ResearchError as error:
                         if error.code == reading_capacity.PROJECTION_STOP:
                             protocol = reading_capacity.find_chain_protocol(reading_logical['native'])
-                            error.details['decision'] = reading_capacity.describe_projection_decision(
-                                protocol, records=records, artifacts=artifacts, assignment=prior or value)
+                            error.details['decision'] = reading_capacity.describe_stop_decision(protocol, error.details,
+                                records=records, artifacts=artifacts, assignment=prior or value)
                             error.details['units'] = reading_capacity.describe_reading_units(artifacts,
                                 reading_capacity.list_reading_rows(records, artifacts, reading_logical['native']))
                         raise
@@ -3841,7 +4008,11 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 if problem and previous['id'] == latest['id'] and review_parts.KEY in previous:
                     previous_state = assignment_state(records, artifacts, previous['id'])
                     ended = has_ended_without_output(records, previous['id'])
+                    previous_parts = _read_json(artifacts, previous['packet'])[review_parts.KEY]
                     is_pending = (previous[review_parts.KEY]['kind'] != 'final' or ended
+                                  or previous_parts.get('final_form') == 'page'
+                                  or (previous_parts.get('page_plan_digest') and
+                                      (previous_state.get('output') or {}).get('stage') == 'material')
                                   or (previous_state.get('output') or {}).get('kind') == 'requests')
                     if is_pending:
                         _require_focused_identity(previous, value)
@@ -3950,13 +4121,15 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         if prompt_parent is not None:
             base_prompt_parameters['common_version'] = find_common_prompt_version(prompt_parent['prompt'])
         base_prompt_parameters.update(prompt_paragraphs.select_prompt_parameters(value['role'], packet))
-        if openness_reading.find_protocol(packet) == READING_V7_PROTOCOL:
-            binding = packet.get('reading_turn', packet.get('reading_final'))
+        if openness_reading.find_protocol(packet) in BOUNDED_CHAIN_PROTOCOLS:
+            binding = packet.get('reading_turn', packet.get('reading_final', packet.get('reading_combine')))
             base_prompt_parameters['capacity'] = binding['capacity']
         if (value['role'] == 'native_math' and openness_reading.find_stage(packet) is None
                 and openness_reading.is_openness_packet(packet['native'])
                 and packet['native']['scientific_context']['openness_minimum']['schema_version'] == 2):
             base_prompt_parameters['version'] = 7
+        if value['role'] == 'native_math' and 'finding_index' in packet:
+            base_prompt_parameters['finding_version'] = 2
         prompt = canonical_prompt(value['role'], **base_prompt_parameters)
         history = []
         session_id = value['id']
@@ -3986,12 +4159,14 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                                     recorded_revision=expected_revision + 1), artifacts)
         if upgrade is None and not staged_repair:
             from .review_route_capacity import require_covered_assignment
+            from . import review_parts_slate
             require_covered_assignment(records, artifacts, value, packet, prompt, history=history)
             if 'context_repair' in packet:
                 from . import review_parts_repair
                 packet = review_parts_repair.prepare_packet(records, artifacts, value, route, packet, prompt, history,
                     base_prompt_parameters=base_prompt_parameters, slot_id=slot_identifier, repair=repair)
-            else:
+            elif (not review_parts_slate.applies(value, packet)
+                  or review_parts_slate.can_start_series(records, artifacts, value, route, packet, prompt, history)):
                 packet = review_parts.prepare_packet(records, artifacts, value, route, packet, prompt, history,
                     base_prompt_parameters=base_prompt_parameters, slot_id=slot_identifier)
         if review_parts.find_kind(packet) is not None:
@@ -4051,7 +4226,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         # that turn's bound without changing the recorded paragraphs of ancestors.
         packet = prepare_capacity_notice(records, route, value['role'], packet)
         parameters = prompt_paragraphs.select_prompt_parameters(value['role'], packet)
-        if (openness_reading.find_protocol(packet) != READING_V7_PROTOCOL
+        if (openness_reading.find_protocol(packet) not in BOUNDED_CHAIN_PROTOCOLS
                 and (prompt_paragraphs.CAPACITY_PARAMETER in parameters
                      or prompt_paragraphs.CAPACITY_PARAMETER in prompt['parameters'])):
             base = prompt_paragraphs.strip_prompt_paragraphs(prompt, value['role'])
@@ -4124,6 +4299,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             return changes + [immutable_record(records, 'review_assignment', value['id'], record)], dict(
                 record, next=[describe_planning_command(record['id'])])
         receipt = dict(record, diagnostics=diagnostics) if diagnostics else record
+        if session_admission is not None:
+            receipt = dict(receipt, session_admission=session_admission)
         if reading_logical is not None and carried_report is not None:
             receipt = dict(receipt, carried_readings=carried_report)
         if value.get('reading_chain') and reading_logical is not None:
@@ -4242,6 +4419,9 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         completed = [a for a in _read_review_group(records, artifacts, 'review_attempt', 'assignment_id', value['assignment_id'])
                      if a['status'] == 'completed'
                      and _context_observed(artifacts, a)]
+        if assignment.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+            from .review_failure_class import classify_final_capacity_attempt
+            completed = [a for a in completed if classify_final_capacity_attempt(records, artifacts, a) is None]
         if completed:
             from .review_refusal import refused_attempts
             refused = refused_attempts(records, artifacts, completed)
@@ -4281,13 +4461,15 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         packet = _read_json(artifacts, assignment['packet'])
         if not _prompt_matches(assignment, packet=packet):
             raise ResearchError('review_prompt_mismatch', 'Invoke the recorded canonical reviewer prompt')
-        if openness_reading.find_protocol(packet) == READING_V7_PROTOCOL:
+        if openness_reading.find_protocol(packet) in BOUNDED_CHAIN_PROTOCOLS:
             from .openness_reading_v7 import describe_ratio_handoff, RATIO_EXPORT_MESSAGE
             handoff = describe_ratio_handoff(records, artifacts, assignment)
             if handoff is not None:
                 raise ResearchError(openness_reading.PROJECTION_STOP, RATIO_EXPORT_MESSAGE, handoff['details'])
         from .review_source_complete import validate
         validate(records, artifacts, assignment, packet)
+        if assignment.get('session_chain'):
+            review_session_v4.authenticate_session_binding(records, artifacts, assignment, packet)
         validate_assignment_inventories(records, artifacts, assignment['id'])
         repair_records = _read_context_records(records, assignment)
         context_repair.validate_repair_binding(repair_records, Evaluation.of(repair_records, artifacts), assignment)
@@ -4333,7 +4515,34 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
                       packet_digest=invocation['packet_digest'], prompt_hash=invocation['prompt_hash'],
                       preflight=invocation['preflight'],
                       recorded_revision=revision)
-        return [immutable_record(records, 'review_attempt', value['id'], result)], result
+        assignment = records['review_assignment'][value['assignment_id']]
+        artifacts = store_artifacts
+        changes = [immutable_record(records, 'review_attempt', value['id'], result)]
+        if observation.get('status') == 'completed' and assignment.get('review_parts', {}).get('protocol') == 'exactory-review-parts-v3':
+            from .review_parts_v3 import prepare_closing_composite
+            try:
+                changes.extend(prepare_closing_composite(records, artifacts, assignment, result,
+                    _read_json(artifacts, result['output'])))
+            except ResearchError as error:
+                if getattr(error, 'contract_check', None) is None:
+                    raise
+        if observation.get('status') == 'completed' and assignment.get('reading_chain', {}).get('final_page_plan'):
+            from .openness_final_pages import prepare_closing_composite
+            try:
+                changes.extend(prepare_closing_composite(records, artifacts, assignment, result,
+                    _read_json(artifacts, result['output'])))
+            except ResearchError as error:
+                if getattr(error, 'contract_check', None) is None:
+                    raise
+                # Keep the exact observation; its scientific refusal is recorded below.
+        if observation.get('status') == 'completed' and assignment.get('session_chain', {}).get('final_page_plan'):
+            try:
+                changes.extend(review_session_v4.prepare_closing_composite(records, artifacts, assignment, result,
+                    _read_json(artifacts, result['output'])))
+            except ResearchError as error:
+                if getattr(error, 'contract_check', None) is None:
+                    raise
+        return changes, result
     result = _invoke_once(store, payload, 'review.invoke', start, finish,
                           expected_revision=expected_revision, request_id=request_id, credential=credential,
                           after_start=after_start)
@@ -4343,7 +4552,7 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         seconds=SCOPED_FINISH_WAIT_SECONDS)['records']['review_assignment'][payload['assignment_id']]
     if 'preflight' in result.get('result', {}):
         result = dict(result, preflight=result['result']['preflight'])
-    if (review_handles.HANDLE_TABLE in _read_json(store_artifacts, assignment['packet'])
+    if (assignment.get('session_chain') or review_handles.HANDLE_TABLE in _read_json(store_artifacts, assignment['packet'])
             or review_parts.KEY in assignment or assignment['role'] == 'native_math' or assignment['prompt'].get('parameters', {}).get('evidence_parts')
             == review_problem_parts.PROTOCOL + '/part'):
         from .review_refusal import record_native_refusal
@@ -4369,6 +4578,8 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
         validate_replacement_origin(records, artifacts, assignment, packet)
         from .review_source_complete import validate
         validate(records, artifacts, assignment, packet)
+        if assignment.get('session_chain'):
+            review_session_v4.authenticate_session_binding(records, artifacts, assignment, packet)
         if review_parts.KEY in assignment:
             if (review_parts.find_kind(packet) is None or read_history(artifacts, assignment) != []
                     or any(assignment[review_parts.KEY].get(key) != packet[review_parts.KEY].get(key)
@@ -4581,6 +4792,11 @@ def _assignment_state(records, artifacts, assignment_id):
             state['output'] = _read_json(artifacts, attempt['output'])
             state['output_digest'] = digest(state['output'])
             state.update(raw_output=state['output'], raw_output_digest=state['output_digest'])
+            if assignment.get('session_chain'):
+                try:
+                    review_session_v4.require_final_capacity(records, artifacts, assignment, attempt)
+                except ResearchError as error:
+                    state['obligations'].append(obligation(error.code, error.message))
             # Retain the existing availability diagnostic separately from the boolean authentication.
             if attempt.get('request'):
                 _read_json(artifacts, attempt['request'])
@@ -4620,21 +4836,34 @@ def _assignment_state(records, artifacts, assignment_id):
             try:
                 packet = source_delivery_packet(records, artifacts, assignment)
                 source_output = review_parts.project_source_output(state['output'], assignment['role'])
-                state['source_requests'] = bar_sources.requests(source_output, passages=review_excerpts.KEY in packet,
-                                                                 source_rules=packet.get('source_rules'))
-                state['pending_source_requests'] = bar_sources.pending(packet, source_output)
-                state['source_request_status'] = ('pending' if state['pending_source_requests']
-                    or source_output.get('settled_requests') else 'settled')
+                if assignment.get('session_chain'):
+                    kind = review_session_v4.find_session_kind(packet)
+                    state['source_requests'] = source_output.get('requests', [])
+                    state['pending_source_requests'] = ([dict(kind='session_turn')] if kind == 'request'
+                        or source_output.get('stage') in ('request', 'material')
+                        or assignment['session_chain'].get('final_page_plan') and 'closing' not in packet.get('session_final', {}) else [])
+                    state['source_request_status'] = 'pending' if state['pending_source_requests'] else 'settled'
+                else:
+                    state['source_requests'] = bar_sources.requests(source_output, passages=review_excerpts.KEY in packet,
+                                                                     source_rules=packet.get('source_rules'))
+                    state['pending_source_requests'] = bar_sources.pending(packet, source_output)
+                    state['source_request_status'] = ('pending' if state['pending_source_requests']
+                        or source_output.get('settled_requests') else 'settled')
             except (ResearchError, ValueError, TypeError, KeyError) as error:
                 state['source_request_status'] = 'invalid'
                 state['source_request_obligations'].append(obligation('invalid_review_source_request', str(error)))
     history_parent = assignment.get('history_assignment_id') or assignment.get('context', {}).get('prior_assignment_id')
-    if history_parent is not None and (assignment['role'] in bar_sources.ROLES
+    inherited_status = None
+    if history_parent is not None and not assignment.get('session_chain') and (assignment['role'] in bar_sources.ROLES
             or (assignment['role'] == 'adjudicator' and assignment.get('subject', {}).get('kind') == 'problem')):
         parent_state = assignment_state(records, artifacts, history_parent)
         if not has_verified_history(parent_state):
-            state['context_status'] = 'contaminated' if parent_state['context_status'] == 'contaminated' else 'unverified'
-            state['obligations'].append(obligation('review_source_parent_unverified', 'The complete scientific and source-request history must remain independently verified.'))
+            inherited_status = 'contaminated' if parent_state['context_status'] == 'contaminated' else 'unverified'
+    if history_parent is not None and assignment.get('session_chain'):
+        inherited_status = review_session_v4.describe_history_status(records, assignment)
+    if inherited_status is not None:
+        state['context_status'] = inherited_status
+        state['obligations'].append(obligation('review_source_parent_unverified', 'The complete scientific and source-request history must remain independently verified.'))
     if state['output'] is not None and state['raw_output'] is None:
         raw = read_raw_observation(records, artifacts, state['attempt_id'])
         state.update(raw_output=raw['raw_output'], raw_output_digest=raw['raw_output_digest'])
@@ -4743,7 +4972,7 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
         return
     from .review_refusal import contract_check, validate_evidence_contract
     parts_kind = review_parts.find_kind(packet)
-    if parts_kind is not None:
+    if parts_kind is not None and not (packet[review_parts.KEY].get('page_plan_digest') and 'objection_id' in output):
         with contract_check('adjudication.shape'):
             review_parts.validate_turn_output(records, artifacts, assignment, packet, output, attempt=attempt)
         if parts_kind != 'final' or output.get('kind') == 'requests':
@@ -4814,6 +5043,10 @@ def record_adjudication(store, payload, *, expected_revision, request_id):
         state = assignment_state(records, artifacts, value['assignment_id'])
         from .research_decisions import bind_effective_result, read_effective_result
         output, _ = read_effective_result(state)
+        from .review_composite import read_final_output
+        final_output, composite = read_final_output(records, artifacts, saved)
+        if composite is not None:
+            output = final_output
         if state.get('effective', {}).get('kind') == 'incomplete':
             raise ResearchError('assessment_incomplete',
                                 'An incomplete focused assessment occupies its slot and leaves the objection open.')
@@ -4837,6 +5070,8 @@ def record_adjudication(store, payload, *, expected_revision, request_id):
                 records['review_attempt'][state['attempt_id']], collect_adjudication_evidence(response))
         _evidence(artifacts, collect_adjudication_evidence(response), records=records)
         record = dict(value, dossier_id=state['dossier_id'], recorded_revision=expected_revision + 1)
+        if composite is not None:
+            record['composite'] = dict(id=composite['id'], digest=digest(composite))
         if assignment.get('staged_review') is not None:
             record['effective_binding'] = bind_effective_result(state['effective'])
         if packet.get('subject', {}).get('kind') == 'problem':
@@ -4874,6 +5109,15 @@ def adjudication_state(records, artifacts, adjudication_id):
     assignment = records.get('review_assignment', {}).get(saved['assignment_id'], {})
     from .research_decisions import bind_effective_result, read_effective_result
     output, _ = read_effective_result(state)
+    if saved.get('composite') is not None:
+        from .review_composite import read_final_output
+        try:
+            output, composite = read_final_output(records, artifacts, assignment)
+            if composite is None or saved['composite'] != dict(id=composite['id'], digest=digest(composite)):
+                output = None
+        except ResearchError as error:
+            obligations.append(obligation(error.code, error.message, **(error.details or {})))
+            output = None
     effective = state.get('effective')
     if assignment.get('staged_review') is not None:
         if effective is None or saved.get('effective_binding') != bind_effective_result(effective):

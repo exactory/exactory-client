@@ -130,8 +130,14 @@ def require_verdict_assignment(records, artifacts, value, body):
     if (state["role"] != "verification" or packet.get("paper", {}).get("task_digest") != value["task_digest"]
             or normalized_text(state["reviewer_id"]) != normalized_text(assessment["assessor"])):
         raise ResearchError("verification_target_mismatch", "Use the observed verifier and exact task evidence")
-    if state["output"] != {"verdict": body, "checks": assessment["checks"]}:
+    from .review_composite import read_final_output
+    output, composite = read_final_output(records, artifacts, assignment)
+    binding = None if composite is None else dict(id=composite['id'], digest=digest(composite))
+    if (output != {"verdict": body, "checks": assessment["checks"]}
+            or ('composite' in value and value['composite'] != binding)):
         raise ResearchError("review_output_mismatch", "Bind the observed verifier's unchanged body and separate scientific checks")
+    if composite is not None:
+        return dict(state, composite=binding)
     return state
 
 
@@ -201,10 +207,12 @@ def bind_verdict(store, payload, *, expected_revision, request_id):
             raise ResearchError("invalid_verdict_assessment", "Keep validity independent of novelty and impact prediction")
         if not any(link["version_id"] == target["id"] for c in assessment["checks"] if c["dimension"] == "soundness" for link in c["evidence"]):
             raise ResearchError("invalid_verdict_assessment", "The soundness reasoning must inspect the exact target itself")
-        require_verdict_assignment(records, artifacts, value, body)
+        state = require_verdict_assignment(records, artifacts, value, body)
         record = dict(value, target=target, task_identity=identity, verification_id=task["task"]["verificationId"],
                       preparation_digest=report["digest"], evidence=evidence, sample_prediction=sample_prediction,
                       reviewed_revision=expected_revision)
+        if state.get('composite') is not None:
+            record['composite'] = state['composite']
         record["digest"] = digest(record)
         return [immutable_record(records, "verdict_assessment", value["id"], record),
                 ("verification_selection", "verdict", {"id": value["id"]})], record

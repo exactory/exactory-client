@@ -258,30 +258,17 @@ class RouteRenewalRegressionTests(RouteRenewalFixture):
             make_codex_stale(self)
             check_stale_procedure(self, case.store, assignment['id'], [8, 7, 1], lambda: renew_codex_route(case))
 
-    def check_refused_without_record(self, store, operation, payload, route_id):
-        """The command refuses the stale route record, records nothing and keeps the revision."""
-        before = store.snapshot()
-        with self.assertRaises(ResearchError) as caught:
-            operation(store, payload, expected_revision=before['revision'], request_id='stale-' + payload.get('id', 'frontier'))
-        after = store.snapshot()
-        # On 0.91.2 the store holds the new assignment.
-        self.assertEqual(set(after['records']['review_assignment']), set(before['records']['review_assignment']))
-        self.assertEqual(after['revision'], before['revision'])
-        self.assertEqual(caught.exception.code, 'review_route_runtime_stale')
-        self.assertEqual(caught.exception.details['route_id'], route_id)
-        return caught.exception.details
-
     def test_no_command_records_an_assignment_on_a_stale_route_record(self):
         first, _ = self.build_refused()
         first_turn = dict(id='second-first', route_id='route', dossier_id=None, role='bar', reviewer_id='second',
                           author_id='author', context=self.case.deliver_supporting('second'))
         self.make_stale()
         with self.subTest(case='replacement that the planner of 0.91.2 gives'):
-            details = self.check_refused_without_record(self.case.store, cli.OPERATIONS['review-assignment'],
+            details = check_refused_without_record(self, self.case.store, cli.OPERATIONS['review-assignment'],
                                                         self.build_payload(first), 'route')
             self.assertEqual(details['renewal'], dict(admitted=True, route_id=None, lacks='record'))
         with self.subTest(case='first assignment of a chain'):
-            details = self.check_refused_without_record(self.case.store, cli.OPERATIONS['review-assignment'],
+            details = check_refused_without_record(self, self.case.store, cli.OPERATIONS['review-assignment'],
                                                         first_turn, 'route')
             self.assertNotIn('renewal', details)
         # The refused first assignment, given again under the same id on a route with the installed runtime.
@@ -316,7 +303,7 @@ class RouteRenewalRegressionTests(RouteRenewalFixture):
             recovery = failures.plan_after_failure(fixture.case.read_records(), fixture.case.artifacts, assignment['id'])
             payload = recovery['details']['recovery']['payload']
             make_codex_stale(self)
-            details = self.check_refused_without_record(fixture.case.store, protocol.record_assignment, payload, 'route')
+            details = check_refused_without_record(self, fixture.case.store, protocol.record_assignment, payload, 'route')
             self.assertNotIn('renewal', details)
         with self.subTest(case='frontier of a staged review'):
             import test_review_staged_frontier as frontier_fixtures
@@ -326,9 +313,23 @@ class RouteRenewalRegressionTests(RouteRenewalFixture):
             controller = fixture.create_controller()
             step = controller['next'][0]
             make_codex_stale(self)
-            details = self.check_refused_without_record(fixture.case.store, cli.OPERATIONS[step['command']],
+            details = check_refused_without_record(self, fixture.case.store, cli.OPERATIONS[step['command']],
                                                         step['payload'], controller['route_id'])
             self.assertNotIn('renewal', details)
+
+
+def check_refused_without_record(test, store, operation, payload, route_id):
+    """The command refuses the stale route record, records nothing and keeps the revision."""
+    before = store.snapshot()
+    with test.assertRaises(ResearchError) as caught:
+        operation(store, payload, expected_revision=before['revision'], request_id='stale-' + payload.get('id', 'frontier'))
+    after = store.snapshot()
+    # On 0.91.2 the store holds the new assignment.
+    test.assertEqual(set(after['records']['review_assignment']), set(before['records']['review_assignment']))
+    test.assertEqual(after['revision'], before['revision'])
+    test.assertEqual(caught.exception.code, 'review_route_runtime_stale')
+    test.assertEqual(caught.exception.details['route_id'], route_id)
+    return caught.exception.details
 
 
 def check_stale_procedure(test, store, head_id, steps, renew):
@@ -1152,6 +1153,8 @@ class RouteRenewalStoredShapeTests(unittest.TestCase):
         import test_review_refusal_replacement as session_fixtures
         import test_review_refusal_replacement_incident as incident_fixtures
         import test_review_refusal_replacement_parts as parts_fixtures
+        import test_review_parts_v3_pages as series_v3_fixtures
+        import test_review_session_v4_turns as session_v4_fixtures
         for shape, test_class, method, set_up in (
                 ('session', session_fixtures.RefusalReplacementTests,
                  'test_second_replacement_lists_revived_attempt_and_keeps_head_finality', True),
@@ -1164,7 +1167,11 @@ class RouteRenewalStoredShapeTests(unittest.TestCase):
                 ('adjudication', parts_fixtures.PartsReplacementTests,
                  'test_ordinary_focused_adjudication_replaces_its_refusal_and_records', False),
                 ('reading chain with a capacity replacement', v7_fixtures.V7RefusalTests,
-                 'test_a7_refusal_replacement_capacity_failure_keeps_notice_and_records', True)):
+                 'test_a7_refusal_replacement_capacity_failure_keeps_notice_and_records', True),
+                ('session v4', session_v4_fixtures.SessionTurnsTests,
+                 'test_refused_final_keeps_level_and_material_with_notice_then_records', True),
+                ('series v3 with pages', series_v3_fixtures.PagedSeriesTests,
+                 'test_a6_refused_closing_is_replaced_with_notice_then_records', True)):
             with self.subTest(shape=shape):
                 self.run_with_membership_check(test_class, method, set_up=set_up)
 
@@ -1177,6 +1184,130 @@ class RouteRenewalReadingRegressionTests(unittest.TestCase):
         self.assertEqual(plan_next(case.store.snapshot()['records'], case.artifacts, 'turn-1')['state'], 'replace')
         make_codex_stale(self)
         check_stale_procedure(self, case.store, 'turn-1', [7, 4], lambda: renew_codex_route(case))
+
+
+def build_session_fixture(test):
+    """A bar session of exactory-independent-review-sources-v4 on a Codex route."""
+    import test_review_session_v4_turns as session_fixtures
+    fixture = session_fixtures.SessionTurnsTests('test_refused_final_keeps_level_and_material_with_notice_then_records')
+    fixture.setUp()
+    test.addCleanup(fixture.doCleanups)
+    return fixture
+
+
+def build_series_fixture(test):
+    """A result series of exactory-review-parts-v3 with pages on a Codex route."""
+    import test_review_parts_v3_pages as series_fixtures
+    fixture = series_fixtures.PagedSeriesTests('test_a6_refused_closing_is_replaced_with_notice_then_records')
+    fixture.setUp()
+    test.addCleanup(fixture.doCleanups)
+    return fixture
+
+
+def check_series_stops_on_the_stale_route(test, store, head_id):
+    """review-series ends with the handoff of the stale route record of the head, before any record."""
+    before = set(store.snapshot()['records']['review_assignment'])
+    lines = []
+    run_series(store, head_id, emit=lines.append)
+    test.assertEqual(set(store.snapshot()['records']['review_assignment']), before)
+    test.assertEqual(len(lines), 1, lines)
+    test.assertEqual((lines[0]['state'], lines[0]['command'], lines[0]['code']),
+                     ('handoff', 'review-route', 'review_route_runtime_stale'))
+    test.assertEqual(lines[0]['details']['route_id'], 'route')
+    test.assertNotIn('renewal', lines[0]['details'])
+
+
+class RouteRenewalSessionV4SeriesV3Tests(unittest.TestCase):
+    """N5 and N6 for a turn of a session of sources v4 and of a series of parts v3, which the 0.92.0 branch adds.
+    Both turns are outside the renewal. Their fixtures need the problem modules that the session fixture replaces."""
+
+    def test_refused_session_v4_final_on_a_stale_route_ends_before_any_record(self):
+        from codex_route_fixtures import invoke_codex
+        fixture = build_session_fixture(self)
+        final, _ = fixture.build_final()
+        output = fixture.case.build_review_output('bar')
+        output['unexpected'] = 'refused'
+        invoke_codex(fixture.case, final['id'], output)
+        self.assertEqual(plan_next(fixture.case.read_records(), fixture.case.artifacts, final['id'])['state'],
+                         'replace')
+        make_codex_stale(self)
+        check_stale_procedure(self, fixture.case.store, final['id'], [8, 7, 1], lambda: renew_codex_route(fixture.case))
+
+    def test_refused_series_v3_closing_on_a_stale_route_ends_before_any_record(self):
+        from research_harness import review_parts
+        fixture = build_series_fixture(self)
+        assignment = fixture.reach_page(fixture.start(0))
+        while fixture.packet(assignment)[review_parts.KEY].get('final_form') != 'closing':
+            assignment = fixture.advance(assignment)
+        refused = fixture.answer(assignment)
+        refused['fields']['/value/status'] = 'invalid-status'
+        self.assertIn('output_refusal', fixture.invoke(assignment, refused))
+        self.assertEqual(plan_next(fixture.case.read_records(), fixture.case.artifacts, assignment['id'])['state'],
+                         'replace')
+        make_codex_stale(self)
+        check_stale_procedure(self, fixture.case.store, assignment['id'], [8, 7, 1],
+                              lambda: renew_codex_route(fixture.case))
+
+    def test_session_v4_continuation_on_a_stale_route_records_nothing(self):
+        from research_harness import review_session_v4 as session
+        fixture = build_session_fixture(self)
+        fixture.add_sources([2000])
+        current = fixture.case.assign('bar', 'first', identifier='request')
+        _, inventory, _ = session.read_bound_session(fixture.case.artifacts, current)
+        unit = next(row for row in inventory['units'] if row['kind'] == 'fulltext')
+        fixture.respond(current, [dict(id='source', kind='source', version_id=unit['identity']['version_id'],
+                                       depth='fulltext')])
+        self.assertEqual(plan_next(fixture.case.read_records(), fixture.case.artifacts, current['id'])['state'],
+                         'continue')
+        make_codex_stale(self)
+        check_series_stops_on_the_stale_route(self, fixture.case.store, current['id'])
+
+    def test_session_v4_capacity_replacement_on_a_stale_route_records_nothing(self):
+        from codex_route_fixtures import build_codex_response
+        from research_harness import review_failure_class as failures
+        fixture = build_session_fixture(self)
+        fixture.install_measured_profile()
+        fixture.add_sources([180000])
+        current = fixture.case.assign('bar', 'first', identifier='request')
+        def respond_over_limit(route, request, credential):
+            response = build_codex_response(route, request, dict())
+            response['usage']['output_tokens'] = 138371
+            return response
+        for number in range(3):
+            with patch.object(protocol.transport, 'send_request', side_effect=respond_over_limit):
+                fixture.case.mutate(protocol.invoke_assignment, dict(id='cap-%d' % number, assignment_id=current['id']),
+                                    credential='test-only')
+            step = failures.plan_after_failure(fixture.case.read_records(), fixture.case.artifacts, current['id'])
+            if step['state'] != 'run':
+                break
+        self.assertEqual(step['state'], 'replace', step)
+        payload = step['details']['recovery']['payload']
+        self.assertEqual(payload['context']['capacity_replacement'], current['id'])
+        make_codex_stale(self)
+        details = check_refused_without_record(self, fixture.case.store, protocol.record_assignment, payload, 'route')
+        self.assertNotIn('renewal', details)
+
+    def test_series_v3_continuation_on_a_stale_route_records_nothing(self):
+        fixture = build_series_fixture(self)
+        first = fixture.start(0)
+        self.assertNotIn('output_refusal', fixture.invoke(first, fixture.answer(first)))
+        self.assertEqual(plan_next(fixture.case.read_records(), fixture.case.artifacts, first['id'])['state'],
+                         'continue')
+        make_codex_stale(self)
+        check_series_stops_on_the_stale_route(self, fixture.case.store, first['id'])
+
+    def test_series_v3_capacity_replacement_on_a_stale_route_records_nothing(self):
+        from research_harness import review_route_capacity as capacity
+        fixture = build_series_fixture(self)
+        page = fixture.reach_page(fixture.start(0))
+        fixture.invoke_usage(page, tokens=128000)
+        recovery = capacity.plan_capacity_recovery(fixture.case.read_records(), fixture.case.artifacts, page,
+                                                   'output_over_cap')
+        self.assertEqual(recovery['kind'], 'replace', recovery)
+        make_codex_stale(self)
+        details = check_refused_without_record(self, fixture.case.store, protocol.record_assignment,
+                                               recovery['payload'], 'route')
+        self.assertNotIn('renewal', details)
 
 
 if __name__ == '__main__':

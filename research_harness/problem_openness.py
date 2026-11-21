@@ -134,8 +134,23 @@ def prepare_openness(records, artifacts, value, revision):
     require_problem(records)
     fields(value, ("assignment_id",))
     from .review_protocol import assignment_state
-    state = assignment_state(records, artifacts, value["assignment_id"])
     assignment = records.get("review_assignment", {}).get(value["assignment_id"])
+    from .native_review import find_finding_version
+    from .openness_reading import BOUNDED_CHAIN_PROTOCOLS, find_protocol, find_stage
+    packet, supplied = None, None
+    if assignment is not None and assignment['role'] == 'native_math' and find_finding_version(assignment) == 2:
+        packet = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
+        supplied = json.loads(artifacts.read(assignment["packet"]))
+        if find_protocol(supplied) in BOUNDED_CHAIN_PROTOCOLS:
+            from .openness_reading_v7 import verify_packet_finding_index
+            from .review_route_capacity import read_chain_capacity_plan
+            verify_packet_finding_index(records, artifacts, packet, read_chain_capacity_plan(artifacts, assignment),
+                json.loads(artifacts.read(assignment['reading_chain']['inventory'])),
+                records['review_route'][assignment['route_id']], supplied)
+        elif find_stage(supplied) in (None, 'final', 'closing'):
+            from .review_search_delivery import verify_finding_index
+            verify_finding_index(records, artifacts, packet, supplied.get('finding_index'))
+    state = assignment_state(records, artifacts, value["assignment_id"])
     if not state["ready"] or assignment is None or assignment["role"] != "native_math":
         raise ResearchError("review_context_unverified", "Obtain the observed native_math openness result", {"obligations": state["obligations"]})
     if uses_finding_contract(assignment):
@@ -147,12 +162,15 @@ def prepare_openness(records, artifacts, value, revision):
             raise ResearchError("review_context_unverified", UNCHECKED_FINDING_MESSAGE,
                                 {"assignment_id": assignment["id"], "attempt_id": state["attempt_id"],
                                  "refusal": failure})
-    packet = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
-    output = state["output"]
+    if packet is None:
+        packet = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
+    from .review_composite import read_final_output
+    output, composite = read_final_output(records, artifacts, assignment)
     from .openness_reading import PROTOCOL_V5, PROTOCOL_V6, PROTOCOL_V7, find_protocol, find_stage, verify_chain, verify_problem_coverage
-    supplied = json.loads(artifacts.read(assignment["packet"]))
+    if supplied is None:
+        supplied = json.loads(artifacts.read(assignment["packet"]))
     stage = find_stage(supplied)
-    if stage == "reading" or (stage == "final" and output.get("stage") in ("reading", "material")):
+    if stage in ("reading", "page", "combine") or (stage in ("final", "closing") and output.get("stage") in ("reading", "material")):
         raise ResearchError("openness_reading_incomplete", "This turn of the reading chain returned no native result; "
                             "continue the chain to a final turn that returns it", {"assignment_id": assignment["id"]})
     finding_contract = uses_finding_contract(assignment)
@@ -196,7 +214,7 @@ def prepare_openness(records, artifacts, value, revision):
         raise ResearchError("openness_statement_mismatch", "The finding must name the exact current problem claim")
     delivered = {entry["digest"] for entry in packet["evidence"]}
     verified = None
-    if stage == "final" and find_protocol(supplied) in (PROTOCOL_V5, PROTOCOL_V6, PROTOCOL_V7):
+    if stage in ("final", "closing") and find_protocol(supplied) in (PROTOCOL_V5, PROTOCOL_V6, PROTOCOL_V7):
         verified = verify_problem_coverage(records, artifacts, assignment, final=True)
         delivered.difference_update(row["search_digest"] for row in
                                     packet["scientific_context"]["openness_minimum"]["searches"])
@@ -235,7 +253,9 @@ def prepare_openness(records, artifacts, value, revision):
                                 {"artifact_digests": sorted(required_artifacts - delivered)})
     record = dict(finding, id=value["assignment_id"], assignment_id=value["assignment_id"],
                   statement_id=statement["id"], review=output, recorded_revision=revision)
-    if stage == "final":
+    if composite is not None:
+        record['composite'] = dict(id=composite['id'], digest=digest(composite))
+    if stage in ("final", "closing"):
         record["reading_turns"] = verified["turns"] if verified is not None else verify_chain(records, artifacts, assignment)
     from .problem_openness_reviews import validate_native_reviews
     native_reviews = validate_native_reviews(records, artifacts, packet, state)
@@ -274,7 +294,7 @@ def assess_openness(records, artifacts):
             from .problem_openness_reviews import RESULT_CHANGED_MESSAGE
             return [obligation("problem_openness_stale", RESULT_CHANGED_MESSAGE,
                                cause="openness_result_changed", **affected)]
-    if "native_reviews" in finding or "source_evidence" in finding or "reading_turns" in finding:
+    if any(key in finding for key in ("native_reviews", "source_evidence", "reading_turns", "composite")):
         from .problem_openness_reviews import observed_review, validate_native_reviews
         try:
             assignment, state, packet = observed_review(records, artifacts, finding["assignment_id"])
@@ -285,8 +305,15 @@ def assess_openness(records, artifacts):
                 turns = verified["turns"] if verified is not None else verify_chain(records, artifacts, assignment)
                 if turns != finding["reading_turns"]:
                     raise ResearchError("openness_reading_incomplete", "The recorded reading turns changed")
+            observed = state['output']
+            composite_matches = True
+            if finding.get('composite') is not None:
+                from .review_composite import read_final_output
+                observed, composite = read_final_output(records, artifacts, assignment)
+                composite_matches = (composite is not None and finding['composite'] ==
+                                     dict(id=composite['id'], digest=digest(composite)))
             current = validate_native_reviews(records, artifacts, packet, state)
-            if current != finding.get("native_reviews") or state["output"] != finding["review"]:
+            if current != finding.get("native_reviews") or observed != finding["review"] or not composite_matches:
                 raise ResearchError("openness_native_review_mismatch", "The recorded native review binding changed")
             from .problem_openness_sources import validate_delivery
             if validate_delivery(records, artifacts, packet, state) != finding.get("openness_delivery"):
@@ -302,11 +329,13 @@ def assess_openness(records, artifacts):
         # A finding of a single review under the finding contract has no chain whose verification checks its answer.
         # The gate checks that the recorded answer is still the selected answer of the review and that it passes its
         # output check: 0.90.0 to 0.91.10 recorded the finding of a refused answer when its refusal record was missing.
+        from .review_composite import read_final_output
         from .review_protocol import assignment_state
         from .review_refusal import classify_observed_output
         try:
             state = assignment_state(records, artifacts, finding["assignment_id"])
-            unverified = (state["output"] != finding["review"]
+            # The finding holds the answer that prepare_openness read with read_final_output.
+            unverified = (read_final_output(records, artifacts, assignment)[0] != finding["review"]
                           or classify_observed_output(records, artifacts, state["attempt_id"]) is not None)
             cause = "openness_native_review_unverified" if unverified else None
         except ResearchError as error:

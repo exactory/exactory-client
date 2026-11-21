@@ -17,6 +17,33 @@
         "research_harness/file_streams.py:freeze_file#1": [
           "content"
         ],
+        "research_harness/openness_final_pages.py:read_composite_currency#1": [
+          "content"
+        ],
+        "research_harness/openness_final_pages.py:read_page_plan#1": [
+          "content"
+        ],
+        "research_harness/openness_final_pages.py:verify_final_page_plans.read_inputs#1": [
+          "content"
+        ],
+        "research_harness/openness_final_pages.py:verify_final_page_plans.read_inputs#2": [
+          "content"
+        ],
+        "research_harness/openness_final_pages.py:verify_final_turn_binding#1": [
+          "content"
+        ],
+        "research_harness/openness_final_pages.py:verify_final_turn_binding#2": [
+          "content"
+        ],
+        "research_harness/openness_final_pages.py:verify_final_turn_binding#3": [
+          "content"
+        ],
+        "research_harness/review_final_pages.py:verify_page_plans#1": [
+          "content"
+        ],
+        "research_harness/review_final_pages.py:verify_page_plans#2": [
+          "content"
+        ],
         "research_harness/review_protocol.py:_save_derivatives#1": [
           "content"
         ],
@@ -40,6 +67,9 @@
         ],
         "research_harness/scientific_delivery.py:ScientificDelivery._read_derived_locator_mapping#2": [
           "content"
+        ],
+        "research_harness/openness_final_pages.py:verify_final_turn_binding#4": [
+          "content"
         ]
       },
       "artifact_missing": {
@@ -56,6 +86,9 @@
           "content"
         ],
         "research_harness/workspace.py:read_file#1": [
+          "content"
+        ],
+        "research_harness/review_composition.py:_PacketArtifacts.read#1": [
           "content"
         ]
       },
@@ -128,7 +161,7 @@
         "research_harness/review_parts.py:_list_series#1": [
           "content"
         ],
-        "research_harness/review_parts.py:prepare_packet#1": [
+        "research_harness/review_parts.py:_prepare_v2_packet#1": [
           "content"
         ],
         "research_harness/review_parts.py:read_delivered_items#1": [
@@ -168,6 +201,60 @@
           "content"
         ],
         "research_harness/review_parts_repair.py:prepare_packet#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:_advance_requested_ranges#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:_list_binary_entries#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:_read_value.check_digest#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:_validate_replayed_turn#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:list_series#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:observe_series#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:observe_series.read_turn#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:read_material_texts#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:read_series_delivery#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:read_series_delivery#2": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:validate_deliveries#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:validate_planned_output#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:validate_planned_output#2": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:validate_planned_output#3": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:validate_turn_output#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:read_composite_currency#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:verify_final_page_plans.read_inputs#1": [
+          "content"
+        ],
+        "research_harness/review_parts_v3.py:verify_final_page_plans.read_inputs#2": [
           "content"
         ]
       },

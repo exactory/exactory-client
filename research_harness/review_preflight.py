@@ -100,7 +100,7 @@ def build_assignment_report(records, artifacts, assignment, request=None, *, obs
         from .openness_reading_v7 import describe_turn_forecast
         report['capacity_forecast'] = describe_turn_forecast(records, artifacts, assignment, request=request)
     if (assignment['role'] == 'native_math' and reading.find_stage(packet) is not None
-            and reading.find_protocol(packet) != reading.PROTOCOL_V7
+            and reading.find_protocol(packet) not in reading.BOUNDED_CHAIN_PROTOCOLS
             and assignment.get('context', {}).get('native_packet')):
         # This native branch only loads artifacts. Other build_packet branches can publish derivatives and must
         # never be used for diagnostic reconstruction.

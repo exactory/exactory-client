@@ -87,8 +87,18 @@ class SingleEntryTests(unittest.TestCase):
                                     packet, prompt, [], **options)
 
     def test_each_adapter_enters_by_task_with_profile_read_start(self):
+        from research_harness import review_parts_v3
         cases = build_adapter_cases()
-        self.assertEqual(set(cases), set(ADAPTERS))
+        self.assertEqual(set(cases) | {'problem_slate'}, set(ADAPTERS))
+        record = dict(id='forming', text='x' * 60000)
+        slate = dict(protocol=protocol._PROBLEM_PROTOCOL, role='slate', subject=dict(kind='problem'),
+                     candidates=[], bars=[], bar_ids=[], candidate_set_digest=digest([]), evidence=[],
+                     forming_records=[dict(record=record, cite=dict(kind='record', record_kind='forming_call',
+                                                                  id=record['id'], digest=digest(record)))])
+        # Slate admission is input-only, even when the unmeasured task level is
+        # smaller than this ordinary request. Its oversized entry is tested by A1.
+        with patch.object(parts, 'NEW_SERIES_PROTOCOLS', (review_parts_v3.PROTOCOL, parts.PROTOCOL)):
+            self.assertEqual(self.prepare(slate), slate)
         for adapter, packet in cases.items():
             with self.subTest(adapter=adapter):
                 planned = self.prepare(packet)

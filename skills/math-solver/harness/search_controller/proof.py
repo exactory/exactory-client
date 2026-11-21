@@ -233,16 +233,27 @@ def validate_reading_turns(turns):
                       "The characters of a part equal its end minus its start")
 
 
+def validate_composite_binding(value):
+    s.closed(value, 'id digest')
+    s.text(value['id'])
+    s.text(value['digest'])
+    s.require(len(value['digest']) == 64 and all(c in '0123456789abcdef' for c in value['digest']),
+              'A composite binding holds its digest')
+
+
 def accept_result(state, payload):
     s.closed(payload, "acceptance digest")
     value = payload["acceptance"]
     s.closed(value, "schema_version checkpoint_id checkpoint_digest obligation_id outcome classification standard dependency_ids route_bindings review audit" +
              (" claims_openness" if isinstance(value, dict) and value.get("schema_version") == 2 else "") +
-             (" reading_turns" if isinstance(value, dict) and "reading_turns" in value else ""))
+             (" reading_turns" if isinstance(value, dict) and "reading_turns" in value else "") +
+             (" composite" if isinstance(value, dict) and "composite" in value else ""))
     s.require(s.digest(value) == payload["digest"], "Acceptance digest differs", "digest_mismatch")
     s.integer(value["schema_version"], 1, 2)
     if "reading_turns" in value:
         validate_reading_turns(value["reading_turns"])
+    if 'composite' in value:
+        validate_composite_binding(value['composite'])
     cp = reference(state["checkpoints"], value["checkpoint_id"], "checkpoint")
     s.require(s.digest(cp) == value["checkpoint_digest"], "Checkpoint differs", "digest_mismatch")
     s.require(cp["kind"] != "hypothesis", "Hypotheses grant no accepted progress")
@@ -512,10 +523,13 @@ def complete_objective(state, payload):
     s.closed(payload, "closure digest")
     closure = payload["closure"]
     s.closed(closure, "subject review audit" +
-             (" reading_turns" if isinstance(closure, dict) and "reading_turns" in closure else ""))
+             (" reading_turns" if isinstance(closure, dict) and "reading_turns" in closure else "") +
+             (" composite" if isinstance(closure, dict) and "composite" in closure else ""))
     s.require(s.digest(closure) == payload["digest"], "Closure digest differs", "digest_mismatch")
     if "reading_turns" in closure:
         validate_reading_turns(closure["reading_turns"])
+    if 'composite' in closure:
+        validate_composite_binding(closure['composite'])
     subject = closure["subject"]
     s.closed(subject, "schema_version objective_id contract_digest outcome acceptance_ids evidence_digests local_deliveries deliverables")
     s.integer(subject["schema_version"], 1, 2)

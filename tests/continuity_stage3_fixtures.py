@@ -1,10 +1,12 @@
 """Stage 3 command journeys; only the reviewer transport and clock are synthetic."""
 
+from contextlib import nullcontext
 import copy
 import json
 from unittest.mock import patch
 
 import continuity_guard_fixtures as matrix
+import test_openness_page_replacement as page_replacement
 import test_openness_reading_v7_refusal as refusal
 from research_harness import openness_reading as reading, openness_reading_v7 as v7
 from research_harness import review_protocol as protocol, review_route_capacity as capacity
@@ -17,15 +19,24 @@ class Stage3ReadingCase(refusal.V7RefusalTests):
     serving_input_limit = 1300000
 
 
+class Stage3PagesCase(page_replacement.PageReplacementTests):
+    """A v7 chain whose final is in pages, the form that has condensing turns."""
+
+
 def prepare_turn(owner, stage):
-    case = Stage3ReadingCase()
+    case = Stage3PagesCase() if stage == 'combine' else Stage3ReadingCase()
     owner.addCleanup(case.doCleanups)
     case.setUp()
-    native = case.export()
-    if stage == 'reading':
-        head = case.assign('turn-1', native)['id']
+    if stage == 'combine':
+        native = case.export_targets(9)
+        head, _ = case.start_final(native)
+        head, _ = case.reach_closing(native, head)
+        # A closing page at the output limit is condensed; its replacement is the first condensing turn.
+        case.fail_capacity(head)
+        head = case.replace(head)
     else:
-        head = case.finish_reading(native)
+        native = case.export()
+        head = case.assign('turn-1', native)['id'] if stage == 'reading' else case.finish_reading(native)
     records = case.store.snapshot()['records']
     owner.assertEqual(_describe_chain(records['review_assignment'][head]), 'reading')
     owner.assertEqual(reading.find_protocol(case.read_packet(head)), v7.PROTOCOL)
@@ -36,12 +47,15 @@ def prepare_turn(owner, stage):
 def execute_size_journey(owner, stage, outcome, detail):
     # An observed profile permits the complete ladder, instead of c=2 ending
     # the over-cap row before all installed reading levels have been exercised.
-    with patch.object(capacity, 'read_profile_priors', return_value=[
-            build_row(level=None, thinking=1000, count=8, over=1),
-            build_row(kind='final', level=None, thinking=1000, count=8, over=1)]):
+    # A condensing turn keeps its level and halves its block, so its row runs
+    # on the profile of its route, under which the final of its chain is paged.
+    priors = nullcontext() if stage == 'combine' else patch.object(capacity, 'read_profile_priors', return_value=[
+        build_row(level=None, thinking=1000, count=8, over=1),
+        build_row(kind='final', level=None, thinking=1000, count=8, over=1)])
+    with priors:
         case, native, head = prepare_turn(owner, stage)
         original = case.store.snapshot()['records']['review_assignment'][head]
-        levels, calls = [], []
+        levels, calls, position_calls = [], [], []
         for number in range(failures.TURN_FAILURE_LIMIT + 8):
             records = case.store.snapshot()['records']
             action = plan_next(records, case.artifacts, head)
@@ -62,19 +76,18 @@ def execute_size_journey(owner, stage, outcome, detail):
                 following = matrix.execute(case, action['command'], action['payload'])
                 owner.assertEqual(following['route_digest'], original['route_digest'])
                 owner.assertEqual(following['reviewer_id'], original['reviewer_id'])
-                packet = case.read_packet(following['id'])
-                old = case.read_packet(head)
-                member = 'reading_turn' if stage == 'reading' else 'reading_final'
-                owner.assertLess(packet[member]['capacity']['material_allowance'],
-                                 old[member]['capacity']['material_allowance'])
+                owner.assertLess(measure_task(case.read_packet(following['id']), stage),
+                                 measure_task(case.read_packet(head), stage))
                 owner.assertEqual(following['reading_chain']['turn'], prior['reading_chain']['turn'])
                 owner.assertTrue(matrix.check_preflight(case, following))
                 head = following['id']
+                if stage == 'combine':
+                    # Each half of a split block is a new position, as the two pages of a split are (D2 G4); a
+                    # reading or final replacement keeps its position, whose failed attempts are counted on.
+                    position_calls = []
                 continue
             owner.assertEqual(action['state'], 'run', action)
-            packet = case.read_packet(head)
-            member = 'reading_turn' if stage == 'reading' else 'reading_final'
-            level = packet[member]['capacity']['material_allowance']
+            level = measure_task(case.read_packet(head), stage)
             if not levels or levels[-1] != level:
                 levels.append(level)
             with patch.object(protocol.transport, 'send_request', side_effect=matrix.fail_size_request(outcome, detail)):
@@ -83,10 +96,19 @@ def execute_size_journey(owner, stage, outcome, detail):
             classified = failures.classify_attempt(records, case.artifacts, records['review_attempt'][attempt['id']])
             owner.assertEqual((classified['outcome'], classified['signal'].get('detail')), (outcome, detail))
             calls.append(attempt['id'])
+            position_calls.append(attempt['id'])
             position = failures.count_position(records, case.artifacts, records['review_assignment'][head])
-            owner.assertEqual(position['failed_attempts'], len(calls))
-            owner.assertEqual(position['failures_by_outcome'][outcome], len(calls))
+            owner.assertEqual(position['failed_attempts'], len(position_calls))
+            owner.assertEqual(position['failures_by_outcome'][outcome], len(position_calls))
         owner.fail('A size row must end at a decision with an executed next assignment.')
+
+
+def measure_task(packet, stage):
+    """The size of a turn's task: the material allowance of a reading or final turn, and the number of entries
+    in the block of a condensing turn, which a replacement halves at the same allowance."""
+    if stage == 'combine':
+        return len(packet['reading_combine']['block']['entries'])
+    return packet['reading_turn' if stage == 'reading' else 'reading_final']['capacity']['material_allowance']
 
 
 def record_finding(case, identifier):

@@ -1,0 +1,2689 @@
+{
+  "allocation": {
+    "admission_room": 887190,
+    "card_budget": 339000,
+    "card_rate": 0.7533333333333333,
+    "card_reserve": 66000,
+    "carried": {
+      "fill": 430000,
+      "minimum": 6000,
+      "parts": [
+        {
+          "allowance": 20000,
+          "id": "notes",
+          "maximum": 20000,
+          "minimum": 6000,
+          "preferred": 20000
+        }
+      ],
+      "room": 450000
+    },
+    "carried_turn_pool": 450000,
+    "entry_sizes": {
+      "card": 2200,
+      "cited_source": 600,
+      "decision": 360,
+      "excerpt_fields": 700,
+      "excerpt_text": 6000,
+      "gap": 400
+    },
+    "largest_card_count": 30,
+    "late_unit_reserve": 45000,
+    "notes": 20000,
+    "page_room": 480000,
+    "rooms": {
+      "combine": 887190,
+      "final": 887190,
+      "read": 887190
+    },
+    "targets": []
+  },
+  "frame": {
+    "combine": {
+      "bound": 3000,
+      "bounded_fields": {
+        "instructions": 3000
+      },
+      "characters": 3000,
+      "fields": {
+        "instructions": 3000
+      },
+      "unit_fields": []
+    },
+    "final": {
+      "bound": 3000,
+      "bounded_fields": {
+        "instructions": 3000
+      },
+      "characters": 3000,
+      "fields": {
+        "instructions": 3000
+      },
+      "unit_fields": []
+    },
+    "read": {
+      "bound": 3000,
+      "bounded_fields": {
+        "instructions": 3000
+      },
+      "characters": 3000,
+      "fields": {
+        "instructions": 3000
+      },
+      "unit_fields": []
+    }
+  },
+  "inventory": {
+    "by_kind": {
+      "text": {
+        "characters": 450000,
+        "units": 1
+      }
+    },
+    "characters": 450000,
+    "digest": "9a8f4c5371ba7f1700cef943ee24986b9b259aee99b126b7ddc624926b840484",
+    "units": 1
+  },
+  "limits": {
+    "binary_inputs": "unsupported",
+    "capacity_evidence": {
+      "classification": [
+        {
+          "classification": "reservation",
+          "member": "max_output_tokens",
+          "reason": "The asking route leaves this room for the answer.",
+          "scope": "configuration"
+        },
+        {
+          "classification": "no_effect",
+          "member": "timeout_seconds",
+          "reason": "The timeout changes how long the caller waits, not the provider window.",
+          "scope": "configuration"
+        },
+        {
+          "classification": "key",
+          "member": "effort",
+          "reason": "Effort changes the model reasoning settings in the request.",
+          "scope": "configuration"
+        }
+      ],
+      "evidence": [
+        {
+          "capacity_probe": false,
+          "fixture": "tests/fixtures/route_capacity_measurements.json",
+          "fixture_row": 0,
+          "id": "d1-input-0",
+          "input_tokens": 687640,
+          "key": {
+            "adapter": "claude_cli_v1",
+            "configuration": {
+              "effort": "xhigh"
+            },
+            "endpoint": "claude://local",
+            "model": "claude-opus-5-5",
+            "runtime": {
+              "adapter": "claude_cli_v1",
+              "credential_mode": "claude-subscription",
+              "flags": [
+                "-p",
+                "--safe-mode",
+                "--tools",
+                "",
+                "--strict-mcp-config",
+                "--mcp-config",
+                "{\"mcpServers\":{}}",
+                "--disable-slash-commands",
+                "--no-session-persistence",
+                "--permission-prompts",
+                "none",
+                "--input-format",
+                "stream-json",
+                "--replay-user-messages",
+                "--output-format",
+                "stream-json",
+                "--verbose"
+              ],
+              "implementation_sha256": "ee183e027eaad81de13cfab1149000c027b4504842070537a1068c93dfb1a7bf",
+              "input_contract": "observed-print-stream-v1"
+            }
+          },
+          "source": "prior",
+          "value": 687640
+        }
+      ],
+      "input_tokens": 687640,
+      "key": null,
+      "probe_input_tokens": 687640
+    },
+    "effort": "xhigh",
+    "input_characters": {
+      "constant": "INPUT_LIMIT_CHARACTERS",
+      "file": "research_harness/review_claude_transport.py",
+      "source": "transport",
+      "value": 1300000
+    },
+    "input_limits": {
+      "documented": {
+        "date": "2026-11-13",
+        "source": "documented",
+        "threshold": 967000,
+        "url": "https://code.claude.com/docs/en/model-config",
+        "value": 839000
+      },
+      "observed": {
+        "date": "2026-11-13",
+        "evidence": [
+          {
+            "capacity_probe": false,
+            "fixture": "tests/fixtures/route_capacity_measurements.json",
+            "fixture_row": 0,
+            "id": "d1-input-0",
+            "input_tokens": 687640,
+            "key": {
+              "adapter": "claude_cli_v1",
+              "configuration": {
+                "effort": "xhigh"
+              },
+              "endpoint": "claude://local",
+              "model": "claude-opus-5-5",
+              "runtime": {
+                "adapter": "claude_cli_v1",
+                "credential_mode": "claude-subscription",
+                "flags": [
+                  "-p",
+                  "--safe-mode",
+                  "--tools",
+                  "",
+                  "--strict-mcp-config",
+                  "--mcp-config",
+                  "{\"mcpServers\":{}}",
+                  "--disable-slash-commands",
+                  "--no-session-persistence",
+                  "--permission-prompts",
+                  "none",
+                  "--input-format",
+                  "stream-json",
+                  "--replay-user-messages",
+                  "--output-format",
+                  "stream-json",
+                  "--verbose"
+                ],
+                "implementation_sha256": "ee183e027eaad81de13cfab1149000c027b4504842070537a1068c93dfb1a7bf",
+                "input_contract": "observed-print-stream-v1"
+              }
+            },
+            "source": "prior",
+            "value": 687640
+          }
+        ],
+        "key": null,
+        "source": "observed",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "value": 687640
+      }
+    },
+    "input_text_characters": {
+      "characters_per_token": 1.36,
+      "margin": 0.05,
+      "source": "estimated",
+      "value": 935190
+    },
+    "input_tokens": {
+      "date": "2026-11-13",
+      "evidence": [
+        {
+          "capacity_probe": false,
+          "fixture": "tests/fixtures/route_capacity_measurements.json",
+          "fixture_row": 0,
+          "id": "d1-input-0",
+          "input_tokens": 687640,
+          "key": {
+            "adapter": "claude_cli_v1",
+            "configuration": {
+              "effort": "xhigh"
+            },
+            "endpoint": "claude://local",
+            "model": "claude-opus-5-5",
+            "runtime": {
+              "adapter": "claude_cli_v1",
+              "credential_mode": "claude-subscription",
+              "flags": [
+                "-p",
+                "--safe-mode",
+                "--tools",
+                "",
+                "--strict-mcp-config",
+                "--mcp-config",
+                "{\"mcpServers\":{}}",
+                "--disable-slash-commands",
+                "--no-session-persistence",
+                "--permission-prompts",
+                "none",
+                "--input-format",
+                "stream-json",
+                "--replay-user-messages",
+                "--output-format",
+                "stream-json",
+                "--verbose"
+              ],
+              "implementation_sha256": "ee183e027eaad81de13cfab1149000c027b4504842070537a1068c93dfb1a7bf",
+              "input_contract": "observed-print-stream-v1"
+            }
+          },
+          "source": "prior",
+          "value": 687640
+        }
+      ],
+      "key": null,
+      "output_reservation_tokens": 128000,
+      "reservation_basis": "compaction_threshold",
+      "source": "observed",
+      "source_record": "20261113110022-every-open-record-and-review-capacity",
+      "value": 687640
+    },
+    "listed": true,
+    "output_tokens": {
+      "date": "2026-11-13",
+      "source": "documented",
+      "url": "https://platform.claude.com/docs/en/models/overview",
+      "value": 128000
+    },
+    "protocol": "exactory-route-capacity-policy-v1",
+    "provider_enforces_output": true,
+    "raises_capacity": [
+      "Add documented model limits with their URLs.",
+      "Record a verified capacity probe under this execution key to raise its observed input limit."
+    ],
+    "request_measure": "calibrated",
+    "route_class": {
+      "adapter": "claude_cli_v1",
+      "effort": "xhigh",
+      "model": "claude-opus-5-5"
+    }
+  },
+  "measure": {
+    "characters_per_token": 1.36,
+    "count_carried_state": true,
+    "non_ascii_limit": 0.05,
+    "ratio_margin": 0.05,
+    "rule": "calibrated"
+  },
+  "policy": "exactory-route-capacity-policy-v1",
+  "profile": {
+    "capacity_probe_id": null,
+    "digest": "5dc6f141b4d177117e751e7e29b3f8cb2eeee6e92f25520bd75541508c76f3dc",
+    "frame_measurements": [
+      {
+        "at_or_over_limit": 0,
+        "attempts": 2,
+        "cli_versions": [
+          {
+            "attempts": 2,
+            "first_date": "2026-11-13",
+            "last_date": "2026-11-13",
+            "version": "2.1.325 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 2,
+        "date": "2026-11-13",
+        "kind": "reading",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 31769,
+        "largest_thinking_tokens": 21050,
+        "measurement_attempts": 2,
+        "other_attempts": 0,
+        "source": "probe-frame",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 120000,
+        "thinking_attempts": 2,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 2,
+        "cli_versions": [
+          {
+            "attempts": 2,
+            "first_date": "2026-11-13",
+            "last_date": "2026-11-13",
+            "version": "2.1.325 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 2,
+        "date": "2026-11-13",
+        "kind": "reading",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 19977,
+        "largest_thinking_tokens": 14900,
+        "measurement_attempts": 2,
+        "other_attempts": 0,
+        "source": "probe-frame",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 480000,
+        "thinking_attempts": 2,
+        "thinking_method": "cli_estimate"
+      }
+    ],
+    "frame_policy": {
+      "borrowing_ready": true,
+      "count_carried_state": true,
+      "frame_limit": null,
+      "largest_material_characters": 36127,
+      "largest_text_characters": 395305,
+      "readings": [
+        {
+          "calls": 2,
+          "calls_left": 0,
+          "effort": "xhigh",
+          "frame_limit": null,
+          "largest_material_characters": 36127,
+          "largest_text_characters": 395305,
+          "part": "lists",
+          "quarters": [
+            "Q1",
+            "Q3"
+          ],
+          "reading": "no effect",
+          "valid_observations": 2
+        },
+        {
+          "calls": 2,
+          "calls_left": 0,
+          "effort": "xhigh",
+          "frame_limit": null,
+          "largest_material_characters": 36127,
+          "largest_text_characters": 587724,
+          "part": "record",
+          "quarters": [
+            "Q1",
+            "Q3"
+          ],
+          "reading": "effect",
+          "valid_observations": 2
+        }
+      ],
+      "source": "probe-frame",
+      "summary_sha256": "fd031720ed0e8becea9ce34045922339fc840b8753af744c421865759f633f9f"
+    },
+    "priors": [
+      {
+        "at_or_over_limit": 0,
+        "attempts": 3,
+        "cli_versions": [
+          {
+            "attempts": 2,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 1,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 3,
+        "date": "2026-11-13",
+        "kind": "reading",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 40406,
+        "largest_thinking_tokens": 31850,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 60000,
+        "thinking_attempts": 3,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 73,
+        "cli_versions": [
+          {
+            "attempts": 30,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 38,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 5,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.318 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 72,
+        "date": "2026-11-13",
+        "kind": "reading",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 62066,
+        "largest_thinking_tokens": 51000,
+        "measurement_attempts": 0,
+        "other_attempts": 1,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 120000,
+        "thinking_attempts": 72,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 244,
+        "cli_versions": [
+          {
+            "attempts": 63,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 108,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 50,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.318 (Claude Code)"
+          },
+          {
+            "attempts": 15,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          },
+          {
+            "attempts": 8,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.323 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 232,
+        "date": "2026-11-13",
+        "kind": "reading",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 50297,
+        "largest_thinking_tokens": 37850,
+        "measurement_attempts": 0,
+        "other_attempts": 12,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 240000,
+        "thinking_attempts": 232,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 163,
+        "cli_versions": [
+          {
+            "attempts": 99,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          },
+          {
+            "attempts": 64,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-13",
+            "version": "2.1.323 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 158,
+        "date": "2026-11-13",
+        "kind": "reading",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 66578,
+        "largest_thinking_tokens": 56500,
+        "measurement_attempts": 0,
+        "other_attempts": 5,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 480000,
+        "thinking_attempts": 158,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 27,
+        "cli_versions": [
+          {
+            "attempts": 27,
+            "first_date": "2026-11-13",
+            "last_date": "2026-11-13",
+            "version": "2.1.323 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 27,
+        "date": "2026-11-13",
+        "kind": "reading",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 51314,
+        "largest_thinking_tokens": 36750,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": null,
+        "thinking_attempts": 27,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 191,
+        "cli_versions": [
+          {
+            "attempts": 1,
+            "first_date": null,
+            "last_date": null,
+            "version": null
+          },
+          {
+            "attempts": 93,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 95,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.318 (Claude Code)"
+          },
+          {
+            "attempts": 2,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 180,
+        "date": "2026-11-13",
+        "kind": "read",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 68664,
+        "largest_thinking_tokens": 53450,
+        "measurement_attempts": 0,
+        "other_attempts": 11,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": null,
+        "thinking_attempts": 180,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 1,
+        "cli_versions": [
+          {
+            "attempts": 1,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 1,
+        "date": "2026-11-13",
+        "kind": "combine",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 25926,
+        "largest_thinking_tokens": 17300,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 480000,
+        "thinking_attempts": 1,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 1,
+        "cli_versions": [
+          {
+            "attempts": 1,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 1,
+        "date": "2026-11-13",
+        "kind": "check",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 76858,
+        "largest_thinking_tokens": 62200,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": null,
+        "thinking_attempts": 1,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 13,
+        "cli_versions": [
+          {
+            "attempts": 4,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 4,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 1,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.318 (Claude Code)"
+          },
+          {
+            "attempts": 3,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          },
+          {
+            "attempts": 1,
+            "first_date": "2026-11-13",
+            "last_date": "2026-11-13",
+            "version": "2.1.323 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 13,
+        "date": "2026-11-13",
+        "kind": "final",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 72468,
+        "largest_thinking_tokens": 47250,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": null,
+        "thinking_attempts": 13,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 5,
+        "cli_versions": [
+          {
+            "attempts": 3,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 2,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 5,
+        "date": "2026-11-13",
+        "kind": "request",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 12309,
+        "largest_thinking_tokens": 7250,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 120000,
+        "thinking_attempts": 5,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 11,
+        "cli_versions": [
+          {
+            "attempts": 1,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 2,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 8,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 11,
+        "date": "2026-11-13",
+        "kind": "request",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 35221,
+        "largest_thinking_tokens": 25450,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 240000,
+        "thinking_attempts": 11,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 21,
+        "cli_versions": [
+          {
+            "attempts": 5,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 4,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 12,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 21,
+        "date": "2026-11-13",
+        "kind": "request",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 64400,
+        "largest_thinking_tokens": 46600,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 480000,
+        "thinking_attempts": 21,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 91,
+        "cli_versions": [
+          {
+            "attempts": 29,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 23,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 4,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.318 (Claude Code)"
+          },
+          {
+            "attempts": 35,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 91,
+        "date": "2026-11-13",
+        "kind": "request",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 84151,
+        "largest_thinking_tokens": 62650,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": null,
+        "thinking_attempts": 91,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 13,
+        "cli_versions": [
+          {
+            "attempts": 2,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 2,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 9,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 13,
+        "date": "2026-11-13",
+        "kind": "single",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 3697,
+        "largest_thinking_tokens": 1700,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 30000,
+        "thinking_attempts": 13,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 11,
+        "cli_versions": [
+          {
+            "attempts": 4,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 7,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 11,
+        "date": "2026-11-13",
+        "kind": "single",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 32009,
+        "largest_thinking_tokens": 28800,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 60000,
+        "thinking_attempts": 11,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 19,
+        "cli_versions": [
+          {
+            "attempts": 6,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 7,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 6,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 19,
+        "date": "2026-11-13",
+        "kind": "single",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 27939,
+        "largest_thinking_tokens": 23400,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 120000,
+        "thinking_attempts": 19,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 18,
+        "cli_versions": [
+          {
+            "attempts": 3,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 5,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 10,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 18,
+        "date": "2026-11-13",
+        "kind": "single",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 33816,
+        "largest_thinking_tokens": 29250,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 240000,
+        "thinking_attempts": 18,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 17,
+        "cli_versions": [
+          {
+            "attempts": 5,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 5,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 7,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 17,
+        "date": "2026-11-13",
+        "kind": "single",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 41658,
+        "largest_thinking_tokens": 36700,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 480000,
+        "thinking_attempts": 17,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 23,
+        "cli_versions": [
+          {
+            "attempts": 6,
+            "first_date": null,
+            "last_date": null,
+            "version": null
+          },
+          {
+            "attempts": 14,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.307 (Claude Code)"
+          },
+          {
+            "attempts": 3,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 17,
+        "date": "2026-11-13",
+        "kind": "single",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 80732,
+        "largest_thinking_tokens": 70200,
+        "measurement_attempts": 0,
+        "other_attempts": 6,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": null,
+        "thinking_attempts": 3,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 27,
+        "cli_versions": [
+          {
+            "attempts": 1,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.307 (Claude Code)"
+          },
+          {
+            "attempts": 7,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 6,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 13,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 27,
+        "date": "2026-11-13",
+        "kind": "probe",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 216,
+        "largest_thinking_tokens": 276,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "source": "live-records",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 15000,
+        "thinking_attempts": 26,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 4,
+        "cli_versions": [
+          {
+            "attempts": 4,
+            "first_date": "2026-11-13",
+            "last_date": "2026-11-13",
+            "version": "2.1.325 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 4,
+        "date": "2026-11-13",
+        "kind": "reading",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 21583,
+        "largest_thinking_tokens": 15050,
+        "measurement_attempts": 4,
+        "other_attempts": 0,
+        "source": "probe",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 120000,
+        "thinking_attempts": 4,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 2,
+        "cli_versions": [
+          {
+            "attempts": 2,
+            "first_date": "2026-11-13",
+            "last_date": "2026-11-13",
+            "version": "2.1.325 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 2,
+        "date": "2026-11-13",
+        "kind": "reading",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 19990,
+        "largest_thinking_tokens": 12550,
+        "measurement_attempts": 2,
+        "other_attempts": 0,
+        "source": "probe",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 240000,
+        "thinking_attempts": 2,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 2,
+        "cli_versions": [
+          {
+            "attempts": 2,
+            "first_date": "2026-11-13",
+            "last_date": "2026-11-13",
+            "version": "2.1.325 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 2,
+        "date": "2026-11-13",
+        "kind": "reading",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 31769,
+        "largest_thinking_tokens": 21050,
+        "measurement_attempts": 2,
+        "other_attempts": 0,
+        "source": "probe-frame",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 120000,
+        "thinking_attempts": 2,
+        "thinking_method": "cli_estimate"
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 2,
+        "cli_versions": [
+          {
+            "attempts": 2,
+            "first_date": "2026-11-13",
+            "last_date": "2026-11-13",
+            "version": "2.1.325 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 2,
+        "date": "2026-11-13",
+        "kind": "reading",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 19977,
+        "largest_thinking_tokens": 14900,
+        "measurement_attempts": 2,
+        "other_attempts": 0,
+        "source": "probe-frame",
+        "source_record": "20261113110022-every-open-record-and-review-capacity",
+        "task_level": 480000,
+        "thinking_attempts": 2,
+        "thinking_method": "cli_estimate"
+      }
+    ],
+    "protocol": "exactory-route-output-profile-v1",
+    "route_class": {
+      "adapter": "claude_cli_v1",
+      "effort": "xhigh",
+      "model": "claude-opus-5-5"
+    },
+    "rows": [
+      {
+        "at_or_over_limit": 0,
+        "attempts": 3,
+        "cli_versions": [
+          {
+            "attempts": 2,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 1,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 3,
+        "kind": "reading",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 40406,
+        "largest_thinking_tokens": 31850,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "task_level": 60000,
+        "thinking_attempts": 3
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 77,
+        "cli_versions": [
+          {
+            "attempts": 30,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 38,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 5,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.318 (Claude Code)"
+          },
+          {
+            "attempts": 4,
+            "first_date": "2026-11-13",
+            "last_date": "2026-11-13",
+            "version": "2.1.325 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 76,
+        "kind": "reading",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 62066,
+        "largest_thinking_tokens": 51000,
+        "measurement_attempts": 4,
+        "other_attempts": 1,
+        "task_level": 120000,
+        "thinking_attempts": 76
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 246,
+        "cli_versions": [
+          {
+            "attempts": 63,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 108,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 50,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.318 (Claude Code)"
+          },
+          {
+            "attempts": 15,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          },
+          {
+            "attempts": 8,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.323 (Claude Code)"
+          },
+          {
+            "attempts": 2,
+            "first_date": "2026-11-13",
+            "last_date": "2026-11-13",
+            "version": "2.1.325 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 234,
+        "kind": "reading",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 50297,
+        "largest_thinking_tokens": 37850,
+        "measurement_attempts": 2,
+        "other_attempts": 12,
+        "task_level": 240000,
+        "thinking_attempts": 234
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 163,
+        "cli_versions": [
+          {
+            "attempts": 99,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          },
+          {
+            "attempts": 64,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-13",
+            "version": "2.1.323 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 158,
+        "kind": "reading",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 66578,
+        "largest_thinking_tokens": 56500,
+        "measurement_attempts": 0,
+        "other_attempts": 5,
+        "task_level": 480000,
+        "thinking_attempts": 158
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 27,
+        "cli_versions": [
+          {
+            "attempts": 27,
+            "first_date": "2026-11-13",
+            "last_date": "2026-11-13",
+            "version": "2.1.323 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 27,
+        "kind": "reading",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 51314,
+        "largest_thinking_tokens": 36750,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "task_level": null,
+        "thinking_attempts": 27
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 191,
+        "cli_versions": [
+          {
+            "attempts": 1,
+            "first_date": null,
+            "last_date": null,
+            "version": null
+          },
+          {
+            "attempts": 93,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 95,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.318 (Claude Code)"
+          },
+          {
+            "attempts": 2,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 180,
+        "kind": "read",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 68664,
+        "largest_thinking_tokens": 53450,
+        "measurement_attempts": 0,
+        "other_attempts": 11,
+        "task_level": null,
+        "thinking_attempts": 180
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 1,
+        "cli_versions": [
+          {
+            "attempts": 1,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 1,
+        "kind": "combine",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 25926,
+        "largest_thinking_tokens": 17300,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "task_level": 480000,
+        "thinking_attempts": 1
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 1,
+        "cli_versions": [
+          {
+            "attempts": 1,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 1,
+        "kind": "check",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 76858,
+        "largest_thinking_tokens": 62200,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "task_level": null,
+        "thinking_attempts": 1
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 13,
+        "cli_versions": [
+          {
+            "attempts": 4,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 4,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 1,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.318 (Claude Code)"
+          },
+          {
+            "attempts": 3,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          },
+          {
+            "attempts": 1,
+            "first_date": "2026-11-13",
+            "last_date": "2026-11-13",
+            "version": "2.1.323 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 13,
+        "kind": "final",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 72468,
+        "largest_thinking_tokens": 47250,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "task_level": null,
+        "thinking_attempts": 13
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 5,
+        "cli_versions": [
+          {
+            "attempts": 3,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 2,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 5,
+        "kind": "request",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 12309,
+        "largest_thinking_tokens": 7250,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "task_level": 120000,
+        "thinking_attempts": 5
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 11,
+        "cli_versions": [
+          {
+            "attempts": 1,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 2,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 8,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 11,
+        "kind": "request",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 35221,
+        "largest_thinking_tokens": 25450,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "task_level": 240000,
+        "thinking_attempts": 11
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 21,
+        "cli_versions": [
+          {
+            "attempts": 5,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 4,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 12,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 21,
+        "kind": "request",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 64400,
+        "largest_thinking_tokens": 46600,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "task_level": 480000,
+        "thinking_attempts": 21
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 91,
+        "cli_versions": [
+          {
+            "attempts": 29,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 23,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 4,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.318 (Claude Code)"
+          },
+          {
+            "attempts": 35,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 91,
+        "kind": "request",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 84151,
+        "largest_thinking_tokens": 62650,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "task_level": null,
+        "thinking_attempts": 91
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 13,
+        "cli_versions": [
+          {
+            "attempts": 2,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 2,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 9,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 13,
+        "kind": "single",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 3697,
+        "largest_thinking_tokens": 1700,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "task_level": 30000,
+        "thinking_attempts": 13
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 11,
+        "cli_versions": [
+          {
+            "attempts": 4,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 7,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 11,
+        "kind": "single",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 32009,
+        "largest_thinking_tokens": 28800,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "task_level": 60000,
+        "thinking_attempts": 11
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 19,
+        "cli_versions": [
+          {
+            "attempts": 6,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 7,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 6,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 19,
+        "kind": "single",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 27939,
+        "largest_thinking_tokens": 23400,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "task_level": 120000,
+        "thinking_attempts": 19
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 18,
+        "cli_versions": [
+          {
+            "attempts": 3,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 5,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 10,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 18,
+        "kind": "single",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 33816,
+        "largest_thinking_tokens": 29250,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "task_level": 240000,
+        "thinking_attempts": 18
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 17,
+        "cli_versions": [
+          {
+            "attempts": 5,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 5,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 7,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 17,
+        "kind": "single",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 41658,
+        "largest_thinking_tokens": 36700,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "task_level": 480000,
+        "thinking_attempts": 17
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 23,
+        "cli_versions": [
+          {
+            "attempts": 6,
+            "first_date": null,
+            "last_date": null,
+            "version": null
+          },
+          {
+            "attempts": 14,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.307 (Claude Code)"
+          },
+          {
+            "attempts": 3,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 17,
+        "kind": "single",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 80732,
+        "largest_thinking_tokens": 70200,
+        "measurement_attempts": 0,
+        "other_attempts": 6,
+        "task_level": null,
+        "thinking_attempts": 3
+      },
+      {
+        "at_or_over_limit": 0,
+        "attempts": 27,
+        "cli_versions": [
+          {
+            "attempts": 1,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.307 (Claude Code)"
+          },
+          {
+            "attempts": 7,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.316 (Claude Code)"
+          },
+          {
+            "attempts": 6,
+            "first_date": null,
+            "last_date": null,
+            "version": "2.1.317 (Claude Code)"
+          },
+          {
+            "attempts": 13,
+            "first_date": "2026-11-12",
+            "last_date": "2026-11-12",
+            "version": "2.1.322 (Claude Code)"
+          }
+        ],
+        "completed_attempts": 27,
+        "kind": "probe",
+        "largest_answer_tokens": null,
+        "largest_output_tokens": 216,
+        "largest_thinking_tokens": 276,
+        "measurement_attempts": 0,
+        "other_attempts": 0,
+        "task_level": 15000,
+        "thinking_attempts": 26
+      }
+    ],
+    "states": {
+      "combine": "unmeasured",
+      "final": "fits",
+      "read": "fits"
+    },
+    "store_attempts": 0,
+    "verified_input_tokens": 0
+  },
+  "protocol": "exactory-route-capacity-plan-v1",
+  "route_class": {
+    "adapter": "claude_cli_v1",
+    "effort": "xhigh",
+    "model": "claude-opus-5-5"
+  },
+  "targets": {
+    "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "handles": []
+  },
+  "task": {
+    "combine": {
+      "adaptation": {
+        "ceiling": 480000,
+        "lower_at_percent": 75,
+        "policy_ceiling": 480000,
+        "raise_at_percent": 35
+      },
+      "answer_bound": 15000,
+      "answer_room_characters": null,
+      "at_or_over_limit": 0,
+      "at_or_over_limit_share": null,
+      "borrowed_kind": null,
+      "carried_characters": 0,
+      "cli_versions": [],
+      "default_answer_bound": 60000,
+      "frame_characters": 48000,
+      "largest_output_tokens": null,
+      "largest_thinking_tokens": null,
+      "levels": [
+        {
+          "answer_room_characters": null,
+          "at_or_over_limit": 0,
+          "at_or_over_limit_share": null,
+          "cli_versions": [],
+          "default_answer_bound": 60000,
+          "frame_characters": 48000,
+          "largest_output_tokens": null,
+          "largest_thinking_tokens": null,
+          "material_allowance": 480000,
+          "measurement_attempts": 0,
+          "qualifies": false,
+          "sample_size": 0,
+          "smallest_answer_bound": 15000,
+          "state": "unmeasured",
+          "target_allowance": 0,
+          "task_characters": 528000,
+          "task_level": null,
+          "thinking_reserve_tokens": null
+        },
+        {
+          "answer_room_characters": null,
+          "at_or_over_limit": 0,
+          "at_or_over_limit_share": null,
+          "cli_versions": [],
+          "default_answer_bound": 60000,
+          "frame_characters": 48000,
+          "largest_output_tokens": null,
+          "largest_thinking_tokens": null,
+          "material_allowance": 240000,
+          "measurement_attempts": 0,
+          "qualifies": false,
+          "sample_size": 0,
+          "smallest_answer_bound": 15000,
+          "state": "unmeasured",
+          "target_allowance": 0,
+          "task_characters": 288000,
+          "task_level": 480000,
+          "thinking_reserve_tokens": null
+        },
+        {
+          "answer_room_characters": null,
+          "at_or_over_limit": 0,
+          "at_or_over_limit_share": null,
+          "cli_versions": [],
+          "default_answer_bound": 60000,
+          "frame_characters": 48000,
+          "largest_output_tokens": null,
+          "largest_thinking_tokens": null,
+          "material_allowance": 120000,
+          "measurement_attempts": 0,
+          "qualifies": false,
+          "sample_size": 0,
+          "smallest_answer_bound": 15000,
+          "state": "unmeasured",
+          "target_allowance": 0,
+          "task_characters": 168000,
+          "task_level": 240000,
+          "thinking_reserve_tokens": null
+        },
+        {
+          "answer_room_characters": null,
+          "at_or_over_limit": 0,
+          "at_or_over_limit_share": null,
+          "cli_versions": [],
+          "default_answer_bound": 60000,
+          "frame_characters": 48000,
+          "largest_output_tokens": null,
+          "largest_thinking_tokens": null,
+          "material_allowance": 60000,
+          "measurement_attempts": 0,
+          "qualifies": false,
+          "sample_size": 0,
+          "smallest_answer_bound": 15000,
+          "state": "unmeasured",
+          "target_allowance": 0,
+          "task_characters": 108000,
+          "task_level": 120000,
+          "thinking_reserve_tokens": null
+        }
+      ],
+      "material_allowance": 60000,
+      "measurement_attempts": 0,
+      "notice_characters": 45000,
+      "policy": "exactory-route-capacity-policy-v1",
+      "qualifies": false,
+      "request_bound": {
+        "characters": 1300000,
+        "text_characters": 108000,
+        "tokens_upper": 687640
+      },
+      "sample_size": 0,
+      "smallest_answer_bound": 15000,
+      "start_rule": "unmeasured",
+      "state": "unmeasured",
+      "step5_material_allowance": 60000,
+      "target_allowance": 0,
+      "task_characters": 108000,
+      "task_level": 120000,
+      "thinking_reserve_tokens": null
+    },
+    "final": {
+      "adaptation": {
+        "ceiling": 480000,
+        "lower_at_percent": 75,
+        "policy_ceiling": 480000,
+        "raise_at_percent": 35
+      },
+      "answer_bound": 21500,
+      "answer_room_characters": 132591,
+      "at_or_over_limit": 0,
+      "at_or_over_limit_share": 0.0,
+      "borrowed_kind": null,
+      "carried_characters": 0,
+      "cli_versions": [
+        {
+          "attempts": 4,
+          "first_date": null,
+          "last_date": null,
+          "version": "2.1.316 (Claude Code)"
+        },
+        {
+          "attempts": 4,
+          "first_date": null,
+          "last_date": null,
+          "version": "2.1.317 (Claude Code)"
+        },
+        {
+          "attempts": 1,
+          "first_date": null,
+          "last_date": null,
+          "version": "2.1.318 (Claude Code)"
+        },
+        {
+          "attempts": 3,
+          "first_date": "2026-11-12",
+          "last_date": "2026-11-12",
+          "version": "2.1.322 (Claude Code)"
+        },
+        {
+          "attempts": 1,
+          "first_date": "2026-11-13",
+          "last_date": "2026-11-13",
+          "version": "2.1.323 (Claude Code)"
+        }
+      ],
+      "default_answer_bound": 21500,
+      "frame_characters": 48000,
+      "largest_output_tokens": 72468,
+      "largest_thinking_tokens": 47250,
+      "levels": [
+        {
+          "answer_room_characters": 132591,
+          "at_or_over_limit": 0,
+          "at_or_over_limit_share": 0.0,
+          "cli_versions": [
+            {
+              "attempts": 4,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.316 (Claude Code)"
+            },
+            {
+              "attempts": 4,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.317 (Claude Code)"
+            },
+            {
+              "attempts": 1,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.318 (Claude Code)"
+            },
+            {
+              "attempts": 3,
+              "first_date": "2026-11-12",
+              "last_date": "2026-11-12",
+              "version": "2.1.322 (Claude Code)"
+            },
+            {
+              "attempts": 1,
+              "first_date": "2026-11-13",
+              "last_date": "2026-11-13",
+              "version": "2.1.323 (Claude Code)"
+            }
+          ],
+          "default_answer_bound": 21500,
+          "frame_characters": 48000,
+          "largest_output_tokens": 72468,
+          "largest_thinking_tokens": 47250,
+          "material_allowance": 480000,
+          "measurement_attempts": 0,
+          "qualifies": true,
+          "sample_size": 13,
+          "smallest_answer_bound": 7500,
+          "state": "fits",
+          "target_allowance": 1,
+          "task_characters": 528000,
+          "task_level": null,
+          "thinking_reserve_tokens": 54338
+        },
+        {
+          "answer_room_characters": 132591,
+          "at_or_over_limit": 0,
+          "at_or_over_limit_share": 0.0,
+          "cli_versions": [
+            {
+              "attempts": 4,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.316 (Claude Code)"
+            },
+            {
+              "attempts": 4,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.317 (Claude Code)"
+            },
+            {
+              "attempts": 1,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.318 (Claude Code)"
+            },
+            {
+              "attempts": 3,
+              "first_date": "2026-11-12",
+              "last_date": "2026-11-12",
+              "version": "2.1.322 (Claude Code)"
+            },
+            {
+              "attempts": 1,
+              "first_date": "2026-11-13",
+              "last_date": "2026-11-13",
+              "version": "2.1.323 (Claude Code)"
+            }
+          ],
+          "default_answer_bound": 21500,
+          "frame_characters": 48000,
+          "largest_output_tokens": 72468,
+          "largest_thinking_tokens": 47250,
+          "material_allowance": 240000,
+          "measurement_attempts": 0,
+          "qualifies": true,
+          "sample_size": 13,
+          "smallest_answer_bound": 7500,
+          "state": "fits",
+          "target_allowance": 1,
+          "task_characters": 288000,
+          "task_level": null,
+          "thinking_reserve_tokens": 54338
+        },
+        {
+          "answer_room_characters": 132591,
+          "at_or_over_limit": 0,
+          "at_or_over_limit_share": 0.0,
+          "cli_versions": [
+            {
+              "attempts": 4,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.316 (Claude Code)"
+            },
+            {
+              "attempts": 4,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.317 (Claude Code)"
+            },
+            {
+              "attempts": 1,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.318 (Claude Code)"
+            },
+            {
+              "attempts": 3,
+              "first_date": "2026-11-12",
+              "last_date": "2026-11-12",
+              "version": "2.1.322 (Claude Code)"
+            },
+            {
+              "attempts": 1,
+              "first_date": "2026-11-13",
+              "last_date": "2026-11-13",
+              "version": "2.1.323 (Claude Code)"
+            }
+          ],
+          "default_answer_bound": 21500,
+          "frame_characters": 48000,
+          "largest_output_tokens": 72468,
+          "largest_thinking_tokens": 47250,
+          "material_allowance": 120000,
+          "measurement_attempts": 0,
+          "qualifies": true,
+          "sample_size": 13,
+          "smallest_answer_bound": 7500,
+          "state": "fits",
+          "target_allowance": 1,
+          "task_characters": 168000,
+          "task_level": null,
+          "thinking_reserve_tokens": 54338
+        },
+        {
+          "answer_room_characters": 132591,
+          "at_or_over_limit": 0,
+          "at_or_over_limit_share": 0.0,
+          "cli_versions": [
+            {
+              "attempts": 4,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.316 (Claude Code)"
+            },
+            {
+              "attempts": 4,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.317 (Claude Code)"
+            },
+            {
+              "attempts": 1,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.318 (Claude Code)"
+            },
+            {
+              "attempts": 3,
+              "first_date": "2026-11-12",
+              "last_date": "2026-11-12",
+              "version": "2.1.322 (Claude Code)"
+            },
+            {
+              "attempts": 1,
+              "first_date": "2026-11-13",
+              "last_date": "2026-11-13",
+              "version": "2.1.323 (Claude Code)"
+            }
+          ],
+          "default_answer_bound": 21500,
+          "frame_characters": 48000,
+          "largest_output_tokens": 72468,
+          "largest_thinking_tokens": 47250,
+          "material_allowance": 60000,
+          "measurement_attempts": 0,
+          "qualifies": true,
+          "sample_size": 13,
+          "smallest_answer_bound": 7500,
+          "state": "fits",
+          "target_allowance": 1,
+          "task_characters": 108000,
+          "task_level": null,
+          "thinking_reserve_tokens": 54338
+        }
+      ],
+      "material_allowance": 480000,
+      "measurement_attempts": 0,
+      "notice_characters": 45000,
+      "policy": "exactory-route-capacity-policy-v1",
+      "qualifies": true,
+      "request_bound": {
+        "characters": 1300000,
+        "text_characters": 528000,
+        "tokens_upper": 687640
+      },
+      "sample_size": 13,
+      "smallest_answer_bound": 7500,
+      "start_rule": "fit",
+      "state": "fits",
+      "step5_material_allowance": 480000,
+      "target_allowance": 1,
+      "task_characters": 528000,
+      "task_level": null,
+      "thinking_reserve_tokens": 54338
+    },
+    "read": {
+      "adaptation": {
+        "ceiling": 600000,
+        "lower_at_percent": 75,
+        "policy_ceiling": 600000,
+        "raise_at_percent": 35
+      },
+      "answer_bound": 80000,
+      "answer_room_characters": 119757,
+      "at_or_over_limit": 0,
+      "at_or_over_limit_share": 0.0,
+      "borrowed_kind": null,
+      "carried_characters": 20002,
+      "cli_versions": [
+        {
+          "attempts": 1,
+          "first_date": null,
+          "last_date": null,
+          "version": null
+        },
+        {
+          "attempts": 93,
+          "first_date": null,
+          "last_date": null,
+          "version": "2.1.316 (Claude Code)"
+        },
+        {
+          "attempts": 95,
+          "first_date": null,
+          "last_date": null,
+          "version": "2.1.318 (Claude Code)"
+        },
+        {
+          "attempts": 2,
+          "first_date": "2026-11-12",
+          "last_date": "2026-11-12",
+          "version": "2.1.322 (Claude Code)"
+        }
+      ],
+      "default_answer_bound": 80000,
+      "frame_characters": 48000,
+      "largest_output_tokens": 68664,
+      "largest_thinking_tokens": 53450,
+      "levels": [
+        {
+          "answer_room_characters": 119757,
+          "at_or_over_limit": 0,
+          "at_or_over_limit_share": 0.0,
+          "cli_versions": [
+            {
+              "attempts": 1,
+              "first_date": null,
+              "last_date": null,
+              "version": null
+            },
+            {
+              "attempts": 93,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.316 (Claude Code)"
+            },
+            {
+              "attempts": 95,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.318 (Claude Code)"
+            },
+            {
+              "attempts": 2,
+              "first_date": "2026-11-12",
+              "last_date": "2026-11-12",
+              "version": "2.1.322 (Claude Code)"
+            }
+          ],
+          "default_answer_bound": 80000,
+          "frame_characters": 48000,
+          "largest_output_tokens": 68664,
+          "largest_thinking_tokens": 53450,
+          "material_allowance": 600000,
+          "measurement_attempts": 0,
+          "qualifies": true,
+          "sample_size": 191,
+          "smallest_answer_bound": 4000,
+          "state": "fits",
+          "target_allowance": 0,
+          "task_characters": 668002,
+          "task_level": null,
+          "thinking_reserve_tokens": 61468
+        },
+        {
+          "answer_room_characters": 119757,
+          "at_or_over_limit": 0,
+          "at_or_over_limit_share": 0.0,
+          "cli_versions": [
+            {
+              "attempts": 1,
+              "first_date": null,
+              "last_date": null,
+              "version": null
+            },
+            {
+              "attempts": 93,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.316 (Claude Code)"
+            },
+            {
+              "attempts": 95,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.318 (Claude Code)"
+            },
+            {
+              "attempts": 2,
+              "first_date": "2026-11-12",
+              "last_date": "2026-11-12",
+              "version": "2.1.322 (Claude Code)"
+            }
+          ],
+          "default_answer_bound": 80000,
+          "frame_characters": 48000,
+          "largest_output_tokens": 68664,
+          "largest_thinking_tokens": 53450,
+          "material_allowance": 300000,
+          "measurement_attempts": 0,
+          "qualifies": true,
+          "sample_size": 191,
+          "smallest_answer_bound": 4000,
+          "state": "fits",
+          "target_allowance": 0,
+          "task_characters": 368002,
+          "task_level": null,
+          "thinking_reserve_tokens": 61468
+        },
+        {
+          "answer_room_characters": 119757,
+          "at_or_over_limit": 0,
+          "at_or_over_limit_share": 0.0,
+          "cli_versions": [
+            {
+              "attempts": 1,
+              "first_date": null,
+              "last_date": null,
+              "version": null
+            },
+            {
+              "attempts": 93,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.316 (Claude Code)"
+            },
+            {
+              "attempts": 95,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.318 (Claude Code)"
+            },
+            {
+              "attempts": 2,
+              "first_date": "2026-11-12",
+              "last_date": "2026-11-12",
+              "version": "2.1.322 (Claude Code)"
+            }
+          ],
+          "default_answer_bound": 80000,
+          "frame_characters": 48000,
+          "largest_output_tokens": 68664,
+          "largest_thinking_tokens": 53450,
+          "material_allowance": 150000,
+          "measurement_attempts": 0,
+          "qualifies": true,
+          "sample_size": 191,
+          "smallest_answer_bound": 4000,
+          "state": "fits",
+          "target_allowance": 0,
+          "task_characters": 218002,
+          "task_level": null,
+          "thinking_reserve_tokens": 61468
+        },
+        {
+          "answer_room_characters": 119757,
+          "at_or_over_limit": 0,
+          "at_or_over_limit_share": 0.0,
+          "cli_versions": [
+            {
+              "attempts": 1,
+              "first_date": null,
+              "last_date": null,
+              "version": null
+            },
+            {
+              "attempts": 93,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.316 (Claude Code)"
+            },
+            {
+              "attempts": 95,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.318 (Claude Code)"
+            },
+            {
+              "attempts": 2,
+              "first_date": "2026-11-12",
+              "last_date": "2026-11-12",
+              "version": "2.1.322 (Claude Code)"
+            }
+          ],
+          "default_answer_bound": 80000,
+          "frame_characters": 48000,
+          "largest_output_tokens": 68664,
+          "largest_thinking_tokens": 53450,
+          "material_allowance": 75000,
+          "measurement_attempts": 0,
+          "qualifies": true,
+          "sample_size": 191,
+          "smallest_answer_bound": 4000,
+          "state": "fits",
+          "target_allowance": 0,
+          "task_characters": 143002,
+          "task_level": null,
+          "thinking_reserve_tokens": 61468
+        },
+        {
+          "answer_room_characters": 119757,
+          "at_or_over_limit": 0,
+          "at_or_over_limit_share": 0.0,
+          "cli_versions": [
+            {
+              "attempts": 1,
+              "first_date": null,
+              "last_date": null,
+              "version": null
+            },
+            {
+              "attempts": 93,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.316 (Claude Code)"
+            },
+            {
+              "attempts": 95,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.318 (Claude Code)"
+            },
+            {
+              "attempts": 2,
+              "first_date": "2026-11-12",
+              "last_date": "2026-11-12",
+              "version": "2.1.322 (Claude Code)"
+            }
+          ],
+          "default_answer_bound": 80000,
+          "frame_characters": 48000,
+          "largest_output_tokens": 68664,
+          "largest_thinking_tokens": 53450,
+          "material_allowance": 37500,
+          "measurement_attempts": 0,
+          "qualifies": true,
+          "sample_size": 191,
+          "smallest_answer_bound": 4000,
+          "state": "fits",
+          "target_allowance": 0,
+          "task_characters": 105502,
+          "task_level": null,
+          "thinking_reserve_tokens": 61468
+        },
+        {
+          "answer_room_characters": 119757,
+          "at_or_over_limit": 0,
+          "at_or_over_limit_share": 0.0,
+          "cli_versions": [
+            {
+              "attempts": 1,
+              "first_date": null,
+              "last_date": null,
+              "version": null
+            },
+            {
+              "attempts": 93,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.316 (Claude Code)"
+            },
+            {
+              "attempts": 95,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.318 (Claude Code)"
+            },
+            {
+              "attempts": 2,
+              "first_date": "2026-11-12",
+              "last_date": "2026-11-12",
+              "version": "2.1.322 (Claude Code)"
+            }
+          ],
+          "default_answer_bound": 80000,
+          "frame_characters": 48000,
+          "largest_output_tokens": 68664,
+          "largest_thinking_tokens": 53450,
+          "material_allowance": 18750,
+          "measurement_attempts": 0,
+          "qualifies": true,
+          "sample_size": 191,
+          "smallest_answer_bound": 4000,
+          "state": "fits",
+          "target_allowance": 0,
+          "task_characters": 86752,
+          "task_level": null,
+          "thinking_reserve_tokens": 61468
+        },
+        {
+          "answer_room_characters": 119757,
+          "at_or_over_limit": 0,
+          "at_or_over_limit_share": 0.0,
+          "cli_versions": [
+            {
+              "attempts": 1,
+              "first_date": null,
+              "last_date": null,
+              "version": null
+            },
+            {
+              "attempts": 93,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.316 (Claude Code)"
+            },
+            {
+              "attempts": 95,
+              "first_date": null,
+              "last_date": null,
+              "version": "2.1.318 (Claude Code)"
+            },
+            {
+              "attempts": 2,
+              "first_date": "2026-11-12",
+              "last_date": "2026-11-12",
+              "version": "2.1.322 (Claude Code)"
+            }
+          ],
+          "default_answer_bound": 80000,
+          "frame_characters": 48000,
+          "largest_output_tokens": 68664,
+          "largest_thinking_tokens": 53450,
+          "material_allowance": 15000,
+          "measurement_attempts": 0,
+          "qualifies": true,
+          "sample_size": 191,
+          "smallest_answer_bound": 4000,
+          "state": "fits",
+          "target_allowance": 0,
+          "task_characters": 83002,
+          "task_level": null,
+          "thinking_reserve_tokens": 61468
+        }
+      ],
+      "material_allowance": 600000,
+      "measurement_attempts": 0,
+      "notice_characters": 45000,
+      "policy": "exactory-route-capacity-policy-v1",
+      "qualifies": true,
+      "request_bound": {
+        "characters": 1300000,
+        "text_characters": 668002,
+        "tokens_upper": 687640
+      },
+      "sample_size": 191,
+      "smallest_answer_bound": 4000,
+      "start_rule": "fit",
+      "state": "fits",
+      "step5_material_allowance": 600000,
+      "target_allowance": 0,
+      "task_characters": 668002,
+      "task_level": null,
+      "thinking_reserve_tokens": 61468
+    }
+  }
+}

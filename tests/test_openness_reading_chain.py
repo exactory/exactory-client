@@ -348,10 +348,11 @@ class OpennessReadingChainTests(OpennessReadingCase):
         native_packet = self.export()
         assignment = self.assign('turn-1', native_packet)
         self.assertNotIn('reading_chain', assignment)
-        self.assertEqual(assignment['prompt'], protocol.canonical_prompt('native_math', version=7))
+        # A new finding review of one request takes finding version 2 and carries the finding index (task T6).
+        self.assertEqual(assignment['prompt'], protocol.canonical_prompt('native_math', version=7, finding_version=2))
         packet = self.read_packet('turn-1')
-        self.assertEqual(sorted(packet),
-                         ['digest', 'dossier_id', 'evidence', 'native', 'protocol', 'reviewer_id', 'role'])
+        self.assertEqual(sorted(packet), ['digest', 'dossier_id', 'evidence', 'finding_index', 'native', 'protocol',
+                                          'reviewer_id', 'role'])
         self.invoke('turn-1', self.build_native_result(packet))
         saved = self.record_openness('turn-1')
         self.assertNotIn('reading_turns', saved)

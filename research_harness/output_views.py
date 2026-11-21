@@ -1015,6 +1015,8 @@ _UNPLACED_KINDS = (
     # through reviewer packets, like the native evidence records above.
     "problem_objection_carry", "problem_carried_evidence", "problem_forming_import", "forming_transfer",
     "reference_resolution", "review_series_stop", "review_stop", "review_series_run", "review_call_wait",
+    # The composite of a final in pages; the review that adopts its output names it.
+    "review_composite",
     "screening", "screening_checkpoint",
     "screening_checkpoint_selection", "search_binding", "search_selection", "source", "source_bundle",
     "source_deferral", "source_deferral_selection", "source_import", "source_resumption", "synthesis",

@@ -269,6 +269,24 @@ class NoticeValueTests(ReadingRefusalCase):
         value, found = notices._read_refused_part(output, entry['path'])
         self.assertEqual((value, found), (dict(ref='u1'), True))
 
+    def test_a_refused_citation_of_a_page_or_a_closing_turn_names_its_place(self):
+        """A final in pages (0.92.0) cites in the grounds of each target of a page and in the grounds of its closing
+        turn; the path of 0.91.12 follows that source."""
+        refused = [dict(kind='reviewer_gap', text='A gap.', refs=[dict(ref='g1'), dict(ref='u1')])]
+        cases = (
+            (dict(page_plan_digest='p', closing=dict(rows=[])), dict(grounds=refused), '/grounds/0/refs/1'),
+            (dict(page_plan_digest='p', page=dict(targets=['t1', 't2'])),
+             dict(targets=[dict(formulation='t1', grounds=[]), dict(formulation='t2', grounds=refused)]),
+             '/targets/1/grounds/0/refs/1'))
+        for binding, output, path in cases:
+            with self.subTest(path=path):
+                packet = dict(reading_final=dict(binding, protocol=v7.PROTOCOL), handle_table={})
+                with self.assertRaises(ResearchError) as caught:
+                    review_handles.expand_handles(packet, output, raw=True)
+                entry = self.build_entry(caught.exception)
+                self.assertEqual((entry['check'], entry['path'], entry['details']), ('review.shape', path, dict(ref='u1')))
+                self.assertEqual(notices._read_refused_part(output, path), (dict(ref='u1'), True))
+
     def test_every_detail_of_the_reading_check_is_a_registered_notice_field(self):
         registered = set(review_refusal.CONTRACT_CHECKS['native.output']['notice_fields'])
         used = set()

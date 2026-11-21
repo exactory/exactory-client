@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from ci import series_code_reach as reach
+from ci.reviewer_program_guard import use_absent_programs
 from ci.series_code_groups import read_group_entries
 from research_harness import cli, review_continuation, review_plan_steps, review_series, stop_classes
 from research_harness import review_protocol as protocol, review_transport
@@ -97,6 +98,9 @@ class RecoveryRowTests(unittest.TestCase):
                 self.assertEqual(arguments, {'--workspace': str(case.store.root)})
                 if step['command'] == 'record-check':
                     from research_harness.record_check import check_record
+                    # The record check lists the path of the Codex program beside each runtime read. The test
+                    # states that the machine has none.
+                    use_absent_programs(self)
                     report = check_record(case.store.root)
                     self.assertIn('series_stops', report)
                 else:
@@ -386,6 +390,9 @@ class RecoveryRowTests(unittest.TestCase):
                 self.assertEqual(step.get('chooses', []), [])
                 if step['command'] == 'record-check':
                     from research_harness.record_check import check_record
+                    # The record check lists the path of the Codex program beside each runtime read. The test
+                    # states that the machine has none.
+                    use_absent_programs(self)
                     self.assertIn('series_stops', check_record(case.store.root))
                 else:
                     self.assertIn('obligations', cli.status_report(case.store))

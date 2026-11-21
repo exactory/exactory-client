@@ -2,68 +2,49 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
-      "id": "carried-selection-leaves-out-turns-without-a-credit",
-      "record": "20261113110022-every-open-record-and-review-capacity",
-      "class": "carried selection",
-      "summary": "The selection of a new v7 chain carried a turn only when a range or a completed search was taken from it. A turn that delivered shared search fields or an earlier part of a search record was left out with its notes, excerpts and passage answers: on the store of record 12 at revision 1646, 12 of the 57 turns of the stopped chain with 164 entries. The verifier required a range or a search of every stored turn, so it agreed.",
-      "expected": "Every ready reading turn of a chain that the selection takes anything from is carried with its notes. An excerpt or a passage answer is carried when its own source is unchanged, unless the selection takes the reading of that unit from other chains, and the receipt counts every entry as carried, superseded or with a changed source. A selection of version 2 that lacks a turn, the end of a chain, a chain or an entry does not verify.",
-      "fixed_in": "0.91.4",
+      "id": "parts-v3-final-pages-record-one-review",
+      "record": "20261112150500-result-review-frame-holds-cited-search-records",
+      "class": "D1 parts v3 final pages, currency and composite authentication",
+      "summary": "A result review can deliver its records as units but its targets and cards exceed one final request.",
+      "expected": "The stored series takes bounded target and closing pages, condenses overflowing entries, records one authenticated composed review, and repeats superseded targets after a late bound unit.",
+      "fixed_in": "0.92.0",
       "test_kind": "real_shape",
       "tests": [
-        "test_openness_carried.V5PartialSearchTests.test_turn_with_an_earlier_part_of_a_search_is_carried_with_its_entries",
-        "test_openness_carried.V5PartialSearchTests.test_last_ready_turn_without_a_credit_gives_the_starting_notes",
-        "test_openness_carried.V5CarriedSelectionTests.test_entry_of_a_turn_whose_delivered_units_changed_is_carried",
-        "test_openness_carried.V6PartialSearchTests.test_turn_with_an_earlier_part_of_a_search_is_carried_with_its_entries",
-        "test_openness_carried.V6PartialSearchTests.test_last_ready_turn_without_a_credit_gives_the_starting_notes",
-        "test_openness_carried.V6CarriedSelectionTests.test_entry_of_a_turn_whose_delivered_units_changed_is_carried",
-        "test_openness_carried_integration.Record12ShapeTests.test_stopped_chain_carries_all_57_turns_and_every_output",
-        "test_openness_carried_integration.Record12ShapeTests.test_v7_chain_reaches_a_verified_finding_with_the_carried_outputs"
+        "test_review_parts_v3_pages.PagedSeriesTests.test_a5_q7_two_hundred_material_objections_record_a_composite",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_a14_page_at_output_limit_splits_then_records",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_currency_source_request_keeps_page_one_and_optional_source_unrequested",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_currency_late_required_unit_reads_then_repeats_completed_page",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_verify_refuses_changed_plan_foreign_target_and_changed_output"
       ]
     },
     {
-      "id": "phenomenon-account-probe-delivery",
-      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
-      "class": "account probe provenance undelivered",
-      "summary": "Result reviewers received checks that cited probes without the probe questions, programs and observations.",
-      "expected": "Version 2 values deliver every native probe cited by accounts, delivered forming calls or outcomes, with its intent when held. Binding, delivery and size reports agree; stored version 1 reviews keep their records, digests and prompts.",
-      "fixed_in": "0.91.2",
+      "id": "v7-final-pages-record-one-finding",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "D1 v7 final pages and composite authentication",
+      "summary": "A chain read 57 turns but its final exceeded the route limit.",
+      "expected": "The stored chain reaches an authenticated composed finding in bounded pages, without repeating its earlier readings.",
+      "fixed_in": "0.92.0",
       "test_kind": "real_shape",
       "tests": [
-        "test_problem_probe_delivery.ProbeDeliveryTests.test_eight_independent_routes_deliver_both_records_once_with_original_digests",
-        "test_problem_probe_delivery.ProbeDeliveryTests.test_base_assignment_with_native_probes_keeps_records_digest_prompt_and_state",
-        "test_problem_probe_delivery.ProbeDeliveryTests.test_native_and_imported_probe_of_one_id_keep_four_distinct_entries",
-        "test_problem_probe_delivery.ProbeDeliveryTests.test_public_value_check_and_record_count_both_probe_records"
+        "test_openness_final_pages.IncidentFinalPagesTests.test_t4_fifty_seven_carried_turns_reach_a_recorded_paged_finding",
+        "test_openness_final_pages.FinalPagesCommandTests.test_a5_q7_nine_targets_record_one_authenticated_composite",
+        "test_openness_final_pages.CondensingCommandTests.test_stored_request_plan_condenses_at_measured_ratio_and_ignores_new_priors",
+        "test_openness_final_pages.FinalPagesCommandTests.test_verify_refuses_changed_plan_target_output_missing_page_and_currency"
       ]
     },
     {
-      "id": "phenomenon-result-delivery-date",
-      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
-      "class": "accepted result date unavailable",
-      "summary": "A result-only account could not derive a date because native acceptances carry no timestamp.",
-      "expected": "New native snapshots carry the store delivery time outside their summary digest. The earliest matching snapshot supplies the result date; an older unstamped snapshot stays undated and the refusal names the reference.",
-      "fixed_in": "0.91.2",
+      "id": "final-page-plan-bounds-each-target-and-closing",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "review capacity (pure final page allocation and replay)",
+      "summary": "A final could exceed the route after 57 reading turns even though its retained entries were within the advertised text allowances.",
+      "expected": "Serialized entry sizes produce an ordered bounded final page plan at both 60,000 and 480,000 characters, with target and decision-row condensation supplied by the pinned policy. Splits and level changes replay from linked artifacts while preserving assigned turns.",
+      "fixed_in": "0.92.0",
       "test_kind": "real_shape",
       "tests": [
-        "test_problem_accounts.ProblemAccountsTests.test_a_result_date_is_derived_but_history_keeps_its_precise_time",
-        "test_problem_accounts.ProblemAccountsTests.test_result_date_uses_earliest_matching_snapshot",
-        "test_problem_accounts.ProblemAccountsTests.test_unstamped_earliest_result_reports_undated_reference"
-      ]
-    },
-    {
-      "id": "phenomenon-account-period-history",
-      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
-      "class": "coarse evidence date and lexical date order",
-      "summary": "A date on the forming day gave no explanation of its precision, and string minima could accept evidence that preceded the form.",
-      "expected": "Version 2 values select both date minima by UTC instant and explain a period containing the form time with evidence and form provenance. Stored values without accounts_version retain their original validation and obligations.",
-      "fixed_in": "0.91.2",
-      "test_kind": "real_shape",
-      "tests": [
-        "test_problem_accounts.ProblemAccountsTests.test_period_dates_explain_ambiguous_form_history",
-        "test_problem_accounts.ProblemAccountsTests.test_utc_date_selection_shared_reference_preserves_v1",
-        "test_problem_accounts.ProblemAccountsTests.test_utc_date_selection_distinct_references_preserves_v1",
-        "test_problem_accounts.ProblemAccountsTests.test_offset_date_selection_shared_reference_preserves_v1",
-        "test_problem_accounts.ProblemAccountsTests.test_offset_date_selection_distinct_references_preserves_v1",
-        "test_problem_accounts.ProblemAccountsTests.test_legacy_history_refusal_keeps_message_and_obligation_bytes"
+        "test_review_final_pages.FinalIncidentTests.test_fifty_seven_turn_final_has_a_bounded_page_plan_at_both_rooms",
+        "test_review_final_pages.FinalIncidentTests.test_all_acceptance_shapes_have_bounded_pages_at_both_rooms",
+        "test_review_final_pages.PagePlanTests.test_verifies_two_successors_from_their_causes_and_authenticated_assignments",
+        "test_review_final_pages.PagePlanTests.test_refuses_changed_turn_changed_cause_missing_predecessor_and_wrong_roots"
       ]
     },
     {
@@ -6907,7 +6888,7 @@
       "id": "refused-output-retry-without-the-refusal",
       "record": "20261112072628-bar-final-refused-for-part-citation-with-whole-text-offsets",
       "summary": "A refused final output was retried without its contract diagnosis or the delivered part-relative offsets.",
-      "expected": "The planner executes an authenticated replacement carrying the current refusal, bounded to its route, and reaches a recorded review or the exhausted role handoff. Validator upgrades retain successor finality and every stored request, observation and refusal.",
+      "expected": "The planner executes an authenticated replacement carrying the current refusal, bounded to its route, and reaches a recorded review or the exhausted role handoff. Validator upgrades retain successor finality and every stored request, observation and refusal. Every v7 final page, closing page and condensing position retains its material and authenticated refusal origin through replacements; capacity splits preserve prior terminal pages and stop at the pinned floor.",
       "fixed_in": "0.90.0",
       "test_kind": "real_shape",
       "tests": [
@@ -6916,7 +6897,31 @@
         "test_continuity_guard.ContinuityGuardTests.test_g6_executes_the_validator_upgrade_through_a_recorded_second_replacement",
         "test_review_refusal_replacement.RefusalReplacementTests.test_g6_validator_upgrade_authenticates_second_replacement_and_preserves_every_observation",
         "test_review_exhaustion_repair.ExhaustionRepairTests.test_result_handoff_has_complete_binding_and_records_without_retirement",
-        "test_continuity_guard.ContinuityGuardTests.test_exhausted_verification_executes_its_fresh_assignment"
+        "test_continuity_guard.ContinuityGuardTests.test_exhausted_verification_executes_its_fresh_assignment",
+        "test_openness_page_replacement.PageReplacementTests.test_a14_request_capacity_splits_then_level_preserves_four_three_and_authenticates",
+        "test_openness_page_replacement.PageReplacementTests.test_a7_page_refusal_rebuilds_same_material_and_records",
+        "test_openness_page_replacement.PageReplacementTests.test_a7_composed_refusal_belongs_to_closing_notice_and_tampering_fails",
+        "test_openness_page_replacement.PageReplacementTests.test_a7_third_page_refusal_exports_admitted_successor",
+        "test_openness_page_replacement.PageReplacementTests.test_a14_closing_capacity_condenses_two_blocks_then_records",
+        "test_openness_page_replacement.PageReplacementTests.test_a7_condensing_refusal_keeps_block_and_authenticates",
+        "test_openness_page_replacement.PageReplacementTests.test_a14_second_of_three_seven_target_pages_splits_and_keeps_first_output",
+        "test_openness_page_replacement.PageReplacementTests.test_a14_condensing_capacity_splits_block_and_selects_only_replacements",
+        "test_openness_page_replacement.PageReplacementTests.test_a14_time_and_provider_input_limit_split_the_page",
+        "test_openness_page_replacement.PageReplacementTests.test_floor_retries_once_then_executes_export_and_route_answers",
+        "test_openness_page_replacement.PageReplacementTests.test_request_only_capacity_keeps_the_base_retry_decision",
+        "test_openness_page_replacement.PageReplacementTests.test_pending_split_four_three_then_allowance_one_keeps_passage_argument_and_digests",
+        "test_openness_page_replacement.PageReplacementTests.test_t2_page_filled_to_room_with_exact_45000_wire_notice_fits_stored_bound",
+        "test_openness_page_replacement.PageReplacementTests.test_provider_refusal_of_pages_in_every_sequence_ends_in_r7_decision",
+        "test_openness_page_replacement.PageReplacementTests.test_local_closing_ground_refusal_does_not_claim_a_page_owned_composed_field",
+        "test_openness_page_replacement.PageReplacementTests.test_guard_every_final_turn_at_output_limit_reaches_floor_decision",
+        "test_openness_page_replacement.PageReplacementTests.test_capacity_split_after_refusal_keeps_notice_and_starts_new_page_positions",
+        "test_openness_page_replacement.PageReplacementTests.test_guard_closing_and_small_combination_at_every_limit_reach_decision",
+        "test_openness_page_replacement.PageReplacementTests.test_valid_page_answer_at_limit_is_split_instead_of_being_completed",
+        "test_openness_page_replacement.PageReplacementTests.test_composed_notice_keeps_page_decision_handles_in_both_notice_forms",
+        "test_openness_page_replacement.PageFloorTests.test_single_target_page_after_condensing_keeps_request_refusal_position",
+        "test_openness_page_replacement.PageFloorTests.test_capacity_rows_cover_request_page_closing_and_combine",
+        "test_openness_page_replacement.PageFloorTests.test_one_target_one_block_above_pinned_floor_gets_condensing_then_page",
+        "test_openness_page_replacement.PageFloorTests.test_closing_with_three_rows_splits_even_when_each_half_is_one_small_block"
       ],
       "class": "refused output continuity"
     },
@@ -7260,6 +7265,198 @@
       ]
     },
     {
+      "id": "field-classes-bound-cited-search-frame",
+      "record": "20261112150500-result-review-frame-holds-cited-search-records",
+      "class": "role field ownership and bounded frame",
+      "summary": "Cited search records and their captured responses could remain in a result frame above route capacity.",
+      "expected": "Every packet field has an inherited class. A 7.5 million character cited-search shape leaves a bounded frame and exact deterministic units; lowered fixed allocations retain bounded descriptors.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_field_classes.FieldClassTests.test_cited_search_incident_has_no_body_left_outside_the_units",
+        "test_review_field_classes.FieldClassTests.test_a_lowered_fixed_field_keeps_its_descriptor_and_exact_unit"
+      ]
+    },
+    {
+      "id": "field-classes-bound-forming-import-frame",
+      "record": "20261112012956-slate-review-cannot-carry-a-forming-import",
+      "class": "slate field ownership and bounded frame",
+      "summary": "A slate with imported forming records and their artifact bodies could require a 28.6 million character request.",
+      "expected": "Forming-import entries and artifact bodies have unit rules, their frame carries bounded counts, and all original characters remain in stable unit rows without changing the frozen builder packet.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_field_classes.FieldClassTests.test_forming_import_incident_accounts_for_twenty_eight_million_characters",
+        "test_review_field_classes.FieldClassTests.test_builder_packets_keep_the_base_fixture_digests_after_classification"
+      ]
+    },
+    {
+      "id": "capacity-composite-final-authentication",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "capacity-composite-final",
+      "summary": "A final that exceeds one response can retain three authenticated pages and a closing page as one composite.",
+      "expected": "Replay selected observations, require disjoint complete targets, compose again and validate the role output.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_composite.CompositeFinalTests.test_three_pages_record_authenticate_and_read_final",
+        "test_review_composite.CompositeFinalTests.test_condition_3_refuses_overlapping_targets"
+      ]
+    },
+    {
+      "id": "final-page-composition-has-complete-owners-and-bounded-decision-rows",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "review-capacity",
+      "summary": "A reading chain could not give its finding after its final grew beyond the route input limit.",
+      "expected": "Pure role rules split stored final outputs into target pages and a closing answer, recompose identical digests, refuse page fields under their role checks and bound every decision row.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_composition.FinalCompositionRuleTests.test_every_rule_round_trips_stored_real_shape_outputs_and_digests",
+        "test_review_composition.FinalCompositionRuleTests.test_guard2_removing_any_owner_fails",
+        "test_review_composition.FinalCompositionRuleTests.test_guard2_duplicating_any_owner_fails",
+        "test_review_composition.FindingFinalCompositionTests.test_incident_five_thousand_decision_rows_fit_serialized_policy_limit",
+        "test_review_composition.FindingFinalCompositionTests.test_unresolved_ground_order_and_recorded_refs_are_preserved"
+      ]
+    },
+    {
+      "id": "parts-v3-card-rate-and-carried-entry-condensing",
+      "record": "20261112150500-result-review-frame-holds-cited-search-records",
+      "class": "review carried-state capacity",
+      "summary": "Moving cited search records into units requires card budgets that follow text read and condensation when carried entries outgrow a request.",
+      "expected": "Pure helpers plan exact whole-entry blocks, bound complete serialized combinations and retain their block artifacts. Undersized blocks are carried in order without ineffective repeated rounds. Cumulative integer content allocations telescope independently of full card entries charged to their stored reserve; every reachable pinned read answer bound sizes turns and bounds the applied rate. A base plan artifact keeps its bytes and digest. Store-free 10000-unit inventories at thirty input limits complete for fitting, scoped max-prior and unlisted classes, with condensing estimates marked as forecasts. Packet and series integration remain separate lanes.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_condensing.CondensingTests.test_ten_thousand_entries_fit_ordered_blocks_and_finish",
+        "test_review_condensing.CombinationTests.test_invalid_combinations_refuse_under_shape_check",
+        "test_review_condensing.CondensingTests.test_equal_totals_have_different_exact_blocks_and_a_marked_upper_forecast",
+        "test_review_condensing.CondensingTests.test_whole_combinations_at_bounds_fit_next_round_and_keep_block_access",
+        "test_review_condensing.CombinationTests.test_whole_escaped_combination_with_all_refs_accepts_exact_bound",
+        "test_review_condensing.CombinationTests.test_lower_turn_answer_bound_controls_whole_output",
+        "test_review_condensing.CondensingTests.test_small_block_before_a_full_entry_is_carried_in_its_original_position",
+        "test_review_condensing.CondensingTests.test_an_overflow_with_only_undersized_blocks_refuses_without_repeating",
+        "test_review_parts_v3_budget.CardAllowanceTests.test_public_bounds_read_the_pinned_turn_and_card_limits",
+        "test_review_parts_v3_budget.CardAllowanceTests.test_allowance_sums_the_parts_own_intervals_and_separate_reserves",
+        "test_review_parts_v3_budget.CardAllowanceTests.test_revised_examples_keep_full_allocations_and_reserves_at_every_level",
+        "test_review_parts_v3_budget.BudgetPolicyMeasurementsTests.test_read_bounds_card_counts_and_turn_counts_for_both_inventories",
+        "test_review_parts_v3_budget.CardAllowanceTests.test_repeated_level_division_keeps_content_and_the_base_plan_artifact",
+        "test_review_parts_v3_budget.CardAllowanceTests.test_rate_ceiling_keeps_a_floor_card_within_combine_and_its_reserve",
+        "test_review_parts_v3_budget.CardAllowanceTests.test_each_read_level_honors_its_pinned_answer_bound",
+        "test_review_parts_v3_budget.CardAllowanceTests.test_rate_uses_every_reachable_level_and_below_entry_refuses",
+        "test_review_parts_v3_budget.CardAllowanceTests.test_all_full_entries_and_content_stay_within_their_separate_budgets",
+        "test_review_parts_v3_budget.CardAllowanceTests.test_late_units_take_content_and_entries_from_the_late_reserve",
+        "test_review_parts_v3_budget.CardCondensingTests.test_forecast_returns_sized_reads_without_using_the_total_forecast",
+        "test_review_parts_v3_budget.SeriesSimulationTests.test_measured_fits_series_uses_every_allowance_and_finishes",
+        "test_review_parts_v3_budget.SeriesSimulationTests.test_scoped_max_prior_series_uses_every_allowance_and_finishes",
+        "test_review_parts_v3_budget.SeriesSimulationTests.test_unlisted_model_series_uses_every_allowance_and_finishes"
+      ]
+    },
+    {
+      "id": "session-v4-bounded-record-after-output-cap",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "bounded session state foundation under a stored plan",
+      "summary": "A replayed source session grew across turns while an effort-max reviewer exceeded its output cap.",
+      "expected": "The v4 state foundation keeps authenticated history behind a digest and carries only bounded latest notes, allowance rows and pending requests. Request notes respect the selected answer bound and all pending rows have reserved serialized room. Reviewer-call recovery and final integration belong to the session-turn units.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_record.SessionRecordTests.test_three_large_source_turns_on_max_keep_only_current_notes_and_bounded_rows",
+        "test_review_session_v4_record.SessionRecordTests.test_forty_source_turns_carry_no_history_rows",
+        "test_review_session_v4_record.SessionRecordTests.test_pending_request_rows_fit_the_carried_reserve_and_oversized_rows_stay_diagnostic",
+        "test_review_session_v4_record.SessionPlanTests.test_each_request_level_keeps_notes_excerpts_and_request_reserve_within_its_answer_bound"
+      ]
+    },
+    {
+      "id": "session-v4-record-keeps-earlier-delivered-excerpts",
+      "record": "20261111235418-bar-final-refused-for-text-delivered-in-reduced-history",
+      "class": "authenticated session history independent of current input",
+      "summary": "A final lost citation credit when a reduced request no longer carried text delivered in an earlier source turn.",
+      "expected": "Rebuilding v4 state from authenticated observations deterministically retains accepted excerpts with unit offsets and span digests. A request carries the delivered-source count without source rows, and final-entry selection can still return the earliest excerpt. Final authentication belongs to the session-turn unit.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_record.SessionRecordTests.test_same_authenticated_turns_rebuild_the_same_state_digest",
+        "test_review_session_v4_record.SessionRecordTests.test_thousand_delivered_sources_are_one_count_and_final_still_retains_early_excerpt"
+      ]
+    },
+    {
+      "id": "session-v4-bounded-allowance-admission-and-pages",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "bounded session allowance projection under a stored request plan",
+      "summary": "The initial session state tests summarized large target tables without proving admission or access to omitted rows, and the declaration combined target and pending row reserves.",
+      "expected": "Admission pins one 30000-character allowance projection separately from notes and pending requests. A keyed synthetic route admits 500 targets, every rebuilt request fits its stored request task, list pages return each allowance row once, and v7 fixture plan values and artifact digests stay unchanged.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_record.SessionAllowancePlanTests.test_finding_10_many_targets_share_admission_bound_and_page_every_allowance_row_once",
+        "test_review_session_v4_record.SessionAllowancePlanTests.test_pending_rows_are_separate_from_the_single_allowance_projection_bound",
+        "test_review_session_v4_record.SessionAllowancePlanTests.test_pending_request_bound_is_validated_before_any_plan_publication",
+        "test_review_session_v4_record.SessionAllowancePlanTests.test_allowance_page_cursor_is_rebuilt_from_the_authenticated_turn",
+        "test_review_session_v4_record.SessionAllowancePlanTests.test_v7_fixture_admission_plan_artifacts_keep_their_base_digests"
+      ]
+    },
+    {
+      "id": "math-v1-carried-reading-selection",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "math reading continuity",
+      "summary": "A new math review chain must preserve verified readings when a math-v1 final stops at its route limit.",
+      "fixed_in": "open",
+      "expected": "Selection credits unchanged delivered units and parts, carries verified source entries, and preserves all math-v1 records while excluding other reviewers, routes, subjects and problem chains.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_carried_math.MathStoppedChainTests.test_g8_three_readings_survive_ruling_24_2_final_stop_and_keep_record_digests",
+        "test_openness_carried_math.MathCarriedSelectionTests.test_g8_changed_neighbour_keeps_credit_and_filters_entries_and_notes",
+        "test_openness_carried_math.MathPartialRangeTests.test_g8_two_of_three_parts_credit_exact_ranges_and_report_remainder"
+      ]
+    },
+    {
+      "id": "phenomenon-account-probe-delivery",
+      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
+      "class": "account probe provenance undelivered",
+      "summary": "Result reviewers received checks that cited probes without the probe questions, programs and observations.",
+      "expected": "Version 2 values deliver every native probe cited by accounts, delivered forming calls or outcomes, with its intent when held. Binding, delivery and size reports agree; stored version 1 reviews keep their records, digests and prompts.",
+      "fixed_in": "0.91.2",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_probe_delivery.ProbeDeliveryTests.test_eight_independent_routes_deliver_both_records_once_with_original_digests",
+        "test_problem_probe_delivery.ProbeDeliveryTests.test_base_assignment_with_native_probes_keeps_records_digest_prompt_and_state",
+        "test_problem_probe_delivery.ProbeDeliveryTests.test_native_and_imported_probe_of_one_id_keep_four_distinct_entries",
+        "test_problem_probe_delivery.ProbeDeliveryTests.test_public_value_check_and_record_count_both_probe_records"
+      ]
+    },
+    {
+      "id": "phenomenon-result-delivery-date",
+      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
+      "class": "accepted result date unavailable",
+      "summary": "A result-only account could not derive a date because native acceptances carry no timestamp.",
+      "expected": "New native snapshots carry the store delivery time outside their summary digest. The earliest matching snapshot supplies the result date; an older unstamped snapshot stays undated and the refusal names the reference.",
+      "fixed_in": "0.91.2",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_accounts.ProblemAccountsTests.test_a_result_date_is_derived_but_history_keeps_its_precise_time",
+        "test_problem_accounts.ProblemAccountsTests.test_result_date_uses_earliest_matching_snapshot",
+        "test_problem_accounts.ProblemAccountsTests.test_unstamped_earliest_result_reports_undated_reference"
+      ]
+    },
+    {
+      "id": "phenomenon-account-period-history",
+      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
+      "class": "coarse evidence date and lexical date order",
+      "summary": "A date on the forming day gave no explanation of its precision, and string minima could accept evidence that preceded the form.",
+      "expected": "Version 2 values select both date minima by UTC instant and explain a period containing the form time with evidence and form provenance. Stored values without accounts_version retain their original validation and obligations.",
+      "fixed_in": "0.91.2",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_accounts.ProblemAccountsTests.test_period_dates_explain_ambiguous_form_history",
+        "test_problem_accounts.ProblemAccountsTests.test_utc_date_selection_shared_reference_preserves_v1",
+        "test_problem_accounts.ProblemAccountsTests.test_utc_date_selection_distinct_references_preserves_v1",
+        "test_problem_accounts.ProblemAccountsTests.test_offset_date_selection_shared_reference_preserves_v1",
+        "test_problem_accounts.ProblemAccountsTests.test_offset_date_selection_distinct_references_preserves_v1",
+        "test_problem_accounts.ProblemAccountsTests.test_legacy_history_refusal_keeps_message_and_obligation_bytes"
+      ]
+    },
+    {
       "id": "reading-date-version-and-unordered-history",
       "record": "20261115000626-reading-date-reads-a-year-the-store-never-writes",
       "class": "reading dates and gain history",
@@ -7313,6 +7510,146 @@
       "tests": [
         "test_foreground_write_stale_during_review_call.ForegroundWriteStaleDuringReviewCallTests.test_refuse_revision_read_before_review_completion_and_retry",
         "test_foreground_write_stale_during_review_call.ForegroundWriteStaleDuringReviewCallTests.test_refuse_prepared_value_after_review_completion_and_retry"
+      ]
+    },
+    {
+      "id": "result-review-parts-v3-bounded-cited-search-frame",
+      "record": "20261112150500-result-review-frame-holds-cited-search-records",
+      "class": "review-capacity",
+      "summary": "Cited search records remain frozen units instead of growing the result series frame.",
+      "expected": "A 7,500,000-character result packet reaches a recorded review through bounded parts-v3 requests.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3.RecordedSeriesTests.test_real_shape_7500000_cited_search_characters_have_bounded_frames"
+      ]
+    },
+    {
+      "id": "session-v4-fresh-input-and-final-once",
+      "record": "20261114053500-bar-chain-delivers-two-full-texts-per-turn-and-store-runs-one-reviewer",
+      "class": "bounded source session request and one final assessment",
+      "summary": "Replayed source deliveries and repeated assessments made each later request grow with the session history.",
+      "expected": "Fresh v4 request inputs carry only their frame, current deliveries and bounded latest state. Six texts are delivered in fitted parts, request outputs contain no assessment, and a final records the bar once.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_turns.SessionTurnsTests.test_n3_six_large_texts_deliver_bounded_parts_and_assessment_once",
+        "test_review_session_v4_turns.SessionTurnsTests.test_forty_source_turns_are_bounded_and_turn_three_handle_records_bar"
+      ]
+    },
+    {
+      "id": "session-v4-capacity-levels-and-authenticated-handles",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "session capacity recovery with authenticated frozen state",
+      "summary": "A session request at effort max exceeded its output limit without a smaller admissible task.",
+      "expected": "V4 uses request profile rows at reading material levels, replaces the request on its route at the next lower level, retries the floor once and stops for a decision. Final handles authenticate delivered evidence, refusals and multipart arguments.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_turns.SessionTurnsTests.test_request_rows_at_480000_control_c1_with_qualifying_reading_rows",
+        "test_review_session_v4_turns.SessionTurnsTests.test_capacity_at_every_request_level_lowers_then_retries_floor_and_stops",
+        "test_review_session_v4_turns.SessionTurnsTests.test_pending_argument_capacity_reduces_answer_bound_and_keeps_final_material"
+      ]
+    },
+    {
+      "id": "phenomenon-named-openness-gaps",
+      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
+      "class": "versioned named literature gaps and bound finding index",
+      "summary": "T6: identical unreached literature could be treated as a coverage limit or a blocking gap by different final reviews.",
+      "expected": "Finding version 2 requires a delivered basis, an exact formulation, a need and an unsettled question. Bound-query tokens and read-work identities come from an authenticated finding index. Invalid answers retain the first failing rule; pages compose and record every ground member. Version 1 prompts and packets retain their bytes.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_named_gaps.NamedGapRecordingTests.test_unread_work_is_validated_and_preserved_through_every_real_recording_path",
+        "test_openness_named_gaps.NamedGapRecordingTests.test_refused_variant_search_is_replaced_with_its_notice_and_recorded"
+      ]
+    },
+    {
+      "id": "session-v4-final-pages-record-review",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "D1 v4 session final pages, capacity recovery and composite authentication",
+      "summary": "A source session final exceeded the Opus output cap and had no smaller admissible final.",
+      "expected": "The fixed-inventory session records bounded target pages, condenses entries when necessary, and records one authenticated review at the same route and effort.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_pages.SessionPagesTests.test_incident_opus_max_five_sources_records_bar_and_reports_final_turns",
+        "test_review_session_v4_pages.SessionPagesTests.test_a12_page_at_output_limit_splits_and_records",
+        "test_review_session_v4_pages.SessionPagesTests.test_a5_a14_result_200_objections_reach_recorded_review"
+      ]
+    },
+    {
+      "id": "slate-series-reviews-oversized-forming-import",
+      "record": "20261112012956-slate-review-cannot-carry-a-forming-import",
+      "class": "D1 slate packet delivery through parts v3",
+      "summary": "A 28,600,000-character slate packet carries 106 imported forming artifact bodies totaling about 24,500,000 characters, exceeding one local text input.",
+      "expected": "The new slate slot plans bounded parts v3 turns and the reviewer stub finishes a slate review recorded by value-review, including a verified imported-record citation. Ordinary assignments and recorded source sessions retain their bytes. A refused slate turn is replaced through the planner with its refusal notice, and the series continues.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_slate.SlateSeriesTests.test_A1_incident_28600000_character_slate_reaches_value_review",
+        "test_review_parts_slate.SlateSeriesTests.test_A1_imported_record_cite_verifies_in_recorded_slate_final",
+        "test_review_parts_slate.SlateSeriesTests.test_ordinary_assignment_keeps_packet_prompt_and_request_bytes",
+        "test_review_parts_slate.SlateSeriesTests.test_recorded_v2_and_v3_slate_sessions_keep_their_bytes",
+        "test_review_parts_slate.SlateSeriesTests.test_v4_session_admission_precedes_the_slate_adapter",
+        "test_continuity_guard.ContinuityGuardTests.test_other_installed_parts_execute_the_refusal_replacement"
+      ]
+    },
+    {
+      "id": "session-v4-entry-repairs-and-verification-of-v4-chains",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "D1 session entry under the rules v4 and the verification criterion of the release",
+      "summary": "A context repair of a bar, slate or result slot did not start under the session rules v4, and the verification criterion of task T2 could not read a v4 chain: its rules, its stored plan, the positions of its pages and splits, and its two routes.",
+      "expected": "A new slot and a context repair start under the first admitted session rules. The repair delivers its scientific history as units, and a clean exhaustion repair is credited the bodies that its predecessor delivered. Running v2 and v3 sessions keep their bytes. The criterion reads stub-driven v4 bar chains at max to pass or fail by their calls, positions, split successors, recorded bars and declared routes.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_entry.SessionEntryTests.test_retirement_repair_starts_v4_and_delivers_history_as_bounded_units",
+        "test_review_session_v4_entry.SessionEntryTests.test_repair_after_a_recorded_final_in_pages_starts_v4_with_the_composed_review",
+        "test_review_session_v4_entry.SessionEntryTests.test_clean_exhaustion_credits_delivered_body_and_citation_audit_passes",
+        "test_review_session_v4_entry.SessionEntryTests.test_exhaustion_with_contamination_reads_bodies_again",
+        "test_review_session_v4_entry.SessionEntryTests.test_exhaustion_with_retirement_reads_bodies_again",
+        "test_review_session_v4_entry.SessionEntryTests.test_slot_and_repair_that_v4_admission_refuses_take_the_base_path",
+        "test_review_session_v4_entry.LegacySessionBytesTests.test_running_v2_and_v3_continuations_keep_packet_prompt_request_and_check_bytes",
+        "test_verification_criterion.StoredSessionVerificationTests.test_two_real_v4_bars_in_24_calls_report_actual_plan_and_routes",
+        "test_verification_criterion.StoredSessionVerificationTests.test_real_page_split_and_nested_split_keep_new_positions",
+        "test_verification_criterion.StoredSessionVerificationTests.test_real_parent_and_child_page_failures_both_count_in_the_bounds"
+      ]
+    },
+    {
+      "id": "math-v2-reading-chain-carries-stopped-v1",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "A25 math result review chain under a stored capacity plan",
+      "summary": "A reading chain of exactory-openness-reading-math-v1 has no finite projection; ruling 24.2 stops it at the exact measure of a request or at the estimate of its final, and its verified turns had no protocol to carry them.",
+      "expected": "With exactory-openness-reading-math-v2 first in NEW_MATH_CHAIN_PROTOCOLS, a math review chain has a stored capacity plan, delivers the proof artifacts and supplementary inputs as units, and records the native result review in one request or in pages. Each stop of a v1 chain names its admitted successor, which carries the verified v1 turns without delivering their units again; the estimate stop keeps its answer continue, and v1 chains keep their bytes.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_math_successor.MathSuccessorTests.test_a25_exact_final_stop_names_the_successor_and_its_steps_reach_a_recorded_review",
+        "test_openness_reading_math_v2.MathV2CarriedTests.test_a25_stopped_v1_turns_are_carried_without_repeating_units_to_a_recorded_review",
+        "test_openness_reading_math_v2.MathV2ChainTests.test_a25_request_final_delivers_native_evidence_with_its_binding_and_records_the_review",
+        "test_openness_reading_math_v2.MathV2ChainTests.test_a25_forty_neighbours_reach_a_recorded_composite_at_the_final_floor",
+        "test_openness_math_successor.MathEstimateStopTests.test_finding5_estimate_stop_keeps_continue_and_the_continued_chain_ends_under_v1",
+        "tests.test_reading_math_v2_controller.MathReadingControllerTests.test_a25_real_controller_two_pages_and_closing_accept_native_review"
+      ]
+    },
+    {
+      "id": "carried-selection-leaves-out-turns-without-a-credit",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "carried selection",
+      "summary": "The selection of a new v7 chain carried a turn only when a range or a completed search was taken from it. A turn that delivered shared search fields or an earlier part of a search record was left out with its notes, excerpts and passage answers: on the store of record 12 at revision 1646, 12 of the 57 turns of the stopped chain with 164 entries. The verifier required a range or a search of every stored turn, so it agreed.",
+      "expected": "Every ready reading turn of a chain that the selection takes anything from is carried with its notes. An excerpt or a passage answer is carried when its own source is unchanged, unless the selection takes the reading of that unit from other chains, and the receipt counts every entry as carried, superseded or with a changed source. A selection of version 2 that lacks a turn, the end of a chain, a chain or an entry does not verify.",
+      "fixed_in": "0.91.4",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_carried.V5PartialSearchTests.test_turn_with_an_earlier_part_of_a_search_is_carried_with_its_entries",
+        "test_openness_carried.V5PartialSearchTests.test_last_ready_turn_without_a_credit_gives_the_starting_notes",
+        "test_openness_carried.V5CarriedSelectionTests.test_entry_of_a_turn_whose_delivered_units_changed_is_carried",
+        "test_openness_carried.V6PartialSearchTests.test_turn_with_an_earlier_part_of_a_search_is_carried_with_its_entries",
+        "test_openness_carried.V6PartialSearchTests.test_last_ready_turn_without_a_credit_gives_the_starting_notes",
+        "test_openness_carried.V6CarriedSelectionTests.test_entry_of_a_turn_whose_delivered_units_changed_is_carried",
+        "test_openness_carried_integration.Record12ShapeTests.test_stopped_chain_carries_all_57_turns_and_every_output",
+        "test_openness_carried_integration.Record12ShapeTests.test_v7_chain_reaches_a_verified_finding_with_the_carried_outputs"
       ]
     },
     {
@@ -7390,6 +7727,36 @@
         "test_review_correction_origin.CallOriginTests.test_correction_on_another_route_record_follows_the_state_of_that_route",
         "test_review_output_correction_visual.VisualCorrectionTests.test_original_visual_delivery_and_negative_science_survive_observed_text_delta",
         "test_review_effective_consumers.EffectiveConsumerTests.test_selected_graph_revalidates_raw_receipts_and_sibling_actual_inputs"
+      ]
+    },
+    {
+      "id": "finding-index-over-the-frame",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "A frame field over its stated size",
+      "summary": "The finding index of a version 2 final copied every field value of the bound searches into the fixed frame. In a stored store two bound searches share one dispositions value of about 290,000 characters, so the final frame exceeded its bound of 200,000, v7 refused with fixed_frame and v6 started, which loses the carried readings; the latest openness packet of 7 of 14 live records gives the same result.",
+      "expected": "The index of a final has one stated size, recorded in the inventory of its chain. Within it the index is complete; beyond it the longest values other than queries leave, the largest first, and the index names the body of each by its handle and length; an index that fits in no such form is one unit of the inventory. v7 is admitted for every size of the index, answers are checked against the complete index of the plan, and a chain that started before the index existed ends with a version 1 final.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_continuity_selection.StoredCaptureJourneyTests.test_g8_c8_chosen_and_stopped_capture_new_export_records_and_verifies",
+        "test_openness_finding_index_frame.LongValueChainTests.test_g8_shared_and_own_long_dispositions_leave_the_final_and_name_their_bodies",
+        "test_openness_finding_index_frame.LongValueChainTests.test_g8_eighteen_searches_keep_their_shortest_values_within_the_stated_size",
+        "test_openness_finding_index_frame.LongValueChainTests.test_g8_twenty_nine_searches_keep_every_query_and_read_work_in_a_form_with_references"
+      ]
+    },
+    {
+      "id": "carried-credit-covers-a-named-value",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "A carried credit covers a body that the final names",
+      "summary": "A final of a bounded chain names the longest field values of its bound searches by their bodies. A new chain that carried the turns of an earlier chain took the credit of each search that the earlier chain completed for every body of that search, so in the stored store of the G8 journey the shared dispositions value of 290,071 characters that the final names was never delivered to the reviewer, and the reading turns had no sentence about such values.",
+      "expected": "The inventory of a chain whose final names values by their bodies lists the span of each value, and its reading turns hold their number and a registered paragraph. A span counts as delivered only when a reading turn of the chain itself delivered it: the chain reads the named values in its own turns, the report of the carried selection lists them as remaining work, the carried credit stays for the searches and for every other part of their bodies, and the verification refuses a final before those deliveries.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_finding_index_frame.CarriedChainTests.test_g8_a_carried_chain_reads_the_value_that_its_final_names_in_its_own_turns",
+        "test_openness_finding_index_frame.CarriedChainTests.test_g8_a_value_that_one_carried_search_holds_alone_is_read_as_its_span",
+        "test_openness_finding_index_frame.FindingUnitsTests.test_g8_reading_turns_hold_the_count_and_the_paragraph_and_the_inventory_the_spans",
+        "test_openness_finding_index_frame.ExcludedWorkLongTests.test_g8_the_long_excluded_work_judgment_is_read_kept_and_settles_the_final"
       ]
     },
     {
@@ -7821,6 +8188,44 @@
       "tests": [
         "test_must_pass.MustPassSelectionTests.test_a_changed_fixture_builder_selects_the_test_that_reaches_it_through_other_test_modules",
         "test_must_pass.MustPassSelectionTests.test_the_fixed_modules_exist"
+      ]
+    },
+    {
+      "id": "release-merged-while-tests-used-the-changed-code-without-a-top-level-import",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "must-pass set of a release",
+      "summary": "Release 0.91.11 went to main while two tests failed: tests/test_research_gates.py imported research_harness.execution inside a test function and patched a function that 0.91.11 had replaced, and tests/fixtures/capacity_transport_inventory.json pinned the checksums of two functions of research_harness/review_protocol.py that 0.91.11 had changed, which tests/test_capacity_guard.py checks through ci/capacity_guard.py. The must-pass set of 0.91.11 was built by hand and held neither module. No test module names that fixture, and many test modules name a harness module only in a mock.patch target, an importlib.import_module argument or a path.",
+      "expected": "ci/must_pass.py selects a test module that imports a changed module inside a function, that names it in a string by its dotted name or its path, or that reads a fixture or uses a module of ci that names it, also through a compressed fixture or a fixture folder. For the diff of 0.91.11 the set holds test_research_gates and test_capacity_guard.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_must_pass.MustPassReachTests.test_a_module_used_without_a_top_level_import_is_selected",
+        "test_must_pass.MustPassReachTests.test_the_checksum_pins_that_a_ci_module_checks_select_the_tests_that_import_it",
+        "test_must_pass.MustPassReachTests.test_a_fixture_that_names_a_changed_module_selects_the_tests_that_read_it"
+      ]
+    },
+    {
+      "id": "must-pass-run-passed-tests-that-failed-in-their-ci-shard",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "must-pass set of a release",
+      "summary": "The must-pass run started one process for each test module, and a CI shard runs the tests that it holds from many modules in one process. A test that leaves module state behind passes alone and fails the later tests of its shard: release 0.89.2 passed its 73 changed modules locally and failed about 3,000 tests in every CI shard.",
+      "expected": "ci/must_pass.py run starts, for each Python executable and each CI shard, one process that discovers the tests as the shard does and runs the tests of the set that the shard holds, in the order of the shard. A test that fails after an earlier test of its shard changed shared state fails in the must-pass run as well.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_must_pass.MustPassRunTests.test_two_modules_of_one_shard_run_in_one_process_and_state_left_behind_fails_the_later_one"
+      ]
+    },
+    {
+      "id": "closing-composite-refusal-record-read-the-whole-store",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "merge of a finishing write and a composite final",
+      "summary": "The merge of 0.91.11 into the 0.92.0 branch joined the refusal record that commits against the records its check read with the check of a closing answer, which built its composite from dict(records, ...). That iterated the scoped records and bound the revision of the whole store, so a commit of another command refused each attempt of the refusal record of a closing composite, and the run ended with store_busy.",
+      "expected": "The check of a closing answer reads the records through a view that does not iterate them; an unrelated commit before each attempt leaves the refusal record of a closing composite to commit at its first attempt.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_final_pages_checked_answers.ClosingRefusalWriteTests.test_refusal_of_a_closing_composite_is_recorded_when_a_commit_meets_every_attempt"
       ]
     }
   ]

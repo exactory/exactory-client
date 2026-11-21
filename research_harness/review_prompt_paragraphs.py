@@ -89,8 +89,30 @@ UNREAD_FINAL_PROMPT = (
     '{ref:<unit>}, with the unit of its row.')
 
 
+FINDING_UNITS_PARAGRAPH_VERSION = 'exactory-openness-finding-units-v1'
+# Placeholder for the writer's pass. The reading frame of a v7 chain with a finding index holds 1,500 characters for
+# this paragraph together with the member reading_turn.finding_units at its widest (FINDING_UNITS_CHARACTERS, G8.11),
+# so the text stays under 1,450 characters. A later change of the text needs a new registered version.
+FINDING_UNITS_PROMPT = (
+    '\n\nValues that the final names. reading_turn.finding_units is the number of field values of bound searches '
+    '(scope, dispositions, resolved or row_dispositions) that the final of this chain does not show; the final names '
+    'the body that holds each of them. This chain delivers each of these values in a reading turn of its own, also '
+    'when an earlier chain read the search. Such a delivery can be the part of a search record that holds the JSON '
+    'text of one field. When you read one, keep as excerpts, with their targets, the judgment rows of the works that '
+    'a text or your notes name and that no reading covers: a ground of the final for an unread work has to say why '
+    'no recorded judgment of a bound search settles it. When a unit with the label Finding index arrives, the index '
+    'itself is too long for the final; keep the bound queries of each target as well.')
+# The paragraphs that a packet without a problem subject can select, such as a turn of a v7 reading chain.
+SHARED_PARAGRAPH_NAMES = ('delivery-notice', 'output-refusal-whole', 'output-refusal-bounded', 'unread-final',
+                          'finding-units')
+
+
 def _has_unread_final(role, packet):
     return 'unread' in packet.get('reading_final', {})
+
+
+def _has_finding_units(role, packet):
+    return 'finding_units' in packet.get('reading_turn', {})
 
 
 def _has_whole_refusal(role, packet):
@@ -651,6 +673,8 @@ PARAGRAPHS = (
                     ((DELIVERY_NOTICE_PROTOCOL, DELIVERY_NOTICE_PROMPT),)),
     PromptParagraph('unread-final', ('native_math',), _has_unread_final,
                     ((UNREAD_FINAL_PARAGRAPH_VERSION, UNREAD_FINAL_PROMPT),)),
+    PromptParagraph('finding-units', ('native_math',), _has_finding_units,
+                    ((FINDING_UNITS_PARAGRAPH_VERSION, FINDING_UNITS_PROMPT),)),
     PromptParagraph('output-refusal-whole', ('bar', 'slate', 'result', 'adjudicator', 'verification', 'native_math', 'manuscript', 'standalone'),
                     _has_whole_refusal, ((REFUSAL_PARAGRAPH_VERSIONS['whole'], REFUSAL_WHOLE_PROMPT),)),
     PromptParagraph('output-refusal-bounded', ('bar', 'slate', 'result', 'adjudicator', 'verification', 'native_math', 'manuscript', 'standalone'),
@@ -658,7 +682,7 @@ PARAGRAPHS = (
 
 
 def has_only_shared_paragraphs(versions):
-    shared = [version for paragraph in PARAGRAPHS if paragraph.name in ('delivery-notice', 'output-refusal-whole', 'output-refusal-bounded', 'unread-final')
+    shared = [version for paragraph in PARAGRAPHS if paragraph.name in SHARED_PARAGRAPH_NAMES
               for version, _ in paragraph.versions]
     return isinstance(versions, list) and all(version in shared for version in versions)
 
@@ -671,13 +695,14 @@ def has_capacity_paragraph(versions):
 def select_prompt_parameters(role, packet):
     """Select the paragraphs called for by this delivered packet, including compact task contexts."""
     problem = packet.get('subject', {}).get('kind') == 'problem'
-    if not problem and not _has_delivery_notice(role, packet) and 'output_refusal' not in packet and not _has_unread_final(role, packet):
+    if (not problem and not _has_delivery_notice(role, packet) and 'output_refusal' not in packet
+            and not _has_unread_final(role, packet) and not _has_finding_units(role, packet)):
         return {}
     conditions = (packet.get(CONDITIONS) if 'value' not in packet.get('problem_evidence', {}) else None)
     from .bar_sources import PROTOCOL_V3
     versions = [paragraph.versions[0 if paragraph.name == 'slate-forming'
                 and packet.get('source_rules') != PROTOCOL_V3 else -1][0] for paragraph in PARAGRAPHS[1:]
-                if role in paragraph.roles and (problem or paragraph.name in ('delivery-notice', 'output-refusal-whole', 'output-refusal-bounded', 'unread-final')) and
+                if role in paragraph.roles and (problem or paragraph.name in SHARED_PARAGRAPH_NAMES) and
                 (paragraph.name in conditions if conditions is not None and paragraph.name not in ('delivery-notice', 'capacity-notice', 'output-refusal-whole', 'output-refusal-bounded')
                  else paragraph.condition(role, packet))]
     if role in PARAGRAPHS[0].roles and _has_carry(role, packet):
@@ -770,7 +795,8 @@ def _append_selected_paragraphs(base, carried, versions, selected, capacity=None
 def _describe_template_suffix(selected):
     return ''.join('/' + version[len('exactory-problem-') if version.startswith('exactory-problem-')
                                else len('exactory-'):] for version, _ in selected
-                   if version not in tuple(REFUSAL_PARAGRAPH_VERSIONS.values()) + (UNREAD_FINAL_PARAGRAPH_VERSION,))
+                   if version not in tuple(REFUSAL_PARAGRAPH_VERSIONS.values()) + (UNREAD_FINAL_PARAGRAPH_VERSION,
+                                                                                    FINDING_UNITS_PARAGRAPH_VERSION))
 
 
 def strip_prompt_paragraphs(prompt, role):

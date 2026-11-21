@@ -277,19 +277,31 @@ def find_review_undelivered_references(records, artifacts, evidence, delivery, *
             from .review_parts import has_series_reference
             if has_series_reference(artifacts, delivery['actual_packets'], reference):
                 continue
-        packets = delivery['packets'] if require_complete_artifacts or reference.get('kind') == 'source' else ()
+        from .review_parts_v3 import is_span_reference
+        packets = delivery['packets'] if require_complete_artifacts or reference.get('kind') == 'source' or is_span_reference(reference) else ()
         missing.extend(undelivered_references(records, artifacts, [reference], delivery['carried_records'],
             delivery['artifacts'], delivery['source_mappings'], frozen=True, packets=packets))
     return missing
 
 
-def validate_review_contract(records, artifacts, assignment, output, *, attempt=None):
+def validate_review_contract(records, artifacts, assignment, output, *, attempt=None, composed=False):
     """Check the frozen scientific contract and the exact attempt's permitted delivery."""
     from .review_handles import expand_handles, is_material_output, validate_material
     packet = read_assignment_packet(records, artifacts, assignment['id'])
     output = expand_handles(packet, output, artifacts=artifacts, assignment=assignment)
     if is_material_output(packet, output):
         validate_material(packet, output, artifacts=artifacts, assignment=assignment)
+        return
+    from . import review_session_v4
+    if not composed and (packet.get('session_combine') or packet.get('session_final', {}).get('page_plan_digest')):
+        review_session_v4.validate_final_turn_output(records, artifacts, assignment, packet, output)
+        return
+    if review_session_v4.find_session_kind(packet) == 'final':
+        with contract_check('review.shape'):
+            review_session_v4._require_turn(isinstance(output, dict) and not set(output).intersection(
+                ('source_requests', 'settled_requests', 'excerpts')))
+    if review_session_v4.find_session_kind(packet) == 'request':
+        review_session_v4.validate_request_output(artifacts, assignment, packet, output)
         return
     from . import bar_sources, review_context_repair, review_excerpts, review_supplied_evidence
     from .review_protocol import has_problem_result_rubric, is_previous_prompt
@@ -299,7 +311,8 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
     parts_kind = review_parts.find_kind(parts_packet)
     readiness_parts = (parts_kind is not None
                        and parts_packet[review_parts.KEY]['adapter'] == 'study_readiness')
-    if parts_kind is not None:
+    if parts_kind is not None and not (parts_packet[review_parts.KEY].get('page_plan_digest')
+                                       and output.get('stage') == assignment['role']):
         with contract_check('review.shape'):
             review_parts.validate_turn_output(records, artifacts, assignment, parts_packet, output, attempt=attempt)
         if parts_kind != 'final' or output.get('kind') == 'requests':
@@ -352,6 +365,10 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
         packets = list(reversed(packets_from_visual_request(request)))
     else:
         packets = review_supplied_evidence.lineage_packets(records, artifacts, [assignment["id"]])
+    if assignment.get('session_chain'):
+        logical = json.loads(artifacts.read(assignment['session_chain']['logical']))
+        logical['evidence'] = []
+        packets = [logical] + packets
     if staged_binding is None:
         packet = packets[0]
     if "excerpts" in output:
@@ -448,6 +465,7 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
     if source_only:
         evidence_rows = [(path, [reference for reference in evidence if reference.get('kind') == 'source'])
                          for path, evidence in evidence_rows]
+    if source_only or assignment.get('session_chain'):
         support = output['support'] if stage == 'result' else None
         if isinstance(support, dict) and isinstance(support.get('checks'), list):
             for index, check in enumerate(support['checks']):
@@ -461,7 +479,7 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
                     with describe_error_at(path):
                         contract_evidence(records, artifacts, sources, positions=positions, forms_notice=False)
                     evidence_rows.append((path, sources))
-    if problem or readiness_parts or source_only and any(evidence for _, evidence in evidence_rows):
+    if assignment.get('session_chain') or problem or readiness_parts or source_only and any(evidence for _, evidence in evidence_rows):
         from .review_delivered_evidence import project_delivery_view
         if staged_binding is not None:
             delivery = project_delivery_view(records, artifacts, packets)
@@ -527,6 +545,13 @@ def record_value_review(store, payload, *, expected_revision, request_id):
         validate_assignment_inventories(records, artifacts, value["assignment_id"])
         assignment = assignment_state(records, artifacts, value["assignment_id"])
         effective_output, effective_digest = read_effective_result(assignment)
+        from .review_composite import read_final_output
+        final_output, composite = read_final_output(records, artifacts, records['review_assignment'][value['assignment_id']])
+        if composite is not None:
+            effective_output, effective_digest = final_output, digest(final_output)
+        if saved is not None and saved.get('session_chain') and assignment.get('attempt_id'):
+            from .review_session_v4 import require_final_capacity
+            require_final_capacity(records, artifacts, saved, records['review_attempt'][assignment['attempt_id']])
         if assignment.get('effective', {}).get('kind') == 'incomplete':
             raise ResearchError('assessment_incomplete', 'An incomplete assessment occupies its slot without a scientific review.')
         if effective_output is None:
@@ -549,7 +574,7 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                 if not assignment['ready'] or not verified['complete']:
                     raise ResearchError('review_parts_pending', _PARTS_RESULT_PENDING_NOTE,
                                         dict(assignment_id=saved_assignment['id'], issues=verified['issues']))
-        validate_review_contract(records, artifacts, saved_assignment, effective_output)
+        validate_review_contract(records, artifacts, saved_assignment, effective_output, composed=composite is not None)
         if value["stage"] in ("bar", "slate", "result"):
             if assignment.get("pending_source_requests") or value.get('settled_requests'):
                 raise ResearchError("review_sources_pending", "Retain the observed request turn; resolve its source deliveries before recording a final phase assessment")
@@ -599,6 +624,8 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                 raise ResearchError("value_review_phase_mismatch", "A result review requires a result dossier")
             recorded_assignment = records["review_assignment"][value["assignment_id"]]
             packet = read_assignment_packet(records, artifacts, recorded_assignment["id"])
+            if recorded_assignment.get("session_chain"):
+                packet = json.loads(artifacts.read(recorded_assignment["session_chain"]["logical"]))
             if value["support"].get("assessor") != packet.get("assessor") or normalized_text(value["support"]["assessor"]["id"]) != reviewer:
                 raise ResearchError("value_review_support_identity", "Use the assigned native assessor and its actual provenance")
             from .publication_scope import has_publication_scope, prepare_combined_scoped_support
@@ -617,6 +644,8 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                   "dossier_id": value["dossier_id"], "dossier_digest": None if dossier is None else dossier["digest"], "assignment_id": value["assignment_id"],
                   "reviewer_id": assignment["reviewer_id"], "packet_digest": assignment["packet_digest"], "prompt_hash": assignment["prompt_hash"],
                   "output_digest": effective_digest, "support": support, "independence_at_recording": assignment["context_status"]}
+        if composite is not None:
+            record['composite'] = dict(id=composite['id'], digest=digest(composite))
         if saved_assignment.get('staged_review') is not None and assignment.get('effective') is not None:
             record['effective_binding'] = bind_effective_result(assignment['effective'])
         if problem is not None:
@@ -842,12 +871,24 @@ def _independence(records, artifacts, reviews):
                 obligations.append(obligation('review_context_contaminated',
                     'Reassess the selected task context after recorded contamination.', review_id=review['id']))
         output, output_digest = read_effective_result(state)
+        composite_stale = False
+        if review.get('composite') is not None:
+            from .review_composite import read_final_output
+            try:
+                output, composite = read_final_output(records, artifacts, saved_assignment)
+                output_digest = digest(output)
+                composite_stale = (composite is None or review['composite'] !=
+                                   dict(id=composite['id'], digest=digest(composite)))
+            except ResearchError as error:
+                obligations.append(obligation(error.code, error.message, **(error.details or {})))
+                composite_stale = True
         effective = state.get('effective')
         binding = review.get('effective_binding')
         stale_binding = ((binding is not None and (effective is None or binding != bind_effective_result(effective)))
                          or (effective is not None and binding is None
                              and (effective.get('kind') == 'paged' or saved_assignment.get('staged_review') is not None)))
-        if output != _response(review["payload"]) or output_digest != review["output_digest"] or stale_binding:
+        if (output != _response(review["payload"]) or output_digest != review["output_digest"]
+                or stale_binding or composite_stale):
             obligations.append(obligation("research_review_binding_stale", "Reassess the exact recorded independent output.", review_id=review["id"]))
     return obligations
 

@@ -190,7 +190,7 @@ def _build_assignment_payload(records, assignment, *, replace=False):
                     'correction', 'source_delivery')}
         context['prior_assignment_id'] = assignment['id']
     maximum = (openness_reading.RESERVED_IDENTIFIER_CHARACTERS if assignment['prompt']['template_id'].startswith(
-        (openness_reading.PROTOCOL_V6 + '/', 'exactory-openness-reading-v7/')) else None)
+        tuple(protocol + '/' for protocol in (openness_reading.PROTOCOL_V6,) + openness_reading.BOUNDED_CHAIN_PROTOCOLS)) else None)
     payload.update(id=_find_unused_id(records, lineage[0]['id'] + '-t' + str(len(lineage) + 1), maximum=maximum),
                    context=context)
     return payload
@@ -203,7 +203,7 @@ def _build_run_payload(records, assignment):
                    if row['assignment_id'] == assignment['id']]
     count = len({row['id'] for row in attempts + invocations}) + 1
     maximum = (openness_reading.RESERVED_IDENTIFIER_CHARACTERS if assignment['prompt']['template_id'].startswith(
-        (openness_reading.PROTOCOL_V6 + '/', openness_reading.PROTOCOL_V7 + '/')) else None)
+        tuple(protocol + '/' for protocol in (openness_reading.PROTOCOL_V6,) + openness_reading.BOUNDED_CHAIN_PROTOCOLS)) else None)
     return dict(id=_find_unused_id(records, assignment['id'] + '-run-' + str(count), maximum=maximum),
                 assignment_id=assignment['id'])
 
@@ -348,12 +348,13 @@ def _plan_unrecorded_refusal(records, artifacts, assignment, state, packet):
     """Plan the recorded run request again for a native answer that fails its output check without a refusal record.
 
     The run of such a turn records the refusal, and the same request records it when that write did not commit.
-    A turn of protocol v7 and an answer under the finding contract are read only after this check, so their head
-    gets this step in place of a continuation or a recording that the command would refuse. The check fails only for
-    an authenticated attempt, and the run writes the invocation and the capture of such an attempt before the attempt
-    itself, so both records are read directly."""
+    A turn of a bounded chain (protocol v7 or math v2) and an answer under the finding contract are read only after
+    this check, so their head gets this step in place of a continuation or a recording that the command would refuse.
+    The check fails only for an authenticated attempt, and the run writes the invocation and the capture of such an
+    attempt before the attempt itself, so both records are read directly."""
     from .native_review import uses_finding_contract
-    if openness_reading.find_protocol(packet) != openness_reading.PROTOCOL_V7 and not uses_finding_contract(assignment):
+    if (openness_reading.find_protocol(packet) not in openness_reading.BOUNDED_CHAIN_PROTOCOLS
+            and not uses_finding_contract(assignment)):
         return None
     attempt_id = state['attempt_id']
     if attempt_id in records.get('review_output_refusal', {}):
@@ -563,6 +564,10 @@ def _plan_head(records, artifacts, assignment):
                     payload=_build_assignment_payload(records, assignment, replace=True),
                     code='review_input_too_large', details=dict(assignment_id=assignment['id']))
     failed = protocol.has_ended_without_output(records, assignment['id'])
+    if attempts and assignment.get('capacity_plan_kind') == 'final':
+        from .review_failure_class import classify_final_capacity_attempt
+        latest = max(attempts, key=lambda row: row.get('recorded_revision', 0))
+        failed = failed or classify_final_capacity_attempt(records, artifacts, latest) is not None
     unverified = bool(attempts) and all(row['status'] != 'completed'
         or not protocol._context_observed(artifacts, row) for row in attempts)
     state = None
@@ -658,9 +663,13 @@ def _plan_head(records, artifacts, assignment):
             return unrecorded
     is_parts = review_parts.KEY in assignment
     continuing = (is_parts and (assignment[review_parts.KEY]['kind'] != 'final'
+                                or packet[review_parts.KEY].get('final_form') == 'page'
+                                or (packet[review_parts.KEY].get('page_plan_digest') and
+                                    state['output'].get('stage') == 'material')
                                 or state['output'].get('kind') == 'requests')
                   or review_problem_parts.find_stage(packet) == 'part'
                   or openness_reading.find_stage(packet) is not None and state['output'].get('stage') in ('reading', 'material')
+                  or openness_reading.find_stage(packet) in ('page', 'combine')
                   or bool(state.get('pending_source_requests'))
                   or bool(state['output'].get('settled_requests'))
                   or (assignment.get('subject', {}).get('kind') == 'problem'

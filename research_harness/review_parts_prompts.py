@@ -261,6 +261,9 @@ FINAL_ANSWER = (
     'or source that this packet does not hold, and stays within review_parts.request_room.'
 )
 
+SLATE_ADAPTER = 'Placeholder: review slate forming records with artifact descriptors, carried bodies and accounts.'
+FINAL_SLATE = 'Placeholder: return the ordinary slate review, assessing the bars and candidate potential.'
+
 FINAL_RESULT = (
     'Final of a problem result review. The units of this series were the entries of openness_searches, '
     'assessment_evidence, readings, passages, computations and formal_checks of problem_evidence, and every '
@@ -444,3 +447,45 @@ SEGMENT_NOTE = (
 )
 
 PROMPTS = {'read': READ, 'combine': COMBINE, 'check': CHECK, 'final': FINAL}
+
+# Writer-pass placeholders: each protocol paragraph has one stable home.
+PARTS_V3_COMMON = (
+    'Review this fresh input under exactory-review-parts-v3. The inventory, stored plan and earlier turns are '
+    'bound by digests; their lists are not repeated. Cite delivered units as {ref:"uN"}, with part and start/end '
+    'for a delivered span; cite cards, combinations, targets and completed arguments by their handles. '
+    'capacity states the route output limit in tokens and the answer bound in characters. Reasoning and answer '
+    'share the token limit; an answer cut there is lost. Follow the field bounds and the per-group allowances.'
+)
+PARTS_V3_READ = (
+    'Read review_parts_material in inventory order. A continued unit row appears in review_parts_context; no '
+    'earlier card or body is repeated. review_parts_groups assigns consecutive delivery intervals. Return '
+    '{kind:"read",turn,cards,unborne}, exactly one card per group, copying its complete group row. Each card '
+    'holds group, summary, bearing, statements, depends_on and questions. Each statement holds unit, text and why '
+    'and quotes only that unit inside its assigned group. summary has at most 12,000 characters, depends_on and '
+    'questions 400 each; at most ten bearings have reasons of 400 characters. At most eight statements have text '
+    'of 3,000 characters and why of 400; statement text totals at most 24,000 in the turn. A complete card fits '
+    'the lowest combine level. An entry alone still holds a complete review card. Each unborne reason has at most '
+    '400 characters; the complete answer, including its wrapper, stays within the answer bound.'
+)
+PARTS_V3_COMBINE = (
+    'When mode is condense, read this block and return {block,summary,refs}. The complete serialized combination '
+    'fits a quarter of its block and the answer bound; refs names distinct entries of the block. Originals remain '
+    'available by handle. Otherwise examine interactions and return {kind:"combine",turn,combinations,rest}; '
+    'each scientific combination holds units, question, view and read, and may state its bearing on targets.'
+)
+PARTS_V3_CHECK = (
+    'Check each assigned scientific combination against review_parts_requests. Return {kind:"check",turn,findings}; '
+    'each finding holds combination, finding, effect and statements. Name contradictions explicitly.'
+)
+PARTS_V3_FINAL = (
+    'Return the role final using the delivered evidence and checked findings. You may instead request originals '
+    'with {kind:"requests",unit_requests,source_requests}; a unit request names unit, why and optional start/end. '
+    'A unit may be a stored card or combination handle. Request a block entry list with {unit:block_handle,entries:true}; '
+    'then request an entry by its handle. Long originals arrive in parts of subsequent final turns. '
+    'An argument may be recorded as {stage:"material",title,part,text,more}, at most eight parts, then cited as mN.'
+)
+PARTS_V3_PAGE = 'PLACEHOLDER: Review the assigned target page and return its composition-rule page answer; requests and material may precede that answer.'
+PARTS_V3_CLOSING = 'PLACEHOLDER: Review the decision rows and return the composition-rule closing answer; requests and material may precede that answer.'
+PARTS_V3_CONDENSE = 'PLACEHOLDER: Condense this final block as {block,summary,refs} within its combination bound; retain the handles of its original entries.'
+PARTS_V3_PROMPTS = dict(read=PARTS_V3_READ, combine=PARTS_V3_COMBINE,
+                        check=PARTS_V3_CHECK, final=PARTS_V3_FINAL)

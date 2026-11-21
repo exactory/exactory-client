@@ -28,7 +28,11 @@ def find_role_adapter(packet):
     ordinary.pop('context_repair', None)
     value = dict(role=packet.get('role'), context={})
     name = find_adapter(value, ordinary)
-    return get_adapter(name) if name is not None else None
+    adapter = get_adapter(name) if name is not None else None
+    # This delegation is part of recorded v2 repair inventories and prompts.
+    # A role added only under a later protocol cannot change that contract.
+    return (adapter if adapter is not None and parts.PROTOCOL in
+            adapter.get('protocols', (parts.PROTOCOL,)) else None)
 
 
 def list_role_units(packet):
@@ -425,6 +429,16 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
         else:
             history = None
         packet = prepare_history(records, artifacts, packet, history)
+    recorded_protocol = prior.get(parts.KEY, {}).get('protocol') if continuing else None
+    if (recorded_protocol == 'exactory-review-parts-v3' or not continuing
+            and next(iter(parts.NEW_SERIES_PROTOCOLS), None) == 'exactory-review-parts-v3'):
+        from .review_parts_v3 import prepare_packet as prepare_v3
+        planned = prepare_v3(records, artifacts, value, route, packet, prompt, [],
+            base_prompt_parameters=base_prompt_parameters, slot_id=slot_id, entry=entry,
+            capacity_replacement=capacity_replacement if capacity_replacement is not None else {},
+            refusal_notice=refusal_notice)
+        if planned is not None:
+            return planned
     # Normalized history may itself fit. Entry was already decided using the
     # ordinary request, so plan directly rather than asking the entry test again.
     series_key = compute_series_key(packet)

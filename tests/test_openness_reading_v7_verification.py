@@ -251,7 +251,7 @@ class NativeDeliveryVerificationTests(unittest.TestCase):
                             {key: 'Checked the supplied subject.' for key in
                                 ('statement', 'assumptions', 'scope', 'dependencies', 'policy')},
                             openness=dict(outcome='unresolved', coverage='Read the required proof and sources.',
-                                reason='A remaining gap.', grounds=[dict(kind='reviewer_gap', text='A remaining gap.')])) )
+                                reason='A remaining gap.', grounds=[dict(kind='own_argument', text='The recorded argument requires further checking.')])) )
                 invoke_codex(case, name, output)
                 if 'reading_final' in supplied:
                     result = case.mutate(case.load_problem_module().record_openness, dict(assignment_id=name))['result']
