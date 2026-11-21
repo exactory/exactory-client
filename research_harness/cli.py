@@ -210,7 +210,12 @@ def _review_run(store, payload, **identity):
             dispatch = records.get("review_task_dispatch", {}).get(identity["request_id"], {})
             identifier = (payload.get("id") or owner.get("id") or dispatch.get("id") or accepted.get("id") or
                           "task-run:" + digest([epoch["id"], payload["task_id"], identity["request_id"]]))
-            payload = {"id": identifier, "assignment_id": child["id"]}
+            # A run that resumes a recorded dispatch sends the whole payload of that dispatch.
+            from .review_task_execution import rebuild_call_payload
+            recorded_dispatch = next((row for row in (dispatch, owner)
+                                      if row.get("id") == identifier and row.get("assignment_id") == child["id"]), None)
+            payload = (rebuild_call_payload("review.invoke", recorded_dispatch) if recorded_dispatch is not None
+                       else {"id": identifier, "assignment_id": child["id"]})
     # Capture, acceptance and output authentication stay in the protocol layer.
     return review_protocol.invoke_assignment(store, payload, credential=os.environ.get("OPENAI_API_KEY"),
         after_start=lambda: render_workspace_views(store.root, lock_wait=0), **identity)

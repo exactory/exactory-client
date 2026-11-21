@@ -22,11 +22,11 @@ from collections.abc import Mapping
 from contextlib import ExitStack
 
 from .artifacts import ArtifactStore, describe_artifact, validate_reference
-from .errors import ResearchError
+from .errors import ResearchError, describe_error_at
 from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, prepared_task_mutation, text
-from .finishing import retry_store_write
+from .finishing import SCOPED_FINISH_ATTEMPT_COUNT, SCOPED_FINISH_RETRY_CODES, SCOPED_FINISH_WAIT_SECONDS, retry_store_write
 from . import review_transport as transport
 from .review_answer_recovery import derive_output, extract_answer_text, recover_answer
 from . import bar_sources
@@ -1638,6 +1638,8 @@ def add_problem_candidates(records, packet):
     """Give a slate reviewer every current candidate and bind the review to that exact candidate set."""
     from .problem_candidates import compute_candidate_set_digest, describe_candidates, find_current_candidates
     packet.update(candidates=describe_candidates(records), candidate_set_digest=compute_candidate_set_digest(records))
+    # The condition of the slate places paragraph reads this member. A recorded slate packet does not hold it.
+    packet[prompt_paragraphs.PLACE_REVIEW_KEY] = {'protocol': prompt_paragraphs.SLATE_PLACES_PROTOCOL}
     current = find_current_candidates(records)
     for candidate in packet['candidates']:
         forming = [item for item in current[candidate['id']]['source']['evidence']
@@ -2314,6 +2316,8 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 packet.update({key: previous[key] for key in ('bar_ids', 'candidates', 'candidate_set_digest')})
                 if previous.get(review_parts.KEY, {}).get('adapter') == 'problem_slate':
                     packet.update({key: previous[key] for key in ('bars', 'own_bars')})
+                if prompt_paragraphs.PLACE_REVIEW_KEY in previous:
+                    packet[prompt_paragraphs.PLACE_REVIEW_KEY] = previous[prompt_paragraphs.PLACE_REVIEW_KEY]
                 packet['material_objections'] = collect_historical_bar_objections(records, artifacts)
             elif problem and role == 'bar' and refreshed:
                 packet['problem_refresh'] = {'assignment_id': prior['id'],
@@ -2795,10 +2799,6 @@ def _observed(artifacts, route, request, credential, *, capacity_probe=False):
 
 
 # Retain the live observation through busy-store retries; committed captures can finish in a later process.
-_FINISH_ATTEMPT_COUNT = 600
-_FINISH_WAIT_SECONDS = 600.0
-
-
 def _finish_call(store, payload, operation, finish, *, request_id):
     from .review_call_capture import read_call_observation
     from .review_task_execution import identify_call, release_call
@@ -2814,8 +2814,8 @@ def _finish_call(store, payload, operation, finish, *, request_id):
             return _prepare_review_mutation(store, operation, payload, prepare,
                 request_id=request_id, _snapshot=finishing, scoped=True,
                 validate_commit=lambda tx, result, revision: release_call(tx, lifecycle_id, termination, revision))
-    return retry_store_write(commit, attempts=_FINISH_ATTEMPT_COUNT, seconds=_FINISH_WAIT_SECONDS,
-                             codes=('store_busy', 'stale_revision', 'review_task_dependency_changed'))
+    return retry_store_write(commit, attempts=SCOPED_FINISH_ATTEMPT_COUNT, seconds=SCOPED_FINISH_WAIT_SECONDS,
+                             codes=SCOPED_FINISH_RETRY_CODES)
 
 
 def _invoke_once(store, payload, operation, start, finish, *, expected_revision, request_id, credential,
@@ -2907,12 +2907,17 @@ def build_probe_prompt(route):
               'Use only supplied evidence. This is an operational input-boundary probe.')
 
 
+# Required, then optional members of the payload of a route probe. The start check and every rebuild of the
+# payload of a started probe (review_task_execution.rebuild_call_payload) read this one definition.
+PROBE_PAYLOAD_FIELDS = (('id', 'route_id'), ('capacity',))
+
+
 def probe_route(store, payload, *, expected_revision, request_id, credential=None, after_start=None):
     store_artifacts = store.build_artifact_store()
     def start(records, value):
         from .evaluation import Evaluation
         artifacts = Evaluation.of(records, store_artifacts)
-        fields(value, ('id', 'route_id'), ('capacity',))
+        fields(value, *PROBE_PAYLOAD_FIELDS)
         if 'capacity' in value:
             fields(value['capacity'], ('input_tokens',), code='invalid_review_capacity_probe')
             size = value['capacity']['input_tokens']
@@ -4381,12 +4386,17 @@ def require_verified_assignment(records, artifacts, assignment):
                  next=plan_next(records, artifacts, assignment['id'])))
 
 
+# Required, then optional members of the payload of an ordinary reviewer call, staged or not. The start checks
+# and every rebuild of the payload of a started call (review_task_execution.rebuild_call_payload) read it.
+INVOKE_PAYLOAD_FIELDS = (('id', 'assignment_id'), ())
+
+
 def invoke_assignment(store, payload, *, expected_revision, request_id, credential=None, after_start=None):
     store_artifacts = store.build_artifact_store()
     def start(records, value):
         from .evaluation import Evaluation
         artifacts = Evaluation.of(records, store_artifacts)
-        fields(value, ('id', 'assignment_id'))
+        fields(value, *INVOKE_PAYLOAD_FIELDS)
         assignment = _get(records, 'review_assignment', value['assignment_id'])
         from .openness_reading import require_reserved_identifier
         require_reserved_identifier(value['id'], assignment['prompt']['template_id'].rsplit('/', 1)[0])
@@ -4987,7 +4997,8 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
             raise ResearchError('invalid_review_adjudication', 'Correction admissibility is null when no correction is assigned')
         text(output['reason'], 'Adjudication reason')
         if packet.get('subject', {}).get('kind') == 'problem':
-            validate_evidence_contract(records, artifacts, output['evidence'], packets=packets)
+            with describe_error_at('/evidence'):
+                validate_evidence_contract(records, artifacts, output['evidence'], packets=packets)
         else:
             # Generic focused findings retain their existing recursive artifact-evidence contract.
             # Artifact availability is still checked by _evidence when recording.

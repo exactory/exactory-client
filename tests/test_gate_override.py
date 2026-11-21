@@ -1,5 +1,6 @@
 """User instructions move work forward without giving unmet gates any credit."""
 
+import copy
 import hashlib
 import html
 import io
@@ -11,6 +12,7 @@ import sys
 from unittest import mock
 import zipfile
 
+from problem_accounts_fixtures import CHANGES_IF_RESOLVED_TEXT
 from research_harness import cli, integration, overrides, problem_claims, problem_delivery
 from research_harness.errors import ResearchError
 from research_harness.gates import STAGES
@@ -574,6 +576,7 @@ class ProblemOverrideTests(OverrideCommandMixin, ProblemCase):
         expected = {"title.txt": statement["title"] + "\n", "statement.md": statement["statement"] + "\n",
                     "criteria.md": statement["resolution_criteria"] + "\n",
                     "motivation.md": "The bound would connect the finite constructions.\n",
+                    "changes-if-resolved.md": CHANGES_IF_RESOLVED_TEXT + "\n",
                     "state.md": "Only bounded examples have been established.\n",
                     "formal-statement.txt": statement["formal_statement"]["text"] + "\n",
                     "citations.json": json.dumps(problem_delivery.project_citations(before, self.artifacts), ensure_ascii=False, sort_keys=True, indent=2) + "\n",
@@ -636,11 +639,29 @@ class ProblemOverrideTests(OverrideCommandMixin, ProblemCase):
 class NormalProblemExportTests(OverrideCommandMixin, ProblemDeliveryCase):
     def test_normal_problem_export_preserves_every_file_byte(self):
         self.prepare_ready(formal=True)
+        self.assert_normal_export({"changes-if-resolved.md": CHANGES_IF_RESOLVED_TEXT + "\n"})
+
+    def test_normal_export_of_a_value_record_without_the_section_keeps_its_file_set_and_bytes(self):
+        def put_stored_value(store, payload, *, expected_revision, request_id):
+            # The value record as 0.91.2 to 0.91.5 recorded it: accounts of version 2, without places and the section.
+            saved = {key: copy.deepcopy(item) for key, item in payload.items() if key != "changes_if_resolved"}
+            saved["accounts"].pop("places")
+            saved["motivation"][0]["evidence"] = [{"kind": "account", "id": "use"}]
+            saved.update(accounts_version=2, recorded_revision=expected_revision + 1)
+            self.put("problem_value", saved["id"], saved)
+            return {"result": saved}
+        with mock.patch.object(problem_claims, "record_value", side_effect=put_stored_value):
+            self.prepare_ready(formal=True)
+        self.assertNotIn("changes_if_resolved", problem_claims.find_value(self.store.snapshot()["records"]))
+        self.assert_normal_export({})
+
+    def assert_normal_export(self, added):
         decision = self.record_post_decision()
         records = self.store.snapshot()["records"]
         statement = self.selected
         expected = {"title.txt": statement["title"] + "\n", "statement.md": statement["statement"] + "\n",
             "criteria.md": statement["resolution_criteria"] + "\n", "motivation.md": "The bound would connect the finite constructions.\n",
+            **added,
             "state.md": "Only bounded examples have been established.\n", "formal-statement.txt": statement["formal_statement"]["text"] + "\n",
             "citations.json": json.dumps(problem_delivery.project_citations(records, self.artifacts), ensure_ascii=False, sort_keys=True, indent=2) + "\n",
             "citation-refs.json": json.dumps([{"referenceString": "A. Researcher. An authored example",
@@ -655,6 +676,11 @@ class NormalProblemExportTests(OverrideCommandMixin, ProblemDeliveryCase):
         self.assertEqual(response.returncode, 0, response.stderr)
         directory = Path(json.loads(response.stdout)["destination"])
         self.assertEqual({path.name: path.read_bytes() for path in directory.iterdir()}, {name: content.encode() for name, content in expected.items()})
+        export_digest = problem_delivery.compute_export_digest({name: content.encode() for name, content in expected.items()})
+        self.assertEqual(directory.name, export_digest)
+        post = self.mutate(problem_claims.record_posted, {"problem_id": "656c336e-e892-4c47-80d2-a71d022f4116",
+                                                          "export_directory": str(directory)})["result"]
+        self.assertEqual(post["export_digest"], export_digest)
 
 
 class OverrideDepositMetadataTests(ProblemCase):

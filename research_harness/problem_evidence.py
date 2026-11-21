@@ -64,14 +64,23 @@ def collect_binding_record_kinds(records):
         for reference in item["evidence"] if reference.get("kind") == "record"}
 
 
+def list_value_sections(value):
+    # motivation and current_state, and changes_if_resolved when the value record holds it.
+    if "changes_if_resolved" in value:
+        return ("motivation", "changes_if_resolved", "current_state")
+    return ("motivation", "current_state")
+
+
 def collect_value_items(value):
-    if value is not None and "accounts" in value:
+    if value is None:
+        return []
+    if "accounts" in value:
         from .problem_accounts import collect_account_evidence
         evidence = collect_account_evidence(value["accounts"])
-        evidence.extend(item for section in ("motivation", "current_state") for paragraph in value[section]
+        evidence.extend(item for section in list_value_sections(value) for paragraph in value[section]
                         for item in paragraph["evidence"] if item["kind"] == "reading")
         return list({digest(item): item for item in evidence}.values())
-    return [item for section in ("motivation", "current_state") for paragraph in (value or {}).get(section, [])
+    return [item for section in list_value_sections(value) for paragraph in value.get(section, [])
             for item in paragraph["evidence"]]
 
 
@@ -333,12 +342,31 @@ def validate_value(records, artifacts, value):
         from .problem_accounts import collect_entries, validate_accounts, validate_paragraph
         from .strategy import items
         accounts = validate_accounts(records, artifacts, value)
+        # A value record that holds changes_if_resolved is one of 0.91.6 or later, which also holds places.
+        if "changes_if_resolved" in value and not accounts.get("places"):
+            raise ResearchError("problem_places_required",
+                                "The accounts of a new value record hold places, with at least one entry. Add "
+                                "accounts.places with one entry for each work in which the statement arises. If no work "
+                                "read states the statement, needs it or stops at it, enter one place with the role "
+                                "continues")
         entries = {entry["id"]: entry for entry in collect_entries(accounts)}
-        for section in ("motivation", "current_state"):
+        for section in list_value_sections(value):
             for paragraph in items(value[section], "Value paragraphs", nonempty=True, code="invalid_input"):
                 validate_paragraph(records, artifacts, paragraph, entries)
+        if "changes_if_resolved" in value:
+            places = {entry["id"] for entry in accounts["places"]}
+            for section in ("motivation", "changes_if_resolved"):
+                if not any(reference["kind"] == "account" and reference["id"] in places
+                           for paragraph in value[section] for reference in paragraph["evidence"]):
+                    raise ResearchError("problem_value_place_uncited",
+                                        "No paragraph of this section cites a place. At least one paragraph of "
+                                        "motivation and at least one of changes_if_resolved cite an entry of "
+                                        "accounts.places, as {kind: account, id}. In motivation, add the citation to the "
+                                        "paragraph that states the line of results that leads to the statement. In "
+                                        "changes_if_resolved, add it to the paragraph that says what an answer decides or "
+                                        "supplies for that work", {"section": section})
         return dict(value, accounts=accounts)
-    for section in ("motivation", "current_state"):
+    for section in list_value_sections(value):
         paragraphs = value[section]
         if not isinstance(paragraphs, list) or not paragraphs:
             raise ResearchError("invalid_input", "Record nonempty paragraphs for " + section)
@@ -936,7 +964,7 @@ def describe_evidence(records, artifacts):
                 "id", "outcome", "statement_digest", "reason", "coverage", "searched_at", "evidence", "minimum")},
                 digest=digest(openness)),
             "openness_searches": describe_openness_searches(records, openness),
-            "value": None if value is None else dict({key: value[key] for key in ("id", "motivation", "current_state")},
+            "value": None if value is None else dict({key: value[key] for key in ("id",) + list_value_sections(value)},
                                                      digest=digest(value)),
             "assessment": None if assessment is None else dict(
                 {key: assessment[key] for key in ("id", "grades", "items", "primary")}, digest=digest(assessment)),
@@ -961,7 +989,7 @@ def describe_evidence(records, artifacts):
     if value is not None and "accounts" in value:
         from .problem_accounts import collect_entries, collect_entry_evidence, describe_account_records
         entries = {entry["id"]: entry for entry in collect_entries(value["accounts"])}
-        for section in ("motivation", "current_state"):
+        for section in list_value_sections(value):
             delivered["value"][section] = [dict(paragraph, delivered_evidence=[
                 item for reference in paragraph["evidence"]
                 for item in (collect_entry_evidence(entries, reference["id"]) if reference["kind"] == "account" else [reference])])

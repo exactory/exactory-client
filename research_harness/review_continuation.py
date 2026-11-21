@@ -11,7 +11,7 @@ from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
 from .operations import text
-from .review_task_execution import has_call_terminated, identify_call
+from .review_task_execution import has_call_terminated, identify_call, rebuild_call_payload
 
 
 def describe_context_failure(error, assignment_id=None):
@@ -272,7 +272,7 @@ def _plan_pending_call(records, assignment):
             captured = records.get('review_call_observation', {}).get(identifier)
             if captured is not None:
                 return dict(state='resume', command='review-output-correction', request_id=captured['request_id'],
-                    payload={key: invocation[key] for key in ('id', 'assignment_id', 'route_id')})
+                    payload=rebuild_call_payload('review.output_correction', invocation))
             return dict(state='wait', command='review-run',
                 payload=dict(action='reconcile', operation='review.output_correction', invocation_id=invocation['id']),
                 not_before=_describe_wait(), code='review_invocation_pending', details={})
@@ -283,7 +283,7 @@ def _plan_pending_call(records, assignment):
         captured = records.get('review_call_observation', {}).get(identifier)
         if captured is not None and invocation['id'] not in records.get('review_attempt', {}):
             return dict(state='resume', command='review-run', request_id=captured['request_id'],
-                        payload=dict(id=invocation['id'], assignment_id=assignment['id']))
+                        payload=rebuild_call_payload('review.invoke', invocation))
         if not has_call_terminated(records, 'review.invoke', invocation['id']):
             payload = dict(action='reconcile', operation='review.invoke', invocation_id=invocation['id'])
             if identifier not in records.get('review_pool_membership', {}):

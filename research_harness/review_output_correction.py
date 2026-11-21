@@ -28,6 +28,10 @@ PROMPT = (
     'If you cannot make exactly this correction, return only {"correction":"declined","reason":"..."}. '
     'Return JSON only.')
 
+# Required, then optional members of the payload of a correction call. The start check and every rebuild of the
+# payload of a started correction (review_task_execution.rebuild_call_payload) read this one definition.
+PAYLOAD_FIELDS = (('id', 'assignment_id', 'route_id'), ())
+
 
 def _reject(message):
     raise ResearchError('review_correction_ineligible', message)
@@ -225,7 +229,7 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
     artifacts = store.build_artifact_store()
 
     def start(records, value):
-        fields(value, ('id', 'assignment_id', 'route_id'))
+        fields(value, *PAYLOAD_FIELDS)
         from .problem_delivery import require_unposted_review
         assignment = protocol._get(records, 'review_assignment', value['assignment_id'])
         require_unposted_review(records, assignment, artifacts)

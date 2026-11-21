@@ -14,6 +14,50 @@ PROTOCOL = 'exactory-review-output-refusal-v1'
 SOURCE_LINK_ACCEPTED_FORMS_NOTICE = (
     'Cite the delivered bytes by their artifact descriptor, or use a source link into a full text that this chain delivered.'
 )
+# details.notice of the check evidence.shape for an array of the three forms that is checked without review_binding.
+EVIDENCE_FORMS_NOTICE = (
+    'When this check refuses entries of the array at path, refused_indexes gives their positions, counted from 0, '
+    'at most 100 of them, and refused_count gives their number. An evidence entry is one reference object in one '
+    'of three forms, and the outermost members of the entry decide its form. An artifact descriptor: the entry '
+    'itself is {"path":"<path>","sha256":"<sha256>","size":0,"media_type":"<media type>"}, with exactly these four '
+    'members copied from one descriptor of the packet. A descriptor under a member name, such as '
+    '{"artifact":{"path":"<path>","sha256":"<sha256>","size":0,"media_type":"<media type>"}}, is refused. '
+    'A source link: {"kind":"source","link":{"version_id":"<version id>","source_id":"<source id>",'
+    '"artifact":{"path":"<path>","sha256":"<sha256>","size":0,"media_type":"<media type>"},'
+    '"locator":{"kind":"<as delivered>"}}}. The member citation of a passage that the packet delivers, for example '
+    'in an entry of prior_context, is the complete value of link. The members version_id, source_id, artifact and '
+    'locator written as the outermost members of the entry are refused. A source link is accepted only when its '
+    'artifact is the original or the extracted text of a full-text capture that this chain delivered to you. Cite '
+    'a text that was delivered at another depth, for example an abstract, by its artifact descriptor. '
+    'A record: {"kind":"record","record_kind":"<record kind>","id":"<record id>","digest":"<digest>"}, with the '
+    'three values copied from the place where the packet names that record. An entry that is only a digest, only '
+    'a path or free text is refused. Every evidence array of the answer outside support follows these forms, so '
+    'correct each of them in the answer that you return. Where the instructions of this turn give handles for '
+    'citations, write each citation as a handle in the form that those instructions state.')
+# The same notice for a call with review_binding, where a record reference may omit its digest.
+REVIEW_BOUND_EVIDENCE_FORMS_NOTICE = (
+    'When this check refuses entries of the array at path, refused_indexes gives their positions, counted from 0, '
+    'at most 100 of them, and refused_count gives their number. An evidence entry is one reference object in one '
+    'of three forms, and the outermost members of the entry decide its form. An artifact descriptor: the entry '
+    'itself is {"path":"<path>","sha256":"<sha256>","size":0,"media_type":"<media type>"}, with exactly these four '
+    'members copied from one descriptor of the packet. A descriptor under a member name, such as '
+    '{"artifact":{"path":"<path>","sha256":"<sha256>","size":0,"media_type":"<media type>"}}, is refused. '
+    'A source link: {"kind":"source","link":{"version_id":"<version id>","source_id":"<source id>",'
+    '"artifact":{"path":"<path>","sha256":"<sha256>","size":0,"media_type":"<media type>"},'
+    '"locator":{"kind":"<as delivered>"}}}. The member citation of a passage that the packet delivers, for example '
+    'in an entry of prior_context, is the complete value of link. The members version_id, source_id, artifact and '
+    'locator written as the outermost members of the entry are refused. A source link is accepted only when its '
+    'artifact is the original or the extracted text of a full-text capture that this chain delivered to you. Cite '
+    'a text that was delivered at another depth, for example an abstract, by its artifact descriptor. '
+    'A record: {"kind":"record","record_kind":"<record kind>","id":"<record id>"}, with the two values copied from '
+    'the place where the packet names that record; where the packet delivers a cite object with the record, copy '
+    'that object unchanged. The member digest is optional in this form: add it only where the instructions of this '
+    'turn ask for it, with the digest that the packet gives for that record. An entry that is only a digest, only '
+    'a path or free text is refused. Every evidence array of the answer outside support follows these forms, so '
+    'correct each of them in the answer that you return. Where the instructions of this turn give handles for '
+    'citations, write each citation as a handle in the form that those instructions state.')
+# The positions that a refusal of evidence.shape lists; refused_count gives the number of every refused entry.
+REFUSED_INDEX_LIMIT = 100
 
 # Only output values, frozen packet values, and measurements computed from them belong here.
 # In particular, an existing review's scientific text is never a notice detail.
@@ -21,7 +65,7 @@ _SHAPE_NOTICE_FIELDS = ('expected_type', 'received_type', 'missing_fields', 'une
 _TEXT_NOTICE_FIELDS = ('characters', 'minimum_characters', 'maximum_characters', 'normalized_characters')
 _DELIVERY_NOTICE_FIELDS = ('record_kind', 'id', 'digest', 'sha256', 'locator')
 CONTRACT_CHECKS = {
-    'evidence.shape': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'evidence.shape': {'notice_fields': _SHAPE_NOTICE_FIELDS + ('refused_indexes', 'refused_count', 'notice')},
     'evidence.fulltext': {'notice_fields': ('version_id', 'source_id', 'artifact', 'delivered_depth', 'notice')},
     'evidence.locator': {'notice_fields': _SHAPE_NOTICE_FIELDS + ('part_relative_span',)},
     'review.shape': {'notice_fields': _SHAPE_NOTICE_FIELDS},
@@ -100,19 +144,50 @@ def _find_delivered_part(link, packets):
     return None
 
 
-def validate_evidence_contract(records, artifacts, values, *, required=True, packets=(), review_binding=False):
-    """Shared evidence grammar and locators over exact bytes; no live source/reading lookup."""
+def validate_evidence_contract(records, artifacts, values, *, required=True, packets=(), review_binding=False,
+                               positions=None, forms_notice=True):
+    """Shared evidence grammar and locators over exact bytes; no live source/reading lookup.
+
+    The shape check reads every entry and raises the error of the first refused one. Its details give the positions
+    of the refused entries in the array of the answer, at most REFUSED_INDEX_LIMIT of them, and the number of all
+    refused entries; positions gives the positions when values is a selection of that array. forms_notice is false
+    for an array of another grammar, whose refusal carries no text of the three forms."""
     from . import strategy
     from .source_links import read_locator, validate_link_fields
+    notice = {}
+    if forms_notice:
+        notice['notice'] = REVIEW_BOUND_EVIDENCE_FORMS_NOTICE if review_binding else EVIDENCE_FORMS_NOTICE
     with contract_check('evidence.shape'):
-        references = strategy.items(values, 'Evidence', nonempty=required)
-        for reference in references:
-            strategy.evidence_fields(reference, review_binding=review_binding)
-            if {'path', 'sha256', 'size', 'media_type'} <= reference.keys():
-                validate_reference(reference)
-            elif reference.get('kind') == 'source':
-                validate_link_fields(reference['link'], locator=False)
-                validate_reference(reference['link']['artifact'])
+        try:
+            references = strategy.items(values, 'Evidence', nonempty=required)
+        except ResearchError as error:
+            if notice:
+                error.details = dict(error.details or {}, **notice)
+            raise
+        first, refused = None, []
+        for index, reference in enumerate(references):
+            try:
+                strategy.evidence_fields(reference, review_binding=review_binding)
+                if {'path', 'sha256', 'size', 'media_type'} <= reference.keys():
+                    validate_reference(reference)
+                elif reference.get('kind') == 'source':
+                    validate_link_fields(reference['link'], locator=False)
+                    validate_reference(reference['link']['artifact'])
+            except ResearchError as error:
+                if first is None:
+                    first = error
+                refused.append(index)
+            except (ValueError, TypeError, KeyError):
+                # Malformed input that is no output finding propagates as before. After a refused entry it is one
+                # more refused entry, so the refusal of the first refused entry stays.
+                if first is None:
+                    raise
+                refused.append(index)
+        if first is not None:
+            indexes = refused if positions is None else [positions[index] for index in refused]
+            first.details = dict(first.details or {}, refused_indexes=indexes[:REFUSED_INDEX_LIMIT],
+                                 refused_count=len(indexes), **notice)
+            raise first
     for reference in references:
         if reference.get('kind') != 'source':
             continue
@@ -244,7 +319,8 @@ def _validate_staged_final(records, artifacts, assignment, packet, epoch, output
                 expected = frame.get('objection', {}).get('id')
             if expected is not None and output['objection_id'] != expected:
                 raise ResearchError('review_adjudication_mismatch', 'Disposition must concern the assigned objection')
-            evidence(records, artifacts, output['evidence'])
+            with describe_error_at('/evidence'):
+                evidence(records, artifacts, output['evidence'])
         validate_source_links_contract(records, output, (packet, frame))
         return
     from .research_decisions import _validate_value

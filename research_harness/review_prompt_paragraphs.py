@@ -21,6 +21,8 @@ FORMING_RECORD_KINDS = ('forming_call', 'form_outcome')
 INVALID_CONTEXT = 'Use admitted problem prompt paragraph versions once, in their registered order and roles'
 DELIVERY_NOTICE_KEY = 'delivery_notice'
 DELIVERY_NOTICE_PROTOCOL = 'exactory-review-delivery-notice-v1'
+PLACE_REVIEW_KEY = 'place_review'
+SLATE_PLACES_PROTOCOL = 'exactory-problem-slate-places-v1'
 CAPACITY_NOTICE_KEY = 'route_capacity'
 CAPACITY_NOTICE_PROTOCOL = 'exactory-route-capacity-notice-v1'
 CAPACITY_PARAMETER = 'capacity'
@@ -186,6 +188,108 @@ ACCOUNT_PROBES_PROMPT = (
     'The response shape of this turn is unchanged.')
 
 
+# Written in the writer's pass of 0.91.6. A later edit of the text requires a new registered version.
+CHANGES_IF_RESOLVED_PROMPT = (
+    '\n\nThe places of the statement and what a resolution would change (exactory-problem-changes-if-resolved-v1). '
+    'value.accounts.places holds the places of the statement in the work of its field. '
+    'value.changes_if_resolved holds the paragraphs of the public section What a resolution would change, each '
+    'with its delivered_evidence. '
+    'A place is a work, or a group of works on one question, in which the statement arises. '
+    'Its fact names the item that the works state, need or stop at. '
+    'Its role says how the statement stands to that item. '
+    'stated: a work states the statement, or an equivalent form, as open. '
+    'needed: the statement is a hypothesis or a missing step of a work. '
+    'decides: a work states an open item, and an answer decides it or settles an open part of it. '
+    'stops: the argument of a work stops at a step that the statement is or supplies. '
+    'continues: the statement continues results of the works, and no work read states it, needs it or stops at it. '
+    'relation_ids names the relations that tie the statement to an item other than itself. '
+    'The harness checked the form of the entries and that each place rests on a full reading, not that a passage '
+    'shows what an entry says. '
+    'Read grounds B1 and B2 with the places as follows. '
+    'The rubric keeps its items, levels and thresholds. '
+    'Where this paragraph is stricter than an anchor, the paragraph on the accounts or a bar, this paragraph '
+    'governs. '
+    'A place counts for a level when three things hold. '
+    'The cited passage of a work read in full shows what the entry says. '
+    'The item is open or missing in that work, and no work read settles it. '
+    'The item is the statement, or a relation that is established for the present text ties the statement to it, '
+    'so that a named answer decides the item, supplies the step or settles an open part of the item. '
+    'A place with the role continues counts for no level. '
+    'That the statement implies a result which the works already have counts for no level: the statement extends '
+    'that result. '
+    'A general question of a work counts for an instance that the record chose only when a work names that '
+    'instance or its class, or an established relation shows that the instance decides an item that the works '
+    'state. '
+    'Level 2 on B1 needs a place that counts, in a line that is active now. '
+    'Level 2 on B2 needs a place that counts, in any line, and the argued part: the section says what a resolution '
+    'opens for the line, with premises that hold. '
+    'An argued part raises no level without a place that counts. '
+    'A consequence that no work read states, needs or stops at raises no level by itself. '
+    'Level 3 needs level 2 and works that name the item as an obstacle or a need of their line: two or more works '
+    'reach the step independently, a work says why its method does not pass it, or works name what they would do '
+    'next once the item is settled. '
+    'No level rests on the judgment that the statement is natural on its face: the evidence of that is a work that '
+    'states it. '
+    'The section holds three things. '
+    'First, for each answer, what a resolution decides or supplies, and for which work. '
+    'Second, what a resolution would supply at the step where the recorded arguments stop. '
+    'Third, what a resolution would open: the next question or step of the line that becomes askable or reachable '
+    'under each answer. '
+    'Either a work names it and the sentence cites that place, or the record argues it and the sentence says so '
+    'and names its premises. '
+    'Where the record can name nothing for an answer, the section says so. '
+    'Judge each sentence against the entries that its paragraph cites: it has their standing, established, '
+    'expected or argued. '
+    'For a sentence on what a resolution opens, ask whether it is mathematics and no forecast of what people will '
+    'do, whether its premises are established, and whether the next question follows from them. '
+    'The record can report where each recorded route stops, with its source and scope, and the account that a work '
+    'gives of the reason. '
+    'It states no difficulty, importance or duration of its own, no opinion of a community, and nothing that rests '
+    'on the absence of attempts in print. '
+    'The failure of its own attempt shows no place. '
+    'value.motivation opens with the past line: the natural question, the results that lead to the step, in the '
+    'order of their dates, each with its year and its work, and the step at which the statement arises. '
+    'A cited entry carries each result. '
+    'In value.rubric_evidence.B1, say which places count and why, and whether the past line is the one that the '
+    'places name. '
+    'In value.rubric_evidence.B2, say what a resolution decides, supplies and opens under each answer, and for '
+    'which work. '
+    'In value.rubric_evidence.calibration, judge the wording by the rules above. '
+    'The assurance problem_value covers the section and fails when a sentence states what no cited entry carries, '
+    'presents an expected relation as established, or presents a continuation as a need of the works. '
+    'State as material objections in objections: a work known to you that states, needs or settles the statement '
+    'or an item and that the places do not name, a place whose passage does not show its role, an item presented '
+    'as open that a work read settles, a section that is silent on what an answer opens, and a past line that '
+    'omits a result read which leads to the step. '
+    'The response shape of this turn stays as it is: an intermediate, source-request or staged task response gives '
+    'only the fields that its task owns. '
+    'An adjudicator who receives this paragraph with a rubric definition applies it to the one item that it '
+    'decides and keeps its own response shape.')
+
+
+# Written in the writer's pass of 0.91.6. A later edit of the text requires a new registered version.
+SLATE_PLACES_PROMPT = (
+    '\n\nThe place of each candidate (exactory-problem-slate-places-v1). '
+    'A problem has the value that its place in a line of work gives it. '
+    'A place of a candidate is a work, or a group of works on one question, in which the candidate arises. '
+    'The work states the candidate as open, needs it as a hypothesis or as a missing step, stops at it in an '
+    'argument, or states an open item that an answer would decide. '
+    'Results that the candidate only continues, as a next case, as an analogue in another setting or as a wider '
+    'class, are a place too, and they show no need. '
+    'For every candidate, whatever the kind of its source, say in value.reason which place its source.reference '
+    'and its observation name, and what the work states, needs or stops at. '
+    'A candidate that implies a result which the works already have extends that result, and that shows no need. '
+    'A general question of a work shows no need for one instance of it that the record chose. '
+    'Give level 1 on both grounds of significance to a candidate whose places show no need, and say which reading '
+    'would raise the level. '
+    'A work is read or it is not: only the relation that ties a candidate to an item of a work can still be '
+    'expected at this stage. '
+    'No grade rests on the judgment that a candidate is natural on its face. '
+    'Where the places of a candidate show no need and the author grades it at level 2 or higher, say so as an '
+    'objection that names the candidate in candidate_ids. '
+    'The response shape of this turn stays as it is.')
+
+
 def _has_carry(role, packet):
     return CARRY_PARAMETER in packet
 
@@ -204,11 +308,22 @@ def _has_account_probes(role, packet):
                     for entry in evidence.get('account_records', [])))
 
 
+def _has_changes_if_resolved(role, packet):
+    value = packet.get('problem_evidence', {}).get('value') or {}
+    return (bool(value.get('changes_if_resolved'))
+            and (role != 'adjudicator' or packet.get('rubric_definition', {}).get('item') in ('significance', 'calibration')))
+
+
 def _has_forming_candidates(role, packet):
     return any(candidate.get('source', {}).get('kind') == 'phenomenon'
                or any(item.get('kind') == 'record' and item.get('record_kind') in FORMING_RECORD_KINDS
                       for item in candidate.get('source', {}).get('evidence', []))
                for candidate in packet.get('candidates', []))
+
+
+def _has_place_review(role, packet):
+    # The packet of a new slate assignment holds place_review since 0.91.6. A recorded slate packet, its continuation and its repair hold none.
+    return packet.get(PLACE_REVIEW_KEY, {}).get('protocol') == SLATE_PLACES_PROTOCOL
 
 
 def _has_replacement(role, packet):
@@ -407,6 +522,8 @@ PARAGRAPHS = (
           'decides and keeps its own response shape.'),)),
     PromptParagraph('account-probes', ('result', 'adjudicator'), _has_account_probes,
                     (('exactory-problem-account-probes-v1', ACCOUNT_PROBES_PROMPT),)),
+    PromptParagraph('changes-if-resolved', ('result', 'adjudicator'), _has_changes_if_resolved,
+                    (('exactory-problem-changes-if-resolved-v1', CHANGES_IF_RESOLVED_PROMPT),)),
     PromptParagraph('slate-forming', ('slate',), _has_forming_candidates,
         (('exactory-problem-slate-forming-v1',
           '\n\nCandidates formed in the record (exactory-problem-slate-forming-v1). '
@@ -459,6 +576,7 @@ PARAGRAPHS = (
           'names the candidate in candidate_ids. '
           'The response shape of this turn is unchanged.'),
          ('exactory-problem-slate-forming-v2', SLATE_FORMING_PROMPT))),
+    PromptParagraph('slate-places', ('slate',), _has_place_review, ((SLATE_PLACES_PROTOCOL, SLATE_PLACES_PROMPT),)),
     PromptParagraph('replacement', ('result', 'adjudicator'), _has_replacement,
         (('exactory-problem-replacement-v1',
           '\n\nA statement posed in place of a refuted one (exactory-problem-replacement-v1). '

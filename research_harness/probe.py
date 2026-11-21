@@ -17,10 +17,10 @@ import uuid
 from . import resources
 from .artifacts import ArtifactStore, is_sealed_artifact
 from .errors import ResearchError
-from .finishing import retry_store_write
-from .operations import fields, immutable_record, is_finite_number, prepared_mutation, text
+from .operations import fields, immutable_record, is_finite_number, prepared_mutation, prepared_task_mutation, text
 from .probe_worker import capture_probe_outcome, find_probe_stream_origins
-from .probe_provenance import pin_probe_artifact
+from .probe_provenance import (PROBE_INTENT_STORE_BUSY_MSG, PROBE_LAUNCH_STORE_BUSY_MSG, PROBE_STORE_BUSY_MSG,
+                               pin_probe_artifact, retry_probe_write)
 from .probe_supervision import find_probe_group_members, find_probe_process_identity, read_probe_clock
 from .program_probes import build_program_run, format_utc_now, validate_program_run, validate_program_run_context
 from .workspace import checked_parent, json_projection, read_file, strict_json, write_projection
@@ -41,9 +41,15 @@ def validate_probe_descriptors(artifacts, values, *, sealed=False):
         validate_probe_descriptor(artifacts, value, sealed=sealed)
 
 
+PROBE_OUTCOME_FIELDS = ("id", "command", "outputs", "stdout", "stderr", "exit_status", "elapsed_seconds", "observation")
+PROBE_OUTCOME_OPTIONAL_FIELDS = ("program_run", "capture_failure")
+# The observations of an outcome that a worker of an earlier release (0.76.0 or later) wrote when the store refused a
+# write of its capture.
+REFUSED_STORE_OBSERVATIONS = ("Probe output capture failed: stale_revision", "Probe output capture failed: store_busy")
+
+
 def validate_probe_outcome(artifacts, value):
-    fields(value, ("id", "command", "outputs", "stdout", "stderr", "exit_status", "elapsed_seconds", "observation"),
-           ("program_run",))
+    fields(value, PROBE_OUTCOME_FIELDS, PROBE_OUTCOME_OPTIONAL_FIELDS)
     for key in ("id", "command", "observation"):
         text(value[key], "Probe " + key)
     sealed = isinstance(value.get("program_run"), dict) and value["program_run"].get("outputs_unread") is True
@@ -54,10 +60,34 @@ def validate_probe_outcome(artifacts, value):
         raise ResearchError("invalid_input", "Probe exit_status must be an integer, timed_out, failed, output_bound or interrupted")
     if not is_finite_number(value["elapsed_seconds"]) or value["elapsed_seconds"] < 0:
         raise ResearchError("invalid_input", "Probe elapsed_seconds must be a finite nonnegative number")
+    if "capture_failure" in value:
+        failure = value["capture_failure"]
+        fields(failure, ("code", "program_exit_status"))
+        text(failure["code"], "Probe capture_failure code")
+        if not is_probe_exit_status(failure["program_exit_status"]):
+            raise ResearchError("invalid_input", "Probe capture_failure program_exit_status must be an integer, timed_out, failed, output_bound or interrupted")
 
 
 def is_probe_exit_status(value):
     return type(value) is int or isinstance(value, str) and value in ("timed_out", "failed", "output_bound", "interrupted")
+
+
+def _commit_probe_record(store, operation, payload, prepare, *, expected_revision, request_id, stamped_kind=None):
+    """Commit the probe records that prepare(records, payload) returns as (changes, result). With an expected revision
+    the commit is the compare-and-swap on the revision of the store that every command makes. With None, which the
+    launcher passes through commit_probe_mutation, the commit depends on the records that prepare read: only a commit
+    that changes one of them refuses it. A new record of stamped_kind holds the revision of its commit."""
+    def stamp(changes, result, revision):
+        if any(kind == stamped_kind for kind, _, _ in changes):
+            changes = [(kind, key, dict(value, revision=revision) if kind == stamped_kind else value)
+                       for kind, key, value in changes]
+            result = dict(result, revision=revision)
+        return changes, result
+    if expected_revision is None:
+        return prepared_task_mutation(store, operation, payload, prepare, request_id=request_id, finalize=stamp)
+    return prepared_mutation(store, operation, payload,
+                             lambda records, value: stamp(*prepare(records, value), expected_revision + 1),
+                             expected_revision=expected_revision, request_id=request_id)
 
 
 def record_probe_intent(store, payload, *, expected_revision, request_id):
@@ -82,18 +112,18 @@ def record_probe_intent(store, payload, *, expected_revision, request_id):
             return [], existing
         # The immutable intent itself holds this allowance until its outcome exists.
         resources.charge(records, "experiment", {"wall_seconds": value["timeout_seconds"]})
-        record = dict(value, revision=expected_revision + 1)
+        record = dict(value)
         return [immutable_record(records, "probe_intent", value["id"], record)], record
 
-    return prepared_mutation(store, "research.probe_intent", payload, prepare, expected_revision=expected_revision, request_id=request_id)
+    return _commit_probe_record(store, "research.probe_intent", payload, prepare, expected_revision=expected_revision,
+                                request_id=request_id, stamped_kind="probe_intent")
 
 
 def record_probe(store, payload, *, expected_revision, request_id):
     artifacts = store.build_artifact_store()
 
     def prepare(records, value):
-        fields(value, ("id", "command", "outputs", "stdout", "stderr", "exit_status", "elapsed_seconds", "observation"),
-               ("program_run",))
+        fields(value, PROBE_OUTCOME_FIELDS, PROBE_OUTCOME_OPTIONAL_FIELDS)
         for key in ("id", "command", "observation"):
             text(value[key], "Probe " + key)
         if value["id"] not in records.get("probe_intent", {}):
@@ -108,7 +138,7 @@ def record_probe(store, payload, *, expected_revision, request_id):
         launch = records.get("probe_launch", {}).get(value["id"])
         if launch is not None and value != read_probe_outcome(store, launch):
             raise ResearchError("probe_pending", "Reconcile the original launch's terminal evidence before recording its outcome")
-        record = dict(value, revision=expected_revision + 1)
+        record = dict(value)
         changes = [immutable_record(records, "probe", value["id"], record)]
         if launch:
             changes.extend(immutable_record(records, "probe_artifact", value["id"] + ":" + origin["sha256"], origin)
@@ -120,7 +150,8 @@ def record_probe(store, payload, *, expected_revision, request_id):
             changes.append(charge)
         return changes, record
 
-    return prepared_mutation(store, "research.probe", payload, prepare, expected_revision=expected_revision, request_id=request_id)
+    return _commit_probe_record(store, "research.probe", payload, prepare, expected_revision=expected_revision,
+                                request_id=request_id, stamped_kind="probe")
 
 
 def summarize_probes(records):
@@ -139,8 +170,11 @@ def find_probe_receipt(store, identifier):
     raise ResearchError("probe_evidence_mismatch", "A recorded probe has no original managed receipt")
 
 
-def commit_probe_mutation(store, operation, payload, request_id):
-    return retry_store_write(lambda: operation(store, payload, expected_revision=store.revision, request_id=request_id))
+def commit_probe_mutation(store, operation, payload, request_id, *, busy_msg=PROBE_STORE_BUSY_MSG):
+    """Commit a record that the launcher writes for a probe. The commit depends on the records that its preparation
+    read and not on the revision of the store. A busy store is waited for, and busy_msg is the message of the refusal
+    after the wait."""
+    return retry_probe_write(lambda: operation(store, payload, expected_revision=None, request_id=request_id), busy_msg)
 
 
 def build_probe_directory(identifier):
@@ -192,6 +226,13 @@ def read_probe_outcome(store, launch):
         return None
     if outcome["id"] != launch["id"] or outcome["command"] != launch["command"]:
         return None
+    if (outcome["exit_status"] == "failed" and "capture_failure" not in outcome
+            and outcome["observation"] in REFUSED_STORE_OBSERVATIONS):
+        # The store refused a write of this capture, so the outcome says nothing about the program, and the launcher
+        # captures again from the terminal evidence. This covers these two refusals only. An outcome file that those
+        # releases wrote for another error of the store or of the disk can have the text of a failed read of an output,
+        # and it stays an outcome.
+        return None
     return outcome
 
 
@@ -202,7 +243,8 @@ def record_probe_launch(store, payload, *, expected_revision, request_id):
         if value["id"] in records.get("probe", {}):
             raise ResearchError("probe_already_recorded", "The probe outcome already exists; replay its receipt without launching")
         return [immutable_record(records, "probe_launch", value["id"], value)], value
-    return prepared_mutation(store, "research.probe_launch", payload, prepare, expected_revision=expected_revision, request_id=request_id)
+    return _commit_probe_record(store, "research.probe_launch", payload, prepare, expected_revision=expected_revision,
+                                request_id=request_id)
 
 
 def find_probe_terminal(store, launch):
@@ -236,7 +278,7 @@ def find_supervisor_timeout(store, launch, supervision):
 
 
 def record_probe_recovery(store, payload, **identity):
-    return prepared_mutation(store, "research.probe_recovery", payload,
+    return _commit_probe_record(store, "research.probe_recovery", payload,
         lambda records, value: ([immutable_record(records, "probe_recovery", value["id"], value)], value), **identity)
 
 
@@ -394,7 +436,8 @@ def launch_owned_probe(store, identifier, question, script, inputs, relative_out
                   "program": pinned[0], "inputs": pinned[1:], "timeout_seconds": timeout}
         if program_run is not None:
             intent["program_run"] = program_run
-        intent = commit_probe_mutation(store, record_probe_intent, intent, "probe-intent:" + identifier)["result"]
+        intent = commit_probe_mutation(store, record_probe_intent, intent, "probe-intent:" + identifier,
+                                       busy_msg=PROBE_INTENT_STORE_BUSY_MSG)["result"]
         directory = build_probe_directory(identifier) + "/run-" + uuid.uuid4().hex
         initial = {}
         for (name, data, _), artifact in zip(files, pinned):
@@ -411,7 +454,8 @@ def launch_owned_probe(store, identifier, question, script, inputs, relative_out
         launch = dict(config, config_artifact=config_artifact)
         write_projection(store.root, directory + "/config.json", artifacts.read(config_artifact))
         try:
-            commit_probe_mutation(store, record_probe_launch, launch, "probe-launch:" + identifier)
+            commit_probe_mutation(store, record_probe_launch, launch, "probe-launch:" + identifier,
+                                  busy_msg=PROBE_LAUNCH_STORE_BUSY_MSG)
         except ResearchError as error:
             if error.code != "probe_already_recorded":
                 raise

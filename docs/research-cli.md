@@ -818,7 +818,7 @@ beyond it. The states and their steps:
 | --- | --- | --- |
 | `running` | The capacity of the call is not released, there is no capture, and its owner or a transport process is alive. | `review-run` with `action: "reconcile"`, which succeeds once the processes have ended. |
 | `interrupted` | As `running`, and no process of the call is alive. | `review-run` with `action: "reconcile"`. For an ordinary call it records the unknown outcome as a failed attempt, probe or correction with the error `review_invocation_interrupted` and releases the capacity. For a staged task it marks the reservation `unknown` (a worker that ran) or `known_failure`, records no attempt and releases the capacity. |
-| `captured` | The observation of the call is retained, and its recording is pending. For an ordinary call the attempt is not recorded. For a staged task the capture has no acceptance and no refusal, and either its attempt is not recorded or its observation is completed. | For an ordinary call, the original command with, as `request_id`, its original request ID, which records the attempt from the capture without a reviewer call; the `payload` of the step is partial (below). For a staged task whose dispatch is recorded, the task's `review-run` under its original attempt id, with its original request ID as `request_id`. For another staged task, `review-run` with the task payload and `action: "accept"` when the observation is completed, and with `action: "reconcile"` when it is not; this step has no `request_id`. |
+| `captured` | The observation of the call is retained, and its recording is pending. For an ordinary call the attempt is not recorded. For a staged task the capture has no acceptance and no refusal, and either its attempt is not recorded or its observation is completed. | For an ordinary call, the original command with its original payload and, as `request_id`, its original request ID. This step records the attempt from the capture without a reviewer call. For a staged task whose dispatch is recorded, the task's `review-run` under its original attempt id, with its original request ID as `request_id`. For another staged task, `review-run` with the task payload and `action: "accept"` when the observation is completed, and with `action: "reconcile"` when it is not; this step has no `request_id`. |
 | `accepted` | The attempt is recorded, or the staged task is accepted or refused, and the capacity is not released. | `review-run` with `action: "reconcile"`, which releases the capacity. |
 | `settled` | The capacity of the call is released, or a call without a pool membership has its attempt. A staged reservation that was reconciled without an observation is settled without an attempt. | None. |
 | `historical` | A call of 0.69.x: an invocation without a pool membership and without an attempt. | For a run, `review-attempt` with the failed attempt of the `review-run` row. The harness cannot establish the end of its processes, so a stop is complete without this step. |
@@ -832,10 +832,13 @@ is not settled. A `now` stop whose result shows a call that is neither
 `settled` nor `historical` is not complete. Send the stop again with a new
 request ID: the command joins the standing stop and continues the settlement,
 and it reads the original payload of a captured call from the store. Or run
-the step of each such call and read the state again. The `payload` of a
-captured ordinary call holds only `id` and `assignment_id` or `route_id`, so
-restore every other member of the original payload before that replay, for
-example `capacity` of a capacity probe. A `historical` state does not
+the step of each such call and read the state again. Since 0.91.5 the
+`payload` of a captured ordinary call is the payload of its original command,
+with every member that the command received (for example `capacity` of a
+capacity probe). The payload needs no change before the step runs. From
+0.89.2 to 0.91.4 the step of a captured capacity probe did not hold
+`capacity`, and the store refused its replay with `request_id_conflict`. A
+`historical` state does not
 establish that the processes of that call ended. A repeat with the same request ID returns the first response
 unchanged. An attempt without a completed output whose call a `now` stop
 lists in `calls` is the outcome `stopped`. It counts as no failure of its turn
@@ -1204,24 +1207,32 @@ checks permits for the check (`notice_fields` in `CONTRACT_CHECKS`,
 `review_refusal.py`); every other detail is replaced by `{sha256}`, its digest.
 An entry has at most 6,000 characters in its JSON form, and details longer than
 4,000 characters keep their start as `{head, sha256, characters, complete:
-false}`. A notice therefore holds only values of the reviewer's own output, of
-the packets of its own chain, and values computed from them. The form `whole`
-adds `output`, the latest refused output in full. The form `bounded` adds
-`output_ref: {artifact, characters}`, the stored output and its length, and
-`refused_part: {path, value, complete}`, the part of that output at the `path`
-of the latest refusal, at most 20,000 characters and cut in the same way.
-`review-assignment` chooses the form by measurement. It tries `whole` and then
-`bounded`; a head with a correction invocation, or a reassessment whose
-correction request does not fit the route, tries `bounded` only. A form is
-chosen when its request passes the measurement and the preflight of the route,
-the sent packet holds the notice unchanged, and the task stays within its
-character allowance. When no form passes, the replacement is tried as the
-smaller task that the capacity recovery names, with the packet and the base
-prompt of that task and the bounded notice. When there is no smaller task, or
-it does not pass either, the refusal is `review_input_too_large` with the
-trials in its details and the position is exhausted. The prompt is the base
-prompt of the refused turn with the paragraph of the chosen form, which takes
-the place of an earlier refusal paragraph
+false}`. A notice holds values of the reviewer's own output, values of the
+packets of its own chain, values computed from them, and the fixed text
+`notice` that a check gives. The check `evidence.shape` names the refused
+evidence array in `path` and gives `refused_indexes` (the positions, counted
+from 0, of the refused entries in that array, at most 100), `refused_count`
+(their number) and `notice` (the accepted forms of an evidence entry). When it
+refuses the array itself, because it is not an array or is empty, it gives
+`notice` alone. For an array of another grammar, which is the evidence of a
+readiness check in the `support` member of a study result review or the
+evidence of a verification, it gives the two numbers when it refuses entries,
+and it never gives `notice`. The form `whole` adds `output`, the latest refused
+output in full. The form `bounded` adds `output_ref: {artifact, characters}`,
+the stored output and its length, and `refused_part: {path, value, complete}`,
+the part of that output at the `path` of the latest refusal, at most 20,000
+characters and cut in the same way. `review-assignment` chooses the form by
+measurement. It tries `whole` and then `bounded`; a head with a correction
+invocation, or a reassessment whose correction request does not fit the route,
+tries `bounded` only. A form is chosen when its request passes the measurement
+and the preflight of the route, the sent packet holds the notice unchanged, and
+the task stays within its character allowance. When no form passes, the
+replacement is tried as the smaller task that the capacity recovery names, with
+the packet and the base prompt of that task and the bounded notice. When there
+is no smaller task, or it does not pass either, the refusal is
+`review_input_too_large` with the trials in its details and the position is
+exhausted. The prompt is the base prompt of the refused turn with the paragraph
+of the chosen form, which takes the place of an earlier refusal paragraph
 (`exactory-review-output-refusal-whole-v1` or
 `exactory-review-output-refusal-bounded-v1`, recorded under
 `problem_paragraphs`), and the request is a fresh input: the prompt and the
@@ -2915,8 +2926,12 @@ of a reading response carry only `path` and `message`;
 and the checks of bars, work items, objections and candidates keep the
 identities they gave before. A check that runs on the items of a list names the
 item by its index or by its valid id, and the first failed check is the one
-reported. A refusal recorded before 0.67.0 keeps its `details` as recorded,
-`null` when its validator gave none, and its receipt is not rewritten. A `native_math`
+reported. The check `evidence.shape` checks every entry of an evidence array:
+`path` names the array, the code and the message are those of the first refused
+entry, and the details add `refused_indexes`, `refused_count` and `notice`,
+which are described with the member `output_refusal`. A refusal recorded before
+0.67.0 keeps its `details` as recorded, `null` when its validator gave none,
+and its receipt is not rewritten. A `native_math`
 review is recorded by `exactory-math`, not by this harness, so `review-run`
 checks its output when an authenticated run completes. A proposal review and an
 approval of a result or a recovery have the closed fields of the native review,
@@ -3565,7 +3580,8 @@ The outcome payload is:
 {id, command, outputs, stdout, stderr, exit_status, elapsed_seconds, observation}
 ```
 
-Command and observation are required text. Outputs is an array of pinned
+An outcome whose capture failed also holds `capture_failure`. Command and
+observation are required text. Outputs is an array of pinned
 descriptors; stdout and stderr are pinned descriptors. Elapsed seconds is finite
 and nonnegative. Exit status is an integer code, `timed_out`, `failed`,
 `output_bound` or `interrupted`. Nonzero exits, timeout cleanup, launch failures
@@ -3615,19 +3631,60 @@ Partial artifacts remain pinned. Last measured elapsed time is charged and any
 unmeasured remainder is explicitly counted as unknown resource usage. Absence of
 an outcome alone never releases a hold. Use a new ID for a new execution.
 
+The launcher and the worker write the records of a probe while other commands
+write to the same store. Each of these writes depends on the records that it
+reads, and not on the revision of the store. Every write reads records of the
+probe itself. The intent also reads `configuration/research`, the
+experiment account and budget, every other intent and whether it has an
+outcome, and the cycle plan of a disclosed run. The outcome also reads
+`configuration/research` and the experiment account and budget. A commit of
+another command that changes one of these records refuses the write, and the
+write is then prepared again: for example, the intent or the outcome of another
+probe, or a change of the budget. A commit that changes none of them does not
+refuse it. A busy store is waited for, for at most 600 seconds for each record
+that the probe writes. When the worker still cannot write a record after that
+time, it ends, and the launcher writes the records of the capture itself, with
+the same wait. When the launcher still cannot write a record after that time,
+`exactory-lab probe` is refused with `store_busy`, and `details.cause` holds
+the last refusal. The message says what was recorded and what the same command
+with the same `--id` does next:
+
+- The intent was not recorded. Nothing was recorded, and the program did not
+  run. The same command records the intent and runs the program.
+- The launch was not recorded. The intent is recorded and keeps its
+  reservation, and the program did not run. The same command does not run the
+  program: it records the probe as `interrupted`, without outputs, and ends the
+  reservation. After that, run the program under a new `--id`.
+- A later record was not written. The probe has no outcome and keeps its
+  reservation. If its program has run, the files of the run are kept. The same
+  command records the outcome from the kept files and does not run the program
+  again.
+
 Each captured stream is bounded at 32 MiB. Exceeding that bound terminates the
 process group and records `output_bound`; the bounded prefix is pinned, the raw
-file remains, and its full SHA identity retains exploratory provenance. Unsafe
-output paths produce a charged failed capture without admitting unsafe artifacts.
+file remains, and its full SHA identity retains exploratory provenance. An
+output that the worker cannot read safely gives a charged failed capture: a
+link, a path that leaves the output directory, or a file that cannot be read. No
+unsafe artifact is admitted. The outcome then has `exit_status: "failed"`, or
+`"output_bound"` when a stream exceeded 32 MiB, and the member
+`capture_failure: {code, program_exit_status}`. `code` names the cause, and
+`program_exit_status` is the exit status of the program. When the store or the
+artifact store refuses a write of a capture, the capture ends without an
+outcome.
 The launcher prints JSON receipts successfully for recorded failures and timeouts.
 Its managed request IDs are `probe-intent:ID`, `probe-launch:ID` and `probe:ID`.
 
 Errors include `configuration_missing`, `resource_budget_exhausted` before launch,
 `probe_intent_missing` for an outcome without an intent, `invalid_input`,
 `artifact_missing`, `artifact_corrupt`, `artifact_sealed`, `unsafe_path`,
-`preplan_cycle_frozen`, and normal immutable/revision/request conflicts. Status
-adds `probes: {count, elapsed_seconds}` when probe history exists. Probes alone
-never form a result candidate.
+`preplan_cycle_frozen`, `store_busy` (see above), and normal
+immutable/revision/request conflicts. `probe_io` is an operating-system error of
+the launcher or of a capture. It records no outcome. Once the cause is gone, the
+same command with the same `--id` acts as it does after `store_busy`: it runs
+the program if the intent was not recorded, it records the probe as
+`interrupted` if the launch was not recorded, and otherwise it records the
+outcome from the kept files. Status adds `probes: {count, elapsed_seconds}` when
+probe history exists. Probes alone never form a result candidate.
 
 ## Search depth, coverage and provisional questions (`search`)
 
@@ -4657,7 +4714,7 @@ since 0.73.0, and is checked, not refused.
 | `problem-statement` | `{id, title, area, statement, resolution_criteria, neighbours, formal_statement, candidate_id}` and the optional `revises_statement_id` | `problem_statement/<id>` and `problem_selection/current = {statement_id}`. Statement and criteria are nonempty text with TeX mathematics. Write `statement` in the two parts of [math-conjecturer Formulation step 1](../skills/math-conjecturer/SKILL.md#formulation), with the optional `---` line and the details in the same field. Neighbours are formulation texts, possibly empty. Formal statement is optional, null or `{language, text}`. `candidate_id` is optional, null or the id of a current candidate that the statement formulates (`problem_candidate_missing`). The area must equal the immutable problem record's area (`problem_area_mismatch`); for another subject class, the rule of [math-conjecturer Exploration](../skills/math-conjecturer/SKILL.md#exploration) applies. Any other changed field requires a new statement id and moves the selection. `revises_statement_id` is optional: the id of the statement record that this one revises (`problem_statement_missing` when the store holds no statement record with that id). The harness reads these references to list the runs on the earlier texts of a statement beside the runs on its current text ([The accounts of a value record](#the-accounts-of-a-value-record)). The statement digest covers `statement` and `resolution_criteria`, so a revision that changes only the neighbours keeps the digest. A record without the field keeps the bytes of 0.82.0. |
 | `problem-attempt` | `{id, statement_id, kind, solver, literature, outcomes, proportion}` | Appends `problem_attempt/<id>`, adding `recorded_revision`. Binds the current statement to a solver attempt delivered in this store or a critically assessed full-reading literature attempt. The latest record by recorded revision is current; a resolved attempt blocks posting as an open problem. |
 | `problem-openness` | `{assignment_id}` | Records `problem_openness/<id>` from the observed native result review. Every supplied minimum must pass the shared closed-schema validation. `supported_open` advances the claim; `unresolved` records the gap without an evidence audit; `already_solved` redirects to the settling result and blocks posting as open. |
-| `problem-value` | `{id, statement_id, accounts, motivation, current_state}` | `problem_value/<id>` holds the accounts of the statement and two ordered paragraph arrays. Each paragraph is `{text, evidence}` with the optional `field_fact`, and its nonempty evidence cites entries of the accounts. `accounts` is required (`problem_accounts_required` otherwise). The record adds `recorded_revision`, the dates that the harness derives and, since 0.91.2, `accounts_version: 2`, which a payload cannot set. [The accounts of a value record](#the-accounts-of-a-value-record) gives the parts, the rules, the derived parts and the refusals. A value record that an earlier release recorded has no accounts and keeps its contract. Since 0.89.2 the response of a new `problem-value` carries `size_report`; [Imported forming history](#imported-forming-history) gives its scope and its fields (the size report). The stored receipt holds none. |
+| `problem-value` | `{id, statement_id, accounts, motivation, changes_if_resolved, current_state}` | `problem_value/<id>` holds the accounts of the statement and three ordered paragraph arrays. Each paragraph is `{text, evidence}` with the optional `field_fact`, and its nonempty evidence cites entries of the accounts. `accounts` is required (`problem_accounts_required` otherwise). Since 0.91.6 a new value record also holds the part `places` of the accounts (`problem_places_required` otherwise) and the paragraph array `changes_if_resolved` (`problem_changes_if_resolved_required` otherwise), the public section "What a resolution would change". The record adds `recorded_revision`, the dates that the harness derives and, since 0.91.2, `accounts_version: 2`, which a payload cannot set. [The accounts of a value record](#the-accounts-of-a-value-record) gives the parts, the rules, the derived parts and the refusals. A value record that an earlier release recorded has no accounts, or has accounts without `places` and no `changes_if_resolved`, and keeps its contract. Since 0.89.2 the response of a new `problem-value` carries `size_report`; [Imported forming history](#imported-forming-history) gives its scope and its fields (the size report). The stored receipt holds none. |
 | `problem-citation-metadata` | `{id, version_id, title, authors, year, evidence}` | Appends `problem_citation_metadata/<id>`, adding `provenance` and `recorded_revision`, for an existing `url:` work with no DOI and no arXiv identity among its id, its aliases and its metadata (`problem_citation_work_ineligible` otherwise) that a valid full reading of this store covers (`problem_value_reading_missing` otherwise). `title` is nonblank text, `authors` is a nonempty ordered array of nonblank names, and `year`, optional, is four ASCII digits; a record without a year is cited without one, with no fallback to the work's year. `evidence` is `{title: span, authors: [span, ...], year: span}`: one span for the title, one span per author in the same order, and a year span exactly when `year` is given. A span is `{kind, source_id, sha256, start, end}`. `kind` is `fulltext`, the extracted text of a `fulltext` capture of this exact version, or `response`, the captured response of a `source` record; `source_id` names that source record; `sha256` is the hash of the retained object, the `text.sha256` of the capture or the `response.sha256` of the source record; `start` and `end` are zero-based UTF-8 byte offsets into that object, end exclusive, with `0 <= start < end <= size`. The selected bytes must equal the UTF-8 encoding of the field value exactly (`problem_citation_span_mismatch` otherwise): no JSON escape is decoded, no whitespace is normalized and no fragments are combined, so a line-wrapped title in a PDF text needs another retained capture that holds the clean title. An offset inside a multibyte character, or an object that is not valid UTF-8, is `invalid_input`. Every object is resolved through the stored records and the artifact store, never through a caller path: an absent source record is `unknown_source`; a source whose response is not a complete capture, or a capture that is not available and extracted, is `source_pending`; a `sha256` that is not the response of that source, a full text that no capture of this version with that source holds, or a retained object that is missing is `problem_citation_evidence_unbound`; retained bytes that fail their integrity check are `artifact_corrupt`. The record keeps the resolved provenance of every span: the source record's identity fields and digest, the response hash and, for a full text, the capture digest with the text and original hashes. The latest record for a version by `(recorded_revision, id)` is selected and revalidated at every projection. A correction is a new id with the complete replacement payload; a changed payload under an existing id is `record_conflict`. The selected record supplies the citation text alone; the locator does not change. |
 | `problem-citation-locator` | `{id, version_id, reading_id, original_sha256, url, source_id}` | Appends `citation_locator/<id>`, adding `reading_digest`, `source_digest` and `recorded_revision`: the HTTPS location of the exact original that an existing reading read. It supplies the locator of a read work that has no DOI, no arXiv id and no bundle HTTPS URL, for example a manuscript PDF in a GitHub repository, after those three in the locator order of `export --kind problem` (below); the citation text does not change. Every field is nonblank text. A payload that fails any of these conditions is refused with `problem_citation_locator_unbound`: `url` is an absolute `https` URL with a host, without a user name, a password, a fragment, whitespace or the port 0; `reading_id` names a reading of `version_id`; the bundle of that reading has `original_sha256`; `source_id` names a `source` record with this exact `url`, status `captured`, a complete response and a verified origin, whose response has the hash `original_sha256`; for a `url:` work, the text after `url:` equals `url`; a full-text capture of the work names this source and this original. The reading itself must still be valid (its own codes). Retained bytes that fail their integrity check are `artifact_corrupt`. The reading, its bundle and the work stay unchanged, and no new reading is needed. The latest record of a reading by `(recorded_revision, id)` is selected and revalidated at every projection; a selected record whose reading or source record changed after it was made is refused with `problem_citation_locator_unbound`. A correction is a new id; a changed payload under an existing id is `record_conflict`. |
 | `problem-assessment` | `{id, statement_id, grades, items, primary}` | `problem_assessment/<id>` binds the rubric self-assessment to the current statement, adding `recorded_revision`. Each item has evidence and a note; `primary` names its significance ground and criterion. |
@@ -5845,10 +5902,11 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   turns once: as carried, as superseded, or under `source_changed` when its
   source unit changed or left the packet. A row with superseded entries also
   holds a `message`. `unavailable_chains` holds a row `{chain, code, details,
-  message}` for an earlier reading chain with the author and the route
-  identity of the new chain and another reviewer, when the store cannot give
-  its packet, or evidence of its native packet that the new packet does not
-  hold. `code` and `details` are those of the refusal of the store. The
+  message}` for an earlier reading chain with the author, the statement, the
+  formulations and the route identity of the new chain and another reviewer.
+  The row appears when the store cannot give the packet of that chain, or
+  evidence of its native packet that the new packet does not hold. `code` and
+  `details` are those of the refusal of the store. The
   report then cannot say whether that chain belongs under `passed_over`. The
   new chain carries none of its turns in either case, and the first
   assignment goes on. A missing native packet of such a chain refuses the
@@ -7062,7 +7120,10 @@ folder, in the details); its message names the default.
 An unready export returns `readiness_required`. The deterministic projection is
 `title.txt`, `statement.md`, `motivation.md`, `state.md`, `criteria.md`,
 `citations.json`, `citation-refs.json`, optional `formal-statement.txt`, and
-`problem-export.json`.
+`problem-export.json`. Since 0.91.6 it also holds `changes-if-resolved.md` when
+the value record holds `changes_if_resolved`: the texts of its paragraphs, with
+one empty line between them. An export of a value record without that part
+keeps its file set and its digest.
 The manifest contains `{schema, statement_id, statement_digest,
 problem_evidence_digest, decision_id, area, formal_statement_language,
 files: {name: sha256}}`, with `schema` set to `exactory-problem-export-v2`.
@@ -7390,15 +7451,14 @@ holds `operation`, `invocation_id` or `reservation_id`, `assignment_id`,
 | --- | --- | --- | --- |
 | `settled` | `true` | `review_call_closed` | None. The post closed the call, and nothing is owed. |
 | `interrupted` | `false` | `review_invocation_pending` | `review-run` with `{action: "reconcile", operation, invocation_id}`, or with the task payload and `action: "reconcile"` for a staged task. |
-| `captured` | `false` | `review_invocation_pending` | For an ordinary call, the original command with its original request ID as `request_id`; restore the members of the original payload that the row's `payload` leaves out. For a staged task: the task's `review-run` under its original attempt id and request ID, or the task payload with `action: "accept"` for a completed observation and `action: "reconcile"` for another. |
+| `captured` | `false` | `review_invocation_pending` | For an ordinary call, the original command with its original payload and its original request ID as `request_id`. For a staged task: the task's `review-run` under its original attempt id and request ID, or the task payload with `action: "accept"` for a completed observation and `action: "reconcile"` for another. |
 | `accepted` | `false` | `review_invocation_pending` | `review-run` with `action: "reconcile"`, which releases the capacity. |
 | `historical` | `false` | `review_invocation_pending` | For a run, `review-attempt` with the failed attempt of the `review-run` row. |
 | `running` | `false` | `review_invocation_pending` | `review-stop` with `{id: "post-close-call:<digest>", action: "stop", assignment_id, mode: "now", reason: "The post closed this review chain."}`, which ends the call. |
 
 Every step is administrative: it closes recorded work and makes no reviewer
 call. A step does not always settle its call: `review-stop` returns also when
-its settlement is not complete, and the row of a captured call names a partial
-payload (the stop, in
+its settlement is not complete (the stop, in
 [Review chains and `review-series`](#review-chains-and-review-series)). Read
 `after_post` again after each step, and take the step that the row then shows,
 until the call is absent from the list or its row is `settled`. A settled call stays listed, with `closed: true`
@@ -7775,6 +7835,9 @@ of the retired kind `phenomenon` whose evidence cites no forming call,
 `problem_start_kind_removed` when `problem-candidate` names a retired source
 kind in a record that does not hold it, and `problem_slate_review_required` when
 `problem-slate` selects a candidate formed in the record without a slate review.
+A record holds a retired kind when its start, one of its candidates or one of
+its forming calls already has that kind
+([The removed kind of start](#the-removed-kind-of-start)).
 
 A record that holds no forming record keeps the `status` report, the output
 folders and the digests of 0.82.0.
@@ -8019,10 +8082,20 @@ alternatives ([math-conjecturer The accounts](../skills/math-conjecturer/SKILL.m
 recorded has no accounts. It is validated, digested, projected and gated under
 the contract of its release, and it needs no change.
 
+Since 0.91.6 `problem-value` also requires two things in every new value
+record: the part `places` of the accounts (`problem_places_required`
+otherwise), and the paragraph array `changes_if_resolved`
+(`problem_changes_if_resolved_required` otherwise). `places` records in which
+works of the field the statement arises. `changes_if_resolved` is the public
+section "What a resolution would change". Both are described below, after
+`replacement`. A value record without them, which an earlier release recorded,
+is validated, digested, projected and gated as before. Its export keeps its
+file set, and its prompts keep their bytes.
+
 The payload of `problem-value` is `{id, statement_id, accounts, motivation,
-current_state}`. `statement_id` names the current statement
+changes_if_resolved, current_state}`. `statement_id` names the current statement
 (`problem_statement_missing` otherwise). `exactory-research example
-problem-value` prints a payload of the first tier.
+problem-value` prints a payload of the first tier with one place.
 
 The version of the accounts. Since 0.91.2 `problem-value` writes
 `accounts_version: 2` into each new value record. The member names the rules
@@ -8044,7 +8117,8 @@ The accounts have two tiers. Every problem holds the first tier: `answer`,
 `relations` and `refuted_conjectures`. The second tier, `checks`, `gain` and a
 nonempty `search_coverage`, is required when the record claims a gain or enters
 a passed test (`problem_accounts_tier_two_missing`). `replacement` is required
-in its two cases (below). A key outside these twelve is `invalid_input`.
+in its two cases (below). `places` is required in a new value record (below).
+A key outside these thirteen is `invalid_input`.
 
 Rules that hold for the entries of every part:
 
@@ -8064,9 +8138,9 @@ Rules that hold for the entries of every part:
   An id that no entry holds is `problem_account_reference_missing`, and
   references that lead back to their entry are
   `problem_account_reference_cycle`.
-- `scope`, in `answer_evidence`, `boundaries`, `explanatory_use` and
-  `relations`, is nonempty text: the scope within which the fact holds.
-- `date`, in those four parts and in `checks`, is the day on which the fact
+- `scope`, in `answer_evidence`, `boundaries`, `explanatory_use`, `relations`
+  and `places`, is nonempty text: the scope within which the fact holds.
+- `date`, in those five parts and in `checks`, is the day on which the fact
   became available: `unknown`, `YYYY`, `YYYY-MM`, `YYYY-MM-DD` or a timestamp
   with a timezone. When every reference that the entry rests on gives a date,
   the harness records the latest of them as `date`, also in place of a value
@@ -8196,8 +8270,29 @@ cites and the forms that these change, through `previous`. The second is every
 entry of `refuted_conjectures`. A refuted form of the purpose `alternative`
 enters `boundaries` and needs no replacement entry.
 
-A paragraph of `motivation` or `current_state` is `{text, evidence}` with the
-optional `field_fact`. `evidence` is nonempty. Each reference is
+`places` is a list of `{id, fact, scope, role, relation_ids, evidence,
+evidence_ids}` with the optional `date`: the places of the statement in the
+work of its field. A place is a work, or a group of works on one question, in
+which the statement arises. `fact` says what the works do: the question that
+they study, the result that they reach, and the item that they state, need or
+stop at. `role` is an open value `{kind, description}` with two nonempty
+texts: how the statement stands to that item. The described kinds are
+`stated`, `needed`, `decides`, `stops` and `continues`
+([math-conjecturer The accounts](../skills/math-conjecturer/SKILL.md#the-accounts)),
+and the harness accepts every kind. `relation_ids` is a list, possibly empty,
+of the ids of `relations` entries: the relations that tie the statement to
+the item, where the item is not the statement
+(`problem_account_reference_missing` for another id). These relations add no
+evidence to the place. The entry rests on at least one full reading, in
+`evidence` or through `evidence_ids`, and an imported full reading counts
+(`problem_place_evidence_missing` otherwise). A new value record holds the
+part with at least one entry (`problem_places_required` otherwise). The harness
+checks the form of an entry and its reading. It does not check that a passage
+of the work shows what the entry says. The reviewers judge that.
+
+A paragraph of `motivation`, `changes_if_resolved` or `current_state` is
+`{text, evidence}` with the optional `field_fact`. `evidence` is nonempty.
+Each reference is
 `{kind: "account", id}`, the id of an entry of the accounts. A paragraph with
 `field_fact: true` can also cite a full reading directly, as `{kind:
 "reading", version_id, reading_id}`, for a fact about the field that no part of
@@ -8205,6 +8300,16 @@ the accounts holds; another direct reference is
 `problem_value_account_required`. A paragraph whose cited entries are all
 expected relations is refused (`problem_value_expected_only`). The delivered
 evidence of a paragraph is the evidence that its cited entries rest on.
+
+In a new value record, `changes_if_resolved` is a nonempty list of such
+paragraphs. At least one paragraph of `motivation` and at least one of
+`changes_if_resolved` cite an entry of `places`
+(`problem_value_place_uncited`, with `section`). The post sends the texts of
+`changes_if_resolved` with one empty line between them, and the server accepts
+100 to 5,000 UTF-16 code units after the trim. `problem-value` applies the same
+count to the joined text (`problem_changes_if_resolved_length`, with
+`characters`, `minimum` and `maximum`), so that a text of another length is
+refused before the reviews and not at the post.
 
 Some entries are shortfalls that the harness records without a refusal: a
 surplus with the status `neither`, a derivation with the status
@@ -8317,20 +8422,27 @@ under both versions ([Imported forming history](#imported-forming-history)).
 In a review delivered in fresh parts, the value part travels whole in every
 frame. The result coverage check requires the request of a review to carry
 `value` and `account_records` with their current values
-(`problem_evidence_unassessed` with the keys under `missing`).
+(`problem_evidence_unassessed` with the keys under `missing`). For a value
+record that holds them, `places` stands in the delivered `accounts`, and the
+value part carries `changes_if_resolved`, each paragraph with its
+`delivered_evidence`. An adjudicator packet lists each paragraph of
+`changes_if_resolved` among its targets, as `value:changes_if_resolved:<index>`.
 
 Reviewer paragraphs. A prompt carries an optional paragraph only when its
 packet carries the material or continues a packet that carried it. The
 registry is `PARAGRAPHS` in
 `research_harness/review_prompt_paragraphs.py`, and the order is fixed: the
-carry paragraph, the accounts paragraph, the probes paragraph, the slate
+carry paragraph, the accounts paragraph, the probes paragraph, the paragraph on
+what a resolution would change, the slate paragraph, the slate places
 paragraph, the replacement paragraph and the areas paragraph.
 
 | Paragraph | Roles | Present when |
 | --- | --- | --- |
 | `exactory-problem-accounts-v1` | Result, in every turn of a series; adjudicator of `A3`, `priority`, `calibration` or `significance`, with the definition of the item | The delivered value record holds accounts. |
 | `exactory-problem-account-probes-v1` | Result, in every turn of a series; adjudicator of `A3`, `priority`, `calibration` or `significance`, with the definition of the item | The accounts paragraph is present, the delivered value record states `accounts_version: 2`, and `account_records` holds a `probe` record of this store. |
+| `exactory-problem-changes-if-resolved-v1` | Result, in every turn of a series; adjudicator of `significance` or `calibration`, with the definition of the item | The delivered value record holds `changes_if_resolved`. |
 | `exactory-problem-slate-forming-v1` | Slate | A current candidate has the retired source kind `phenomenon`, or its `source.evidence` cites a forming call or a form outcome. The slate packet then keeps those references in the candidate's `source.evidence`. |
+| `exactory-problem-slate-places-v1` | Slate | The slate packet holds `place_review`. The packet of a new slate assignment holds it since 0.91.6, also when the assignment refreshes an earlier review in its slot. A continuation or a repair holds it when its parent does. |
 | `exactory-problem-replacement-v1` | Result; adjudicator of `A7`, with the definition of the item | The accounts hold a nonempty `replacement`. |
 | `exactory-problem-areas-v1` | Bar; result | The record names a further area, so the packet carries `problem_areas` ([Further areas](#further-areas)). |
 
@@ -8358,6 +8470,25 @@ paragraph, for example `/accounts-v1/replacement-v1`, and its
 envelope keeps them, so an assignment rebuilds from its own envelope after a
 later version of a paragraph is registered. An assignment whose packet calls
 for no paragraph keeps the prompt bytes of 0.82.0.
+
+Two paragraphs are registered since 0.91.6. The paragraph on what a resolution
+would change says what `places` and `changes_if_resolved` hold, when a place
+counts for a level of ground B1 or B2, what the section and the past line of
+the motivation say, what the record can report about the step at which a route
+stops, and where each judgment goes. It governs where it is stricter than an
+anchor, than the accounts paragraph or than a bar. Its template suffix is
+`/changes-if-resolved-v1`. The slate places paragraph asks, for every candidate
+of a slate review, in which work the candidate arises, and it asks for level 1
+on both grounds of significance for a candidate whose places show no need. Its
+condition
+reads a member of the slate packet: the packet of a new slate assignment
+carries `place_review: {protocol: "exactory-problem-slate-places-v1"}` since
+0.91.6. A recorded slate packet holds no such member, so a recorded slate
+review keeps its prompt and stays verified. A continuation or a repair takes
+the member from the packet of its parent, so the continuation or the repair of
+such a recorded review holds no member and keeps the paragraphs of its parent.
+The template suffix is `/slate-places-v1`. Both paragraphs leave the response
+shapes as they are.
 
 Refusals of `problem-value` for the accounts, beside the codes of the cited
 evidence:
@@ -8394,6 +8525,11 @@ evidence:
 | `problem_form_missing` | `form_id` of a `replacement` entry names no form with the standing `refuted`. Record that outcome with `form-outcome` first. |
 | `problem_value_account_required` | A paragraph cites a reference that is no account entry, and it is not a full reading in a paragraph with `field_fact: true`. Enter the fact in its account, and cite the entry. |
 | `problem_value_expected_only` | Every entry that a paragraph cites is an expected relation. Establish a relation, or cite an entry that holds a fact. |
+| `problem_places_required` | The accounts of a new value record hold no `places`, or an empty list. Add one entry for each work in which the statement arises. When no work read states the statement, needs it or stops at it, enter one place with the role `continues`. |
+| `problem_place_evidence_missing` | A place rests on no full reading (`id`). Cite a full reading of the work in `evidence`, or cite in `evidence_ids` an entry that holds one. |
+| `problem_changes_if_resolved_required` | The payload of a new value record has no `changes_if_resolved`. Add the paragraphs of the section "What a resolution would change". |
+| `problem_value_place_uncited` | No paragraph of `motivation`, or no paragraph of `changes_if_resolved`, cites an entry of `places` (`section`). Cite a place in that section, as `{kind: "account", id}`. |
+| `problem_changes_if_resolved_length` | The joined text of `changes_if_resolved` is outside the length that the post accepts (`characters`, `minimum`, `maximum`). Make the paragraphs shorter or longer. |
 
 ### Further areas
 

@@ -10,7 +10,7 @@ from .operations import fields, strings, text, timestamp
 
 
 ACCOUNT_LIST_PARTS = ("answer_evidence", "boundaries", "explanatory_use", "alternatives", "strength", "relations",
-                      "checks", "search_coverage", "refuted_conjectures", "replacement")
+                      "checks", "search_coverage", "refuted_conjectures", "replacement", "places")
 STRENGTH_HEADS = ("range_of_instances", "constants", "exponents", "exactness")
 RELATION_KINDS = ("implies", "follows_from", "equivalent_to", "incompatible_with", "strengthens", "generalizes", "presents_anew")
 ALTERNATIVE_ROLES = ("stronger", "weaker", "same_assertion", "other_assertion", "no_alternative")
@@ -361,12 +361,50 @@ def validate_relations(accounts, entries, alternatives):
                                 {"id": entry["id"]})
 
 
+def is_full_reading(reference):
+    return (reference["kind"] == "reading"
+            or reference["kind"] == "record" and reference.get("origin") and reference["record_kind"] == "reading")
+
+
+def validate_place_shape(entry):
+    # A place is a fact about a work: the work states the statement, needs it, stops at it, or has results that the statement continues.
+    fields(entry, ("id", "fact", "scope", "role", "relation_ids", "evidence", "evidence_ids"), ("date",))
+    text(entry["fact"], "The fact of a place")
+    text(entry["scope"], "The scope of a place")
+    try:
+        fields(entry["role"], ("kind", "description"))
+        for key in ("kind", "description"):
+            text(entry["role"][key], "The " + key + " of the role of a place")
+    except ResearchError as error:
+        raise ResearchError("invalid_input",
+                            "The role of a place is an open value {kind, description}: how the statement stands to "
+                            "the item of the place. The described kinds are stated, needed, decides, stops and "
+                            "continues") from error
+
+
+def validate_places(records, accounts, entries):
+    relations = {entry["id"] for entry in accounts["relations"]}
+    for entry in accounts.get("places", []):
+        if not set(entry["relation_ids"]) <= relations:
+            raise ResearchError("problem_account_reference_missing",
+                                "relation_ids of this place names an entry that is no relations entry. Name the ID of a "
+                                "relations entry that ties the statement to the item of the place, or leave relation_ids "
+                                "empty", {"id": entry["id"]})
+        # The fact rests on a full reading of the work. relation_ids tie the statement to the item and add no evidence.
+        if not any(is_full_reading(reference) for reference in collect_entry_evidence(entries, entry["id"])):
+            raise ResearchError("problem_place_evidence_missing",
+                                "This place cites no full reading. A place is a fact about a work. Cite a full reading of "
+                                "that work in evidence, or cite in evidence_ids an entry that holds one. A computation or "
+                                "an accepted result alone shows no place", {"id": entry["id"]})
+        validate_fact(records, entry, entries)
+
+
 def validate_accounts(records, artifacts, value):
     from .problem_claims import find_current_statement
     from .problem_forming import validate_description
     accounts = copy.deepcopy(value["accounts"])
     fields(accounts, ("answer", "answer_evidence", "boundaries", "explanatory_use", "alternatives", "strength", "relations", "refuted_conjectures"),
-           ("checks", "gain", "search_coverage", "replacement"))
+           ("checks", "gain", "search_coverage", "replacement", "places"))
     for part in ACCOUNT_LIST_PARTS:
         strategy.items(accounts.get(part, []), "The accounts part " + part, code="invalid_input")
     fields(accounts["answer"], ("id", "status", "text", "evidence_ids"))
@@ -379,6 +417,9 @@ def validate_accounts(records, artifacts, value):
     if accounts.get("gain") is not None:
         fields(accounts["gain"], ("id", "form", "claim", "relation_ids", "separate_grounds", "conjunction", "establishing_ids", "new_object_justification"))
         strategy.items(accounts["gain"]["separate_grounds"], "The separate_grounds of the gain", code="invalid_input")
+    # The role of a place has its own shape. The checks of every entry below read role as the role of an alternative.
+    for place in accounts.get("places", []):
+        validate_place_shape(place)
     entries = {}
     for entry in collect_entries(accounts):
         fields(entry, ("id",), None)
@@ -438,6 +479,7 @@ def validate_accounts(records, artifacts, value):
         validate_fact(records, entry, entries,
                       required_code="problem_relation_evidence_missing" if entry["standing"] == "established" else None)
     validate_relations(accounts, entries, alternatives)
+    validate_places(records, accounts, entries)
     validate_tier_two(records, value, accounts, entries, alternatives)
     validate_replacement(records, artifacts, accounts, entries)
     return accounts
@@ -777,8 +819,7 @@ def validate_tier_two(records, value, accounts, entries, alternatives):
     revisions, dates, native_evidence, ordered_evidence = [], [], False, False
     choose_date = (lambda row: find_date_start(row["date"])) if accounts_version == 2 else (lambda row: row["date"])
     for reference in establishing:
-        if (reference["kind"] == "reading"
-                or reference["kind"] == "record" and reference.get("origin") and reference["record_kind"] == "reading"):
+        if is_full_reading(reference):
             continue
         ordered_evidence = True
         if reference['kind'] == 'record' and 'origin' in reference:

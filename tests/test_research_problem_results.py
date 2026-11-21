@@ -17,6 +17,11 @@ class ProblemResultTests(ProblemCase):
         super().setUp()
         self.initialize_problem()
         self.statement = self.select_statement()
+        # The place of a new value record rests on a full reading; the evidence of these values is results.
+        self.place_reading = self.record_full_reading()
+
+    def build_value(self, evidence, identifier="value-1"):
+        return super().build_value(evidence, identifier, place_evidence=[self.place_reading])
 
     def bind_result(self, acceptance, identifier="attempt-1"):
         native = build_native_attempt(self.statement["statement"], [acceptance], {})
@@ -283,7 +288,7 @@ class ProblemResultReviewTests(ProblemDeliveryCase):
         native = build_native_attempt(self.selected["statement"], [acceptance], {})
         self.mutate(problem_attempt.record_attempt, build_attempt("result-attempt", put_native_attempt(self, native)))
         item = {"kind": "result", "attempt_id": "result-attempt", "acceptance_id": "acceptance-1"}
-        value = self.build_value([item], "result-value")
+        value = self.build_value([item], "result-value", place_evidence=[self.full_reading])
         self.mutate(claims.record_value, value)
         records = self.store.snapshot()["records"]
         self.assertNotEqual(before, claims.compute_problem_evidence_digest(records, self.artifacts))
@@ -295,7 +300,7 @@ class ProblemResultReviewTests(ProblemDeliveryCase):
         original = review_protocol.add_problem_evidence
         for omitted in (None, "results", "attempt"):
             if omitted is not None:
-                value = self.build_value([item], "value-without-" + omitted)
+                value = self.build_value([item], "value-without-" + omitted, place_evidence=[self.full_reading])
                 value["motivation"][0]["text"] += " Updated to explain " + omitted + "."
                 self.mutate(claims.record_value, value)
             def deliver(records, artifacts, packet):

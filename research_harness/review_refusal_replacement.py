@@ -28,10 +28,7 @@ REPLACEMENT_ROUTE_MSG = (
     'adapter, model, endpoint and configuration. It pins the installed runtime, is not retired and is verified by a '
     'probe. details.renewal is what the plan of review-series reads for the refused assignment when its route record '
     'is stale. The named route record does not change it, and it does not say which condition failed. Run '
-    'review-series on the head and take the step that it plans. That is the replacement on a route record that '
-    'admits it, or the handoff review_route_runtime_stale. That handoff names what the store lacks, or it lists the '
-    'steps of the stale-route procedure. When no route record can carry the replacement, or the turn position is '
-    'exhausted, the step is the step of the role of the head.')
+    'review-series on the head and take the step that it plans.')
 REPLACEMENT_ATTEMPT_LIMIT_MSG = (
     'A replacement that carries a refusal has one output, and the output of this replacement was refused. Run '
     'review-series on the head. It plans another replacement that carries the refusal when one is admissible, and '

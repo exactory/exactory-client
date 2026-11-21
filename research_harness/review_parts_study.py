@@ -3,7 +3,7 @@
 import copy
 
 from . import review_parts as parts, review_parts_prompts as prompts
-from .errors import ResearchError
+from .errors import ResearchError, describe_error_at
 from .evidence import digest
 from .operations import fields, text
 
@@ -186,7 +186,7 @@ def validate_study_references(records, artifacts, references, delivery):
             citations.append(reference['artifact'])
         else:
             citations.append(reference)
-    validate_evidence_contract(records, artifacts, citations, packets=delivery['packets'])
+    validate_evidence_contract(records, artifacts, citations, packets=delivery['packets'], forms_notice=False)
     missing = find_review_undelivered_references(
         records, artifacts, citations, delivery, require_complete_artifacts=True)
     if missing:
@@ -223,7 +223,7 @@ def validate_verification_final(records, artifacts, assignment, output, *, attem
     delivery = read_review_citation_delivery(records, artifacts, assignment, attempt=attempt)
     target = strict_json(artifacts.read(assignment['packet']))['paper']['target']
     seen = set()
-    for check in output['checks']:
+    for index, check in enumerate(output['checks']):
         fields(check, ('dimension', 'reason', 'evidence'), code='invalid_value_review')
         if check['dimension'] not in VERIFICATION_CHECKS or check['dimension'] in seen:
             raise ResearchError('invalid_value_review',
@@ -234,7 +234,8 @@ def validate_verification_final(records, artifacts, assignment, output, *, attem
             raise ResearchError('invalid_value_review',
                                 'Verification evidence is an array of source links')
         references = [dict(kind='source', link=link) for link in check['evidence']]
-        validate_evidence_contract(records, artifacts, references, packets=packets)
+        with describe_error_at('/checks/' + str(index) + '/evidence'):
+            validate_evidence_contract(records, artifacts, references, packets=packets, forms_notice=False)
         if find_review_undelivered_references(records, artifacts, references, delivery,
                                             require_complete_artifacts=True):
             raise ResearchError('review_evidence_undelivered',

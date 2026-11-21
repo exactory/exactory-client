@@ -20,15 +20,20 @@ from research_harness import review_staged_protocol as staged
 from problem_parts_fixtures import ResultPartsCase
 
 
-def build_packet(role='result', *, accounts=False, replacement=False, forming=False, areas=False, carry=False, item=None):
+def build_packet(role='result', *, accounts=False, replacement=False, forming=False, areas=False, carry=False, item=None,
+                 changes=False, places=False):
     value = dict(accounts={})
     if accounts:
         value['accounts']['answer'] = 'A supported conjectured answer.'
     if replacement:
         value['accounts']['replacement'] = dict(statement='A refuted earlier statement.')
+    if changes:
+        value['changes_if_resolved'] = [dict(text='A proof decides the item that the source states as open.')]
     packet = dict(role=role, subject=dict(kind='problem'), problem_evidence=dict(value=value))
     if forming:
         packet['candidates'] = [dict(id='formed', source=dict(kind='phenomenon'))]
+    if places:
+        packet[paragraphs.PLACE_REVIEW_KEY] = dict(protocol=paragraphs.SLATE_PLACES_PROTOCOL)
     if areas:
         packet['problem_areas'] = [dict(id='further-area')]
     if carry:
@@ -142,6 +147,8 @@ class OptionalParagraphTests(unittest.TestCase):
         expected = {
             'exactory-problem-accounts-v1': 'c2e3eb3807d4ff247ad26a6abf716b02a58188968080195afeba16354c3a686d',
             'exactory-problem-account-probes-v1': '81d4dbbf210e62b453a5535425be6553924f69e41fe1929fd1b483eed8373b5f',
+            'exactory-problem-changes-if-resolved-v1': '4d688cdffbe965d3533aeecdc89dd6e04f4d28b463ecd49e9e678fc0ccad104a',
+            'exactory-problem-slate-places-v1': '234fce931e8378f342c0d6af6de942aa7f560cef00b645ab3efc00accb2e4d70',
             'exactory-problem-slate-forming-v2': '13c788192070b3fa9d16cf8abf3ab36a81d381f248a7a7333c3f69648aa9849d',
             'exactory-problem-slate-forming-v1': 'e14ff7ce5d6f1a0bd2d03b1f2fd7f45c596e14902eea5083dd7bc66d78f78d2b',
             'exactory-problem-replacement-v1': '92d8d0ace0a5c7dbd61d340f2fe6e6c5f93760ca1b7764853b7217f1dbbd12c0',
@@ -165,9 +172,11 @@ class OptionalParagraphTests(unittest.TestCase):
         self.assertTrue(protocol._prompt_matches(build_assignment('result', prompt), packet=packet))
 
     def test_every_admitted_combination_renders_once_in_order_and_recognizes(self):
-        for role, accounts, replacement, forming, areas, carry in itertools.product(
-                ('bar', 'slate', 'result'), (False, True), (False, True), (False, True), (False, True), (False, True)):
-            packet = build_packet(role, accounts=accounts, replacement=replacement, forming=forming, areas=areas, carry=carry)
+        for role, accounts, replacement, forming, areas, carry, changes, places in itertools.product(
+                ('bar', 'slate', 'result'), (False, True), (False, True), (False, True), (False, True), (False, True),
+                (False, True), (False, True)):
+            packet = build_packet(role, accounts=accounts, replacement=replacement, forming=forming, areas=areas, carry=carry,
+                                  changes=changes, places=places)
             prompt = render_packet(packet)
             expected = protocol.canonical_prompt(role, orchestration='problem_creation')
             self.assertEqual(prompt['text'].encode(), (expected['text'] + ''.join(select_texts(prompt))).encode())
@@ -197,6 +206,8 @@ class OptionalParagraphTests(unittest.TestCase):
         cases = [(build_packet(accounts=True), build_packet()),
                  (build_packet(replacement=True), build_packet(accounts=True)),
                  (build_packet('slate', forming=True), build_packet('slate')),
+                 (build_packet(changes=True), build_packet()),
+                 (build_packet('slate', places=True), build_packet('slate')),
                  (build_packet(areas=True), build_packet()),
                  (build_packet(carry=True), build_packet())]
         for required, absent in cases:
@@ -228,7 +239,8 @@ class OptionalParagraphTests(unittest.TestCase):
         later = dict(row, id='later', previous='first', source=dict(kind='literature', reference='A published question.', evidence=[]))
         records['problem_candidate']['later'] = later
         protocol.add_problem_candidates(records, packet)
-        self.assertEqual(paragraphs.select_prompt_parameters('slate', packet), {})
+        self.assertEqual(paragraphs.select_prompt_parameters('slate', packet),
+                         dict(problem_paragraphs=['exactory-problem-slate-places-v1']))
 
     def test_0820_candidate_projection_and_record_digest_stay_unchanged(self):
         row = dict(id='ordinary', previous=None, statement='An existing question.', source=dict(
@@ -242,6 +254,43 @@ class OptionalParagraphTests(unittest.TestCase):
             source={key: row['source'][key] for key in ('kind', 'reference')},
             observation=row['observation'], neighbours=[], potential={})
         self.assertEqual(packet['candidates'], [expected])
+
+    def test_the_changes_paragraph_follows_a_nonempty_section_of_the_delivered_value(self):
+        for section, expected in ((None, False), ([], False), ([dict(text='A paragraph.')], True)):
+            packet = build_packet(accounts=True)
+            if section is not None:
+                packet['problem_evidence']['value']['changes_if_resolved'] = section
+            versions = paragraphs.select_prompt_parameters('result', packet)['problem_paragraphs']
+            self.assertEqual(versions, ['exactory-problem-accounts-v1'] + (
+                ['exactory-problem-changes-if-resolved-v1'] if expected else []))
+        prompt = render_packet(build_packet(accounts=True, changes=True))
+        self.assertTrue(prompt['template_id'].endswith('/accounts-v1/changes-if-resolved-v1'))
+        self.assertTrue(prompt['text'].endswith(paragraphs.CHANGES_IF_RESOLVED_PROMPT))
+        self.assertEqual(paragraphs.strip_prompt_paragraphs(prompt, 'result'),
+                         protocol.canonical_prompt('result', orchestration='problem_creation'))
+        self.assertEqual(render_packet(build_packet(accounts=True)), protocol.canonical_prompt(
+            'result', orchestration='problem_creation', problem_paragraphs=['exactory-problem-accounts-v1']))
+
+    def test_the_slate_places_paragraph_follows_the_member_that_the_slate_builder_writes(self):
+        row = dict(id='first', previous=None, statement='An exact claim.', source=dict(
+            kind='literature', reference='A published question.', evidence=[]), observation='A stated question.',
+            neighbours=[], potential={})
+        packet = build_packet('slate')
+        protocol.add_problem_candidates(dict(problem_candidate={'first': row}), packet)
+        self.assertEqual(packet['place_review'], {'protocol': 'exactory-problem-slate-places-v1'})
+        prompt = render_packet(packet)
+        self.assertEqual(prompt['parameters']['problem_paragraphs'], ['exactory-problem-slate-places-v1'])
+        self.assertTrue(prompt['template_id'].endswith('/slate-places-v1'))
+        self.assertTrue(prompt['text'].endswith(paragraphs.SLATE_PLACES_PROMPT))
+        recorded = {key: value for key, value in packet.items() if key != 'place_review'}
+        self.assertEqual(render_packet(recorded), protocol.canonical_prompt('slate', orchestration='problem_creation'))
+        self.assertTrue(protocol._prompt_matches(build_assignment('slate', render_packet(recorded)), packet=recorded))
+        self.assertFalse(protocol._prompt_matches(build_assignment('slate', render_packet(recorded)), packet=packet))
+        for member in (dict(protocol='exactory-problem-slate-places-v0'), {}, dict(other='member')):
+            self.assertEqual(paragraphs.select_prompt_parameters('slate', dict(recorded, place_review=member)), {})
+        formed = build_packet('slate', forming=True, places=True)
+        self.assertEqual(render_packet(formed)['parameters']['problem_paragraphs'],
+                         ['exactory-problem-slate-forming-v1', 'exactory-problem-slate-places-v1'])
 
     def test_empty_accounts_and_replacement_call_for_no_paragraph(self):
         for accounts in (None, {}, []):
@@ -257,12 +306,13 @@ class OptionalParagraphTests(unittest.TestCase):
 
     def test_adjudicator_receives_only_the_paragraph_for_its_named_definition(self):
         for item in ('A1', 'A2', 'A3', 'A7', 'priority', 'calibration', 'significance', 'attempt'):
-            packet = build_packet('adjudicator', accounts=True, replacement=True, item=item)
+            packet = build_packet('adjudicator', accounts=True, replacement=True, changes=True, item=item)
             prompt = render_packet(packet)
             versions = prompt['parameters'].get('problem_paragraphs', [])
             self.assertEqual('exactory-problem-accounts-v1' in versions,
                              item in ('A3', 'priority', 'calibration', 'significance'))
             self.assertEqual('exactory-problem-replacement-v1' in versions, item == 'A7')
+            self.assertEqual('exactory-problem-changes-if-resolved-v1' in versions, item in ('calibration', 'significance'))
             self.assertTrue(protocol._matches_current_problem_adjudicator_prompt(prompt))
             self.assertTrue(protocol._prompt_matches(build_assignment('adjudicator', prompt), packet=packet))
             paragraphs.append_rubric_definition(packet)
@@ -372,11 +422,11 @@ class OptionalParagraphTests(unittest.TestCase):
                 self.assertTrue(staged.matches_prompt(build_assignment('result', prompt), protocol.find_common_prompt_version(prompt)))
 
     def test_compact_context_preserves_applicability_without_repeating_accounts(self):
-        packet = build_packet(accounts=True, replacement=True, areas=True)
+        packet = build_packet(accounts=True, replacement=True, areas=True, changes=True)
         compact = build_packet()
         compact['problem_evidence'] = dict(delivery='delivered-in-an-earlier-turn')
         paragraphs.preserve_prompt_conditions('result', packet, compact)
-        self.assertEqual(compact['problem_prompt_conditions'], ['accounts', 'replacement', 'areas'])
+        self.assertEqual(compact['problem_prompt_conditions'], ['accounts', 'changes-if-resolved', 'replacement', 'areas'])
         self.assertEqual(paragraphs.select_prompt_parameters('result', compact),
                          paragraphs.select_prompt_parameters('result', packet))
         self.assertNotEqual(compact['problem_evidence'], packet['problem_evidence'])

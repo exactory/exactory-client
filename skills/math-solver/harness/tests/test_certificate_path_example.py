@@ -26,7 +26,7 @@ from tests import test_search_execution_proof as certified_tests
 PLUGIN = Path(__file__).resolve().parents[4]
 sys.path.append(str(PLUGIN / "tests"))
 
-from problem_accounts_fixtures import build_accounts
+from problem_accounts_fixtures import CHANGES_IF_RESOLVED_TEXT, build_accounts, build_place
 
 
 class CertificatePathExampleTests(WorkspaceTest):
@@ -269,15 +269,24 @@ class CertificatePathExampleTests(WorkspaceTest):
         self.assertEqual({"review-assignment:" + identifier for identifier in assignments},
                          {row["reviewer"]["attestation_id"] for row in self.reviews.values()})
 
-    def build_value(self, evidence):
+    def record_place_reading(self):
+        """A full reading in the common store, on which the place of a new value record rests (0.91.6)."""
+        from test_research_problem_claims import ProblemCase
+        reader = ProblemCase()
+        reader.store, reader.artifacts, reader.root, reader.sequence = self.common_store, self.artifacts, self.common, 0
+        return reader.record_full_reading()
+
+    def build_value(self, evidence, place_reading):
         accounts = build_accounts()
         accounts["boundaries"] = [{
             "id": "mod-four-boundary", "fact": "No square has residue two modulo four.",
             "scope": "The four residue classes modulo four.", "date": "unknown", "evidence": [evidence],
             "evidence_ids": [], "argument": "The complete residue table excludes the class two when m is four."}]
+        accounts["places"] = [build_place([place_reading])]
         return {"id": "certificate-value", "statement_id": "statement-1", "accounts": accounts,
             "motivation": [{"text": "A classification must explain the excluded classes already proved modulo four.",
-                            "evidence": [{"kind": "account", "id": "mod-four-boundary"}]}],
+                            "evidence": [{"kind": "account", "id": "mod-four-boundary"}, {"kind": "account", "id": "place"}]}],
+            "changes_if_resolved": [{"text": CHANGES_IF_RESOLVED_TEXT, "evidence": [{"kind": "account", "id": "place"}]}],
             "current_state": [{"text": "The modulo-four boundary has an accepted certificate result.",
                                "evidence": [{"kind": "account", "id": "mod-four-boundary"}]}]}
 
@@ -288,7 +297,7 @@ class CertificatePathExampleTests(WorkspaceTest):
         reference = {"kind": "result", "native_attempt_digest": delivered["native_attempt_digest"],
             "acceptance_id": "acceptance-000001", "purpose": "Locate the excluded square class modulo four",
             "extension_reason": None}
-        saved = self.invoke_common_command("problem-value", self.build_value(reference))["result"]
+        saved = self.invoke_common_command("problem-value", self.build_value(reference, self.record_place_reading()))["result"]
         self.assertEqual(saved["accounts"]["boundaries"][0]["evidence"], [reference])
         self.assertIn("certificate-value", self.common_store.snapshot()["records"]["problem_value"])
         native = self.common_store.snapshot()["records"]["native_attempt"][delivered["native_attempt_digest"]]
@@ -345,8 +354,9 @@ class CertificatePathExampleTests(WorkspaceTest):
 
     def test_probe_reference_is_refused_in_boundary_accounts(self):
         self.record_probe()
+        place_reading = self.record_place_reading()
         before = self.common_store.snapshot()
         with self.assertRaises(ResearchError) as caught:
-            self.invoke_common_command("problem-value", self.build_value({"kind": "probe", "id": "probe-residues"}))
+            self.invoke_common_command("problem-value", self.build_value({"kind": "probe", "id": "probe-residues"}, place_reading))
         self.assertEqual(caught.exception.code, "problem_boundary_evidence_missing")
         self.assertEqual(self.common_store.snapshot(), before)

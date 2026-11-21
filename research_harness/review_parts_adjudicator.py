@@ -59,6 +59,7 @@ def list_citations(source):
 
 
 def list_targets(packet):
+    from .problem_evidence import list_value_sections
     evidence = packet.get('problem_evidence', {})
     claim = evidence.get('claim') or {}
     targets = [dict(id='objection', label=packet['objection'].get('claim', packet['objection']['id'])),
@@ -66,7 +67,7 @@ def list_targets(packet):
                dict(id='resolution_criteria', label=claim.get('resolution_criteria', ''))]
     value = evidence.get('value') or {}
     targets.extend(dict(id='value:' + section + ':' + str(index), label=paragraph['text'])
-                   for section in ('motivation', 'current_state')
+                   for section in list_value_sections(value)
                    for index, paragraph in enumerate(value.get(section, [])))
     if 'rubric_definition' in packet:
         definition = packet['rubric_definition']

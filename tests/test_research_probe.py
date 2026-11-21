@@ -27,15 +27,18 @@ class ProbeTests(LiteratureCase):
         from research_harness.storage import Store
         self.record_intent()
         payload = build_probe_outcome(self.artifacts)
-        mutate, refused = Store.mutate, set()
+        refused = set()
         operations = {'research.probe_artifact', 'research.probe', 'workspace.artifact'}
-        def refuse(store, operation, *args, **kwargs):
-            if operation in operations and operation not in refused:
-                refused.add(operation)
-                raise ResearchError('store_busy', 'Concurrent writer')
-            return mutate(store, operation, *args, **kwargs)
+        def refuse_first(commit):
+            def refuse(store, operation, *args, **kwargs):
+                if operation in operations and operation not in refused:
+                    refused.add(operation)
+                    raise ResearchError('store_busy', 'Concurrent writer')
+                return commit(store, operation, *args, **kwargs)
+            return refuse
         (self.root / 'pin.txt').write_text('Original captured bytes')
-        with patch.object(Store, 'mutate', new=refuse), \
+        with patch.object(Store, 'mutate', new=refuse_first(Store.mutate)), \
+                patch.object(Store, 'mutate_scoped', new=refuse_first(Store.mutate_scoped)), \
                 patch('research_harness.storage._BUSY_TIMEOUT_SECONDS', 0.001):
             record_probe_artifact_origin(self.root, payload['id'], payload['stdout']['sha256'], 'stdout')
             receipt = commit_probe_mutation(self.store, record_probe, payload, 'busy-probe')

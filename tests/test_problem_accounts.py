@@ -4,7 +4,8 @@ import copy
 import json
 from pathlib import Path
 
-from problem_accounts_fixtures import build_account_value, build_accounts, build_alternative, build_relation
+from problem_accounts_fixtures import (CHANGES_IF_RESOLVED_TEXT, build_account_value, build_accounts, build_alternative,
+                                      build_place, build_relation)
 from research_harness import problem_claims, problem_evidence
 from research_harness.errors import ResearchError
 from test_research_problem_claims import ProblemCase
@@ -33,7 +34,7 @@ class ProblemAccountsTests(ProblemCase):
         self.value["accounts"]["relations"] = [build_relation(alternative_id="weaker")]
 
     def test_new_command_requires_accounts_but_historical_validation_does_not(self):
-        legacy = {key: value for key, value in self.value.items() if key != "accounts"}
+        legacy = {key: value for key, value in self.value.items() if key not in ("accounts", "changes_if_resolved")}
         for section in ("motivation", "current_state"):
             legacy[section] = [{"text": "A fact supported by the source.", "evidence": [self.reading]}]
         problem_evidence.validate_value(self.store.snapshot()["records"], self.artifacts, legacy)
@@ -182,8 +183,9 @@ class ProblemAccountsTests(ProblemCase):
 
     def test_direct_reading_is_only_for_a_field_fact(self):
         self.assert_refused("problem_value_account_required", lambda v: v["motivation"][0].update(evidence=[self.reading]))
-        self.value["motivation"][0].update(field_fact=True, evidence=[self.reading])
-        self.assertEqual(self.record()["motivation"][0]["evidence"], [self.reading])
+        place = {"kind": "account", "id": "place"}
+        self.value["motivation"][0].update(field_fact=True, evidence=[self.reading, place])
+        self.assertEqual(self.record()["motivation"][0]["evidence"], [self.reading, place])
 
     def test_entry_ids_are_unique_and_references_exist_and_do_not_cycle(self):
         self.assert_refused("problem_account_id_conflict", lambda v: v["accounts"]["strength"][0].update(id="use"))
@@ -331,8 +333,11 @@ class ProblemAccountsTests(ProblemCase):
         for boundary in accounts["boundaries"]:
             boundary["evidence"] = [self.reading]
         selected = self.select_statement(identifier="sidorenko-schema", neighbours=[entry["neighbour"] for entry in accounts["alternatives"]])
+        accounts["places"] = [build_place([self.reading])]
+        place = {"kind": "account", "id": "place"}
         value = {"id": "sidorenko-schema", "statement_id": selected["id"], "accounts": accounts,
-            "motivation": [{"text": "The reported construction marks a necessary hypothesis within its stated scope.", "evidence": [{"kind": "account", "id": "bnd-1"}]}],
+            "motivation": [{"text": "The reported construction marks a necessary hypothesis within its stated scope.", "evidence": [{"kind": "account", "id": "bnd-1"}, place]}],
+            "changes_if_resolved": [{"text": CHANGES_IF_RESOLVED_TEXT, "evidence": [place]}],
             "current_state": [{"text": "The leading-order mechanism stops on the stated class; other constructions remain open.", "evidence": [{"kind": "account", "id": "bnd-2"}]}]}
         saved = self.record(value)
         self.assertEqual(len(saved["accounts"]["alternatives"]), 7)
@@ -856,7 +861,7 @@ class ReadingDateTests(ReadingDateCase):
         self.addCleanup(case.doCleanups)
         plan, observed = case.run_problem()
         case.assess_support(plan, observed)
-        reading = case.record_full_reading()
+        reading = case.place_reading
         value = case.build_value([reading, case.build_computation_evidence(observed)])
         value["accounts"]["explanatory_use"][0]["date"] = "2026-08"
         saved = case.mutate(problem_claims.record_value, value)["result"]

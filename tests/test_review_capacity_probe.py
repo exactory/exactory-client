@@ -11,6 +11,8 @@ from research_harness import review_capacity_evidence as capacity_evidence
 from stored_review_fixtures import restore_stored_review
 from research_harness import review_protocol as protocol, review_route_capacity as capacity
 from research_harness import review_transport as transport
+from research_harness import cli, record_check, review_stop
+from research_harness.review_task_execution import identify_call
 from research_harness.errors import ResearchError
 
 
@@ -338,6 +340,36 @@ class CapacityProbeTests(LiteratureCase):
                   'and excluded_controls containing any other control strings you received, or an empty array. '
                   'Use only supplied evidence. This is an operational input-boundary probe.')
         self.assertEqual(send.call_args[0][1], transport.request_body(self.records()['review_route']['route'], prompt, packet))
+
+    def test_record_check_authenticates_a_committed_capacity_probe(self):
+        # record-check rebuilt the payload of a capacity probe without its capacity member and refused the
+        # committed capture with review_invocation_unverified (record 20261119165105).
+        self.route()
+        self.assertTrue(self.run_sized_probe('capacity', 25000)['capacity_verified'])
+        report = record_check.check_record(self.root, isolate=False)
+        authentication = next(step for step in report['steps'] if step['step'] == 'authentication')
+        self.assertEqual(authentication['status'], 'passed', authentication.get('error'))
+        self.assertEqual(authentication['result']['captures'][identify_call('review.route_probe', 'capacity')],
+                         {'authenticated': True, 'status': 'completed'})
+
+    def test_resume_step_of_a_captured_capacity_probe_carries_its_capacity(self):
+        # The resume step of a captured capacity probe dropped its capacity member, so the replay of its start was
+        # refused with request_id_conflict (record 20261119165105).
+        self.route()
+        with patch.object(protocol, '_finish_call', side_effect=RuntimeError('Lost after capture')):
+            with self.assertRaisesRegex(RuntimeError, 'Lost after capture'):
+                self.run_sized_probe('capacity', 25000)
+        call = dict(operation='review.route_probe', invocation_id='capacity')
+        row = review_stop.describe_call(self.records(), call)
+        self.assertEqual(row['state'], 'captured')
+        self.assertEqual(row['step']['command'], 'review-probe')
+        self.assertEqual(row['step']['payload'], dict(id='capacity', route_id='route', capacity=dict(input_tokens=25000)))
+        with patch.object(transport, 'send_request', side_effect=AssertionError('The resume sends nothing')):
+            receipt = cli.OPERATIONS['review-probe'](self.store, row['step']['payload'],
+                request_id=row['step']['request_id'], expected_revision=self.store.revision)
+        self.assertTrue(receipt['result']['capacity_verified'])
+        self.assertEqual(review_stop.describe_call(self.records(), call)['state'], 'settled')
+
 
 class CapacityEvidenceTests(unittest.TestCase):
     def test_a_larger_ordinary_review_preserves_the_verified_claude_capacity_probe(self):

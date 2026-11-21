@@ -317,7 +317,7 @@ for _codes, _command, _payload, _chooses in (
          ('id', 'source_workspace', 'source_revision')),
         (('problem_result_extension_unexplained', 'problem_result_missing', 'problem_result_superseded',
           'problem_value_stale'), 'problem-value', {},
-         ('id', 'statement_id', 'accounts', 'motivation', 'current_state')),
+         ('id', 'statement_id', 'accounts', 'motivation', 'changes_if_resolved', 'current_state')),
         (('problem_value_reading_missing',), 'read', {},
          ('id', 'version_id', 'depth', 'bundle_id', 'inspections', 'notes')),
         (('resource_budget_exhausted',), 'budget', {}, ('profile', 'purpose', 'limits', 'reason')),

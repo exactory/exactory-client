@@ -291,6 +291,32 @@ class SlateSeriesTests(unittest.TestCase):
         self.assertFalse(slate.applies(first, packet))
         self.assertNotIn(parts.KEY, first)
 
+    def test_new_slate_series_and_session_deliver_place_review(self):
+        # 0.91.6 writes place_review into every new slate packet. A slate series of parts v3 and a slate session of
+        # the rules v4 classify that member and deliver it: in the frame of each part, which then carries the slate
+        # places paragraph, and in the frame of each session turn.
+        from research_harness import review_prompt_paragraphs as paragraphs, review_session_v4 as session
+        member = {'protocol': paragraphs.SLATE_PLACES_PROTOCOL}
+        case = self.make_case()
+        logical, cite = self.make_imported_packet(case, body_characters=1400000, record_characters=1000)
+        self.assertEqual(logical[paragraphs.PLACE_REVIEW_KEY], member)
+        with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL):
+            first = self.assign(case)
+        self.assertEqual(first[parts.KEY]['protocol'], v3.PROTOCOL)
+        self.assertEqual(json.loads(case.artifacts.read(first['packet']))[paragraphs.PLACE_REVIEW_KEY], member)
+        self.assertIn(paragraphs.SLATE_PLACES_PROTOCOL, first['prompt']['parameters'][paragraphs.PARAMETER])
+        case = self.make_case()
+        logical, cite = self.make_imported_packet(case, body_characters=1400000, record_characters=1000)
+        original = protocol.build_packet
+        def build_packet(*args, **kwargs):
+            return copy.deepcopy(logical) if args[3] == 'slate' else original(*args, **kwargs)
+        with patch.object(protocol, 'NEW_SESSION_RULES', (session.PROTOCOL, bar_sources.PROTOCOL_V3)), \
+                patch.object(protocol, 'build_packet', side_effect=build_packet):
+            first = self.assign(case)
+        self.assertIn('session_chain', first)
+        frame = session.read_session_binding(json.loads(case.artifacts.read(first['packet'])))['frame']
+        self.assertEqual(frame[paragraphs.PLACE_REVIEW_KEY], member)
+
     def test_recorded_v2_slate_repair_final_prompt_keeps_its_bytes(self):
         from research_harness import review_parts_roles
         parameters = dict(orchestration='problem_creation', repair=True, excerpts=True,

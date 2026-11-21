@@ -11,7 +11,8 @@ import re
 from .artifacts import ArtifactStore, validate_reference
 from .errors import ResearchError
 from .evidence import digest
-from .exactory_api import UUID_RE
+from .exactory_api import (CHANGES_IF_RESOLVED_MAX_UNITS, CHANGES_IF_RESOLVED_MIN_UNITS, JAVASCRIPT_TRIM_CHARACTERS,
+                           UUID_RE, count_utf16_units, normalize_plain_text_line_breaks)
 from .graph import obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text, timestamp
 from .principles import prepare_initialization
@@ -198,18 +199,35 @@ def record_value(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         nonlocal size_report
         require_problem(records)
-        fields(value, ("id", "statement_id", "motivation", "current_state"), ("accounts",))
+        fields(value, ("id", "statement_id", "motivation", "current_state"), ("accounts", "changes_if_resolved"))
         if "accounts" not in value:
             raise ResearchError("problem_accounts_required",
                                 "A new value record holds the accounts of the statement. Add accounts to the "
                                 "payload, and cite account entries in the value paragraphs. exactory-research example "
                                 "problem-value prints the shape")
+        # Since 0.91.6 a new value record holds accounts.places and changes_if_resolved. A stored value record without them stays valid.
+        if "changes_if_resolved" not in value:
+            raise ResearchError("problem_changes_if_resolved_required",
+                                "A new value record holds changes_if_resolved, the paragraphs of the section What a "
+                                "resolution would change. Add changes_if_resolved to the payload as a list of paragraphs "
+                                "{text, evidence}. exactory-research example problem-value prints the shape")
         text(value["id"], "Problem value ID")
         statement = find_current_statement(records)
         if statement is None or value["statement_id"] != statement["id"]:
             raise ResearchError("problem_statement_missing", "Select the exact current problem statement")
         from .problem_evidence import validate_value
         validated = validate_value(records, artifacts, dict(value, accounts_version=2))
+        # The post would refuse this text after the reviews, so the write refuses it now, with the count of the post command.
+        posted_text = "\n\n".join(paragraph["text"] for paragraph in value["changes_if_resolved"])
+        characters = count_utf16_units(normalize_plain_text_line_breaks(posted_text).strip(JAVASCRIPT_TRIM_CHARACTERS))
+        if not CHANGES_IF_RESOLVED_MIN_UNITS <= characters <= CHANGES_IF_RESOLVED_MAX_UNITS:
+            raise ResearchError("problem_changes_if_resolved_length",
+                                "The text of changes_if_resolved is outside the length that the post accepts. The post "
+                                "sends the texts of the paragraphs with one empty line between them, after a trim. "
+                                "characters gives the length of that text, and minimum and maximum give the limits. Make "
+                                "the paragraphs shorter or longer. Then record the value again",
+                                {"characters": characters, "minimum": CHANGES_IF_RESOLVED_MIN_UNITS,
+                                 "maximum": CHANGES_IF_RESOLVED_MAX_UNITS})
         record = dict(validated, recorded_revision=expected_revision + 1)
         changes = [immutable_record(records, "problem_value", value["id"], record)]
         size_report = describe_value_size(records, artifacts, record)

@@ -543,14 +543,16 @@ It needs that override, recorded for the current statement text and
 resolution criteria (`gate_override_required` otherwise), and the value record
 (`problem_value_missing` otherwise). It writes
 `final/problem/exports/<export digest>/` with `title.txt`, `statement.md`,
-`criteria.md`, `motivation.md`, `state.md`, `formal-statement.txt` when the
+`criteria.md`, `motivation.md`, `state.md`, `changes-if-resolved.md` when the
+value record holds `changes_if_resolved`, `formal-statement.txt` when the
 statement has one, `citations.json`, `citation-refs.json` (the reference list
 for the citation check before the post) and `problem-export.json`, whose manifest
 has `decision_id` and `problem_evidence_digest` null, the `override_id` and
 `gate: "bypassed"`. Run `exactory post-problem` on those files as the
 [math-conjecturer skill](../skills/math-conjecturer/SKILL.md#compose-and-post-a-problem)
-states (title, area, statement, motivation, current state, resolution criteria
-and citations), and keep its printed response. Then read the posted problem
+states (title, area, statement, motivation, what a resolution would change,
+current state, resolution criteria and citations), and keep its printed
+response. Then read the posted problem
 back with `exactory problem <id>`, compare its statement, details, resolution
 criteria and area with the selected statement, and store that response with
 `artifact`. Record the post with `problem-post-external`: the returned `id` as
@@ -901,7 +903,12 @@ a bar reviewer is required after a carry that imported at least one objection
 candidate formed in the record, which is a candidate of the retired source kind
 `phenomenon` or one whose source evidence cites a forming call or a form outcome
 (`problem_slate_review_required` otherwise). It is optional otherwise, when the
-comparison needs an independent judgment. It is bound to the exact candidate set,
+comparison needs an independent judgment. Since 0.91.6 a new slate review
+carries the places paragraph (`exactory-problem-slate-places-v1`), which asks
+for every candidate in which work of the field the candidate arises. A
+continuation or a repair of a slate review that an earlier release assigned
+keeps the paragraphs of that review. The
+review is bound to the exact candidate set,
 the current bars and the imported set. After a candidate is added or superseded,
 a bar is refreshed or a carry changes the imported set, assigning
 the slate again to the same reviewer refreshes the review in its session, with the
@@ -1028,6 +1035,19 @@ cites entries of the accounts, and a paragraph that rests only on expected
 relations is refused (`problem_value_expected_only`). A paragraph cites a full
 reading directly only for a fact about the field (`field_fact`). A value record
 that an earlier release recorded has no accounts and keeps its contract.
+
+Since 0.91.6 a new value record holds two more things. The part `places` of the
+accounts records in which works of the field the statement arises: a work
+states the statement, needs it, stops at it, states an open item that an answer
+decides, or has results that the statement only continues
+(`problem_places_required` without the part). Each place rests on a full
+reading. The paragraph array `changes_if_resolved` is the public section "What
+a resolution would change": what a proof or a disproof decides or supplies for
+work that exists, and which next question or step of the line it opens
+(`problem_changes_if_resolved_required` without it). The motivation says where
+the question comes from, and it opens with the line of results that leads to
+the step at which the statement arises. A value record without the two parts,
+which an earlier release recorded, keeps its contract.
 [The accounts of a value record](research-cli.md#the-accounts-of-a-value-record)
 gives every part and refusal.
 
@@ -1124,7 +1144,11 @@ necessary conditions of a statement posed in place of a refuted one. A slate
 review of a candidate formed in the record carries the slate paragraph
 (`exactory-problem-slate-forming-v1`). In a record that names a further area,
 the bar and result prompts carry the areas paragraph
-(`exactory-problem-areas-v1`). The response shapes are unchanged, and
+(`exactory-problem-areas-v1`). When the value record holds
+`changes_if_resolved`, the result prompt carries the paragraph
+`exactory-problem-changes-if-resolved-v1`: the reading of grounds B1 and B2
+with the places of the statement, and the judgment of the section on what a
+resolution would change. The response shapes are unchanged, and
 no rubric item, level or threshold changes. A below-threshold result grade blocks posting
 until repaired or resolved by a ready focused `not_upheld` adjudication of
 `rubric:<review_id>:<item>` for the same subject and current evidence digest,

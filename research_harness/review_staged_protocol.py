@@ -1342,7 +1342,7 @@ def invoke_task(store, payload, *, expected_revision, request_id):
     """Reserve, launch an owned worker once, then resume capture acceptance on replay."""
     from . import review_task_execution as execution
     from .operations import prepared_task_mutation
-    fields(payload, ('id', 'assignment_id'))
+    fields(payload, *protocol.INVOKE_PAYLOAD_FIELDS)
     snapshot = _read_preparation(store)
     if snapshot.has_request(request_id):
         return prepared_mutation(store, 'review.invoke', payload, lambda r, v: None,

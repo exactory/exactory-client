@@ -817,6 +817,7 @@ FIELD_CLASSES = {
             'intent': {'class': 'fixed', 'characters': 16000, 'overflow_unit': True},
             'material_objections': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'own_bars': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            'place_review': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'pending_source_requests': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'problem_areas': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'problem_forming_imports': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},

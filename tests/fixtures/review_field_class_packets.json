@@ -44,8 +44,8 @@
     "value_sha256": "e54db6260150fa0125ee52f7535d1791b5320fa79c6ce5161fcb733b198039d6"
   },
   "slate": {
-    "packet_sha256": "932148b5e1df736388cdfa84ffb78231b424acd89d16c2db822b7624a1dc52e1",
-    "value_sha256": "086e183c54833b094718afa68b4cd62da8be7149fdd32f49b4cfbc3fc13f170c"
+    "packet_sha256": "68ddd16ca1f5d49ffce8093f19528738f39a3cb632e4aaad0de3c68d83c8ae9b",
+    "value_sha256": "caf632448a020c8f70e4211d357df32444ebe6d9b1e0d295d481457504cbe352"
   },
   "staged_adjudicator_answer": {
     "packet_sha256": "76c0daddb4346fd7c1b0260333a600d84eab2d5b7a01863a26273fbcec92076c",

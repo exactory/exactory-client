@@ -358,11 +358,12 @@ class StoredProblemAreaCompatibilityTests(ProblemDeliveryCase):
                 packet = review_protocol.build_packet(records, self.artifacts, None, role, "first")
                 self.assertNotIn("problem_areas", packet)
                 parameters = review_prompt_paragraphs.select_prompt_parameters(role, packet)
-                self.assertEqual(parameters, {})
+                # Since 0.91.6 every new slate packet holds place_review and its prompt adds the slate places paragraph.
+                self.assertEqual(parameters, {"problem_paragraphs": ["exactory-problem-slate-places-v1"]} if role == "slate" else {})
                 options = dict(orchestration="problem_creation", version=5, common_version=3)
                 expected = next(case["prompt"] for case in frozen["cases"]
                                 if case["role"] == role and case["options"] == options)
                 prompt = review_protocol.canonical_prompt(role, **options, **parameters)
-                self.assertEqual(json.dumps(prompt, sort_keys=True).encode(),
+                self.assertEqual(json.dumps(review_prompt_paragraphs.strip_prompt_paragraphs(prompt, role), sort_keys=True).encode(),
                                  json.dumps(expected, sort_keys=True).encode())
         self.assertEqual(records, before)
