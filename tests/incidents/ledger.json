@@ -5355,7 +5355,9 @@
       "test_kind": "real_shape",
       "tests": [
         "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry",
-        "test_d2_outcomes.OutcomeTests.test_recovery_results_have_one_shape_and_keep_the_route"
+        "test_d2_outcomes.OutcomeTests.test_recovery_results_have_one_shape_and_keep_the_route",
+        "test_review_session_v4_turns.SessionTurnsTests.test_opus_max_138371_replaces_request_on_same_route_then_records_bar",
+        "test_continuity_guard_forms.FormSizeRowTests.test_k8_session_v4_request_final_and_pages"
       ]
     },
     {
@@ -6921,7 +6923,9 @@
         "test_openness_page_replacement.PageFloorTests.test_single_target_page_after_condensing_keeps_request_refusal_position",
         "test_openness_page_replacement.PageFloorTests.test_capacity_rows_cover_request_page_closing_and_combine",
         "test_openness_page_replacement.PageFloorTests.test_one_target_one_block_above_pinned_floor_gets_condensing_then_page",
-        "test_openness_page_replacement.PageFloorTests.test_closing_with_three_rows_splits_even_when_each_half_is_one_small_block"
+        "test_openness_page_replacement.PageFloorTests.test_closing_with_three_rows_splits_even_when_each_half_is_one_small_block",
+        "test_review_session_v4_pages.SessionPagesTests.test_refused_page_replaced_at_same_level_with_notice_then_records",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_a6_refused_closing_is_replaced_with_notice_then_records"
       ],
       "class": "refused output continuity"
     },
