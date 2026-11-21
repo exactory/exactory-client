@@ -5905,9 +5905,17 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   `state_digest`. A packet holds no
   list that grows with the chain. An assignment id or an attempt id has at
   most 120 characters. The receipt of each assignment carries
-  `capacity_forecast`, `capacity_warning`, `reading_chain_admission:
-  {state, protocol, plan_digest}` and `diagnostics.final_input`, the bound
-  of the final request under the plan.
+  one `capacity_forecast`, the forecast over the inputs that remain
+  (`basis: remaining_inputs`). For a turn that continues the chain, the
+  recorded receipt holds it in `result`, with `capacity_warning`,
+  `reading_chain_admission: {state, protocol, plan_digest}` and
+  `diagnostics.final_input`, the bound of the final request under the
+  plan. That receipt holds `capacity_plan` beside `result`. The check
+  receipt holds these members at the top. The receipt of a replacement
+  turn, recorded or checked, holds `capacity_plan` and the forecast at the
+  top. When the harness cannot read the stored inputs of the turn, the
+  forecast is `{status: "unavailable", is_bound: false, message, reason}`.
+  `status` and the preflight report of a v7 turn give the same forecast.
 - The units. A v7 chain delivers the units of v6 and, as record units, the
   bound minimum (`openness_minimum`), its gaps (`minimum_gaps`) and the
   notices of the forecast (`audit_notices`), with `native_reviews`,
@@ -5957,9 +5965,26 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   `unread_attempts`, at most once for each list in an answer. `after` is null
   for the first page of a list, also when the packet shows rows of it, and
   then the `next` of the latest page; `next: null` ends the list. A malformed
-  answer is the output refusal `invalid_reading_response`. A part of an
-  argument is refused here with `invalid_review_material`; arguments belong
-  to final turns.
+  answer is the output refusal `invalid_reading_response`. Its details hold
+  `path`, a JSON Pointer to the member of the answer that failed, and the
+  values that the rule compared. Notes over the bound give `characters`,
+  `notes_cost` and `bound`. A list request for an unknown list, or for a
+  list that the answer names twice, gives `list`. A list request with
+  another cursor gives `list`, `after` and `expected_after`, or `ended` for
+  a list that has ended. A request for a list without rows gives `list`,
+  `after` and `rows: 0`. A passage request whose unit or anchor the chain
+  cannot resolve gives `unit` and `anchor`. A passage request over the
+  passage allowance gives `requested` and `remaining`. An id that the
+  answer repeats, or that is still being delivered, gives `request_id`. A
+  member of another type gives `expected_type` and `received_type`. An
+  object with a missing or an extra member also gives `missing_fields` and
+  `unexpected_fields`. A text or a count outside its bounds gives
+  `characters` with the bounds. A list of targets or of requests outside
+  its bounds gives `items` with the bound. An unknown or a repeated target
+  gives `target`, and a carried entry that cannot be kept gives `keep`.
+  The refusal notice of the replacement turn shows these values. A part of
+  an argument is refused here with `invalid_review_material`; arguments
+  belong to final turns.
 - The final turn. The final holds what the chain kept. It delivers source text
   only on request, in a chain that ends over unread ranges. The packet holds
   `native`, the frame of the native packet with counts in place of its lists,

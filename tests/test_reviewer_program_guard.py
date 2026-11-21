@@ -24,10 +24,16 @@ from research_harness.errors import ResearchError
 
 ROOT = Path(__file__).resolve().parents[1]
 STUB = '#!/bin/sh\nprintf "{name}-cli 0.0.123\\n"\n'
+GUARD_MISSING_MSG = (
+    'This run has no reviewer program guard, so a test can get the codex or the claude program of the machine. '
+    'In the plugin root, run the test modules with python3 ci/unittest_shards.py run-modules tests.<module>. '
+    'That command installs the guard.')
 
 
 class ReviewerProgramGuardTests(unittest.TestCase):
     def setUp(self):
+        # Without the guard, these tests start the reviewer programs of the machine. Each test stops here first.
+        self.assertTrue(is_guard_installed(), GUARD_MISSING_MSG)
         # These tests reach the guard on purpose. The runner must not count their lookups against them.
         self.addCleanup(take_machine_reads)
 
@@ -47,10 +53,7 @@ class ReviewerProgramGuardTests(unittest.TestCase):
         return runner
 
     def test_this_run_has_the_guard(self):
-        self.assertTrue(is_guard_installed(),
-                        'This run has no reviewer program guard, so a test can get the codex or the claude program '
-                        'of the machine. In the plugin root, run the test modules with '
-                        'python3 ci/unittest_shards.py run-modules tests.<module>. That command installs the guard.')
+        self.assertTrue(is_guard_installed(), GUARD_MISSING_MSG)
 
     def test_a_lookup_that_the_machine_would_answer_stops_the_test(self):
         for program in REVIEWER_PROGRAMS:

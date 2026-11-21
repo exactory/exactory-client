@@ -7693,7 +7693,7 @@
       "class": "release-ci (local runs differ from CI)",
       "summary": "Six places of the harness look for the codex or the claude program with shutil.which. Two readers above them turn a missing program into an ordinary value. A test that did not state its own answer got the answer of the machine. On a machine with the Codex program, the lookup returned the path of that program, and a runtime reader then started codex --version. CI ran the same test without the program. A child process of a test, such as ci/record_fingerprint.py, read the machine in the same way. Release 0.91.4 repaired such tests in two modules. After that repair, the five tests of test_visual_assignment_integration still read the machine through the second route record of their fixture. On 0.91.7, 62 tests in 15 modules read the machine, 13 of them only through a child process. No check kept a new test from a read of the machine.",
       "expected": "The commands run and run-modules of ci/unittest_shards.py install a guard before a test module loads. In such a run, a lookup of codex or claude that the machine would answer stops the test with MachineReadError. A test gets each reviewer program from the test itself. Three ways exist: a patch of the lookup or of a reader above it, a program in a temporary directory of the test, and use_absent_programs. The first way includes a patch that installs the runtime that the route record of the test pins. A child process of a test finds a stub that records its start and refuses every call. The runner fails a test that passed after a stopped lookup or a stub start. The plugin tests directory stays without __init__.py, so the harness package keeps the name tests.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.12",
       "test_kind": "real_shape",
       "tests": [
         "test_reviewer_program_guard.ReviewerProgramGuardTests.test_this_run_has_the_guard",
@@ -7721,7 +7721,7 @@
       "class": "refusal notice of a v7 reading answer",
       "summary": "In the paid verification of record 12, three v7 reading answers were refused with invalid_reading_response, and no refusal notice gave the reviewer a value. 19 of the 28 checks of a v7 reading response passed no detail, none passed path, and the notice replaced each detail whose name the check native.output does not register by its digest. Notes of 20,996 characters gave empty details. Notes whose cost of 20,111 characters passed the bound of 20,000 gave the digests of notes_cost and bound. A page request for the empty list unread gave the digests of list and after. A refused part of an argument and a refused citation by handle showed digests too, and the path of a refused citation named no member. The reviewer then guessed each cause and set itself limits that the harness does not have.",
       "expected": "Each refusal of a v7 reading response gives path, the JSON Pointer of the member that failed, and the values that its rule compared: for the notes characters, notes_cost and bound; for a list request list, after and one of rows, ended and expected_after; for a passage request unit and anchor, or requested and remaining. These names are notice fields of native.output, and the six names of the checks of a part of an argument and of a citation are notice fields of review.shape, so the notice of the replacement shows the values. A refused citation names its ground and its reference. The check accepts and refuses the same answers, and a refusal and a notice that an earlier release recorded keep their bytes and the chain verifies.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.12",
       "test_kind": "real_shape",
       "tests": [
         "test_openness_reading_v7_refusal_details.NotesRefusalTests.test_notes_longer_than_the_bound_give_their_length_their_cost_and_the_bound",
@@ -7741,7 +7741,7 @@
       "class": "review capacity forecasts",
       "summary": "The printed receipt of review-assignment of a v7 turn held two forecasts. Its stored result held the forecast over the inputs that remain, 13 turns at the first assignment of the paid verification of record 12, and the command added a forecast over the whole inventory of the plan, 40 turns that counted the 29 full texts which the carried turns had read. The receipt of a replacement turn held only the forecast over the whole plan. Status and the preflight report gave that forecast for every turn: on a fixture chain of three turns, 3, 3 and 3 turns where the receipts gave 3, 2 and 1.",
       "expected": "The receipt of each v7 turn holds one forecast, over the inputs that remain: in the result for a turn that continues the chain, and beside the result for a replacement turn, computed as the lines of review-series compute it. The check receipt, status and the preflight report give the same forecast.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.12",
       "test_kind": "real_shape",
       "tests": [
         "test_openness_reading_v7_turns.V7CommandTests.test_each_receipt_of_a_reading_chain_holds_one_forecast_over_the_inputs_that_remain",
@@ -7755,7 +7755,7 @@
       "class": "concurrency",
       "summary": "With a pending step of a verdict or of a submission, exactory verify and exactory submit left the managed path. They sent the request directly, a second time. A step stayed pending in four cases: the store refused the record of the answer, the response was lost, the request did not arrive, or the server refused the request. The server answered the second verdict with 409 or 422. The text of the 422 refusal told the user to correct the body and send it again. The workspace kept no receipt, and its intent stayed pending for good. With --managed-only, a submission whose request never arrived had no command that sent it.",
       "expected": "With a pending step, exactory verify, exactory submit and exactory reconcile read the task before they send a request, and the read that decides a pending verdict step is taken while the command owns the verification. On both paths, the commands send only a verdict file that names the verdict that the task shows as current. A pending verdict step whose predecessor is still current is cleared and sent once on the managed path, with its receipt. A pending step of the same verdict with a newer verdict of the account ends the command with verdict_reconciliation_pending. exactory reconcile with --verdict-id then records the answer. A pending submission is recorded from the task. If the server shows no task of the record, the submission is sent again on the managed path. A submission of the same record with other declarations is refused on the managed path with submission_declarations_mismatch. A verdict that the server refuses names the command that reads the task.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.12",
       "test_kind": "real_shape",
       "tests": [
         "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verify_after_a_refused_answer_record_sends_no_second_verdict",
@@ -7790,7 +7790,7 @@
       "class": "identity (server and plugin)",
       "summary": "continue_submission looked for verificationId in the answer of POST /api/v1/verifications. The server answers with the summary of the request (id, status, doi, createdAt, webUrl, supersedes, supersededBy) and never sends verificationId, so every path read the task by the concept DOI of the record. Three test stand-ins answered with verificationId and hid the dead read. No path failed.",
       "expected": "The task of a submission is read by the concept DOI of the record, or its DOI, on every path, and no code reads a member of the answer that the server does not send. The test stand-ins answer the submission with the schema of the server, and two tests pin the DOI read after a 201 and after a 200 answer that hold only id.",
-      "fixed_in": "open",
+      "fixed_in": "0.91.12",
       "test_kind": "real_shape",
       "tests": [
         "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_reads_the_task_by_the_concept_doi_after_the_answer_of_a_new_request",
