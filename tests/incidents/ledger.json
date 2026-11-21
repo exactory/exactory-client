@@ -8227,6 +8227,18 @@
       "tests": [
         "test_openness_final_pages_checked_answers.ClosingRefusalWriteTests.test_refusal_of_a_closing_composite_is_recorded_when_a_commit_meets_every_attempt"
       ]
+    },
+    {
+      "id": "budget-change-made-a-runner-test-start-itself-without-end",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "test that runs a command on its own tree",
+      "summary": "tests/test_must_pass.py ran ci/must_pass.py run --module test_must_pass --jobs 9 on the tree of the test and expected a refusal, because the limit test_processes of ci/budgets.json was 8. When the limit became 12, the command accepted the call and ran the module, whose test started the command again. The timeout of the test ended its direct child only, so the group processes stayed and each started more: 168 processes ran within three minutes, and the load average of the machine reached 124.",
+      "expected": "A test of the runner gets its refusal on a small tree with one empty test module, and it reads the limit from the budgets of that tree. No test holds a budget value, and no test runs the command on the tree of the test.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_must_pass.MustPassRunTests.test_jobs_above_the_limit_of_the_budgets_and_an_unknown_module_are_refused"
+      ]
     }
   ]
 }
