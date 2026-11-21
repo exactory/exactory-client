@@ -16764,11 +16764,13 @@
     },
     {
       "ast_sha256": "ced9fb38633ba3abc0916759a89778c15c2a96497fc372dfc8911baaeae6df2c",
-      "callee": "research_harness.openness_reading_v7.plan_turn_recovery",
+      "callee": "research_harness.review_session_v4.plan_turn_recovery",
       "caller": "research_harness.review_route_capacity.plan_capacity_recovery",
       "classification": "listed module",
-      "reason": "Reviewed v7 dispatch or artifact-aware validation; the target is a declared source and the caller certificate pins its packet arguments.",
+      "reason": "The caller holds this call three times, each after its own import of plan_turn_recovery: from review_session_v4, review_parts_v3 or openness_reading_v7, one for each handler. The targets name the three functions.",
       "targets": [
+        "research_harness.review_session_v4.plan_turn_recovery",
+        "research_harness.review_parts_v3.plan_turn_recovery",
         "research_harness.openness_reading_v7.plan_turn_recovery"
       ]
     },
@@ -22429,20 +22431,20 @@
     },
     {
       "ast_sha256": "e492ca038e125171703ad269b5d364a818c56a8b6be4ff7242f8596fcb6ad02d",
-      "callee": "research_harness.review_session_v4.build_handle_packet",
+      "callee": "research_harness.openness_reading_v7.build_handle_packet",
       "caller": "research_harness.review_handles._build_v7_handle_table",
       "classification": "listed module",
       "targets": [
-        "research_harness.review_session_v4.build_handle_packet"
+        "research_harness.openness_reading_v7.build_handle_packet"
       ]
     },
     {
       "ast_sha256": "e492ca038e125171703ad269b5d364a818c56a8b6be4ff7242f8596fcb6ad02d",
-      "callee": "research_harness.review_session_v4.build_handle_packet",
+      "callee": "research_harness.review_parts_v3.build_handle_packet",
       "caller": "research_harness.review_handles._build_parts_v3_handle_packet",
       "classification": "listed module",
       "targets": [
-        "research_harness.review_session_v4.build_handle_packet"
+        "research_harness.review_parts_v3.build_handle_packet"
       ]
     },
     {
@@ -22546,11 +22548,11 @@
     },
     {
       "ast_sha256": "605f84b4b48e5c7ebb88d1bf9aa373a202639ee8dcad08dc6ff53153560968fb",
-      "callee": "research_harness.review_parts_v3.validate_turn_output",
+      "callee": "research_harness.review_parts_v3.validate_deliveries",
       "caller": "research_harness.review_parts.validate_deliveries",
       "classification": "listed module",
       "targets": [
-        "research_harness.review_parts_v3.validate_turn_output"
+        "research_harness.review_parts_v3.validate_deliveries"
       ]
     },
     {
@@ -22573,11 +22575,11 @@
     },
     {
       "ast_sha256": "c777679f1bd2b73102b0c1d0487fd22b4e6ebce1256cb24de4d785da123276f5",
-      "callee": "research_harness.review_parts_v3.has_series_reference",
+      "callee": "research_harness.review_parts_v3.has_series_attachment",
       "caller": "research_harness.review_parts.has_series_attachment",
       "classification": "listed module",
       "targets": [
-        "research_harness.review_parts_v3.has_series_reference"
+        "research_harness.review_parts_v3.has_series_attachment"
       ]
     },
     {
@@ -25273,10 +25275,12 @@
     },
     {
       "ast_sha256": "6ef4da1de10ff21a59addb8a43510ecfe3993bcbadbe4028bcb2e3535f1353e5",
-      "callee": "research_harness.review_parts_v3.describe_composed_refusal",
+      "callee": "research_harness.openness_final_pages.describe_composed_refusal",
       "caller": "research_harness.review_refusal_replacement.validate_replacement_origin",
       "classification": "listed module",
+      "reason": "The caller holds this call twice, each after its own import of describe_composed_refusal: from openness_final_pages for a chain with a final page plan, and from review_parts_v3 for a parts v3 chain.",
       "targets": [
+        "research_harness.openness_final_pages.describe_composed_refusal",
         "research_harness.review_parts_v3.describe_composed_refusal"
       ]
     },
@@ -27474,6 +27478,326 @@
       "targets": [
         "builtins.get"
       ]
+    },
+    {
+      "ast_sha256": "8d7c09530316e554a2a52c8082ca534d2d30fca59f6aa80f13e8f10d7ef55568",
+      "callee": "<dynamic>",
+      "caller": "research_harness.review_composite._check_role_output",
+      "classification": "listed module",
+      "reason": "The callback comes from the finite table FINAL_FAMILIES of this module; every validator is certified.",
+      "targets": [
+        "research_harness.review_composite._validate_v7_composite",
+        "research_harness.review_composite._validate_parts_composite",
+        "research_harness.review_composite._validate_session_composite"
+      ]
+    },
+    {
+      "ast_sha256": "f0b427a9df37856f9845ed31d324ea7a16b92bf9df7ced673803f9e5e2c3be49",
+      "callee": "UNCLASSIFIED_FIELD_MESSAGE.format",
+      "caller": "research_harness.review_field_classes._select_table",
+      "classification": "standard library",
+      "reason": "Reviewed built-in collection/string method does not mutate packet arguments.",
+      "targets": [
+        "builtins.format"
+      ]
+    },
+    {
+      "ast_sha256": "0ca478cd4390363420aff01a277de364f1a3c413c98ddabb636d173897a615f4",
+      "callee": "research_harness.review_condensing.validate_combination",
+      "caller": "research_harness.openness_reading_v7.validate_turn_output",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_condensing.validate_combination"
+      ]
+    },
+    {
+      "ast_sha256": "567b259c10922ab9504f64976035c311775c9a19c4d99735736ff16defa8b32e",
+      "callee": "research_harness.openness_final_pages.validate_composite_output",
+      "caller": "research_harness.review_composite._validate_v7_composite",
+      "classification": "listed module",
+      "reason": "The import inside this function binds validate_composite_output to openness_final_pages.",
+      "targets": [
+        "research_harness.openness_final_pages.validate_composite_output"
+      ]
+    },
+    {
+      "ast_sha256": "77db8da1d3073095c135326d1b65e01dec870349e8028ce28440355a916390c1",
+      "callee": "research_harness.review_parts_v3.validate_composite_output",
+      "caller": "research_harness.review_composite._validate_parts_composite",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_parts_v3.validate_composite_output"
+      ]
+    },
+    {
+      "ast_sha256": "567b259c10922ab9504f64976035c311775c9a19c4d99735736ff16defa8b32e",
+      "callee": "research_harness.review_session_v4.validate_composite_output",
+      "caller": "research_harness.review_composite._validate_session_composite",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_session_v4.validate_composite_output"
+      ]
+    },
+    {
+      "ast_sha256": "0c31c8e41d3b16ff8ab5ad2fb5d8bb23633eb3fbf8c8abe406a859a88713e28c",
+      "callee": "research_harness.review_composition.find_rule",
+      "caller": "research_harness.review_composite.find_composition_rule",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_composition.find_rule"
+      ]
+    },
+    {
+      "ast_sha256": "d3b73968e646d6f37506aeaffc06e7c51690fd0fce34645947cbf4aa25c4c60a",
+      "callee": "dict",
+      "caller": "research_harness.review_composite.find_composition_rule",
+      "classification": "standard library",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "6cbcf8b01bc2566c32d11e4742c13b008b3dac0af01f9f7d743a51462d22c214",
+      "callee": "functools.partial",
+      "caller": "research_harness.review_composite.find_composition_rule",
+      "classification": "standard library",
+      "targets": [
+        "functools.partial"
+      ]
+    },
+    {
+      "ast_sha256": "dbe35d9c0ef8bcfd350148257a1935d41d28c78799b78db53971f4006dac4891",
+      "callee": "ValueError",
+      "caller": "research_harness.review_field_classes._select_table",
+      "classification": "standard library",
+      "targets": [
+        "ValueError"
+      ]
+    },
+    {
+      "ast_sha256": "13f8df7b9c2b0c500725bbae091bf46a76845e083dbe27b0237fa868269a7ee1",
+      "callee": "research_harness.review_field_classes._select_table",
+      "caller": "research_harness.review_field_classes._build_classified_frame",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes._select_table"
+      ]
+    },
+    {
+      "ast_sha256": "7bc7f91b9fc23504e21e0bf358f354b6cdcb195c4c194de3423e44075a431261",
+      "callee": "sorted",
+      "caller": "research_harness.review_field_classes._build_classified_frame",
+      "classification": "standard library",
+      "targets": [
+        "sorted"
+      ]
+    },
+    {
+      "ast_sha256": "2b31c901bb8315dc09e6c3fb3d22bc1cd57f4ae9b0d1570345a644b1f5e45b67",
+      "callee": "research_harness.review_field_classes._project_field",
+      "caller": "research_harness.review_field_classes._build_classified_frame",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes._project_field"
+      ]
+    },
+    {
+      "ast_sha256": "59ee4b896a5b4214756d83e4757533d3ab372737569f434173bdc2a512157a62",
+      "callee": "research_harness.review_field_classes._build_classified_frame",
+      "caller": "research_harness.review_field_classes.classify_packet",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes._build_classified_frame"
+      ]
+    },
+    {
+      "ast_sha256": "bedcabf1caeda53a140420cdda9b36c02b070bfee37f1321dab3d6cf15659d38",
+      "callee": "research_harness.review_field_classes.classify_packet.visit",
+      "caller": "research_harness.review_field_classes.classify_packet",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes.classify_packet.visit"
+      ]
+    },
+    {
+      "ast_sha256": "03515546eb1073d4559dd90dd1a354a809c7655b3450e6b0cbc1220b16f82d61",
+      "callee": "research_harness.review_field_classes._build_classified_frame",
+      "caller": "research_harness.review_field_classes.describe_role_frame",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes._build_classified_frame"
+      ]
+    },
+    {
+      "ast_sha256": "7bc7f91b9fc23504e21e0bf358f354b6cdcb195c4c194de3423e44075a431261",
+      "callee": "sorted",
+      "caller": "research_harness.review_field_classes.describe_role_frame",
+      "classification": "standard library",
+      "targets": [
+        "sorted"
+      ]
+    },
+    {
+      "ast_sha256": "23672aaba98a94c1c1364c3c51ee0e2c6c734d7c20df8d6b58c4a9825da04653",
+      "callee": "research_harness.review_field_classes._build_classified_frame",
+      "caller": "research_harness.review_field_classes.list_frame_units",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes._build_classified_frame"
+      ]
+    },
+    {
+      "ast_sha256": "998e695f47d863a6902b2439e931d054d361d8985de490f15001a8936eae5ecc",
+      "callee": "research_harness.review_field_classes.describe_role_frame",
+      "caller": "research_harness.review_field_classes.plan_role_capacity",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes.describe_role_frame"
+      ]
+    },
+    {
+      "ast_sha256": "27ea516afd5d837faf23ef29be5e9239e795b36ac3f167a2f9b28b5e624a0681",
+      "callee": "research_harness.review_field_classes.list_frame_units",
+      "caller": "research_harness.review_field_classes.plan_role_capacity",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes.list_frame_units"
+      ]
+    },
+    {
+      "ast_sha256": "57a480736b17987d944069b761ae0cac78ffc9801836af5c514ffa94e4ae1fb9",
+      "callee": "research_harness.review_route_capacity.plan_chain_capacity",
+      "caller": "research_harness.review_field_classes.plan_role_capacity",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_route_capacity.plan_chain_capacity"
+      ]
+    },
+    {
+      "ast_sha256": "e2bc923e81286cb1aae8465bf6369bb389c9b3a14d7d123443679e320447ce3a",
+      "callee": "any",
+      "caller": "research_harness.review_field_classes.plan_role_capacity",
+      "classification": "standard library",
+      "targets": [
+        "any"
+      ]
+    },
+    {
+      "ast_sha256": "342f527d5aadd1f4c0a2a92ba221fed4a3f47a83c1336fcb015005cc2f089cf3",
+      "callee": "dict",
+      "caller": "research_harness.review_field_classes.plan_role_capacity",
+      "classification": "standard library",
+      "targets": [
+        "dict"
+      ]
+    },
+    {
+      "ast_sha256": "1488ad2fd7b32081a6fb4f10f25e29d2e73f8e84a471dc5004e1cc0e610804e2",
+      "callee": "research_harness.review_field_classes.describe_role_frame",
+      "caller": "research_harness.review_parts_v3.build_series_inventory",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes.describe_role_frame"
+      ]
+    },
+    {
+      "ast_sha256": "c84353bcc94c1104fb7c3f6b817260f657aea01a97947546fef83886157cb024",
+      "callee": "research_harness.review_field_classes.classify_packet",
+      "caller": "research_harness.review_parts_v3.build_series_inventory",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes.classify_packet"
+      ]
+    },
+    {
+      "ast_sha256": "0c46f7288ec4a08e7d303befb2174c11a50687defb35d75ff96f99a151ef73fa",
+      "callee": "research_harness.review_field_classes.list_frame_units",
+      "caller": "research_harness.review_parts_v3.build_series_inventory",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes.list_frame_units"
+      ]
+    },
+    {
+      "ast_sha256": "dffad604828f6d8d40eb0d2e96bd50c864c6d8d606754185235e8bd3d261f664",
+      "callee": "research_harness.review_field_classes.describe_role_frame",
+      "caller": "research_harness.review_parts_v3.admit_packet",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes.describe_role_frame"
+      ]
+    },
+    {
+      "ast_sha256": "ce794c0cf726c65a4b01571f717b0e55e434890c1e929e07e0e3ebb39bb4059a",
+      "callee": "research_harness.review_condensing.validate_combination",
+      "caller": "research_harness.review_parts_v3.validate_planned_output",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_condensing.validate_combination"
+      ]
+    },
+    {
+      "ast_sha256": "64d19214d9fb488a8228faf43a0125e6aaf783caaa9d578b03fcf15235f1e32e",
+      "callee": "research_harness.review_final_pages.build_page_plan",
+      "caller": "research_harness.review_parts_v3.prepare_series_final",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_final_pages.build_page_plan"
+      ]
+    },
+    {
+      "ast_sha256": "71a8005ce1e945b16769e70439d035e934e329d30cde6c9d1193653323e4b27e",
+      "callee": "research_harness.review_final_pages.repack_final_turns",
+      "caller": "research_harness.review_parts_v3.prepare_series_final",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_final_pages.repack_final_turns"
+      ]
+    },
+    {
+      "ast_sha256": "8f40f1e7649a8b61ab2997d35e1cd075822cee2e9c8741bce440db679afa0cde",
+      "callee": "research_harness.review_condensing.describe_combination_bound",
+      "caller": "research_harness.review_parts_v3.build_final_packet",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_condensing.describe_combination_bound"
+      ]
+    },
+    {
+      "ast_sha256": "046f0f9a22c41d329dd48c6df1889bcfeb149776ee41c86264c8f8217d327ecb",
+      "callee": "research_harness.review_field_classes.describe_role_frame",
+      "caller": "research_harness.review_session_v4.check_v4_admission",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes.describe_role_frame"
+      ]
+    },
+    {
+      "ast_sha256": "1de6ea81cc17295472106c9628660c1a0e415e2897579448bdd4a4ade5acd656",
+      "callee": "research_harness.review_field_classes.list_frame_units",
+      "caller": "research_harness.review_session_v4.check_v4_admission",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes.list_frame_units"
+      ]
+    },
+    {
+      "ast_sha256": "389342919f4e93bb2e3958054bf17903b411faca503afedb153cf80e0091ea54",
+      "callee": "research_harness.review_field_classes.classify_packet",
+      "caller": "research_harness.review_session_v4.build_session_packet",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes.classify_packet"
+      ]
+    },
+    {
+      "ast_sha256": "cd616fa5eac42359fb82c8dcb9c3b47f194ffd5e5503949f81150676b61e0405",
+      "callee": "research_harness.review_condensing.validate_combination",
+      "caller": "research_harness.review_session_v4.validate_final_turn_output",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_condensing.validate_combination"
+      ]
     }
   ],
   "certificates": {
@@ -29164,6 +29488,7 @@
         "0a1a32983dc25d453fea82d67f70090e82acf19a977a5eb0bb1e7b1064a19f26",
         "0a8132d2b43949164eb737bf7553905cdca66e25766ba398483ccd3c530b614f",
         "0c04343a61b977b876e8e7ef652d895fef597a0df99d7b43f0488de46d7074a5",
+        "0ca478cd4390363420aff01a277de364f1a3c413c98ddabb636d173897a615f4",
         "0e4ab3661555e719e1c56bb345ce4d1c8da78b97e3ac4919c2469101e4b06562",
         "10800cf02970baf9d290245ccd3f324b2e20dc7cb0a7b64fcd84872f9b022c80",
         "12a172b12686efc3b394f6e7dff3cd29f539e007b4230154df27b39471159f41",
@@ -32293,11 +32618,13 @@
         "07d152c4a38b861fc3edd78960aa320a4d8223c317710a563f89899eea7c7b05",
         "0a5c981def78b5da3de81548700e932d15a2f144285ff8b5716e4beada4a1174",
         "0b47a98833583307e493abbff7bd53a734c25ca1feedaa36cb37c71887a0e253",
+        "0c46f7288ec4a08e7d303befb2174c11a50687defb35d75ff96f99a151ef73fa",
         "0c66aa981e491e6b7788e0f6ff4e25116326227cd3056de0d847a174151bbbf7",
         "0faee714078d9faad7a15083d1b4a0fcfd7c6728b0bcbbc589087ac0aef90806",
         "10d7d0e31067ed0c25fad7c23b1e047072ba46e01a3ef6a76547ddefee99ecd2",
         "12feedafeb792b6124ac87d5ebd08038f845fcc0f35093f363eeba60391db98d",
         "144774c9f542aa680c98d48adafb62aa725e2711168f086f7d9ff89c5c3c9702",
+        "1488ad2fd7b32081a6fb4f10f25e29d2e73f8e84a471dc5004e1cc0e610804e2",
         "14b0b72b9d22306d0b0609dd4be0fa7f1430943c61c53418f308c38a8fe16328",
         "155b2abf8ad9bcc104dd9afa6f4fbdc652fd574452e3da0ed46f03b550f3ad39",
         "197101c04aa6f0111bffb4ba9b72eadf38550a4d0ec531ed6e15a1a2bcce2b5f",
@@ -32361,6 +32688,7 @@
         "62fd5ff77c0ab1379f409e4f8235607d8b251957afe9679015abc6f67db1b112",
         "63b962d4a03b92985f91c8d53988ff8a8af9e993bc09361d34c63321d0cb11cd",
         "64995665d7c8a50a10e8904b6d4665aacd2bf7d1ed59cea272e12a56dbd1d198",
+        "64d19214d9fb488a8228faf43a0125e6aaf783caaa9d578b03fcf15235f1e32e",
         "64dab7148fa095df68446595a1aeeb63982cb8ddf13e2873b472be37305ca277",
         "65d590ad19f2f77dcda79b0142ba113c1f6704cbfb9e413a493bb90d30593993",
         "677081d911111291cbf8cd1757d8c0638a423a95c43f84fa678cffae8e44a086",
@@ -32375,6 +32703,7 @@
         "6f13dae5131e16b8c81f45c554eb72bacfd2df0c668cdc9492801488124db708",
         "7072dca4b02a96ecf2bf25e9f80362a4d0af67d376d32c058a1277421dbe7797",
         "7088d4b792f39c96aeae9e348dd97b505a76483d4aa1a1dfa0e2c55ed8994360",
+        "71a8005ce1e945b16769e70439d035e934e329d30cde6c9d1193653323e4b27e",
         "738c66b65422e776985b69828a5dcf66e3ea5d6937ca4150f40eb379f99ebb4a",
         "73ee065e854414f2187f3b78e94f3ca9f58285dc249e701a7ba248ca1f46aafe",
         "751119705652a95aefd3d8aee93f6fd2a65cb15bc2cd79d3ca9fd8f41efd21e8",
@@ -32412,6 +32741,7 @@
         "8d6d7727f75e261c531893643209842dd0b4487e54c1c2a2e8d81bec201d2e8b",
         "8dbc1ae5d8479e8303fac6815b2f01e99924d2523cc83a73a3a251c1078cf784",
         "8e707e25c7ea3cdbc3dc164f8baab0d48b3a150e1d2d85759830547348eb54d0",
+        "8f40f1e7649a8b61ab2997d35e1cd075822cee2e9c8741bce440db679afa0cde",
         "8f5909939fc244a660fe7fe427c43a7767f714d077ebe12dfb5dcc7c1168a08a",
         "8ff7a805fc8e621c7f665dec7a6aa3b3ed66a4063274d2a3cc87095358f4b86a",
         "91e6f75cc83673354132fb4b6589df75e3d02c7c6ac158c8c5a492d480d3c370",
@@ -32468,11 +32798,13 @@
         "c693e009ea8960e69481a22f2d5734ab2ef9a97b5ce88512c14d415519794cd9",
         "c78d95ec19e99cdc5c28b3cb1dbb27f41bbd615dbc2c263f26403abffa26ce41",
         "c82a90d2bba615a9babe23c4d0abc860da840a602b3fb68e3c57f7c823cf6797",
+        "c84353bcc94c1104fb7c3f6b817260f657aea01a97947546fef83886157cb024",
         "caea7851793e11ed4a662e48382f46a361a05d5de9955af9431fbca970319597",
         "cca5ed677f547e23b21906735ad8e675e3ec6c17fd3d2fa0d1e5ec5dfa6433b1",
         "ccae7bcf79804d392f9eacdfd81792666ec20b5bc98f5f65c83a0f6958b424e6",
         "cd591923a4c16b9e350a2759a74e632d9f06d61d138a195b4bf722a0ae5de98a",
         "cdefaf115f79ee306f2e70a8e87a9e2b0f95fe2a39d398c1a9ad9d76f978815f",
+        "ce794c0cf726c65a4b01571f717b0e55e434890c1e929e07e0e3ebb39bb4059a",
         "cf66f110b0ff810dcf59570d4b2eab7b14a1321af15d998f6df4c7d559eb0ff2",
         "cfd09a1f8af5d1499d4b6ccc049349fa25071c666877cfc9bd13da248f3a6848",
         "d0af0112ff16904e6a26cb27471a265c8a809b81caa4c70d807f9227655f23d6",
@@ -32489,6 +32821,7 @@
         "dd55fae8f4baf72e3a5da90f57786068e821fbd1e635508c56b76601db7762c0",
         "de60da99fe2739164fe4abb6bbb51215305980d415b8dbaebf8a4c82300d9001",
         "df7e2af959f5cfb39e60c5c632b786f8e53daa70aff697467335587336f637ad",
+        "dffad604828f6d8d40eb0d2e96bd50c864c6d8d606754185235e8bd3d261f664",
         "dffd442fe622175eabf56c1b2806026af35a27b31513fa063b0ec19ec1d4ce04",
         "e0c7fa797754aef123327f6c0a61ca39fc5b8db21c2c49def5181ea1b8de18d3",
         "e1d293a65da8e1e5865e189480a92850f700947763d00a18ccee42e5a8abc516",
@@ -35109,6 +35442,7 @@
       },
       "packet_call_digests": [
         "01b0061e8cebba4d4c44c4fe592c5059b912cabfb91990f343ce2e98c7fe8a93",
+        "046f0f9a22c41d329dd48c6df1889bcfeb149776ee41c86264c8f8217d327ecb",
         "066f93d9535ae98527f8cd0a465a8d59cb147b194a9afbb468c4d9c84d1aac08",
         "0683d669d5493ee787e6240749f5314a936dd7173dd8b0361851927df4b664e1",
         "07c860e68976930fa7afa2dbc1bec0225dd9c04ca9a83a4ff996888d556a655c",
@@ -35126,6 +35460,7 @@
         "1b985b0c8af2c935d9bea54f27dacca15c4a00fea68a19de4f190b29ac5624d9",
         "1bd3c1436119af107074a5e2834bc254c178e6c662e82a266aeb322d0048eb47",
         "1bd59904b3d738248e3f30f6dbf7716144f5382fe0eb53c695ca5ac2603282a2",
+        "1de6ea81cc17295472106c9628660c1a0e415e2897579448bdd4a4ade5acd656",
         "207b320f0f2135c0986f6a51c03ccf44e8dca550cacc6577e65543a68b6fd8ba",
         "2157465e952f19182e8de833ff6245125586951a5d90267020ec3cfa1b688d85",
         "25f0f282ac6de794a0b28c22811624a18f0475ee8b0be502e750f289fadd8a2d",
@@ -35139,6 +35474,7 @@
         "3455ad5c975294528485736db7ee11d0a03c79584b6d7450d817ed56cc28ecf1",
         "35d8a00b76c14ce916e2f5d5e1ddadd2d29c8117747774e3ce6519ae11b6cd57",
         "3741bf905d91cab5ba1a0882592cb511d3f33638a00b641bcd03644a51c5cb7c",
+        "389342919f4e93bb2e3958054bf17903b411faca503afedb153cf80e0091ea54",
         "39258a7e8e4173208ea2b2df3f7f41f6f22fc1f1768b533b08eda593d6ee80e9",
         "3b205b926281b725bc1a5451a78311ea44339a51761ec97c68bb58f1e8b3f76e",
         "3d957a76b283be76ee4fa72ac59d9cf9ccf416b62bd8449d736516f3b94f6514",
@@ -35206,6 +35542,7 @@
         "c35f5541483844156de1c78321d66547d70188b2bf6506a1283a0a62bc31fc28",
         "c8df974a3672de4f2b48ef4a0ef8471b31548a42e9308807a807a0ce12b45a00",
         "c951c30417be7371b89a10b67c294e3a03b167aefc35ce34436668ed9495fdfa",
+        "cd616fa5eac42359fb82c8dcb9c3b47f194ffd5e5503949f81150676b61e0405",
         "cdbce75cce3bafa543e49e43a25f84d70cccf50c1affb6d7f8ef10dbeafaed54",
         "cdc1e42ef084910e3e904bb87c058b4d2056a6844ed34dc5ae9df0d401c04590",
         "cde08de33acb72cc733f2302f04869755e3b6c383aac9850699a4edc1269f70c",
@@ -35258,6 +35595,134 @@
         "f25e10da5bf4227203322b6d5b243735786d8d72cb7ad523e99b88b1982194c8"
       ],
       "reason": "Reviewed slate-series adapter, v3-only ordered admission, session precedence and preserved legacy repair delegation; authenticated slate journey and compatibility tests pin this source."
+    },
+    "research_harness.review_composite": {
+      "ast_sha256": "2c6c1514dd1af1ede77048b120868796051f663d3d584d156e8a44ba3b2f1d91",
+      "functions": {
+        "_check_chain_currency": "a1cb989183e3aaae2ca77b393f25913dcdd51b4293400e3bc92c91d442c4eb16",
+        "_check_page_targets": "40244978dcdfe55a4ba21ed41c55e7601c961179df5207c449b6993e42b43167",
+        "_check_recomposed_output": "ae1b32710d8737de01f958d9c58ca5373f6e448f7554ba7133d9a1b0fd2d0fb3",
+        "_check_role_output": "f82e6e3cceb68a8e68f10fd0f6cd669cedce880cfa9ef1ba0fa00f862f5019aa",
+        "_check_selected_attempts": "a804c57164ecfabf9b514dc8a41a864bb35b42784d3aa5eedae79d15f08e0719",
+        "_find_family": "0b754d697f797e1d41f08086376b61c72a63a995ae0a1eea7ba793e4e15efe0f",
+        "_list_parts_final_turns": "b385e2b2b66e75da3c1b5814e82156cb506ce0760f8f6b70f02353bf5fb9ae91",
+        "_list_session_final_turns": "b47ca85085007f959ccfca774d8ea5cae83946d22d2938427f0138d03cf7997d",
+        "_list_v7_final_turns": "5c4dda6871b6abaa77302a852ab7338b1caa10a0f3a076096be5ec14f932ee11",
+        "_read_parts_currency": "a19c96a9b4e9880a692e7155f28ce81d09640dd121cfe40aeecc4eb6147b3a02",
+        "_read_session_currency": "fa5fb96fe47fee93064a16c67041022ef4bc1b9eb1b28a5eb4172fba222a88bc",
+        "_read_v7_currency": "77210c0b599e016893e236f7cb5e2e9a16d961cfca4878b54c07b5dcfc187cab",
+        "_refuse_composite": "f60a15aed3b668b657d1af5096f1003141d1e4b2349c7a65dd97f366e89ed7a8",
+        "_validate_parts_composite": "c519438a515a71a1ec91a57591cf0ac2f74fc87a622b5a48aabec7180c434cb1",
+        "_validate_session_composite": "8cef57d9ff244afeab54b4f1a122cfd3f60be1e503eea7f082d71a43e507abaf",
+        "_validate_v7_composite": "40086e8bdc4b37b7bca285029618e0f03a532d0cacb54faced8c35d71841d19b",
+        "authenticate_composite": "fa195c1110e1b8f2b37ae430829736caee3d168aadc38f47687da97605e3ea6f",
+        "build_composite": "81d9ed05f8a93ab6dec10b6b763d7fccb5fafa632bea6a02d53abaa74c79c3aa",
+        "find_composition_rule": "c48fc1172d8fb8ba58099bf5b41154112421fee3293a4cb74b64d9fd9e872808",
+        "prepare_composite": "69b606ca3dab72fb4ce57a00c50673676defc18bfeab1eb57ed4ea5bbfcdad0a",
+        "read_final_output": "55c2f9c52ef6b0d43e19a7823b377c973c8371c01cc1d3c1343dcab3c2f21f03"
+      },
+      "packet_call_digests": [
+        "0c31c8e41d3b16ff8ab5ad2fb5d8bb23633eb3fbf8c8abe406a859a88713e28c",
+        "567b259c10922ab9504f64976035c311775c9a19c4d99735736ff16defa8b32e",
+        "6cbcf8b01bc2566c32d11e4742c13b008b3dac0af01f9f7d743a51462d22c214",
+        "77db8da1d3073095c135326d1b65e01dec870349e8028ce28440355a916390c1",
+        "8d7c09530316e554a2a52c8082ca534d2d30fca59f6aa80f13e8f10d7ef55568",
+        "d3b73968e646d6f37506aeaffc06e7c51690fd0fce34645947cbf4aa25c4c60a"
+      ],
+      "reason": "Reviewed the composite final of one paged chain. build_composite and prepare_composite build the review_composite record and its output artifact from the selected outputs of the page, closing and condensing turns and return them without writing; the family recorder stores the pair that prepare_composite returns. read_final_output, authenticate_composite and the five _check_ functions replay and authenticate a stored composite. No function of this module builds or writes into a reviewer packet. The role packet that list_turns returns is passed on: find_composition_rule passes it to review_composition.find_rule and binds review_composition.compose_output; build_composite and _check_recomposed_output pass it to the composer and to review_handles.expand_handles; _check_role_output passes it to the validator of its family in FINAL_FAMILIES, which passes it to validate_composite_output of openness_final_pages, review_parts_v3 or review_session_v4. The keys of FINAL_FAMILIES are protocol names under non_packet_names (exactory-openness-reading-v7 by its earlier entry for CHAIN_OBSERVERS). Changed AST requires declaration review."
+    },
+    "research_harness.review_condensing": {
+      "ast_sha256": "36a1efbd6a098720d37d585d21e2e87add4976a40dffd1504d083571c0f0c7eb",
+      "functions": {
+        "_build_block": "440ea7b191d3b90361ab5d42ba0ffc8c03e8c794501eb35cb84e7a4a38e9ac2f",
+        "_validate_size": "dd91e40ed8b1e4ee3240e6bb1c53f9642045293fd99603c9c91e3084276f50d0",
+        "apply_combination": "53f4d53003f269f3e261175254c15593940eac3c80fb659af0262763e74f1ce3",
+        "cut_condensing_blocks": "5f0989b36dc3013ea7ba9d8f55194d2f2d35704a98a22369cfc2871eb573d84b",
+        "describe_combination_bound": "155da6c3548843a24ed5bba5544ed9abb0d7ae023b11420631fa414ebd85a267",
+        "forecast_condensing": "f26acb369a7dccd6c876392c48ac9a713657e527e4169ec2ecc0a7f13cc0d30a",
+        "plan_condensing": "41faa449a332269c6745dcf3bedacca376b6ec3f6db9886229ae46167c334766",
+        "validate_combination": "fbd81e67febef0e7ac5e0ee043693d57ea9cfa42c0044437d50fa02b5d0ff347"
+      },
+      "packet_call_digests": [],
+      "reason": "Reviewed the pure condensation functions. cut_condensing_blocks, plan_condensing and forecast_condensing return blocks, rounds and counts from entry handles and sizes; describe_combination_bound returns the answer bound of a combining turn, which the families write into the capacity of the binding or the header of the turn; validate_combination checks one reviewer answer against its block and returns a copy; apply_combination returns a new carried state with its archives. No function receives or changes a packet. Changed AST requires declaration review."
+    },
+    "research_harness.review_field_classes": {
+      "ast_sha256": "e24c79bb37a295570b212b6048c012e8fa460f5c0e23521cbc8e7d16fd391d74",
+      "functions": {
+        "_build_classified_frame": "7ee5f2cafc30e1634d89fd14e7c472bb809c75d832a3a718d87dff8269c60e48",
+        "_describe_value_reference": "207bb7400f166a7262a3a04023046563a7a0cd20e48327b05e34cd82fe9b9e5c",
+        "_describe_value_unit": "04affd78bcc78149120149827e965e80e6ee22de33f2c174edb6e8a6cadea1ca",
+        "_find_declared_row": "97a596de604b5d16e6646063d3675cc83e28a72497da500bb863cd23f4946b63",
+        "_find_inherited_row": "38a3e80cac4b437afec316ea7c7534ba2197092670d65042352ee570f473b620",
+        "_list_value_entries": "c9385b6dac25b65df49fdcf6f3e25c18f56bcda34da73154870bd472c32b9eab",
+        "_measure_field_overhead": "6e525c3161ea71347d326d8422828958ad73b891cffdeae0b109aefcca5b39ab",
+        "_project_children": "f2b116f59cd7ade44c8818685256593341088d35d11719bc4373d4681c752f47",
+        "_project_field": "00bfbdffcc279cefa49b9d7740585faaa4daa7e4a62319691a2e854f79f33021",
+        "_select_table": "28bdb99fd300a1d6779ac6bbcbdf72f77e74bca916341623ef91b1991d292949",
+        "classify_packet": "6fa1465a625588e2fb410a54ac0e0da5e4b5972b7495bcf328b202401a8da302",
+        "describe_registry_classes": "c634b6a9eacad63177b99963620e76cee7f2963f269de5b8f06dcdf2583b23b0",
+        "describe_role_frame": "c24e72441fa9e3e8c32ac21bdd36b966a1a7196cad2165c948fc26a05155364b",
+        "describe_unit_references": "440c6e949c86d427e90a27184a32e99af6b6a3c211849a3cf18a438dbb569b6d",
+        "list_frame_units": "797b4dcf09a3cbf395c885b361f7ea4b20f60ab9f58659ce2562a31b9a493e8b",
+        "plan_role_capacity": "efec7d93095f232a2177efcc4820c0425d502d1b03edba12c63856facbbdcc63"
+      },
+      "packet_call_digests": [
+        "03515546eb1073d4559dd90dd1a354a809c7655b3450e6b0cbc1220b16f82d61",
+        "13f8df7b9c2b0c500725bbae091bf46a76845e083dbe27b0237fa868269a7ee1",
+        "23672aaba98a94c1c1364c3c51ee0e2c6c734d7c20df8d6b58c4a9825da04653",
+        "27ea516afd5d837faf23ef29be5e9239e795b36ac3f167a2f9b28b5e624a0681",
+        "2b31c901bb8315dc09e6c3fb3d22bc1cd57f4ae9b0d1570345a644b1f5e45b67",
+        "342f527d5aadd1f4c0a2a92ba221fed4a3f47a83c1336fcb015005cc2f089cf3",
+        "57a480736b17987d944069b761ae0cac78ffc9801836af5c514ffa94e4ae1fb9",
+        "59ee4b896a5b4214756d83e4757533d3ab372737569f434173bdc2a512157a62",
+        "7bc7f91b9fc23504e21e0bf358f354b6cdcb195c4c194de3423e44075a431261",
+        "998e695f47d863a6902b2439e931d054d361d8985de490f15001a8936eae5ecc",
+        "99c6eaae71b11813fe453511a3774a4d9c2bf0c956443d5107af5b7aeafc5c2a",
+        "bedcabf1caeda53a140420cdda9b36c02b070bfee37f1321dab3d6cf15659d38",
+        "dbe35d9c0ef8bcfd350148257a1935d41d28c78799b78db53971f4006dac4891",
+        "e2bc923e81286cb1aae8465bf6369bb389c9b3a14d7d123443679e320447ce3a",
+        "f0b427a9df37856f9845ed31d324ea7a16b92bf9df7ced673803f9e5e2c3be49"
+      ],
+      "reason": "Reviewed the data table FIELD_CLASSES and the frame functions. classify_packet, describe_role_frame and list_frame_units read a role packet and return new values: a classified frame, units with handles and sizes, field rows, and per-kind frame bounds with the $descriptors and $unit: tags; plan_role_capacity calls review_route_capacity.plan_chain_capacity until no fixed field moves and returns the plan and the units; describe_unit_references returns the reference rows of a unit descriptor; describe_registry_classes reads the registry for release tooling. No function writes into the packet that it receives. The frame of classify_packet enters the packets of parts protocol v3 and session protocol v4 through their builders; the registry declares it in the parts-v3 wire variants with the provenance of classify_packet, and as the opaque frame of session_v4_binding with the provenance of review_session_v4.build_session_packet. The table rows that classify_packet returns under fields reach no packet. The keys of FIELD_CLASSES (protocol forms, the empty form and dotted field paths) and the row member overflow_unit are table data under non_packet_names. Changed AST requires declaration review."
+    },
+    "research_harness.review_final_pages": {
+      "ast_sha256": "84a7bbb5e666d579aedaf591f5f174da535db78ea42aee8048b41e07a6a49698",
+      "functions": {
+        "_apply_completed": "b5c6338d434d9d18330d2ed16d5613834f692c4628b626a342fc80f1ec9e5cb9",
+        "_build_context": "94e172f57930f1b8c7da62fd3ecae6b0091b0818af8ede4cbc3e62e4f5bc659a",
+        "_build_decision_rows": "3f494e00538ae2779c260c70f9d25082a301bff56e10cf68e9274fd874ffa026",
+        "_build_fixed_part": "f9b2b3592e6fc9af224510774f622048a39581c41a01e4658baa3bbbc9125b8e",
+        "_build_page": "009e40cce4723684a833aafe6dd522d77f9389207eaac3cbade7ce94baf24b77",
+        "_build_turn": "59402c4ab6963fe4389b642044196977dde25280932561b45aa8ff613a17e730",
+        "_collect_preserved": "3861d96243089d1e523a7848a2f7574d1ccd00812eafbf35d2caeec3b0e16598",
+        "_forecast_final_turns": "ae8ec29da4b918c45c42e1a89de4ab8c69919dcd7361ccbb0fdb67ccb9903886",
+        "_number_turns": "ac128a042ca6001520bf99919c02206568bd24e1fb7478f846701be2a9200743",
+        "_pack_pages": "f1f01f8231506492f064b94032614aaf624d734a086b465e1894b8ee1c35b069",
+        "_plan_closing": "ec0c68360cb89a4b61ce1d77969fa24c5092f9357f7e0333e61de3f0671a149a",
+        "_plan_condensing": "49aae549c4ce9e6762dd5b8644b5ec83da6b7b08a116a4191f166039463ac956",
+        "_prepare_pool": "a0c68e88205bf542fe28939d3a7589d57f672e277a072c0a7075ae1de9611ec3",
+        "_raise_below_floor": "c9470f7dfcca1607612481599f386413110308dbbd34cec80107f863463da688",
+        "_read_forecast": "f1dfc1c40d3f59b25b462875390a0ce86c428624c27a8376e3f13f26661e4af0",
+        "_replace_blocks": "f26f6950ddd56a7d42d0866591abd01e32ebf8e4d250150cb168e03f450576ce",
+        "_rewrite_consumers": "5b74151cf80e4ea9abeb2500b3abb6b41d942fd5a7029f4edc6cf2e0a252963c",
+        "_rewrite_entries": "35a6cb6da27f4ff2da0fbced8e324761ec8a4470947c1420072f2698f5289c86",
+        "_sum_entries": "63fef7b6757eb2df234fc8e13278830a226d7e3b1ad43e10988794a236667e1f",
+        "_validate_completed": "6142afffaa2d8cf904408e9dc7394c8cda6c687a19b8f224245da2f3eaeb5cfa",
+        "_validate_entries": "e4e780bc77c9f38cd39acddb866e3d1e8b831284e87845e60c64aeec980d2e07",
+        "_validate_final_inputs": "3ad403c913ca720e8315ef893966aceedd9d181712b1b4061e0b2d8ed8889a73",
+        "_validate_progress": "5551367cb7277da52f47f563e5d0abde39fd30b56eee084d76ff2c8f9d76c269",
+        "_validate_replacement_cause": "15bc52be7211a467d3621a3e790c55beee7f3dc294b5fcef7db5a5ab30c13d77",
+        "allocate_final_targets": "34731bdd1e87d9876b53d3ab541e3eece81d15184b1260a15464b4a5344fe73e",
+        "build_page_plan": "f4bacf616b2d5d3bac3483ebe82c701233e501c06f6655d89367d58b69111193",
+        "count_final_turns": "61af225ffd5df8b2b77a6d629be33a4157f7c176221c482bed2f5c9075048465",
+        "plan_final_turns": "b2981b2f0f6b9c66852863b0fb4dc36dcbd387bce5d0d3a39869e368b810b15c",
+        "prepare_final_turn": "82e790190c0a8d55f11474e3e6db257a128a545ca18c3c4e14538c01ff7e4013",
+        "repack_final_turns": "a870a0dc5a1025cf2f51df812f1b8805e46fa91ed91e26531cceeaa0be5966d4",
+        "split_final_turn": "1671ea3b47d8e5dbbc2bfcce7e5a326b8d892004892175710fed982d315ddb4c",
+        "verify_page_plans": "c1103aa3946db1ff8abde8e27d8ae609a1a1008d0410bb91b1805ae25087ca53"
+      },
+      "packet_call_digests": [],
+      "reason": "Reviewed the pure final page planner. plan_final_turns, split_final_turn, repack_final_turns, prepare_final_turn and their helpers return numbered turns of entry handles and sizes, which the families read to choose the targets and entries of a page packet; count_final_turns returns counts or a marked forecast; allocate_final_targets divides a page room; build_page_plan returns the stored page plan of protocol exactory-final-page-plan-v1, and verify_page_plans replays a list of plans. No function receives or changes a packet. The keys split and ratio of the cause table of _validate_replacement_cause are cause kinds under non_packet_names. Changed AST requires declaration review."
     }
   },
   "computed_sites": {},
@@ -55399,6 +55864,14 @@
       "classification": "reviewed local write site",
       "form": "reviewed local write",
       "reason": "The call writes declared members into the packet that this builder holds in a local. The module certificate pins the call."
+    },
+    {
+      "ast_sha256": "99c6eaae71b11813fe453511a3774a4d9c2bf0c956443d5107af5b7aeafc5c2a",
+      "callee": "<dynamic>",
+      "caller": "research_harness.review_field_classes.plan_role_capacity",
+      "classification": "reviewed local write site",
+      "form": "reviewed local write",
+      "reason": "The call writes into a container that this function holds in a local. The module certificate pins the call."
     }
   ],
   "modules": [
@@ -55527,7 +56000,9 @@
     "research_harness.review_codex_notices",
     "research_harness.review_codex_transport",
     "research_harness.review_codex_visual_transport",
+    "research_harness.review_composite",
     "research_harness.review_composition",
+    "research_harness.review_condensing",
     "research_harness.review_context_repair",
     "research_harness.review_continuation",
     "research_harness.review_delivered_evidence",
@@ -55539,6 +56014,8 @@
     "research_harness.review_excerpts",
     "research_harness.review_failed_request_history",
     "research_harness.review_failure_class",
+    "research_harness.review_field_classes",
+    "research_harness.review_final_pages",
     "research_harness.review_handles",
     "research_harness.review_input_projection",
     "research_harness.review_objection_evidence",
@@ -55638,7 +56115,48 @@
     "character": "Reviewed 0.91.8: exactory_api.find_post_text_violation returns character, the code point of a refused character, which problem_claims.require_post_texts writes only in the details of problem_statement_post_text_invalid and problem_value_post_text_invalid; character is also a key of the refusal message tables of problem_claims. Never a packet member.",
     "column": "Reviewed 0.91.8: exactory_api.find_post_text_violation returns column, the place of a refused character in its line, which problem_claims.require_post_texts writes only in ResearchError.details. Never a packet member.",
     "statement_details": "Reviewed 0.91.8: a key of exactory_api.POST_TEXT_BOUNDS, the bounds of the text after the --- line of a statement, which problem_claims writes only as the field of a problem_statement_post_text_invalid refusal. A statement record keeps the whole text in statement, so the name is never a packet member.",
-    "remote_intent": "A record kind of the allowlisted scoped-storage equality selectors (storage._FILTER_FIELDS): remote.find_intent reads the saved intents of one request fingerprint through read_filtered_records. It is query metadata, not a reviewer packet field."
+    "remote_intent": "A record kind of the allowlisted scoped-storage equality selectors (storage._FILTER_FIELDS): remote.find_intent reads the saved intents of one request fingerprint through read_filtered_records. It is query metadata, not a reviewer packet field.",
+    "exactory-openness-reading-math-v2": "Key of the source-owned FINAL_FAMILIES dispatch table in review_composite; a protocol value selects the turn lister, the currency reader and the validator of a composite final, never a packet member. The module certificate pins the complete table AST.",
+    "exactory-review-parts-v3": "Key of the source-owned FINAL_FAMILIES dispatch table in review_composite; a protocol value selects the turn lister, the currency reader and the validator of a composite final, never a packet member. The module certificate pins the complete table AST.",
+    "exactory-independent-review-sources-v4": "Key of the source-owned FINAL_FAMILIES dispatch table in review_composite; a protocol value selects the turn lister, the currency reader and the validator of a composite final, never a packet member. The module certificate pins the complete table AST.",
+    "exactory-focused-review-evidence-v2": "Key of the source-owned FIELD_CLASSES table in review_field_classes: the protocol of a role packet, which selects the field-class rows of that form, never a packet member. The module certificate pins the complete table AST.",
+    "exactory-independent-review-sources-v2": "Key of the source-owned FIELD_CLASSES table in review_field_classes: the protocol of a role packet, which selects the field-class rows of that form, never a packet member. The module certificate pins the complete table AST.",
+    "exactory-independent-review-v1": "Key of the source-owned FIELD_CLASSES table in review_field_classes: the protocol of a role packet, which selects the field-class rows of that form, never a packet member. The module certificate pins the complete table AST.",
+    "exactory-problem-review-v2": "Key of the source-owned FIELD_CLASSES table in review_field_classes: the protocol of a role packet, which selects the field-class rows of that form, never a packet member. The module certificate pins the complete table AST.",
+    "exactory-reassessment-disposition-correction-v1": "Key of the source-owned FIELD_CLASSES table in review_field_classes: the protocol of a role packet, which selects the field-class rows of that form, never a packet member. The module certificate pins the complete table AST.",
+    "exactory-review-staged-v2": "Key of the source-owned FIELD_CLASSES table in review_field_classes: the protocol of a role packet, which selects the field-class rows of that form, never a packet member. The module certificate pins the complete table AST.",
+    "": "Key of the source-owned FIELD_CLASSES table in review_field_classes: the empty form, which selects the field-class rows of a manuscript, readiness or round packet without a protocol, never a packet member. The module certificate pins the complete table AST.",
+    "bodies.*.aliases": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "evidence.*.content": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "native.scientific_context.audit_forecast.notices": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "native.scientific_context.minimum_gaps": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "native.scientific_context.openness_minimum": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "problem_evidence.account_records": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "problem_evidence.assessment_evidence": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "problem_evidence.audit_forecast.notices": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "problem_evidence.citations": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "problem_evidence.computations": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "problem_evidence.formal_checks": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "problem_evidence.minimum_gaps": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "problem_evidence.openness.minimum": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "problem_evidence.openness_minimum": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "problem_evidence.openness_searches": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "problem_evidence.passages": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "problem_evidence.readings": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "problem_evidence.results": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "review_parts.inventory": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "review_parts.logical_packet": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "review_parts.source_inventory": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "review_parts.units.*.aliases": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "review_parts.units.*.bodies.*.aliases": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "review_parts.units.*.citations": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "review_parts.units.*.occurrences": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "scientific_context.audit_forecast.notices": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "scientific_context.minimum_gaps": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "scientific_context.openness_minimum": "Key of the source-owned FIELD_CLASSES table in review_field_classes: a dotted field path (* stands for any key or index) that selects the field-class row of a nested member, never a packet member. The module certificate pins the complete table AST.",
+    "overflow_unit": "Member of a field-class row of the source-owned FIELD_CLASSES table in review_field_classes. classify_packet copies rows into the fields of its result, and no caller writes those rows into a packet; no harness code reads the member. Never a packet member. The module certificate pins the complete table AST.",
+    "split": "Key of the local table of cause kinds in review_final_pages._validate_replacement_cause: a cause kind of a page-plan successor, which selects the members that its cause holds, never a packet member. The module certificate pins the function.",
+    "ratio": "Key of the local table of cause kinds in review_final_pages._validate_replacement_cause: a cause kind of a page-plan successor, which selects the members that its cause holds, never a packet member. The module certificate pins the function."
   },
   "non_packet_sites": [
     {

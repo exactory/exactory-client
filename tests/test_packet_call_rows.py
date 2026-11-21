@@ -153,6 +153,29 @@ class CallRowTests(unittest.TestCase):
         self.assertEqual(apply_call_rows(registry, differences), [])
         self.assertEqual(inspect_packet_sources(sources, registry), [])
 
+    def test_a_name_is_resolved_by_the_import_of_its_own_function_or_else_of_the_module(self):
+        from ci.capacity_packet_inventory import describe_call_rows
+        # Two functions import read from two modules inside their bodies; the third has no import of its own.
+        source = ('from third import read\n\n\ndef read_first(packet):\n    from first import read\n    return read(packet)\n'
+                  '\n\ndef read_second(packet):\n    from second import read\n    return read(packet)\n'
+                  '\n\ndef read_module(packet):\n    return read(packet)\n')
+        sources = dict(builder=source, first=HELPER, second=HELPER, third=HELPER)
+        expected = [('builder.read_first', ['first.read']), ('builder.read_second', ['second.read']),
+                    ('builder.read_module', ['third.read'])]
+        registry = certify(sources, [])
+        self.assertEqual([(item['caller'], item['row']['targets']) for item in describe_call_rows(sources, registry)],
+                         expected)
+        rows = [make_row(caller, 'read(packet)', targets=targets) for caller, targets in expected]
+        self.assertEqual(inspect_packet_sources(sources, certify(sources, rows)), [])
+
+    def test_a_name_that_one_function_imports_twice_is_resolved_by_the_import_before_the_call(self):
+        from ci.capacity_packet_inventory import describe_call_rows
+        source = ('def read_either(packet, flag):\n    if flag:\n        from first import read\n'
+                  '        return read(packet)\n    from second import read\n    return read(packet, flag)\n')
+        sources = dict(builder=source, first=HELPER, second=HELPER)
+        self.assertEqual([(item['line'], item['row']['targets']) for item in describe_call_rows(sources, certify(sources, []))],
+                         [(4, ['first.read']), (6, ['second.read'])])
+
     def test_a_packet_cannot_reach_an_unlisted_plugin_module_as_standard_library(self):
         source = 'import outside\n\n\ndef build(packet):\n    return outside.mutate(packet)\n'
         outside = 'def mutate(value):\n    value["known"] = []\n'
