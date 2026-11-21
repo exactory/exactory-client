@@ -18158,7 +18158,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.cli": {
-      "ast_sha256": "cb8e1c8512c089202a10b897cf31443c84e7640a8563183c7ecfe7351cba4fe9",
+      "ast_sha256": "75e3f022197824fb334d684a4b3d1887a4a6155ef5103f6186d28181eaa46715",
       "functions": {
         "_build_status_report": "d66e55cb0dab6385c501dd53ebe53f6d1348d3c3d9c469ca8c53a79050987e9b",
         "_is_recording_command": "05655a0a1dadde896d4de40e67283b9eedfc8feb68651142be7c2b6f25c9a43c",
@@ -18175,7 +18175,7 @@
         "describe_review_budget_refusal": "52a68afb6356f613e89ff52911781fb4cd59963a2949fffcf998b1ba8a4f61ed",
         "describe_review_receipt": "be17a862f7907c5138ee8b071616b20dc223de85893449c850dd94b458a906e6",
         "load_candidates": "b2e758f7f31c5e48eaa7355c86a18a4c9a6233b937722b804d26919d19692153",
-        "main": "7493e608bc3cecd976f3955afd4d7a19777208c9e5c2316d6b29bffc7dfee9f8",
+        "main": "ee278acef7d5f1a9e666854f76ad56b3738c8310ff486c131faa7229ea79ec30",
         "normalize_request_payload": "f796445dfc10aabf769fdab7a06725083105d24d34f255f596fd1f74a0471fa6",
         "note_managed_record_skipped": "817e9fdac6970585a8ab660bd697be2118615ae036b0e6cbd94d78dfa91d2089",
         "parse_managed_scope_arguments": "bf44042b8c22c402fcf4f29e75622b4279bc36a823cc8265caaf9fe10135c322",
@@ -18192,7 +18192,7 @@
         "a0d2e18c7c5c2e6ad274fcf82b2917d3698924188278b78fbfd66ff1946cbe5a",
         "a3a9cf9b5882f596f3cf0a522f43748f07b3a4927f02d6368cb87171ac89d5db"
       ],
-      "reason": "Reviewed one authoritative planner projection for the conservative refusal diagnostic; replacements stay actionable, actual terminal codes remain, executable handoffs remain visible, and posted/independent blockers are unchanged. Changed AST requires declaration review. Reviewed 0.91.2 after_start view callbacks and main docstring: calls render views with no packet arguments; packet construction, fields and wire shapes are unchanged. Reviewed 0.91.5 call payload definition: _review_run sends the whole payload of a recorded dispatch through rebuild_call_payload when a task run resumes it, and the id and assignment_id of a run that starts a new dispatch as before; no packet argument or member changes."
+      "reason": "Reviewed one authoritative planner projection for the conservative refusal diagnostic; replacements stay actionable, actual terminal codes remain, executable handoffs remain visible, and posted/independent blockers are unchanged. Changed AST requires declaration review. Reviewed 0.91.2 after_start view callbacks and main docstring: calls render views with no packet arguments; packet construction, fields and wire shapes are unchanged. Reviewed 0.91.5 call payload definition: _review_run sends the whole payload of a recorded dispatch through rebuild_call_payload when a task run resumes it, and the id and assignment_id of a run that starts a new dispatch as before; no packet argument or member changes. Reviewed replay-first-writes, part 1 (the first patch release after 0.91.7): a committed request is answered from a read before any write lock, a write transaction that finds its request committed ends with ROLLBACK, and the open of an existing store for creation checks its structure in a read; inside a command a read waits for a COMMIT in progress and a COMMIT for the readers of the store, for at most the shared wait, while a polling read and the render of the output views keep the busy timeout; no packet argument or member changes."
     },
     "research_harness.cohort_evidence": {
       "ast_sha256": "370f882ea407c0840704ab00a56a423dc92514a67f7aaf19bedc662ad2a7ab19",
@@ -18529,13 +18529,14 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.finishing": {
-      "ast_sha256": "129cb5b7be6d9325200472ec0d6eec6bb3241d2b196574298e9b3bf1c341dbc3",
+      "ast_sha256": "2256cd42673cb2a68c1976c15303479cc2e427f10ae22a36fe0d0aaa78b4719f",
       "functions": {
         "retry_finishing_write": "52216c9e0d69a139b629d12e339e87076b8022ed9bcee085c591d6a9e9dd0520",
-        "retry_store_write": "4ed751301c59d637ed01e34744c9c88451b6ec794c61f2a6b464345fc9569ebb"
+        "retry_store_write": "4ed751301c59d637ed01e34744c9c88451b6ec794c61f2a6b464345fc9569ebb",
+        "wait_for_store_in_command": "74e53e304e4b870e024ad0f8aa294b1e1ac13fe5c009bfe88d343d8e792bafd0"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed probe-capture-contention (0.91.7): the attempt limit, the wait and the retried codes of a scoped finishing write have one definition in finishing, which review_protocol._finish_call and the probe writes import; no packet argument or member changes. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed finishing-writes-2 (the first patch release after 0.91.7): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and a refused record of that process refuses the call past the transport; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed probe-capture-contention (0.91.7): the attempt limit, the wait and the retried codes of a scoped finishing write have one definition in finishing, which review_protocol._finish_call and the probe writes import; no packet argument or member changes. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed finishing-writes-2 (the first patch release after 0.91.7): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and a refused record of that process refuses the call past the transport; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes. Reviewed replay-first-writes, part 1 (the first patch release after 0.91.7): a committed request is answered from a read before any write lock, a write transaction that finds its request committed ends with ROLLBACK, and the open of an existing store for creation checks its structure in a read; inside a command a read waits for a COMMIT in progress and a COMMIT for the readers of the store, for at most the shared wait, while a polling read and the render of the output views keep the busy timeout; no packet argument or member changes."
     },
     "research_harness.fulltext": {
       "ast_sha256": "93d5968e8e159c1097ca48a876678adc1b8db8bf3dcf0a88997e5f5371946ba3",
@@ -19460,7 +19461,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.output_views": {
-      "ast_sha256": "11680c04d349f3d52ce579e3bf01629f9309fa1c740c4f2b13de9f06fcc1dc07",
+      "ast_sha256": "3b37440ea0c012f670cd455dc87c5b219aa26547e73160c926557834637ce1ca",
       "functions": {
         "_bound_embedded_record": "507cefe18a2105353d34b52ff9a18098be71433d56d02ac1371ce9b8cce0c238",
         "_build_bundles": "b53daac323240e839216fb01bb73e3605d3661a6922401443371c9a0c7dd0ef8",
@@ -19517,7 +19518,7 @@
         "_remove_view_file": "cd25610384d6fb6306536c43dfcd238efd6331a5149b9892060d9f78aa2607d8",
         "_render": "3f956b07292943f930a97fd3f9f0ba2bf3cec71439a6d35d187dac57e55c384a",
         "_render_locked": "27f5999e4c24414407b51b0541831837ab6618c8165a2a85f9821718b82422ba",
-        "_render_safely": "744330e60b668d8ad6da7067214e9e8b6decc027621ee1369893ab66940ad1fe",
+        "_render_safely": "6eff9a782dea3ae24fef493214a9e3f4420aacede570ad2567a1925cd70405d6",
         "_stat_view_file": "953667a3d0c31db334062d42e8042645ba9799ce4eb41dc87a3d651a616d5cf1",
         "_summarize": "80fa3c3dcca0a609570a30587a0eea2c1c9eb27f7c436561ff7ff3d6c4d4017b",
         "_summarize_record": "2bab41e3fae51e479881f33decbd81dc6bb3aa6b87e52653a19dddcda9c987e8",
@@ -19533,7 +19534,7 @@
         "render_workspace_views": "fd81bbe024597eb1472cb452cc2bb1c10b381cd9322aa1141a5c095a66967344"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.91.2 render lock wait, two-pass rendering, dirty markers and failure ordering: only derived output views and their existing marker fields change; reviewer packet shapes are unchanged."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.91.2 render lock wait, two-pass rendering, dirty markers and failure ordering: only derived output views and their existing marker fields change; reviewer packet shapes are unchanged. Reviewed replay-first-writes, part 1 (the first patch release after 0.91.7): a committed request is answered from a read before any write lock, a write transaction that finds its request committed ends with ROLLBACK, and the open of an existing store for creation checks its structure in a read; inside a command a read waits for a COMMIT in progress and a COMMIT for the readers of the store, for at most the shared wait, while a polling read and the render of the output views keep the busy timeout; no packet argument or member changes."
     },
     "research_harness.overrides": {
       "ast_sha256": "b735f18316b1f7f8f1658e95d6ac0159e07ce36f673e0aa4af267371152108e7",
@@ -23813,7 +23814,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_worker": {
-      "ast_sha256": "1790c45d88c95eb5efa0eb55a2b48c8a14af68a09b08fc66c75c7f817650887f",
+      "ast_sha256": "d32d94a834e46affe14643d1322d7499a751bb437739b4d4621d0fe90dd088bd",
       "functions": {
         "_authorize_launch": "e414038be49883a66ab781190f44ff2b1dd713f55766d4ea292ad5d5f5b9318d",
         "_await_release": "ed8a5e84883e97e012f03e16adf40854ef9c96a8adb0435baf02f6c5a111d8f5",
@@ -23836,14 +23837,14 @@
         "_termination_guard": "554b9761f6f88d684927ea2401bdc642add637a2a239405cbf9d4311a52a621c",
         "confirm_termination": "3db5963a5c5de7e25833d00c67fcf6d34eea7d2ddbebb79d938294645d0e6484",
         "launch_worker": "2f07376072d6fdce5773e2aac3563c99158d02a9ddabd0e05d501cf0282cede1",
-        "main": "08ab75c2be7e421480ab2a40877fb0ac487d1f7108409e0ebd801550f1878e0a",
+        "main": "d24c548da1e1dee3e182f93ac76c34f98278fbfb9a48f6322c934bafc05bd24a",
         "own_call": "9342250ee9c5653648eb1b3cf82f747598bd1725667fba3b80d49bba24ec29ed",
         "read_call_termination": "ea9b2da7c34829cdcf1b7c6346c177f068e9713e8474d054b191241b8c5afdf9",
-        "read_polling_store": "7cad14111c4b4bdce12cded7e7870ce931aad4d115ad1b91a369708baeb6791a",
+        "read_polling_store": "c2e867a3e4a0d5208db6eb7da95d320c5bfb131393701dd23b7c7334cc0588a5",
         "run_worker": "ab17d2ceb91a267a3554e0a1748de559faec994f3523fff618abe813b503d462"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the capture waits import the attempt count and the wait from finishing; no behavior, packet argument or member changes. Reviewed finishing-writes-2 (the first patch release after 0.91.7): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and a refused record of that process refuses the call past the transport; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the capture waits import the attempt count and the wait from finishing; no behavior, packet argument or member changes. Reviewed finishing-writes-2 (the first patch release after 0.91.7): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and a refused record of that process refuses the call past the transport; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes. Reviewed replay-first-writes, part 1 (the first patch release after 0.91.7): a committed request is answered from a read before any write lock, a write transaction that finds its request committed ends with ROLLBACK, and the open of an existing store for creation checks its structure in a read; inside a command a read waits for a COMMIT in progress and a COMMIT for the readers of the store, for at most the shared wait, while a polling read and the render of the output views keep the busy timeout; no packet argument or member changes."
     },
     "research_harness.rounds": {
       "ast_sha256": "12c48c3b70682a177f4385921b30e8ea34135edfcbd804b2699e0f42e8eef529",
@@ -24090,7 +24091,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.6: the step of problem-value names changes_if_resolved among its fields; the packet members stay as they are."
     },
     "research_harness.storage": {
-      "ast_sha256": "7bfe3cf88f7edf025d8963ea22af33bfa6e4004c0834ed599933f5afb3f07151",
+      "ast_sha256": "4ad927e68cc6d8bbdba01cdd45ac116caf67d1b3ea022dd706fe62eba607de65",
       "functions": {
         "_canonical": "83dab9f8520cc85f11ca786c64dc5f6901d8372d19972e7da48ed5fe3965f32a",
         "_check_bounds": "9b36c395983b709198dd33488615f500f7546ca88ac1c46a1f956e9e1bf13eac",
@@ -24108,11 +24109,13 @@
         "_load": "7681da397bf448599adfbb8ecf08d3e3d5fdffd1682df93c225d346b9697fd02",
         "_is_busy_error": "189b282c135d7bb8002220cdd1b663d9d14c8bc1a5f266b0ed548cee1c6e6bf9",
         "retry_busy_commits_until": "765dda7df28ad54472b5d45b641c9220abb808540430af0411d05715ef900f2d",
-        "_commit": "549c9543efd267b886bf6b2d0ce61a03661013e36e378e9d4226293730bf8486",
+        "wait_for_store_locks": "5ab3cbf05b9d9c267cf729edb403b208e45d9f37e9d796a981ef7cba1b106bbb",
+        "_commit": "640a76d64638896a069324007ed063b546e79731b4332aa6070b89707a018175",
         "_matches_record_filter": "295e584ae4a922ed5b8b2ac3267d92048a19dc076eece4a0d9137178678c3e4d",
         "_read_creation_revision": "2bbd3b70b34b60ac101d384072a25ff142ac18fbbfe22e90ed90f2f73ee060f6",
         "_read_event_digests": "ea152d0fac119f0500168f321f6590a4e01d45891a43d73ddd9b3023bc61c997",
         "_read_original_response": "39eb15efff332c5cf12bcebe73fadabe8fffebf451c8a03a957699b3f1b79476",
+        "_replay_in_write_transaction": "26e208afa4d11b6478fcba99b7cee52d7c60a2890a9c7e50cfb2403b2ee34e43",
         "_read_snapshot": "864dcb15057e19d0f6d3990b71c9f78112f07bc63ab6bdd0dd32b48bc6a7b831",
         "_refuse_snapshot_identity": "3f9791e29a3a2d907db768fafda7d42e6bae34cfc97b95abafba739a2bb69271",
         "_request_row": "5fc4914ee16fd2ab72d614e07e26f0e54049b52e95d74d907d2e9ef3a7e39306",
@@ -24128,7 +24131,7 @@
         "select_record_groups": "e482783667db130c5fca6615f58feb274c61d77606589d537a5d90379b3cb968"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed scoped equality selectors for exact route/context and refusal parent groups; revalidation algorithms and authenticated row membership remain unchanged. Changed AST requires declaration review. Reviewed 0.91.4: _read_snapshot: Retain record-version history for an assignment whose carried_selection.protocol names version 2, after JSON member inspection without SQLite JSON extensions. overlay_kinds: Retain history, revision and the authentic current row source when overlaying kinds on snapshot, historical, prepared or scoped records. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
+      "reason": "Reviewed scoped equality selectors for exact route/context and refusal parent groups; revalidation algorithms and authenticated row membership remain unchanged. Changed AST requires declaration review. Reviewed 0.91.4: _read_snapshot: Retain record-version history for an assignment whose carried_selection.protocol names version 2, after JSON member inspection without SQLite JSON extensions. overlay_kinds: Retain history, revision and the authentic current row source when overlaying kinds on snapshot, historical, prepared or scoped records. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed replay-first-writes, part 1 (the first patch release after 0.91.7): a committed request is answered from a read before any write lock, a write transaction that finds its request committed ends with ROLLBACK, and the open of an existing store for creation checks its structure in a read; inside a command a read waits for a COMMIT in progress and a COMMIT for the readers of the store, for at most the shared wait, while a polling read and the render of the output views keep the busy timeout; no packet argument or member changes."
     },
     "research_harness.strategy": {
       "ast_sha256": "30a9dc55b611829fa7bc481961ecbb6822991ee2f9be7e49e52de9cbc902f928",

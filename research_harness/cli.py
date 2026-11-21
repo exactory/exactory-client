@@ -18,6 +18,7 @@ from .drafting import find_draft_obligations
 from .errors import ResearchError, describe_tool_timeout
 from .evaluation import Evaluation
 from .evidence import digest
+from .finishing import wait_for_store_in_command
 from .gates import gate_state, require_ready
 from .integration import (adopt_workspace, current_store, export_workspace, matches_direct_deposit_files,
                           pin_artifact)
@@ -1294,7 +1295,7 @@ def main(argv=None, render_views=render_views_after_command):
     request a render after committing a new call's start, before sending it, without waiting for the render lock."""
     args = build_parser().parse_args(argv)
     try:
-        with describe_tool_timeout():
+        with describe_tool_timeout(), wait_for_store_in_command():
             result = run(args)
         if args.command == "review-series":
             raise SystemExit(result)

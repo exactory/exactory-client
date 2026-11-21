@@ -161,7 +161,7 @@
       "expected": "Ordinary file admission leaves authentication to the command. Artifact registration and canonical replays use two full validations and one structural check. Refused paths still authenticate historical receipts before replay, and all file payload commands retain their existing domain checks.",
       "test_kind": "real_shape",
       "tests": [
-        "test_research_store_preparation.ResearchStorePreparationTests.test_register_artifact_with_two_full_validations_and_one_structural_check",
+        "test_research_store_preparation.ResearchStorePreparationTests.test_register_artifact_with_two_full_validations_and_two_structural_checks",
         "test_payload_file_paths.PayloadFilePathTests.test_every_file_payload_command_keeps_its_validation_count",
         "test_payload_file_paths.PayloadFilePathTests.test_artifact_replays_keep_two_full_validations_without_reopening_input",
         "test_payload_file_paths.PayloadFilePathTests.test_0853_artifact_receipt_replays_without_reopening_the_old_input"
@@ -1072,7 +1072,7 @@
       "expected": "Repeated validation is reduced, but the idle 3.64 GB study store is not qualified in 0.73.0; its remaining performance incident stays open.",
       "test_kind": "same_path",
       "tests": [
-        "test_research_store_preparation.ResearchStorePreparationTests.test_register_artifact_with_two_full_validations_and_one_structural_check"
+        "test_research_store_preparation.ResearchStorePreparationTests.test_register_artifact_with_two_full_validations_and_two_structural_checks"
       ]
     },
     {
@@ -7543,6 +7543,22 @@
         "test_remaining_finishing_writes.OutputRefusalTests.test_series_runs_the_same_request_again_after_the_refusal_of_its_output_was_refused",
         "test_remaining_finishing_writes.OutputRefusalTests.test_series_keeps_the_request_whose_refusal_is_pending_after_a_busy_read",
         "test_remaining_finishing_writes.RecordingRefusalTests.test_recording_command_records_the_refusal_when_a_commit_meets_every_attempt"
+      ]
+    },
+    {
+      "id": "replay-and-reads-refused-beside-other-commands",
+      "record": "20261120104814-replay-and-first-writes-wait-for-readers-on-a-large-store",
+      "class": "concurrency",
+      "summary": "A command that repeated a committed request ran a write transaction that changed nothing. Its start waited for every writer and its COMMIT for every reader, so on a store of a study's size the repeat was refused with store_busy. Opening a store for creation had the same two waits. With the commit retry of the finishing writes, a read of another command that started while a COMMIT waited was refused after one second, also the first read of a command.",
+      "expected": "A committed request is answered from a read, a write transaction that finds its request committed ends with ROLLBACK, and the open of an existing store for creation takes no write lock. Inside a command a read waits for a COMMIT in progress, and a COMMIT waits for the readers that hold the store, for at most 600 seconds.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_replay_and_first_writes.ReplayTests.test_replay_returns_the_original_response_beside_a_reader",
+        "test_replay_and_first_writes.ReplayTests.test_replay_returns_the_original_response_beside_a_writer",
+        "test_replay_and_first_writes.ReplayTests.test_open_of_an_existing_store_for_creation_takes_no_write_lock",
+        "test_replay_and_first_writes.StoreWaitTests.test_reading_commands_wait_for_a_commit_in_progress",
+        "test_replay_and_first_writes.StoreWaitTests.test_mutation_of_a_command_commits_when_the_reader_has_ended"
       ]
     }
   ]

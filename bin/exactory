@@ -31,6 +31,7 @@ from research_harness.citation_report import report_citation_gate
 from research_harness.problem_evidence import POST_CITATION_LIMIT
 from research_harness.cli import add_identity, select_managed_path
 from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError, describe_tool_timeout
+from research_harness.finishing import wait_for_store_in_command
 from research_harness.exactory_api import (_DEFAULT_API_URL, CHANGES_IF_RESOLVED_MAX_UNITS,
                                           CHANGES_IF_RESOLVED_MIN_UNITS, JAVASCRIPT_TRIM_CHARACTERS,
                                           count_utf16_units, normalize_plain_text_line_breaks,
@@ -1821,7 +1822,7 @@ def main(render_views=render_views_after_command) -> None:
     args = _build_parser().parse_args()
     _API_BASE_URL = _read_checked_api_base_url()
     try:
-        with describe_tool_timeout():
+        with describe_tool_timeout(), wait_for_store_in_command():
             args.handler(args)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))
