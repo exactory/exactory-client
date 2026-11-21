@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import platform
 import shutil
 import subprocess
 import sys
@@ -27,7 +28,7 @@ class CIShardTests(unittest.TestCase):
         spec.loader.exec_module(module)
         return module
 
-    def fixture(self, outcome="pass"):
+    def fixture(self, outcome="pass", duplicate_ids=False):
         class Sample(unittest.TestCase):
             def test_a(self):
                 if outcome == "failure":
@@ -43,28 +44,106 @@ class CIShardTests(unittest.TestCase):
             def test_c(self):
                 pass
 
-        # Discovery can contain the same imported case more than once.
-        return unittest.TestSuite([
-            unittest.TestSuite([Sample("test_a"), Sample("test_b")]),
-            Sample("test_a"), Sample("test_c"), Sample("test_b"),
-        ])
+            def test_d(self):
+                pass
 
-    def receipt(self, index, outcome="pass"):
+            def test_e(self):
+                pass
+
+        # With duplicate_ids the discovery holds the same case more than once, as when a test module holds an
+        # imported test class by name.
+        later = ("test_a", "test_c", "test_b") if duplicate_ids else ("test_c", "test_d", "test_e")
+        return unittest.TestSuite([unittest.TestSuite([Sample("test_a"), Sample("test_b")])]
+                                  + [Sample(name) for name in later])
+
+    def receipt(self, index, outcome="pass", duplicate_ids=False, evidence_tests=()):
         return self.api().run_shard(
-            self.fixture(outcome), index, 4,
+            self.fixture(outcome, duplicate_ids), index, 4,
             {"client_commit": "client-commit", "client_tree": "client-tree",
              "marketplace_commit": "marketplace-commit", "python_version": "3.9.25"},
             stream=io.StringIO(), take_machine_reads=take_machine_reads,
+            read_evidence_tests=lambda: sorted(evidence_tests),
         )
 
     def test_partition_executes_every_discovered_entry_including_duplicate_ids(self):
-        reports = [self.receipt(index) for index in range(4)]
+        reports = [self.receipt(index, duplicate_ids=True) for index in range(4)]
         self.assertEqual([r["selected_indices"] for r in reports], [[0, 4], [1], [2], [3]])
         self.assertEqual([r["tests_run"] for r in reports], [2, 1, 1, 1])
         self.assertEqual(reports[0]["all_test_ids"][0], reports[0]["all_test_ids"][2])
         summary = self.api().verify_reports(reports, ["3.9.25"], 4)
-        self.assertTrue(summary["success"], summary)
         self.assertEqual(summary["tests_run"], 5)
+        # A run executes each test once (principle 3): two tests that ran twice fail the verification.
+        self.assertFalse(summary["success"], summary)
+        self.assertEqual(summary["test_counts"], {"3.9.25": {"executed": 5, "distinct": 3, "evidence": 0}})
+        distinct = self.api().verify_reports([self.receipt(index) for index in range(4)], ["3.9.25"], 4)
+        self.assertTrue(distinct["success"], distinct)
+        self.assertEqual(distinct["test_counts"], {"3.9.25": {"executed": 5, "distinct": 5, "evidence": 0}})
+
+    def test_each_evidence_test_that_a_shard_names_runs_and_passes_in_the_same_run(self):
+        api = self.api()
+        test_a = next(api.flatten(self.fixture())).id()
+
+        def verify(evidence, outcome="pass"):
+            # Shard 0 runs test_a, and shard 3 names the evidence that a guard test of its process required.
+            reports = [self.receipt(index, outcome, evidence_tests=evidence if index == 3 else ())
+                       for index in range(4)]
+            self.assertEqual(reports[3]["evidence_tests"], sorted(evidence))
+            return api.verify_reports(reports, ["3.9.25"], 4)
+
+        summary = verify((test_a,))
+        self.assertTrue(summary["success"], summary)
+        self.assertEqual(summary["test_counts"], {"3.9.25": {"executed": 5, "distinct": 5, "evidence": 1}})
+        absent = test_a.rsplit(".", 1)[0] + ".test_absent"
+        for evidence, outcome, issue in (((absent,), "pass", "absent from the run: " + absent),
+                                         ((test_a,), "skip", "skipped: " + test_a),
+                                         ((test_a,), "failure", "did not pass: " + test_a)):
+            with self.subTest(outcome=outcome, evidence=evidence):
+                summary = verify(evidence, outcome)
+                self.assertFalse(summary["success"])
+                self.assertIn("3.9.25: evidence test " + issue, summary["issues"])
+
+    def test_the_tests_of_a_shard_group_run_in_one_shard_and_the_others_keep_their_rank(self):
+        api = self.api()
+        first, second = api.SHARD_GROUPS[0][0], api.SHARD_GROUPS[1][0]
+        # A discovery in which the modules of two groups lie between other modules; the discovery failure of a group
+        # module belongs to its group.
+        ids = (["test_alpha.Case.test_%d" % index for index in range(3)]
+               + ["%s.Case.test_%d" % (first, index) for index in range(3)]
+               + ["test_beta.Case.test_%d" % index for index in range(4)]
+               + ["unittest.loader._FailedTest.%s" % second, "test_gamma.Case.test_0"])
+        shards = [api.select_shard_indices(ids, index, 4) for index in range(4)]
+        self.assertEqual(sorted(index for shard in shards for index in shard), list(range(len(ids))))
+        # Group 0 goes to shard 0 and group 1 to shard 1; the eight other tests take the shards 0 to 3 in turn.
+        self.assertEqual(shards, [[0, 3, 4, 5, 7], [1, 8, 10], [2, 9], [6, 11]])
+        # Without a group module the partition is test i in shard i mod the count.
+        plain = ["test_alpha.Case.test_%d" % index for index in range(9)]
+        self.assertEqual([api.select_shard_indices(plain, index, 4) for index in range(4)],
+                         [[0, 4, 8], [1, 5], [2, 6], [3, 7]])
+
+    def test_an_evidence_test_is_checked_without_a_run(self):
+        from ci.evidence_tests import inspect_evidence_tests
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "test_evidence_sample.py").write_text(
+                "import unittest\n"
+                "class Sample(unittest.TestCase):\n"
+                "    def test_ok(self): pass\n"
+                "    @unittest.skip('a mark')\n    def test_skipped(self): pass\n"
+                "    @unittest.expectedFailure\n    def test_expected(self): self.fail()\n"
+                "@unittest.skip('a mark')\n"
+                "class Skipped(unittest.TestCase):\n"
+                "    def test_any(self): pass\n")
+            sys.path.insert(0, directory)
+            self.addCleanup(sys.path.remove, directory)
+            self.addCleanup(sys.modules.pop, "test_evidence_sample", None)
+            names = ("Sample.test_ok", "Sample.test_skipped", "Sample.test_expected", "Skipped.test_any",
+                     "Sample.test_absent", "Sample")
+            problems = inspect_evidence_tests(["test_evidence_sample." + name for name in names])
+        self.assertEqual(problems, {
+            "test_evidence_sample.Sample.test_skipped": "skip_mark",
+            "test_evidence_sample.Sample.test_expected": "expected_failure_mark",
+            "test_evidence_sample.Skipped.test_any": "skip_mark",
+            "test_evidence_sample.Sample.test_absent": "not_one_loadable_test",
+            "test_evidence_sample.Sample": "not_one_loadable_test"})
 
     def test_observed_failure_error_or_skip_prevents_a_successful_shard(self):
         for outcome in ("failure", "error", "skip"):
@@ -267,7 +346,7 @@ class CIShardTests(unittest.TestCase):
 
     def copy_runner(self, client):
         (client / "ci").mkdir(parents=True)
-        for name in ("unittest_shards.py", "reviewer_program_guard.py", "budgets.json"):
+        for name in ("unittest_shards.py", "reviewer_program_guard.py", "evidence_tests.py", "budgets.json"):
             shutil.copyfile(ROOT / "ci" / name, client / "ci" / name)
 
     def write_guarded_sample(self, path):
@@ -398,6 +477,49 @@ class CIShardTests(unittest.TestCase):
         self.assertEqual(report["tests_run"], 1)
         self.assertEqual(report["errors"], [])
         self.assertEqual(report["skipped"], [])
+
+    def test_cli_verify_reads_the_evidence_that_a_guard_test_required_from_the_run(self):
+        # A guard test requires test_evidence of another module, which runs in the same shard. The runner writes the
+        # required test into the result of the shard, and verify requires it to have run and passed.
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            client = base / "client"
+            self.copy_runner(client)
+            (client / "tests").mkdir()
+            (client / "tests/test_guard.py").write_text(
+                "import unittest\nfrom ci.evidence_tests import require_evidence_tests\n"
+                "class Guard(unittest.TestCase):\n"
+                "    def test_requires(self):\n"
+                "        self.assertEqual(require_evidence_tests(['test_proof.Proof.test_evidence']), {})\n")
+            client_commit, client_tree = self.git_fixture(client)
+            marketplace_commit, _ = self.git_fixture(base / "marketplace")
+            command = [sys.executable, str(client / "ci/unittest_shards.py")]
+            summary = base / "summary.json"
+            verify = command + ["verify", "--receipts", str(base / "receipts"), "--python-versions",
+                                platform.python_version(), "--shard-count", "1", "--client-commit", client_commit,
+                                "--client-tree", client_tree, "--marketplace-commit", marketplace_commit,
+                                "--result", str(summary)]
+            for is_skipped, exit_status in ((False, 0), (True, 1)):
+                with self.subTest(is_skipped=is_skipped):
+                    # The skip comes at run time, so the check without a run does not see it.
+                    (client / "tests/test_proof.py").write_text(
+                        "import unittest\nclass Proof(unittest.TestCase):\n"
+                        "    def test_evidence(self):\n"
+                        + ("        self.skipTest('a run-time skip')\n" if is_skipped else "        pass\n"))
+                    run = subprocess.run(command + ["run", "--shard-index", "0", "--shard-count", "1", "--marketplace",
+                                                    str(base / "marketplace"), "--result",
+                                                    str(base / "receipts/0/shard-result.json")],
+                                         cwd=client, capture_output=True, text=True, timeout=60)
+                    self.assertEqual(run.returncode, exit_status, run.stderr)
+                    receipt = json.loads((base / "receipts/0/shard-result.json").read_text())
+                    self.assertEqual(receipt["evidence_tests"], ["test_proof.Proof.test_evidence"])
+                    checked = subprocess.run(verify, cwd=client, capture_output=True, text=True, timeout=60)
+                    self.assertEqual(checked.returncode, exit_status, checked.stderr)
+                    result = json.loads(summary.read_text())
+                    self.assertEqual(result["test_counts"][platform.python_version()],
+                                     {"executed": 2, "distinct": 2, "evidence": 1})
+                    self.assertEqual("%s: evidence test skipped: test_proof.Proof.test_evidence"
+                                     % platform.python_version() in result["issues"], is_skipped)
 
     def test_cli_receipts_reject_an_actual_failure_and_a_missing_shard(self):
         self.api()

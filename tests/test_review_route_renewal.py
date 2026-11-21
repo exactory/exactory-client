@@ -286,10 +286,13 @@ class RouteRenewalRegressionTests(RouteRenewalFixture):
             lines = self.series(source['id'])
             self.assertEqual(set(self.records()['review_assignment']), before)
             self.assertEqual(len(lines), 1, lines)
+            # The plan itself is the stale-route procedure of the slot; no command is executed and refused.
             self.assertEqual((lines[0]['state'], lines[0]['command'], lines[0]['code']),
-                             ('handoff', 'review-route', 'review_route_runtime_stale'))
+                             ('handoff', 'review-context', 'review_route_runtime_stale'))
+            self.assertNotIn('error', lines[0])
             self.assertEqual(lines[0]['details']['route_id'], 'route-renewed')
-            self.assertNotIn('renewal', lines[0]['details'])
+            self.assertEqual(lines[0]['details']['renewal'], dict(admitted=False, route_id=None, lacks='record'))
+            self.assertEqual([step['id'] for step in lines[0]['details']['steps']], [8, 7, 1])
         with self.subTest(case='capacity replacement'):
             from test_review_task_size import RecoveryRowsTests
             from review_parts_fixtures import PartsResultCase
@@ -332,13 +335,15 @@ def check_refused_without_record(test, store, operation, payload, route_id):
     return caught.exception.details
 
 
-def check_stale_procedure(test, store, head_id, steps, renew):
+def check_stale_procedure(test, store, head_id, steps, renew, renewed_steps=None):
     """The series ends with the steps of the stale-route procedure, before any record and any call, also after
-    a route of the same identity with the installed runtime is recorded and probed."""
+    a route of the same identity with the installed runtime is recorded and probed. renewed_steps are the steps
+    after that, when the verified record makes a step unnecessary."""
     invocations = set(store.snapshot()['records'].get('review_invocation', {}))
     for renewed in (False, True):
         if renewed:
             renew()
+            steps = renewed_steps or steps
         lines = []
         run_series(store, head_id, emit=lines.append)
         records = store.snapshot()['records']
@@ -350,6 +355,9 @@ def check_stale_procedure(test, store, head_id, steps, renew):
         test.assertIs(line['details']['renewal']['admitted'], False)
         test.assertEqual([step['id'] for step in line['details']['steps']], steps)
         test.assertEqual(line['command'], line['details']['steps'][0]['command'])
+        # Once the store holds a route record with the installed runtime, the step that verifies a route probes it.
+        test.assertEqual([step['command'] for step in line['details']['steps'] if step['id'] == 7],
+                         ['review-probe' if renewed else 'review-route'] * (7 in steps))
         test.assertEqual(set(records.get('review_invocation', {})), invocations)
 
 
@@ -1046,8 +1054,10 @@ class RouteRenewalCompatibilityTests(RouteRenewalFixture):
         self.retire(first, 'retire-route')
         self.make_stale()
         line = self.series(first['id'])[-1]
-        self.assertEqual((line['state'], line['code'], line['details']['step']['id']),
-                         ('handoff', 'review_route_retired', 1), line)
+        # The retired route record is also stale, so the slot first needs a route record with the installed runtime.
+        self.assertEqual((line['state'], line['code'], [step['id'] for step in line['details']['steps']]),
+                         ('handoff', 'review_route_retired', [7, 1]), line)
+        self.assertNotIn('error', line)
         self.assertEqual(self.list_replacements(), [])
         with self.subTest(review='the frontier of a staged review on a retired and stale route'):
             import test_review_staged_frontier as frontier_fixtures
@@ -1066,7 +1076,7 @@ class RouteRenewalCompatibilityTests(RouteRenewalFixture):
                 fixture.command(planned['next'][0]['command'], planned['next'][0]['payload'])
             self.assertEqual(caught.exception.code, 'review_route_retired')
 
-    def test_plans_other_than_a_replacement_on_a_stale_route_are_those_of_0_91_2(self):
+    def test_plans_on_a_stale_route_keep_a_pending_call_and_name_no_command_on_the_stale_record(self):
         with self.subTest(head='a refused head with a pending call'):
             first, _ = self.build_refused()
             records = self.records()
@@ -1087,7 +1097,10 @@ class RouteRenewalCompatibilityTests(RouteRenewalFixture):
             route = fixture.read_records()['review_route'][assignment['route_id']]
             with patch.object(transport, 'runtime', return_value=dict(route['runtime'], implementation_sha256='0' * 64)):
                 self.assertNotEqual(transport.runtime(route), route['runtime'])
-                self.assertEqual(plan_next(fixture.read_records(), fixture.artifacts, assignment['id']), current)
+                # The correction needs a route record with the installed runtime (tests/test_review_route_plan.py).
+                stale = plan_next(fixture.read_records(), fixture.artifacts, assignment['id'])
+                self.assertEqual((stale['state'], stale['code'], stale['details']['renewal']),
+                                 ('handoff', 'review_route_runtime_stale', dict(admitted=True, route_id=None, lacks='record')))
         with self.subTest(head='a staged review with a refused answer'):
             import sys
             import test_review_staged_frontier as frontier_fixtures
@@ -1102,8 +1115,12 @@ class RouteRenewalCompatibilityTests(RouteRenewalFixture):
                 self.assertTrue(fixture.command('review-run', planned['next'][0]['payload'])['refusal'])
             records = fixture.case.read_records()
             current = plan_next(records, fixture.case.artifacts, controller['id'])
+            self.assertEqual((current['state'], current['command']), ('run', 'review-run'))
             make_codex_stale(self)
-            self.assertEqual(plan_next(records, fixture.case.artifacts, controller['id']), current)
+            # The next call of the staged review cannot run on the stale route record.
+            stale = plan_next(records, fixture.case.artifacts, controller['id'])
+            self.assertEqual((stale['state'], stale['code']), ('handoff', 'review_route_runtime_stale'))
+            self.assertIs(stale['details']['renewal']['admitted'], False)
 
     def test_recorded_replacement_on_a_route_that_became_stale_keeps_its_handoff(self):
         from research_harness.review_failure_class import count_position
@@ -1115,8 +1132,9 @@ class RouteRenewalCompatibilityTests(RouteRenewalFixture):
             if renewed:
                 self.renew()
             line = self.series(first['id'])[-1]
-            self.assertEqual((line['state'], line['command'], line['code'], line['details']['step']['id']),
-                             ('handoff', 'review-route', 'review_route_runtime_stale', 7), line)
+            self.assertEqual((line['state'], line['command'], line['code'], [step['id'] for step in line['details']['steps']]),
+                             ('handoff', 'review-context', 'review_route_runtime_stale', [8, 7, 1]), line)
+            self.assertEqual(line['details']['steps'][1]['command'], 'review-probe' if renewed else 'review-route')
             records = self.records()
             self.assertEqual(set(records['review_assignment']), before)
             self.assertEqual(count_position(records, self.case.artifacts, replacement)['replacements']['output_refused'], 1)
@@ -1183,7 +1201,7 @@ class RouteRenewalReadingRegressionTests(unittest.TestCase):
         case = build_refused_v7_turn(self)
         self.assertEqual(plan_next(case.store.snapshot()['records'], case.artifacts, 'turn-1')['state'], 'replace')
         make_codex_stale(self)
-        check_stale_procedure(self, case.store, 'turn-1', [7, 4], lambda: renew_codex_route(case))
+        check_stale_procedure(self, case.store, 'turn-1', [7, 4], lambda: renew_codex_route(case), renewed_steps=[4])
 
 
 def build_session_fixture(test):
@@ -1205,16 +1223,18 @@ def build_series_fixture(test):
 
 
 def check_series_stops_on_the_stale_route(test, store, head_id):
-    """review-series ends with the handoff of the stale route record of the head, before any record."""
+    """review-series ends with the stale-route procedure of the head, before any record and any command."""
     before = set(store.snapshot()['records']['review_assignment'])
     lines = []
     run_series(store, head_id, emit=lines.append)
     test.assertEqual(set(store.snapshot()['records']['review_assignment']), before)
     test.assertEqual(len(lines), 1, lines)
     test.assertEqual((lines[0]['state'], lines[0]['command'], lines[0]['code']),
-                     ('handoff', 'review-route', 'review_route_runtime_stale'))
+                     ('handoff', 'review-context', 'review_route_runtime_stale'))
+    test.assertNotIn('error', lines[0])
     test.assertEqual(lines[0]['details']['route_id'], 'route')
-    test.assertNotIn('renewal', lines[0]['details'])
+    test.assertEqual(lines[0]['details']['renewal'], dict(admitted=False, route_id=None, lacks='record'))
+    test.assertEqual([step['id'] for step in lines[0]['details']['steps']], [8, 7, 1])
 
 
 class RouteRenewalSessionV4SeriesV3Tests(unittest.TestCase):

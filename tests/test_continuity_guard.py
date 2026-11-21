@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from ci import capacity_guard, continuity_guard as guard
+from ci.evidence_tests import require_evidence_tests
 from research_harness import cli, review_protocol as protocol, review_route_capacity as capacity, stop_classes
 from research_harness import review_failure_class as failures, review_transport as transport
 from research_harness.evidence import digest
@@ -75,9 +76,12 @@ class ContinuityGuardTests(unittest.TestCase):
             if row['requirement'] == 'finality':
                 row['tests'] += ('test_review_refusal_replacement.RefusalReplacementTests.'
                                  'test_g6_validator_upgrade_authenticates_second_replacement_and_preserves_every_observation',)
-        outcomes = guard.run_evidence_tests(guard.list_stage2_evidence_tests(rows))
-        failed = {identifier: status for identifier, status in outcomes.items() if status != 'passed'}
-        self.assertEqual(guard.validate_stage2_evidence(rows, outcomes, supported), [], failed)
+        # The run that executes the evidence tests gives their results (ci/evidence_tests.py); here each one is
+        # checked without a run, and the rows are checked for their requirements and chains.
+        identifiers = guard.list_stage2_evidence_tests(rows)
+        self.assertEqual(require_evidence_tests(identifiers), {})
+        outcomes = {identifier: 'passed' for identifier in identifiers}
+        self.assertEqual(guard.validate_stage2_evidence(rows, outcomes, supported), [])
 
     def test_stage2_missing_skipped_and_failed_journeys_get_no_execution_credit(self):
         from research_harness.review_parts_roles import ADAPTERS
@@ -98,7 +102,7 @@ class ContinuityGuardTests(unittest.TestCase):
             'test_review_capacity_plan.CapacityPlanTests.test_a5_five_thousand_targets_refuse_before_any_call',
             'test_review_capacity_plan.StoredCapacityPlanTests.test_a5_check_five_thousand_targets_refuses_before_recording_or_calling',
         ]
-        self.assertEqual(set(guard.run_evidence_tests(identifiers).values()), {'passed'})
+        self.assertEqual(require_evidence_tests(identifiers), {})
 
     def test_stage2_registry_has_no_unreviewed_rows(self):
         from ci.series_code_reach import validate_registry_coverage
@@ -110,7 +114,7 @@ class ContinuityGuardTests(unittest.TestCase):
     def test_g6_executes_the_validator_upgrade_through_a_recorded_second_replacement(self):
         identifier = ('test_review_refusal_replacement.RefusalReplacementTests.'
                       'test_g6_validator_upgrade_authenticates_second_replacement_and_preserves_every_observation')
-        self.assertEqual(guard.run_evidence_tests([identifier]), {identifier: 'passed'})
+        self.assertEqual(require_evidence_tests([identifier]), {})
 
     def test_scientific_refused_reading_executes_the_problem_export_handoff(self):
         from test_openness_v6_chain import V6ChainTests
@@ -349,7 +353,7 @@ class ContinuityGuardTests(unittest.TestCase):
             'test_capacity_signals.ResponseLimitJourneyTests.test_math_review_moves_by_new_attestation_to_recorded_acceptance',
             'test_capacity_signals.ResponseLimitJourneyTests.test_verification_moves_by_probe_and_first_assignment_to_recorded_verdict',
         ]
-        self.assertEqual(set(capacity_guard.run_evidence_tests(identifiers).values()), {'passed'})
+        self.assertEqual(require_evidence_tests(identifiers), {})
 
     def test_response_limit_slate_and_result_rows_preserve_the_slot_to_recording(self):
         for role in ('slate', 'result'):
@@ -450,7 +454,7 @@ class ContinuityGuardTests(unittest.TestCase):
             'test_record_reading_handoff.ReadingHandoffTests.test_abstract_refusal_precedes_every_missing_reading_and_rechecks_from_frozen_output',
             'test_record_reading_handoff.FocusedReadingHandoffTests.test_adjudication_final_hands_off_a_stale_reading_then_records_the_same_output',
         ]
-        self.assertEqual(set(capacity_guard.run_evidence_tests(identifiers).values()), {'passed'})
+        self.assertEqual(require_evidence_tests(identifiers), {})
         case = self.prepare(reading_fixtures.ReadingHandoffTests)
         case.build_final(count=0, abstract=True)
         case.case.assign('bar', 'second', identifier='other-slot')
@@ -493,4 +497,4 @@ class ContinuityGuardTests(unittest.TestCase):
             'test_d2_outcomes.OutcomeTests.test_three_reconciled_interruptions_continue_the_reading_chain',
             'test_record_reading_handoff.ReadingHandoffTests.test_stored_reviews_and_refusal_certificates_keep_their_identities_through_the_handoff',
         ]
-        self.assertEqual(set(capacity_guard.run_evidence_tests(identifiers).values()), {'passed'})
+        self.assertEqual(require_evidence_tests(identifiers), {})

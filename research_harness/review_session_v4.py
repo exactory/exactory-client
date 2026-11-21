@@ -336,6 +336,32 @@ TURN_LIMITS_PROMPT = (
     'A final may instead record an argument with {stage:"material",title,part,text,more}: consecutive parts '
     'starting at one, fixed title, text within answer_bound, at most eight parts. Resume the pending argument, '
     'then cite its completed m<n> handle. Inventory metadata grants no evidence credit.')
+# The base prompt of the role states the response shape of the final answer; these turns answer in another form.
+SESSION_BASE_SHAPE_PROMPT = (
+    ' The response shape stated above belongs to the final answer of this review, not to this turn. '
+    'Answer this turn in the form that this turn states.')
+SESSION_PART_SHAPE_PROMPT = (
+    ' The response shape stated above belongs to the whole final answer. This turn returns only the part of it '
+    'that this turn owns.')
+# The accepted forms of an evidence entry of a study review (rule S1 of the study forms), for its final, page and
+# closing turns. A study review validates its evidence without a review binding (review_refusal.EVIDENCE_FORMS_NOTICE).
+STUDY_HANDLE_PROMPT = ' Cite each evidence entry of the answer by its handle, in the citation form stated above.'
+STUDY_WRITTEN_OUT_PROMPT = ' An evidence entry that you write out instead of citing a handle takes one of three forms.'
+STUDY_EVIDENCE_FORMS_PROMPT = (
+    ' The outermost members of the entry decide its form. An artifact descriptor: the entry itself is '
+    '{"path":"<path>","sha256":"<sha256>","size":0,"media_type":"<media type>"}, with exactly these four members '
+    'copied from one descriptor of the packet; a descriptor under a member name, such as '
+    '{"artifact":{"path":"<path>","sha256":"<sha256>","size":0,"media_type":"<media type>"}}, is refused. '
+    'A source link: {"kind":"source","link":{"version_id":"<version id>","source_id":"<source id>",'
+    '"artifact":{"path":"<path>","sha256":"<sha256>","size":0,"media_type":"<media type>"},'
+    '"locator":{"kind":"<as delivered>"}}}; the members version_id, source_id, artifact and locator written as the '
+    'outermost members of the entry are refused, and a source link is accepted only into a full text that this '
+    'chain delivered to you. A record: {"kind":"record","record_kind":"<record kind>","id":"<record id>",'
+    '"digest":"<digest>"}, with the three values copied from the place where the packet names that record. An entry '
+    'that is only a digest, only a path or free text is refused.')
+STUDY_FORMS_PROMPT = STUDY_HANDLE_PROMPT + STUDY_WRITTEN_OUT_PROMPT + STUDY_EVIDENCE_FORMS_PROMPT
+# Each frame reserves this envelope for the turn text, binding, delivery descriptors and bounded source rows, and
+# beside it the base prompt of the role as the turns render it (rule V3).
 FRAME_ENVELOPE_CHARACTERS = 20000
 
 
@@ -351,27 +377,68 @@ def _require_turn(condition, **details):
         raise ResearchError('invalid_review_session_turn', TURN_CONTRACT_MESSAGE, details or None)
 
 
-def build_turn_prompt(role, kind, bounds, *, common_version=None, repair_suffix=None):
-    """repair_suffix is the context-repair suffix of review_context_repair that every turn of a repair chain ends with."""
+def find_base_orchestration(value):
+    """The orchestration of the base prompt of a v4 turn: a problem review, or None for a study review (rule S1).
+
+    An assignment and the logical packet of its chain carry the same subject, so the admission, each builder of a
+    turn and the check of a recorded turn decide by this one rule."""
+    return 'problem_creation' if value.get('subject', {}).get('kind') == 'problem' else None
+
+
+def build_base_prompt(role, orchestration, *, common_version=None, repair_suffix=None):
+    """Return (descriptor, base) for the review template of the role at the common version of the chain (rule V1).
+
+    The descriptor names the canonical base as a parts turn of the protocol v3 names it: the arguments of
+    canonical_prompt, its template id and its hash. base is the canonical envelope whose text leaves out the source
+    rules v2, which the turn text of v4 replaces."""
     from . import review_protocol as protocol, review_context_repair as repair
+    arguments = dict(orchestration=orchestration, repair=repair_suffix is not None, excerpts=False,
+                     common_version=common_version or protocol.COMMON_VERSION)
+    if repair_suffix == repair.EXHAUSTION_PROMPT_V1:
+        arguments['repair_prompt'] = repair_suffix
+    canonical = protocol.canonical_prompt(role, **arguments)
+    descriptor = dict(parameters=arguments, template_id=canonical['template_id'],
+                      rendered_prompt_hash=canonical['rendered_prompt_hash'])
+    # str.index raises when the base no longer holds the source rules v2.
+    start = canonical['text'].index(bar_sources.PROMPT)
+    text = canonical['text'][:start] + canonical['text'][start + len(bar_sources.PROMPT):]
+    return descriptor, dict(canonical, text=text, template_hash=digest(text), rendered_prompt_hash=digest(text))
+
+
+def build_turn_prompt(role, kind, bounds, *, orchestration, paragraphs=None, common_version=None, repair_suffix=None):
+    """The base prompt of the role, then the turn text of v4, then the paragraphs that the logical packet selects
+    (rules V1 and V2). paragraphs holds problem_paragraphs and problem_objection_carry as
+    review_prompt_paragraphs.select_prompt_parameters gives them; a refusal turn adds its refusal paragraph.
+    repair_suffix is the context-repair suffix of review_context_repair that the base of a repair chain holds."""
+    from . import review_protocol as protocol, review_prompt_paragraphs as selection
+    descriptor, base = build_base_prompt(role, orchestration, common_version=common_version, repair_suffix=repair_suffix)
     prompts = dict(bar=dict(request=BAR_REQUEST_PROMPT, final=BAR_FINAL_PROMPT),
                    slate=dict(request=SLATE_REQUEST_PROMPT, final=SLATE_FINAL_PROMPT),
                    result=dict(request=RESULT_REQUEST_PROMPT, final=RESULT_FINAL_PROMPT))
     for name in prompts:
         prompts[name].update(protocol.SESSION_FINAL_PROMPTS[name])
-    text = protocol._select_common_prompt(common_version or protocol.COMMON_VERSION) + '\n\n' + prompts[role][kind] + TURN_LIMITS_PROMPT
+    text = base['text'] + '\n\n' + prompts[role][kind]
+    if kind in ('request', 'combine'):
+        text += SESSION_BASE_SHAPE_PROMPT
+    elif kind in ('page', 'closing'):
+        text += SESSION_PART_SHAPE_PROMPT
+    text += TURN_LIMITS_PROMPT
     if kind in ('page', 'closing'):
         text += protocol.SESSION_PAGE_REQUESTS_PROMPT
-    template = PROTOCOL + '/' + role + '/' + kind
-    parameters = dict(source_rules=PROTOCOL, session_stage=kind, capacity=copy.deepcopy(bounds))
-    if repair_suffix is not None:
-        # The parameters name the suffix as they do in a repair prompt of the base path.
-        text += repair_suffix
-        template += '/context-repair'
-        parameters['context_repair'] = True
-        if repair_suffix == repair.EXHAUSTION_PROMPT_V1:
-            parameters['context_repair_exhaustion'] = repair.EXHAUSTION_PROTOCOL
-    return protocol._build_prompt(template, text, parameters, common_version or protocol.COMMON_VERSION)
+    if orchestration is None and kind in ('final', 'page', 'closing'):
+        text += STUDY_FORMS_PROMPT
+    template = PROTOCOL + '/' + role + '/' + kind + ('/context-repair' if repair_suffix is not None else '')
+    parameters = dict(source_rules=PROTOCOL, session_stage=kind, base_prompt=descriptor)
+    # The parameters name the repair suffix as the base does.
+    parameters.update((key, base['parameters'][key]) for key in ('context_repair', 'context_repair_exhaustion')
+                      if key in base['parameters'])
+    prompt = protocol._build_prompt(template, text, parameters, descriptor['parameters']['common_version'])
+    if paragraphs:
+        prompt = selection.append_prompt_paragraphs(prompt, role, paragraphs.get(selection.CARRY_PARAMETER),
+                                                    paragraphs.get(selection.PARAMETER))
+    # The session bounds share the name of the capacity paragraph's parameter, so they join after the paragraphs.
+    prompt['parameters']['capacity'] = copy.deepcopy(bounds)
+    return prompt
 
 
 def _select_repair_suffix(logical):
@@ -383,14 +450,15 @@ def _select_repair_suffix(logical):
     return repair.EXHAUSTION_PROMPT_V1 if 'exhaustion' in binding else repair.PROMPT
 
 
-def matches_turn_prompt(assignment, packet=None):
-    from . import review_protocol as protocol, review_prompt_paragraphs as paragraphs, review_context_repair as repair
-    envelope = copy.deepcopy(assignment['prompt'])
-    bounds = envelope['parameters'].pop('capacity', None)
-    base = paragraphs.strip_prompt_paragraphs(envelope, assignment['role'])
-    if base is None:
-        return False
-    kind = base['parameters'].get('session_stage')
+def matches_turn_prompt(assignment, packet=None, logical=None):
+    """Rebuild the recorded prompt of a v4 turn from its parameters and compare it whole (rule V2). logical, the
+    logical packet of the chain, is given where a caller authenticates the turn: the paragraphs that the turn
+    recorded, beside a refusal paragraph, are then exactly those that the logical packet selects."""
+    from . import review_protocol as protocol, review_prompt_paragraphs as selection, review_context_repair as repair
+    from .errors import ResearchError
+    parameters = assignment['prompt'].get('parameters', {})
+    kind = parameters.get('session_stage')
+    bounds = parameters.get('capacity')
     if packet is not None:
         binding = read_session_binding(packet)
         if kind != find_session_form(packet) or bounds != binding.get('capacity'):
@@ -398,14 +466,30 @@ def matches_turn_prompt(assignment, packet=None):
     if kind not in ('request', 'final', 'page', 'closing', 'combine'):
         return False
     suffix = None
-    if base['parameters'].get('context_repair') is True:
-        suffix = (repair.EXHAUSTION_PROMPT_V1 if 'context_repair_exhaustion' in base['parameters'] else repair.PROMPT)
+    if parameters.get('context_repair') is True:
+        suffix = (repair.EXHAUSTION_PROMPT_V1 if 'context_repair_exhaustion' in parameters else repair.PROMPT)
     if (suffix is not None) != (assignment.get('reassessment_required') is True):
         return False
-    expected = build_turn_prompt(assignment['role'], kind, bounds, common_version=protocol.find_common_prompt_version(base),
-                                 repair_suffix=suffix)
-    expected['parameters'].pop('capacity')
-    return base == expected
+    common_version = protocol.find_common_prompt_version(assignment['prompt'])
+    if common_version is None:
+        return False
+    recorded = {key: parameters[key] for key in (selection.PARAMETER, selection.CARRY_PARAMETER) if key in parameters}
+    try:
+        expected = build_turn_prompt(assignment['role'], kind, bounds, orchestration=find_base_orchestration(assignment),
+            paragraphs=recorded, common_version=common_version, repair_suffix=suffix)
+    except ResearchError:
+        # An unregistered or reordered paragraph version.
+        return False
+    if expected != assignment['prompt']:
+        return False
+    if logical is None:
+        return True
+    refusals = set(selection.REFUSAL_PARAGRAPH_VERSIONS.values())
+    own = dict(recorded, **{selection.PARAMETER: [version for version in recorded.get(selection.PARAMETER, [])
+                                                  if version not in refusals]})
+    if not own[selection.PARAMETER]:
+        del own[selection.PARAMETER]
+    return own == selection.select_prompt_parameters(assignment['role'], logical)
 
 
 def _describe_logical_fields(packet):
@@ -424,6 +508,18 @@ def _list_frame_values(packet):
     return values
 
 
+def measure_base_prompt(role, logical):
+    """The characters of the base prompt of a new chain as its turns render it: the template of the role with its
+    repair suffix and the paragraphs that the logical packet selects (rule V3). It depends on the logical packet only.
+    A packet of the base path that holds a capacity notice, which a slate series check admits, counts that notice."""
+    from . import review_prompt_paragraphs as selection
+    _, base = build_base_prompt(role, find_base_orchestration(logical), repair_suffix=_select_repair_suffix(logical))
+    selected = selection.select_prompt_parameters(role, logical)
+    rendered = selection.append_prompt_paragraphs(base, role, selected.get(selection.CARRY_PARAMETER),
+        selected.get(selection.PARAMETER), selected.get(selection.CAPACITY_PARAMETER))
+    return len(rendered['text'])
+
+
 def check_v4_admission(records, artifacts, route, role, packet):
     """Plan a frozen session without publishing any artifacts or consulting later currency."""
     from . import review_field_classes as classes, review_composition as composition
@@ -438,12 +534,13 @@ def check_v4_admission(records, artifacts, route, role, packet):
                for index, row in enumerate(composition.list_targets(rule, packet), 1)]
     moved = {kind: set() for kind in ('request', 'final')}
     profile = capacity.read_output_profile(records, route)
+    reserve = FRAME_ENVELOPE_CHARACTERS + measure_base_prompt(role, packet)
     try:
         while True:
             frames = classes.describe_role_frame(route, role, logical, ('request', 'final'), unit_fields=moved)
-            # Reserve the prompt, binding, delivery descriptors and bounded source rows.
+            # Reserve the base prompt, turn text, binding, delivery descriptors and bounded source rows.
             for fields in frames.values():
-                fields[classes.FRAME_DESCRIPTOR_FIELD] += FRAME_ENVELOPE_CHARACTERS
+                fields[classes.FRAME_DESCRIPTOR_FIELD] += reserve
             declarations = {}
             for kind in frames:
                 for row in classes.list_frame_units(route, role, logical, frames[kind]):
@@ -483,6 +580,48 @@ def check_v4_admission(records, artifacts, route, role, packet):
     forecast = describe_session_forecast(overlay, route, inventory, plan, profile)
     return dict(state='record', protocol=PROTOCOL, capacity_plan=plan, capacity_members=members,
                 inventory=built, forecast=forecast, bodies=overlay.bodies)
+
+
+SESSION_BELOW_FLOOR_REASON = 'session_below_floor'
+
+
+def list_session_serving_routes(records, artifacts, value, logical):
+    """The other verified routes of the record on which the admission of the rules v4 plans this new chain."""
+    from .errors import ResearchError
+    from .review_protocol import route_state, retired_routes, _require_route_runtime
+    result = []
+    for route in records.get('review_route', {}).values():
+        if route['id'] == value['route_id'] or route['id'] in retired_routes(records):
+            continue
+        if route_state(records, artifacts, route['id'])['context_status'] != 'verified_for_route':
+            continue
+        try:
+            _require_route_runtime(route)
+        except ResearchError:
+            continue
+        if check_v4_admission(records, artifacts, route, value['role'], logical)['state'] == 'record':
+            result.append(dict(route_id=route['id'], delivery='session'))
+    return result
+
+
+def require_session_capacity(records, artifacts, value, logical, admission):
+    """Rule V5: a new chain that the admission of the rules v4 stops for capacity, and that would start as a session
+    of an older rule set, which has no capacity plan, ends before its first call, with the stop that a first request
+    which does not fit gets and the routes that serve the chain. A stop for another reason takes the next rule set."""
+    if admission['state'] != 'stop' or admission['reason'] != 'below_floor':
+        return
+    from .errors import ResearchError
+    from .review_route_capacity import CAPACITY_STOP_MESSAGE, CAPACITY_OWNER_DECISION, UNSERVED_REVIEW_MESSAGE
+    from .review_plan_steps import describe_capacity_steps
+    serving = list_session_serving_routes(records, artifacts, value, logical)
+    # A new chain of v4 continues no session of its own bar, so its steps start it on a serving route.
+    details = dict(reason=SESSION_BELOW_FLOOR_REASON, admission={key: copy.deepcopy(admission[key])
+                   for key in ('protocol', 'reason', 'code', 'details') if key in admission},
+                   serving_routes=serving, owner_decides=CAPACITY_OWNER_DECISION,
+                   then=describe_capacity_steps(records, artifacts, value, serving))
+    if not serving:
+        details['coverage'] = UNSERVED_REVIEW_MESSAGE
+    raise ResearchError('review_route_capacity_below_floor', CAPACITY_STOP_MESSAGE, details)
 
 
 def read_bound_session(artifacts, assignment):
@@ -943,7 +1082,9 @@ def prepare_session_assignment(records, artifacts, value, route, revision, *, lo
     else:
         packet = build_session_packet(artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
                                       inventory, state, plan, limits, kind, notice=notice)
+    from .review_prompt_paragraphs import select_prompt_parameters
     prompt = build_turn_prompt(value['role'], find_session_form(packet), read_session_binding(packet)['capacity'],
+        orchestration=find_base_orchestration(value), paragraphs=select_prompt_parameters(value['role'], logical),
         common_version=protocol.find_common_prompt_version(parent['prompt']) if parent else None,
         repair_suffix=_select_repair_suffix(logical))
     for entry in packet['evidence']:
@@ -1066,7 +1207,7 @@ def _authenticate_session_binding(records, artifacts, assignment, packet):
                                      frozen['session_final']['capacity']['answer_bound'] // 2)
     expected = build_session_packet(artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
                                     inventory, state, plan, limits, kind, notice=packet.get('output_refusal'))
-    if expected != packet or not matches_turn_prompt(assignment, packet):
+    if expected != packet or not matches_turn_prompt(assignment, packet, logical):
         raise ResearchError('review_invocation_unverified', TURN_BINDING_MESSAGE)
     return True
 
@@ -1149,13 +1290,14 @@ def prepare_refusal_assignment(records, artifacts, value, revision, prior, froze
         else:
             packet = build_session_packet(artifacts, route, logical, chain['first_assignment_id'], chain['turn'],
                                        inventory, state, plan, limits, kind, notice=notice)
+        chosen = paragraphs.select_prompt_parameters(prior['role'], logical)
+        # The refusal paragraph follows the selected paragraphs in their registered order.
+        chosen[paragraphs.PARAMETER] = (chosen.get(paragraphs.PARAMETER, [])
+                                        + [paragraphs.REFUSAL_PARAGRAPH_VERSIONS[notice['form']]])
         prompt = build_turn_prompt(prior['role'], find_session_form(packet), read_session_binding(packet)['capacity'],
+                                    orchestration=find_base_orchestration(prior), paragraphs=chosen,
                                     common_version=protocol.find_common_prompt_version(prior['prompt']),
                                     repair_suffix=_select_repair_suffix(logical))
-        bounds = prompt['parameters'].pop('capacity')
-        prompt = paragraphs.append_prompt_paragraphs(prompt, prior['role'], None,
-                                                     [paragraphs.REFUSAL_PARAGRAPH_VERSIONS[notice['form']]])
-        prompt['parameters']['capacity'] = bounds
         return packet, prompt
     selected = notices.select_refusal_notice(records, artifacts, attempt_ids, diagnoses=diagnoses, route=route,
         role=prior['role'], prompt=None, packet=None, prepare_turn=prepare_turn, task_characters=None,
@@ -1643,7 +1785,8 @@ def authenticate_final_binding(records, artifacts, assignment, packet):
         from .review_refusal_notice import attach_refusal_notice
         expected = attach_refusal_notice(expected, packet['output_refusal'])
         _require_turn(expected == packet and assignment['session_chain'] == prior['session_chain']
-                      and matches_turn_prompt(assignment, packet))
+                      and matches_turn_prompt(assignment, packet,
+                                              protocol._read_json(artifacts, assignment['session_chain']['logical'])))
         return True
     value = {key: copy.deepcopy(assignment[key]) for key in
              ('id', 'route_id', 'dossier_id', 'role', 'reviewer_id', 'author_id', 'context')}

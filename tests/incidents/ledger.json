@@ -2774,8 +2774,8 @@
       "test_kind": "real_shape",
       "tests": [
         "test_review_runtime_retry.RuntimeRetryTests.test_observed_stale_runtime_hands_off_with_stale_code",
-        "test_review_continuation.ContinuationTests.test_stale_runtime_failure_hands_off_recording_a_new_route",
-        "test_review_series.SeriesTests.test_stale_runtime_refusal_hands_off_recording_a_new_route"
+        "test_review_continuation.ContinuationTests.test_stale_runtime_code_of_the_failure_planner_becomes_the_stale_route_procedure",
+        "test_review_series.SeriesTests.test_stale_runtime_refusal_ends_with_the_stale_route_procedure"
       ]
     },
     {
@@ -6630,7 +6630,7 @@
         "test_session_forecast.SessionForecastTests.test_waiting_series_line_reports_pending_delivery_without_sending_a_request",
         "test_session_forecast.SessionForecastTests.test_advisory_selection_keeps_a_stored_metadata_correction",
         "test_review_continuation_regressions.ContinuationRegressionTests.test_series_ends_with_the_exhausted_fixed_slot_stop",
-        "test_review_series.SeriesTests.test_stale_runtime_refusal_hands_off_recording_a_new_route"
+        "test_review_series.SeriesTests.test_stale_runtime_refusal_ends_with_the_stale_route_procedure"
       ],
       "fixed_in": "0.89.2",
       "test_kind": "real_shape"
@@ -7600,7 +7600,7 @@
       "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
       "class": "D1 session entry under the rules v4 and the verification criterion of the release",
       "summary": "A context repair of a bar, slate or result slot did not start under the session rules v4, and the verification criterion of task T2 could not read a v4 chain: its rules, its stored plan, the positions of its pages and splits, and its two routes.",
-      "expected": "A new slot and a context repair start under the first admitted session rules. The repair delivers its scientific history as units, and a clean exhaustion repair is credited the bodies that its predecessor delivered. Running v2 and v3 sessions keep their bytes. The criterion reads stub-driven v4 bar chains at max to pass or fail by their calls, positions, split successors, recorded bars and declared routes.",
+      "expected": "A new slot and a context repair start under the first admitted session rules. The repair delivers its scientific history as units, and a clean exhaustion repair is credited the bodies that its predecessor delivered. Running v2 and v3 sessions keep their bytes. The criterion reads stub-driven v4 bar chains at max to pass or fail by their calls, positions, split successors, recorded bars and declared routes. When the rules v4 stop a new slot for capacity and it would start as a session of an older rule set, it ends before its first call with the routes that serve it; a context repair takes the next rule set.",
       "fixed_in": "0.92.0",
       "test_kind": "real_shape",
       "tests": [
@@ -7609,7 +7609,7 @@
         "test_review_session_v4_entry.SessionEntryTests.test_clean_exhaustion_credits_delivered_body_and_citation_audit_passes",
         "test_review_session_v4_entry.SessionEntryTests.test_exhaustion_with_contamination_reads_bodies_again",
         "test_review_session_v4_entry.SessionEntryTests.test_exhaustion_with_retirement_reads_bodies_again",
-        "test_review_session_v4_entry.SessionEntryTests.test_slot_and_repair_that_v4_admission_refuses_take_the_base_path",
+        "test_review_session_v4_entry.SessionEntryTests.test_new_slot_below_the_v4_floor_stops_and_a_context_repair_takes_the_next_rule_set",
         "test_review_session_v4_entry.LegacySessionBytesTests.test_running_v2_and_v3_continuations_keep_packet_prompt_request_and_check_bytes",
         "test_verification_criterion.StoredSessionVerificationTests.test_two_real_v4_bars_in_24_calls_report_actual_plan_and_routes",
         "test_verification_criterion.StoredSessionVerificationTests.test_real_page_split_and_nested_split_keep_new_positions",
@@ -8251,6 +8251,147 @@
       "tests": [
         "test_packet_call_rows.CallRowTests.test_a_name_is_resolved_by_the_import_of_its_own_function_or_else_of_the_module",
         "test_packet_call_rows.CallRowTests.test_a_name_that_one_function_imports_twice_is_resolved_by_the_import_before_the_call"
+      ]
+    },
+    {
+      "id": "guard-test-ran-149-evidence-tests-again-inside-itself",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "repeated work of the suite",
+      "summary": "test_capacity_guard.CapacityGuardTests.test_matrix_evidence_executes_and_no_evidence_can_be_silently_skipped ran the 149 evidence tests of the capacity matrix (54 modules) again inside itself, though each of them also ran in its own shard. It took 1,596 s to 2,050 s on each Python version of the CI of 0.91.14. Five tests of the continuity guards and the v6 material paths did the same with smaller lists.",
+      "expected": "A guard test checks without a run that each evidence test exists, loads as one test and carries no skip mark and no expected-failure mark, and names it in the result of its shard. ci/unittest_shards.py verify fails a Python version when a named evidence test is absent from the executed tests of the run, was skipped, or did not pass.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_ci_shards.CIShardTests.test_each_evidence_test_that_a_shard_names_runs_and_passes_in_the_same_run",
+        "test_ci_shards.CIShardTests.test_cli_verify_reads_the_evidence_that_a_guard_test_required_from_the_run",
+        "test_ci_shards.CIShardTests.test_an_evidence_test_is_checked_without_a_run"
+      ]
+    },
+    {
+      "id": "discovery-collected-an-imported-test-class-twice",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "repeated work of the suite",
+      "summary": "tests/test_research_review_packets.py imported ResearchPublicationTests by name and tests/test_research_scoped_review_protocol.py imported ScopedDecisionTests by name, so the discovery of those modules collected the 28 tests of the two classes again under the same ids, and every run executed them twice.",
+      "expected": "A test module imports the module of a test class that it reuses, not the class. ci/unittest_shards.py verify reports the count of executed tests and of distinct tests of each Python version and fails when they differ.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_ci_shards.CIShardTests.test_partition_executes_every_discovered_entry_including_duplicate_ids"
+      ]
+    },
+    {
+      "id": "record-12-cut-built-four-times-for-each-python-version",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "repeated work of the suite",
+      "summary": "The cut of the verification of record 12 (57 review turns, 23 to 36 minutes for each build in CI) was built in each of the three shards that held a test of Record12ShapeTests, and once more in test_openness_reading_v7_refusal, so each Python version built it four times. Two class fixtures (ProblemResultHistoryTests, ManagedStreamingTests) were built in each of seven or eight shards.",
+      "expected": "A process builds the cut once and its users load writable copies, and a check after the users fails when the build changed. ci/unittest_shards.py keeps the modules that share a costly fixture in one shard (SHARD_GROUPS), so a run builds each such fixture once for each Python version.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_ci_shards.CIShardTests.test_the_tests_of_a_shard_group_run_in_one_shard_and_the_others_keep_their_rank",
+        "test_openness_reading_v7_refusal.Record12ShapeTests.test_stopped_head_is_handed_to_an_export_whose_chain_carries_it"
+      ]
+    },
+    {
+      "id": "must-pass-run-of-a-core-change-repeated-the-full-suite",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "must-pass set of a release",
+      "summary": "For a change of a core harness module the must-pass set held most of the suite (456 of 554 test modules and 97% of the test time for the diff of 0.91.11), so its local run took all eight test processes for 1.5 to 1.8 hours and did the work of the full suite of the CI a second time.",
+      "expected": "ci/must_pass.py run starts the whole set when it holds at most half of the test modules, and else its near part (the fixed modules, the slow pins, the changed test modules and their importers in tests/), prints one line with the count of the far part, whose check is the full suite of the CI, and names the far part in its report as not run. list --near prints what run starts.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_must_pass.MustPassRunTests.test_a_set_of_at_most_half_of_the_test_modules_runs_whole",
+        "test_must_pass.MustPassRunTests.test_a_set_of_more_than_half_of_the_test_modules_runs_its_near_part_and_names_its_far_part"
+      ]
+    },
+    {
+      "id": "record-12-test-answered-a-version-2-final-with-a-version-1-gap",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "test stub outside the answer contract",
+      "summary": "After the named gaps (finding version 2), the stub of Record12ShapeTests.test_v7_chain_reaches_a_verified_finding_with_the_carried_outputs still answered the final with a reviewer_gap ground of kind and text only. The check refused it three times with openness_finding_invalid, rule gap_fields, and review-series ended with review_slot_exhausted. The class takes about 25 minutes, and the lanes before left it out of their runs.",
+      "expected": "The stub answers a final of version 2 with an own_argument ground, as the sibling helpers do, and the chain records a verified finding.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_carried_integration.Record12ShapeTests.test_v7_chain_reaches_a_verified_finding_with_the_carried_outputs"
+      ]
+    },
+    {
+      "id": "session-v4-prompt-without-the-instructions-of-its-role",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "prompt of a turn under the session rules v4",
+      "summary": "A turn prompt of a session under the rules v4 held the common text, one sentence for the role and the turn limits. It held no part of the review template of its role and no paragraph that its packet selects, so a slate session read no slate-places paragraph although its frame delivered place_review, and a final read no response shape. The frame reserved a fixed 20,000 characters for the prompt.",
+      "expected": "A turn prompt starts with the base prompt of its role, followed by the turn text of v4 and the paragraphs that the logical packet selects; a recorded turn verifies only when its paragraphs equal that selection; each frame reserves the base as the turns render it.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_prompt.SessionRolePromptTests.test_v1_v2_slate_turn_holds_places_paragraph_and_verifies_only_with_the_selected_paragraphs",
+        "test_review_session_v4_prompt.SessionRolePromptTests.test_v3_largest_base_keeps_request_and_final_within_their_bounds_at_effort_max",
+        "test_review_session_v4_prompt.SessionRolePromptTests.test_v3_admission_of_a_packet_with_a_capacity_notice_counts_the_notice_in_the_base",
+        "test_review_session_v4_prompt.RolePromptRenderTests.test_every_turn_starts_with_its_role_base_without_the_texts_of_other_rule_sets"
+      ]
+    },
+    {
+      "id": "new-chain-below-the-v4-floor-started-under-the-rules-v3",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "rule-set fallback of a new chain",
+      "summary": "On a copy of a problem record, a new bar on a route of 29,000 input tokens met the v4 admission stop below_floor and was assigned under the session rules v3, whose receipt forecasts no further turn; next then gave a reviewer call.",
+      "expected": "A new chain that the v4 admission stops for capacity, and that would start as a session of an older rule set, ends before its first call with review_route_capacity_below_floor, reason session_below_floor, and the routes on which v4 admits it. A context repair, a new chain that starts as a series of the parts protocol v3, and a stop for another reason take the next rule set.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_prompt.SessionRolePromptTests.test_v5_new_bar_below_the_v4_floor_stops_before_its_call_and_names_a_serving_route",
+        "test_review_session_v4_prompt.SessionRolePromptTests.test_v5_new_slate_below_the_v4_floor_starts_on_the_serving_route_without_repairing_its_bar",
+        "test_review_session_v4_prompt.SessionRolePromptTests.test_v5_admission_stops_for_another_reason_take_the_next_rule_set",
+        "test_review_session_v4_prompt.StudySeriesBelowFloorTests.test_v5_new_study_result_below_the_v4_floor_starts_a_series_of_the_parts_protocol_v3",
+        "test_review_session_v4_entry.SessionEntryTests.test_new_slot_below_the_v4_floor_stops_and_a_context_repair_takes_the_next_rule_set",
+        "test_review_session_v4_entry.SessionEntryTests.test_repair_of_a_v3_chain_that_v4_stops_for_capacity_is_recorded_under_the_rules_v3"
+      ]
+    },
+    {
+      "id": "recorded-v4-problem-review-read-as-a-refresh",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "reader of a turn packet of a v4 session",
+      "summary": "review-series recorded a new problem bar under the rules v4 with value-review and then ended with exit status 3 and the handoff review_resampling_forbidden. The refresh check read the turn packet of the head, which carries the problem areas only inside the logical packet of the chain, so every recorded area read as missing and the planner asked for a continuation that the assignment refuses; for a slate the same read raised KeyError.",
+      "expected": "The refresh check of a v4 problem review reads the logical packet of its chain; after the recorded review the plan is done.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_prompt.SessionRolePromptTests.test_recorded_v4_bar_ends_its_series_when_an_area_preceded_it"
+      ]
+    },
+    {
+      "id": "study-v4-final-without-the-accepted-forms",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "prompt of a study review under the session rules v4",
+      "summary": "The final, page and closing prompts of a study review under the rules v4, and the final of a study series of the parts protocol v3, held none of the accepted forms of an evidence entry; a final with the entry kinds of the incident of 20261115234509 was refused under evidence.shape.",
+      "expected": "These prompts state that an entry is cited by its handle and give the three accepted forms of an entry that is written out; a refused final is replaced on its route and recorded after an answer by handle; a parts v2 prompt keeps its bytes.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_prompt.StudyBarFormsTests.test_s2_refused_final_with_written_out_entries_is_replaced_and_recorded_after_a_handle",
+        "test_review_session_v4_prompt.RolePromptRenderTests.test_s1_study_final_page_and_closing_prompts_hold_the_forms_and_problem_prompts_do_not",
+        "test_review_session_v4_prompt.RolePromptRenderTests.test_s3_study_series_final_holds_the_forms_and_a_v2_series_final_keeps_its_bytes"
+      ]
+    },
+    {
+      "id": "planned-step-names-a-route-record-that-refuses-the-command",
+      "record": "20261115225347-handoff-export-names-a-stale-route",
+      "class": "plan that names a route record that refuses its command",
+      "summary": "The handoff export of a stopped problem chain fixed route_id of the first assignment of the new chain to the route of the stopped chain. When that route record pinned another reviewer runtime than the installed one, review-assignment refused the assignment, so the export and the assignment were spent on a route that could not run. Other plans named a stale or retired route record in the same way: a next turn, a recorded turn, a retry, the probe after a missing reviewer program, the output correction and the answers of an owner's decision that start a new chain.",
+      "expected": "Every plan names route records that take their commands. A head on a stale route record gets the steps of the stale-route procedure in the order that works: the retirement, the probe after it, the context repair. A step that starts new work names a verified route record of the same identity that pins the installed runtime, or names what the store lacks for it, and the plan states the admission of a new chain for the record that its step names.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_route_plan.RoutePlanRegressionTests.test_next_turn_on_a_stale_route_plans_the_procedure_before_any_command",
+        "test_review_route_plan.RoutePlanRegressionTests.test_procedure_names_the_record_with_the_installed_runtime_and_reaches_a_runnable_repair",
+        "test_review_route_plan.RoutePlanRegressionTests.test_call_that_failed_because_the_runtime_changed_plans_the_procedure_until_the_repair",
+        "test_review_route_plan.RoutePlanRegressionTests.test_handoff_after_a_missing_reviewer_program_on_a_stale_route_plans_the_procedure",
+        "test_review_route_plan.CorrectionRouteTests.test_correction_on_a_stale_route_names_what_the_store_lacks_and_then_the_renewed_record",
+        "test_review_route_plan.SuccessorRouteTests.test_export_of_a_stopped_chain_names_a_route_record_that_takes_its_assignment",
+        "test_review_route_plan.SuccessorRouteTests.test_verified_record_that_does_not_admit_the_new_chain_gives_the_stop_of_its_admission",
+        "test_review_route_plan.MathSuccessorRouteTests.test_math_successor_answer_on_a_stale_route_gives_the_route_step_and_then_the_successor_step"
       ]
     }
   ]

@@ -217,6 +217,69 @@ def select_route_steps(records, artifacts, assignment):
     return [8, 7, 1]
 
 
+def describe_route_probe_step(records, artifacts, assignment, route_id):
+    """The step that probes this route record."""
+    step = describe_step(records, artifacts, dict(assignment, route_id=route_id), 7)
+    step.update(command='review-probe', payload=dict(route_id=route_id), chooses=['id'])
+    step.pop('then', None)
+    return step
+
+
+def describe_renewal_step(records, artifacts, assignment, renewal):
+    """The step that gives the store what a renewal lacks: a route record with the installed runtime and its probe,
+    the probe of the route record that the renewal names, or its capacity probe. review-series on the head follows
+    it."""
+    series = dict(command='review-series', assignment_id=assignment['id'])
+    if renewal['lacks'] == 'record':
+        step = describe_step(records, artifacts, assignment, 7)
+        step['then'].append(series)
+        return step
+    candidate = dict(assignment, route_id=renewal['route_id'])
+    if renewal['lacks'] == 'capacity':
+        step = describe_step(records, artifacts, candidate, 16)
+        step['payload']['capacity'] = dict(input_tokens=renewal['capacity']['input_tokens'])
+    else:
+        step = describe_step(records, artifacts, candidate, 7)
+        step.update(command='review-probe', payload=dict(route_id=renewal['route_id']), chooses=['id'])
+    step['then'] = [series]
+    return step
+
+
+def describe_route_steps(records, artifacts, assignment, numbers, details):
+    """The steps of the stale-route procedure for these step numbers, in the order to take them, with
+    details.renewal. The step that gives the slot a route record with the installed runtime is step 7 when the
+    store holds no such record of the same identity, the probe of that record when it lacks one, and no step when
+    the record is verified. A repair needs the probe after its cause events, so the probe follows the retirement."""
+    from .review_route_plan import select_current_route
+    route = records['review_route'][assignment['route_id']]
+    after_revision = 0
+    if 1 in numbers:
+        lineage = protocol.context_repair._exposure_lineage(records, assignment)
+        events = protocol.context_repair.cause_events(records, {item['id'] for item in lineage})
+        after_revision = max((event['recorded_revision'] for event in events), default=0)
+    found = select_current_route(records, artifacts, route, after_revision=after_revision)
+    if 8 in numbers and found['route_id'] is not None:
+        # The retirement of step 8 comes after every probe that the store holds.
+        found = dict(found, lacks='probe')
+    details['renewal'] = dict(details.get('renewal') or {}, admitted=False, **found)
+    steps = []
+    for number in numbers:
+        if number != 7:
+            steps.append(describe_step(records, artifacts, assignment, number))
+        elif found['route_id'] is None:
+            steps.append(describe_step(records, artifacts, assignment, 7))
+        elif found['lacks'] == 'probe':
+            steps.append(describe_route_probe_step(records, artifacts, assignment, found['route_id']))
+    return steps
+
+
+def awaits_verification(records, artifacts, assignment):
+    """Whether this head holds an observed answer whose context is not verified now."""
+    state = protocol.assignment_state(records, artifacts, assignment['id'])
+    return state.get('output') is not None and any(
+        item['code'] == 'review_context_unverified' for item in state['obligations'])
+
+
 def describe_role_handoff(records, artifacts, assignment, code, details=None):
     """Give each exhausted role its executable preserved-slot handoff."""
     details = copy.deepcopy(details or {})
@@ -366,28 +429,41 @@ def complete_plan(records, artifacts, assignment, plan):
         # An existing cause event already meets retirement's prerequisite.
         steps = [number for number in steps if number != 8]
         number = steps[-1] if steps[-1] in (4, 5, 6) else 1
-        details['step'] = describe_step(records, artifacts, assignment, number)
+        from .review_route_plan import read_route_standing
+        if code == 'review_route_retired' and read_route_standing(records, artifacts, assignment['route_id'])['stale']:
+            # The retired route record is stale: the slot continues on a record of the same identity with the
+            # installed runtime, verified after the retirement.
+            details['steps'] = describe_route_steps(records, artifacts, assignment, [7, number], details)
+            details['step'] = details['steps'][0]
+            if len(details['steps']) == 1:
+                details.pop('steps')
+        else:
+            details['step'] = describe_step(records, artifacts, assignment, number)
         plan.update(state='handoff', command=details['step']['command'])
     elif code == 'review_route_runtime_stale' and details.get('renewal', {}).get('admitted') is False:
-        # A refused head outside the renewal: the steps of the stale-route procedure for its role.
+        # A head whose next step cannot move to another route record: the steps of the stale-route procedure for
+        # its role, in the order to take them.
+        from .review_route_plan import STALE_ROUTE_ANSWER_MSG, STALE_ROUTE_PLAN_MSG
         numbers = select_route_steps(records, artifacts, assignment)
         if numbers in ([4], [5]):
             numbers = [7] + numbers
-        details['steps'] = [describe_step(records, artifacts, assignment, number) for number in numbers]
+        if 8 in numbers and awaits_verification(records, artifacts, assignment):
+            # The retirement can end the unverified state of an observed answer, so the plan after it names what
+            # follows.
+            details['steps'] = [describe_step(records, artifacts, assignment, 8),
+                                dict(command='review-series', assignment_id=assignment['id'])]
+            details.setdefault('message', STALE_ROUTE_ANSWER_MSG)
+        else:
+            details['steps'] = describe_route_steps(records, artifacts, assignment, numbers, details)
+            details.setdefault('message', STALE_ROUTE_PLAN_MSG)
         details['step'] = details['steps'][0]
         plan.update(state='handoff', command=details['step']['command'])
-    elif code == 'review_route_runtime_stale' and details.get('renewal', {}).get('lacks') in ('probe', 'capacity'):
-        # The renewed route record lacks its probe or its capacity evidence; review-series then sends the replacement.
-        renewal = details['renewal']
-        candidate = dict(assignment, route_id=renewal['route_id'])
-        if renewal['lacks'] == 'capacity':
-            details['step'] = describe_step(records, artifacts, candidate, 16)
-            details['step']['payload']['capacity'] = dict(input_tokens=renewal['capacity']['input_tokens'])
-        else:
-            details['step'] = describe_step(records, artifacts, candidate, 7)
-            details['step'].update(command='review-probe', payload=dict(route_id=renewal['route_id']), chooses=['id'])
-        details['step']['then'] = [dict(command='review-series', assignment_id=assignment['id'])]
-        plan.update(state='handoff', command='review-probe')
+    elif (code == 'review_route_runtime_stale'
+          and details.get('renewal', {}).get('lacks') in ('record', 'probe', 'capacity')):
+        # The store lacks the route record of a renewal, its probe or its capacity evidence; review-series then
+        # names the work that runs on that record.
+        details['step'] = describe_renewal_step(records, artifacts, assignment, details['renewal'])
+        plan.update(state='handoff', command=details['step']['command'])
     elif code in ('review_runtime_missing', 'review_route_runtime_stale') or (
             code == 'review_context_unverified' and plan['state'] == 'handoff'):
         details['step'] = describe_step(records, artifacts, assignment, 7)
@@ -395,11 +471,15 @@ def complete_plan(records, artifacts, assignment, plan):
             details['step']['prerequisites'].append(dict(not_before=plan['not_before']))
         plan.update(state='handoff', command='review-probe' if code != 'review_route_runtime_stale' else 'review-route')
         if plan['command'] == 'review-probe':
-            details['step'].update(command='review-probe', payload=dict(route_id=assignment['route_id']),
-                                   chooses=['id'])
-            details['step'].pop('then', None)
-        elif details.get('renewal', {}).get('lacks') == 'record':
-            details['step']['then'].append(dict(command='review-series', assignment_id=assignment['id']))
+            # The probe that ends an unverified context is the probe of the route record that causes it: the record
+            # of an accepted output correction when that one is not verified, otherwise the route of the assignment.
+            route_id = assignment['route_id']
+            if code == 'review_context_unverified':
+                from .review_route_plan import find_unverified_route
+                route_id = find_unverified_route(records, artifacts, assignment)
+            prerequisites = details['step']['prerequisites']
+            details['step'] = describe_route_probe_step(records, artifacts, assignment, route_id)
+            details['step']['prerequisites'] = prerequisites
     elif code == 'review_route_capacity_below_floor':
         details['step'] = describe_step(records, artifacts, assignment, 7)
         plan.update(state='handoff', command='review-route')
@@ -438,15 +518,14 @@ def complete_plan(records, artifacts, assignment, plan):
                 from .openness_reading import find_protocol, PROTOCOL_V5, PROTOCOL_V6
                 packet = protocol._read_json(artifacts, assignment['packet'])
                 if find_protocol(packet) in (PROTOCOL_V5, PROTOCOL_V6):
-                    from .openness_successor import describe_successor_handoff
+                    from .openness_successor import OUTPUT_CAP_EXPORT_MESSAGE, describe_successor_handoff
                     successor = describe_successor_handoff(records, artifacts, assignment, code)
                     if successor is not None:
                         details['successor'] = successor['details']['successor']
                         step = successor['details'].get('step')
                         if step is not None:
                             details['row'] = 4
-                            answers.append(dict(
-                                answer='Export a new packet and start a new chain on this route', steps=[step]))
+                            answers.append(dict(answer=OUTPUT_CAP_EXPORT_MESSAGE, steps=[step]))
             details['decision'] = dict(owner_decides=question, then=answers)
             if code == 'review_response_too_large':
                 from .review_route_capacity import find_serving_routes
@@ -477,7 +556,7 @@ def complete_plan(records, artifacts, assignment, plan):
         payload = dict(assignment_id=assignment['id'])
         chooses = ['command inputs']
         if command == 'review-output-correction':
-            payload['route_id'] = assignment['route_id']
+            payload['route_id'] = details.get('correction_route_id', assignment['route_id'])
             chooses = ['id']
         elif command == 'search':
             payload = dict(profile='research', purpose='direct')

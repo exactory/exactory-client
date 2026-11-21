@@ -10,7 +10,8 @@ import unittest
 
 from research_harness.errors import ResearchError
 from rounds_fixtures import RoundsCase
-from test_research_publication import ResearchPublicationTests
+# The module, not its test class: discovery collects each test class that a test module holds by name.
+import test_research_publication as publication_fixtures
 
 PLUGIN = Path(__file__).resolve().parents[1]
 
@@ -25,7 +26,7 @@ class ScrubTests(unittest.TestCase):
                                         "manifest": {"path": "p", "revision_label": "kept-because-it-is-not-a-suffix"}})
 
 
-class PacketTests(ResearchPublicationTests):
+class PacketTests(publication_fixtures.ResearchPublicationTests):
     def test_manuscript_delivery_is_a_neutral_packet_with_the_claim_evidence_closure(self):
         api = self.publication()
         bundle = self.mutate(api.prepare_publication, self.bundle_payload())["result"]
