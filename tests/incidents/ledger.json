@@ -8252,6 +8252,70 @@
         "test_packet_call_rows.CallRowTests.test_a_name_is_resolved_by_the_import_of_its_own_function_or_else_of_the_module",
         "test_packet_call_rows.CallRowTests.test_a_name_that_one_function_imports_twice_is_resolved_by_the_import_before_the_call"
       ]
+    },
+    {
+      "id": "guard-test-ran-149-evidence-tests-again-inside-itself",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "repeated work of the suite",
+      "summary": "test_capacity_guard.CapacityGuardTests.test_matrix_evidence_executes_and_no_evidence_can_be_silently_skipped ran the 149 evidence tests of the capacity matrix (54 modules) again inside itself, though each of them also ran in its own shard. It took 1,596 s to 2,050 s on each Python version of the CI of 0.91.14. Five tests of the continuity guards and the v6 material paths did the same with smaller lists.",
+      "expected": "A guard test checks without a run that each evidence test exists, loads as one test and carries no skip mark and no expected-failure mark, and names it in the result of its shard. ci/unittest_shards.py verify fails a Python version when a named evidence test is absent from the executed tests of the run, was skipped, or did not pass.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_ci_shards.CIShardTests.test_each_evidence_test_that_a_shard_names_runs_and_passes_in_the_same_run",
+        "test_ci_shards.CIShardTests.test_cli_verify_reads_the_evidence_that_a_guard_test_required_from_the_run",
+        "test_ci_shards.CIShardTests.test_an_evidence_test_is_checked_without_a_run"
+      ]
+    },
+    {
+      "id": "discovery-collected-an-imported-test-class-twice",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "repeated work of the suite",
+      "summary": "tests/test_research_review_packets.py imported ResearchPublicationTests by name and tests/test_research_scoped_review_protocol.py imported ScopedDecisionTests by name, so the discovery of those modules collected the 28 tests of the two classes again under the same ids, and every run executed them twice.",
+      "expected": "A test module imports the module of a test class that it reuses, not the class. ci/unittest_shards.py verify reports the count of executed tests and of distinct tests of each Python version and fails when they differ.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_ci_shards.CIShardTests.test_partition_executes_every_discovered_entry_including_duplicate_ids"
+      ]
+    },
+    {
+      "id": "record-12-cut-built-four-times-for-each-python-version",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "repeated work of the suite",
+      "summary": "The cut of the verification of record 12 (57 review turns, 23 to 36 minutes for each build in CI) was built in each of the three shards that held a test of Record12ShapeTests, and once more in test_openness_reading_v7_refusal, so each Python version built it four times. Two class fixtures (ProblemResultHistoryTests, ManagedStreamingTests) were built in each of seven or eight shards.",
+      "expected": "A process builds the cut once and its users load writable copies, and a check after the users fails when the build changed. ci/unittest_shards.py keeps the modules that share a costly fixture in one shard (SHARD_GROUPS), so a run builds each such fixture once for each Python version.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_ci_shards.CIShardTests.test_the_tests_of_a_shard_group_run_in_one_shard_and_the_others_keep_their_rank",
+        "test_openness_reading_v7_refusal.Record12ShapeTests.test_stopped_head_is_handed_to_an_export_whose_chain_carries_it"
+      ]
+    },
+    {
+      "id": "must-pass-run-of-a-core-change-repeated-the-full-suite",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "must-pass set of a release",
+      "summary": "For a change of a core harness module the must-pass set held most of the suite (456 of 554 test modules and 97% of the test time for the diff of 0.91.11), so its local run took all eight test processes for 1.5 to 1.8 hours and did the work of the full suite of the CI a second time.",
+      "expected": "ci/must_pass.py run starts the whole set when it holds at most half of the test modules, and else its near part (the fixed modules, the slow pins, the changed test modules and their importers in tests/), prints one line with the count of the far part, whose check is the full suite of the CI, and names the far part in its report as not run. list --near prints what run starts.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_must_pass.MustPassRunTests.test_a_set_of_at_most_half_of_the_test_modules_runs_whole",
+        "test_must_pass.MustPassRunTests.test_a_set_of_more_than_half_of_the_test_modules_runs_its_near_part_and_names_its_far_part"
+      ]
+    },
+    {
+      "id": "record-12-test-answered-a-version-2-final-with-a-version-1-gap",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "test stub outside the answer contract",
+      "summary": "After the named gaps (finding version 2), the stub of Record12ShapeTests.test_v7_chain_reaches_a_verified_finding_with_the_carried_outputs still answered the final with a reviewer_gap ground of kind and text only. The check refused it three times with openness_finding_invalid, rule gap_fields, and review-series ended with review_slot_exhausted. The class takes about 25 minutes, and the lanes before left it out of their runs.",
+      "expected": "The stub answers a final of version 2 with an own_argument ground, as the sibling helpers do, and the chain records a verified finding.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_carried_integration.Record12ShapeTests.test_v7_chain_reaches_a_verified_finding_with_the_carried_outputs"
+      ]
     }
   ]
 }
