@@ -7648,6 +7648,33 @@
         "test_replay_and_first_writes.FirstWriteTests.test_intent_without_a_revision_is_saved_when_another_command_commits_before_it",
         "test_replay_and_first_writes.VerdictCommandTests.test_verify_saves_its_intent_when_another_command_commits_before_it"
       ]
+    },
+    {
+      "id": "refused-answer-without-its-refusal-record-was-read-as-checked",
+      "record": "20261120092352-next-v7-turn-reads-an-unchecked-refused-answer",
+      "class": "gate (gap)",
+      "summary": "The run of a reviewer turn records a refusal for an answer that fails its output check, in a second write that can be missing. Protocol v7 then read such an answer as a checked one at the next assignment, at the verification of the chain and in problem-openness. A malformed answer ended these commands and review-series with AttributeError, TypeError or KeyError. Other answers were used: the chain went on over the answer, a later chain carried the turn, and problem-openness recorded the finding of a final that fails its contract, so that the openness gate reported no obligation for supported_open with a ground. A single review of exactory-review-v7/native_math had the same gap from 0.90.0, and the gate never checked its answer again.",
+      "expected": "Each reader of an own answer of protocol v7, and problem-openness for an answer under the finding contract, applies the output check of the run before it reads the answer. A failed answer without its refusal record is refused with the code that the reader gives when the record exists, and details.refusal names the failure. The plan of such a head is resume: the recorded review-run request, which calls no reviewer and records the refusal. A finding that 0.90.0 to 0.91.7 recorded from such an answer is problem_openness_stale, with the cause openness_reading_incomplete for a chain and openness_native_review_unverified for a single review.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_next_turn_refuses_an_answer_that_failed_its_check",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_every_refused_reading_answer_is_refused_at_each_reader",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_later_chain_carries_no_answer_that_failed_its_check",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_later_chain_carries_the_turns_before_such_an_answer_and_verifies",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_plan_runs_the_recorded_request_again_and_then_replaces_the_turn",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_series_records_the_refusal_and_reaches_the_finding",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_final_answer_that_failed_its_check_gives_no_finding",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_finding_recorded_from_such_a_final_becomes_stale",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_chain_that_went_on_over_such_an_answer_gives_no_finding",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_later_chain_that_carried_such_an_answer_gives_no_finding",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_next_turn_names_an_earlier_answer_that_failed_its_check",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_part_of_an_argument_at_a_final_turn_is_no_finding",
+        "test_openness_reading_v7_unchecked_answer.UncheckedV6FinalTests.test_v6_final_answer_that_failed_its_check_gives_no_finding",
+        "test_openness_reading_v7_unchecked_answer.UncheckedSingleReviewTests.test_single_review_answer_that_failed_its_check_gives_no_finding",
+        "test_openness_reading_v7_unchecked_answer.UncheckedSingleReviewTests.test_single_review_finding_recorded_from_such_an_answer_becomes_stale",
+        "test_openness_reading_v7_unchecked_answer.UncheckedSingleReviewTests.test_single_review_finding_whose_answer_the_store_cannot_give_is_stale"
+      ]
     }
   ]
 }

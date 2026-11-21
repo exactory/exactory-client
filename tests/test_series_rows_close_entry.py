@@ -89,7 +89,7 @@ class EntryRowTests(unittest.TestCase):
         self.assertTrue(GROUPS.is_file(), 'Entry membership needs its writing-place evidence.')
         members = json.loads(GROUPS.read_text())['named_cause']['members']
         self.assertEqual(len(members), 145)
-        self.assertEqual(sum(len(sites) for sites in members.values()), 202)
+        self.assertEqual(sum(len(sites) for sites in members.values()), 203)
         additions_path = GROUPS.with_name('d2-v7-refusal-turn.json')
         additions = json.loads(additions_path.read_text())['named_cause']['members']
         self.assertEqual(set(additions), {'search_page_capture_interval'})
@@ -97,7 +97,7 @@ class EntryRowTests(unittest.TestCase):
         members.update(additions)
         self.assertEqual(set(members), set(stop_classes._NAMED_CAUSE_CODES_ENTRY))
         self.assertEqual(len(members), 146)
-        self.assertEqual(sum(len(sites) for sites in members.values()), 203)
+        self.assertEqual(sum(len(sites) for sites in members.values()), 204)
         for code, sites in members.items():
             for site, conditions in sites.items():
                 with self.subTest(code=code, site=site):

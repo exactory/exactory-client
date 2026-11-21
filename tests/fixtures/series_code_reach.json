@@ -1663,7 +1663,8 @@
           "research_harness/problem_openness.py:assess_openness#4": ["entry"],
           "research_harness/problem_openness.py:assess_openness#5": ["entry"],
           "research_harness/problem_openness.py:assess_openness#6": ["entry"],
-          "research_harness/problem_openness.py:assess_openness#7": ["entry"]
+          "research_harness/problem_openness.py:assess_openness#7": ["entry"],
+          "research_harness/problem_openness.py:assess_openness#8": ["entry"]
         },
         "problem_openness_unresolved": {
           "research_harness/problem_openness.py:assess_openness#1": ["entry"],
@@ -2189,6 +2190,7 @@
         "review_source_continuation_unverified": {
           "research_harness/openness_reading.py:_read_prior#1": ["record"],
           "research_harness/openness_reading_v7.py:_rebuild_own_state#1": ["record"],
+          "research_harness/openness_reading_v7.py:_rebuild_own_state#2": ["record"],
           "research_harness/openness_reading_v7.py:prepare_next_assignment#1": ["record"],
           "research_harness/review_parts_native.py:read_prior_assignment#1": ["record"],
           "research_harness/review_protocol.py:_source_parent#1": ["record"],
