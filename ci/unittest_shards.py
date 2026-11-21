@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Run and verify exhaustive partitions of ordinary unittest discovery, and run named test modules, each with the
-reviewer program guard (ci/reviewer_program_guard.py)."""
+"""Run and verify exhaustive partitions of ordinary unittest discovery, and run named test modules. The commands
+run and run-modules install the reviewer program guard (ci/reviewer_program_guard.py) before a test module loads."""
 import argparse
 import hashlib
 import json
@@ -25,8 +25,9 @@ def write_json(path, value):
 
 
 def run_shard(suite, shard_index, shard_count, provenance, *, take_machine_reads, stream=None, record_path=None):
-    """Run the selected tests. take_machine_reads returns the reads of the reviewer program guard since its last
-    call (ci/reviewer_program_guard.py), and a test that passed after one of them is an error."""
+    """Run the selected tests. take_machine_reads returns one error for each stopped lookup and each stub start that
+    the reviewer program guard recorded since its last call (ci/reviewer_program_guard.py). The runner reports a
+    test that passed after one of them as an error."""
     if shard_count < 1 or not 0 <= shard_index < shard_count:
         raise ValueError("Invalid shard index or count")
     tests = list(flatten(suite))
@@ -48,8 +49,9 @@ def run_shard(suite, shard_index, shard_count, provenance, *, take_machine_reads
             super().startTest(test)
 
         def addSuccess(self, test):
-            # The code under test can catch the stop of the guard, a thread does not pass it on, and a child process
-            # cannot stop the test. A read since the end of the previous test, such as one in setUpClass, counts too.
+            # A test can pass after a read of the machine. The code under test can catch the stop of the guard. A
+            # thread does not pass the stop on. A child process cannot stop the test. A read since the end of the
+            # previous test counts against this test too, for example a stub start in setUpClass.
             reads = take_machine_reads()
             if reads:
                 self.addError(test, (type(reads[0]), reads[0], reads[0].__traceback__))
@@ -57,7 +59,7 @@ def run_shard(suite, shard_index, shard_count, provenance, *, take_machine_reads
                 super().addSuccess(test)
 
         def stopTest(self, test):
-            # A test that did not pass has its outcome already; its reads are not charged to the next test.
+            # A test that did not pass has its outcome already. Its reads are not charged to the next test.
             take_machine_reads()
             super().stopTest(test)
 
@@ -149,7 +151,8 @@ def git_value(directory, expression):
 
 
 def install_reviewer_program_guard(root):
-    """Install the reviewer program guard of the client before a test module loads, and return its reader."""
+    """Put the plugin root on the import path, install the reviewer program guard, and return its function
+    take_machine_reads. The caller does this before a test module loads."""
     sys.path.insert(0, str(root))
     from ci import reviewer_program_guard
     reviewer_program_guard.install_guard()
@@ -167,10 +170,13 @@ def main():
     run.add_argument("--marketplace", type=Path, required=True)
     run.add_argument("--result", type=Path, required=True)
     named = commands.add_parser(
-        "run-modules", help="Run named test modules with the reviewer program guard, as a CI shard runs them.")
+        "run-modules",
+        help="Run named test modules, classes or methods with the reviewer program guard. Run this command in the "
+             "plugin root. The exit status is 0 only when every named test runs and passes. A skipped test and an "
+             "expected failure give status 1, as in a CI shard.")
     named.add_argument("--top-level-directory", type=Path, default=Path("tests"),
-                       help="The directory that goes first on the import path. Use skills/math-solver/harness for "
-                            "the harness tests.")
+                       help="The directory that goes first on the import path (default: %(default)s). For the "
+                            "harness tests, use skills/math-solver/harness.")
     named.add_argument("names", nargs="+", help="Test modules, classes or methods, such as tests.test_ci_shards.")
     verify = commands.add_parser("verify")
     verify.add_argument("--receipts", type=Path, required=True)

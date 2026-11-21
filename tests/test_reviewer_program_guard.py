@@ -48,7 +48,9 @@ class ReviewerProgramGuardTests(unittest.TestCase):
 
     def test_this_run_has_the_guard(self):
         self.assertTrue(is_guard_installed(),
-                        'Run test modules with python3 ci/unittest_shards.py run-modules, which installs the guard')
+                        'This run has no reviewer program guard, so a test can get the codex or the claude program '
+                        'of the machine. In the plugin root, run the test modules with '
+                        'python3 ci/unittest_shards.py run-modules tests.<module>. That command installs the guard.')
 
     def test_a_lookup_that_the_machine_would_answer_stops_the_test(self):
         for program in REVIEWER_PROGRAMS:
@@ -124,7 +126,8 @@ class ReviewerProgramGuardTests(unittest.TestCase):
         self.assertEqual(child.stdout.strip(), 'review_runtime_missing', child.stderr)
         reads = take_machine_reads()
         self.assertEqual(len(reads), 3)
-        self.assertTrue(all(str(read).startswith('A child process of this test started') for read in reads))
+        self.assertTrue(all(str(read).startswith('This test or one of its child processes started')
+                            for read in reads))
         # The report of a start names the command of the process that started the stub.
         self.assertIn(str(script), str(reads[2]))
 
