@@ -8473,6 +8473,33 @@
         "test_review_session_v4_refresh.SessionRefreshTests.test_f8_on_a_stale_route_record_the_plan_names_the_current_record_of_the_same_identity",
         "test_review_session_v4_refresh.SessionRefreshTests.test_f9_under_the_next_rule_set_the_refresh_is_a_new_request_without_history"
       ]
+    },
+    {
+      "id": "page-manifest-read-against-installed-renderer",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "authentication of a stored observation",
+      "summary": "A recorded page manifest of a visual route was verified only while the installed PDF renderer had the render profile that the manifest records. After an update of the renderer, or without it, a stored attempt whose lineage holds a visual transition did not authenticate and its assignment showed review_invocation_unverified.",
+      "expected": "A recorded manifest that records the profile of the installed renderer is verified by a fresh derivation of each page. A recorded manifest that records another profile, or that is read without a renderer, is verified from the store: its profile is a profile of the protocol, and each page image is the stored PNG artifact with the recorded size. A stored review on a visual route keeps its authentication in both cases, a changed page is refused in both, and the value review of an answer that the store holds is recorded in both. New reviewer work for an assignment on a visual route is a new assignment or a new call. It is admitted only when the installed renderer is the one that the manifests of its request and of the visual transitions in its lineage record. Otherwise it is refused with review_visual_source_mismatch before a page is rendered, a record is written or a call is sent. Each function that writes a record of new reviewer work stands behind that comparison.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_visual_manifest_recorded_profile.RecordedProfileTests.test_stored_visual_review_stands_under_another_renderer_without_a_new_derivation",
+        "test_visual_manifest_recorded_profile.RecordedProfileTests.test_stored_visual_review_stands_without_a_renderer",
+        "test_visual_manifest_recorded_profile.RecordedProfileTests.test_recorded_manifest_with_a_changed_page_is_refused_by_its_stored_image",
+        "test_visual_manifest_recorded_profile.RecordedProfileTests.test_recorded_profile_keeps_the_fixed_members_of_the_protocol",
+        "test_visual_manifest_recorded_profile.RecordedProfileTests.test_fixed_profile_members_are_those_of_the_installed_renderer",
+        "test_visual_manifest_recorded_profile.RecordedProfileTests.test_manifest_of_another_renderer_is_verified_as_stored_and_enters_no_new_delivery",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_new_assignment_after_a_renderer_update_is_refused_before_any_page_is_rendered",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_run_after_a_renderer_update_is_refused_before_any_call",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_run_of_a_transition_child_after_a_renderer_update_is_refused_before_any_call",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_staged_packet_with_a_native_page_verifies_as_stored_under_another_renderer",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_frontier_after_a_renderer_update_is_refused_and_no_child_is_recorded",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_staged_dispatch_after_a_renderer_update_is_refused_before_any_worker_starts",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_refusal_replacement_after_a_renderer_update_is_refused_and_not_recorded",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_output_correction_after_a_renderer_update_is_refused_before_any_record",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_value_review_of_a_stored_answer_is_recorded_under_another_renderer",
+        "test_visual_manifest_recorded_profile.NewWorkWriterTests.test_every_writer_of_new_reviewer_work_stands_behind_a_renderer_comparison"
+      ]
     }
   ]
 }
