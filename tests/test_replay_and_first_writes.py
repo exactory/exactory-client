@@ -1,5 +1,6 @@
-"""A committed request is answered beside a reader and beside a writer, and a command waits for a busy store: its
-reads wait for a COMMIT in progress and its COMMIT for the readers of the store (record
+"""A committed request is answered beside a reader and beside a writer, a command waits for a busy store (its reads
+wait for a COMMIT in progress and its COMMIT for the readers of the store), and the first write of an acquisition and
+of a remote operation commits after another command committed (record
 20261120104814-replay-and-first-writes-wait-for-readers-on-a-large-store)."""
 
 import contextlib
@@ -18,9 +19,10 @@ import time
 import unittest
 from unittest import mock
 
-from finishing_write_fixtures import OtherWriters
+from finishing_write_fixtures import ORIGINAL_MUTATE, OtherWriters
 from research_fixtures import atom, client, entry, xml_response
-from research_harness import acquisition, cli, finishing, output_views, review_worker, storage
+from research_harness import (acquisition, cli, finishing, fulltext_jobs, output_views, remote, review_worker, storage,
+                              submission, zenodo)
 from research_harness.errors import ResearchError
 from research_harness.operations import prepared_mutation, prepared_task_mutation
 from research_harness.storage import Store
@@ -407,6 +409,20 @@ class CommandEntryTests(LockedStoreCase):
         self.assertEqual((status, errors), (0, ""))
         self.assertEqual(json.loads(output)["status"], "paused")
 
+    def test_cohort_collection_admits_its_operation_after_a_writer_has_ended(self):
+        cohort = load_bin_module("exactory-cohort", "replay_first_writes_cohort_admission")
+        definition = self.root.parent / (self.root.name + "-definition.json")
+        definition.write_text(json.dumps(DEFINITION))
+        self.addCleanup(definition.unlink)
+        writer = self.open_connection()
+        writer.execute("BEGIN IMMEDIATE")
+        with self.ended_after(lambda: writer.execute("ROLLBACK"), 0.4):
+            status, output, errors = run_command_main(cohort.main, [
+                "exactory-cohort", "collect", "--workspace", str(self.root), "--definition", str(definition),
+                "--request-id", "collect", "--expected-revision", "0", "--max-requests", "0"], self.root)
+        self.assertEqual((status, errors), (0, ""))
+        self.assertEqual(json.loads(output)["status"], "paused")
+
     def test_review_worker_reads_after_a_commit_in_progress(self):
         revisions = []
         with mock.patch.object(review_worker, "run_worker",
@@ -414,6 +430,272 @@ class CommandEntryTests(LockedStoreCase):
                 self.ended_after(self.hold_waiting_commit(), 0.4):
             review_worker.main([str(self.root), "reservation", "token", "3"])
         self.assertEqual(revisions, [0])
+
+
+class FirstWriteTests(LockedStoreCase):
+    """The admission of an acquisition and the saved intent of a remote operation commit beside other commands."""
+
+    def acquire(self, http, revision, request_id="acquire"):
+        return acquisition.acquire_work(self.store, "2601.00001v1", request_id=request_id, expected_revision=revision,
+                                        http=http)
+
+    def hold_then_free_the_write_lock(self, operation):
+        """Another command holds the write lock at the first commit of operation and has ended at the second."""
+        held = []
+
+        def act():
+            if held:
+                held.pop().execute("ROLLBACK")
+            else:
+                held.append(self.hold_write_lock())
+        return self.meet_commits((operation,), act=act, limit=2)
+
+    def write_collection(self, collection_id, **members):
+        """Another command writes members of the collection without its lock, as an import of an OAI cohort does."""
+        other = Store(self.root)
+        ORIGINAL_MUTATE(other, "fixture.collection", {"revision": other.revision},
+                        lambda transaction: transaction.put("collection", collection_id, dict(
+                            transaction.get("collection", collection_id), **members)),
+                        expected_revision=other.revision, request_id="collection-" + str(other.revision))
+
+    def acquire_work_record(self):
+        http, _, _ = client([xml_response(atom([entry()], total=1))])
+        self.acquire(http, self.store.revision, request_id="metadata")
+        return "arxiv:2601.00001v1"
+
+    def start_fulltext_job(self, identifier, revision):
+        return fulltext_jobs.start_job(self.store, identifier, request_id="start", expected_revision=revision,
+                                       url="https://arxiv.org/pdf/2601.00001v1")
+
+    def test_admission_commits_after_another_command_committed(self):
+        revision = self.store.revision
+        self.commit_unrelated()
+        http, wire, _ = client([xml_response(atom([entry()], total=1))])
+        result = self.acquire(http, revision)
+        operation = self.records()["acquisition_operation"]["acquire"]
+        self.assertEqual((result["status"], len(wire.requests), operation["admission_revision"]),
+                         ("complete", 1, revision + 2))
+
+    def test_admission_names_the_revision_of_its_commit(self):
+        http, _, _ = client([xml_response(atom([entry()], total=1))])
+        self.meet_commits(("work.acquire",))
+        self.acquire(http, 0)
+        operation = self.records()["acquisition_operation"]["acquire"]
+        admitted = self.store.committed_request("acquire")["response"]
+        self.assertEqual((admitted["revision"], admitted["result"]["revision"], operation["admission_revision"]),
+                         (2, 2, 2))
+
+    def test_admission_waits_for_a_busy_store(self):
+        http, wire, _ = client([xml_response(atom([entry()], total=1))])
+        self.hold_then_free_the_write_lock("work.acquire")
+        with mock.patch.object(storage, "_BUSY_TIMEOUT_SECONDS", 0.01):
+            result = self.acquire(http, 0)
+        self.assertEqual((result["status"], len(wire.requests), self.attempts["work.acquire"]), ("complete", 1, 2))
+
+    def test_admission_refused_beyond_the_wait_sends_nothing_and_the_same_request_goes_on(self):
+        http, wire, _ = client([xml_response(atom([entry()], total=1))])
+        refusal = self.refuse_beyond_the_wait("work.acquire", lambda: self.acquire(http, 0))
+        self.assertEqual((refusal.code, refusal.message), ("store_busy", acquisition.ADMISSION_STORE_BUSY_MSG))
+        self.assertEqual(refusal.details["cause"]["code"], "store_busy")
+        self.assertEqual((len(wire.requests), self.records().get("acquisition_operation")), (0, None))
+        self.assertEqual((self.acquire(http, 0)["status"], len(wire.requests)), ("complete", 1))
+
+    def test_admission_needs_the_store_at_the_callers_revision_or_a_later_one(self):
+        http, wire, _ = client([xml_response(atom([entry()], total=1))])
+        with self.assertRaises(ResearchError) as caught:
+            self.acquire(http, 5)
+        self.assertEqual((caught.exception.code, caught.exception.details["expected_revision"],
+                          caught.exception.details["revision"], len(wire.requests)), ("stale_revision", 5, 0, 0))
+
+    def test_cohort_collection_starts_after_another_command_committed(self):
+        revision = self.store.revision
+        self.commit_unrelated()
+        http, wire, _ = client([xml_response(atom([entry()], total=1))])
+        result = acquisition.collect_cohort(self.store, DEFINITION, request_id="collect", expected_revision=revision,
+                                            http=http)
+        self.assertEqual((result["status"], len(wire.requests)), ("complete", 1))
+
+    def test_resume_reserves_requests_by_the_collection_that_its_admission_reads(self):
+        http, wire, _ = client([])
+        collection_id = acquisition.collect_cohort(self.store, DEFINITION, request_id="collect", expected_revision=0,
+                                                   max_requests=0, http=http)["collection_id"]
+        partitions = self.records()["collection"][collection_id]["partitions"]
+        self.write_collection(collection_id, pending=[acquisition.describe_query_ceiling(partitions[0], 30001)])
+        revision = self.store.revision
+        # Before the admission of resume, another command completes the enumeration and ends the pause.
+        self.meet_commits(("cohort.resume",), act=lambda: self.write_collection(
+            collection_id, pending=[], partitions=[dict(partition, status="complete") for partition in partitions]),
+            limit=1)
+        acquisition.resume_cohort(self.store, collection_id, request_id="resume", expected_revision=revision,
+                                  max_requests=3, http=http)
+        operation = self.records()["acquisition_operation"]["resume"]
+        self.assertEqual((operation["payload"]["max_requests"], operation["admission_revision"], len(wire.requests)),
+                         (3, revision + 2, 0))
+
+    def test_same_admission_request_returns_its_recorded_result(self):
+        http, wire, _ = client([xml_response(atom([entry()], total=1))])
+        first = self.acquire(http, 0)
+        self.commit_unrelated()
+        self.assertEqual((self.acquire(http, 0), len(wire.requests)), (first, 1))
+
+    def test_fulltext_job_starts_after_another_command_committed(self):
+        identifier = self.acquire_work_record()
+        revision = self.store.revision
+        self.commit_unrelated()
+        result = self.start_fulltext_job(identifier, revision)
+        self.assertEqual((result["status"], result["revision"]), ("pending", revision + 2))
+        self.assertIn(result["job_id"], self.records()["fulltext_job"])
+
+    def test_fulltext_job_start_waits_for_a_busy_store(self):
+        identifier = self.acquire_work_record()
+        self.hold_then_free_the_write_lock("fulltext.start")
+        with mock.patch.object(storage, "_BUSY_TIMEOUT_SECONDS", 0.01):
+            result = self.start_fulltext_job(identifier, self.store.revision)
+        self.assertEqual((result["status"], self.attempts["fulltext.start"]), ("pending", 2))
+
+    def test_fulltext_job_start_refuses_a_revision_later_than_the_store(self):
+        identifier = self.acquire_work_record()
+        revision = self.store.revision
+        with self.assertRaises(ResearchError) as caught:
+            self.start_fulltext_job(identifier, revision + 1)
+        self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
+                         ("stale_revision", acquisition.ADMISSION_REVISION_AHEAD_MSG,
+                          {"expected_revision": revision + 1, "revision": revision}))
+        self.assertNotIn("fulltext_job", self.records())
+
+    def test_intent_without_a_revision_is_saved_when_another_command_commits_before_it(self):
+        self.meet_commits(("remote.begin",))
+        intent = remote.begin_intent(self.store, "fixture", {"id": "item"}, request_id="intent")
+        self.assertEqual((intent["id"], intent["status"], intent["created_revision"], self.store.revision),
+                         ("intent", "prepared", 1, 2))
+
+    def test_intent_without_a_revision_waits_for_a_busy_store(self):
+        self.hold_then_free_the_write_lock("remote.begin")
+        with mock.patch.object(storage, "_BUSY_TIMEOUT_SECONDS", 0.01):
+            intent = remote.begin_intent(self.store, "fixture", {"id": "item"}, request_id="intent")
+        self.assertEqual((intent["id"], self.attempts["remote.begin"]), ("intent", 2))
+
+    def test_intent_refused_beyond_the_wait_says_that_nothing_was_sent(self):
+        refusal = self.refuse_beyond_the_wait("remote.begin", lambda: remote.begin_intent(
+            self.store, "fixture", {"id": "item"}, request_id="intent"))
+        self.assertEqual((refusal.code, refusal.message), ("store_busy", remote.REMOTE_BEGIN_STORE_BUSY_MSG))
+        self.assertEqual(self.records().get("remote_intent"), None)
+
+    def test_same_remote_request_of_two_commands_is_one_intent(self):
+        def save_the_same_request():
+            other = Store(self.root)
+            prepared_mutation(other, "fixture.other_command", {}, lambda records, value: (
+                [("remote_intent", "other", {
+                    "id": "other", "kind": "fixture", "binding": {"id": "item"}, "responses": {}, "pending": None,
+                    "fingerprint": remote._compute_request_fingerprint("fixture", {"id": "item"}, None),
+                    "status": "prepared", "created_revision": 0})], {}),
+                              expected_revision=other.revision, request_id="other-command")
+        self.meet_commits(("remote.begin",), act=save_the_same_request, limit=1)
+        intent = remote.begin_intent(self.store, "fixture", {"id": "item"}, request_id="intent")
+        self.assertEqual((intent["id"], sorted(self.records()["remote_intent"])), ("other", ["other"]))
+
+    def test_intent_without_a_revision_is_saved_when_another_command_changes_another_intent(self):
+        remote.begin_intent(self.store, "fixture", {"id": "other"}, expected_revision=self.store.revision,
+                            request_id="other")
+
+        def change_the_other_intent():
+            other = Store(self.root)
+            ORIGINAL_MUTATE(other, "fixture.other_step", {}, lambda transaction: transaction.put(
+                "remote_intent", "other", dict(transaction.get("remote_intent", "other"), status="confirmed")),
+                expected_revision=other.revision, request_id="other-step")
+        self.meet_commits(("remote.begin",), act=change_the_other_intent, limit=1)
+        intent = remote.begin_intent(self.store, "fixture", {"id": "item"}, request_id="intent")
+        # The intent reads only the saved intents of its own request, so the first attempt commits.
+        self.assertEqual((intent["id"], self.attempts["remote.begin"]), ("intent", 1))
+
+    def test_intent_with_the_revision_of_the_user_keeps_the_compare_and_swap(self):
+        self.commit_unrelated()
+        with self.assertRaises(ResearchError) as caught:
+            remote.begin_intent(self.store, "fixture", {"id": "item"}, expected_revision=0, request_id="intent")
+        self.assertEqual(caught.exception.code, "stale_revision")
+
+    def test_deposit_and_submission_without_a_revision_save_their_intents_beside_another_command(self):
+        # The checks of the manuscript, the reviews and the publication are not what this test is about.
+        self.meet_commits(("remote.begin",))
+        with mock.patch.object(zenodo, "_current", side_effect=lambda store, binding: store.revision):
+            deposit = zenodo.begin_deposit(self.store, {"new_version": False, "fixture": "deposit"},
+                                           request_id="deposit")
+        binding = {"fixture": "submission"}
+        with mock.patch.object(submission, "check_submission_preconditions", return_value=(binding, None)), \
+                mock.patch.object(submission, "continue_submission",
+                                  side_effect=lambda store, identifier, client: remote.get_intent(store, identifier)):
+            submitted = submission.submit_managed(self.store, {"doi": "10.5072/zenodo.1"}, None, request_id="submit")
+        self.assertEqual((deposit["status"], submitted["status"], self.attempts["remote.begin"]),
+                         ("prepared", "prepared", 2))
+        self.assertEqual(sorted(self.records()["remote_intent"]), ["deposit", "submit"])
+
+
+class ReservationTests(unittest.TestCase):
+    """The admission of a supplied full text reserves no request, and the resume of a full-text job reserves its bounded
+    invocation, as before the reservation was read inside the admission."""
+
+    def start_case(self, case_class):
+        case = case_class()
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        return case
+
+    def test_import_of_a_supplied_full_text_reserves_no_request(self):
+        from test_import_fulltext import ImportFulltextTests
+        case = self.start_case(ImportFulltextTests)
+        with mock.patch.object(acquisition.resources, "admit", wraps=acquisition.resources.admit) as admit:
+            case.import_text()
+        operation = case.store.snapshot()["records"]["acquisition_operation"]["supplied"]
+        self.assertEqual((operation["payload"]["max_requests"], admit.call_count), (0, 0))
+
+    def test_resume_of_a_full_text_job_reserves_its_bounded_invocation(self):
+        from test_research_fulltext_jobs import JobCase
+        case = self.start_case(JobCase)
+        job = case.start()
+        http, _ = case.wire()
+        request_id = "resume-" + str(case.store.revision)
+        with mock.patch.object(acquisition.resources, "admit", wraps=acquisition.resources.admit) as admit:
+            case.resume(job, http=http, max_requests=1)
+        # Each charged request lowers the reservation later, so the admission's own event holds it.
+        database = sqlite3.connect(str(case.root / ".exactory" / "research.sqlite3"))
+        self.addCleanup(database.close)
+        changes = json.loads(database.execute("SELECT changes FROM events WHERE request_id = ?", (request_id,))
+                             .fetchone()[0])
+        admitted = next(change["value"] for change in changes if change["kind"] == "acquisition_operation")
+        self.assertEqual((admitted["payload"]["max_requests"], admit.call_args[0][1:]), (1, ("literature", 1)))
+
+
+class VerdictCommandTests(OtherWriters, unittest.TestCase):
+    """exactory verify saves the intent of its verdict while another command commits: its user gives no revision."""
+
+    def setUp(self):
+        from test_research_verification import ResearchVerificationTests
+        self.case = ResearchVerificationTests()
+        self.case.setUp()
+        self.addCleanup(self.case.doCleanups)
+        self.root = self.case.store.root
+        self.start_other_writers()
+        self.case.bind(self.case.verifier())
+
+    def test_verify_saves_its_intent_when_another_command_commits_before_it(self):
+        exactory = load_bin_module("exactory", "replay_first_writes_verify")
+        verdict = self.root / "verdict.json"
+        verdict.write_text(json.dumps(self.case.verdict()))
+        sent = []
+
+        def send_request(method, path, body=None, **options):
+            sent.append(method)
+            if method == "GET":
+                return dict(self.case.task), 200
+            return {"id": "22222222-2222-4222-8222-222222222222"}, 201
+        self.meet_commits(("remote.begin",), limit=1)
+        with mock.patch.object(exactory, "_send_request", send_request):
+            status, _, errors = run_command_main(
+                exactory.main, ["exactory", "verify", self.case.task["verificationId"], "--file", str(verdict)],
+                self.root)
+        self.assertEqual((status, errors, sent), (0, "", ["GET", "POST"]))
+        intents = list(Store(self.root).snapshot()["records"]["remote_intent"].values())
+        self.assertEqual([(intent["kind"], intent["status"]) for intent in intents], [("verdict", "complete")])
 
 
 if __name__ == "__main__":

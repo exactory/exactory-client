@@ -841,6 +841,7 @@ _FILTER_FIELDS = {
     'review_output_correction': {'assignment_id', 'origin'},
     'review_output_correction_invocation': {'assignment_id'},
     'review_selection': {'controller_assignment_id'},
+    'remote_intent': {'fingerprint'},
 }
 
 

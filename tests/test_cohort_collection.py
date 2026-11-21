@@ -293,12 +293,13 @@ class CollectionTests(unittest.TestCase):
         self.assertEqual(second["pending"][0]["code"], "rate_limited")
         self.assertEqual(wire2.requests, [])
 
-    def test_stale_admission_and_conflicting_replay_do_not_fetch(self):
+    def test_admission_of_an_existing_collection_and_conflicting_replay_do_not_fetch(self):
         http, wire, _ = client([])
         first = collect_cohort(self.store, DEFINITION, request_id="admit", expected_revision=0, max_requests=0, http=http)
+        # The admission commits at a later revision than the caller's and reads the collection in its write.
         with self.assertRaises(ResearchError) as error:
             collect_cohort(self.store, DEFINITION, request_id="stale", expected_revision=0, http=http)
-        self.assertEqual(error.exception.code, "stale_revision")
+        self.assertEqual(error.exception.code, "collection_exists")
         with self.assertRaises(ResearchError):
             collect_cohort(self.store, DEFINITION, request_id="admit", expected_revision=0, max_requests=1, http=http)
         self.assertEqual(wire.requests, [])

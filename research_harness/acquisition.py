@@ -40,8 +40,10 @@ reported counts, disposition, exact source_ids and excluded entries.
 Historical pages never change.
 
 acquisition_operation/{request_id} holds operation, payload, state, target,
-admission_revision and original result. Admission uses the supplied revision;
-every later commit uses a consistent snapshot and explicit revision CAS.
+admission_revision and original result. The admission commits at the revision
+that the write lock finds when the store is at the supplied revision or a later
+one (a visual asset needs the store at exactly that revision), and
+admission_revision names the revision of that commit.
 Deterministic derived request IDs identify pages and finalization. A replay
 returns the original finalized result (or committed admission after a crash)
 without further network I/O. A NEW request id for the same operation and target
@@ -138,6 +140,18 @@ COHORT_END_STORE_BUSY_MSG = (
     'operation requested is recorded. The operation stays admitted and holds its request allowance, and the collection '
     'still names it as its active operation. Continue the collection with resume and a new request ID. The new '
     'operation replaces this one and releases its allowance.')
+# The messages of the admission of an operation, its first write: when the store stayed busy beyond the wait, and when
+# the store is at an earlier revision than the caller's.
+ADMISSION_STORE_BUSY_MSG = (
+    'The research store stayed busy, and it did not admit this operation. This command sent no request, and the '
+    'store holds no record of the operation. Run the same command again with the same request ID.')
+ADMISSION_REVISION_AHEAD_MSG = (
+    'The store is at an earlier revision than --expected-revision. Read the current revision with status. Then run '
+    'the command again with that revision.')
+# The refusals after which an admission is tried again within the wait: a busy store, and for the admission of a
+# full-text job, which commits against the records that it read, a change of one of those records. stale_revision ends
+# the command at once: the store is at an earlier revision than the caller's, or its database was replaced.
+ADMISSION_RETRY_CODES = ('store_busy', 'review_task_dependency_changed')
 
 
 @contextmanager
@@ -231,30 +245,77 @@ def _supersede(transaction, operation, target, request_id):
             transaction.put("acquisition_operation", identifier, dict(record, state="superseded"))
 
 
-def _begin(store, operation, payload, request_id, expected_revision, *, target=None, apply=None, reserved_requests=None):
-    admitted = []
+def _admission_write(operation, payload, request_id, target, apply, admitted):
+    """The write of an admission, admit(transaction, commit_revision): what apply writes, the superseded operations of
+    the target, the request allowance and the operation record, which names the revision of its commit. apply returns
+    the number of requests that the operation reserves, or None for max_requests of the payload. Each call of admit
+    notes itself in admitted, so that the caller can tell a new admission from a recorded one."""
     runtime = runtime_provenance()
 
-    def admission(transaction):
-        if apply:
-            apply(transaction)
+    def admit(transaction, commit_revision):
+        reserved_requests = apply(transaction) if apply else None
         _supersede(transaction, operation, target, request_id)
         if reserved_requests != 0:
             resources.admit(transaction, "literature", payload.get("max_requests") if reserved_requests is None else reserved_requests)
-        result = {"status": "admitted", "request_id": request_id, "revision": expected_revision + 1,
+        result = {"status": "admitted", "request_id": request_id, "revision": commit_revision,
                   "target": target, "pending": [{"code": "operation_incomplete"}]}
         transaction.put("acquisition_operation", request_id,
                         {"operation": operation, "payload": payload if reserved_requests is None else dict(payload, max_requests=reserved_requests),
                          "state": "admitted", "target": target,
-                         "admission_revision": expected_revision + 1, "result": result, "runtime": runtime})
+                         "admission_revision": commit_revision, "result": result, "runtime": runtime})
         admitted.append(True)
         return result
+    return admit
 
-    receipt = store.mutate(operation, payload, admission, expected_revision=expected_revision, request_id=request_id)
-    if admitted:
-        return None
+
+def _read_recorded_result(store, receipt, request_id):
+    """The result of a committed admission: the recorded result of its operation, or the admission itself while the
+    store holds no record of the operation."""
     record = store.snapshot()["records"].get("acquisition_operation", {}).get(request_id)
     return receipt["result"] if record is None else record["result"]
+
+
+def _refuse_revision_ahead(expected_revision, commit_revision):
+    """Refuse an admission when the store, at commit_revision - 1, is at an earlier revision than the caller's."""
+    if expected_revision >= commit_revision:
+        raise ResearchError("stale_revision", ADMISSION_REVISION_AHEAD_MSG,
+                            {"expected_revision": expected_revision, "revision": commit_revision - 1})
+
+
+def _begin(store, operation, payload, request_id, expected_revision, *, target=None, apply=None):
+    """Admit the operation, the first write of its command, at the revision that the write lock finds. What the
+    admission depends on is read inside the write: what apply reads, the admitted operations of the target and the
+    request allowance; what the command read before belongs to the target, whose lock it holds. So a commit of
+    another command does not refuse the admission, and the admission waits for a busy store. It needs the store at
+    the caller's revision or a later one. apply(transaction) writes what the command admits and returns the number of
+    requests that the operation reserves, or None for max_requests of the payload. Returns None after a new admission,
+    and the recorded result when the request ID is committed."""
+    if type(expected_revision) is not int or expected_revision < 0:
+        raise ResearchError("invalid_input", "Expected revision must be a nonnegative integer")
+    admitted = []
+    admit = _admission_write(operation, payload, request_id, target, apply, admitted)
+
+    def admit_at_or_after_the_callers_revision(transaction, commit_revision):
+        _refuse_revision_ahead(expected_revision, commit_revision)
+        return admit(transaction, commit_revision)
+
+    def commit():
+        admitted.clear()
+        return store.mutate_serialized(operation, payload, admit_at_or_after_the_callers_revision,
+                                       request_id=request_id)
+
+    receipt = retry_finishing_write(commit, ADMISSION_STORE_BUSY_MSG, codes=ADMISSION_RETRY_CODES)
+    return None if admitted else _read_recorded_result(store, receipt, request_id)
+
+
+def _begin_at_revision(store, operation, payload, request_id, expected_revision, *, target=None):
+    """Admit an operation whose command checked the store on a snapshot outside the write: the commit is the
+    compare-and-swap on the caller's revision, so those checks hold at the commit. Returns what _begin returns."""
+    admitted = []
+    admit = _admission_write(operation, payload, request_id, target, None, admitted)
+    receipt = store.mutate(operation, payload, lambda transaction: admit(transaction, expected_revision + 1),
+                           expected_revision=expected_revision, request_id=request_id)
+    return None if admitted else _read_recorded_result(store, receipt, request_id)
 
 
 def _finish(store, request_id, result, *, apply=None, busy_msg=ACQUISITION_RESULT_STORE_BUSY_MSG):
@@ -411,9 +472,6 @@ def resume_cohort(store, collection_id, *, request_id, expected_revision, max_re
     if type(recheck) is not bool:
         raise ResearchError("invalid_input", "recheck must be boolean")
     budget = RequestBudget(max_requests)
-    held = (store._read_scoped_preparation().records.get("collection", {}).get(collection_id)
-            if store.committed_request(request_id) is None else None)
-    preserve_ceiling = (not recheck and held is not None and any(p.get("code") == "query_ceiling" for p in held["pending"]))
 
     def admission(transaction):
         collection = transaction.get("collection", collection_id)
@@ -442,13 +500,14 @@ def resume_cohort(store, collection_id, *, request_id, expected_revision, max_re
                 if "entries_seen" in partition:
                     partition["entries_seen"] = 0
         transaction.put("collection", collection_id, collection)
+        # Without recheck, a collection paused at its query ceiling resumes with no reserved requests.
+        return 0 if ceilings and not recheck else None
 
     payload = {"collection_id": collection_id, "max_requests": max_requests}
     if recheck:
         payload["recheck"] = True
-    replay = _begin(store, "cohort.resume", payload,
-                    request_id, expected_revision, target=collection_id, apply=admission,
-                    reserved_requests=0 if preserve_ceiling else None)
+    replay = _begin(store, "cohort.resume", payload, request_id, expected_revision, target=collection_id,
+                    apply=admission)
     return replay if replay is not None else _run_collection(store, collection_id, request_id, budget, http or HttpClient())
 
 
@@ -783,9 +842,10 @@ def import_fulltext(store, identifier, file, origin, *, request_id, expected_rev
                                 'OpenAlex id, acquire the work with acquire. For a url: identifier, use '
                                 'import-response with a mapping that creates the work under that identifier. Then '
                                 'run import-fulltext again.')
+        # A supplied file is imported without a request, so the operation reserves none.
+        return 0
 
-    replay = _begin(store, 'fulltext.import', payload, request_id, expected_revision,
-                    target=identifier, apply=admit, reserved_requests=0)
+    replay = _begin(store, 'fulltext.import', payload, request_id, expected_revision, target=identifier, apply=admit)
     if replay is not None:
         return replay
     snapshot = store.snapshot()

@@ -17895,9 +17895,11 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.acquisition": {
-      "ast_sha256": "a1429462069bb7d7ee51de94801b68d66f0b1ac22ebebd4c2f054f5d4f7e251a",
+      "ast_sha256": "9ff1b9d01c91c3c6a23fd311c834b71fd0074abfd283adcf94378ca6193f9b35",
       "functions": {
-        "_begin": "01971de6b858fde242c2676ef97d3b0818d4102354aa1b9564d44547126b58f0",
+        "_admission_write": "22578be93d351ea05c2ad6522b7d03d18d35d7fcf0839560a35e05ab07665c14",
+        "_begin": "aca592e3580787fb4a606f3ee52b32e650fbfc5b1c93849d9f2b97523f569d28",
+        "_begin_at_revision": "661cf02cac95b04862b7decd8f1ba85182525b193f3bdf0761132f72371b08ec",
         "_collection_members": "d5c211c6ab1e26eba61e6cac4a142ef6c78073431fa932bd0b44bf96c699640b",
         "_collection_summary": "5d823e41004d9c2f550a834258e7d4db9a621105abf3726715c8c4b69faf7888",
         "_definition": "09d87ca6001f3a45f8bda2b6c4c4ec4196802d0d864b9e6c90c1723f0092a5fb",
@@ -17912,6 +17914,8 @@
         "_page_update": "6c34c8844a306fbb774b6fc21da6d2b8c9962e07accf9e3984dcf16d5597bef0",
         "_partition": "cba988c58f024992322475f6712bd4b1566293653d326443088415b94a8965ad",
         "_provider": "4153028c4006b614feb3f8931da311c54ff23689fbab5d5fdc624543a89c4680",
+        "_read_recorded_result": "0efcca895796bc460eb54405003450c7e021a2eb5e5a21e157d2b9eb163d45d8",
+        "_refuse_revision_ahead": "5f6c67fc87cd1513bb47ca031bb372a234eab9c5b8f0cb2cd8a1162163c1842d",
         "_run_collection": "50109286c0e8ba9b655925c1907b05105e3a408d8d6612d58f1f50e8a39a71f5",
         "_split_partition": "8ec00f8597518312d71adec656b99883b918fd6afa4f83c715edac165b63f004",
         "_supersede": "92dd25b5a05c66987415eb04014029e1a1571fd65c168215e3847af24f50eb6e",
@@ -17925,18 +17929,18 @@
         "describe_supplied_texts": "a72e133d41c4309bd9bda9977e68241390d4f8ae079cc1518b031b310a0c6cfd",
         "digest_bytes": "c4852d2242e57b053ab3df9e5db93a75d2f21a00b72b1c1188cb36bb435263e1",
         "hold_operation": "8baa76bc99a1b73cdff122c5a2904e622250f208fd81c65291775556a7051ff1",
-        "import_fulltext": "d417e462d9f231fb26d4d811a83503471fd86efa94ea4a905b5dfe7648102cd3",
+        "import_fulltext": "07aa3df9388309a465694d9152a5f038aed6b7d546d025c36f86eb7b0681ea63",
         "import_oai_cohort": "9d3a07558b624e61664458cb75f3181d4d5ba83c32426d06558294d1b0914b2c",
         "import_response": "e218adb31576e4a966d1b0f935abb05f4dcbe64925a7547367adfe5d4500d481",
         "import_response_file": "51a1b386c64b25e7cd44908cd19ad888a0852d36ddba215ad34bfbc735106619",
         "preview_import_response": "9d1fc5c03c4a551a192981badeda78ea6750fbfdc607bca5ce9a8d95f4a7a0e4",
         "read_supplied_fulltext": "3129e4806b4fec61d610ad817a38d96af8b66b6a4bf8ab20c4aef904971d273c",
-        "resume_cohort": "463e4cea5997b21c322623a089a96312d45125d4e28eb87bbb1b07d4e9b547c5",
+        "resume_cohort": "438b0bd83ba7b448b32910c7dea116a20e2e5501e2b13c8108cb681bab47bcaa",
         "serialize_acquisition": "092910d6950d3aa39df755a6b5da6d40e7918a30efa019566b0b36c7634ff47e",
         "validate_supplied_origin": "40fafa84ee3d263fccd5e3971733559cf4703687fa3be2a04cc0a69cf69daaab"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed replay-first-writes, part 2 (the first patch release after 0.91.7): the admission of an acquisition commits at the revision that the write lock finds when the store is at the caller's revision or a later one, reads the reservation of its operation inside its write, and waits for a busy store through finishing.retry_finishing_write; visual keeps the compare-and-swap; the start of a full-text job commits against the records of its check with the same condition and wait; the saved intent of a remote operation without a revision of the user commits against the saved intents and waits the same way, and a check answers the committed admission of an acquisition; no packet argument or member changes."
     },
     "research_harness.artifacts": {
       "ast_sha256": "d038166cf3411bdf883203fd6381be594fa89f0b11a007ccae800f0b44ca0caa",
@@ -18094,12 +18098,12 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.check_mode": {
-      "ast_sha256": "4d0d51a0ae0655f3b3811f41e6fc63039152166e4b33a358859a3fa2f616c4f6",
+      "ast_sha256": "c2ddae47425bff4369bfd05c99f9b9516c20aebf57bed7ab1ae6707c9e16bb56",
       "functions": {
         "check_mutation": "61f257e0ad6895ddf89f68e7248697df340edc323fee96b2b14e22173f7adaa6"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed replay-first-writes, part 2 (the first patch release after 0.91.7): the admission of an acquisition commits at the revision that the write lock finds when the store is at the caller's revision or a later one, reads the reservation of its operation inside its write, and waits for a busy store through finishing.retry_finishing_write; visual keeps the compare-and-swap; the start of a full-text job commits against the records of its check with the same condition and wait; the saved intent of a remote operation without a revision of the user commits against the saved intents and waits the same way, and a check answers the committed admission of an acquisition; no packet argument or member changes."
     },
     "research_harness.citation_report": {
       "ast_sha256": "3f1c5da4c755ddd14d01679617a070ada3a9ac5e698b7b719913e8608521bfb7",
@@ -18550,7 +18554,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.fulltext_jobs": {
-      "ast_sha256": "0dc86132aeeef4e3c8a3a53e94f66eb0ab4a6f23a659ea6b95847e6a52f69967",
+      "ast_sha256": "7f7e5ac5d5c143334a3cd1471a04164b5061ca2d2d7a457a56e170448f5f8a25",
       "functions": {
         "build_unit_key": "bdb3db4c3b21920307b1dc6cc27422b626ad0903c982b34c9d5f3723966b12ca",
         "charge_attempts": "e400831712a1c368e0b934623417f9e6c9c61dec187acf5304dc42c8edb95dbb",
@@ -18558,13 +18562,13 @@
         "read_job": "ca3586abc12c2c89064be75de5147747fac22de4148441d6e8ec931f1f47b55b",
         "read_job_status": "262bd23d854b8d3f675df0e365a80502c08c69e103a967d28d2f3e52ff05fd9b",
         "read_unit": "d2bbb3016da77632cbb9b793529978a1049ddd678a498048e3a0b6bfaa974ea6",
-        "resume_job": "841fd769efbb3a97acba1f9fd19521937a983fb859db0e4c8c356c78189e8847",
-        "start_job": "b27af119c68c38948540fdc3e5c36c0611a3042ee835751865148bd4a470eb4c",
+        "resume_job": "15dbe35cd1286cfde88cb6fc0cbe3d4e522f42589e14b8c2473060eecfe22aba",
+        "start_job": "323df63d301a64ce916daf6694797783bdeff4418da7fd76454ce03bee541e53",
         "validate_allowances": "1261b45c1be71f76807e3d0ef712f93b852ef4d3ff8a8d3a13e2acaac3750196",
         "validate_assembly": "a98071285a67c4060ad5b8e960edaf80ca55e35b4910146c0121ddd307abc45a"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed replay-first-writes, part 2 (the first patch release after 0.91.7): the admission of an acquisition commits at the revision that the write lock finds when the store is at the caller's revision or a later one, reads the reservation of its operation inside its write, and waits for a busy store through finishing.retry_finishing_write; visual keeps the compare-and-swap; the start of a full-text job commits against the records of its check with the same condition and wait; the saved intent of a remote operation without a revision of the user commits against the saved intents and waits the same way, and a check answers the committed admission of an acquisition; no packet argument or member changes."
     },
     "research_harness.fulltext_transfer": {
       "ast_sha256": "950b83587e5490c9e91bfd53d79d299cd1c4b360d243758f27d512a96003d28d",
@@ -18663,11 +18667,12 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.integration": {
-      "ast_sha256": "77488fb58d9030228b61d13c4a4975b2656668a09d71d5e5d8fd0d74d69fa53f",
+      "ast_sha256": "b64d1d4f53d49554713f71bdd71e16bbc777a4d31d088034f6990742e333f4ec",
       "functions": {
         "_decisions": "12e706ad148e24be3a1131968b35e828e3d4f7cc49194fd4a06e9e0732da71bc",
         "adopt_workspace": "7f3c52a1e9693e6f2b9e5abe31c76f6109dddf9757837ef4f2e3240959e96ec9",
-        "command_identity": "7ff70b07f203c3dc7ef81a05e324345485e669f1ed22daa144fc58615d49fd92",
+        "command_identity": "a962ae02162dfe68713946b4951ee7a47966a02bd2457482df2e84fd04d2bc7c",
+        "command_request_id": "dee1c4777689deec6f0004c0911a144891264ea1a2e4a19853bf05e5715a0093",
         "current_store": "cd6683f2f0883a573d59bba0db7ed38aa7f1d36f76904f01cf80413d23ac037e",
         "export_workspace": "34ede103c34af488cf70325ac25a8effcecaf04d92caa323237f37e6eb13b263",
         "initialization_payload": "ae75116330e661184b143595152338c6e76ff9bf49c572dfb611766708f79e31",
@@ -18681,7 +18686,7 @@
         "update_study": "ffdc9a7898fc73b1105b6ca6bc533281b12de2e69efce25da7edb1401f2ce0df"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed replay-first-writes, part 2 (the first patch release after 0.91.7): the admission of an acquisition commits at the revision that the write lock finds when the store is at the caller's revision or a later one, reads the reservation of its operation inside its write, and waits for a busy store through finishing.retry_finishing_write; visual keeps the compare-and-swap; the start of a full-text job commits against the records of its check with the same condition and wait; the saved intent of a remote operation without a revision of the user commits against the saved intents and waits the same way, and a check answers the committed admission of an acquisition; no packet argument or member changes."
     },
     "research_harness.jpeg": {
       "ast_sha256": "d30dc719d65b06d52da8db49d81d5657dcd020fdd904463a0402a683402e1062",
@@ -20558,23 +20563,23 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.4 origin authentication: describe_correction_observation passes the origin view of the records to _authenticate_observation; no packet argument or member changes. Reviewed 0.91.5 call payload definition: check_authentication rebuilds the payload of each committed call capture through review_task_execution.rebuild_call_payload, with the optional members that the invocation holds, in place of fixed key lists; no packet argument or member changes."
     },
     "research_harness.remote": {
-      "ast_sha256": "8a21b1993953dd33100af777fa9d9aabfad96785e5430c6f01add957b02cc06f",
+      "ast_sha256": "eb52011aa4cda9301fddda30ad7d8a862d53769b515113d8504d94283f5d7865",
       "functions": {
         "_select_answer_members": "92f1798231f491c0e0f753a8e4984cba8fd30f216ecd04e2234f3a2bb5ec6a38",
         "_change": "4b0684c358442d85218a613eca9593aa48cc686e18b3db02f0b06deaf5c4d6d5",
         "_compute_request_fingerprint": "c85df950087d4aeb76bf11d6f7899be503d30120d4eca111536f6120d3c849b6",
         "_finish_intent_once": "ff1a14f38e8189abfa881039278aca50ea38b7e9f3de491263a4e3ffc445c04f",
         "_read_pending_step": "4580ce79e8b8e23df61b671e433f15f8a0b3b18f63b5a226c5a8631d9bae0658",
-        "begin_intent": "6be41209c75597bc2e67e3a3542a0cae079e37fcfae31c937c3e945dd8fc236b",
+        "begin_intent": "0d4bddbe0926c2b16dae985cdbcdc769ed1fa61361b834e979705deb486c8042",
         "discard_step": "8cdf176f8a548d1fe8a089264153676c74632c8a1ab0afaef2db351e6c4d3053",
-        "find_intent": "9cd4897569c7fa0939138cf35594b775a03eba261249a9e3dfd266b270a0b026",
+        "find_intent": "f2aa0f50236d9427469f521a5d24a9e325ad060ac2e8be1aefbffae0cb71ff76",
         "finish_intent": "6a758c7068f8626d930256e0e8794916cfeb4577cfe4e88e9f7cb2580531de4b",
         "get_intent": "afc0d8c462b68840f25253ccb0e584a053a0e88098930c8ecd50fad8f91b7769",
         "remote_step": "b10ac2865e48422504dde0b652ab4c2d3cb0b3540d6c136c35d5cc9aaba1d5d8",
         "resolve_step": "d9fd010e3cc275d0e24988b8f9e6bc73ebcfd8b52fa028870ae041b5b8cd6ff5"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed replay-first-writes, part 2 (the first patch release after 0.91.7): the admission of an acquisition commits at the revision that the write lock finds when the store is at the caller's revision or a later one, reads the reservation of its operation inside its write, and waits for a busy store through finishing.retry_finishing_write; visual keeps the compare-and-swap; the start of a full-text job commits against the records of its check with the same condition and wait; the saved intent of a remote operation without a revision of the user commits against the saved intents and waits the same way, and a check answers the committed admission of an acquisition; no packet argument or member changes."
     },
     "research_harness.remote_execution": {
       "ast_sha256": "44150a9f37fb267c851e3780ad6803ac506654d843dc3340d09375c2181d1484",
@@ -24091,7 +24096,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.6: the step of problem-value names changes_if_resolved among its fields; the packet members stay as they are."
     },
     "research_harness.storage": {
-      "ast_sha256": "4ad927e68cc6d8bbdba01cdd45ac116caf67d1b3ea022dd706fe62eba607de65",
+      "ast_sha256": "cb0ad808f70be9f39fd69123aaeb4880586ce57ddc2a8b7e0653d01de17e87b3",
       "functions": {
         "_canonical": "83dab9f8520cc85f11ca786c64dc5f6901d8372d19972e7da48ed5fe3965f32a",
         "_check_bounds": "9b36c395983b709198dd33488615f500f7546ca88ac1c46a1f956e9e1bf13eac",
@@ -24131,7 +24136,7 @@
         "select_record_groups": "e482783667db130c5fca6615f58feb274c61d77606589d537a5d90379b3cb968"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed scoped equality selectors for exact route/context and refusal parent groups; revalidation algorithms and authenticated row membership remain unchanged. Changed AST requires declaration review. Reviewed 0.91.4: _read_snapshot: Retain record-version history for an assignment whose carried_selection.protocol names version 2, after JSON member inspection without SQLite JSON extensions. overlay_kinds: Retain history, revision and the authentic current row source when overlaying kinds on snapshot, historical, prepared or scoped records. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed replay-first-writes, part 1 (the first patch release after 0.91.7): a committed request is answered from a read before any write lock, a write transaction that finds its request committed ends with ROLLBACK, and the open of an existing store for creation checks its structure in a read; inside a command a read waits for a COMMIT in progress and a COMMIT for the readers of the store, for at most the shared wait, while a polling read and the render of the output views keep the busy timeout; no packet argument or member changes."
+      "reason": "Reviewed scoped equality selectors for exact route/context and refusal parent groups; revalidation algorithms and authenticated row membership remain unchanged. Changed AST requires declaration review. Reviewed 0.91.4: _read_snapshot: Retain record-version history for an assignment whose carried_selection.protocol names version 2, after JSON member inspection without SQLite JSON extensions. overlay_kinds: Retain history, revision and the authentic current row source when overlaying kinds on snapshot, historical, prepared or scoped records. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed replay-first-writes, part 1 (the first patch release after 0.91.7): a committed request is answered from a read before any write lock, a write transaction that finds its request committed ends with ROLLBACK, and the open of an existing store for creation checks its structure in a read; inside a command a read waits for a COMMIT in progress and a COMMIT for the readers of the store, for at most the shared wait, while a polling read and the render of the output views keep the busy timeout; no packet argument or member changes. Reviewed replay-first-writes, part 2 (the first patch release after 0.91.7): the admission of an acquisition commits at the revision that the write lock finds when the store is at the caller's revision or a later one, reads the reservation of its operation inside its write, and waits for a busy store through finishing.retry_finishing_write; visual keeps the compare-and-swap; the start of a full-text job commits against the records of its check with the same condition and wait; the saved intent of a remote operation without a revision of the user commits against the saved intents and waits the same way, and a check answers the committed admission of an acquisition; no packet argument or member changes."
     },
     "research_harness.strategy": {
       "ast_sha256": "30a9dc55b611829fa7bc481961ecbb6822991ee2f9be7e49e52de9cbc902f928",
@@ -24171,19 +24176,19 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.submission": {
-      "ast_sha256": "bac4c3a5b05064d8dcce9b30db341dbb8a52766b871e96de19f91803d60f15b0",
+      "ast_sha256": "eb03034294c72fed302dfac8466128c053f1e6d39e7c07097620a945ce51c330",
       "functions": {
         "_observation": "5cb23ed0270920906c85d251bc238dc79e0225846d912375955eec7bef2c859e",
-        "_send_verdict": "bbfa11e943505f74edb3dab05de483ef5df1fa78938154637d2668e085b31337",
+        "_send_verdict": "a1e2fd0bc587ab3b2cc165009dfdcbc2b12931bb7f47213550777c36baaa9ffc",
         "check_submission_preconditions": "bbb5793c108b8211100d4750b23a5f1766220addbfebd0f730eed9a38d8133d3",
         "check_verdict_preconditions": "12cc25ab249c3120c782e908f83a5073ec9749265f28cc24ee04ae806248b7d4",
         "continue_submission": "c39a7055cc79c460129ed424ede9090321bfba923568b90df63c4b336f4faf5f",
-        "send_verdict": "74bae0353fe2a67801441238b2ed377b44b003aef3422b656a249b845a2fcc10",
-        "submit_managed": "d55b611338ea968b5744cbcdfd6d8d3a37220520892bd0b81e9edbd64ac4804c",
+        "send_verdict": "652dc059ed229d18fd5959c42cbc6574073ed40d1fea9d598062182e022ae312",
+        "submit_managed": "85abd821aadcfcfb36b2922fcf063346aba57804e1245f66f3de7397e5f9507d",
         "validate_submission": "f798de8b24d62fcea02c9ba861ab3108adab670c8cd977adf2add120726db8b9"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed replay-first-writes, part 2 (the first patch release after 0.91.7): the admission of an acquisition commits at the revision that the write lock finds when the store is at the caller's revision or a later one, reads the reservation of its operation inside its write, and waits for a busy store through finishing.retry_finishing_write; visual keeps the compare-and-swap; the start of a full-text job commits against the records of its check with the same condition and wait; the saved intent of a remote operation without a revision of the user commits against the saved intents and waits the same way, and a check answers the committed admission of an acquisition; no packet argument or member changes."
     },
     "research_harness.synthesis": {
       "ast_sha256": "c6fa820431e1c4fd7875723e3d45f05495d3700651ae2e984dacb26e500c17be",
@@ -24227,16 +24232,16 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.visual_assets": {
-      "ast_sha256": "2dd7b7de7204865aa0db55ef3a4810f7505657accf11dcf80c397d271c3ecbff",
+      "ast_sha256": "12ac53b8651d58fa2c85f03b447b8a24c0b467142013c5e6c4a1cf2cd1db7d3c",
       "functions": {
-        "acquire_visual_asset": "aac00a5077b9b56f29631936a6a8a5a1235bd29f878f682e398826e96053648c",
+        "acquire_visual_asset": "2f0eb4b7b85921560b18a020e131688670f56fa6712f678da56a81b6637f7a57",
         "asset_dependencies": "bfb3386ff6c2e513bce8afd923a3df1c9db1c071fa42f99370e5d7f99a6cac4a",
         "asset_key": "b38192de5adef6ea7b05517e6be2bb602d6a2465ea61a356cfacd36dd9cabd9a",
         "current_asset": "f3d93466a51b83f3af4f3fff461fcefbd65825d56f97f11e7b72b245316df6d1",
         "visual_context": "a09182fb64dbf6ff5459003fd5371d4714d3dd75c5b35cb909ad575f52cd8483"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed replay-first-writes, part 2 (the first patch release after 0.91.7): the admission of an acquisition commits at the revision that the write lock finds when the store is at the caller's revision or a later one, reads the reservation of its operation inside its write, and waits for a busy store through finishing.retry_finishing_write; visual keeps the compare-and-swap; the start of a full-text job commits against the records of its check with the same condition and wait; the saved intent of a remote operation without a revision of the user commits against the saved intents and waits the same way, and a check answers the committed admission of an acquisition; no packet argument or member changes."
     },
     "research_harness.workspace": {
       "ast_sha256": "7fea536a5dc3c0dbdbed22dba4880053ec0a4fca4778e2af06ab039131367e0d",
@@ -24255,7 +24260,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.zenodo": {
-      "ast_sha256": "2429843704af0708c87e657f9cac0e73e696e6aa3eb6c8ed2b354e0fc1373a34",
+      "ast_sha256": "20f9e6dad1a6187bae7dac6dd30f2d7474f17e8c35d8dc488cdb480324551855",
       "functions": {
         "_current": "1a81961f4e3171e57d0aaf04dd3718a40fdf9a8147ac8dd5581b9825bd158e09",
         "_deposition": "7039fa6718dabcb8aaadc4f835b3c3203e303abab680d4eaa839de81485b658d",
@@ -24266,11 +24271,11 @@
         "_recover_published_deposition": "7f707fdfe0e1157892cc6ceac8ce6846a0382220b89fb1eae7016387b251243c",
         "_require_published_deposition": "6f2297f4a510dd0498886bc3652642889280b30f6bb6376dcb0f46c819cca675",
         "_set_preview": "8a30c3afc26b9259398ccd2f32090c91b11e6d3c2be092257aff4bee8d3d654e",
-        "begin_deposit": "d0ad12c281f59af555c9cd628901509dc6546323cd9ab2d4baa61657ce10cee6",
+        "begin_deposit": "1b10009eba357ed80be5facbf627bb80a54dfe45ef64aa39ac79a3bc0cadf33c",
         "build_draft_document_url": "4ede605a8955d1677d08ac7dbceb041bb9e0ed66e801565ae80a204dc9eb5a3c",
         "build_previewed_document": "acf787e6d4a330e4e980d4572276dbc0311af76471259f085b744dc56e93b7f1",
         "continue_deposit": "827afa5e630c735bd177a64247e543c25f72a174428e9564750d9bd453207e73",
-        "deposit": "040050f1f14c8e016d53df7ce1d833c77417b220baef03ae87577e518a10b20d",
+        "deposit": "01009fbca96fa86e640a69948ced7e3dbf88294c98954f0ae8553e9a37f2359e",
         "has_claimed_publish": "b7a589e31c700344a8c82d7d0f54ebcca80fa91ccd3f264743a2407684d1a324",
         "has_published_record": "0c42a011bc1cdf6df7d77e49286d07ff52b6bf6d253fbfd7da6579d7a958fb08",
         "own_workspace_deposits": "e4c4e4a8ddb474265bcd8c8e562d71d29d8b7c1f07c3a2fd0e22d49d42f2af44",
@@ -24279,7 +24284,7 @@
         "validate_deposit": "377deb1f00bea47d8f2d1bbe5a97d2f846dcabf738118114fa7734e74295c27e"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (the first patch release after 0.91.7): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed replay-first-writes, part 2 (the first patch release after 0.91.7): the admission of an acquisition commits at the revision that the write lock finds when the store is at the caller's revision or a later one, reads the reservation of its operation inside its write, and waits for a busy store through finishing.retry_finishing_write; visual keeps the compare-and-swap; the start of a full-text job commits against the records of its check with the same condition and wait; the saved intent of a remote operation without a revision of the user commits against the saved intents and waits the same way, and a check answers the committed admission of an acquisition; no packet argument or member changes."
     }
   },
   "certified_callers": {
@@ -42433,7 +42438,8 @@
     "source_changed": "Count of entries whose own source no longer matches the inventory, in the carried-reading receipt only.",
     "undated": "Reviewed 0.91.2: problem_accounts.validate_fact writes undated only in problem_account_date_missing ResearchError.details. Its validate_value callers are record_value (command refusal) and problem_delivery._assess_minimum (gate/status obligations), not reviewer packet construction. Native openness assessment_error gaps capture reading/deferral errors and never these account validators.",
     "forecast": "Internal describe_minimum_forecast return value; export stores it under audit_forecast.",
-    "supporting": "Internal bind_minimum_records return value listing supporting reading records; not a packet member."
+    "supporting": "Internal bind_minimum_records return value listing supporting reading records; not a packet member.",
+    "remote_intent": "A record kind of the allowlisted scoped-storage equality selectors (storage._FILTER_FIELDS): remote.find_intent reads the saved intents of one request fingerprint through read_filtered_records. It is query metadata, not a reviewer packet field."
   },
   "non_packet_sites": [
     {

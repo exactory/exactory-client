@@ -9,6 +9,7 @@ from .errors import ResearchError
 from .finishing import retry_finishing_write
 from .evidence import digest
 from .operations import immutable_record, prepared_mutation, prepared_task_mutation, text
+from .storage import read_filtered_records
 
 
 # The messages of a write of a remote intent that the store refused: before a request is sent, after its answer
@@ -17,6 +18,9 @@ REMOTE_CLAIM_STORE_BUSY_MSG = (
     'The research store stayed busy, or kept changing the records that this write read, and the step of this remote '
     'operation was not started. No request of this step was sent. The intent keeps every step that was confirmed '
     'before. Run the same command again. It continues from the confirmed steps.')
+REMOTE_BEGIN_STORE_BUSY_MSG = (
+    'The research store stayed busy, or kept changing the records that this write read, and it did not save this '
+    'remote operation. This command sent no request. Run the same command again.')
 REMOTE_CLAIM_STORE_CHANGED_MSG = (
     'The research store changed between the check of this remote step and its start, so the step was not started. No '
     'request of this step was sent. The intent keeps every step that was confirmed before. Run the same command '
@@ -97,12 +101,17 @@ def _compute_request_fingerprint(kind, binding, deduplication_key):
 
 
 def find_intent(records, kind, binding, deduplication_key=None):
-    """The saved intent that begin_intent reuses for this exact request, or None."""
+    """The saved intent that begin_intent reuses for this exact request, or None. It reads only the intents with the
+    fingerprint of the request, so a change of another intent does not refuse a write that commits against this read."""
     fingerprint = _compute_request_fingerprint(kind, binding, deduplication_key)
-    return next((r for r in records.get("remote_intent", {}).values() if r["fingerprint"] == fingerprint), None)
+    return next(iter(read_filtered_records(records, "remote_intent", fingerprint=fingerprint).values()), None)
 
 
-def begin_intent(store, kind, binding, *, expected_revision, request_id, deduplication_key=None):
+def begin_intent(store, kind, binding, *, expected_revision=None, request_id, deduplication_key=None):
+    """Save the intent of a remote operation, its first write, or return the saved intent of the same request. The
+    intent sends nothing: each step of the operation is claimed after a check of its own. With expected_revision, which
+    the user of a command gives, the commit is the compare-and-swap on that revision. Without it the commit depends on
+    the saved intents that this write reads, and it waits for a busy store or a change of them."""
     payload = {"kind": kind, "binding": binding}
     if deduplication_key is not None:
         payload["deduplication_key"] = deduplication_key
@@ -117,8 +126,18 @@ def begin_intent(store, kind, binding, *, expected_revision, request_id, dedupli
         if deduplication_key is not None:
             record["deduplication_key"] = deduplication_key
         return [immutable_record(records, "remote_intent", request_id, record)], {"id": request_id}
-    receipt = prepared_mutation(store, "remote.begin", payload, prepare,
-                                expected_revision=expected_revision, request_id=request_id)
+    if expected_revision is not None:
+        receipt = prepared_mutation(store, "remote.begin", payload, prepare,
+                                    expected_revision=expected_revision, request_id=request_id)
+        return get_intent(store, receipt["result"]["id"])
+
+    def stamp_created_revision(changes, result, commit_revision):
+        # created_revision is the revision before the commit, as the compare-and-swap form records it.
+        return [(record_kind, key, dict(record, created_revision=commit_revision - 1))
+                for record_kind, key, record in changes], result
+    receipt = retry_finishing_write(lambda: prepared_task_mutation(
+        store, "remote.begin", payload, prepare, request_id=request_id, finalize=stamp_created_revision),
+        REMOTE_BEGIN_STORE_BUSY_MSG)
     return get_intent(store, receipt["result"]["id"])
 
 

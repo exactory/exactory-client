@@ -36,7 +36,7 @@ from research_harness.exactory_api import (_DEFAULT_API_URL, CHANGES_IF_RESOLVED
                                           CHANGES_IF_RESOLVED_MIN_UNITS, JAVASCRIPT_TRIM_CHARACTERS,
                                           count_utf16_units, normalize_plain_text_line_breaks,
                                           read_api_base_url)
-from research_harness.integration import command_identity, current_store
+from research_harness.integration import command_identity, command_request_id, current_store
 from research_harness.output_views import render_views_after_command
 from research_harness.same_origin import (REQUEST_ERROR_TYPES, RefusedRedirectError,
                                           describe_request_error_cause, get_origin, is_read_method,
@@ -484,7 +484,7 @@ def _run_submit(args: argparse.Namespace) -> None:
         public_action="POST /api/v1/verifications", **strict)
     if submission_checks is not None:
         payload = submit_managed(store, body, _send_request, scope_contract_id=strict["scope_contract_id"],
-                                 scope_target_digest=strict["scope_target_digest"], **command_identity(store, args))
+                                 scope_target_digest=strict["scope_target_digest"], request_id=command_request_id(args))
         status = 201
     else:
         payload, status = _send_request("POST", "/api/v1/verifications", body)
@@ -581,7 +581,7 @@ def _run_verify(args: argparse.Namespace) -> None:
         lambda workspace_store: check_verdict_preconditions(workspace_store, task, body), public_gate="verification",
         public_action="POST /api/v1/verifications/" + urllib.parse.quote(task["verificationId"], safe="") + "/verdicts")
     if verdict_report is not None:
-        payload = send_verdict(store, task, body, _send_request, **command_identity(store, args))
+        payload = send_verdict(store, task, body, _send_request, request_id=command_request_id(args))
     else:
         payload, _ = _send_request(
             "POST",
@@ -601,8 +601,7 @@ def _run_reconcile(args: argparse.Namespace) -> None:
     if intent["kind"] == "verdict":
         identity = intent["binding"]["verification_id"]
         task, _ = _send_request("GET", "/api/v1/tasks/" + _quote_identifier_path(identity))
-        _print_json(send_verdict(store, task, intent["binding"]["body"], _send_request,
-                                expected_revision=store.revision, request_id=intent["id"]))
+        _print_json(send_verdict(store, task, intent["binding"]["body"], _send_request, request_id=intent["id"]))
         return
     raise ResearchError("remote_intent_mismatch", "Use exactory-draft reconcile for a Zenodo deposit")
 

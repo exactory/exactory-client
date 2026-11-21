@@ -840,6 +840,9 @@ class SharedWaitTests(PlainStoreCase):
             calls.append((options.get("attempts", 8), options.get("seconds", 8.0), tuple(options.get("codes", ("store_busy", "stale_revision")))))
             return retry(write, **options)
         shared = (finishing.SCOPED_FINISH_ATTEMPT_COUNT, finishing.SCOPED_FINISH_WAIT_SECONDS, finishing.SCOPED_FINISH_RETRY_CODES)
+        # The admission of the acquisition waits as long, and ends at once on its own stale_revision.
+        admission = (finishing.SCOPED_FINISH_ATTEMPT_COUNT, finishing.SCOPED_FINISH_WAIT_SECONDS,
+                     acquisition.ADMISSION_RETRY_CODES)
         with mock.patch.object(finishing, "retry_store_write", record), \
                 mock.patch.object(remote, "retry_store_write", record, create=True), \
                 mock.patch.object(acquisition, "retry_store_write", record, create=True), \
@@ -851,8 +854,8 @@ class SharedWaitTests(PlainStoreCase):
             http, _, _ = client([xml_response(atom([entry()], total=1))])
             acquisition.acquire_work(self.store, "2601.00001v1", request_id="acquire",
                                      expected_revision=self.store.revision, http=http)
-        self.assertEqual(len(calls), 5)
-        self.assertEqual(set(calls), {shared})
+        self.assertEqual(len(calls), 6)
+        self.assertEqual(set(calls), {shared, admission})
 
 
 if __name__ == "__main__":

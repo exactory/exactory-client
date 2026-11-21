@@ -21,7 +21,7 @@ an unsupported or malformed container produces a current pending obligation.
 
 import copy
 
-from .acquisition import _begin, _finish
+from .acquisition import _begin_at_revision, _finish
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evidence import digest, media_type, prepare_sources, put_sources
@@ -114,7 +114,7 @@ def acquire_visual_asset(store, link, url, *, request_id, expected_revision, htt
     from .operations import _read_preparation
     preparation = _read_preparation(store)
     if preparation.has_request(request_id):
-        return _begin(store, "visual_asset.acquire", payload, request_id, expected_revision)
+        return _begin_at_revision(store, "visual_asset.acquire", payload, request_id, expected_revision)
     snapshot = {"revision": preparation.revision, "records": preparation.records}
     artifacts = ArtifactStore(store.root)
     context = validate_link(snapshot["records"], artifacts, link)
@@ -123,7 +123,8 @@ def acquire_visual_asset(store, link, url, *, request_id, expected_revision, htt
     inventory = context["visual"]
     if url not in {r["url"] for r in inventory["resources"]}:
         raise ResearchError("invalid_visual_asset", "The requested URL is not a saved resource of the selected HTML visual")
-    replay = _begin(store, "visual_asset.acquire", payload, request_id, expected_revision, target=link["version_id"])
+    replay = _begin_at_revision(store, "visual_asset.acquire", payload, request_id, expected_revision,
+                                target=link["version_id"])
     if replay is not None:
         return replay
     snapshot = store.snapshot()
