@@ -7714,6 +7714,40 @@
         "test_ci_shards.CIShardTests.test_cli_run_gives_each_test_the_reviewer_program_guard",
         "test_ci_shards.CIShardTests.test_cli_run_modules_gives_named_plugin_and_harness_modules_the_guard"
       ]
+    },
+    {
+      "id": "v7-reading-refusal-gave-no-path-and-no-values",
+      "record": "20261120072937-v7-reading-refusals-without-bounds-and-an-empty-unread-list",
+      "class": "refusal notice of a v7 reading answer",
+      "summary": "In the paid verification of record 12, three v7 reading answers were refused with invalid_reading_response, and no refusal notice gave the reviewer a value. 19 of the 28 checks of a v7 reading response passed no detail, none passed path, and the notice replaced each detail whose name the check native.output does not register by its digest. Notes of 20,996 characters gave empty details. Notes whose cost of 20,111 characters passed the bound of 20,000 gave the digests of notes_cost and bound. A page request for the empty list unread gave the digests of list and after. A refused part of an argument and a refused citation by handle showed digests too, and the path of a refused citation named no member. The reviewer then guessed each cause and set itself limits that the harness does not have.",
+      "expected": "Each refusal of a v7 reading response gives path, the JSON Pointer of the member that failed, and the values that its rule compared: for the notes characters, notes_cost and bound; for a list request list, after and one of rows, ended and expected_after; for a passage request unit and anchor, or requested and remaining. These names are notice fields of native.output, and the six names of the checks of a part of an argument and of a citation are notice fields of review.shape, so the notice of the replacement shows the values. A refused citation names its ground and its reference. The check accepts and refuses the same answers, and a refusal and a notice that an earlier release recorded keep their bytes and the chain verifies.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_refusal_details.NotesRefusalTests.test_notes_longer_than_the_bound_give_their_length_their_cost_and_the_bound",
+        "test_openness_reading_v7_refusal_details.NotesRefusalTests.test_notes_within_the_length_whose_cost_passes_the_bound_give_the_same_three_numbers",
+        "test_openness_reading_v7_refusal_details.ListRefusalTests.test_a_request_for_a_list_without_rows_names_the_list_and_its_rows",
+        "test_openness_reading_v7_refusal_details.EveryRuleTests.test_every_refusal_names_the_member_that_failed",
+        "test_openness_reading_v7_refusal_details.NoticeValueTests.test_the_notice_shows_the_numbers_of_refused_notes",
+        "test_openness_reading_v7_refusal_details.NoticeValueTests.test_the_notice_shows_the_list_of_a_refused_page_request",
+        "test_openness_reading_v7_refusal_details.NoticeValueTests.test_the_notice_shows_the_values_of_a_refused_part_of_an_argument",
+        "test_openness_reading_v7_refusal_details.NoticeValueTests.test_the_notice_shows_the_place_and_the_handle_of_a_refused_citation",
+        "test_openness_reading_v7_turns.V7CommandTests.test_a_refusal_and_a_notice_that_an_earlier_release_recorded_keep_their_bytes_and_the_chain_verifies"
+      ]
+    },
+    {
+      "id": "v7-assignment-receipt-held-a-forecast-over-the-whole-plan",
+      "record": "20261120072937-v7-reading-refusals-without-bounds-and-an-empty-unread-list",
+      "class": "review capacity forecasts",
+      "summary": "The printed receipt of review-assignment of a v7 turn held two forecasts. Its stored result held the forecast over the inputs that remain, 13 turns at the first assignment of the paid verification of record 12, and the command added a forecast over the whole inventory of the plan, 40 turns that counted the 29 full texts which the carried turns had read. The receipt of a replacement turn held only the forecast over the whole plan. Status and the preflight report gave that forecast for every turn: on a fixture chain of three turns, 3, 3 and 3 turns where the receipts gave 3, 2 and 1.",
+      "expected": "The receipt of each v7 turn holds one forecast, over the inputs that remain: in the result for a turn that continues the chain, and beside the result for a replacement turn, computed as the lines of review-series compute it. The check receipt, status and the preflight report give the same forecast.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_turns.V7CommandTests.test_each_receipt_of_a_reading_chain_holds_one_forecast_over_the_inputs_that_remain",
+        "test_openness_reading_v7_turns.V7CommandTests.test_the_receipt_and_the_check_of_a_replacement_turn_hold_the_forecast_over_the_inputs_that_remain",
+        "test_openness_reading_v7_turns.V7CommandTests.test_status_and_preflight_give_the_forecast_over_the_inputs_that_remain"
+      ]
     }
   ]
 }

@@ -1117,6 +1117,136 @@ class V7CommandTests(OpennessReadingCase):
         self.assertIn('capacity_forecast', rows[0])
         self.assertIn('input', rows[0]['capacity_warning'])
 
+    def list_forecasts(self, value, path=''):
+        """Each capacity_forecast of a receipt or a report, by its JSON Pointer, with its basis and its turns."""
+        found = []
+        for key, item in value.items():
+            if key == 'capacity_forecast':
+                found.append((path + '/' + key, item.get('basis'), item.get('turns')))
+            elif isinstance(item, dict):
+                found.extend(self.list_forecasts(item, path + '/' + key))
+        return found
+
+    def build_assignment_payload(self, identifier, native, prior=None):
+        context = dict(native_packet=native) if prior is None else dict(native_packet=native, prior_assignment_id=prior)
+        return dict(id=identifier, route_id='route', dossier_id=None, role='native_math',
+                    reviewer_id='openness-reviewer', author_id='problem-author', context=context)
+
+    def test_each_receipt_of_a_reading_chain_holds_one_forecast_over_the_inputs_that_remain(self):
+        # Record 12 (20261120072937-v7-reading-refusals-without-bounds-and-an-empty-unread-list): the receipt held
+        # a second forecast over the whole inventory of the plan, which a later turn no longer reads.
+        from research_harness import cli, review_protocol as protocol
+        native = self.export()
+        turns, prior = [], None
+        for identifier in ('turn-1', 'turn-2'):
+            payload = self.build_assignment_payload(identifier, native, prior)
+            receipt = self.mutate(protocol.record_assignment, payload)
+            reported = cli.describe_review_receipt(self.store, 'review-assignment', payload, receipt)
+            turns.append(receipt['result']['capacity_forecast']['turns'])
+            self.assertEqual(self.list_forecasts(reported),
+                             [('/result/capacity_forecast', 'remaining_inputs', turns[-1])])
+            self.assertEqual(digest(reported['capacity_plan']), receipt['result']['capacity_plan']['digest'])
+            self.invoke(identifier, self.build_v7_answer(self.read_packet(identifier)))
+            prior = identifier
+        self.assertEqual(turns, [3, 2])
+
+    def test_the_receipt_and_the_check_of_a_replacement_turn_hold_the_forecast_over_the_inputs_that_remain(self):
+        from research_harness import cli, review_protocol as protocol
+        from research_harness.check_mode import check_mutation
+        from research_harness.review_continuation import plan_next
+        native = self.export()
+        self.assign('turn-1', native)
+        self.invoke('turn-1', self.build_v7_answer(self.read_packet('turn-1')))
+        refused = self.assign('turn-2', native, prior='turn-1')
+        self.invoke('turn-2', dict(stage='reading', notes=42))
+        plan = plan_next(self.store.snapshot()['records'], self.artifacts, 'turn-2')
+        self.assertEqual((plan['state'], plan.get('command')), ('replace', 'review-assignment'), plan)
+        expected = [('/capacity_forecast', 'remaining_inputs', refused['capacity_forecast']['turns'])]
+        checked = check_mutation(self.store, protocol.record_assignment, plan['payload'],
+                                 expected_revision=self.store.revision, request_id='replacement-check',
+                                 bounded_payload=plan['payload'])
+        self.assertEqual(self.list_forecasts(checked), expected)
+        receipt = self.mutate(protocol.record_assignment, plan['payload'])
+        self.assertNotIn('capacity_forecast', receipt['result'])
+        reported = cli.describe_review_receipt(self.store, 'review-assignment', plan['payload'], receipt)
+        self.assertEqual(self.list_forecasts(reported), expected)
+        self.assertEqual(expected[0][2], 2)
+        from research_harness.review_series import _enrich_line
+        line = _enrich_line(self.store, dict(state='run', head_id=plan['payload']['id']),
+                            self.store.snapshot()['records'])
+        self.assertEqual(reported['capacity_forecast'], line['capacity_forecast'])
+        self.assertEqual(digest(reported['capacity_plan']), receipt['result']['capacity_plan']['digest'])
+        self.assertEqual(digest(checked['capacity_plan']), receipt['result']['capacity_plan']['digest'])
+
+    def test_status_and_preflight_give_the_forecast_over_the_inputs_that_remain(self):
+        from research_harness import review_preflight
+        from research_harness.evaluation import Evaluation
+        native = self.export()
+        turns, prior = [], None
+        for number in range(1, 10):
+            identifier = 'turn-%d' % number
+            result = self.assign(identifier, native, prior=prior)
+            turns.append(result['capacity_forecast']['turns'])
+            records = self.store.snapshot()['records']
+            artifacts = Evaluation(records, self.store.build_artifact_store())
+            status = capacity.describe_open_route_reports(records, artifacts)['route']['capacity_forecast']
+            preflight = review_preflight.build_assignment_report(records, artifacts,
+                                                                 records['review_assignment'][identifier])
+            expected = ('remaining_inputs', turns[-1])
+            self.assertEqual(list(status), [identifier])
+            self.assertEqual((status[identifier].get('basis'), status[identifier].get('turns')), expected)
+            self.assertEqual(self.list_forecasts(preflight), [('/capacity_forecast',) + expected])
+            packet = self.read_packet(identifier)
+            if 'reading_final' in packet:
+                break
+            self.invoke(identifier, self.build_v7_answer(packet))
+            invocation = next(row for row in self.store.snapshot()['records']['review_invocation'].values()
+                              if row['assignment_id'] == identifier)
+            self.assertEqual(self.list_forecasts(invocation['preflight']), [('/capacity_forecast',) + expected])
+            prior = identifier
+        self.assertEqual(turns, [3, 2, 1])
+
+    def test_a_refusal_and_a_notice_that_an_earlier_release_recorded_keep_their_bytes_and_the_chain_verifies(self):
+        # 0.91.11 recorded the refusal of notes over the bound without path and values, and its notice showed none.
+        from research_harness import review_protocol as protocol, review_refusal
+        from research_harness.review_continuation import plan_next
+        earlier_fields = ('expected_type', 'received_type', 'missing_fields', 'unexpected_fields', 'characters',
+                          'minimum_characters', 'maximum_characters', 'normalized_characters', 'request_id')
+        def refuse_as_earlier(condition, **details):
+            if not condition:
+                raise ResearchError(reading.INVALID_RESPONSE, 'An earlier message.', {})
+        native = self.export()
+        self.assign('turn-1', native)
+        packet = self.read_packet('turn-1')
+        bound = packet['reading_turn']['allowances']['notes']
+        with patch.object(v7, '_require_reading', refuse_as_earlier), patch.dict(
+                review_refusal.CONTRACT_CHECKS, {'native.output': dict(notice_fields=earlier_fields)}):
+            self.invoke('turn-1', dict(self.build_v7_answer(packet), notes='n' * (bound + 1)))
+            plan = plan_next(self.store.snapshot()['records'], self.artifacts, 'turn-1')
+            head = self.mutate(protocol.record_assignment, plan['payload'])['result']['id']
+        records = self.store.snapshot()['records']
+        self.assertEqual(records['review_output_refusal']['attempt-turn-1']['details'],
+                         dict(message='An earlier message.'))
+        entry = self.read_packet(head)['output_refusal']['refused'][0]
+        self.assertEqual((entry['path'], entry['details'], entry['message']), ('', {}, 'An earlier message.'))
+        diagnosis = review_refusal.classify_observed_output(records, self.artifacts, 'attempt-turn-1')
+        self.assertEqual({key: value for key, value in diagnosis['details'].items() if key != 'message'},
+                         dict(path='/notes', characters=bound + 1, notes_cost=bound + 1, bound=bound))
+        for number in range(2, 100):
+            packet = self.read_packet(head)
+            if 'reading_final' in packet:
+                break
+            self.invoke(head, self.build_v7_answer(packet))
+            self.assign('turn-%d' % number, native, prior=head)
+            head = 'turn-%d' % number
+        self.invoke(head, self.build_v7_finding(packet, packet['reading_final']['notes_handle']))
+        records = self.store.snapshot()['records']
+        self.assertEqual(self.read_packet(plan['payload']['id'])['output_refusal']['refused'][0], entry)
+        self.assertEqual(review_refusal.refused_attempts(records, self.artifacts,
+                                                         [records['review_attempt']['attempt-turn-1']]),
+                         [dict(attempt_id='attempt-turn-1', code=reading.INVALID_RESPONSE)])
+        self.assertTrue(reading.verify_chain(records, self.artifacts, records['review_assignment'][head]))
+
 
 class IncidentV7CommandTests(OpennessReadingCase):
     reading_protocol = None

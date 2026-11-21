@@ -156,9 +156,7 @@ def _enrich_line(store, row, capacity_records, *, usage_snapshot=None):
                 _record_omission(row, 'capacity_forecast', error)
                 _record_omission(row, 'capacity_warning', error)
                 if isinstance(error, (ResearchError, ValueError)):
-                    row['capacity_forecast'] = dict(status='unavailable', is_bound=False,
-                        message=openness_reading.FORECAST_NO_BOUND_MESSAGE,
-                        reason=error.code if isinstance(error, ResearchError) else type(error).__name__)
+                    row['capacity_forecast'] = openness_reading.describe_unavailable_forecast(error)
     return row
 
 

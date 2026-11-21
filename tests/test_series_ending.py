@@ -580,7 +580,7 @@ class SeriesEndingTests(unittest.TestCase):
                 'describe_session_forecast': 1, 'store.build_artifact_store': 4, 'review_protocol._read_json': 1,
                 'review_protocol.build_packet': 1, 'review_protocol.build_assignment_request': 1,
                 'openness_reading.describe_reading_receipt': 1, 'read_position_context': 1,
-                '_record_omission': 6, 'classify_stop': 1},
+                'openness_reading.describe_unavailable_forecast': 1, '_record_omission': 6, 'classify_stop': 1},
             '_build_check_step': {},
             '_use_fallback_step': {'_build_check_step': 1},
             '_complete_ending_step': {},

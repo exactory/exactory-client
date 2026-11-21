@@ -539,7 +539,15 @@ def describe_review_receipt(store, command, payload, receipt):
             return receipt
         from .evaluation import Evaluation
         artifacts = Evaluation(records, store.build_artifact_store())
-        if 'capacity_plan_kind' in assignment:
+        if 'capacity_plan_kind' in assignment and assignment.get('reading_chain'):
+            # The one forecast of a reading turn covers the inputs that remain: the result holds it, and the receipt
+            # of a replacement turn, whose result holds none, gets it here.
+            from .openness_reading_v7 import describe_turn_forecast
+            from .review_route_capacity import read_chain_capacity_plan
+            receipt = dict(receipt, capacity_plan=read_chain_capacity_plan(artifacts, assignment))
+            if 'capacity_forecast' not in receipt['result']:
+                receipt['capacity_forecast'] = describe_turn_forecast(records, artifacts, assignment)
+        elif 'capacity_plan_kind' in assignment:
             from .review_route_capacity import describe_assignment_capacity
             receipt = dict(receipt, **describe_assignment_capacity(records, artifacts, assignment))
         warning = describe_assignment_warning(records, payload['id'], artifacts=artifacts)

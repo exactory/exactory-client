@@ -13,6 +13,15 @@ import math
 from .errors import ResearchError
 from .storage import _canonical, _PreparedSnapshot, _ScopedPreparation, _text
 
+# The JSON type that a refusal names for each Python type of a decoded value.
+JSON_TYPE_NAMES = {dict: "object", list: "array", str: "string", type(None): "null",
+                   bool: "boolean", int: "number", float: "number"}
+
+
+def describe_json_type(value):
+    """Name the JSON type of a decoded value, or the Python type of any other value."""
+    return JSON_TYPE_NAMES.get(type(value), type(value).__name__)
+
 
 def fields(value, required, optional=(), *, code="invalid_input", path=None):
     if (not isinstance(value, dict) or not set(required) <= value.keys()
@@ -20,10 +29,8 @@ def fields(value, required, optional=(), *, code="invalid_input", path=None):
         details = None
         if path is not None:
             received = set(value) if isinstance(value, dict) else set()
-            types = {dict: "object", list: "array", str: "string", type(None): "null",
-                     bool: "boolean", int: "number", float: "number"}
             details = {"path": path, "expected_type": "object",
-                       "received_type": types.get(type(value), type(value).__name__),
+                       "received_type": describe_json_type(value),
                        "missing_fields": sorted(set(required) - received),
                        "unexpected_fields": sorted(received - set(required) - set(optional)) if optional is not None else []}
         raise ResearchError(code, "Expected fields: " + ", ".join(sorted(required)) +

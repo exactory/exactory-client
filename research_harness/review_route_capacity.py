@@ -1635,8 +1635,12 @@ def describe_open_route_reports(records, artifacts=None):
             for head in plans:
                 if 'capacity_plan_kind' in head:
                     plan = read_chain_capacity_plan(artifacts, head)
-                    forecasts[head['id']] = describe_capacity_forecast(plan, route, report['output_profile'],
-                        records=records, turn_kind=head['capacity_plan_kind'])
+                    if head.get('reading_chain'):
+                        from .openness_reading_v7 import describe_turn_forecast
+                        forecasts[head['id']] = describe_turn_forecast(records, artifacts, head)
+                    else:
+                        forecasts[head['id']] = describe_capacity_forecast(plan, route, report['output_profile'],
+                            records=records, turn_kind=head['capacity_plan_kind'])
                 else:
                     plan = json.loads(artifacts.read(head['capacity_plan']['artifact']))
                 statuses.append(

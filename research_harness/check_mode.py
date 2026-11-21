@@ -99,7 +99,15 @@ class _CheckingStore:
         response = {"check": "accepted", "revision": self.revision, "recorded": False,
                               "operation": operation, "payload_digest": _digest(encoded_payload),
                               "snapshot_digest": snapshot_digest, "artifact_digests": self._artifacts.read_digests()}
-        if operation == 'review.assignment' and 'capacity_plan' in result:
+        if operation == 'review.assignment' and 'capacity_plan' in result and result.get('reading_chain'):
+            # A turn of a reading chain states the forecast over the inputs that remain, from its result below, or
+            # here for a replacement turn, whose result holds none.
+            from .openness_reading_v7 import describe_turn_forecast
+            from .review_route_capacity import read_chain_capacity_plan
+            response['capacity_plan'] = read_chain_capacity_plan(self._artifacts, result)
+            if 'capacity_forecast' not in result:
+                response['capacity_forecast'] = describe_turn_forecast(self._records, self._artifacts, result)
+        elif operation == 'review.assignment' and 'capacity_plan' in result:
             from .review_route_capacity import describe_assignment_capacity
             response.update(describe_assignment_capacity(self._records, self._artifacts, result))
         if operation == 'review.assignment' and 'protocol_selection' in result:
