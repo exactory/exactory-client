@@ -40,14 +40,16 @@ SELECTION_MISMATCH_MESSAGE = (
     'its last carried turn under the records as they stand now. A contamination event on a carried turn has this '
     'effect, and so has a failed latest probe of the route record of a carried chain. Third, a stored item of a '
     'carried turn does not match the authenticated turn that it comes from or the inventory of this chain. Fourth, '
-    'the stored selection has a form or a protocol that this release does not verify. The chain gives no finding, '
-    'and a finding that it recorded is stale. When the latest probe of the route record of a carried chain failed, '
-    'probe that route record again. A completed probe of that route record ends the refusal. No probe can end it '
-    'when review-probe refuses that route record with review_route_runtime_stale. In that case and in every other '
-    'case, check the record with record-check. When record-check reports the record ready, export a new packet with '
-    'the same reviewer_id. Assign it for a new finding. The new chain carries the turns of earlier chains that '
-    'still authenticate from their first turn on. It carries no turn of this chain, and it reads again what this '
-    'chain read itself.')
+    'the stored selection has a form or a protocol that this release does not verify. A carried turn whose answer '
+    'fails the output check of its turn, with or without its refusal record, gives the first case under '
+    'exactory-openness-carried-selection-v2 and the second case under exactory-openness-carried-selection-v1. The '
+    'chain gives no finding, and a finding that it recorded is stale. When the latest probe of the route record of '
+    'a carried chain failed, probe that route record again. A completed probe of that route record ends the '
+    'refusal. No probe can end it when review-probe refuses that route record with review_route_runtime_stale. In '
+    'that case and in every other case, check the record with record-check. When record-check reports the record '
+    'ready, export a new packet with the same reviewer_id. Assign it for a new finding. The new chain carries the '
+    'turns of earlier chains that still authenticate from their first turn on. It carries no turn of this chain, '
+    'and it reads again what this chain read itself.')
 ALLOWANCES_CHARACTERS = 30000
 TARGET_LABELS_CHARACTERS = 100000
 DECISIVE_WORK_IDS_CHARACTERS = 10000
@@ -1889,6 +1891,7 @@ def _project_observed_turn(records, artifacts, member, frozen, output, attempt_i
 
 def _rebuild_own_state(records, artifacts, prior, inventory, plan, route):
     from .review_protocol import assignment_state
+    from .review_refusal import classify_observed_output
     projections = []
     for member in reading._list_chain(records, prior):
         frozen = json.loads(artifacts.read(member['packet']))
@@ -1899,6 +1902,11 @@ def _rebuild_own_state(records, artifacts, prior, inventory, plan, route):
                                 'output that passed its checks, so the chain cannot continue from it. Run '
                                 'review-series on the chain and take the step that it plans.',
                                 dict(assignment_id=member['id'], obligations=observed['obligations']))
+        failure = classify_observed_output(records, artifacts, observed['attempt_id'])
+        if failure is not None:
+            raise ResearchError('review_source_continuation_unverified',
+                                UNCHECKED_HEAD_MESSAGE if member['id'] == prior['id'] else UNCHECKED_EARLIER_MESSAGE,
+                                dict(assignment_id=member['id'], attempt_id=observed['attempt_id'], refusal=failure))
         output = observed['output']
         if output.get('stage') != 'reading' and not (output.get('stage') == 'material' and 'reading_final' in frozen):
             raise ResearchError('review_resampling_forbidden',
@@ -2234,9 +2242,11 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
                 details=dict(material_allowance=bounds['material_allowance'], answer_bound=bounds['answer_bound']))
 
 
-# The verification of a v7 chain has five conditions, and a chain that fails one gives no finding. Each condition has
-# its own refusal message. Condition 1 also refuses with SELECTION_MISMATCH_MESSAGE or with a refusal of the artifact
-# store.
+# The verification of a v7 chain has seven conditions, and a chain that fails one gives no finding. Each condition has
+# its own refusal message; condition 6 refuses with the messages of review_refusal_replacement. Condition 1 also
+# refuses with SELECTION_MISMATCH_MESSAGE or with a refusal of the artifact store. Condition 7: the answer of every
+# own turn passes the output check that its run applies (review_refusal.classify_observed_output), also when the
+# store holds no refusal record for it.
 ORIGIN_VERIFICATION_MESSAGE = (
     'The harness cannot verify the carried selection of this chain from its first assignment. One of three cases is '
     'the cause. First, the reference carried_selection of that assignment names a protocol or a digest other than '
@@ -2265,6 +2275,24 @@ COVERAGE_VERIFICATION_MESSAGE = (
     'or the unread set, the outcome unresolved, the citation of the set in the finding or the recorded finding '
     'differs from what the harness rebuilds. Run review-series '
     'on the chain and take the step that it plans.')
+ANSWER_VERIFICATION_MESSAGE = (
+    'The answer of the turn that details.assignment_id names fails the output check of its turn, and the store '
+    'holds no refusal record for it. details.refusal gives the code, the check and the details of the failure. The '
+    'chain gives no finding from that answer or from a turn after it. When a later turn of this chain follows the '
+    'named turn, that turn was built on the answer. Then export a new packet with the same reviewer_id and assign '
+    'it. The new chain can carry the reading turns of this chain that come before the named turn.')
+UNCHECKED_HEAD_MESSAGE = (
+    'The answer of the turn that details.assignment_id names fails the output check of its turn, and the store '
+    'holds no refusal record for it. details.refusal gives the code, the check and the details of the failure. No '
+    'turn continues from that answer. Run review-series on the chain. It runs the recorded review-run request of '
+    'that answer again, which calls no reviewer and records the refusal. It then plans the step for a refused '
+    'answer.')
+UNCHECKED_EARLIER_MESSAGE = (
+    'The answer of the turn that details.assignment_id names fails the output check of its turn, and the store '
+    'holds no refusal record for it. details.refusal gives the code, the check and the details of the failure. A '
+    'later turn of this chain was built on that answer, so the harness assigns no turn that continues this chain, '
+    'and the chain gives no finding. Export a new packet with the same reviewer_id and assign it. The new chain can '
+    'carry the reading turns of this chain that come before the named turn.')
 FINAL_VERIFICATION_MESSAGE = (
     'The turn that details.assignment_id names has no observed, authenticated output in a verified context, or its '
     'output stands at the wrong place. A chain of exactory-openness-reading-v7 ends with one final turn that '
@@ -2432,6 +2460,7 @@ def verify_problem_coverage(records, artifacts, assignment, *, final=False):
     """Verify a v7 prefix/final from its stored selection and plan, without admission or planning."""
     from .native_review import load_packet
     from .review_protocol import assignment_state
+    from .review_refusal import classify_observed_output
     from .evaluation import Evaluation
     overlay = _PlanningArtifacts(artifacts)
     chain = reading._list_chain(records, assignment)
@@ -2464,6 +2493,9 @@ def verify_problem_coverage(records, artifacts, assignment, *, final=False):
         observed = assignment_state(records, overlay, member['id'])
         _require_verification(observed['ready'], FINAL_VERIFICATION_MESSAGE,
                               assignment_id=member['id'], obligations=observed['obligations'])
+        failure = classify_observed_output(records, overlay, observed['attempt_id'])
+        _require_verification(failure is None, ANSWER_VERIFICATION_MESSAGE,
+                              assignment_id=member['id'], attempt_id=observed['attempt_id'], refusal=failure)
         terminal = final and number == len(chain)
         _verify_final_attempt(records, overlay, member, observed, packet, final=terminal)
         projected = _project_observed_turn(records, overlay, member, packet, observed['output'],

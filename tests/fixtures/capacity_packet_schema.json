@@ -19305,7 +19305,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the activation of 0.91.0 (ruling 37): NEW_PROBLEM_CHAIN_PROTOCOLS becomes (PROTOCOL_V7, PROTOCOL_V6); no packet member, call, write or closed shape changes. Reviewed 0.91.1: a math openness packet that fits one turn stays a single native turn under (v7, v6); the condition reads the packet kind only, and no packet member, call, write or closed shape changes."
     },
     "research_harness.openness_reading_v7": {
-      "ast_sha256": "df2a61c0810810a5dc353d1a0f973a7e7f86648f50a56802918ff3d26a891e1d",
+      "ast_sha256": "04cdca4f3ece5da70f9a9cc5d35d0506daefe5887502bcbc91f853fa8fe0b469",
       "functions": {
         "_append_carried_reading": "9f34c832b71cea341b53d12bb0eb023879f03e02a06ba40e5c018c2ba3869e5e",
         "_append_unit": "f6cb4ac11ffc0db1bbc01ecf87ec1ca4e26a2ccc64a24c9aebe0b2c8d2ce16a7",
@@ -19327,7 +19327,7 @@
         "plan_inventory": "427d865ada5c730d6601f112e91becc1da90deba9d364145001dcbdee033d0d0",
         "project_carried_turn": "0c984a434694f523c26e101401f7d285b7d189fdf69c5cab89491985e5cbb682",
         "require_text_reading_route": "0996fc68285408ff85afa069221807feb9838d253254f15016f5b03c8df65d30",
-        "verify_problem_coverage": "6665fb439d31441e01c1c6d26de43d68bcc3b9685848ab05c6d22a0ab3feefa8"
+        "verify_problem_coverage": "79c7dbdc68e5c827be14cd40ebc4a257e1bdd814f8aa398cbc9fa86f590ccdc9"
       },
       "packet_call_digests": [
         "027bbbdf412a92864492ccaf59a88aaa3a1b544a2f6bae687e6d87e75227ea0f",
@@ -19404,7 +19404,7 @@
         "ee40fa0154dd550b5e1956b30fd0089c7e28eceb5a623ab0241aba4b4f0fd5c8",
         "f6afa337053d9231a7eadb9660e4668eba9b23c47a14ad648702ca89f7060179"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.4: describe_uncarried_chains: Expose supersession rows and artifact refusals in a v6 planning receipt without preventing its assignment. _verify_carried_origins: Match the reference protocol and digest, prove the first-assignment commit stamp, and verify version 2 against its historical cutoff. verify_problem_coverage: Pass the stored evaluation beside the planning overlay so origin verification shares authenticated historical reads. Reviewed malformed selection refusal: the reference predicate checks a JSON object before its protocol member. Reviewed 0.91.4 writer pass: the texts of SELECTION_MISMATCH_MESSAGE, ORIGIN_VERIFICATION_MESSAGE and SUPERSEDED_TEXT; the syntax tree is unchanged with every string blanked. Reviewed 0.91.4 lane carry-read-scope: describe_uncarried_chains passes the report member unavailable_chains on when the report holds it and takes the store codes from openness_carried.STORE_REFUSAL_CODES; UNAVAILABLE_CHAIN_TEXT is the message of such a row. No packet member, write or closed shape changes. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.4: describe_uncarried_chains: Expose supersession rows and artifact refusals in a v6 planning receipt without preventing its assignment. _verify_carried_origins: Match the reference protocol and digest, prove the first-assignment commit stamp, and verify version 2 against its historical cutoff. verify_problem_coverage: Pass the stored evaluation beside the planning overlay so origin verification shares authenticated historical reads. Reviewed malformed selection refusal: the reference predicate checks a JSON object before its protocol member. Reviewed 0.91.4 writer pass: the texts of SELECTION_MISMATCH_MESSAGE, ORIGIN_VERIFICATION_MESSAGE and SUPERSEDED_TEXT; the syntax tree is unchanged with every string blanked. Reviewed 0.91.4 lane carry-read-scope: describe_uncarried_chains passes the report member unavailable_chains on when the report holds it and takes the store codes from openness_carried.STORE_REFUSAL_CODES; UNAVAILABLE_CHAIN_TEXT is the message of such a row. No packet member, write or closed shape changes. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked. Reviewed v7-checked-answers: _rebuild_own_state and verify_problem_coverage read the answer of an own turn only after review_refusal.classify_observed_output finds no failure, and refuse a failed answer with details.refusal; three message constants are new and SELECTION_MISMATCH_MESSAGE names one more cause; no packet argument or member changes."
     },
     "research_harness.openness_successor": {
       "ast_sha256": "61f2e4dec733c963200e4952066823c00823007c4fc222cc997aa79cc2db56de",
@@ -20055,10 +20055,10 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.problem_openness": {
-      "ast_sha256": "7060a5d104e3d659431ba54a505c49d7570660a012231da88699ee107435e163",
+      "ast_sha256": "ad73a9a421caf4e19bd0730dc5cd99c5c546e36c72f8e9209b1cc424d2a5904c",
       "functions": {
         "_is_utf8": "802384d729df9c710bdc631eac4e0a7c325b5239cf38258e5f37412a5cae902c",
-        "assess_openness": "c410e5151ddd5e8dc8acb9fd52a000a8a4ff9f87869e0077ccd8ce2440d53f68",
+        "assess_openness": "7b803e13570b0a4043b9e5628265741e87e0fe38f7d62a927d2f0505708ae0da",
         "assess_packet_freshness": "116f99eb5655456ba0d0766c0516e3f0804bc404754a5fbd6b68ccebd8400d39",
         "bind_family_readings": "a40f34badca793c7bb3af5f44fcdfbe35c195e6e8c0a4a3331ca40b17fbf788e",
         "bind_minimum_records": "edc3d27b3c5cf62a412f38a2b429b013ad566f4a1ff63ac7eb118e8f26191081",
@@ -20069,7 +20069,7 @@
         "describe_minimum_forecast": "70c265a91f3e19ec775b09d13b8f1f78c53c348c708f78619578417cb67b05b8",
         "export_openness": "2e3986305108d5b456eb0b9632e8b415bb1e629612a138df87525b44b51e2927",
         "list_reading_citations": "1e10edb49b268265b79893763303217b089a037928712089e634bd7c4eeb086b",
-        "prepare_openness": "5a4f2b61c30306a7d1d1bf56e9bfa9d03eb83a71df43cf848fed89dfb8456e90",
+        "prepare_openness": "213cefa83f44a85c549915bcb26b0dc18cdd889aa0e4e28f757488faef82551b",
         "serialize_record": "f7243934e28cc8ee92a7c6af903b9056bd8864249cf01df9d8466a5a00442d69"
       },
       "packet_call_digests": [
@@ -20087,7 +20087,7 @@
         "f3b61f78adea174b2b0e2ca15f0967d7919b350edc020214e24829480130396e",
         "faf81d5df46f6fb0bbdf3673766717d7a835e3219b8535bfb470dada5c4ed7d9"
       ],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.91.4: describe_minimum_forecast shares the existing gap and forecast construction between export and projection. bind_minimum_records shares bound search, decisive reading and inspected artifact, supporting reading and statement evidence plus decisive and family context. export_openness delegates those two constructions while retaining refusal order, result binding, declaration validation, spec context and sorted evidence."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.91.4: describe_minimum_forecast shares the existing gap and forecast construction between export and projection. bind_minimum_records shares bound search, decisive reading and inspected artifact, supporting reading and statement evidence plus decisive and family context. export_openness delegates those two constructions while retaining refusal order, result binding, declaration validation, spec context and sorted evidence. Reviewed v7-checked-answers: prepare_openness reads an answer under the finding contract only after review_refusal.classify_observed_output finds no failure and refuses a part of an argument at a final turn as a reading response; assess_openness checks again that the recorded answer of a single review under the finding contract is its selected answer and passes that check; no packet argument or member changes."
     },
     "research_harness.problem_openness_reviews": {
       "ast_sha256": "dfa213888c1b7488093077f71797cb8738f0662b12183da143c485b33ecfbefe",
@@ -21007,7 +21007,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed the refusal details of evidence.shape (record 20261115234509): validate_reassessment names the path of the evidence of each finding for the evidence check. No packet member, packet call or stored record changes."
     },
     "research_harness.review_continuation": {
-      "ast_sha256": "d2e7513ca66df3317a1e00b6f8bdf461fe96f1f1382a55931b1c939f66de4712",
+      "ast_sha256": "6aeb6d58a15227646e41a318f0ab50e92cd5dbe7f8699cc8de1623b3ca8ff4c8",
       "functions": {
         "_build_assignment_payload": "852d5d1d923e2a76803f72f49e0dd9aab3c6cb448cfa7a8807a80b5a87cd7f4e",
         "_build_run_payload": "d74332719fa5e822c1bdc1f4e8feb83fb6b76a964f1106185956b9670b2497fa",
@@ -21021,12 +21021,13 @@
         "_list_lineage": "82418b850a1f1352896e4fb7eb86c376099e02cf7639c35189226c2a983224fa",
         "_list_recorded_finals": "56efee52bfddd11cd39b68c9290b8c653a6bdaf8e893ef5f564de7507bc54f56",
         "_plan_capacity": "3028023c9278ac1ed39d35cfea830bd951fb0cdc91299a1cfd074cd6341d0c08",
-        "_plan_head": "f002a0d9550c0fd4be8215e7695804a000bd0f9918bfd88c5ac2b74681bbc32c",
+        "_plan_head": "76f36ddc2d6202a6c1a8e58ded7697281f509092eefb946c5bbac6bd36ff0571",
         "_plan_openness_freshness": "15a0d5d09881f3417683d0778265b3031c782a784fc2ad195dbe74a36a61500c",
         "_plan_pending_call": "aef0d267753d73b2ceecfa5c5a89741745c6e81d06ab1607bde497d071c331da",
         "_plan_recording": "3dab2e4318a5924715b81e71d381f4fdc44d59bec1dc2125fec69456bb2e1bc4",
         "_plan_staged": "565884d0529f825d290771106691a69b3d02eb4623266f039148b33f9e079a90",
         "_plan_staged_action": "f38bdf1b1e806c7a32a3ce6b8ba708f97b966cc291a1743dbee9314c6b889829",
+        "_plan_unrecorded_refusal": "957cb3eee619c5f1b41fab0f2faf1777b8142dcd1e116eb813e9fdc9e668e311",
         "annotate_review_obligations": "b6e1aca68d9c41d87a08433f58801ed2cc41063f215d23493172e2fefd28ff06",
         "describe_context_failure": "dbecd6bba10b0547cf1bb395df820d3fef6dab3014a6821833c878f6f71c600b",
         "describe_next_actions": "c29846e3d47b956c91a7dfb7b0a8672fdc06768ab4dab76a7a1295d4bcf7b895",
@@ -21043,7 +21044,7 @@
         "a818bb9dd2888f3485740b4f47e07cc197cdd55fdc8befa8a39604351e566028",
         "f2348c8b962b96093effe1bac671b28bfea9e07217876102e0e949a27fea8c7e"
       ],
-      "reason": "Reviewed initial/native guard exception only for an already-proved replace recovery whose capacity_replacement names this exact assignment; existing handoff protections remain. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.5 call payload definition: _plan_pending_call builds the resume payloads of a captured correction and a captured invocation through rebuild_call_payload; no packet argument or member changes."
+      "reason": "Reviewed initial/native guard exception only for an already-proved replace recovery whose capacity_replacement names this exact assignment; existing handoff protections remain. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.5 call payload definition: _plan_pending_call builds the resume payloads of a captured correction and a captured invocation through rebuild_call_payload; no packet argument or member changes. Reviewed v7-checked-answers: _plan_unrecorded_refusal plans the recorded review-run request, with the payload of rebuild_call_payload, for a native answer that fails its output check without a refusal record; no packet argument or member changes."
     },
     "research_harness.review_delivered_evidence": {
       "ast_sha256": "532ac96cd4ab5d939c27d4444291d809ccc4571f693221c146c1c37a847f88e0",

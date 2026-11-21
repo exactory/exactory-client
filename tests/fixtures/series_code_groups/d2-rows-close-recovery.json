@@ -632,6 +632,9 @@
         "research_harness/openness_reading_v7.py:_rebuild_own_state#1": [
           "record"
         ],
+        "research_harness/openness_reading_v7.py:_rebuild_own_state#2": [
+          "record"
+        ],
         "research_harness/openness_reading_v7.py:prepare_next_assignment#1": [
           "record"
         ],
