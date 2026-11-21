@@ -665,38 +665,113 @@ class ReservationTests(unittest.TestCase):
         self.assertEqual((admitted["payload"]["max_requests"], admit.call_args[0][1:]), (1, ("literature", 1)))
 
 
-class VerdictCommandTests(OtherWriters, unittest.TestCase):
-    """exactory verify saves the intent of its verdict while another command commits: its user gives no revision."""
+class ManagedCommandCase(OtherWriters, unittest.TestCase):
+    """A workspace whose managed remote write is ready, and exactory run through its main beside a stand-in service.
+    Without --expected-revision the command saves its intent while another command commits; with it the intent is
+    the compare-and-swap on that revision, as exactory-draft deposit keeps it."""
 
-    def setUp(self):
-        from test_research_verification import ResearchVerificationTests
-        self.case = ResearchVerificationTests()
-        self.case.setUp()
-        self.addCleanup(self.case.doCleanups)
-        self.root = self.case.store.root
+    def start_case(self, case_class):
+        case = case_class()
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        self.root = case.store.root
         self.start_other_writers()
-        self.case.bind(self.case.verifier())
+        return case
 
-    def test_verify_saves_its_intent_when_another_command_commits_before_it(self):
-        exactory = load_bin_module("exactory", "replay_first_writes_verify")
-        verdict = self.root / "verdict.json"
-        verdict.write_text(json.dumps(self.case.verdict()))
+    def run_exactory(self, arguments):
+        """Run exactory with arguments. Returns the exit status, stderr and the methods of the requests it sent."""
+        exactory = load_bin_module("exactory", "replay_first_writes_" + self.id().rsplit(".", 1)[-1])
         sent = []
 
         def send_request(method, path, body=None, **options):
             sent.append(method)
-            if method == "GET":
-                return dict(self.case.task), 200
-            return {"id": "22222222-2222-4222-8222-222222222222"}, 201
-        self.meet_commits(("remote.begin",), limit=1)
-        with mock.patch.object(exactory, "_send_request", send_request):
-            status, _, errors = run_command_main(
-                exactory.main, ["exactory", "verify", self.case.task["verificationId"], "--file", str(verdict)],
-                self.root)
-        self.assertEqual((status, errors, sent), (0, "", ["GET", "POST"]))
-        intents = list(Store(self.root).snapshot()["records"]["remote_intent"].values())
-        self.assertEqual([(intent["kind"], intent["status"]) for intent in intents], [("verdict", "complete")])
+            return self.answer(method)
+        with mock.patch.object(exactory, "_send_request", send_request), \
+                mock.patch.object(exactory, "report_citation_gate", lambda *arguments: None):
+            status, _, errors = run_command_main(exactory.main, ["exactory", *arguments], self.root)
+        return status, errors, sent
 
+    def read_intents(self, kind):
+        intents = Store(self.root).snapshot()["records"].get("remote_intent", {}).values()
+        return [(intent["status"], intent["created_revision"]) for intent in intents if intent["kind"] == kind]
+
+    def assert_stale_revision(self, errors):
+        self.assertEqual(json.loads(errors.strip().splitlines()[-1])["error"]["code"], "stale_revision", errors)
+
+
+class VerdictCommandTests(ManagedCommandCase):
+    """exactory verify on a bound verdict."""
+
+    def setUp(self):
+        from test_research_verification import ResearchVerificationTests
+        self.case = self.start_case(ResearchVerificationTests)
+        self.case.bind(self.case.verifier())
+        self.verdict = self.root / "verdict.json"
+        self.verdict.write_text(json.dumps(self.case.verdict()))
+
+    def answer(self, method):
+        if method == "GET":
+            return dict(self.case.task), 200
+        return {"id": "22222222-2222-4222-8222-222222222222"}, 201
+
+    def verify(self, *options):
+        return self.run_exactory(["verify", self.case.task["verificationId"], "--file", str(self.verdict), *options])
+
+    def test_verify_saves_its_intent_when_another_command_commits_before_it(self):
+        self.meet_commits(("remote.begin",), limit=1)
+        status, errors, sent = self.verify()
+        self.assertEqual((status, errors, sent), (0, "", ["GET", "POST"]))
+        self.assertEqual([status for status, _ in self.read_intents("verdict")], ["complete"])
+
+    def test_verify_with_a_stale_revision_is_refused_before_its_request(self):
+        status, errors, sent = self.verify("--expected-revision", "0")
+        self.assertEqual((status, sent), (1, ["GET"]))
+        self.assert_stale_revision(errors)
+        self.assertEqual(self.read_intents("verdict"), [])
+
+    def test_verify_with_the_current_revision_sends_its_verdict(self):
+        revision = self.case.store.revision
+        status, errors, sent = self.verify("--expected-revision", str(revision))
+        self.assertEqual((status, errors, sent), (0, "", ["GET", "POST"]))
+        self.assertEqual(self.read_intents("verdict"), [("complete", revision)])
+
+
+class SubmitCommandTests(ManagedCommandCase):
+    """exactory submit on a published deposit."""
+
+    TASK = {"verificationId": "11111111-1111-4111-8111-111111111111", "doi": "10.5281/zenodo.90", "source": "zenodo",
+            "sourceId": "91", "sourceVersion": None, "url": "https://zenodo.org/records/91"}
+
+    def setUp(self):
+        from test_research_publication import ResearchPublicationTests
+        self.case = self.start_case(ResearchPublicationTests)
+        self.publication = self.case.publish_remote(self.case.remote_binding())[0]
+
+    def answer(self, method):
+        if method == "POST":
+            return {"verificationId": self.TASK["verificationId"], "doi": self.TASK["doi"]}, 201
+        return dict(self.TASK), 200
+
+    def submit(self, *options):
+        return self.run_exactory(["submit", "--doi", self.publication["doi"], *options])
+
+    def test_submit_saves_its_intent_when_another_command_commits_before_it(self):
+        self.meet_commits(("remote.begin",), limit=1)
+        status, errors, sent = self.submit()
+        self.assertEqual((status, errors, sent), (0, "", ["POST", "GET"]))
+        self.assertEqual([status for status, _ in self.read_intents("submit")], ["complete"])
+
+    def test_submit_with_a_stale_revision_is_refused_before_its_request(self):
+        status, errors, sent = self.submit("--expected-revision", "0")
+        self.assertEqual((status, sent), (1, []))
+        self.assert_stale_revision(errors)
+        self.assertEqual(self.read_intents("submit"), [])
+
+    def test_submit_with_the_current_revision_sends_its_request(self):
+        revision = self.case.store.revision
+        status, errors, sent = self.submit("--expected-revision", str(revision))
+        self.assertEqual((status, errors, sent), (0, "", ["POST", "GET"]))
+        self.assertEqual(self.read_intents("submit"), [("complete", revision)])
 
 if __name__ == "__main__":
     unittest.main()

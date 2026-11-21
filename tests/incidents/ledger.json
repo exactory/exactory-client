@@ -7638,7 +7638,7 @@
       "record": "20261120104814-replay-and-first-writes-wait-for-readers-on-a-large-store",
       "class": "concurrency",
       "summary": "A command that repeated a committed request ran a write transaction that changed nothing. Its start waited for every writer and its COMMIT for every reader, so on a store of a study's size the repeat was refused with store_busy. Opening a store for creation had the same two waits. With the commit retry of the finishing writes, a read of another command that started while a COMMIT waited was refused after one second, also the first read of a command. The first write of an acquisition and the saved intent of a remote operation were refused when another command committed or held a lock.",
-      "expected": "A committed request is answered from a read, a write transaction that finds its request committed ends with ROLLBACK, and the open of an existing store for creation takes no write lock. Inside a command a read waits for a COMMIT in progress, and a COMMIT waits for the readers that hold the store, for at most 600 seconds. The admission of an acquisition commits at the revision that the write lock finds, and the saved intent of a remote operation without a revision of the user commits against the saved intents; both wait for a busy store for at most 600 seconds.",
+      "expected": "A committed request is answered from a read, a write transaction that finds its request committed ends with ROLLBACK, and the open of an existing store for creation takes no write lock. Inside a command a read waits for a COMMIT in progress, and a COMMIT waits for the readers that hold the store, for at most 600 seconds. The admission of an acquisition commits at the revision that the write lock finds, and the saved intent of a remote operation without a revision of the user commits against the saved intents; both wait for a busy store for at most 600 seconds. A revision that the user of exactory submit or exactory verify gives keeps the compare-and-swap of the saved intent on it.",
       "fixed_in": "open",
       "test_kind": "real_shape",
       "tests": [
@@ -7650,7 +7650,9 @@
         "test_replay_and_first_writes.FirstWriteTests.test_admission_commits_after_another_command_committed",
         "test_replay_and_first_writes.FirstWriteTests.test_resume_reserves_requests_by_the_collection_that_its_admission_reads",
         "test_replay_and_first_writes.FirstWriteTests.test_intent_without_a_revision_is_saved_when_another_command_commits_before_it",
-        "test_replay_and_first_writes.VerdictCommandTests.test_verify_saves_its_intent_when_another_command_commits_before_it"
+        "test_replay_and_first_writes.VerdictCommandTests.test_verify_saves_its_intent_when_another_command_commits_before_it",
+        "test_replay_and_first_writes.VerdictCommandTests.test_verify_with_a_stale_revision_is_refused_before_its_request",
+        "test_replay_and_first_writes.SubmitCommandTests.test_submit_with_a_stale_revision_is_refused_before_its_request"
       ]
     },
     {
