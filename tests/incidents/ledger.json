@@ -7686,6 +7686,34 @@
         "test_openness_unchecked_answer_busy_store.SingleReviewRefusalWriteTests.test_run_refused_beyond_the_wait_is_resumed_and_its_step_records_the_refusal",
         "test_openness_unchecked_answer_busy_store.SingleReviewRefusalWriteTests.test_series_refused_again_at_resume_waits_and_a_later_series_goes_on"
       ]
+    },
+    {
+      "id": "tests-read-the-reviewer-program-of-the-machine",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "release-ci (local runs differ from CI)",
+      "summary": "Six places of the harness look for the codex or the claude program with shutil.which, and two readers above them turn a missing program into an ordinary value. A test that did not state its own answer got the answer of the machine: on a machine with the Codex program such a test started codex --version and passed, and CI ran it without the program. A child process of a test, such as ci/record_fingerprint.py, read the machine in the same way. 0.91.4 repaired such tests in two modules, and the five tests of test_visual_assignment_integration still read the machine through the second route record of their fixture. On 0.91.7, 62 tests in 15 modules read the machine, 13 of them only through a child process, and nothing stopped the next one.",
+      "expected": "In a run of ci/unittest_shards.py, with the command run or run-modules, a lookup of codex or claude that the machine would answer stops the test with MachineReadError. A test gets each reviewer program from the test itself: a patch that installs the runtime that its route record pins, a program in a temporary directory of the test, or use_absent_programs. A child process of a test finds a stub that records its start and refuses every call, and the runner fails a test that passed after a stopped lookup or a stub start. The plugin tests directory stays without __init__.py, so the harness package keeps the name tests.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_this_run_has_the_guard",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_lookup_that_the_machine_would_answer_stops_the_test",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_each_runtime_reader_of_the_code_under_test_stops_at_the_guard",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_the_code_under_test_cannot_turn_the_stop_into_an_ordinary_refusal",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_other_programs_are_found_as_on_the_machine",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_stub_in_a_directory_of_the_test_is_the_installed_program",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_path_of_test_directories_alone_gives_its_own_answer",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_directory_outside_the_temporary_directory_is_a_directory_of_the_machine",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_test_states_that_the_machine_has_no_reviewer_program",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_child_process_finds_a_stub_that_refuses",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_the_stub_prints_its_message_as_written",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_forked_child_leaves_the_stubs_of_its_parent",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_test_that_states_absent_programs_can_start_child_processes",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_the_runner_fails_a_test_that_passes_after_a_stopped_lookup",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_the_runner_charges_a_read_of_a_class_fixture_to_the_next_test",
+        "test_ci_shards.CIShardTests.test_cli_run_gives_each_test_the_reviewer_program_guard",
+        "test_ci_shards.CIShardTests.test_cli_run_modules_gives_named_plugin_and_harness_modules_the_guard"
+      ]
     }
   ]
 }

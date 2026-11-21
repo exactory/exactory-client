@@ -45,6 +45,10 @@ class PostedReviewTests(ResultPartsCase):
         return case
 
     def read_fingerprint(self, case):
+        from ci.reviewer_program_guard import use_absent_programs
+        # The fingerprint command looks for the Codex program in its own process. The test states that the
+        # machine has none.
+        use_absent_programs(self)
         completed = subprocess.run([sys.executable, str(ROOT / 'ci/record_fingerprint.py'),
             '--harness', str(ROOT), '--workspace', str(case.root)],
             cwd=ROOT, check=True, capture_output=True, text=True, timeout=120)

@@ -40,6 +40,10 @@ class RenderTimeoutTests(unittest.TestCase):
         self.case = self.fixture.case
         # The review cites a native PDF page, so recording it and every later reader render that page.
         self.output = self.fixture.observe([{'kind': 'source', 'link': self.fixture.pdf_link}])
+        from ci.reviewer_program_guard import use_absent_programs
+        # The record checks of these tests list the path of the Codex program beside each runtime read. The test
+        # states that the machine has none.
+        use_absent_programs(self)
 
     def unfinished_render(self):
         return patch('subprocess.run', side_effect=run_with_unfinished_render)

@@ -98,7 +98,11 @@ class UnreadFinalTests(UnreadFinalSupport):
         self.assertIn(self.texts[self.versions[0]]['sha256'], record['evidence'])
         self.assertEqual(record['grounds'][0]['refs'][0]['sha256'], unread['digest'])
         self.assertEqual(record['unread']['rows'], json.loads(self.artifacts.read(unread['artifact']))['rows'])
+        from ci.reviewer_program_guard import use_absent_programs
         from research_harness.record_check import check_record
+        # The record check lists the path of the Codex program beside each runtime read. The test states that
+        # the machine has none.
+        use_absent_programs(self)
         checked = check_record(self.root, isolate=False)
         self.assertTrue(checked['ready'], checked)
 
