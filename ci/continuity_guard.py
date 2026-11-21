@@ -1,7 +1,5 @@
 """Finite continuity matrix and the completion contract for executed stop answers."""
 
-from ci.capacity_guard import run_evidence_tests
-
 STOP_END_MESSAGE = ('A stop answer did not end at an eligible assignment that follows the stopped head, at a recorded action, '
                     'or at a stated boundary without a serving route. Make the journey of the answer reach one of these ends.')
 STOP_ANSWER_MESSAGE = ('The executed journeys do not match the answers of the stop, a journey did not run the commands of its '

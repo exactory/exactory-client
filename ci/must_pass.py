@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """List and run the test modules that must pass before the pull request of a release.
 
-The set has three parts.
+The set has three parts. The first two make its near part, the third its far part.
 
 Always: the modules of ALWAYS. They compare the harness with frozen values, or they pin a fixture, a version or a
 release file, so a change far from them can break them. When the diff changes a file of research_harness/ or of
@@ -23,13 +23,18 @@ checksum pins of a fixture that a module of ci checks select the test modules th
 part takes the direct users only. The full suites of the CI cover the rest. They are also the check for a change of
 the runner or of the reviewer program guard, which can change the result of every test.
 
-    python3 ci/must_pass.py list [--base origin/main] [--head REVISION]
+    python3 ci/must_pass.py list [--base origin/main] [--head REVISION] [--near]
     python3 ci/must_pass.py run [--base origin/main] [--head REVISION] [--module NAME ...] [--python EXECUTABLE ...]
                                 [--jobs N] [--logs DIRECTORY]
 
 Without --head, the diff is the working tree, with its untracked files, against the merge base of HEAD and the
 base. With --head, it is that commit against the merge base of the head and the base, for example to replay a
 release.
+
+list prints the whole set. run starts the whole set when it holds at most half of the test modules of tests/
+(LARGE_SET_SHARE). A larger set comes from a change of a core module, and its local run would do the work of the
+full suite of the CI a second time: run then starts its near part only, and prints one line with the count of the
+modules of its far part, whose check is the full suite of the CI. list --near prints the modules that run starts.
 
 run groups the tests into processes as the full suite of the CI does. For each Python executable and each shard of
 the CI, one process (ci/unittest_shards.py run-group) runs the tests of the set that the shard holds, in the order
@@ -39,8 +44,9 @@ of the shard. So a test that leaves state behind breaks the later tests of its g
 run prints each group when it ends, then a table of the modules with the wall time, the processor time and the
 status of each module for each Python executable, the slowest tests, the times of the run, and the comparison of
 the wall time of the run with its budget in ci/budgets.json: implementer_run with --module, must_pass_run without.
-It writes the same report, with the time of each test, as must-pass-report.json into the log directory. It ends
-with status 1 when a group fails; the budget does not change the status. --jobs is at most test_processes of
+It writes the same report, with the time of each test, as must-pass-report.json into the log directory; its member
+far_part holds the modules of the far part and whether this run started them. It ends with status 1 when a group
+that it started fails; the budget does not change the status. --jobs is at most test_processes of
 ci/budgets.json. The tests of skills/math-solver/harness have their own command and are not in the set.
 """
 import argparse
@@ -76,6 +82,13 @@ MODULE_NAME_PATTERN = re.compile(r"\b(?:" + "|".join(MODULE_PACKAGES) + r")(?:[.
 # The readers of the compressed fixtures, by file suffix.
 DECOMPRESSORS = {".gz": gzip.decompress, ".xz": lzma.decompress}
 REPORT_FILE_NAME = "must-pass-report.json"
+# run starts only the near part of a set that holds more than this share of the test modules of tests/. Such a set
+# comes from a change of a core module: for the diff of 0.91.11 it held 456 of 554 modules and 97% of the test time,
+# and its local run would take all eight test processes for 1.5 to 1.8 hours, as long as the full suite of the CI,
+# which runs the same tests again. The full suite of the CI is the check of its far part.
+LARGE_SET_SHARE = 0.5
+FAR_PART_LINE = ("The set holds %d of %d test modules, more than half. This run starts its near part, %d modules. The "
+                 "full suite of the CI is the check of the %d modules of its far part, which this run does not start.")
 
 
 def list_changed_files(root, base, head=None):
@@ -185,9 +198,9 @@ def find_carriers(carriers, changed):
     return found
 
 
-def find_touched_modules(files, changed):
-    """The test modules that reach a changed file of tests/ through their imports, and the test modules that use
-    a changed file of another kind themselves."""
+def find_importers(files, changed):
+    """The test modules that reach a changed file of tests/ through the imports between the files of tests/. A
+    changed test module reaches itself."""
     importers = {name: set() for name in files}
     for name, file in files.items():
         for imported in file["imports"]:
@@ -201,19 +214,29 @@ def find_touched_modules(files, changed):
         for importer in importers[pending.pop()] - reached:
             reached.add(importer)
             pending.append(importer)
-    reached.update(name for name, file in files.items() if uses_changed_file(file, changed))
     return {name for name in reached if name.startswith("test_")}
 
 
+def find_users(files, changed):
+    """The test modules that use a changed file of another kind than the files of tests/ themselves."""
+    return {name for name, file in files.items() if name.startswith("test_") and uses_changed_file(file, changed)}
+
+
 def select_modules(tree, changed):
-    """The must-pass set for a diff, with the slow pins first: the fixed modules and the modules of the diff."""
+    """The must-pass set for a diff, with the slow pins first, and its far part, by name.
+
+    The near part holds the fixed modules, the slow pins when they join, and the test modules that reach a changed
+    file of tests/ through the imports between the files of tests/. The far part holds the other test modules that
+    use a changed file of another kind: a module of research_harness, ci or tools, a fixture, a document or a
+    command, directly or through a file that reads for them."""
     tests = tree["tests"]
     missing = [name for name in ALWAYS + HARNESS_PINS if name not in tests]
     if missing:
         raise SystemExit("ALWAYS or HARNESS_PINS names test modules that tests/ does not hold: " + ", ".join(missing))
     pins = HARNESS_PINS if any(name.startswith(("research_harness/", "tests/fixtures/")) for name in changed) else ()
-    touched = find_touched_modules(tests, list(changed) + sorted(find_carriers(tree["carriers"], changed)))
-    return list(pins) + sorted((set(ALWAYS) | touched) - set(pins))
+    near = set(ALWAYS) | set(pins) | find_importers(tests, changed)
+    far = find_users(tests, list(changed) + sorted(find_carriers(tree["carriers"], changed))) - near
+    return list(pins) + sorted((near | far) - set(pins)), sorted(far)
 
 
 def run_group(root, executable, shard_index, modules, directory):
@@ -314,6 +337,9 @@ def main():
         command = commands.add_parser(name)
         command.add_argument("--base", default="origin/main", help="The branch that the release merges into.")
         command.add_argument("--head", help="A commit whose diff selects the set, in place of the working tree.")
+    commands.choices["list"].add_argument("--near", action="store_true",
+                                          help="Print the modules that run starts: the near part of a set that "
+                                               "holds more than half of the test modules, else the whole set.")
     run = commands.choices["run"]
     run.add_argument("--module", action="append",
                      help="A test module of tests/ to run in place of the set, such as test_must_pass. Give the "
@@ -335,22 +361,31 @@ def main():
                    if not (name.startswith("test_") and (ROOT / "tests" / (name + ".py")).is_file())]
         if unknown:
             parser.error("--module names no test module of tests/: " + ", ".join(unknown))
-        modules, budget_name = sorted(set(args.module)), "implementer_run"
+        selected, budget_name = sorted(set(args.module)), "implementer_run"
+        far_part = {"modules": [], "ran": True}
     else:
         changed = list_changed_files(ROOT, args.base, args.head)
-        modules, budget_name = select_modules(describe_tree(ROOT), changed), "must_pass_run"
+        tree = describe_tree(ROOT)
+        (selected, far), budget_name = select_modules(tree, changed), "must_pass_run"
         if any(name.startswith("skills/math-solver/harness/") for name in changed):
             print("The diff changes skills/math-solver/harness. Run its tests with their own command.", file=sys.stderr)
+        test_module_count = sum(name.startswith("test_") for name in tree["tests"])
+        far_part = {"modules": far, "ran": len(selected) <= LARGE_SET_SHARE * test_module_count}
+    # The modules that run starts: the whole set, or the near part of a large set.
+    modules = selected if far_part["ran"] else [name for name in selected if name not in far_part["modules"]]
     if args.command == "list":
-        print("\n".join(modules))
+        print("\n".join(modules if args.near else selected))
         return 0
+    if not far_part["ran"]:
+        print(FAR_PART_LINE % (len(selected), test_module_count, len(modules), len(far_part["modules"])), flush=True)
     logs = args.logs or Path(tempfile.mkdtemp(prefix="must-pass-"))
     executables = args.python or [sys.executable]
     groups = run_groups(ROOT, executables, modules, unittest_shards.SHARD_COUNT, args.jobs, logs)
     ended = unittest_shards.read_process_clock()
     tests = [[group["python"]] + row for group in groups for row in group["test_seconds"]]
     report = {
-        "base": args.base, "head": args.head, "modules": modules, "python": executables, "jobs": args.jobs,
+        "base": args.base, "head": args.head, "modules": modules, "far_part": far_part, "python": executables,
+        "jobs": args.jobs,
         "groups": [{key: value for key, value in group.items() if key != "test_seconds"} for group in groups],
         "module_times": sum_module_times(groups, modules, unittest_shards.read_test_module),
         "test_seconds": tests,

@@ -1,12 +1,12 @@
 """UB10: execute every bindable material path and qualify stored findings."""
 
 import copy
-import io
 import json
 from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+from ci.evidence_tests import require_evidence_tests
 from openness_reading_fixtures import OpennessReadingCase
 from research_harness import openness_reading as reading, problem_openness, record_check
 from research_harness import review_protocol as protocol
@@ -49,14 +49,11 @@ class V6GuardTests(unittest.TestCase):
     def run_material_paths(self, paths):
         self.assertEqual(len({kind for kind, _ in paths}), len(paths))
         self.assertTrue(all(identifiers for _, identifiers in paths), 'Every material kind needs an executed path')
+        # Each path exists, loads and carries no skip or expected-failure mark. The run that executes it gives its
+        # result: the verification of the run requires it to have run and passed (ci/evidence_tests.py).
         for kind, identifiers in paths:
             with self.subTest(kind=kind):
-                stream = io.StringIO()
-                suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromName(identifier)
-                                           for identifier in identifiers)
-                result = unittest.TextTestRunner(stream=stream).run(suite)
-                self.assertTrue(result.wasSuccessful(), stream.getvalue())
-                self.assertFalse(result.skipped, 'A skipped path gives no delivery evidence')
+                self.assertEqual(require_evidence_tests(identifiers), {})
 
     def test_g3_executes_every_material_path(self):
         self.run_material_paths(MATERIAL_PATHS)

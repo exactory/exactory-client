@@ -1,8 +1,12 @@
 """Command regressions for D2 G8, A4 and Q12, with synthetic scientific content."""
 
 import copy
+import functools
 import hashlib
 import json
+from pathlib import Path
+import shutil
+import tempfile
 import unittest
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -1337,6 +1341,10 @@ class Record12ShapeTests(OpennessReadingCase):
     route_model = 'gpt-6-astra'
     route_output_tokens = 128000
     shape_scale = 0.25
+    # The members of a built cut that its users read; a copy of the store holds the rest.
+    CUT_STATE = ('shape', 'text_sizes', 'versions', 'texts', 'selected', 'searches', 'search', 'shape_search_ids',
+                 'shape_reading_names', 'shape_spans', 'shape_packets', 'shape_observations', 'old_records',
+                 'older_native', 'stopped_native', 'native', 'sequence', 'shape_input_limit')
     answer_v7 = CarriedIntegrationSupport.answer_v7
     finish_chain = CarriedIntegrationSupport.finish_chain
     read_selection_context = StoredSelectionIntegrationTests.read_selection_context
@@ -1344,7 +1352,6 @@ class Record12ShapeTests(OpennessReadingCase):
 
     @staticmethod
     def read_shape():
-        from pathlib import Path
         return json.loads((Path(__file__).parent / 'fixtures/record12_cut_shape.json').read_text())
 
     @classmethod
@@ -1459,32 +1466,16 @@ class Record12ShapeTests(OpennessReadingCase):
     @classmethod
     def read_fixture_report(cls, directory):
         """Reauthenticate a saved synthetic cut for another interpreter's checks."""
-        from pathlib import Path
-        import shutil
-        from codex_route_fixtures import install_codex_runtime
-        from literature_fixtures import LiteratureCase
-        from research_harness.storage import Store
         fixture = cls('test_stopped_chain_carries_all_57_turns_and_every_output')
         try:
-            LiteratureCase.setUp(fixture)
             state = json.loads((Path(directory) / 'state.json').read_text())
             fixture.assertEqual(state['shape'], cls.read_shape(), 'shape: saved cut uses Appendix A')
-            shutil.rmtree(fixture.root)
-            shutil.copytree(Path(directory) / 'store', fixture.root)
-            fixture.store = Store(fixture.root)
-            fixture.artifacts = fixture.store.build_artifact_store()
-            for name, value in state.items():
-                setattr(fixture, name, value)
-            fixture.historical_v5 = False
-            fixture.shape_quotes = {}
+            fixture.install_cut(Path(directory) / 'store', state)
             fixture.shape_packets = {}
             for chain, count in (('older-1', 44), ('stopped', 57)):
                 for number in range(1, count + 1):
                     identifier = chain if number == 1 else '%s-%d' % (chain, number)
                     fixture.shape_packets[chain, number] = fixture.read_packet(identifier)
-            install_codex_runtime(fixture)
-            fixture.install_shape_runtime()
-            fixture.install_shape_context()
             fixture.assert_cut_shape()
             return fixture
         except BaseException:
@@ -1492,13 +1483,46 @@ class Record12ShapeTests(OpennessReadingCase):
             raise
 
     @classmethod
+    def load_cut(cls):
+        """A case that holds a writable copy of the one build of this process (build_record12_cut), with the
+        runtime and the context of the shape installed as the build left them. The caller releases doCleanups."""
+        built = build_record12_cut()
+        fixture = cls('test_stopped_chain_carries_all_57_turns_and_every_output')
+        try:
+            fixture.install_cut(built['store'], built['state'])
+            return fixture
+        except BaseException:
+            fixture.doCleanups()
+            raise
+
+    def install_cut(self, store, state):
+        """Copy a built store into this case's own root, take a copy of the built state, and install the runtime and
+        the context of the shape."""
+        from codex_route_fixtures import install_codex_runtime
+        from literature_fixtures import LiteratureCase
+        from research_harness.storage import Store
+        LiteratureCase.setUp(self)
+        shutil.rmtree(self.root)
+        shutil.copytree(store, self.root)
+        self.store = Store(self.root)
+        self.artifacts = self.store.build_artifact_store()
+        for name, value in state.items():
+            setattr(self, name, copy.deepcopy(value))
+        self.historical_v5 = False
+        self.shape_quotes = {}
+        install_codex_runtime(self)
+        self.install_shape_runtime()
+        self.install_shape_context()
+
+    @classmethod
     def setUpClass(cls):
-        # Each test mutates its own complete filesystem clone, including the
-        # store's event history, of this expensive authenticated cut.
+        # Each test mutates its own complete filesystem clone, including the store's event history, of a copy of the
+        # one build of this process. The last cleanup checks that the build kept its bytes.
         import os
         import time
         started = time.monotonic()
-        cls.shape_template = cls.build_fixture()
+        cls.shape_template = cls.load_cut()
+        cls.addClassCleanup(check_record12_cut_unchanged)
         cls.addClassCleanup(cls.shape_template.doCleanups)
         directory = os.environ.get('EXACTORY_RECORD12_REPORT_DIRECTORY')
         if directory:
@@ -1510,8 +1534,6 @@ class Record12ShapeTests(OpennessReadingCase):
 
     def write_fixture_report(self, directory):
         """Preserve the synthetic cut only for an explicitly requested measurement."""
-        from pathlib import Path
-        import shutil
         destination = Path(directory).resolve()
         if getattr(self, '_fixture_report_directory', None) != str(destination):
             destination.mkdir(parents=True)
@@ -1523,7 +1545,6 @@ class Record12ShapeTests(OpennessReadingCase):
         (destination / 'state.json').write_text(json.dumps({name: getattr(self, name) for name in names if hasattr(self, name)}))
 
     def clone_shape_fixture(self):
-        import shutil
         from literature_fixtures import LiteratureCase
         from research_harness.storage import Store
         LiteratureCase.setUp(self)
@@ -1532,9 +1553,7 @@ class Record12ShapeTests(OpennessReadingCase):
         shutil.copytree(template.root, self.root)
         self.store = Store(self.root)
         self.artifacts = self.store.build_artifact_store()
-        for name in ('shape', 'text_sizes', 'versions', 'texts', 'selected', 'searches', 'search',
-                     'shape_search_ids', 'shape_reading_names', 'shape_spans', 'shape_packets',
-                     'shape_observations', 'old_records', 'older_native', 'stopped_native', 'native', 'sequence', 'shape_input_limit'):
+        for name in self.CUT_STATE:
             setattr(self, name, copy.deepcopy(getattr(template, name)))
         self.historical_v5 = False
 
@@ -1906,12 +1925,15 @@ class Record12ShapeTests(OpennessReadingCase):
                 output = self.answer_v7(packet)
             else:
                 binding = packet['reading_final']
+                # The final of a new chain takes finding version 2, where a reviewer_gap needs the fields of a
+                # named gap; an own argument keeps the outcome unresolved, as in finish_chain.
                 output = dict(schema_version=3,
                     **{key: binding[key] for key in ('subject_digest', 'claim_digest', 'reviewer')},
                     findings=dict({key: 'Assessed the supplied formulation.' for key in
                         ('statement', 'assumptions', 'scope', 'dependencies', 'policy')},
                         openness=dict(outcome='unresolved', coverage='Reviewed the bound material.',
-                            reason='A remaining literature gap.', grounds=[dict(kind='reviewer_gap', text='A remaining gap.')])) )
+                            reason='A remaining literature gap.', grounds=[dict(kind='own_argument',
+                                text='The reviewer argument requires further checking.')])) )
             return build_codex_response(route, request, output)
         steps = []
         with patch.object(protocol.transport, 'send_request', side_effect=respond):
@@ -1951,6 +1973,35 @@ class Record12ShapeTests(OpennessReadingCase):
         for kind, group in self.old_records.items():
             self.assertEqual({key: digest(row) for key, row in group.items()},
                 {key: digest(records[kind][key]) for key in group})
+
+
+def digest_directory(path):
+    """The digest of the relative path and the SHA-256 of the bytes of each file under a directory."""
+    return digest([[item.relative_to(path).as_posix(), hashlib.sha256(item.read_bytes()).hexdigest()]
+                   for item in sorted(path.rglob('*')) if item.is_file()])
+
+
+@functools.lru_cache(maxsize=None)
+def build_record12_cut():
+    """Build the record-12 cut once in this process (principle 3) and keep it until the process ends: the built
+    store in a directory of its own, the built state, and the digest of the store's bytes. Each user loads a writable
+    copy (Record12ShapeTests.load_cut), so no user writes to this build; ci/unittest_shards.py keeps the modules of
+    its users in one shard."""
+    directory = tempfile.TemporaryDirectory(prefix='record12-cut-')
+    template = Record12ShapeTests.build_fixture()
+    try:
+        store = Path(shutil.copytree(template.root, Path(directory.name) / 'store'))
+        state = {name: copy.deepcopy(getattr(template, name)) for name in Record12ShapeTests.CUT_STATE}
+    finally:
+        template.doCleanups()
+    return dict(directory=directory, store=store, state=state, sha256=digest_directory(store))
+
+
+def check_record12_cut_unchanged():
+    """Fail when the one build of this process no longer has the bytes that it had when it was built."""
+    built = build_record12_cut()
+    if digest_directory(built['store']) != built['sha256']:
+        raise AssertionError('The one build of the record-12 cut changed while its users ran.')
 
 
 class FullPoolCapacityTests(unittest.TestCase):

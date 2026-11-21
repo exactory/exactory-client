@@ -4,20 +4,21 @@ import copy
 import json
 
 from source_limited_fixtures import SourceLimitedCase
-from test_research_scoped_decisions import ScopedDecisionTests
+# The module, not its test class: discovery collects each test class that a test module holds by name.
+import test_research_scoped_decisions as decision_fixtures
 from research_harness import review_protocol
 
 
 class ScopedPacketTests(SourceLimitedCase):
-    module = ScopedDecisionTests.module
-    put = ScopedDecisionTests.put
-    dossier = ScopedDecisionTests.dossier
-    provider_response = ScopedDecisionTests.provider_response
-    route = ScopedDecisionTests.route
-    review_response = ScopedDecisionTests.review_response
-    record_response = ScopedDecisionTests.record_response
-    intent = ScopedDecisionTests.intent
-    prepare_scoped_strategy = ScopedDecisionTests.prepare_scoped_strategy
+    module = decision_fixtures.ScopedDecisionTests.module
+    put = decision_fixtures.ScopedDecisionTests.put
+    dossier = decision_fixtures.ScopedDecisionTests.dossier
+    provider_response = decision_fixtures.ScopedDecisionTests.provider_response
+    route = decision_fixtures.ScopedDecisionTests.route
+    review_response = decision_fixtures.ScopedDecisionTests.review_response
+    record_response = decision_fixtures.ScopedDecisionTests.record_response
+    intent = decision_fixtures.ScopedDecisionTests.intent
+    prepare_scoped_strategy = decision_fixtures.ScopedDecisionTests.prepare_scoped_strategy
 
     def packet(self):
         return review_protocol.build_packet(self.store.snapshot()['records'], self.artifacts,

@@ -2,8 +2,10 @@
 """Run and verify exhaustive partitions of ordinary unittest discovery, run the tests of named modules that one
 shard holds, and run named test modules. The commands run, run-group and run-modules install the reviewer program
 guard (ci/reviewer_program_guard.py) before a test module loads, record the wall time and the processor time of
-each test, and print the wall time and the processor time of the command. The command run compares its wall time
-with the shard budget of ci/budgets.json."""
+each test, and print the wall time and the processor time of the command. Their result also names the evidence tests
+that the guard tests of the process required (ci/evidence_tests.py). The command run compares its wall time with the
+shard budget of ci/budgets.json. The command verify requires, for each Python version, that the run executed each
+test once and that each evidence test that a shard named ran and passed in a shard of the same run."""
 import argparse
 import hashlib
 import json
@@ -29,6 +31,17 @@ INVALID_BUDGETS_ERR_MSG = ("ci/budgets.json needs a positive whole number for te
                            "object core_operations.")
 # The count of the slowest tests that the summary of a run prints. The result file holds the time of every test.
 SLOWEST_TEST_COUNT = 10
+# The test modules that share a costly fixture, so that the fixture has one build in a run (principle 3): the tests
+# of the modules of one group run in one shard (select_shard_indices). A group names only modules whose shared
+# fixture was measured; the times are those of the CI of 0.91.14 on Python 3.12.14.
+SHARD_GROUPS = (
+    # The cut of the verification of record 12 (57 review turns), built once in a process: 1,371 s to 1,645 s.
+    ("test_openness_carried_integration", "test_openness_reading_v7_refusal"),
+    # The 11 recorded series of ProblemResultHistoryTests: 107 s.
+    ("test_problem_result_history",),
+    # The deposit workspace of ManagedStreamingTests with two files above 1 MiB: 38 s.
+    ("test_publication_streaming",),
+)
 
 
 def flatten(suite):
@@ -44,10 +57,21 @@ def write_json(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def select_shard_indices(test_count, shard_index, shard_count):
-    """The indices of the discovered tests that one shard runs: test i belongs to shard i mod shard_count. This is
-    the one definition of the partition of the CI."""
-    return [index for index in range(test_count) if index % shard_count == shard_index]
+def select_shard_indices(test_ids, shard_index, shard_count):
+    """The indices of the discovered tests that one shard runs. The tests of the modules of group j of SHARD_GROUPS
+    belong to shard j mod shard_count. Every other test belongs to shard i mod shard_count, where i is its index among
+    the tests outside the groups. This is the one definition of the partition of the CI."""
+    group_of_module = {module: index for index, group in enumerate(SHARD_GROUPS) for module in group}
+    selected, rank = [], 0
+    for index, test_id in enumerate(test_ids):
+        group = group_of_module.get(read_test_module(test_id))
+        if group is None:
+            shard, rank = rank % shard_count, rank + 1
+        else:
+            shard = group % shard_count
+        if shard == shard_index:
+            selected.append(index)
+    return selected
 
 
 def read_test_module(test_id):
@@ -92,10 +116,12 @@ def format_budget_report(budget_name, budget_seconds, wall_seconds, processor_se
 
 
 def run_shard(suite, shard_index, shard_count, provenance, *, take_machine_reads, stream=None, record_path=None,
-              modules=None, started=None):
+              modules=None, started=None, read_evidence_tests=None):
     """Run the selected tests. take_machine_reads returns one error for each stopped lookup and each stub start that
     the reviewer program guard recorded since its last call (ci/reviewer_program_guard.py). The runner reports a
-    test that passed after one of them as an error.
+    test that passed after one of them as an error. read_evidence_tests returns, after the last test, the evidence
+    tests that the guard tests of this process required (ci/evidence_tests.py); the report holds them as
+    evidence_tests, and without the function it holds none.
 
     With modules, the shard keeps only the tests of those test modules (read_test_module), in the order of the
     shard; the discovery failure of such a module stays in. The report gives for each executed test its wall time
@@ -109,7 +135,7 @@ def run_shard(suite, shard_index, shard_count, provenance, *, take_machine_reads
     if not tests:
         raise ValueError("Discovery returned no tests")
     test_ids = [test.id() for test in tests]
-    selected = [index for index in select_shard_indices(len(tests), shard_index, shard_count)
+    selected = [index for index in select_shard_indices(test_ids, shard_index, shard_count)
                 if modules is None or read_test_module(test_ids[index]) in modules]
     report = {
         "schema_version": 1, "status": "running", "success": False,
@@ -156,6 +182,7 @@ def run_shard(suite, shard_index, shard_count, provenance, *, take_machine_reads
     ended = read_process_clock()
     report.update(
         wall_seconds=round(ended[0] - started[0], 3), processor_seconds=round(ended[1] - started[1], 3),
+        evidence_tests=read_evidence_tests() if read_evidence_tests else [],
         status="completed", tests_run=result.testsRun,
         failures=[test.id() for test, _ in result.failures],
         errors=[test.id() for test, _ in result.errors],
@@ -180,9 +207,18 @@ def verify_reports(reports, python_versions, shard_count, expected_provenance=No
     source = expected_provenance
     tests_run = 0
     discoveries = {}
+    # For each Python version: the executed tests, the evidence tests that the shards named, and the tests that were
+    # skipped or did not pass, by the id of the test (a subtest counts for its test).
+    executed, evidence, skipped, unpassed = {}, {}, {}, {}
     for report in reports:
         provenance = report.get("provenance", {})
         version = provenance.get("python_version")
+        executed.setdefault(version, []).extend(report.get("executed_test_ids") or [])
+        evidence.setdefault(version, set()).update(report.get("evidence_tests") or [])
+        skipped.setdefault(version, set()).update(row[0].split(" ")[0] for row in report.get("skipped") or [])
+        unpassed.setdefault(version, set()).update(
+            test_id.split(" ")[0] for field in ("failures", "errors", "expected_failures", "unexpected_successes")
+            for test_id in report.get(field) or [])
         index = report.get("shard_index")
         slot = (version, index)
         observed_slots.append(slot)
@@ -209,7 +245,7 @@ def verify_reports(reports, python_versions, shard_count, expected_provenance=No
         if not isinstance(index, int) or not 0 <= index < shard_count:
             issues.append(label + ": invalid shard index")
             continue
-        selected = select_shard_indices(len(ids), index, shard_count)
+        selected = select_shard_indices(ids, index, shard_count)
         if report.get("selected_indices") != selected:
             issues.append(label + ": incorrect partition")
         if report.get("executed_test_ids") != [ids[offset] for offset in selected]:
@@ -225,8 +261,23 @@ def verify_reports(reports, python_versions, shard_count, expected_provenance=No
                 issues.append(label + ": " + field + " are present or unreported")
     if set(observed_slots) != expected_slots or len(observed_slots) != len(expected_slots):
         issues.append("Missing or repeated shards")
+    test_counts = {}
+    for version, test_ids in executed.items():
+        distinct = set(test_ids)
+        test_counts[version] = {"executed": len(test_ids), "distinct": len(distinct),
+                                "evidence": len(evidence[version])}
+        if len(test_ids) != len(distinct):
+            issues.append("%s: the run executed %d tests and %d distinct tests"
+                          % (version, len(test_ids), len(distinct)))
+        for identifier in sorted(evidence[version]):
+            if identifier not in distinct:
+                issues.append("%s: evidence test absent from the run: %s" % (version, identifier))
+            elif identifier in skipped[version]:
+                issues.append("%s: evidence test skipped: %s" % (version, identifier))
+            elif identifier in unpassed[version]:
+                issues.append("%s: evidence test did not pass: %s" % (version, identifier))
     return {
-        "success": not issues, "issues": issues, "tests_run": tests_run,
+        "success": not issues, "issues": issues, "tests_run": tests_run, "test_counts": test_counts,
         "python_versions": python_versions, "shard_count": shard_count,
         "source": source,
         "discovery_counts": {version: len(ids) for version, ids in discoveries.items()},
@@ -289,9 +340,12 @@ def main():
     if args.command != "run-modules" and args.shard_count < 1:
         parser.error("Shard count must be positive")
     root = Path(__file__).resolve().parents[1]
+    if args.command != "verify":
+        take_machine_reads = install_reviewer_program_guard(root)
+        # The guard tests import the same module, so their required evidence tests reach the result of this run.
+        from ci.evidence_tests import read_required_tests
     if args.command == "run":
         shard_budget_seconds = read_budgets()["runs"]["full_suite_run"]["shard_wall_seconds"]
-        take_machine_reads = install_reviewer_program_guard(root)
         provenance = {
             "client_commit": git_value(root, "HEAD"), "client_tree": git_value(root, "HEAD^{tree}"),
             "marketplace_commit": git_value(args.marketplace, "HEAD"),
@@ -302,22 +356,23 @@ def main():
             str(args.start_directory.resolve()), top_level_dir=top_level,
         )
         report = run_shard(suite, args.shard_index, args.shard_count, provenance, record_path=args.result,
-                           take_machine_reads=take_machine_reads, started=started)
+                           take_machine_reads=take_machine_reads, started=started,
+                           read_evidence_tests=read_required_tests)
         for line in format_budget_report("full_suite_run.shard_wall_seconds", shard_budget_seconds,
                                          report["wall_seconds"], report["processor_seconds"]):
             print(line, file=sys.stderr)
     elif args.command == "run-group":
-        take_machine_reads = install_reviewer_program_guard(root)
         suite = unittest.TestLoader().discover(str(root / "tests"))
         report = run_shard(suite, args.shard_index, args.shard_count,
                            {"python_version": platform.python_version()}, record_path=args.result,
-                           take_machine_reads=take_machine_reads, modules=set(args.modules), started=started)
+                           take_machine_reads=take_machine_reads, modules=set(args.modules), started=started,
+                           read_evidence_tests=read_required_tests)
     elif args.command == "run-modules":
-        take_machine_reads = install_reviewer_program_guard(root)
         sys.path.insert(0, str(args.top_level_directory.resolve()))
         suite = unittest.TestLoader().loadTestsFromNames(args.names)
         report = run_shard(suite, 0, 1, {"python_version": platform.python_version()},
-                           take_machine_reads=take_machine_reads, started=started)
+                           take_machine_reads=take_machine_reads, started=started,
+                           read_evidence_tests=read_required_tests)
     else:
         paths = sorted(args.receipts.rglob("shard-result.json"))
         report = verify_reports(
@@ -329,7 +384,8 @@ def main():
         report["receipts"] = [str(path) for path in paths]
         write_json(args.result, report)
     summary = {key: value for key, value in report.items()
-               if key not in ("all_test_ids", "executed_test_ids", "selected_indices", "test_seconds")}
+               if key not in ("all_test_ids", "executed_test_ids", "selected_indices", "test_seconds",
+                              "evidence_tests")}
     if "test_seconds" in report:
         summary["slowest_tests"] = sorted(report["test_seconds"], key=lambda row: -row[1])[:SLOWEST_TEST_COUNT]
     print(json.dumps(summary, sort_keys=True))

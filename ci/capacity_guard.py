@@ -7,10 +7,8 @@ its declaration, even when no fixture executes the changed branch.
 
 import ast
 import hashlib
-import io
 import json
 from pathlib import Path
-import unittest
 
 from ci.source_inventory import describe_source_ast
 
@@ -130,44 +128,6 @@ def build_gap_table(matrix):
 def collect_evidence_tests(matrix):
     return sorted({test for entry in matrix['entries'] for test in entry['tests'] +
         entry['evidence']['tests'] + [test for stop in entry['required_stops'] for test in stop['tests']]})
-
-
-class EvidenceResult(unittest.TextTestResult):
-    """Record actual execution, including skipped tests and failing subtests."""
-    def __init__(self, *args):
-        super().__init__(*args)
-        self.outcomes = {}
-
-    def startTest(self, test):
-        super().startTest(test)
-        self.outcomes[test.id()] = 'failed'
-
-    def addSuccess(self, test):
-        super().addSuccess(test)
-        if self.outcomes.get(test.id()) != 'skipped':
-            self.outcomes[test.id()] = 'passed'
-
-    def addSkip(self, test, reason):
-        super().addSkip(test, reason)
-        parent = getattr(test, 'test_case', test)
-        self.outcomes[parent.id()] = 'skipped'
-
-    def addExpectedFailure(self, test, error):
-        super().addExpectedFailure(test, error)
-        self.outcomes[test.id()] = 'failed'
-
-    def addSubTest(self, test, subtest, error):
-        super().addSubTest(test, subtest, error)
-        if error is not None:
-            self.outcomes[test.id()] = 'failed'
-
-
-def run_evidence_tests(identifiers):
-    """Run trusted repository test IDs; a missing method is a failed suite row."""
-    loader = unittest.TestLoader()
-    suite = unittest.TestSuite(loader.loadTestsFromName(identifier) for identifier in identifiers)
-    result = unittest.TextTestRunner(stream=io.StringIO(), resultclass=EvidenceResult).run(suite)
-    return {identifier: result.outcomes.get(identifier, 'missing') for identifier in identifiers}
 
 
 def read_plugin_sources(root):
