@@ -2774,8 +2774,8 @@
       "test_kind": "real_shape",
       "tests": [
         "test_review_runtime_retry.RuntimeRetryTests.test_observed_stale_runtime_hands_off_with_stale_code",
-        "test_review_continuation.ContinuationTests.test_stale_runtime_failure_hands_off_recording_a_new_route",
-        "test_review_series.SeriesTests.test_stale_runtime_refusal_hands_off_recording_a_new_route"
+        "test_review_continuation.ContinuationTests.test_stale_runtime_code_of_the_failure_planner_becomes_the_stale_route_procedure",
+        "test_review_series.SeriesTests.test_stale_runtime_refusal_ends_with_the_stale_route_procedure"
       ]
     },
     {
@@ -6630,7 +6630,7 @@
         "test_session_forecast.SessionForecastTests.test_waiting_series_line_reports_pending_delivery_without_sending_a_request",
         "test_session_forecast.SessionForecastTests.test_advisory_selection_keeps_a_stored_metadata_correction",
         "test_review_continuation_regressions.ContinuationRegressionTests.test_series_ends_with_the_exhausted_fixed_slot_stop",
-        "test_review_series.SeriesTests.test_stale_runtime_refusal_hands_off_recording_a_new_route"
+        "test_review_series.SeriesTests.test_stale_runtime_refusal_ends_with_the_stale_route_procedure"
       ],
       "fixed_in": "0.89.2",
       "test_kind": "real_shape"
@@ -8373,6 +8373,25 @@
         "test_review_session_v4_prompt.StudyBarFormsTests.test_s2_refused_final_with_written_out_entries_is_replaced_and_recorded_after_a_handle",
         "test_review_session_v4_prompt.RolePromptRenderTests.test_s1_study_final_page_and_closing_prompts_hold_the_forms_and_problem_prompts_do_not",
         "test_review_session_v4_prompt.RolePromptRenderTests.test_s3_study_series_final_holds_the_forms_and_a_v2_series_final_keeps_its_bytes"
+      ]
+    },
+    {
+      "id": "planned-step-names-a-route-record-that-refuses-the-command",
+      "record": "20261115225347-handoff-export-names-a-stale-route",
+      "class": "plan that names a route record that refuses its command",
+      "summary": "The handoff export of a stopped problem chain fixed route_id of the first assignment of the new chain to the route of the stopped chain. When that route record pinned another reviewer runtime than the installed one, review-assignment refused the assignment, so the export and the assignment were spent on a route that could not run. Other plans named a stale or retired route record in the same way: a next turn, a recorded turn, a retry, the probe after a missing reviewer program, the output correction and the answers of an owner's decision that start a new chain.",
+      "expected": "Every plan names route records that take their commands. A head on a stale route record gets the steps of the stale-route procedure in the order that works: the retirement, the probe after it, the context repair. A step that starts new work names a verified route record of the same identity that pins the installed runtime, or names what the store lacks for it, and the plan states the admission of a new chain for the record that its step names.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_route_plan.RoutePlanRegressionTests.test_next_turn_on_a_stale_route_plans_the_procedure_before_any_command",
+        "test_review_route_plan.RoutePlanRegressionTests.test_procedure_names_the_record_with_the_installed_runtime_and_reaches_a_runnable_repair",
+        "test_review_route_plan.RoutePlanRegressionTests.test_call_that_failed_because_the_runtime_changed_plans_the_procedure_until_the_repair",
+        "test_review_route_plan.RoutePlanRegressionTests.test_handoff_after_a_missing_reviewer_program_on_a_stale_route_plans_the_procedure",
+        "test_review_route_plan.CorrectionRouteTests.test_correction_on_a_stale_route_names_what_the_store_lacks_and_then_the_renewed_record",
+        "test_review_route_plan.SuccessorRouteTests.test_export_of_a_stopped_chain_names_a_route_record_that_takes_its_assignment",
+        "test_review_route_plan.SuccessorRouteTests.test_verified_record_that_does_not_admit_the_new_chain_gives_the_stop_of_its_admission",
+        "test_review_route_plan.MathSuccessorRouteTests.test_math_successor_answer_on_a_stale_route_gives_the_route_step_and_then_the_successor_step"
       ]
     }
   ]
