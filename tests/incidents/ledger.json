@@ -7600,7 +7600,7 @@
       "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
       "class": "D1 session entry under the rules v4 and the verification criterion of the release",
       "summary": "A context repair of a bar, slate or result slot did not start under the session rules v4, and the verification criterion of task T2 could not read a v4 chain: its rules, its stored plan, the positions of its pages and splits, and its two routes.",
-      "expected": "A new slot and a context repair start under the first admitted session rules. The repair delivers its scientific history as units, and a clean exhaustion repair is credited the bodies that its predecessor delivered. Running v2 and v3 sessions keep their bytes. The criterion reads stub-driven v4 bar chains at max to pass or fail by their calls, positions, split successors, recorded bars and declared routes.",
+      "expected": "A new slot and a context repair start under the first admitted session rules. The repair delivers its scientific history as units, and a clean exhaustion repair is credited the bodies that its predecessor delivered. Running v2 and v3 sessions keep their bytes. The criterion reads stub-driven v4 bar chains at max to pass or fail by their calls, positions, split successors, recorded bars and declared routes. When the rules v4 stop a new slot for capacity and it would start as a session of an older rule set, it ends before its first call with the routes that serve it; a context repair takes the next rule set.",
       "fixed_in": "0.92.0",
       "test_kind": "real_shape",
       "tests": [
@@ -7609,7 +7609,7 @@
         "test_review_session_v4_entry.SessionEntryTests.test_clean_exhaustion_credits_delivered_body_and_citation_audit_passes",
         "test_review_session_v4_entry.SessionEntryTests.test_exhaustion_with_contamination_reads_bodies_again",
         "test_review_session_v4_entry.SessionEntryTests.test_exhaustion_with_retirement_reads_bodies_again",
-        "test_review_session_v4_entry.SessionEntryTests.test_slot_and_repair_that_v4_admission_refuses_take_the_base_path",
+        "test_review_session_v4_entry.SessionEntryTests.test_new_slot_below_the_v4_floor_stops_and_a_context_repair_takes_the_next_rule_set",
         "test_review_session_v4_entry.LegacySessionBytesTests.test_running_v2_and_v3_continuations_keep_packet_prompt_request_and_check_bytes",
         "test_verification_criterion.StoredSessionVerificationTests.test_two_real_v4_bars_in_24_calls_report_actual_plan_and_routes",
         "test_verification_criterion.StoredSessionVerificationTests.test_real_page_split_and_nested_split_keep_new_positions",
@@ -8315,6 +8315,64 @@
       "test_kind": "real_shape",
       "tests": [
         "test_openness_carried_integration.Record12ShapeTests.test_v7_chain_reaches_a_verified_finding_with_the_carried_outputs"
+      ]
+    },
+    {
+      "id": "session-v4-prompt-without-the-instructions-of-its-role",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "prompt of a turn under the session rules v4",
+      "summary": "A turn prompt of a session under the rules v4 held the common text, one sentence for the role and the turn limits. It held no part of the review template of its role and no paragraph that its packet selects, so a slate session read no slate-places paragraph although its frame delivered place_review, and a final read no response shape. The frame reserved a fixed 20,000 characters for the prompt.",
+      "expected": "A turn prompt starts with the base prompt of its role, followed by the turn text of v4 and the paragraphs that the logical packet selects; a recorded turn verifies only when its paragraphs equal that selection; each frame reserves the base as the turns render it.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_prompt.SessionRolePromptTests.test_v1_v2_slate_turn_holds_places_paragraph_and_verifies_only_with_the_selected_paragraphs",
+        "test_review_session_v4_prompt.SessionRolePromptTests.test_v3_largest_base_keeps_request_and_final_within_their_bounds_at_effort_max",
+        "test_review_session_v4_prompt.SessionRolePromptTests.test_v3_admission_of_a_packet_with_a_capacity_notice_counts_the_notice_in_the_base",
+        "test_review_session_v4_prompt.RolePromptRenderTests.test_every_turn_starts_with_its_role_base_without_the_texts_of_other_rule_sets"
+      ]
+    },
+    {
+      "id": "new-chain-below-the-v4-floor-started-under-the-rules-v3",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "rule-set fallback of a new chain",
+      "summary": "On a copy of a problem record, a new bar on a route of 29,000 input tokens met the v4 admission stop below_floor and was assigned under the session rules v3, whose receipt forecasts no further turn; next then gave a reviewer call.",
+      "expected": "A new chain that the v4 admission stops for capacity, and that would start as a session of an older rule set, ends before its first call with review_route_capacity_below_floor, reason session_below_floor, and the routes on which v4 admits it. A context repair, a new chain that starts as a series of the parts protocol v3, and a stop for another reason take the next rule set.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_prompt.SessionRolePromptTests.test_v5_new_bar_below_the_v4_floor_stops_before_its_call_and_names_a_serving_route",
+        "test_review_session_v4_prompt.SessionRolePromptTests.test_v5_new_slate_below_the_v4_floor_starts_on_the_serving_route_without_repairing_its_bar",
+        "test_review_session_v4_prompt.SessionRolePromptTests.test_v5_admission_stops_for_another_reason_take_the_next_rule_set",
+        "test_review_session_v4_prompt.StudySeriesBelowFloorTests.test_v5_new_study_result_below_the_v4_floor_starts_a_series_of_the_parts_protocol_v3",
+        "test_review_session_v4_entry.SessionEntryTests.test_new_slot_below_the_v4_floor_stops_and_a_context_repair_takes_the_next_rule_set",
+        "test_review_session_v4_entry.SessionEntryTests.test_repair_of_a_v3_chain_that_v4_stops_for_capacity_is_recorded_under_the_rules_v3"
+      ]
+    },
+    {
+      "id": "recorded-v4-problem-review-read-as-a-refresh",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "reader of a turn packet of a v4 session",
+      "summary": "review-series recorded a new problem bar under the rules v4 with value-review and then ended with exit status 3 and the handoff review_resampling_forbidden. The refresh check read the turn packet of the head, which carries the problem areas only inside the logical packet of the chain, so every recorded area read as missing and the planner asked for a continuation that the assignment refuses; for a slate the same read raised KeyError.",
+      "expected": "The refresh check of a v4 problem review reads the logical packet of its chain; after the recorded review the plan is done.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_prompt.SessionRolePromptTests.test_recorded_v4_bar_ends_its_series_when_an_area_preceded_it"
+      ]
+    },
+    {
+      "id": "study-v4-final-without-the-accepted-forms",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "prompt of a study review under the session rules v4",
+      "summary": "The final, page and closing prompts of a study review under the rules v4, and the final of a study series of the parts protocol v3, held none of the accepted forms of an evidence entry; a final with the entry kinds of the incident of 20261115234509 was refused under evidence.shape.",
+      "expected": "These prompts state that an entry is cited by its handle and give the three accepted forms of an entry that is written out; a refused final is replaced on its route and recorded after an answer by handle; a parts v2 prompt keeps its bytes.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_prompt.StudyBarFormsTests.test_s2_refused_final_with_written_out_entries_is_replaced_and_recorded_after_a_handle",
+        "test_review_session_v4_prompt.RolePromptRenderTests.test_s1_study_final_page_and_closing_prompts_hold_the_forms_and_problem_prompts_do_not",
+        "test_review_session_v4_prompt.RolePromptRenderTests.test_s3_study_series_final_holds_the_forms_and_a_v2_series_final_keeps_its_bytes"
       ]
     }
   ]
