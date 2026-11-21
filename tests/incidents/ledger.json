@@ -7797,6 +7797,31 @@
         "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_reads_the_task_by_the_concept_doi_after_the_answer_of_the_open_request",
         "test_transport.TestSubmitDecision.test_submit_in_a_ready_study_writes_the_receipt"
       ]
+    },
+    {
+      "id": "long-chain-of-account-references-meets-the-recursion-limit",
+      "record": "20261120203506-improvements-from-the-problem-value-cycle",
+      "class": "walk of the references of the accounts",
+      "summary": "problem-value followed the references between the entries of the accounts (evidence_ids, relation_ids and the other reference members) with a recursive function. A chain of more than about 1,000 entries, each citing the next, ended with RecursionError in collect_entry_evidence. A chain of 500 entries was accepted. The independent review of 0.91.8 found it with 1,200 entries; no run met it.",
+      "expected": "collect_entry_evidence walks the references with a stack of its own. A chain of any length gets the evidence that the entry reaches, each reference once, in the order of the recursive walk. A cycle is refused with problem_account_reference_cycle and an unknown ID with problem_account_reference_missing, as before.",
+      "fixed_in": "0.91.13",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_payload_changes.ValuePayloadChangeTests.test_a_chain_of_references_longer_than_the_recursion_limit_is_accepted"
+      ]
+    },
+    {
+      "id": "release-merged-with-a-failing-test-that-no-list-held",
+      "record": "20261120203506-improvements-from-the-problem-value-cycle",
+      "class": "must-pass set of a release",
+      "summary": "Release 0.91.8 changed the default statement of the problem fixtures in tests/test_research_problem_claims.py. tests.test_review_request_parity builds six of its cases through that default by way of other test modules and compares them with values frozen at an earlier commit, so it failed in 15 CI jobs of 0.91.8 on main, and 0.91.9 inherited the failure. The must-pass list of the release was built by hand from the names that the diff changed, and it did not hold the module. 0.91.10 corrected the cases. The same module had failed in the CI of 0.73.3 and of 0.91.4 after a merge.",
+      "expected": "ci/must_pass.py gives the must-pass set of a release from the diff. The set always holds the modules that compare with frozen values or pin a fixture, a version or a release file, with tests.test_review_request_parity among them, and it holds each test module that reaches a changed file of tests/ through the imports between the files of tests/. For the diff of 0.91.8 the set holds tests.test_review_request_parity.",
+      "fixed_in": "0.91.13",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_must_pass.MustPassSelectionTests.test_a_changed_fixture_builder_selects_the_test_that_reaches_it_through_other_test_modules",
+        "test_must_pass.MustPassSelectionTests.test_the_fixed_modules_exist"
+      ]
     }
   ]
 }
