@@ -210,7 +210,8 @@ class ResearchGateTests(DevelopmentCase):
         from research_harness.storage import _canonical
         from research_harness.workspace import strict_json
         self.prepared_study()
-        actual = execution.prepared_mutation
+        # The record of an observation goes through prepared_task_mutation, which waits for a busy store.
+        actual = execution.prepared_task_mutation
 
         def retain_original_observation(store, operation, payload, prepare, **identity):
             if operation == "execution.observe":
@@ -224,7 +225,7 @@ class ResearchGateTests(DevelopmentCase):
                 return actual(store, operation, payload, original_envelope, **identity)
             return actual(store, operation, payload, prepare, **identity)
 
-        with mock.patch.object(execution, "prepared_mutation", side_effect=retain_original_observation):
+        with mock.patch.object(execution, "prepared_task_mutation", side_effect=retain_original_observation):
             payload = observed_candidate(self)
         self.assertTrue(self.development().readiness_report(self.store)["ready"])
         saved = self.store.snapshot()["records"]["execution"][payload["id"]]
