@@ -8239,6 +8239,19 @@
       "tests": [
         "test_must_pass.MustPassRunTests.test_jobs_above_the_limit_of_the_budgets_and_an_unknown_module_are_refused"
       ]
+    },
+    {
+      "id": "call-row-target-ignores-function-local-imports",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "guard resolution of a call target",
+      "summary": "The packet inventory read all imports of a module into one map, so a name that two functions import from two modules resolved to the last import. The command wrote call rows whose target the call does not reach (four in review_handles and review_parts, two more that named only one of the functions that their calls reach), and the guard refused the row of review_composite._validate_v7_composite that names the function that the call reaches.",
+      "expected": "A call row names the function that its call reaches through the imports in force at the call: the imports of the module, then each import of the function of the call that comes before it. The guard accepts that row.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_packet_call_rows.CallRowTests.test_a_name_is_resolved_by_the_import_of_its_own_function_or_else_of_the_module",
+        "test_packet_call_rows.CallRowTests.test_a_name_that_one_function_imports_twice_is_resolved_by_the_import_before_the_call"
+      ]
     }
   ]
 }
