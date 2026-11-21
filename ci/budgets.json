@@ -5,5 +5,16 @@
     "must_pass_run": {"wall_seconds": 2700},
     "full_suite_run": {"wall_seconds": 10800, "shard_wall_seconds": 9000}
   },
-  "core_operations": {}
+  "core_operations": {
+    "small": {
+      "open": {"wall_seconds": 0.068, "processor_seconds": 0.064, "peak_memory_bytes": 31000000},
+      "status": {"wall_seconds": 0.3, "processor_seconds": 0.27, "peak_memory_bytes": 56000000},
+      "write": {"wall_seconds": 0.18, "processor_seconds": 0.16, "peak_memory_bytes": 43000000}
+    },
+    "large": {
+      "open": {"wall_seconds": 0.077, "processor_seconds": 0.068, "peak_memory_bytes": 31000000},
+      "status": {"wall_seconds": 470, "processor_seconds": 470, "peak_memory_bytes": 2200000000},
+      "write": {"wall_seconds": 1.2, "processor_seconds": 1.2, "peak_memory_bytes": 320000000}
+    }
+  }
 }

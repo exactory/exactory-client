@@ -8189,6 +8189,44 @@
         "test_must_pass.MustPassSelectionTests.test_a_changed_fixture_builder_selects_the_test_that_reaches_it_through_other_test_modules",
         "test_must_pass.MustPassSelectionTests.test_the_fixed_modules_exist"
       ]
+    },
+    {
+      "id": "release-merged-while-tests-used-the-changed-code-without-a-top-level-import",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "must-pass set of a release",
+      "summary": "Release 0.91.11 went to main while two tests failed: tests/test_research_gates.py imported research_harness.execution inside a test function and patched a function that 0.91.11 had replaced, and tests/fixtures/capacity_transport_inventory.json pinned the checksums of two functions of research_harness/review_protocol.py that 0.91.11 had changed, which tests/test_capacity_guard.py checks through ci/capacity_guard.py. The must-pass set of 0.91.11 was built by hand and held neither module. No test module names that fixture, and many test modules name a harness module only in a mock.patch target, an importlib.import_module argument or a path.",
+      "expected": "ci/must_pass.py selects a test module that imports a changed module inside a function, that names it in a string by its dotted name or its path, or that reads a fixture or uses a module of ci that names it, also through a compressed fixture or a fixture folder. For the diff of 0.91.11 the set holds test_research_gates and test_capacity_guard.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_must_pass.MustPassReachTests.test_a_module_used_without_a_top_level_import_is_selected",
+        "test_must_pass.MustPassReachTests.test_the_checksum_pins_that_a_ci_module_checks_select_the_tests_that_import_it",
+        "test_must_pass.MustPassReachTests.test_a_fixture_that_names_a_changed_module_selects_the_tests_that_read_it"
+      ]
+    },
+    {
+      "id": "must-pass-run-passed-tests-that-failed-in-their-ci-shard",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "must-pass set of a release",
+      "summary": "The must-pass run started one process for each test module, and a CI shard runs the tests that it holds from many modules in one process. A test that leaves module state behind passes alone and fails the later tests of its shard: release 0.89.2 passed its 73 changed modules locally and failed about 3,000 tests in every CI shard.",
+      "expected": "ci/must_pass.py run starts, for each Python executable and each CI shard, one process that discovers the tests as the shard does and runs the tests of the set that the shard holds, in the order of the shard. A test that fails after an earlier test of its shard changed shared state fails in the must-pass run as well.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_must_pass.MustPassRunTests.test_two_modules_of_one_shard_run_in_one_process_and_state_left_behind_fails_the_later_one"
+      ]
+    },
+    {
+      "id": "closing-composite-refusal-record-read-the-whole-store",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "merge of a finishing write and a composite final",
+      "summary": "The merge of 0.91.11 into the 0.92.0 branch joined the refusal record that commits against the records its check read with the check of a closing answer, which built its composite from dict(records, ...). That iterated the scoped records and bound the revision of the whole store, so a commit of another command refused each attempt of the refusal record of a closing composite, and the run ended with store_busy.",
+      "expected": "The check of a closing answer reads the records through a view that does not iterate them; an unrelated commit before each attempt leaves the refusal record of a closing composite to commit at its first attempt.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_final_pages_checked_answers.ClosingRefusalWriteTests.test_refusal_of_a_closing_composite_is_recorded_when_a_commit_meets_every_attempt"
+      ]
     }
   ]
 }
