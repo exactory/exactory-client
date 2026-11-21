@@ -39,6 +39,11 @@ def copy_runner(root):
         shutil.copyfile(must_pass.ROOT / "ci" / name, root / "ci" / name)
 
 
+def read_tree_budgets(root):
+    """The budgets of a plugin tree. A test compares with the values of its tree, so a new value changes no test."""
+    return json.loads((root / "ci" / "budgets.json").read_text(encoding="utf-8"))
+
+
 class MustPassSelectionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -207,7 +212,9 @@ class MustPassRunTests(unittest.TestCase):
             for group in report["groups"]:
                 self.assertGreater(group["processor_seconds"], 0)
                 self.assertGreaterEqual(group["wall_seconds"], 0)
-            self.assertEqual(report["budget"], {"name": "implementer_run", "wall_seconds": 600, "over": False})
+            self.assertEqual(report["budget"], {
+                "name": "implementer_run", "over": False,
+                "wall_seconds": read_tree_budgets(root)["runs"]["implementer_run"]["wall_seconds"]})
             self.assertIn("implementer_run", run.stdout)
 
     def test_a_replay_of_a_commit_runs_the_set_of_its_diff_against_the_must_pass_budget(self):
@@ -242,17 +249,25 @@ class MustPassRunTests(unittest.TestCase):
             report = json.loads((logs / must_pass.REPORT_FILE_NAME).read_text(encoding="utf-8"))
             self.assertEqual(report["modules"], selected)
             self.assertEqual(report["budget"]["name"], "must_pass_run")
-            self.assertEqual(report["budget"]["wall_seconds"], 2700)
+            self.assertEqual(report["budget"]["wall_seconds"],
+                             read_tree_budgets(root)["runs"]["must_pass_run"]["wall_seconds"])
             self.assertIn("must_pass_run", run.stdout)
 
     def test_jobs_above_the_limit_of_the_budgets_and_an_unknown_module_are_refused(self):
-        refused = self.run_command(must_pass.ROOT, "run", "--module", "test_must_pass", "--jobs", "9")
-        self.assertEqual(refused.returncode, 2)
-        self.assertIn("between 1 and 8", refused.stderr)
-        self.assertIn("test_processes", refused.stderr)
-        unknown = self.run_command(must_pass.ROOT, "run", "--module", "test_no_such_module", "--jobs", "1")
-        self.assertEqual(unknown.returncode, 2)
-        self.assertIn("test_no_such_module", unknown.stderr)
+        # The command runs on a small tree with one empty test module, never on the tree of this test: a call that
+        # the command accepted there would start this module again, and that run the next one, without an end.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            copy_runner(root)
+            write_tree(root, {"tests/test_sample.py": EMPTY_TEST_MODULE})
+            limit = read_tree_budgets(root)["test_processes"]
+            refused = self.run_command(root, "run", "--module", "test_sample", "--jobs", str(limit + 1))
+            self.assertEqual(refused.returncode, 2, refused.stdout + refused.stderr)
+            self.assertIn("between 1 and %d" % limit, refused.stderr)
+            self.assertIn("test_processes", refused.stderr)
+            unknown = self.run_command(root, "run", "--module", "test_no_such_module", "--jobs", "1")
+            self.assertEqual(unknown.returncode, 2, unknown.stdout + unknown.stderr)
+            self.assertIn("test_no_such_module", unknown.stderr)
 
 
 if __name__ == "__main__":
