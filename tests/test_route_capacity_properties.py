@@ -15,14 +15,93 @@ from research_harness import review_route_capacity as capacity, review_transport
 from research_harness.evidence import digest
 
 PARTS_END_MESSAGE = 'A finite text did not finish its declared parts.'
+# K6 for the series of the parts protocol v3 and the sessions under the rules v4. A series delivers every unit by
+# the offsets of its intervals (decision 31), reference rows included (C11); a session delivers every unit by the
+# offsets of its parts. No unit kind of either inventory is delivered whole.
+SERIES_DELIVERY_RULES = {kind: dict(delivery='segments') for kind in ('record', 'frame', 'reference', 'source')}
+SESSION_DELIVERY_RULES = {kind: dict(delivery='segments')
+                          for kind in ('source', 'abstract', 'fulltext', 'artifact', 'history', 'frame')}
+
+
+def read_unit_kinds(functions, writers):
+    """Read the unit kinds that inventory functions write, from their source.
+
+    writers maps the name of a function that writes a unit to the position of its kind argument. A kind is a
+    string constant or a conditional of constants, given to such a writer, as the default of its kind parameter,
+    as a loop constant that the writer receives, or as the member kind of a mapping. The kinds of the components of
+    a unit (components=[...]) are no unit kinds.
+    """
+    import ast
+    import inspect
+    import textwrap
+    def read_strings(node):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return {node.value}
+        if isinstance(node, ast.IfExp):
+            return read_strings(node.body) | read_strings(node.orelse)
+        return set()
+    kinds = set()
+    for function in functions:
+        tree = ast.parse(textwrap.dedent(inspect.getsource(function)))
+        loops = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.For) and isinstance(node.target, ast.Tuple) and isinstance(node.iter, ast.Tuple):
+                for row in node.iter.elts:
+                    if isinstance(row, ast.Tuple) and isinstance(node.target.elts[0], ast.Name):
+                        loops.setdefault(node.target.elts[0].id, set()).update(read_strings(row.elts[0]))
+            if isinstance(node, ast.FunctionDef) and node.name in writers:
+                names = [argument.arg for argument in node.args.args]
+                defaults = dict(zip(names[len(names) - len(node.args.defaults):], node.args.defaults))
+                kinds.update(read_strings(defaults.get('kind', ast.Constant(value=None))))
+        components = [node.value for node in ast.walk(tree) if isinstance(node, ast.keyword) and node.arg == 'components']
+        components += [node.value for node in ast.walk(tree) if isinstance(node, ast.Assign)
+                       and any(isinstance(target, ast.Name) and target.id == 'components' for target in node.targets)]
+        components += [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+                       and isinstance(node.func, ast.Attribute) and node.func.attr == 'append'
+                       and isinstance(node.func.value, ast.Name) and node.func.value.id == 'components']
+        skipped = {id(child) for value in components for child in ast.walk(value)}
+        for node in ast.walk(tree):
+            if id(node) in skipped or not isinstance(node, ast.Call):
+                continue
+            name = node.func.id if isinstance(node.func, ast.Name) else getattr(node.func, 'attr', None)
+            if name in writers:
+                position = writers[name]
+                argument = node.args[position] if len(node.args) > position else next(
+                    (item.value for item in node.keywords if item.arg == 'kind'), None)
+                if isinstance(argument, ast.Name):
+                    kinds.update(loops.get(argument.id, set()))
+                elif argument is not None:
+                    kinds.update(read_strings(argument))
+            elif name == 'dict':
+                kinds.update(value for item in node.keywords if item.arg == 'kind' for value in read_strings(item.value))
+    return kinds
+
+
+def read_series_unit_kinds():
+    from research_harness import review_parts_v3
+    return read_unit_kinds((review_parts_v3.build_series_inventory, review_parts_v3._describe_inventory_unit,
+                            review_parts_v3._describe_reference_units), {'_describe_inventory_unit': 2})
+
+
+def read_session_unit_kinds():
+    from research_harness import review_session_v4
+    return read_unit_kinds((review_session_v4.build_session_inventory, review_session_v4.check_v4_admission),
+                           {'append_unit': 0})
+
+
+def read_required_stops(matrix, identifier):
+    """Return the codes of the required stops of a closure entry that have tests."""
+    entry = next(row for row in matrix['entries'] if row['id'] == identifier)
+    return {stop['code'] for stop in entry['required_stops'] if stop['tests']}
 
 
 class CapacityPropertyTests(unittest.TestCase):
     def test_text_sizes_to_thirty_route_limits_have_finite_fitting_turns(self):
         room = 80000
         limit = fixtures.measure_input_limit(room)
-        gaps = capacity_guard.build_gap_table(capacity_guard.read_matrix())
-        self.assertIn('Q17', gaps['gaps'])
+        # This drives the parts protocol v2, whose ends stay the required stops of A6 after parts v3 constructs A6,
+        # Q2 and Q17 (capacity-guard-3).
+        stops = read_required_stops(capacity_guard.read_matrix(), 'A6')
         for numerator in (9, 10, 11, 30, 300):
             with self.subTest(tenths=numerator):
                 packet = fixtures.make_packet(count=1, characters=limit * numerator // 10)
@@ -31,8 +110,8 @@ class CapacityPropertyTests(unittest.TestCase):
                     try:
                         turn = fixtures.plan(packet, observations, room=room)
                     except ResearchError as error:
-                        self.assertIn('A6', gaps['gaps'])
                         self.assertIn(error.code, ('review_parts_final_too_large', 'review_parts_inventory_too_large'))
+                        self.assertIn(error.code, stops)
                         break
                     clean = {key: value for key, value in turn.items() if key != '_test_inventory'}
                     self.assertLessEqual(fixtures.measure_packet(clean), limit)
@@ -50,12 +129,11 @@ class CapacityPropertyTests(unittest.TestCase):
     def test_ten_thousand_units_end_at_the_declared_inventory_boundary(self):
         packet = fixtures.make_packet(count=10000, characters=200)
         before = copy.deepcopy(packet)
-        matrix = capacity_guard.read_matrix()
-        self.assertIn('Q2', capacity_guard.build_gap_table(matrix)['gaps'])
         with self.assertRaises(ResearchError) as caught:
             fixtures.plan(packet, room=80000)
         self.assertIn(caught.exception.code, ('review_parts_frame_too_large',
             'review_parts_inventory_too_large', 'review_parts_final_too_large'))
+        self.assertIn(caught.exception.code, read_required_stops(capacity_guard.read_matrix(), 'A6'))
         self.assertEqual(packet, before)
 
 
@@ -233,6 +311,62 @@ class ReadingCapacityPropertyTests(unittest.TestCase):
         self.assertEqual(result['state'], 'stop')
         row = capacity_guard.read_matrix()['reading_property_ends']['gaps_2000']
         self.assertEqual((row['entry'], row['closing_unit']), ('Q8', 'final-pages'))
+
+
+class Stage3PropertyCoverageTests(unittest.TestCase):
+    def test_every_family_subject_and_property_is_driven_or_a_named_gap(self):
+        from research_harness import bar_sources, review_parts_roles
+        matrix = capacity_guard.read_matrix()
+        self.assertEqual(capacity_guard.inspect_property_coverage(matrix), [])
+        families = matrix['property_coverage']['families']
+        self.assertEqual(set(families), {'session-v4', 'parts-v3', 'math-v2', 'v7-pages'})
+        self.assertEqual(capacity_guard.read_family_subjects(families['session-v4']), bar_sources.ROLES)
+        self.assertEqual(capacity_guard.read_family_subjects(families['parts-v3']), tuple(review_parts_roles.ADAPTERS))
+        tests = capacity_guard.collect_evidence_tests(matrix)
+        self.assertTrue(all(test in tests for row in matrix['property_coverage']['rows'] for test in row['tests']))
+        # A new adapter, a removed gap and a gap that a row also covers each fail.
+        with patch.dict(review_parts_roles.ADAPTERS, new_adapter=review_parts_roles.ADAPTERS['problem_result']):
+            self.assertEqual(capacity_guard.inspect_property_coverage(matrix), [capacity_guard.PROPERTY_COVERAGE_MESSAGE])
+        removed = copy.deepcopy(matrix)
+        removed['property_coverage']['gaps'].pop()
+        self.assertEqual(capacity_guard.inspect_property_coverage(removed), [capacity_guard.PROPERTY_COVERAGE_MESSAGE])
+        doubled = copy.deepcopy(matrix)
+        doubled['property_coverage']['gaps'].append(dict(family='parts-v3', subject='*', property='late_units', reason='x'))
+        self.assertEqual(capacity_guard.inspect_property_coverage(doubled), [capacity_guard.PROPERTY_COVERAGE_MESSAGE])
+
+
+class Stage3DeliveryRuleTests(unittest.TestCase):
+    def test_k6_every_series_session_and_math_unit_kind_has_a_delivery_rule(self):
+        import ast
+        import inspect
+        import textwrap
+        self.assertEqual(read_series_unit_kinds(), set(SERIES_DELIVERY_RULES))
+        self.assertEqual(read_session_unit_kinds(), set(SESSION_DELIVERY_RULES))
+        for rules in (SERIES_DELIVERY_RULES, SESSION_DELIVERY_RULES):
+            self.assertTrue(all(rule['delivery'] == 'segments' or rule.get('largest_size') for rule in rules.values()))
+        # The math chain of protocol v2 builds its inventory with the functions of protocol v7, whose kinds the K6
+        # test of the reading chains reads; its own record kinds are those of its context units.
+        description = v7.PROTOCOL_DESCRIPTIONS[reading.MATH_PROTOCOL_V2]
+        self.assertIs(description['list_context_units'], v7._list_math_context_units)
+        tree = ast.parse(textwrap.dedent(inspect.getsource(v7._list_math_context_units)))
+        records = {node.elts[0].value for node in ast.walk(tree) if isinstance(node, ast.Tuple)
+                   and node.elts and isinstance(node.elts[0], ast.Constant)}
+        self.assertTrue(records)
+        self.assertEqual(records - set(reading_fixtures.RECORD_DELIVERY_RULES), set())
+
+    def test_k6_a_new_series_or_session_unit_kind_requires_its_own_rule(self):
+        self.assertEqual(read_unit_kinds((write_future_series_unit,), {'_describe_inventory_unit': 2}), {'new_unit'})
+        self.assertEqual(read_unit_kinds((write_future_session_unit,), {'append_unit': 0}), {'new_session_unit'})
+
+
+def write_future_series_unit(route, source):
+    from research_harness import review_parts_v3
+    return review_parts_v3._describe_inventory_unit(route, source, 'new_unit')
+
+
+def write_future_session_unit(append_unit):
+    for kind, captures in (('new_session_unit', []),):
+        append_unit(kind, captures)
 
 
 class ReadingCapacityCommandTests(unittest.TestCase):

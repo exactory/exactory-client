@@ -8393,6 +8393,46 @@
         "test_review_route_plan.SuccessorRouteTests.test_verified_record_that_does_not_admit_the_new_chain_gives_the_stop_of_its_admission",
         "test_review_route_plan.MathSuccessorRouteTests.test_math_successor_answer_on_a_stale_route_gives_the_route_step_and_then_the_successor_step"
       ]
+    },
+    {
+      "id": "session-v4-bar-turns-over-the-output-limit",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "session request turn at the output limit",
+      "summary": "Three turns of a bar session under the rules v3 at effort max reached the output limit, and the session had no smaller request form.",
+      "expected": "Under the rules v4 a request turn at the output limit is replaced at the next lower level on the same route and the bar is recorded; the lowest level ends in the decision stop.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_turns.SessionTurnsTests.test_opus_max_138371_replaces_request_on_same_route_then_records_bar",
+        "test_review_session_v4_turns.SessionTurnsTests.test_capacity_at_every_request_level_lowers_then_retries_floor_and_stops",
+        "test_review_session_v4_pages.SessionPagesTests.test_incident_opus_max_five_sources_records_bar_and_reports_final_turns"
+      ]
+    },
+    {
+      "id": "session-v4-final-cites-a-text-of-turn-three",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "session final citing an earlier turn",
+      "summary": "A bar final that cited a text delivered in turn 3 of its session was refused, because the final no longer held that text.",
+      "expected": "Under the rules v4 the final cites the text of turn 3 by its handle, the citation passes, and a page of a final in pages that cites it is credited by the composite audit.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_turns.SessionTurnsTests.test_forty_source_turns_are_bounded_and_turn_three_handle_records_bar",
+        "test_review_session_v4_pages.SessionPagesTests.test_page_cites_text_delivered_on_turn_three_and_composite_audit_credits_it"
+      ]
+    },
+    {
+      "id": "parts-v3-reference-rows-of-a-unit",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "reference rows of a series unit",
+      "summary": "Under the parts protocol v2 every delivery of a unit held its whole lists of occurrences, citations and aliases, so a unit of 11 body characters with many occurrences made a request too large (row Q17).",
+      "expected": "Under the parts protocol v3 a descriptor shows its reference rows within a stated size, the other rows are delivered in segments once each, and the frozen packet is rebuilt with every occurrence; a series with 1,000 occurrences records a review.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3.RecordedSeriesTests.test_Q17_repeated_occurrences_record_a_review_and_missing_turn_fails",
+        "test_review_parts_v3.BuilderScaleTests.test_Q17_reference_shapes_keep_one_body_and_rebuild_every_occurrence"
+      ]
     }
   ]
 }

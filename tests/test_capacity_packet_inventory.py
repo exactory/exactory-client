@@ -7,11 +7,19 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+from ci import capacity_packet_inventory as inventory
 from ci.capacity_packet_inventory import (generate_quantity_shapes, inspect_packet_sources,
     read_packet_registry, validate_packet, QUANTITIES, build_quantity_shape_packet, compute_ast_digest, validate_open_members, inspect_quantity_factories, read_quantity_allowance)
 
 ROOT = Path(__file__).resolve().parents[1]
 PARTS_FINAL_MESSAGE = 'Parts fixture did not reach its final'
+
+
+def find_members(registry):
+    """Map the identity of each growing member to its declaration."""
+    return {role + '/' + protocol + ':' + '.'.join(path): member
+            for role, protocol, schema in inventory.iter_packet_schemas(registry)
+            for path, member in inventory._walk_declarations(schema, registry, ())}
 
 
 def make_registry():
@@ -369,15 +377,18 @@ class QuantityFactoryTests(unittest.TestCase):
         contracts = registry['quantity_contracts']
         lineage = contracts['native_math/exactory-independent-review-v1:reading_turn.reading_record.turns']
         self.assertEqual(lineage['canonical']['factory'], 'v6_reading_records')
-        for path, owner in (
-                ('manuscript/:evidence.work', 'A1_frame_metadata'),
-                ('readiness/:inputs.branches', 'A1_frame_metadata'),
-                ('native_math/exactory-independent-review-v1:native.contract', 'A1_frame_metadata'),
-                ('result/exactory-problem-review-v2:context_repair.predecessor_binding.attempt_ids',
-                 'Q10_frame_metadata')):
+        # The frames of other roles were gaps of field-classes; that unit is installed, and each member now has
+        # the bound of its own role: the field class, or the admission of a request that no chain serves.
+        members = find_members(registry)
+        for path, bound in (
+                ('manuscript/:evidence.work', 'request_admission'),
+                ('readiness/:inputs.branches', 'field_class'),
+                ('native_math/exactory-independent-review-v1:native.contract', 'field_class'),
+                ('result/exactory-problem-review-v2:context_repair.predecessor_binding.attempt_ids', 'field_class')):
             with self.subTest(property=path):
-                self.assertEqual(contracts[path]['gap'], owner)
-                self.assertEqual(registry['quantity_gaps'][owner]['closing_unit'], 'field-classes')
+                self.assertNotIn(path, contracts)
+                self.assertEqual(list(members[path]['bound']), [bound])
+        self.assertEqual(registry['quantity_gaps']['A1_frame_metadata']['closing_unit'], 'field-classes')
 
     def test_missing_factory_and_merged_closing_unit_fail_before_execution(self):
         from ci.capacity_guard import read_matrix
@@ -390,9 +401,14 @@ class QuantityFactoryTests(unittest.TestCase):
         identity = next(iter(hidden['shipped_quantity_properties']))
         hidden['quantity_contracts'][identity] = {'gap': 'A1_frame_metadata', 'declared_entry': 'Q3'}
         self.assertTrue(inspect_quantity_factories(hidden, read_matrix(), FACTORIES))
+        # field-classes is installed: a gap of that unit passes only for the members that lane record-copies
+        # declares. Without that exception, the 23 members under the first prefix fail before any execution.
         matrix = read_matrix()
-        matrix['installed_units'].append('field-classes')
-        self.assertTrue(inspect_quantity_factories(registry, matrix, FACTORIES))
+        self.assertIn('field-classes', matrix['installed_units'])
+        with patch.object(inventory, 'RECORD_COPY_OPEN_PREFIXES', inventory.RECORD_COPY_OPEN_PREFIXES[1:]):
+            errors = inspect_quantity_factories(registry, matrix, FACTORIES)
+        self.assertIn(inventory.QUANTITY_COVERAGE_MISSING.format(
+            path=inventory.RECORD_COPY_OPEN_PREFIXES[0] + 'alternatives'), errors)
 
     def test_new_bounded_member_requires_reachable_executable_variant_not_a_legacy_gap(self):
         from research_harness import review_packets
@@ -630,6 +646,67 @@ class ProductionPacketInventoryTests(unittest.TestCase):
         member['class'] = 'fixed'
         self.assertEqual(validate_open_members(reduced), [])
         self.assertEqual(reduced['open_members'], registry['open_members'])
+
+    def test_k4_only_the_record_copy_members_keep_the_bound_open(self):
+        registry = read_packet_registry()
+        opened = inventory.list_open_members(registry)
+        for prefix in inventory.RECORD_COPY_OPEN_PREFIXES:
+            self.assertEqual(len([identity for identity in opened if identity.startswith(prefix)]), 23, prefix)
+        self.assertEqual(len(opened), 69)
+        self.assertEqual(validate_open_members(registry), [])
+        members = find_members(registry)
+        bounds = {}
+        for identity, member in members.items():
+            kind = 'open' if member['bound'] == 'open' else next(iter(member['bound']))
+            bounds[kind] = bounds.get(kind, 0) + 1
+        self.assertEqual(bounds, dict(open=69, field_class=6583, request_admission=1428, chain_stop=21,
+                                      serialized_characters=35))
+        # A copy of the registry with one more open member fails, and so does a packet checked against it.
+        changed = copy.deepcopy(registry)
+        identity = 'bar/exactory-problem-review-v2:pending_source_requests'
+        member = find_members(changed)[identity]
+        member.update(bound='open', **{'class': 'open'})
+        self.assertIn(inventory.OPEN_MEMBER_PRESENT.format(path=identity), validate_open_members(changed))
+        self.assertTrue(validate_packet('bar', dict(protocol='exactory-problem-review-v2'), changed))
+
+    def test_k5_every_bounded_member_executes_its_field_class_or_its_admission_stop(self):
+        """Each of the 8,032 bounded members is classified by the frame builder one character above its size.
+
+        Assertion K5 executes every declared member, so the count is that of the registry, and the size is the
+        smallest at which the frame moves the member. Measured in the must-pass run: 8.7 s on 3.12, 11.5 s on 3.9."""
+        from ci.capacity_guard import read_matrix
+        self.assertEqual(inventory.inspect_member_bounds(read_packet_registry(), read_matrix()), [])
+
+    def test_k5_a_changed_bound_a_missing_stop_or_a_framed_overflow_fails(self):
+        from ci.capacity_guard import read_matrix
+        from research_harness import review_field_classes
+        registry = read_packet_registry()
+        matrix = read_matrix()
+        def focus(role, protocol):
+            # Shared definitions are copied too, so that a change of one copy reaches no other.
+            return copy.deepcopy(dict(registry, certificates={}, roles={role: dict(protocols={
+                protocol: registry['roles'][role]['protocols'][protocol]})}))
+        bar = focus('bar', 'exactory-problem-review-v2')
+        self.assertEqual(inventory.inspect_member_bounds(bar, matrix), [])
+        identity = 'bar/exactory-problem-review-v2:pending_source_requests'
+        find_members(bar)[identity]['bound']['field_class']['characters'] += 1
+        self.assertIn(inventory.MEMBER_BOUND_INVALID.format(path=identity), inventory.inspect_member_bounds(bar, matrix))
+        standalone = focus('standalone', 'exactory-independent-review-v1')
+        self.assertEqual(inventory.inspect_member_bounds(standalone, matrix), [])
+        identity, member = next(iter(find_members(standalone).items()))
+        member['bound']['request_admission']['stop'] = 'review_output_over_cap_without_tests'
+        self.assertIn(inventory.MEMBER_BOUND_INVALID.format(path=identity),
+                      inventory.inspect_member_bounds(standalone, matrix))
+        original = review_field_classes.classify_packet
+        def keep_in_frame(route, role, packet, **kwargs):
+            classified = original(route, role, packet, **kwargs)
+            for row in classified['fields']:
+                row['travel'] = 'frame'
+            return classified
+        with patch.object(review_field_classes, 'classify_packet', keep_in_frame):
+            errors = inventory.inspect_member_bounds(focus('bar', 'exactory-problem-review-v2'), matrix)
+        self.assertIn(inventory.MEMBER_FRAME_UNBOUNDED.format(
+            path='bar/exactory-problem-review-v2:pending_source_requests'), errors)
 
     def test_real_problem_bar_packet_has_no_undeclared_member(self):
         from test_review_continuation import ContinuationTests

@@ -69,7 +69,19 @@
     "reading-v7-turns",
     "reading-v7-verification",
     "unread-final",
-    "v7-refusal-turn"
+    "v7-refusal-turn",
+    "field-classes",
+    "composite-final",
+    "composition-rules",
+    "final-pages",
+    "card-budget-v3",
+    "parts-v3",
+    "slate-series",
+    "session-record-v4",
+    "session-turns-v4",
+    "session-entry-v4",
+    "reading-math-v2",
+    "capacity-guard-3"
   ],
   "entries": [
     {
@@ -107,7 +119,7 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
           "test_review_uncovered_stop.UncoveredReviewTests.test_serving_route_steps_record_a_new_head_of_the_preserved_bar_slot",
@@ -119,7 +131,11 @@
           "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
           "test_size_reports.SizeReportTests.test_import_check_counts_delivered_bodies_without_changing_the_import_receipt",
           "test_size_reports.SizeReportTests.test_size_report_uses_only_its_keyed_capacity_witness",
-          "test_size_reports.SizeReportTests.test_value_receipt_reports_cited_records_and_transitive_bodies_outside_storage"
+          "test_size_reports.SizeReportTests.test_value_receipt_reports_cited_records_and_transitive_bodies_outside_storage",
+          "test_review_parts_v3.RecordedSeriesTests.test_A1_A6_A15_Q2_real_series_reaches_recorded_result",
+          "test_review_parts_slate.SlateSeriesTests.test_A1_incident_28600000_character_slate_reaches_value_review",
+          "test_review_parts_slate.SlateSeriesTests.test_A1_imported_record_cite_verifies_in_recorded_slate_final",
+          "test_review_session_v4_turns.SessionTurnsTests.test_n3_six_large_texts_deliver_bounded_parts_and_assessment_once"
         ],
         "reports": []
       },
@@ -153,7 +169,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "A2",
@@ -186,7 +202,7 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
           "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call",
@@ -197,7 +213,15 @@
           "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
           "test_size_reports.SizeReportTests.test_import_check_counts_delivered_bodies_without_changing_the_import_receipt",
           "test_size_reports.SizeReportTests.test_size_report_uses_only_its_keyed_capacity_witness",
-          "test_size_reports.SizeReportTests.test_value_receipt_reports_cited_records_and_transitive_bodies_outside_storage"
+          "test_size_reports.SizeReportTests.test_value_receipt_reports_cited_records_and_transitive_bodies_outside_storage",
+          "test_review_session_v4_turns.SessionTurnsTests.test_forty_source_turns_are_bounded_and_turn_three_handle_records_bar",
+          "test_review_session_v4_entry.SessionEntryTests.test_retirement_repair_starts_v4_and_delivers_history_as_bounded_units",
+          "test_review_session_v4_turns.SessionTurnsTests.test_bar_shortest_excerpts_maximum_notes_and_ten_requests_record",
+          "test_review_session_v4_turns.SessionTurnsTests.test_bar_longest_excerpts_maximum_notes_and_ten_requests_record",
+          "test_review_session_v4_turns.SessionTurnsTests.test_slate_shortest_excerpts_maximum_notes_and_ten_requests_record",
+          "test_review_session_v4_turns.SessionTurnsTests.test_slate_longest_excerpts_maximum_notes_and_ten_requests_record",
+          "test_review_session_v4_turns.SessionTurnsTests.test_result_shortest_excerpts_maximum_notes_and_ten_requests_record",
+          "test_review_session_v4_turns.SessionTurnsTests.test_result_longest_excerpts_maximum_notes_and_ten_requests_record"
         ],
         "reports": []
       },
@@ -223,7 +247,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "A3",
@@ -447,10 +471,16 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
-          "test_continuity_guard.ContinuityGuardTests.test_final_minimum_floor_stops_before_call_even_with_final_pages"
+          "test_continuity_guard.ContinuityGuardTests.test_final_minimum_floor_stops_before_call_even_with_final_pages",
+          "test_openness_final_pages.FinalPagesCommandTests.test_a5_q7_nine_targets_record_one_authenticated_composite",
+          "test_review_parts_v3_pages.PagedSeriesTests.test_a5_q7_two_hundred_material_objections_record_a_composite",
+          "test_review_session_v4_pages.SessionPagesTests.test_a5_a14_bar_pages_reach_recorded_review",
+          "test_review_session_v4_pages.SessionPagesTests.test_a5_a14_slate_pages_reach_recorded_review",
+          "test_review_session_v4_pages.SessionPagesTests.test_a5_a14_result_200_objections_reach_recorded_review",
+          "test_openness_reading_math_v2.MathV2ChainTests.test_a25_forty_neighbours_reach_a_recorded_composite_at_the_final_floor"
         ],
         "reports": []
       },
@@ -466,7 +496,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "Installed path evidence only. Construction remains incomplete pending: composite-final, composition-rules, final-pages.",
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests.",
       "pending_stops": [
         {
           "unit": "capacity-plan",
@@ -510,11 +540,13 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
           "test_series_code_reach.CodeReachTests.test_deleting_a_registry_row_or_missing_row_entry_fails_coverage",
-          "test_series_code_reach.CodeReachTests.test_fixture_regenerates_and_names_every_unreviewed_registry_row"
+          "test_series_code_reach.CodeReachTests.test_fixture_regenerates_and_names_every_unreviewed_registry_row",
+          "test_review_parts_v3.RecordedSeriesTests.test_A1_A6_A15_Q2_real_series_reaches_recorded_result",
+          "test_review_parts_v3_pages.PagedSeriesTests.test_a6_refused_closing_is_replaced_with_notice_then_records"
         ],
         "reports": []
       },
@@ -551,7 +583,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "A7",
@@ -582,7 +614,7 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
           "test_review_capacity_plan.CapacityPlanTests.test_plan_pins_every_input_and_counts_carried_state_and_notice",
@@ -596,7 +628,11 @@
           "test_review_refusal_replacement.RefusalReplacementTests.test_replacement_freezes_one_fresh_diagnosis_and_records_corrected_answer",
           "test_review_refusal_replacement.RefusalReplacementTests.test_second_replacement_lists_revived_attempt_and_keeps_head_finality",
           "test_review_refusal_replacement.RefusalReplacementTests.test_third_replacement_is_refused",
-          "test_continuity_guard.ContinuityGuardTests.test_g6_executes_the_validator_upgrade_through_a_recorded_second_replacement"
+          "test_continuity_guard.ContinuityGuardTests.test_g6_executes_the_validator_upgrade_through_a_recorded_second_replacement",
+          "test_route_capacity_properties.ReadingCapacityCommandTests.test_ruling39_a_refused_full_final_keeps_its_level_material_and_records",
+          "test_review_parts_v3.RecordedSeriesTests.test_refused_read_delivers_less_and_refused_final_keeps_its_level",
+          "test_review_session_v4_turns.SessionTurnsTests.test_refused_final_keeps_level_and_material_with_notice_then_records",
+          "test_review_session_v4_pages.SessionPagesTests.test_refused_page_replaced_at_same_level_with_notice_then_records"
         ],
         "reports": []
       },
@@ -626,7 +662,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "Installed path evidence only. Construction remains incomplete pending: v7-refusal-turn."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "A8",
@@ -655,12 +691,14 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
           "test_review_exhaustion_capacity_position.MixedCapacityPositionTests.test_mixed_capacity_and_refusal_position_repairs_without_rewriting_history",
           "test_review_exhaustion_repair.ExhaustionRepairTests.test_result_handoff_has_complete_binding_and_records_without_retirement",
-          "test_review_exhaustion_repair.ExhaustionRepairTests.test_slate_handoff_admits_the_same_complete_binding"
+          "test_review_exhaustion_repair.ExhaustionRepairTests.test_slate_handoff_admits_the_same_complete_binding",
+          "test_review_parts_v3.AdapterJourneyTests.test_context_repair_history_is_unitized_under_the_stored_frame",
+          "test_review_parts_v3_pages.AdapterPageTests.test_context_repair_pages_record_the_reassessment"
         ],
         "reports": []
       },
@@ -669,7 +707,7 @@
       ],
       "required_stops": [],
       "verification_required": false,
-      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "A9",
@@ -940,10 +978,12 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
-          "test_review_capacity_closure.ClosureStartTests.test_session_v4_uses_request_rows_and_counts_its_whole_request"
+          "test_review_capacity_closure.ClosureStartTests.test_session_v4_uses_request_rows_and_counts_its_whole_request",
+          "test_review_session_v4_pages.SessionPagesTests.test_a12_page_at_output_limit_splits_and_records",
+          "test_review_session_v4_turns.SessionTurnsTests.test_opus_max_138371_replaces_request_on_same_route_then_records_bar"
         ],
         "reports": []
       },
@@ -961,7 +1001,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "A13",
@@ -1032,9 +1072,13 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
-        "tests": [],
+        "tests": [
+          "test_openness_final_pages.FinalPagesCommandTests.test_a14_forty_targets_reach_recorded_finding",
+          "test_review_parts_v3_pages.PagedSeriesTests.test_a14_page_at_output_limit_splits_then_records",
+          "test_review_session_v4_pages.SessionPagesTests.test_a5_a14_bar_pages_reach_recorded_review"
+        ],
         "reports": []
       },
       "tests": [
@@ -1050,7 +1094,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "A15",
@@ -1073,9 +1117,12 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
-        "tests": [],
+        "tests": [
+          "test_review_parts_v3.RecordedSeriesTests.test_A1_A6_A15_Q2_real_series_reaches_recorded_result",
+          "test_review_parts_v3.RecordedSeriesTests.test_single_attempt_at_output_limit_enters_v3_and_records_its_final"
+        ],
         "reports": []
       },
       "tests": [
@@ -1091,7 +1138,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "A16",
@@ -1172,13 +1219,14 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
           "test_review_capacity_notice.CapacityAssignmentTests.test_unprofiled_packet_prompt_and_request_keep_the_existing_bytes",
           "test_review_capacity_notice.CapacityParagraphTests.test_notice_authentication_binds_the_packet_numbers_and_rendered_text",
           "test_review_handles.HandleExpansionTests.test_material_accepts_eight_parts_but_refuses_a_ninth_or_more_on_eighth",
-          "test_review_handles.HandleObservationTests.test_final_attempt_records_expanded_references_and_exact_answer_certificate"
+          "test_review_handles.HandleObservationTests.test_final_attempt_records_expanded_references_and_exact_answer_certificate",
+          "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_allowance_and_over_bound_stubs_execute_planner_to_recorded_finding"
         ],
         "reports": []
       },
@@ -1195,7 +1243,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "Installed path evidence only. Construction remains incomplete pending: ."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "A18",
@@ -1556,14 +1604,17 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
           "test_reading_forecast.MathForecastTests.test_estimate_stops_before_call_and_owner_continue_reaches_fitting_final",
           "test_reading_forecast.MathForecastTests.test_exact_oversize_math_turn_stops_before_any_invocation",
           "test_reading_forecast.MathForecastTests.test_first_and_middle_turn_report_uncharged_diagnostics_and_chain_token_ratio",
           "test_reading_forecast.MathForecastTests.test_math_with_no_reading_units_and_an_oversize_fixed_packet_stops_before_a_call",
-          "test_reading_forecast.MathForecastTests.test_owner_continue_on_an_existing_math_head_authorizes_that_head"
+          "test_reading_forecast.MathForecastTests.test_owner_continue_on_an_existing_math_head_authorizes_that_head",
+          "test_openness_reading_math_v2.MathV2ChainTests.test_a25_request_final_delivers_native_evidence_with_its_binding_and_records_the_review",
+          "test_openness_reading_math_v2.MathV2ChainTests.test_a25_forty_neighbours_reach_a_recorded_composite_at_the_final_floor",
+          "test_openness_reading_math_v2.MathV2CarriedTests.test_a25_stopped_v1_turns_are_carried_without_repeating_units_to_a_recorded_review"
         ],
         "reports": []
       },
@@ -1583,7 +1634,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "Installed path evidence only. Construction remains incomplete pending: reading-math-v2."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "A26",
@@ -1775,10 +1826,13 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
-          "test_openness_reading_v7_state.V7InventoryTests.test_q2_ten_thousand_units_keep_only_one_body_per_sha256"
+          "test_openness_reading_v7_state.V7InventoryTests.test_q2_ten_thousand_units_keep_only_one_body_per_sha256",
+          "test_review_parts_v3.RecordedSeriesTests.test_A1_A6_A15_Q2_real_series_reaches_recorded_result",
+          "test_review_parts_v3_budget.SeriesSimulationTests.test_measured_fits_series_uses_every_allowance_and_finishes",
+          "test_review_session_v4_turns.SessionTurnsTests.test_thousand_sources_are_one_count_without_delivered_rows_in_request"
         ],
         "reports": []
       },
@@ -1788,7 +1842,7 @@
       ],
       "required_stops": [],
       "verification_required": false,
-      "coverage_scope": "Installed path evidence only. Construction remains incomplete pending: field-classes."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "Q3",
@@ -1905,7 +1959,7 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
           "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call",
@@ -1916,7 +1970,13 @@
           "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
           "test_openness_reading_v7_turns.TurnPacketTests.test_q1_every_allowance_shortest_and_longest_excerpts_reaches_final_after_sixty_turns",
           "test_openness_carried_integration.ManyNotesIntegrationTests.test_q12_four_hundred_on_request_origins_have_bounded_index_and_complete_pages",
-          "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_twenty_percent_denser_measurement_keeps_fitting_turns_and_records"
+          "test_route_capacity_properties.ReadingCapacityCommandTests.test_v7_twenty_percent_denser_measurement_keeps_fitting_turns_and_records",
+          "test_review_session_v4_turns.SessionTurnsTests.test_bar_shortest_excerpts_maximum_notes_and_ten_requests_record",
+          "test_review_session_v4_turns.SessionTurnsTests.test_bar_longest_excerpts_maximum_notes_and_ten_requests_record",
+          "test_review_session_v4_turns.SessionTurnsTests.test_slate_shortest_excerpts_maximum_notes_and_ten_requests_record",
+          "test_review_session_v4_turns.SessionTurnsTests.test_slate_longest_excerpts_maximum_notes_and_ten_requests_record",
+          "test_review_session_v4_turns.SessionTurnsTests.test_result_shortest_excerpts_maximum_notes_and_ten_requests_record",
+          "test_review_session_v4_turns.SessionTurnsTests.test_result_longest_excerpts_maximum_notes_and_ten_requests_record"
         ],
         "reports": []
       },
@@ -1939,7 +1999,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "The v7 part has executed evidence. Overall coverage remains stop_before_call until the remaining 0.92.0 construction ships."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "Q6",
@@ -2007,11 +2067,14 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
           "test_openness_reading_v7_refusal.LegacySuccessorTests.test_k7_nine_targets_v7_refuses_v6_exports_reads_again_and_records",
-          "test_route_capacity_properties.ReadingCapacityCommandTests.test_final_pages_five_and_twenty_thousand_targets_stop_both_admissions_then_execute_smaller_answer"
+          "test_route_capacity_properties.ReadingCapacityCommandTests.test_final_pages_five_and_twenty_thousand_targets_stop_both_admissions_then_execute_smaller_answer",
+          "test_openness_final_pages.FinalPagesCommandTests.test_a5_q7_nine_targets_record_one_authenticated_composite",
+          "test_review_parts_v3_pages.PagedSeriesTests.test_a5_q7_two_hundred_material_objections_record_a_composite",
+          "test_review_parts_v3_pages.PagedSeriesTests.test_q7_five_thousand_targets_check_admits_and_forecasts_pages"
         ],
         "reports": []
       },
@@ -2022,7 +2085,7 @@
       ],
       "required_stops": [],
       "verification_required": false,
-      "coverage_scope": "The v7 part has executed evidence. Overall coverage remains stop_before_call until the remaining 0.92.0 construction ships."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "Q8",
@@ -2052,11 +2115,12 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
           "test_openness_unread_final.UnreadArtifactTests.test_large_both_cause_set_pages_reproduce_the_complete_canonical_artifact",
-          "test_openness_unread_final.UnreadPagingTests.test_fixed_artifact_order_survives_pages_and_replacement_and_rejects_omitted_tampering"
+          "test_openness_unread_final.UnreadPagingTests.test_fixed_artifact_order_survives_pages_and_replacement_and_rejects_omitted_tampering",
+          "test_openness_final_pages.DensePendingCommandTests.test_q8_two_thousand_forecast_gaps_are_condensed_before_target_page"
         ],
         "reports": []
       },
@@ -2067,7 +2131,7 @@
       ],
       "required_stops": [],
       "verification_required": false,
-      "coverage_scope": "The v7 part has executed evidence. Overall coverage remains stop_before_call until the remaining 0.92.0 construction ships."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "Q9",
@@ -2166,9 +2230,12 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
-        "tests": [],
+        "tests": [
+          "test_review_parts_v3.AdapterJourneyTests.test_context_repair_history_is_unitized_under_the_stored_frame",
+          "test_review_parts_v3_pages.AdapterPageTests.test_context_repair_pages_record_the_reassessment"
+        ],
         "reports": []
       },
       "tests": [
@@ -2176,7 +2243,7 @@
       ],
       "required_stops": [],
       "verification_required": false,
-      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "Q11",
@@ -2316,7 +2383,7 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
           "test_session_forecast.SessionForecastTests.test_artifact_parts_are_forecast_once_and_stop_before_another_call",
@@ -2324,7 +2391,10 @@
           "test_session_forecast.SessionForecastTests.test_forecast_uses_keyed_input_evidence_instead_of_output_profile",
           "test_session_forecast.SessionForecastTests.test_four_padded_texts_stop_with_capture_details_before_another_call",
           "test_session_forecast.SessionForecastTests.test_repeated_parts_keep_v3_span_identity_and_v2_digest_accounting",
-          "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review"
+          "test_session_forecast.SessionForecastTests.test_route_answer_executes_retirement_probe_and_repair_to_a_recorded_review",
+          "test_review_session_v4_turns.SessionTurnsTests.test_thousand_sources_are_one_count_without_delivered_rows_in_request",
+          "test_review_session_v4_turns.SessionTurnsTests.test_inventory_list_and_passage_requests_are_delivered_and_settled",
+          "test_review_session_v4_turns.SessionTurnsTests.test_forty_source_turns_are_bounded_and_turn_three_handle_records_bar"
         ],
         "reports": []
       },
@@ -2350,7 +2420,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "Q14",
@@ -2596,12 +2666,14 @@
         ]
       },
       "no_construction_ruling": null,
-      "coverage": "stop_before_call",
+      "coverage": "constructed",
       "evidence": {
         "tests": [
           "test_review_unlisted_stops.UnlistedStopTests.test_every_executable_command_is_a_public_operation",
           "test_series_code_reach.CodeReachTests.test_deleting_a_registry_row_or_missing_row_entry_fails_coverage",
-          "test_series_code_reach.CodeReachTests.test_fixture_regenerates_and_names_every_unreviewed_registry_row"
+          "test_series_code_reach.CodeReachTests.test_fixture_regenerates_and_names_every_unreviewed_registry_row",
+          "test_review_parts_v3.RecordedSeriesTests.test_Q17_repeated_occurrences_record_a_review_and_missing_turn_fails",
+          "test_review_parts_v3.BuilderScaleTests.test_Q17_reference_shapes_keep_one_body_and_rebuild_every_occurrence"
         ],
         "reports": []
       },
@@ -2638,7 +2710,7 @@
         }
       ],
       "verification_required": false,
-      "coverage_scope": "Current admission and retained stop coverage only; the uninstalled units do not supply construction evidence."
+      "coverage_scope": "Constructed in 0.92.0: the evidence tests execute the construction of this entry with a reviewer stub to a recorded review. Its required stops keep their tests."
     },
     {
       "id": "Q18",
@@ -4725,5 +4797,617 @@
         "test_openness_unread_final.UnreadPagingTests.test_fixed_artifact_order_survives_pages_and_replacement_and_rejects_omitted_tampering"
       ]
     }
+  },
+  "missing_evidence": {
+    "A3": "No acceptance test executes the session rules v3 and the session forecast stop to a recorded review under this entry; the entry is outside the list of 0.92.0 (lane brief, point 6).",
+    "A9": "No evidence test is named; the entry is outside the list of 0.92.0.",
+    "A13": "Its own scope: the reading planner stopped at 60,000 before its lower levels; the owning lane did not add the executed evidence. Outside the list of 0.92.0.",
+    "A24": "No acceptance test executes a probe request to a recorded review under this entry; outside the list of 0.92.0.",
+    "A27": "No acceptance test executes the compaction row to a recorded review under this entry; outside the list of 0.92.0.",
+    "Q3": "No evidence test is named for segmented text; outside the list of 0.92.0.",
+    "Q16": "Its own scope: each source kind needs command-to-recorded-review evidence at three material allowances; outside the list of 0.92.0.",
+    "Q18": "No test drives a session with a reviewer stub whose every response is at its answer bound (row Q18 of the triage); the allowance stubs fill the notes to their allowance only.",
+    "T3": "An external task of the supervisor tooling; no construction in the plugin."
+  },
+  "property_coverage": {
+    "families": {
+      "session-v4": {
+        "subjects_source": "research_harness.bar_sources.ROLES",
+        "properties": [
+          "every_allowance",
+          "over_bound",
+          "output_limit_floor",
+          "failed_attempts",
+          "late_units",
+          "denser_ratio",
+          "q18_answer_bound",
+          "k6_three_allowances"
+        ]
+      },
+      "parts-v3": {
+        "subjects_source": "research_harness.review_parts_roles.ADAPTERS",
+        "properties": [
+          "every_allowance",
+          "over_bound",
+          "output_limit_floor",
+          "failed_attempts",
+          "late_units",
+          "denser_ratio",
+          "q17_references",
+          "k6_three_allowances"
+        ],
+        "subject_properties": [
+          "d31_group_credit",
+          "d31_card_refusal",
+          "d31_uncarded_citation",
+          "d31_middle_unit_change",
+          "d31_late_reserve"
+        ]
+      },
+      "math-v2": {
+        "subjects": [
+          "native_math"
+        ],
+        "properties": [
+          "every_allowance",
+          "over_bound",
+          "output_limit_floor",
+          "failed_attempts",
+          "late_units",
+          "denser_ratio",
+          "k6_three_allowances"
+        ]
+      },
+      "v7-pages": {
+        "subjects": [
+          "native_math"
+        ],
+        "properties": [
+          "every_allowance",
+          "over_bound",
+          "output_limit_floor",
+          "failed_attempts",
+          "late_units",
+          "denser_ratio",
+          "k6_three_allowances"
+        ]
+      }
+    },
+    "rows": [
+      {
+        "family": "session-v4",
+        "subject": "bar",
+        "property": "recorded_review",
+        "tests": [
+          "test_review_session_v4_turns.SessionTurnsTests.test_bar_shortest_excerpts_maximum_notes_and_ten_requests_record",
+          "test_review_session_v4_turns.SessionTurnsTests.test_forty_source_turns_are_bounded_and_turn_three_handle_records_bar"
+        ]
+      },
+      {
+        "family": "session-v4",
+        "subject": "slate",
+        "property": "recorded_review",
+        "tests": [
+          "test_review_session_v4_turns.SessionTurnsTests.test_slate_shortest_excerpts_maximum_notes_and_ten_requests_record"
+        ]
+      },
+      {
+        "family": "session-v4",
+        "subject": "result",
+        "property": "recorded_review",
+        "tests": [
+          "test_review_session_v4_turns.SessionTurnsTests.test_result_shortest_excerpts_maximum_notes_and_ten_requests_record"
+        ]
+      },
+      {
+        "family": "session-v4",
+        "subject": "*",
+        "property": "every_allowance",
+        "tests": [
+          "test_review_session_v4_turns.SessionTurnsTests.test_bar_shortest_excerpts_maximum_notes_and_ten_requests_record",
+          "test_review_session_v4_turns.SessionTurnsTests.test_bar_longest_excerpts_maximum_notes_and_ten_requests_record",
+          "test_review_session_v4_turns.SessionTurnsTests.test_slate_shortest_excerpts_maximum_notes_and_ten_requests_record",
+          "test_review_session_v4_turns.SessionTurnsTests.test_slate_longest_excerpts_maximum_notes_and_ten_requests_record",
+          "test_review_session_v4_turns.SessionTurnsTests.test_result_shortest_excerpts_maximum_notes_and_ten_requests_record",
+          "test_review_session_v4_turns.SessionTurnsTests.test_result_longest_excerpts_maximum_notes_and_ten_requests_record"
+        ]
+      },
+      {
+        "family": "session-v4",
+        "subject": "*",
+        "property": "output_limit_floor",
+        "tests": [
+          "test_review_session_v4_turns.SessionTurnsTests.test_capacity_at_every_request_level_lowers_then_retries_floor_and_stops",
+          "test_review_session_v4_pages.SessionPagesTests.test_page_floor_retries_then_decision_stop"
+        ]
+      },
+      {
+        "family": "session-v4",
+        "subject": "*",
+        "property": "denser_ratio",
+        "tests": [
+          "test_review_session_v4_pages.SessionPagesTests.test_astra_b3_completed_high_low_and_ratio_successors_replay"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "context_repair",
+        "property": "recorded_review",
+        "tests": [
+          "test_review_parts_v3.AdapterJourneyTests.test_context_repair_history_is_unitized_under_the_stored_frame",
+          "test_review_parts_v3_pages.AdapterPageTests.test_context_repair_pages_record_the_reassessment"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_slate",
+        "property": "recorded_review",
+        "tests": [
+          "test_review_parts_slate.SlateSeriesTests.test_A1_imported_record_cite_verifies_in_recorded_slate_final"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_result",
+        "property": "recorded_review",
+        "tests": [
+          "test_review_parts_v3.RecordedSeriesTests.test_A1_A6_A15_Q2_real_series_reaches_recorded_result"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_adjudicator",
+        "property": "recorded_review",
+        "tests": [
+          "test_review_parts_v3.AdapterJourneyTests.test_adjudicator_adapter_records_its_disposition"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "native_math",
+        "property": "recorded_review",
+        "tests": [
+          "test_review_parts_v3.AdapterJourneyTests.test_native_command_accepts_and_audits_a_v3_series"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_verification",
+        "property": "recorded_review",
+        "tests": [
+          "test_review_parts_v3.AdapterJourneyTests.test_verification_adapter_reaches_the_verdict_command_boundary"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_readiness",
+        "property": "recorded_review",
+        "tests": [
+          "test_review_parts_v3.AdapterJourneyTests.test_readiness_adapter_reaches_its_review_command_boundary"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "*",
+        "property": "every_allowance",
+        "tests": [
+          "test_review_parts_v3_budget.SeriesSimulationTests.test_measured_fits_series_uses_every_allowance_and_finishes",
+          "test_review_parts_v3_budget.SeriesSimulationTests.test_scoped_max_prior_series_uses_every_allowance_and_finishes",
+          "test_review_parts_v3_budget.SeriesSimulationTests.test_unlisted_model_series_uses_every_allowance_and_finishes"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "*",
+        "property": "output_limit_floor",
+        "tests": [
+          "test_review_parts_v3.RecordedSeriesTests.test_read_capacity_recovery_reaches_each_level_and_the_floor_decision",
+          "test_review_parts_v3_pages.PagedSeriesTests.test_every_level_at_limit_repeats_at_floor_then_decision_stop"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "*",
+        "property": "late_units",
+        "tests": [
+          "test_review_parts_v3.RecordedSeriesTests.test_two_late_additions_share_groups_and_keep_the_stored_plan",
+          "test_review_parts_v3.RecordedSeriesTests.test_late_cards_beyond_reserve_keep_contradictions_after_condensing"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "*",
+        "property": "denser_ratio",
+        "tests": [
+          "test_review_parts_v3_pages.PagedSeriesTests.test_successful_page_denser_ratio_repacks_without_level_change_and_records"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "*",
+        "property": "q17_references",
+        "tests": [
+          "test_review_parts_v3.RecordedSeriesTests.test_Q17_repeated_occurrences_record_a_review_and_missing_turn_fails",
+          "test_review_parts_v3.BuilderScaleTests.test_Q17_reference_shapes_keep_one_body_and_rebuild_every_occurrence"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_result",
+        "property": "d31_group_credit",
+        "tests": [
+          "test_review_parts_v3.RecordedSeriesTests.test_statement_of_another_group_has_no_verified_credit"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_result",
+        "property": "d31_card_refusal",
+        "tests": [
+          "test_review_parts_v3.RecordedSeriesTests.test_group_missing_duplicate_or_changed_boundaries_is_refused"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_result",
+        "property": "d31_uncarded_citation",
+        "tests": [
+          "test_review_parts_v3.RecordedSeriesTests.test_final_unquoted_delivered_unit_and_card_handles_record_expanded"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_result",
+        "property": "d31_middle_unit_change",
+        "tests": [
+          "test_review_parts_v3.RecordedSeriesTests.test_middle_unit_text_mutation_fails_series_verification"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_result",
+        "property": "d31_late_reserve",
+        "tests": [
+          "test_review_parts_v3.RecordedSeriesTests.test_late_cards_beyond_reserve_keep_contradictions_after_condensing",
+          "test_review_parts_v3.PlanProtocolTests.test_default_late_example_rebuilds_paid_and_unfunded_card_counters"
+        ]
+      },
+      {
+        "family": "math-v2",
+        "subject": "native_math",
+        "property": "recorded_review",
+        "tests": [
+          "test_openness_reading_math_v2.MathV2ChainTests.test_a25_request_final_delivers_native_evidence_with_its_binding_and_records_the_review",
+          "test_openness_reading_math_v2.MathV2ChainTests.test_a25_forty_neighbours_reach_a_recorded_composite_at_the_final_floor",
+          "test_openness_reading_math_v2.MathV2CarriedTests.test_a25_stopped_v1_turns_are_carried_without_repeating_units_to_a_recorded_review"
+        ]
+      },
+      {
+        "family": "v7-pages",
+        "subject": "native_math",
+        "property": "recorded_review",
+        "tests": [
+          "test_openness_final_pages.FinalPagesCommandTests.test_a5_q7_nine_targets_record_one_authenticated_composite",
+          "test_openness_final_pages.FinalPagesCommandTests.test_a14_forty_targets_reach_recorded_finding",
+          "test_openness_final_pages.IncidentFinalPagesTests.test_t4_fifty_seven_carried_turns_reach_a_recorded_paged_finding"
+        ]
+      },
+      {
+        "family": "v7-pages",
+        "subject": "*",
+        "property": "denser_ratio",
+        "tests": [
+          "test_openness_final_pages.FinalLevelSuccessorTests.test_completed_pages_replay_high_low_and_ratio_successors"
+        ]
+      }
+    ],
+    "gaps": [
+      {
+        "family": "session-v4",
+        "subject": "*",
+        "property": "over_bound",
+        "reason": "No test of the base drives this family with this stub to a recorded review."
+      },
+      {
+        "family": "session-v4",
+        "subject": "*",
+        "property": "failed_attempts",
+        "reason": "No test of the base drives this family with this stub to a recorded review."
+      },
+      {
+        "family": "session-v4",
+        "subject": "*",
+        "property": "late_units",
+        "reason": "No test of the base drives this family with this stub to a recorded review."
+      },
+      {
+        "family": "session-v4",
+        "subject": "*",
+        "property": "q18_answer_bound",
+        "reason": "No test drives a session with a reviewer stub whose every response is at its answer bound (row Q18 of the triage); the allowance stubs fill the notes to their allowance only."
+      },
+      {
+        "family": "session-v4",
+        "subject": "*",
+        "property": "k6_three_allowances",
+        "reason": "Only full texts are delivered at more than one turn (test_n3_six_large_texts_deliver_bounded_parts_and_assessment_once); no test delivers a source, abstract, artifact, history or frame unit at three material allowances."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "*",
+        "property": "over_bound",
+        "reason": "No test of the base drives this family with this stub to a recorded review."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "*",
+        "property": "failed_attempts",
+        "reason": "No test of the base drives this family with this stub to a recorded review."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "*",
+        "property": "k6_three_allowances",
+        "reason": "Record and reference units are delivered in segments by the builder tests; no test delivers a frame or a source unit at three material allowances."
+      },
+      {
+        "family": "math-v2",
+        "subject": "*",
+        "property": "every_allowance",
+        "reason": "No test of the base drives this family with this stub to a recorded review."
+      },
+      {
+        "family": "math-v2",
+        "subject": "*",
+        "property": "over_bound",
+        "reason": "No test of the base drives this family with this stub to a recorded review."
+      },
+      {
+        "family": "math-v2",
+        "subject": "*",
+        "property": "output_limit_floor",
+        "reason": "The math tests replace an output at the limit by the next lower level (MathV2RecoveryTests.test_reading_at_output_limit_is_replaced_at_next_lower_level); none goes down to the floor."
+      },
+      {
+        "family": "math-v2",
+        "subject": "*",
+        "property": "failed_attempts",
+        "reason": "No test of the base drives this family with this stub to a recorded review."
+      },
+      {
+        "family": "math-v2",
+        "subject": "*",
+        "property": "late_units",
+        "reason": "No test of the base drives this family with this stub to a recorded review."
+      },
+      {
+        "family": "math-v2",
+        "subject": "*",
+        "property": "denser_ratio",
+        "reason": "No test of the base drives this family with this stub to a recorded review."
+      },
+      {
+        "family": "math-v2",
+        "subject": "*",
+        "property": "k6_three_allowances",
+        "reason": "The kinds are those of protocol v7, whose K6 shapes run with a final in one request; none runs under math v2."
+      },
+      {
+        "family": "v7-pages",
+        "subject": "*",
+        "property": "every_allowance",
+        "reason": "The allowance and over-bound stubs of the reading chains run with V7_FINAL_FORMS (\"request\",); none runs a final in pages."
+      },
+      {
+        "family": "v7-pages",
+        "subject": "*",
+        "property": "over_bound",
+        "reason": "As every_allowance."
+      },
+      {
+        "family": "v7-pages",
+        "subject": "*",
+        "property": "output_limit_floor",
+        "reason": "The floor test of the reading chains runs with a final in one request; a page is split, not taken to the floor."
+      },
+      {
+        "family": "v7-pages",
+        "subject": "*",
+        "property": "failed_attempts",
+        "reason": "The thirty-failure test runs with a final in one request."
+      },
+      {
+        "family": "v7-pages",
+        "subject": "*",
+        "property": "late_units",
+        "reason": "No test of the base drives this family with this stub to a recorded review."
+      },
+      {
+        "family": "v7-pages",
+        "subject": "*",
+        "property": "k6_three_allowances",
+        "reason": "As failed_attempts."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "context_repair",
+        "property": "d31_group_credit",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "context_repair",
+        "property": "d31_card_refusal",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "context_repair",
+        "property": "d31_uncarded_citation",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "context_repair",
+        "property": "d31_middle_unit_change",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "context_repair",
+        "property": "d31_late_reserve",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_slate",
+        "property": "d31_group_credit",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_slate",
+        "property": "d31_card_refusal",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_slate",
+        "property": "d31_uncarded_citation",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_slate",
+        "property": "d31_middle_unit_change",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_slate",
+        "property": "d31_late_reserve",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_adjudicator",
+        "property": "d31_group_credit",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_adjudicator",
+        "property": "d31_card_refusal",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_adjudicator",
+        "property": "d31_uncarded_citation",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_adjudicator",
+        "property": "d31_middle_unit_change",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_adjudicator",
+        "property": "d31_late_reserve",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "native_math",
+        "property": "d31_group_credit",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "native_math",
+        "property": "d31_card_refusal",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "native_math",
+        "property": "d31_uncarded_citation",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "native_math",
+        "property": "d31_middle_unit_change",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "native_math",
+        "property": "d31_late_reserve",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_verification",
+        "property": "d31_group_credit",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_verification",
+        "property": "d31_card_refusal",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_verification",
+        "property": "d31_uncarded_citation",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_verification",
+        "property": "d31_middle_unit_change",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_verification",
+        "property": "d31_late_reserve",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_readiness",
+        "property": "d31_group_credit",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_readiness",
+        "property": "d31_card_refusal",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_readiness",
+        "property": "d31_uncarded_citation",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_readiness",
+        "property": "d31_middle_unit_change",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_readiness",
+        "property": "d31_late_reserve",
+        "reason": "The decision 31 test exists for the adapter problem_result only."
+      }
+    ]
   }
 }
