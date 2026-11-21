@@ -259,10 +259,10 @@ def _describe_wait():
     return (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat()
 
 
-def plan_route_handoff(assignment):
-    """Name the agent action required to record a current runtime route."""
-    return dict(state='handoff', command='review-route', code='review_route_runtime_stale',
-                details=dict(assignment_id=assignment['id'], route_id=assignment['route_id']))
+def plan_route_handoff(assignment, renewal=None):
+    """The handoff of a head whose route record is stale, with the renewal that a refused replacement states."""
+    from .review_route_plan import plan_stale_route
+    return plan_stale_route(assignment, renewal)
 
 
 def _plan_pending_call(records, assignment):
@@ -598,8 +598,6 @@ def _plan_head(records, artifacts, assignment):
             outdated = _plan_openness_freshness(records, artifacts, assignment)
             if outdated is not None:
                 return outdated
-        if result['state'] == 'stop' and result.get('code') == 'review_route_runtime_stale':
-            return plan_route_handoff(assignment)
         if result['state'] == 'replace':
             recovery = result.get('details', {}).get('recovery', {})
             single_replacement = recovery.get('details', {}).get('handler') == 'single_request_series'
@@ -724,7 +722,9 @@ def plan_next(records, artifacts, head_id, *, context_failures=None):
                         result.pop(key, None)
                     result.update(stopped)
         from .review_plan_steps import complete_plan
-        result = complete_plan(records, artifacts, assignment, result)
+        from .review_route_plan import apply_route_rule
+        result = apply_route_rule(records, artifacts, assignment,
+                                  complete_plan(records, artifacts, assignment, result))
     except (ResearchError, json.JSONDecodeError) as error:
         if stop is not None and isinstance(error, ResearchError) and error.code == 'review_source_continuation_fork':
             from .review_plan_steps import complete_plan
@@ -749,7 +749,9 @@ def plan_next(records, artifacts, head_id, *, context_failures=None):
         elif assignment is not None:
             try:
                 from .review_plan_steps import complete_plan
-                result = complete_plan(records, artifacts, assignment, result)
+                from .review_route_plan import apply_route_rule
+                result = apply_route_rule(records, artifacts, assignment,
+                                          complete_plan(records, artifacts, assignment, result))
             except (ResearchError, json.JSONDecodeError) as detail_error:
                 # A damaged binding cannot supply an executable repair payload.
                 decision = describe_unlisted_step()

@@ -317,7 +317,7 @@ def _end_series(store, plan, *, error=None, exit_code, output, capacity_records=
             assignment = records.get('review_assignment', {}).get(row['head_id'])
             if assignment is not None and code != 'review_series_no_progress':
                 if code == 'review_route_runtime_stale' and error is not None:
-                    handoff = plan_route_handoff(assignment)
+                    handoff = plan_route_handoff(assignment, row['details'].get('renewal'))
                     row.update(handoff, details=dict(row['details'], **handoff.get('details', {})))
                 planned_state = row['state']
                 row = complete_plan(records, Evaluation(records, ArtifactStore(store.root)), assignment, row)

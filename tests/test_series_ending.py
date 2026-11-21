@@ -391,7 +391,7 @@ class SeriesEndingTests(unittest.TestCase):
             result = cli.run(cli.build_parser().parse_args(argv))
         self.assertEqual(result, 3)
         resumed = json.loads(output.getvalue().splitlines()[-1])
-        self.assertEqual(resumed['details']['step']['command'], 'review-route')
+        self.assertEqual(resumed['details']['step']['command'], 'review-context')
         self.assertTrue(resumed['details']['step']['payload'])
 
     def build_defect_stop(self):
@@ -755,7 +755,7 @@ class SeriesEndingTests(unittest.TestCase):
                 patch('research_harness.review_plan_steps.complete_plan', side_effect=self.build_error()):
             second = self.run_refusal('review_route_runtime_stale')
         self.assertEqual((first['state'], second['state']), ('handoff', 'handoff'))
-        self.assertEqual(first['details']['step']['command'], 'review-route')
+        self.assertEqual(first['details']['step']['command'], 'review-context')
         self.assertEqual(second['details']['step']['command'], 'record-check')
         self.assertNotEqual(first['stop_id'], second['stop_id'])
         for line in (first, second):

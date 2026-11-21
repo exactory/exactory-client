@@ -10,25 +10,25 @@ from .errors import ResearchError
 from .problem_openness import serialize_record
 
 # The messages of the handoff export that a stopped problem chain gets when a new chain is admitted. details.successor
-# holds that admission.
+# holds that admission. NEW_CHAIN_ROUTE_TEXT is their statement on the route record of the first assignment.
+NEW_CHAIN_ROUTE_TEXT = (
+    'The assignment of details.step names the route record on which details.successor states the admission. Without '
+    'details.successor.route_id, that is the route record of the stopped chain. With details.successor.route_id, it '
+    'is the route record that this member names. That record is verified, has the same adapter, model, endpoint and '
+    'configuration, and pins the installed runtime. When details.step leaves route_id open, the route record of the '
+    'stopped chain is retired. Then give route_id a verified route record that pins the installed runtime. Read the '
+    'admission on that record from the check of details.step. ')
 V7_SUCCESSOR_MESSAGE = (
-    'Export a new packet and assign it on this route with the same reviewer_id, as details.step states. The '
-    'admission accepts it as a chain of exactory-openness-reading-v7. That chain carries the verified reading turns '
-    'that details.successor.carried_readings lists. It reads the ranges that remain and the carried excerpts and '
-    'passage answers that its final cannot hold. It also reads the newest carried notes that rest on a unit that '
-    'changed or left the packet. When this route record pins another reviewer runtime than the installed one, '
-    'review-assignment refuses the assignment with review_route_runtime_stale and records nothing. In that case, '
-    'assign the same export on another route record with the same adapter, model, endpoint and configuration. That '
-    'record must pin the installed runtime and be verified by a probe. When the store holds none, record one and '
-    'probe it. A chain of exactory-openness-reading-v7 carries the same turns there.')
+    'Export a new packet and assign it with the same reviewer_id, as details.step states. ' + NEW_CHAIN_ROUTE_TEXT +
+    'The admission accepts the new packet as a chain of exactory-openness-reading-v7. That chain carries the '
+    'verified reading turns that details.successor.carried_readings lists. It reads the ranges that remain and the '
+    'carried excerpts and passage answers that its final cannot hold. It also reads the newest carried notes that '
+    'rest on a unit that changed or left the packet.')
 V6_SUCCESSOR_MESSAGE = (
-    'Export a new packet and assign it on this route with the same reviewer_id, as details.step states. The '
-    'admission accepts it as a chain of exactory-openness-reading-v6. That chain carries no earlier turn: it reads '
-    'every unit again, in the number of reading turns that details.successor.planned_reading_turns gives. When this '
-    'route record pins another reviewer runtime than the installed one, review-assignment refuses the assignment '
-    'with review_route_runtime_stale and records nothing. In that case, assign the same export on another route '
-    'record with the same adapter, model, endpoint and configuration. That record must pin the installed runtime and '
-    'be verified by a probe. When the store holds none, record one and probe it.')
+    'Export a new packet and assign it with the same reviewer_id, as details.step states. ' + NEW_CHAIN_ROUTE_TEXT +
+    'The admission accepts the new packet as a chain of exactory-openness-reading-v6. That chain carries no '
+    'earlier turn: it reads every unit again, in the number of reading turns that '
+    'details.successor.planned_reading_turns gives.')
 RATIO_SUCCESSOR_MESSAGE = (
     'When the new chain runs under exactory-openness-reading-v7, details.successor.measure states the ratio of its '
     'plan and the source of that ratio: the ratio of details.ratio, which this chain measured, or a denser one that '
@@ -36,19 +36,19 @@ RATIO_SUCCESSOR_MESSAGE = (
     'by its own projection and does not take this '
     'ratio.')
 # An answer of the decision after an output over the limit, and details.export_message of the same stop.
-OUTPUT_CAP_EXPORT_MESSAGE = 'Export a new packet and start a new chain on this route'
+OUTPUT_CAP_EXPORT_MESSAGE = 'Export a new packet and start a new chain with the same reviewer'
 # The texts of a stopped chain of exactory-openness-reading-math-v1 once the installed release holds
 # exactory-openness-reading-math-v2 in openness_reading.NEW_MATH_CHAIN_PROTOCOLS (ruling 24.2 as corrected).
 MATH_V2_SUCCESSOR_MESSAGE = (
-    'Build a new review packet with the math controller and assign it on this route with the same reviewer_id, as '
-    'details.step states. The admission accepts it as a chain of exactory-openness-reading-math-v2. That chain '
-    'carries the verified reading turns that details.successor.carried_readings lists, and it reads only the ranges '
-    'that remain.')
+    'Build a new review packet with the math controller and assign it with the same reviewer_id, as details.step '
+    'states. ' + NEW_CHAIN_ROUTE_TEXT + 'The admission accepts the new packet as a chain of '
+    'exactory-openness-reading-math-v2. That chain carries the verified reading turns that '
+    'details.successor.carried_readings lists, and it reads only the ranges that remain.')
 MATH_V1_SUCCESSOR_MESSAGE = (
-    'Build a new review packet with the math controller and assign it on this route with the same reviewer_id, as '
-    'details.step states. The admission accepts it as a chain of exactory-openness-reading-math-v1. That chain '
-    'carries no earlier turn: it reads every unit again.')
-MATH_SUCCESSOR_ANSWER = 'Build a new math review packet and start the admitted chain on this route'
+    'Build a new review packet with the math controller and assign it with the same reviewer_id, as details.step '
+    'states. ' + NEW_CHAIN_ROUTE_TEXT + 'The admission accepts the new packet as a chain of '
+    'exactory-openness-reading-math-v1. That chain carries no earlier turn: it reads every unit again.')
+MATH_SUCCESSOR_ANSWER = 'Build a new math review packet and start the admitted chain with the same reviewer'
 MATH_ESTIMATE_DECISION = ('Whether this chain continues to its final turn, a new chain carries its verified turns, or '
                           'the review runs over a packet that binds less material.')
 MATH_EXACT_DECISION = ('Whether a new chain carries the verified turns of this chain, or the review runs over a packet '
@@ -124,8 +124,9 @@ def _project_successor_native(records, artifacts, native):
     return native
 
 
-def admit_successor_chain(records, artifacts, assignment):
-    """Return the actual ordered admission and carried work, or all protocol refusals."""
+def admit_successor_chain(records, artifacts, assignment, route_id=None):
+    """Return the actual ordered admission and carried work, or all protocol refusals, for a new chain on the route
+    record of the stopped chain, or on the route record that route_id names. The result names that other record."""
     packet = protocol._read_json(artifacts, assignment['packet'])
     math_chain = is_math_successor_installed(packet)
     if reading.find_protocol(packet) not in (reading.PROTOCOL_V5, reading.PROTOCOL_V6, v7.PROTOCOL) and not math_chain:
@@ -140,13 +141,16 @@ def admit_successor_chain(records, artifacts, assignment):
         if projected is not native:
             reference = overlay.put(serialize_record(projected), 'application/json')
         native = projected
-    route = records['review_route'][assignment['route_id']]
+    route = records['review_route'][route_id or assignment['route_id']]
     logical = protocol.build_packet(records, overlay, assignment['dossier_id'], assignment['role'],
                                     assignment['reviewer_id'], native_packet=reference)
     selected = reading.choose_chain_protocol(records, overlay, route, native, packet=logical, assignment=assignment)
     result = {key: value for key, value in selected.items() if key != 'result'}
+    if route['id'] != assignment['route_id']:
+        result['route_id'] = route['id']
     if selected['protocol'] in v7.PROTOCOL_DESCRIPTIONS:
         value = {key: assignment[key] for key in ('id', 'role', 'route_id', 'dossier_id', 'reviewer_id', 'author_id', 'context')}
+        value['route_id'] = route['id']
         _, chain = v7.prepare_carried_assignment(records, overlay, value, route, logical, selected['result'])
         result.update(carried_readings=chain['carried_readings'],
                       measure=selected['result']['capacity_plan']['measure'])
@@ -162,8 +166,9 @@ def admit_successor_chain(records, artifacts, assignment):
     return result
 
 
-def _describe_successor_step(records, artifacts, assignment):
-    """The step of a new packet on this route under the same reviewer: row 4 for a problem chain, row 5 for math."""
+def _describe_successor_step(records, artifacts, assignment, route_id):
+    """The step of a new packet under the same reviewer: row 4 for a problem chain, row 5 for math. Its assignment
+    names the route record route_id, or leaves the route to the agent when route_id is None."""
     from .review_plan_steps import describe_step
     packet = protocol._read_json(artifacts, assignment['packet'])
     if reading.find_protocol(packet) in MATH_PROTOCOLS:
@@ -177,18 +182,34 @@ def _describe_successor_step(records, artifacts, assignment):
         step['payload']['reviewer_id'] = assignment['reviewer_id']
         step['chooses'].remove('reviewer_id')
     continuation = step['then'][0]
-    continuation['payload'].update(route_id=assignment['route_id'], reviewer_id=assignment['reviewer_id'])
-    continuation['chooses'] = [key for key in continuation['chooses'] if key not in ('route_id', 'reviewer_id')]
+    if route_id is None:
+        continuation['payload'].update(reviewer_id=assignment['reviewer_id'])
+        continuation['chooses'].remove('reviewer_id')
+    else:
+        continuation['payload'].update(route_id=route_id, reviewer_id=assignment['reviewer_id'])
+        continuation['chooses'] = [key for key in continuation['chooses'] if key not in ('route_id', 'reviewer_id')]
     step['then'] = [dict(copy.deepcopy(continuation), check=True), continuation]
     return step
 
 
 def describe_math_successor_answer(records, artifacts, assignment):
-    """Return the answer that starts the admitted successor of a stopped math chain, or None, and the admission."""
-    admitted = admit_successor_chain(records, artifacts, assignment)
+    """Return the answer that starts the admitted successor of a stopped math chain, or None, and the admission.
+    While the store lacks the route record of the new chain or its probe, the answer holds the step that records or
+    probes it, and review-series follows: the decision then holds the step of the new packet. The admission is stated
+    for the record that the step names once that record is verified, and until then for the route record of the
+    stopped chain."""
+    from .review_route_plan import select_step_route
+    found = select_step_route(records, artifacts, assignment['route_id'])
+    admitted = admit_successor_chain(records, artifacts, assignment,
+                                     found['route_id'] if found['lacks'] is None else None)
     if admitted['protocol'] is None:
         return None, admitted
-    return dict(answer=MATH_SUCCESSOR_ANSWER, steps=[_describe_successor_step(records, artifacts, assignment)]), admitted
+    if found['lacks'] is not None:
+        from .review_plan_steps import describe_renewal_step
+        step = describe_renewal_step(records, artifacts, assignment, found)
+        return dict(answer=MATH_SUCCESSOR_ANSWER, steps=[step]), admitted
+    return dict(answer=MATH_SUCCESSOR_ANSWER,
+                steps=[_describe_successor_step(records, artifacts, assignment, found['route_id'])]), admitted
 
 
 def describe_math_decision(records, artifacts, assignment, decision, *, estimate):
@@ -220,7 +241,10 @@ def describe_successor_handoff(records, artifacts, assignment, code, details=Non
         details['decision'] = reading.describe_stop_decision(reading.MATH_PROTOCOL, details, records=records,
                                                              artifacts=artifacts, assignment=assignment)
         return dict(state='stop', code=code, details=details)
-    successor = details.get('successor') or admit_successor_chain(records, artifacts, assignment)
+    from .review_route_plan import SUCCESSOR_ROUTE_MSG, select_step_route
+    found = select_step_route(records, artifacts, assignment['route_id'])
+    successor = details.get('successor') or admit_successor_chain(
+        records, artifacts, assignment, found['route_id'] if found['lacks'] is None else None)
     if successor is None:
         return None
     details['successor'] = successor
@@ -228,7 +252,15 @@ def describe_successor_handoff(records, artifacts, assignment, code, details=Non
         details.update(successor['stop'])
         details.pop('step', None)
         return dict(state='stop', code=code, details=details)
-    step = _describe_successor_step(records, artifacts, assignment)
+    if found['lacks'] is not None:
+        # The store lacks the route record of the new chain or its probe: that step comes before the export, and
+        # the plan after it states the admission on the new record.
+        from .review_plan_steps import describe_renewal_step
+        step = describe_renewal_step(records, artifacts, assignment, found)
+        details.update(route_id=assignment['route_id'], renewal=dict(admitted=True, **found),
+                       message=SUCCESSOR_ROUTE_MSG, step=step)
+        return dict(state='handoff', code='review_route_runtime_stale', command=step['command'], details=details)
+    step = _describe_successor_step(records, artifacts, assignment, found['route_id'])
     messages = {v7.PROTOCOL: V7_SUCCESSOR_MESSAGE, reading.PROTOCOL_V6: V6_SUCCESSOR_MESSAGE,
                 reading.MATH_PROTOCOL_V2: MATH_V2_SUCCESSOR_MESSAGE, reading.MATH_PROTOCOL: MATH_V1_SUCCESSOR_MESSAGE}
     details.update(step=step, message=messages[successor['protocol']])

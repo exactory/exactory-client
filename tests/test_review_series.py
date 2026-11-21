@@ -227,18 +227,20 @@ class SeriesTests(unittest.TestCase):
         self.assertEqual(steps[-1]['code'], 'stale_revision')
         self.assertEqual(len([row for row in steps if row.get('error')]), 8)
 
-    def test_stale_runtime_refusal_hands_off_recording_a_new_route(self):
+    def test_stale_runtime_refusal_ends_with_the_stale_route_procedure(self):
         initial = self.fixture.plan()
         operation = Mock(side_effect=ResearchError('review_route_runtime_stale', 'fixture stale runtime'))
         with patch.dict(cli.OPERATIONS, {'review-run': operation}):
             code, steps = self.drive()
         self.assertEqual(code, 3)
         operation.assert_called_once()
+        # The runtime changed between the plan and the command: the line is the stale-route procedure of the slot.
         step = steps[0]['details']['step']
-        self.assertEqual(step['id'], 7)
-        self.assertEqual(step['command'], 'review-route')
+        self.assertEqual(step['id'], 8)
+        self.assertEqual(step['command'], 'review-context')
+        self.assertEqual([row['id'] for row in steps[0]['details']['steps']], [8, 7, 1])
         expected = dict(state='handoff', chain=initial['chain'],
-            head_id='bar-first', progress=initial['progress'], command='review-route',
+            head_id='bar-first', progress=initial['progress'], command='review-context',
             code='review_route_runtime_stale',
             provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0))
         self.assertEqual({key: steps[0][key] for key in expected}, expected)

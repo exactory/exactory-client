@@ -138,19 +138,23 @@ class ContinuationTests(unittest.TestCase):
                    return_value=self.case.build_provider_response(self.case.build_review_output('bar'))):
             self.execute(plan, request='retry-unverified')
 
-    def test_stale_runtime_failure_hands_off_recording_a_new_route(self):
+    def test_stale_runtime_code_of_the_failure_planner_becomes_the_stale_route_procedure(self):
+        """The failure planner gives the code review_route_runtime_stale without a renewal. Its state for a failed
+        call is handoff (tests/test_review_route_plan.py records such a call); the rule holds for every state."""
         with patch('research_harness.review_transport.send_request', side_effect=OSError('failure')):
             self.execute(self.plan(), request='failed-call')
-        with patch('research_harness.review_failure_class.plan_after_failure',
-                   return_value=dict(state='stop', code='review_route_runtime_stale', details={})):
-            plan = self.plan()
-        self.assertEqual(plan['state'], 'handoff')
-        self.assertEqual(plan['code'], 'review_route_runtime_stale')
-        self.assertEqual(plan['command'], 'review-route')
-        self.assertEqual({key: plan['details'][key] for key in ('assignment_id', 'route_id')},
-                         dict(assignment_id='bar-first', route_id='route'))
-        self.assertEqual(plan['details']['step']['id'], 7)
-        self.assertNotIn('payload', plan)
+        for state in ('handoff', 'stop'):
+            with self.subTest(state=state), patch('research_harness.review_failure_class.plan_after_failure',
+                    return_value=dict(state=state, code='review_route_runtime_stale', details={})):
+                plan = self.plan()
+                self.assertEqual(plan['state'], 'handoff')
+                self.assertEqual(plan['code'], 'review_route_runtime_stale')
+                self.assertEqual(plan['command'], 'review-context')
+                self.assertEqual({key: plan['details'][key] for key in ('assignment_id', 'route_id')},
+                                 dict(assignment_id='bar-first', route_id='route'))
+                self.assertEqual(plan['details']['renewal'], dict(admitted=False, route_id=None, lacks='record'))
+                self.assertEqual([step['id'] for step in plan['details']['steps']], [8, 7, 1])
+                self.assertNotIn('payload', plan)
 
     def test_all_registered_roles_and_parts_adapters_keep_their_context(self):
         from research_harness.review_parts_roles import ADAPTERS

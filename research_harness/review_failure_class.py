@@ -14,6 +14,7 @@ from . import review_parts as parts
 from . import review_parts_repair as repair
 from . import review_protocol as protocol
 from .review_route_capacity import plan_capacity_recovery
+from .review_route_plan import RETIREMENT_ORDER_TEXT
 
 
 # Outcome names, terminal codes and allowances have one policy home.
@@ -802,7 +803,11 @@ ROUTE_RENEWAL_MSG = (
     'paid call. Then run the capacity probe of details.step. After the step, run review-series on this head again. '
     'It records and sends the replacement on the other route record, or it names the next step. When '
     'details.renewal.admitted is false, the replacement of this head cannot run on another route record. Take the '
-    'steps of the stale-route procedure in the order of details.steps.')
+    'steps of the stale-route procedure in the order of details.steps. details.renewal.lacks then says what the '
+    'store holds for the route record that the slot continues on. For record, the step with the command '
+    'review-route records such a route, and its probe follows. For probe, the step with the command review-probe '
+    'probes the route record that details.renewal.route_id names. For null, that route record is verified. '
+    + RETIREMENT_ORDER_TEXT)
 
 
 def plan_refusal_recovery(records, artifacts, assignment):
@@ -836,13 +841,25 @@ def plan_refusal_recovery(records, artifacts, assignment):
     if reassessment and not correction_used:
         if len(completed) == 1:
             return dict(result, state='run')
+        # The correction runs on the route record of the head, or, when that record is stale, on a verified record
+        # of the same identity with the installed runtime.
+        from .review_route_plan import CORRECTION_ROUTE_MSG, select_step_route
+        found = select_step_route(records, artifacts, assignment['route_id'])
+        if found['lacks'] is not None:
+            details.update(route_id=assignment['route_id'], renewal=dict(admitted=True, **found),
+                           message=CORRECTION_ROUTE_MSG)
+            return dict(result, state='handoff', command='review-route', code='review_route_runtime_stale')
+        # After a retirement the correction is not eligible, and build_request refuses the retired record.
+        correction_route_id = found['route_id'] or assignment['route_id']
         try:
-            measured = correction.build_request(records, artifacts, assignment['id'], assignment['route_id'])
+            measured = correction.build_request(records, artifacts, assignment['id'], correction_route_id)
         except ResearchError as error:
             if error.code == 'review_input_too_large':
                 details['correction_preflight'] = error.details
         else:
             details['preflight'] = measured['preflight']
+            if correction_route_id != assignment['route_id']:
+                details['correction_route_id'] = correction_route_id
             return dict(result, state='handoff', command='review-output-correction')
     if sum(read_replacement_link(member)[0] == 'output_refused' for member in members) >= 2:
         return result
