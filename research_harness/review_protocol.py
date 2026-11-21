@@ -1323,6 +1323,10 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
             if kind == 'final':
                 final_prompt = get_adapter(adapter)['final_prompt']
                 sections.append(final_prompt(role, base_parameters) if callable(final_prompt) else final_prompt)
+                # Rule S3 of the study forms: the final, page and closing turns of a study series state the forms.
+                if (adapter in ('study_readiness', 'context_repair') and role in bar_sources.ROLES
+                        and orchestration != 'problem_creation' and review_parts.get('final_form') != 'combine'):
+                    sections.append(review_session_v4.STUDY_FORMS_PROMPT.lstrip())
         rendered = '\n\n'.join(sections)
         variant = 'final-answer' if answer else kind
         if parts_protocol == 'exactory-review-parts-v3' and 'final_form' in review_parts:
@@ -3547,6 +3551,9 @@ def _is_problem_refresh(records, artifacts, prior, previous):
     reassessment in the same session and slot."""
     if previous.get(review_parts.KEY, {}).get('adapter') == 'problem_slate':
         previous = review_parts.read_logical_packet(artifacts, previous[review_parts.KEY])
+    elif prior.get('session_chain'):
+        # A turn of a session under the rules v4 carries the scientific packet in the logical packet of its chain.
+        previous = _read_json(artifacts, prior['session_chain']['logical'])
     if any(review['assignment_id'] == prior['id'] and _is_evidence_refresh_needed(records, artifacts, review)
            for review in records.get('value_review', {}).values()):
         return True
@@ -3921,6 +3928,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 if admission['state'] == 'record':
                     return review_session_v4.prepare_session_assignment(records, artifacts, value, route,
                         expected_revision + 1, logical=logical, admission=admission, slot=slot_identifier)
+                review_session_v4.require_session_capacity(records, planning, value, logical, admission)
         diagnostics = {}
         reading_logical = None
         carried_report = None

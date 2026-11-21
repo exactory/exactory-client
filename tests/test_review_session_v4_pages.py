@@ -314,13 +314,25 @@ class SessionPagesTests(unittest.TestCase):
             response = build_codex_response(route, request, output)
             response['usage']['output_tokens'] = output_tokens
             if room is not None:
+                # A measured ratio is kept to hundredths, so the page room moves in steps of one hundredth of the
+                # input limit. The reported tokens give the smallest such room at or above the requested one.
                 fixed = plan['frame']['final']['bound'] + plan['task']['final']['notice_characters']
-                ratio = (fixed + room) / plan['limits']['input_tokens']['value']
+                ratio = math.ceil((fixed + room) * 100 / plan['limits']['input_tokens']['value']) / 100
                 size = capacity.measure_request(route, request)['text_characters']
-                response['usage']['input_tokens'] = math.ceil(size * (1 - capacity.TOKEN_RATIO_MARGIN) / ratio)
+                response['usage']['input_tokens'] = math.floor(size * (1 - capacity.TOKEN_RATIO_MARGIN) / ratio)
             return response
         with patch.object(protocol.transport, 'send_request', side_effect=respond):
             self.case.mutate(protocol.invoke_assignment, dict(id='attempt-' + current['id'], assignment_id=current['id']), credential='test-only')
+
+    def limit_observed_input(self, tokens):
+        """The route's probe observed this many input tokens, so a measured ratio moves the page room in steps of
+        tokens / 100 characters. A room between the floor and the notes needs steps finer than the fixture probe's."""
+        from research_harness import review_capacity_evidence as evidence
+        read = evidence.read_capacity_evidence
+        patcher = patch.object(evidence, 'read_capacity_evidence',
+                               side_effect=lambda *args, **kwargs: dict(read(*args, **kwargs), input_tokens=tokens))
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def install_final_profile(self, thinking=109000, rows=()):
         original = capacity.read_output_profile
@@ -562,13 +574,13 @@ class SessionPagesTests(unittest.TestCase):
 
     def test_single_request_v4_packet_prompt_and_plan_bytes_match_base(self):
         current = self.case.assign('bar', 'first', identifier='single')
-        self.assertEqual(digest(self.read_packet(current)), '0ded3e37b36e34a8b7fc0f8547c5bc264e1f7f4a4b9e64e3fba051b0a376533d')
-        self.assertEqual(digest(current['prompt']), 'eb9f961616fabaa5adfaf3310ee270e96dd786dc4cf3a5e311157840d9a51530')
-        self.assertEqual(current['capacity_plan']['digest'], '4ac3dad81064efa9e498a09710ef92ab37e05fdb3a0ccfab616ad1c61649a3ce')
+        self.assertEqual(digest(self.read_packet(current)), '8772dcc9a3cec0f7ecfd86db45a793e242faa6fa9f9093d26c184f0b880a79a6')
+        self.assertEqual(digest(current['prompt']), '2b91b5c42abdb555a2eb14ed885c396dae10b5585d5c72e3c147980283398e56')
+        self.assertEqual(current['capacity_plan']['digest'], '33bcee45a4619e6809eeea9c73764e88bcc347b553d46cd4d4d59d2eb1c123d2')
         self.respond(current)
         final = self.case.assign('bar', 'first', identifier='single-final', prior_assignment_id=current['id'])
-        self.assertEqual(digest(self.read_packet(final)), 'b53ee8d4a7ea988cd5176365638005f0d9b9871fffe6372e0526b4b54433c698')
-        self.assertEqual(digest(final['prompt']), '7397824ada63af5a872fa3b47260db1903d8d6e6bec4d9cc3275379b58252eb9')
+        self.assertEqual(digest(self.read_packet(final)), 'd0185d01152c38b56050db2fa0d0ad1e91f214bd21a4a668ee708672d7ee9bac')
+        self.assertEqual(digest(final['prompt']), '95ac8663f1c94b90cbe60577ed3339532943e8da75ce389a0ace5db0ea254d30')
 
     test_v2_and_v3_running_sessions_keep_exact_bytes = turn_fixtures.SessionTurnsTests.test_running_v2_and_v3_continuations_keep_exact_check_bytes
 
@@ -747,9 +759,12 @@ class SessionPagesTests(unittest.TestCase):
         self.finish_pages(current)
 
     def test_condensed_block_lists_and_delivers_original_entry_without_changing_currency(self):
+        self.limit_observed_input(3435400)
         self.fill_combinations = True
         with patch.object(capacity, 'TARGET_MAXIMUM_CHARACTERS', 120000), self.install_final_profile(thinking=100):
-            current = self.start_condensing_session(characters=1200000)
+            # A block of blocks needs the page room of 13,875 characters that this fixture had before the frame
+            # reserved the base prompt; at the ratio 0.02 of 3,435,400 input tokens that room is one step.
+            current = self.start_condensing_session(characters=1200000, room=13875)
         def resume_page(current):
             while 'session_combine' in self.read_packet(current):
                 current = self.advance(current)
@@ -807,6 +822,7 @@ class SessionPagesTests(unittest.TestCase):
         self.finish_pages(current)
 
     def test_page_request_refreshes_notes_and_pool_after_notes_condensation(self):
+        self.limit_observed_input(1000000)
         current = self.start_condensing_session(notes_characters=20000)
         while 'session_combine' in self.read_packet(current):
             current = self.advance(current)
