@@ -32,10 +32,11 @@ Without --head, the diff is the working tree, with its untracked files, against 
 base. With --head, it is that commit against the merge base of the head and the base, for example to replay a
 release.
 
-list prints the whole set. run starts the whole set when it holds at most half of the test modules of tests/
-(LARGE_SET_SHARE). A larger set comes from a change of a core module, and its local run would do the work of the
-full suite of the CI a second time: run then starts its near part only, and prints one line with the count of the
-modules of its far part, whose check is the full suite of the CI. list --near prints the modules that run starts.
+list prints the whole set. run starts the whole set when it holds at most the share LARGE_SET_SHARE of the test
+modules of tests/. A larger set comes from a change of a module that many tests use, and its local run would
+take hours of the test processes of a lane and do work of the full suite of the CI a second time: run then starts
+its near part only, and prints one line with the count of the modules of its far part, whose check is the full
+suite of the CI. list --near prints the modules that run starts.
 
 run groups the tests into processes as the full suite of the CI does. For each Python executable and each shard of
 the CI, one process (ci/unittest_shards.py run-group) runs the tests of the set that the shard holds, in the order
@@ -84,12 +85,17 @@ MODULE_NAME_PATTERN = re.compile(r"\b(?:" + "|".join(MODULE_PACKAGES) + r")(?:[.
 DECOMPRESSORS = {".gz": gzip.decompress, ".xz": lzma.decompress}
 REPORT_FILE_NAME = "must-pass-report.json"
 # run starts only the near part of a set that holds more than this share of the test modules of tests/. Such a set
-# comes from a change of a core module: for the diff of 0.91.11 it held 456 of 554 modules and 97% of the test time,
-# and its local run would take all eight test processes for 1.5 to 1.8 hours, as long as the full suite of the CI,
-# which runs the same tests again. The full suite of the CI is the check of its far part.
-LARGE_SET_SHARE = 0.5
-FAR_PART_LINE = ("The set holds %d of %d test modules, more than half. This run starts its near part, %d modules. The "
-                 "full suite of the CI is the check of the %d modules of its far part, which this run does not start.")
+# comes from a change of a module that many tests use: for the diff of 0.91.11 it held 456 of 554 modules and 97%
+# of the test time. The share was one half until 2026-11-21. That day the whole sets of four lanes, each under one
+# half, ran against the budget must_pass_run of 2,700 s: 35 modules took 4,002 s with four test processes, 124
+# modules took 13,089 s with four, and two sets took about 16,000 s with two. The near parts of the same day (16 to
+# 18 modules) took 1,124 to 1,408 s with two. So the whole set runs only when it is small: 0.07 is about 41 of 590
+# modules. The full suite of the CI is the check of the far part, and ALWAYS holds the modules that read every
+# source file, which a change of any source can fail.
+LARGE_SET_SHARE = 0.07
+FAR_PART_LINE = ("The set holds %d of %d test modules, above the share of a whole run. This run starts its near "
+                 "part, %d modules. The full suite of the CI is the check of the %d modules of its far part, which "
+                 "this run does not start.")
 
 
 def list_changed_files(root, base, head=None):
@@ -339,8 +345,9 @@ def main():
         command.add_argument("--base", default="origin/main", help="The branch that the release merges into.")
         command.add_argument("--head", help="A commit whose diff selects the set, in place of the working tree.")
     commands.choices["list"].add_argument("--near", action="store_true",
-                                          help="Print the modules that run starts: the near part of a set that "
-                                               "holds more than half of the test modules, else the whole set.")
+                                          help="Print the modules that run starts: the near part of a set "
+                                               "above the share LARGE_SET_SHARE of the test modules, else the "
+                                               "whole set.")
     run = commands.choices["run"]
     run.add_argument("--module", action="append",
                      help="A test module of tests/ to run in place of the set, such as test_must_pass. Give the "
