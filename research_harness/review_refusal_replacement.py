@@ -120,12 +120,8 @@ def describe_route_renewal(records, artifacts, prior):
     from . import review_protocol as protocol
     if not admits_route_renewal(records, artifacts, prior):
         return dict(admitted=False, route_id=None, lacks=None)
-    stale, retired = records['review_route'][prior['route_id']], protocol.retired_routes(records)
-    candidates = sorted((row for row in records['review_route'].values()
-                         if row['id'] != stale['id'] and row['id'] not in retired
-                         and protocol.context_repair.is_same_route(stale, row)
-                         and not protocol.is_route_stale(artifacts, row)),
-                        key=lambda row: (row['recorded_revision'], row['id']), reverse=True)
+    from .review_route_plan import list_current_routes
+    candidates = list_current_routes(records, artifacts, records['review_route'][prior['route_id']])
     if not candidates:
         return dict(admitted=True, route_id=None, lacks='record')
     verified = next((row for row in candidates
