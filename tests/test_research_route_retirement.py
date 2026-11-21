@@ -189,3 +189,114 @@ class RetiredSourceTurnTests(RouteRetirementCase):
         with self.assertRaises(ResearchError) as refused:
             self.mutate(review_protocol.record_assignment, self.repair_payload(events=("exposure",)))
         self.assertEqual(refused.exception.code, "review_resampling_forbidden")
+
+
+class RetiredRouteStateTests(RouteRetirementCase):
+    """The state of a route record after its retirement (rules RS1 and RS2, requirement R3.2): on a retired route
+    record a probe without an answer decides nothing, and a probe with an answer decides as on any other record. The
+    route record holds the completed probe "probe" and the observed assignment "assignment-bar-a"."""
+
+    def setUp(self):
+        super().setUp()
+        self.setup_dossier()
+        self.route()
+        self.record_response("bar-a", "reviewer-a", self.review_response("bar"))
+
+    def probe(self, probe_id, respond, route_id="route"):
+        with patch("research_harness.review_transport.send_request", side_effect=respond):
+            review_protocol.probe_route(self.store, {"id": probe_id, "route_id": route_id}, credential="fixture-only",
+                                         expected_revision=self.store.revision, request_id=probe_id + "-call")
+        return self.store.snapshot()["records"]["review_route_probe"][probe_id]
+
+    def answer(self, output):
+        """The provider response whose answer is this text, or this object as JSON."""
+        text = output if isinstance(output, str) else json.dumps(output)
+        return dict(self.provider_response({}), output=[
+            {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": text}]}])
+
+    def answer_controls(self, **changes):
+        """A probe answer that copies the two positive controls of the packet, with these members changed."""
+        def respond(route, request, credential):
+            packet = json.loads(request["input"][0]["content"].removeprefix("The packet below is JSON.\n"))
+            return self.answer(dict({"allowed_control": packet["allowed_control"],
+                                     "evidence_control": packet["evidence_control"], "excluded_controls": []}, **changes))
+        return respond
+
+    def read_excluded_control(self, probe_id):
+        """One control of an excluded source of a probe that has started: what a leak would show."""
+        invocation = self.store.snapshot()["records"]["review_probe_invocation"][probe_id]
+        return sorted(json.loads(self.artifacts.read(invocation["controls"])).values())[0]
+
+    def read_route_state(self, route_id="route"):
+        state = review_protocol.route_state(self.store.snapshot()["records"], self.artifacts, route_id)
+        return state["context_status"], state["probe_id"]
+
+    def list_obligations(self, assignment="assignment-bar-a"):
+        return [item["code"] for item in self.state(assignment)["obligations"]]
+
+    def test_probe_without_an_answer_decides_nothing_on_a_retired_route_record(self):
+        failed = self.probe("no-answer", ResearchError("review_provider_failure", "The provider returned no answer."))
+        self.assertEqual((failed["status"], failed["response"], failed["output"]), ("failed", None, None))
+        self.assertEqual(self.read_route_state(), ("unverified", None))
+        self.retire()
+        # On the base the record stays unverified, and the observed assignment has review_context_unverified.
+        self.assertEqual(self.read_route_state(), ("verified_for_route", "probe"))
+        self.assertEqual(self.list_obligations(), [])
+        self.assertEqual(self.state("assignment-bar-a")["context_status"], "verified_for_route")
+
+    def test_answered_probe_that_fails_a_control_decides_on_a_retired_route_record(self):
+        wrong = self.probe("wrong-control", self.answer_controls(allowed_control="not-the-control"))
+        self.assertEqual(wrong["status"], "completed")
+        self.retire()
+        self.assertEqual(self.read_route_state(), ("unverified", None))
+        self.assertIn("review_context_unverified", self.list_obligations())
+
+    def test_probe_answer_with_an_excluded_control_decides_on_a_retired_route_record(self):
+        def leak(route, request, credential):
+            return self.answer_controls(excluded_controls=[self.read_excluded_control("leaked")])(
+                route, request, credential)
+        self.assertEqual(self.probe("leaked", leak)["status"], "completed")
+        self.retire()
+        self.assertEqual(self.read_route_state(), ("contaminated", None))
+
+    def test_retired_route_record_without_an_answered_probe_stays_unverified(self):
+        # A second record of the identity of "route", so that the capacity evidence of "probe" admits its assignment.
+        route = self.store.snapshot()["records"]["review_route"]["route"]
+        self.mutate(review_protocol.record_route, dict(
+            {key: route[key] for key in ("adapter", "model", "endpoint", "configuration")}, id="route-2"))
+        self.probe("no-answer", ResearchError("review_provider_failure", "The provider returned no answer."),
+                   route_id="route-2")
+        self.mutate(review_protocol.record_assignment, {"id": "assignment-on-route-2", "route_id": "route-2",
+            "dossier_id": "dossier-1", "role": "bar", "reviewer_id": "reviewer-c", "author_id": "author", "context": {}})
+        self.retire(assignment="assignment-on-route-2")
+        self.assertEqual(review_protocol.retired_routes(self.store.snapshot()["records"]), {"route-2"})
+        self.assertEqual(self.read_route_state("route-2"), ("unverified", None))
+
+    def test_failed_probe_keeps_a_route_record_unverified_until_a_probe_or_a_retirement(self):
+        self.probe("no-answer", ResearchError("review_provider_failure", "The provider returned no answer."))
+        self.assertEqual(self.read_route_state(), ("unverified", None))
+        self.assertIn("review_context_unverified", self.list_obligations())
+        self.probe("completed", self.answer_controls())
+        self.assertEqual(self.read_route_state(), ("verified_for_route", "completed"))
+        self.assertEqual(self.list_obligations(), [])
+
+    def test_probe_answer_that_is_no_json_decides_on_a_retired_route_record(self):
+        """Finding R1 of the review of the design: the reviewer answered, so the probe decides although the
+        transport parsed no output from the answer."""
+        prose = self.probe("prose", lambda route, request, credential: self.answer(
+            "I read the packet. The allowed control is in it, but I will not return JSON."))
+        self.assertEqual((prose["status"], prose["output"]), ("failed", None))
+        self.assertIsNotNone(prose["response"])
+        self.retire()
+        self.assertEqual(self.read_route_state(), ("unverified", None))
+        self.assertIn("review_context_unverified", self.list_obligations())
+
+    def test_probe_answer_with_an_excluded_control_and_no_json_decides_on_a_retired_route_record(self):
+        """Finding R1 of the review of the design: an answer that leaks a control of an excluded source is an
+        observation against the route, also when the transport parsed no output from it."""
+        def leak(route, request, credential):
+            return self.answer("The controls that I received: " + self.read_excluded_control("leaked-prose") + ".")
+        leaked = self.probe("leaked-prose", leak)
+        self.assertEqual((leaked["status"], leaked["output"]), ("failed", None))
+        self.retire()
+        self.assertEqual(self.read_route_state(), ("unverified", None))
