@@ -26,7 +26,7 @@ skills/math-solver/harness have their own command and are not in the set.
 """
 import argparse
 import ast
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 import re
 import subprocess
@@ -148,7 +148,9 @@ def run_modules(root, executables, modules, jobs, logs):
         runs.extend((executable, module, directory / (module + ".log")) for module in modules)
     failed_count = 0
     with ThreadPoolExecutor(max_workers=jobs) as pool:
-        for executable, module, status, seconds in pool.map(lambda run: run_module(root, *run), runs):
+        # Each result is printed when its run ends, so the slow pins that start first do not hold back the others.
+        for finished in as_completed([pool.submit(run_module, root, *run) for run in runs]):
+            executable, module, status, seconds = finished.result()
             failed_count += status != 0
             print("%s  %s  %s  %.0f s" % ("ok    " if status == 0 else "FAILED", module, executable, seconds), flush=True)
     return failed_count
