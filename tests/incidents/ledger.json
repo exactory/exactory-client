@@ -7626,7 +7626,11 @@
         "test_remaining_finishing_writes.OutputRefusalTests.test_refusal_is_recorded_when_the_read_after_the_run_meets_a_busy_store",
         "test_remaining_finishing_writes.OutputRefusalTests.test_series_runs_the_same_request_again_after_the_refusal_of_its_output_was_refused",
         "test_remaining_finishing_writes.OutputRefusalTests.test_series_keeps_the_request_whose_refusal_is_pending_after_a_busy_read",
-        "test_remaining_finishing_writes.RecordingRefusalTests.test_recording_command_records_the_refusal_when_a_commit_meets_every_attempt"
+        "test_remaining_finishing_writes.RecordingRefusalTests.test_recording_command_records_the_refusal_when_a_commit_meets_every_attempt",
+        "test_openness_unchecked_answer_busy_store.V7TurnRefusalWriteTests.test_run_refused_beyond_the_wait_is_resumed_and_its_step_records_the_refusal",
+        "test_openness_unchecked_answer_busy_store.V7TurnRefusalWriteTests.test_series_refused_again_at_resume_waits_and_a_later_series_goes_on",
+        "test_openness_unchecked_answer_busy_store.SingleReviewRefusalWriteTests.test_run_refused_beyond_the_wait_is_resumed_and_its_step_records_the_refusal",
+        "test_openness_unchecked_answer_busy_store.SingleReviewRefusalWriteTests.test_series_refused_again_at_resume_waits_and_a_later_series_goes_on"
       ]
     },
     {
@@ -7673,7 +7677,12 @@
         "test_openness_reading_v7_unchecked_answer.UncheckedV6FinalTests.test_v6_final_answer_that_failed_its_check_gives_no_finding",
         "test_openness_reading_v7_unchecked_answer.UncheckedSingleReviewTests.test_single_review_answer_that_failed_its_check_gives_no_finding",
         "test_openness_reading_v7_unchecked_answer.UncheckedSingleReviewTests.test_single_review_finding_recorded_from_such_an_answer_becomes_stale",
-        "test_openness_reading_v7_unchecked_answer.UncheckedSingleReviewTests.test_single_review_finding_whose_answer_the_store_cannot_give_is_stale"
+        "test_openness_reading_v7_unchecked_answer.UncheckedSingleReviewTests.test_single_review_finding_whose_answer_the_store_cannot_give_is_stale",
+        "test_openness_unchecked_answer_busy_store.V7TurnRefusalWriteTests.test_run_refused_beyond_the_wait_is_resumed_and_its_step_records_the_refusal",
+        "test_openness_unchecked_answer_busy_store.V7TurnRefusalWriteTests.test_series_refused_again_at_resume_waits_and_a_later_series_goes_on",
+        "test_openness_unchecked_answer_busy_store.V7TurnRefusalWriteTests.test_read_after_the_run_refused_for_the_whole_wait_is_resumed_without_using_the_answer",
+        "test_openness_unchecked_answer_busy_store.SingleReviewRefusalWriteTests.test_run_refused_beyond_the_wait_is_resumed_and_its_step_records_the_refusal",
+        "test_openness_unchecked_answer_busy_store.SingleReviewRefusalWriteTests.test_series_refused_again_at_resume_waits_and_a_later_series_goes_on"
       ]
     }
   ]
