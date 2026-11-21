@@ -19,8 +19,8 @@ REMOTE_CLAIM_STORE_BUSY_MSG = (
     'operation was not started. No request of this step was sent. The intent keeps every step that was confirmed '
     'before. Run the same command again. It continues from the confirmed steps.')
 REMOTE_BEGIN_STORE_BUSY_MSG = (
-    'The research store stayed busy, or kept changing the records that this write read, and it did not save this '
-    'remote operation. This command sent no request. Run the same command again.')
+    'The research store stayed busy, or kept changing the records that this write read. The intent of this remote '
+    'operation was not saved. This command sent no request. Run the same command again.')
 REMOTE_CLAIM_STORE_CHANGED_MSG = (
     'The research store changed between the check of this remote step and its start, so the step was not started. No '
     'request of this step was sent. The intent keeps every step that was confirmed before. Run the same command '

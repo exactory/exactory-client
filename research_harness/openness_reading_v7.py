@@ -36,20 +36,20 @@ LABEL_CHARACTERS = 120
 SELECTION_MISMATCH_MESSAGE = (
     'The carried selection of this chain does not verify. One of four cases is the cause. First, under '
     'exactory-openness-carried-selection-v2, the stored selection is not the selection that the harness makes again '
-    'on the store as it stood before the first assignment. Second, an earlier chain no longer authenticates up to '
-    'its last carried turn under the records as they stand now. A contamination event on a carried turn has this '
-    'effect, and so has a failed latest probe of the route record of a carried chain. Third, a stored item of a '
-    'carried turn does not match the authenticated turn that it comes from or the inventory of this chain. Fourth, '
-    'the stored selection has a form or a protocol that this release does not verify. A carried turn whose answer '
-    'fails the output check of its turn, with or without its refusal record, gives the first case under '
-    'exactory-openness-carried-selection-v2 and the second case under exactory-openness-carried-selection-v1. The '
-    'chain gives no finding, and a finding that it recorded is stale. When the latest probe of the route record of '
-    'a carried chain failed, probe that route record again. A completed probe of that route record ends the '
-    'refusal. No probe can end it when review-probe refuses that route record with review_route_runtime_stale. In '
-    'that case and in every other case, check the record with record-check. When record-check reports the record '
-    'ready, export a new packet with the same reviewer_id. Assign it for a new finding. The new chain carries the '
-    'turns of earlier chains that still authenticate from their first turn on. It carries no turn of this chain, '
-    'and it reads again what this chain read itself.')
+    'on the store as it stood before the first assignment. Second, an earlier chain no longer authenticates up to its '
+    'last carried turn under the records as they stand now. A contamination event on a carried turn has this effect, '
+    'and so has a failed latest probe of the route record of a carried chain. Third, a stored item of a carried turn '
+    'does not match the authenticated turn that it comes from or the inventory of this chain. Fourth, the stored '
+    'selection has a form or a protocol that this release does not verify. A carried turn whose answer fails the '
+    'output check of its turn gives the first case under exactory-openness-carried-selection-v2 and the second case '
+    'under exactory-openness-carried-selection-v1. This holds with or without a refusal record for that answer. The '
+    'chain gives no finding, and a finding that it recorded is stale. When the latest probe of the route record of a '
+    'carried chain failed, probe that route record again. A completed probe of that route record ends the refusal. No '
+    'probe can end it when review-probe refuses that route record with review_route_runtime_stale. In that case and '
+    'in every other case, check the record with record-check. When record-check reports the record ready, export a '
+    'new packet with the same reviewer_id. Assign it for a new finding. The new chain carries the turns of earlier '
+    'chains that still authenticate from their first turn on. It carries no turn of this chain, and it reads again '
+    'what this chain read itself.')
 ALLOWANCES_CHARACTERS = 30000
 TARGET_LABELS_CHARACTERS = 100000
 DECISIVE_WORK_IDS_CHARACTERS = 10000
@@ -2284,17 +2284,17 @@ ANSWER_VERIFICATION_MESSAGE = (
     'named turn, that turn was built on the answer. Then export a new packet with the same reviewer_id and assign '
     'it. The new chain can carry the reading turns of this chain that come before the named turn.')
 UNCHECKED_HEAD_MESSAGE = (
-    'The answer of the turn that details.assignment_id names fails the output check of its turn, and the store '
-    'holds no refusal record for it. details.refusal gives the code, the check and the details of the failure. No '
-    'turn continues from that answer. Run review-series on the chain. It runs the recorded review-run request of '
-    'that answer again, which calls no reviewer and records the refusal. It then plans the step for a refused '
-    'answer.')
+    'The answer of the turn that details.assignment_id names fails the output check of its turn, and the store holds '
+    'no refusal record for it. details.refusal gives the code, the check and the details of the failure. No turn '
+    'continues from that answer. Run review-series on the chain and take the step that it plans. Its step for this '
+    'answer is the recorded review-run request, which calls no reviewer and records the refusal. The plan after that '
+    'request is the step for a refused answer.')
 UNCHECKED_EARLIER_MESSAGE = (
-    'The answer of the turn that details.assignment_id names fails the output check of its turn, and the store '
-    'holds no refusal record for it. details.refusal gives the code, the check and the details of the failure. A '
-    'later turn of this chain was built on that answer, so the harness assigns no turn that continues this chain, '
-    'and the chain gives no finding. Export a new packet with the same reviewer_id and assign it. The new chain can '
-    'carry the reading turns of this chain that come before the named turn.')
+    'The answer of the turn that details.assignment_id names fails the output check of its turn, and the store holds '
+    'no refusal record for it. details.refusal gives the code, the check and the details of the failure. A later turn '
+    'of this chain was built on that answer. The harness assigns no turn that continues this chain, and the chain '
+    'gives no finding. Export a new packet with the same reviewer_id and assign it. The new chain can carry the '
+    'reading turns of this chain that come before the named turn.')
 FINAL_VERIFICATION_MESSAGE = (
     'The turn that details.assignment_id names has no observed, authenticated output in a verified context, or its '
     'output stands at the wrong place. A chain of exactory-openness-reading-v7 ends with one final turn that '

@@ -1344,6 +1344,10 @@ each of these refusals.
      (`review_source_continuation_unverified`), and do not assign a sibling turn
      (`review_source_continuation_fork`): run `review-series`, take the handoff or report the
      decision stop that it gives, and keep the diagnostics of both refusals in your report.
+   - When a step of `review-series` has the state `resume` and its `details` hold `refusal`,
+     the answer of that turn failed its check. Its refusal record was not written. The step
+     runs the recorded `review-run` request again, without a reviewer call, and records the
+     refusal. `review-series` takes the step itself. Take no step of your own for it.
    - The assignment after the last reading turn is the final turn (prompt template
      `exactory-openness-reading-v5/final`, or `exactory-openness-reading-v4/final` in a v4
      chain): the native packet with the reading record of the earlier turns. A v5 final turn

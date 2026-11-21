@@ -290,10 +290,19 @@ cooldown are shared by all processes and workspaces of this user on the machine.
 qualification, old receipt, or completed form does not discharge current work.
 
 When an acquisition command is refused with `store_busy`, read its message. A
-message of the acquisition says what is recorded, and that the command goes on
-with a new request ID. The message of the store itself names the same request:
-run it again. When the same request ID then returns `operation_incomplete`, the
-operation was admitted before the refusal. Then run the command with a new
-request ID. When `fulltext-resume` returns `store_busy` as an item of `pending`,
-the command was not refused. Continue the job with `fulltext-resume` and a new
-request ID.
+message of the acquisition says what is recorded, and which request ID the
+command goes on with. When it says that the store did not admit the operation,
+run the same command again with the same request ID. Do the same when it says
+that a full-text job was not started. When it says that a result or a page was
+not recorded, the command goes on with a new request ID. The message of the
+store itself names the same request: run it again. When the same request ID
+then returns `operation_incomplete`, the operation was admitted before the
+refusal. Then run the command with a new request ID. When `fulltext-resume`
+returns `store_busy` as an item of `pending`, the command was not refused.
+Continue the job with `fulltext-resume` and a new request ID.
+
+An acquisition command is admitted when the store is at `--expected-revision`
+or at a later revision. A command with a new request ID is therefore admitted
+also when another command acquired the same target after your last read. It
+then sends its requests again. Before you acquire a target, make sure that no
+other command acquired it after your last read.

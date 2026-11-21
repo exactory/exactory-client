@@ -27,7 +27,7 @@ OUTDATED_PACKET_MESSAGE = ("The records changed after this packet was exported: 
                            "verified reading turns of this chain stay verified.")
 
 UNCHECKED_FINDING_MESSAGE = ("The answer of this assignment fails its output check, and the store holds no "
-                             "refusal record for it, so the harness records no finding from it. details.refusal "
+                             "refusal record for it. The harness records no finding from it. details.refusal "
                              "gives the code, the check and the details of the failure. Run review-series on the "
                              "assignment and take the step that it plans.")
 
@@ -301,7 +301,7 @@ def assess_openness(records, artifacts):
     if "reading_turns" not in finding and assignment is not None and uses_finding_contract(assignment):
         # A finding of a single review under the finding contract has no chain whose verification checks its answer.
         # The gate checks that the recorded answer is still the selected answer of the review and that it passes its
-        # output check: 0.90.0 to 0.91.7 recorded the finding of a refused answer when its refusal record was missing.
+        # output check: 0.90.0 to 0.91.10 recorded the finding of a refused answer when its refusal record was missing.
         from .review_protocol import assignment_state
         from .review_refusal import classify_observed_output
         try:

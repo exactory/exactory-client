@@ -337,11 +337,11 @@ def _plan_capacity(records, assignment, action, artifacts=None):
 
 
 UNRECORDED_REFUSAL_MESSAGE = (
-    'The answer of this turn fails the output check of its turn, and the store holds no refusal record for it: the '
+    'The answer of this turn fails the output check of its turn, and the store holds no refusal record for it. The '
     'write of that record did not commit when the run ended. details.refusal gives the code, the check and the '
     'details of the failure. This step runs the recorded review-run request of that answer again, with its request '
-    'ID. It calls no reviewer: it returns the recorded run and records the refusal. The next plan is the step for '
-    'a refused answer.')
+    'ID. It calls no reviewer: it returns the recorded run and records the refusal. The next plan is the step for a '
+    'refused answer.')
 
 
 def _plan_unrecorded_refusal(records, artifacts, assignment, state, packet):

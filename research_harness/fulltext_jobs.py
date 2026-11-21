@@ -41,9 +41,9 @@ def validate_allowances(value, previous=None):
 
 # The message of the start of a full-text job (fulltext-start), when the store refused it beyond the wait.
 FULLTEXT_START_STORE_BUSY_MSG = (
-    'The research store stayed busy, or kept changing the records that this write read, and it did not start this '
-    'full-text job. This command sent no request, and the store holds no record of the job. Run the same command '
-    'again with the same request ID.')
+    'The research store stayed busy, or kept changing the records that this write read. This full-text job was not '
+    'started. This command sent no request, and the store holds no record of the job. Run the same command again with '
+    'the same request ID.')
 # The message of a record of a full-text job that the store refused beyond the wait.
 FULLTEXT_JOB_STORE_BUSY_MSG = (
     'The research store stayed busy, or kept changing the records that this write read. A record of this '

@@ -1,4 +1,4 @@
-"""An answer that fails its output check is read by no later step, also without its refusal record.
+"""No later step builds on an answer that fails its output check, also without its refusal record.
 
 The run of a turn records a refusal for an answer that fails its check. In these tests that write does not commit
 (the run command ends before it), so the store holds a completed, authenticated answer that fails its check and no
@@ -517,7 +517,7 @@ class UncheckedSingleReviewTests(OpennessReadingCase):
         self.assertNotIn('refusal', raised.exception.details or {})
 
     def test_single_review_finding_recorded_from_such_an_answer_becomes_stale(self):
-        """A finding as 0.90.0 to 0.91.7 recorded it, read by the gate before and after its refusal is recorded."""
+        """A finding as 0.90.0 to 0.91.10 recorded it, read by the gate before and after its refusal is recorded."""
         packet = self.refuse_review()
         with patch.object(review_refusal, 'classify_observed_output', return_value=None):
             finding = self.record_answer('turn-1')

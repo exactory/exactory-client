@@ -647,7 +647,7 @@ planner never moves a chain to another route. New ids are
 | `state` | Meaning |
 | --- | --- |
 | `run` | A fresh call of the head may start now (`review-run`). |
-| `resume` | A captured call whose attempt is not yet recorded is finished with its original request id. An uncaptured current call is a `wait` with `payload.action` `reconcile` and the code `review_invocation_pending`; a call without pool membership (0.69.x) is the handoff `review_worker_reconciliation_required`. |
+| `resume` | A captured call whose attempt is not yet recorded is finished with its original request id. A recorded call can hold an answer that fails its output check, while the store holds no refusal record for that answer. Such a call is run again with its original request id. That command calls no reviewer. It returns the recorded run and records the refusal, and `details.refusal` of the plan names the failure. The planner gives this step for a turn of a chain under `exactory-openness-reading-v7`. It also gives it for the final turn of a chain under `exactory-openness-reading-v6` and for a problem openness review of one turn. An uncaptured current call is a `wait` with `payload.action` `reconcile` and the code `review_invocation_pending`; a call without pool membership (0.69.x) is the handoff `review_worker_reconciliation_required`. |
 | `wait` | Not before `not_before` (a provider condition, an active call, a capacity limit); the payload is the action to take then. |
 | `continue` | The head's output asks for another turn (`review-assignment` with the complete payload). |
 | `replace` | The head ended without an output and its rule names a replacement turn from the original parent (`review-assignment`). |
@@ -700,9 +700,10 @@ refused action, the driver runs that action again with the same request ID. It
 does so until an action succeeds or the 8th refusal ends the run. A run whose
 output refusal the store did not take is refused in this way
 ([Problem evidence in parts](#problem-evidence-in-parts)). A captured call is
-resumed with its original request id (state `resume`, field `request_id`);
-every other planned action, including the reconciliation of an uncaptured
-call, gets a new request id. It
+resumed with its original request id (state `resume`, field `request_id`).
+So is a recorded call whose answer fails its output check while the store
+holds no refusal record for that answer. Every other planned action,
+including the reconciliation of an uncaptured call, gets a new request id. It
 stops with `review_series_no_progress` when it would repeat an action (the
 same command and payload apart from a fresh id) while the chain's progress is
 unchanged; the `details` then hold `command`, `action_state`,
@@ -3207,7 +3208,11 @@ exactory-research OPERATION --workspace /absolute/path/to/study --file payload.j
   --expected-revision 42 --request-id study-specific-operation-001
 ```
 
-Read the current revision with `status`. Use the same request ID and identical payload when retrying an interrupted operation. An identical committed request returns its original receipt even after later revisions. Reusing that ID with different content fails; a new operation at a stale revision fails. A historical successful receipt does not bypass a current gate. Acquisition also persists collection operations and individual page receipts. One read-only exception: `import-response --preview` (see "Operation fields") takes neither `--expected-revision` nor `--request-id`, and a real import without both is refused with `invalid_input`.
+Read the current revision with `status`. Use the same request ID and identical payload when retrying an interrupted operation. An identical committed request returns its original receipt even after later revisions. The command reads that receipt. It takes no write lock, so it returns while another command reads or writes the store. Reusing that ID with different content fails; a new operation at a stale revision fails. A historical successful receipt does not bypass a current gate. Acquisition also persists collection operations and individual page receipts. One read-only exception: `import-response --preview` (see "Operation fields") takes neither `--expected-revision` nor `--request-id`, and a real import without both is refused with `invalid_input`.
+
+The acquisition commands have another rule for the revision. They are `collect`, `resume`, `acquire`, `expand`, `fulltext`, `import-fulltext`, `fulltext-start`, `fulltext-resume` and `import-response`. Such a command admits its operation when the store is at `--expected-revision` or at a later revision. A commit of another command does not refuse the admission. When `--expected-revision` is later than the revision of the store, the command is refused with `stale_revision`. The admission also waits for a busy store, with the wait that the end of this section describes. When the store still refuses the admission after that wait, the command is refused with `store_busy`. It then sent no request, and the store holds no record of the operation. Run the same command again with the same request ID. `visual` and `import-oai-cohort` need the store at exactly `--expected-revision`. `import-response` records its result at the revision that it read after its admission. When another command commits before that record, the command is refused with `stale_revision`, and the operation stays admitted. Then run the command again with a new request ID.
+
+As a result, the revision of such a command does not show that nothing changed after your last read of the store. A command with a new request ID is admitted also when another command acquired the same target in that time. It then sends its requests again. Before you acquire a target, make sure that no other command acquired it after your last read.
 
 `exactory-lab init` and `exactory-draft init` also accept `--expected-revision` and `--request-id`. Retain those values and the original user arguments when retrying a lost success. They reuse the original generated timestamps and committed initialization, even after later study changes. Current workspace projections are repaired from current history, while existing context, literature, Git configuration and user files are preserved. A retry can finish an interrupted initial layout. Different user arguments under the same ID conflict, and a new ID cannot reinitialize an existing workspace. Legacy markers without a managed initialization require explicit adoption; an interrupted existing database still requires explicit recovery.
 
@@ -3267,7 +3272,9 @@ One write reads the revision itself. The outcome of a run that pauses its cycle 
 
 After a refused attempt, the write is prepared again. This applies after a busy store (`store_busy`) and after a commit that changed a record that the write read. The write is tried at most 600 times, and no attempt starts later than 600 seconds after the first attempt. The wait applies to each record, so a command that writes several records can wait for longer.
 
-During an attempt, the write holds the write lock of the store and checks the history of the store once. A write of another command that starts in that time is refused with `store_busy` after 1 second. The commit of an attempt can meet a command that reads the store. The commit then waits for that read to end, inside the same 600 seconds, and the attempt keeps its work. A read or a write of another command that starts during that wait is refused with `store_busy` after 1 second. A write that is not in this list is rolled back after its commit waited 1 second for a reader, as before.
+During an attempt, the write holds the write lock of the store and checks the history of the store once. A write of another command that starts in that time is refused with `store_busy` after 1 second. The commit of an attempt can meet a command that reads the store. The commit then waits for that read to end, inside the same 600 seconds, and the attempt keeps its work. A write of another command that starts during that wait is refused with `store_busy` after 1 second. A read of another command waits for the commit to end, as the next paragraph describes.
+
+A command also waits for the store at each read and at each commit. A read waits for a commit of another command that is in progress. The commit of a write that is not in this list waits for the reads that hold the store. Each of these waits lasts at most 600 seconds. Such a wait is usually as long as one read of the store, and that time grows with the history of the study. After 600 seconds, the read or the commit is refused with `store_busy` and the message of the store. The store did not record the write that it refused, and the same request can run again. The records that the command wrote before stay. These waits apply to the commands of `exactory-research`, `exactory`, `exactory-draft`, `exactory-lab` and `exactory-cohort`, and to the worker of a staged review task. Three kinds of access keep one attempt of 1 second. The first is a read that a command repeats while it waits for a worker or for a runner. The second is the render of the output views. The third is an access outside these commands, for example by the math-solver controller `exactory-math`. The wait for the write lock at the start of a write also stays 1 second.
 
 When a record is still refused after the wait, the command is refused with `store_busy`. `details.cause` holds the last refusal. The message says what was recorded, what is kept, and which command goes on. That command is not always the refused command. The sections of the commands give the cases.
 
@@ -4512,6 +4519,8 @@ UUID, DOI, and arXiv routes all fetch the task-only target. The server supplies 
 Under `sampled-v1` `bind-verdict` also checks the verdict body's prediction against the sample. The percentile and both band ends are integers from 1 to 100. It refuses with `prediction_mismatch` when the sample places no member, when the body states a percentile other than the sample estimate, when the body's band does not contain the sample band, or when more than 20 sampled members are unplaced and the body's band is no wider than the sample band. The refusal carries both the sample prediction and the claimed one.
 
 The task endpoint may reveal only an own-verdict ID after a lost POST response; it cannot establish the exact body that was accepted. Such an intent remains pending even when that ID exists, and the managed path does not repeat the POST; `exactory verify` prints the `Managed record skipped` line and sends the verdict directly. A verification-level owner serializes the complete verdict decision and write, including distinct assessment IDs. Other verification targets retain independent owners. Known-success receipts and explicitly bound revisions remain supported. A stale task response cannot erase a locally confirmed prior verdict or permit a revision that omits the latest known predecessor. The server's `requestedByViewer` means the request opener, not the paper author, and supplies no authorship proof.
+
+A managed deposit, submission or verdict first saves the intent of its remote operation. The save sends no request: each step of the operation starts after a check of its own. Without `--expected-revision`, `exactory submit`, `exactory verify` and `exactory-draft deposit` save the intent while other commands commit. This save waits for a busy store, and for a change of the saved intents of the same request, with the wait that "Inputs and receipts" describes. When the store still refuses it after that wait, the command is refused with `store_busy`. No request was then sent. Run the same command again. With `--expected-revision`, each of the three commands saves the intent only at that revision. A store at another revision then refuses the command with `stale_revision`.
 
 A managed deposit, submission or verdict writes the records of its remote intent as "Inputs and receipts" describes. One write is an exception: the start of a step that follows a check. Before each step of a deposit, the command checks the manuscript and the reviews. Before the request of a submission, the command checks the published record. Such a step starts only at the revision of its check.
 
@@ -6211,14 +6220,53 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   recorded; every range and every required affected note is delivered and
   every bound search rebuilds from the delivered text, or, for a final over
   unread ranges, the unread set and its citation match; the chain ends with
-  one final that returns the finding; and the origin of each replacement
-  that carries a refusal verifies. A chain that fails one of the first five
-  conditions is refused with `openness_reading_incomplete`, whose message
-  names the condition. The first condition can also end the verification
-  with another code, which the next item names. The record keeps
+  one final that returns the finding; the origin of each replacement that
+  carries a refusal verifies; and the answer of every turn of the chain
+  passes the output check of its turn. A chain that fails one of the first
+  five conditions or the last one is refused with
+  `openness_reading_incomplete`, whose message names the condition. The first
+  condition can also end the verification with another code, which the next
+  item names. The record keeps
   `reading_turns`: the carried turns
   first, each with its `origin` (`chain`, `protocol`, `assignment_id` and
   `attempt_id`), then the turns of the chain.
+- An answer that failed its check and has no refusal record. `review-run`
+  checks the answer of a turn against the contract of the turn, and it
+  records a refusal for an answer that fails. That record is a second write
+  after the run, and it can be missing. The store then holds a completed
+  answer that fails its check. No later step builds on such an answer.
+  `review-assignment` of the next turn is refused with
+  `review_source_continuation_unverified`, the verification of the chain with
+  `openness_reading_incomplete`, and `problem-openness` with
+  `review_context_unverified`. Each refusal names the turn in
+  `details.assignment_id`, the answer in `details.attempt_id` and the failure
+  in `details.refusal` (`code`, `check` and `details`). A new chain carries
+  no turn of the chain from that turn on. While no finding is recorded,
+  `review-series` plans the state `resume` for such a head: `review-run` with
+  the request id of the recorded run. That command calls no reviewer and
+  records the refusal. The plan after it is the replacement that carries the
+  refusal. Two views do not apply the check. `series.json` shows such an
+  answer as the selected run of its turn, and the step `authentication` of
+  `record-check` lists the turn as ready.
+  `problem-openness` applies the same check to the final turn of a chain
+  under `exactory-openness-reading-v6` and to a problem openness review of one
+  turn. Their plan is the same `resume`. After the recorded refusal, a v6
+  final gets a second run, and the plan of a review of one turn is the
+  handoff `export`.
+  Earlier releases did not apply the check: 0.91.0 to 0.91.10 for a v7
+  chain, and 0.90.0 to 0.91.10 for a review of one turn. A chain that such a
+  release continued over such an answer gives no finding. `review-assignment`
+  of its next turn is refused with a message that names the earlier turn. A
+  replacement of one of its later turns is still recorded, and the reviewer
+  call of that replacement gives no finding. A finding that such a release
+  recorded from such an answer becomes `problem_openness_stale`. The cause is
+  `openness_reading_incomplete` for a chain. For a review of one turn the
+  openness gate now reads the answer again: the recorded answer must be the
+  selected answer of the review, and it must pass its check. If not, the
+  cause is `openness_native_review_unverified`, or the code of a refusal of
+  the store. In each of these cases, a new export with the same
+  `reviewer_id` starts a chain for a new finding. That chain can carry the
+  reading turns before the answer.
 - The verification of the carried selection. The harness verifies a stored
   selection under the protocol that it names. For
   `exactory-openness-carried-selection-v2` the verification has two parts. In
@@ -6275,6 +6323,13 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   chain read itself. Every turn of that chain was read from a state that
   holds its carried turns, so the chain authenticates only together with
   them.
+  A chain that 0.91.0 to 0.91.10 recorded can fail for one more reason: the
+  answer of a carried turn fails the output check of its turn (the item
+  before this one). A selection of version 2 then fails the first part, and
+  a selection of version 1 the second part. This holds with or without a
+  refusal record for that answer. While the store holds no refusal record
+  for it, `record-check` lists that turn as ready. The step is a new export,
+  as after the first two events.
   When the artifact store cannot give an artifact that the selection of the
   first part reads, the verification ends with the refusal of the store
   (Carried turns, above) and gives no answer on the selection. This holds for
@@ -6391,7 +6446,10 @@ Refusal codes of a reading chain:
 - `review_assignment_replaced`: the named turn ended without output and a later
   turn of the same parent replaced it; it can be neither run nor continued.
 - `review_source_continuation_unverified`: the named turn has no observed,
-  authenticated output in a verified context.
+  authenticated output in a verified context. In a v7 chain the code also
+  names a turn whose answer fails the output check of its turn. The store
+  then holds no refusal record for that answer (`details.attempt_id` and
+  `details.refusal`).
 - `review_resampling_forbidden`: the named final turn returned the native result,
   which ends the chain.
 - `review_context_unverified`: `problem-openness` finds a turn of the chain
@@ -6400,9 +6458,15 @@ Refusal codes of a reading chain:
   or closure give it for any failed chain check, with `details.cause` set to
   the code of that check: `review_context_unverified` for a turn that is not
   ready, `review_source_continuation_fork`, `invalid_reading_response` or
-  `openness_reading_incomplete`.
+  `openness_reading_incomplete`. `problem-openness` also gives it for an
+  answer that fails its output check while the store holds no refusal record
+  for it (`details.attempt_id` and `details.refusal`). This applies to the
+  final turn of a v6 or v7 chain and to a problem openness review of one
+  turn.
 - `openness_reading_incomplete`: `problem-openness` names a turn without a
-  native result, a unit of the packet that reached neither a reading turn nor
+  native result (a reading turn, or a final turn that returned a reading
+  response or a part of an argument), a unit of the packet that reached
+  neither a reading turn nor
   the final turn's request complete (`details.units` lists each by kind and
   identity, with `missing_parts` for a unit delivered in parts, and
   `details.version_ids` lists the missing full texts as before), a chain with
@@ -7201,7 +7265,7 @@ example the population of the cohort tool. The post decision is
 | `problem_attempt_extension_unexplained` | Explain an attempt exceeding 24 moves, 24 runs, one admitted worker or 300 admitted timeout seconds; `totals` gives usage and admitted bounds, and `exceeded` lists the limit names. |
 | `problem_openness_missing`, `problem_openness_unresolved` | Obtain an observed supported openness finding with the audited minimum. |
 | `problem_already_solved` | Redirect to the named established result or record a new statement. |
-| `problem_openness_stale` | Refresh the finding for the changed formulation, search or reading. For the finding of a v7 chain whose `cause` is `openness_reading_incomplete`, `artifact_missing`, `artifact_corrupt` or another code that the verification of its carried selection raised, first read the item "The verification of the carried selection" above. A completed probe of the route record of a carried chain makes such a finding current again when a failed probe caused it, and the restored bytes do when a lost artifact caused it. Neither needs a new export. A stale route record takes no probe, so the step is then a new export. |
+| `problem_openness_stale` | Refresh the finding for the changed formulation, search or reading. For the finding of a v7 chain whose `cause` is `openness_reading_incomplete`, `artifact_missing`, `artifact_corrupt` or another code that the verification of its carried selection raised, first read the item "The verification of the carried selection" above. A completed probe of the route record of a carried chain makes such a finding current again when a failed probe caused it, and the restored bytes do when a lost artifact caused it. Neither needs a new export. A stale route record takes no probe, so the step is then a new export. A finding that 0.90.0 to 0.91.10 recorded from an answer that fails its output check is stale too. Its `cause` is `openness_reading_incomplete` for a v7 chain and `openness_native_review_unverified` for a problem openness review of one turn. The step is a new export (the item "An answer that failed its check and has no refusal record" above). |
 | `problem_value_missing`, `problem_value_reading_missing`, `problem_value_computation_missing` | Supply a value record with the accounts of the statement and ordered value paragraphs, with valid full readings or admitted, reconciled, assessed computation support. |
 | `problem_value_stale` | The current value record holds accounts, and the record gained a later run on the current text, a later outcome of a form in the history of the statement, or a later delivered snapshot of a cited objective (`value_id`, `changes`). Record a new value record whose accounts take each change into account and cite the latest snapshot. The result reviews are then refreshed ([The accounts of a value record](#the-accounts-of-a-value-record)). |
 | The codes of the accounts, for example `problem_neighbour_role_missing` or `problem_test_run_invalid` | The current value record does not validate against the current records, for example after a revision of the statement changed its neighbours. Record a new value record. The table under [The accounts of a value record](#the-accounts-of-a-value-record) gives the repair for each code. |
