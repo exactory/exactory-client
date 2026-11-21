@@ -1133,8 +1133,10 @@ class SuccessorProjectionTests(OpennessReadingCase):
 
 class Record12ShapeTests(unittest.TestCase):
     def test_stopped_head_is_handed_to_an_export_whose_chain_carries_it(self):
-        from test_openness_carried_integration import Record12ShapeTests as ShapeFixture
-        fixture = ShapeFixture.build_fixture()
+        from test_openness_carried_integration import Record12ShapeTests as ShapeFixture, check_record12_cut_unchanged
+        # A writable copy of the one build of this process; the last cleanup checks that the build kept its bytes.
+        fixture = ShapeFixture.load_cut()
+        self.addCleanup(check_record12_cut_unchanged)
         self.addCleanup(fixture.doCleanups)
         before = fixture.store.snapshot()['records']
         plan = plan_next(before, fixture.artifacts, 'stopped-57')

@@ -3,6 +3,7 @@ and its run groups the tests into processes as the shards of the CI do."""
 
 import gzip
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -33,9 +34,11 @@ def write_tree(root, files):
 
 
 def copy_runner(root):
-    """Copy the must-pass command, the runner, its guard and the budgets into a small plugin tree."""
+    """Copy the must-pass command, the runner, its guard, its record of evidence tests and the budgets into a small
+    plugin tree."""
     (root / "ci").mkdir(parents=True, exist_ok=True)
-    for name in ("must_pass.py", "unittest_shards.py", "reviewer_program_guard.py", "budgets.json"):
+    for name in ("must_pass.py", "unittest_shards.py", "reviewer_program_guard.py", "evidence_tests.py",
+                 "budgets.json"):
         shutil.copyfile(must_pass.ROOT / "ci" / name, root / "ci" / name)
 
 
@@ -44,17 +47,26 @@ def read_tree_budgets(root):
     return json.loads((root / "ci" / "budgets.json").read_text(encoding="utf-8"))
 
 
+def commit_tree(root, message):
+    """Commit every file of a small plugin tree in its own git repository, and return the commit."""
+    subprocess.run(("git", "add", "."), cwd=root, check=True)
+    subprocess.run(("git", "-c", "commit.gpgsign=false", "commit", "-q", "--no-verify", "-m", message),
+                   cwd=root, check=True, env=GIT_ENVIRONMENT)
+    return subprocess.check_output(("git", "rev-parse", "HEAD"), cwd=root, text=True).strip()
+
+
 class MustPassSelectionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.files = must_pass.describe_test_files(must_pass.ROOT)
 
     def find(self, *changed):
-        return must_pass.find_touched_modules(self.files, changed)
+        return must_pass.find_importers(self.files, changed) | must_pass.find_users(self.files, changed)
 
     def select(self, *changed):
         # These cases change no file that a fixture or a module of ci names, so the tree needs no carriers.
-        return must_pass.select_modules({"tests": self.files, "carriers": {}}, list(changed))
+        selected, _ = must_pass.select_modules({"tests": self.files, "carriers": {}}, list(changed))
+        return selected
 
     def test_the_fixed_modules_exist(self):
         for name in must_pass.ALWAYS + must_pass.HARNESS_PINS:
@@ -103,7 +115,8 @@ class MustPassReachTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             write_tree(root, dict(files))
-            return set(must_pass.select_modules(must_pass.describe_tree(root), list(changed)))
+            selected, _ = must_pass.select_modules(must_pass.describe_tree(root), list(changed))
+            return set(selected)
 
     def test_a_module_used_without_a_top_level_import_is_selected(self):
         # 0.91.11 changed research_harness/execution.py, and tests/test_research_gates.py imports it inside a test
@@ -221,21 +234,18 @@ class MustPassRunTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             copy_runner(root)
-            write_tree(root, {"research_harness/alpha.py": "VALUE = 1\n",
-                              "tests/test_alpha.py": "import unittest\n\n\nclass AlphaTests(unittest.TestCase):\n"
-                                                     "    def test_a(self):\n"
-                                                     "        from research_harness import alpha\n"})
-
-            def commit(message):
-                subprocess.run(("git", "add", "."), cwd=root, check=True)
-                subprocess.run(("git", "-c", "commit.gpgsign=false", "commit", "-q", "--no-verify", "-m", message),
-                               cwd=root, check=True, env=GIT_ENVIRONMENT)
-                return subprocess.check_output(("git", "rev-parse", "HEAD"), cwd=root, text=True).strip()
-
+            files = {"research_harness/alpha.py": "VALUE = 1\n",
+                     "tests/test_alpha.py": "import unittest\n\n\nclass AlphaTests(unittest.TestCase):\n"
+                                            "    def test_a(self):\n"
+                                            "        from research_harness import alpha\n"}
+            # Unrelated test modules keep the set within LARGE_SET_SHARE of the test modules, so run starts it whole.
+            others = math.ceil(len(must_pass.ALWAYS + must_pass.HARNESS_PINS) / must_pass.LARGE_SET_SHARE)
+            files.update(("tests/test_other_%02d.py" % index, EMPTY_TEST_MODULE) for index in range(others))
+            write_tree(root, files)
             subprocess.run(("git", "init", "-q"), cwd=root, check=True)
-            base = commit("Record the base of the fixture")
+            base = commit_tree(root, "Record the base of the fixture")
             (root / "research_harness/alpha.py").write_text("VALUE = 2\n", encoding="utf-8")
-            head = commit("Record a change of the fixture")
+            head = commit_tree(root, "Record a change of the fixture")
             (root / "tests/test_untracked.py").write_text(EMPTY_TEST_MODULE, encoding="utf-8")
             listed = self.run_command(root, "list", "--base", base, "--head", head)
             self.assertEqual(listed.returncode, 0, listed.stderr)
@@ -252,6 +262,64 @@ class MustPassRunTests(unittest.TestCase):
             self.assertEqual(report["budget"]["wall_seconds"],
                              read_tree_budgets(root)["runs"]["must_pass_run"]["wall_seconds"])
             self.assertIn("must_pass_run", run.stdout)
+
+    # Two test modules that use the changed module and fail when they run, so the exit status shows whether run
+    # started the far part.
+    FAR_MODULES = ("test_user_a", "test_user_b")
+    FAILING_USER_MODULE = ("import unittest\n\nUSED = 'research_harness.alpha'\n\n\n"
+                           "class UserTests(unittest.TestCase):\n    def test_runs(self):\n"
+                           "        self.fail('The far part ran.')\n")
+
+    def build_set_around_the_share(self, root, is_large):
+        """A small tree and a commit that changes research_harness/alpha.py. The set holds the fixed modules, the
+        slow pins and the two users of FAR_MODULES; the near part is the fixed modules and the pins. Beside them the
+        tree holds as many empty test modules as put the set exactly at LARGE_SET_SHARE of the test modules, or with
+        is_large one fewer, which puts it just above."""
+        copy_runner(root)
+        set_count = len(must_pass.ALWAYS + must_pass.HARNESS_PINS + self.FAR_MODULES)
+        module_count = math.ceil(set_count / must_pass.LARGE_SET_SHARE) - (1 if is_large else 0)
+        files = {"research_harness/alpha.py": "VALUE = 1\n"}
+        files.update(("tests/%s.py" % name, self.FAILING_USER_MODULE) for name in self.FAR_MODULES)
+        files.update(("tests/test_other_%02d.py" % index, EMPTY_TEST_MODULE)
+                     for index in range(module_count - set_count))
+        write_tree(root, files)
+        subprocess.run(("git", "init", "-q"), cwd=root, check=True)
+        base = commit_tree(root, "Record the base of the fixture")
+        (root / "research_harness/alpha.py").write_text("VALUE = 2\n", encoding="utf-8")
+        head = commit_tree(root, "Record a change of the fixture")
+        listed = self.run_command(root, "list", "--base", base, "--head", head)
+        near = self.run_command(root, "list", "--near", "--base", base, "--head", head)
+        logs = root / "logs"
+        run = self.run_command(root, "run", "--base", base, "--head", head, "--jobs", "2", "--logs", str(logs))
+        report = json.loads((logs / must_pass.REPORT_FILE_NAME).read_text(encoding="utf-8"))
+        self.assertEqual((listed.returncode, near.returncode), (0, 0), listed.stderr + near.stderr)
+        self.assertEqual(listed.stdout.split(),
+                         list(must_pass.HARNESS_PINS) + sorted(must_pass.ALWAYS + self.FAR_MODULES))
+        return set_count, module_count, near.stdout.split(), run, report
+
+    def test_a_set_of_at_most_half_of_the_test_modules_runs_whole(self):
+        with tempfile.TemporaryDirectory() as directory:
+            set_count, module_count, near, run, report = self.build_set_around_the_share(Path(directory), False)
+        self.assertLessEqual(set_count, must_pass.LARGE_SET_SHARE * module_count)
+        self.assertEqual(near, list(must_pass.HARNESS_PINS) + sorted(must_pass.ALWAYS + self.FAR_MODULES))
+        self.assertEqual(report["modules"], near)
+        self.assertEqual(report["far_part"], {"modules": list(self.FAR_MODULES), "ran": True})
+        self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+        self.assertEqual({row["module"] for row in report["module_times"] if row["status"] != "ok"},
+                         set(self.FAR_MODULES))
+        self.assertNotIn(must_pass.FAR_PART_LINE.split("%d")[0], run.stdout)
+
+    def test_a_set_of_more_than_half_of_the_test_modules_runs_its_near_part_and_names_its_far_part(self):
+        with tempfile.TemporaryDirectory() as directory:
+            set_count, module_count, near, run, report = self.build_set_around_the_share(Path(directory), True)
+        self.assertGreater(set_count, must_pass.LARGE_SET_SHARE * module_count)
+        self.assertEqual(near, list(must_pass.HARNESS_PINS) + sorted(must_pass.ALWAYS))
+        self.assertEqual(report["modules"], near)
+        self.assertEqual(report["far_part"], {"modules": list(self.FAR_MODULES), "ran": False})
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertEqual({row[1].split(".")[0] for row in report["test_seconds"]}, set(near))
+        self.assertIn(must_pass.FAR_PART_LINE % (set_count, module_count, len(near), len(self.FAR_MODULES)),
+                      run.stdout.splitlines())
 
     def test_jobs_above_the_limit_of_the_budgets_and_an_unknown_module_are_refused(self):
         # The command runs on a small tree with one empty test module, never on the tree of this test: a call that

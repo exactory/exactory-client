@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from ci import continuity_guard as guard
+from ci.evidence_tests import require_evidence_tests
 import continuity_stage3_fixtures as stage3
 import continuity_guard_fixtures as matrix
 import test_openness_unread_final as unread
@@ -169,7 +170,7 @@ class Stage3EvidenceTests(unittest.TestCase):
             'test_openness_reading_v7_refusal.FullGrantFinalRefusalTests.test_t1_short_refused_full_final_replaces_with_whole_notice_and_records',
             'test_openness_reading_v7_refusal.FullGrantFinalRefusalTests.test_t1_large_refused_full_final_replaces_with_bounded_notice_and_records',
         ]
-        self.assertEqual(guard.run_evidence_tests(identifiers), {name: 'passed' for name in identifiers})
+        self.assertEqual(require_evidence_tests(identifiers), {})
 
     def test_g2_current_reach_has_no_code_without_a_registry_row(self):
         from pathlib import Path
