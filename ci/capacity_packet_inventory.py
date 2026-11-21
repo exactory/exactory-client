@@ -523,18 +523,62 @@ def _read_strings(node, constants):
     return None
 
 
-def _collect_imports(tree, module):
-    imports = {}
+def _list_import_names(node, module):
+    """List the (name, dotted target) pairs that one import statement of a module binds."""
+    if isinstance(node, ast.Import):
+        return [(alias.asname or alias.name, alias.name) for alias in node.names]
     package = module.rsplit('.', 1)[0] if '.' in module else ''
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                imports[alias.asname or alias.name] = alias.name
-        elif isinstance(node, ast.ImportFrom):
-            base = (package + '.' if node.level and package else '') + (node.module or '')
-            for alias in node.names:
-                imports[alias.asname or alias.name] = (base.rstrip('.') + '.' + alias.name).strip('.')
+    base = (package + '.' if node.level and package else '') + (node.module or '')
+    return [(alias.asname or alias.name, (base.rstrip('.') + '.' + alias.name).strip('.')) for alias in node.names]
+
+
+def _collect_imports(tree, module):
+    """Map each name that a module imports outside its functions to its dotted target.
+
+    An import inside a function binds its name in that function only: _map_call_imports keeps it for the calls of
+    that function, and _read_call_imports applies it.
+    """
+    imports = {}
+    def collect(parent):
+        for node in ast.iter_child_nodes(parent):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                imports.update(_list_import_names(node, module))
+            elif not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                collect(node)
+    collect(tree)
     return imports
+
+
+def _map_call_imports(tree, module):
+    """Map the place (line, column) of each call inside a function of a module to the imports of the outermost
+    function that holds the call, as (place, name, target) in source order. A call outside the functions has no entry.
+    """
+    calls = {}
+    def collect(parent):
+        for node in ast.iter_child_nodes(parent):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                bindings = sorted(((item.lineno, item.col_offset), name, target) for item in ast.walk(node)
+                                  if isinstance(item, (ast.Import, ast.ImportFrom))
+                                  for name, target in _list_import_names(item, module))
+                calls.update(((item.lineno, item.col_offset), bindings) for item in ast.walk(node)
+                             if isinstance(item, ast.Call))
+            else:
+                collect(node)
+    collect(tree)
+    return calls
+
+
+def _read_call_imports(module, call, imports, call_imports):
+    """Return the imports in force at a call of a module: the imports of the module, then each import of the
+    function that holds the call that comes before the call in the source.
+
+    imports and call_imports map each module to its _collect_imports and _map_call_imports. This is the one rule
+    by which the guard resolves an imported name.
+    """
+    place = (call.lineno, call.col_offset)
+    scope = dict(imports.get(module, {}))
+    scope.update((name, target) for bound, name, target in call_imports.get(module, {}).get(place, ()) if bound < place)
+    return scope
 
 
 def _collect_functions(tree):
@@ -619,20 +663,22 @@ def _find_caller_module(caller, modules):
     return max((module for module in modules if caller.startswith(module + '.')), key=len, default=None)
 
 
-def _resolve_callee(module, node, imports, functions):
-    """Return the dotted name that a callee expression reaches through the imports and the functions of its module.
+def _resolve_callee(module, call, imports, functions, call_imports):
+    """Return the dotted name that the callee of a call reaches through the imports in force at the call
+    (_read_call_imports) and the functions of its module.
 
     A name that another inspected module imports is followed to the module that defines it. A name whose first
-    part the module neither imports nor defines as a top-level function is returned as written. The result is
-    None for a callee that is not a plain or dotted name.
+    part is neither imported at the call nor a top-level function of the module is returned as written. The result
+    is None for a callee that is not a plain or dotted name.
     """
-    name = _resolve_name(node)
+    name = _resolve_name(call.func)
     if name is None:
         return None
+    scope = _read_call_imports(module, call, imports, call_imports)
     root, _, tail = name.partition('.')
-    if root not in imports.get(module, {}):
+    if root not in scope:
         return module + '.' + name if root in functions.get(module, {}) else name
-    name = imports[module][root] + ('.' + tail if tail else '')
+    name = scope[root] + ('.' + tail if tail else '')
     followed = set()
     owner = _find_caller_module(name, imports)
     while owner is not None and name not in followed:
@@ -655,7 +701,8 @@ def _resolve_call_target(listed, caller, call):
     if (written is not None and written.startswith('self.') and owner in listed['symbols']
             and owner + written[4:] in listed['symbols']):
         return owner + written[4:]
-    return _resolve_callee(listed['callers'][caller][0], call.func, listed['imports'], listed['functions'])
+    return _resolve_callee(listed['callers'][caller][0], call, listed['imports'], listed['functions'],
+                           listed['call_imports'])
 
 
 def _name_assignment_targets(node):
@@ -734,17 +781,18 @@ def list_packet_calls(function, builder_parameters=None):
     return sorted(calls, key=lambda node: (node.lineno, node.col_offset))
 
 
-def _classify_callee(listed, module, written, reached, bound_names):
+def _classify_callee(listed, scope, written, reached, bound_names):
     """Return the classification that the source alone determines for a callee, or None when a reviewer gives it.
 
-    A function, a class or a method of a listed module gets "listed module". A name that the module imports from
-    outside the plugin, and a built-in whose name the module binds nowhere, get "standard library".
+    A function, a class or a method of a listed module gets "listed module". A name that the imports in force at the
+    call (scope) bind to a target outside the plugin, and a built-in whose name the module binds nowhere, get
+    "standard library".
     """
     if reached in listed['symbols']:
         return 'listed module'
     if written is None:
         return None
-    if written.partition('.')[0] in listed['imports'][module]:
+    if written.partition('.')[0] in scope:
         return 'standard library' if _find_caller_module(reached, listed['sources']) is None else None
     if written == reached and hasattr(builtins, written) and written not in bound_names:
         return 'standard library'
@@ -757,9 +805,9 @@ def _compare_rows_with_sites(registry, listed, declared):
     The comparison checks four rules. A row names a call of its caller, or for mapping_sites a call or an
     assignment statement. A list holds a row at most as many times as the caller holds its node. The rows of one
     node in one list are equal. When the call of a callee_inventory row reaches a plugin function through the
-    imports and the functions of its module, the row names that function. The fourth rule leaves out a call to a
-    function nested in the caller and a call to a method through self, because the imports and the functions of
-    the module do not give the function that such a call reaches.
+    imports in force at the call and the functions of its module, the row names that function. The fourth rule
+    leaves out a call to a function nested in the caller and a call to a method through self, because the imports
+    and the functions of the module do not give the function that such a call reaches.
     """
     differences, indexes = [], {}
     for collection in CALL_ROW_COLLECTIONS:
@@ -783,7 +831,8 @@ def _compare_rows_with_sites(registry, listed, declared):
                 differences.append(dict(difference, kind='stale', held=len(nodes)))
             elif collection == 'callee_inventory':
                 module = listed['callers'][caller][0]
-                reached = _resolve_callee(module, nodes[0].func, listed['imports'], listed['functions'])
+                reached = _resolve_callee(module, nodes[0], listed['imports'], listed['functions'],
+                                          listed['call_imports'])
                 if (reached is not None and reached == _resolve_call_target(listed, caller, nodes[0])
                         and _find_caller_module(reached, listed['sources']) is not None
                         and (rows[0].get('classification') not in PLUGIN_CALLEE_CLASSIFICATIONS
@@ -813,7 +862,8 @@ def _compare_sites_with_rows(registry, listed, declared):
             reached = _resolve_call_target(listed, caller, call)
             if module not in bound_names:
                 bound_names[module] = _collect_bound_names(listed['trees'][module])
-            classification = _classify_callee(listed, module, _resolve_name(call.func), reached, bound_names[module])
+            scope = _read_call_imports(module, call, listed['imports'], listed['call_imports'])
+            classification = _classify_callee(listed, scope, _resolve_name(call.func), reached, bound_names[module])
             row = None if classification is None else dict(
                 ast_sha256=digest, callee=reached, caller=caller, classification=classification, targets=[reached])
             differences.append(dict(kind='missing', collection='callee_inventory', caller=caller,
@@ -835,17 +885,18 @@ def describe_call_rows(sources, registry, parsed=None):
     - unequal: rows of one node in one list that differ.
     - target: a callee_inventory row whose call reaches a plugin function that the row does not name (target, line).
     - missing: a packet call without a row (line), with the row that the source determines, or None (row).
-    parsed is the tuple of the trees, the imports, the functions and the symbols of the modules, each a mapping by
-    module, from a caller that has them already.
+    parsed is the tuple of the trees, the imports, the functions, the symbols and the call imports
+    (_map_call_imports) of the modules, each a mapping by module, from a caller that has them already.
     """
     modules = [module for module in registry.get('modules', []) if module in sources]
     if parsed is None:
         trees = {module: ast.parse(sources[module]) for module in modules}
         parsed = (trees, {module: _collect_imports(tree, module) for module, tree in trees.items()},
                   {module: _collect_functions(tree) for module, tree in trees.items()},
-                  {module: _collect_symbols(tree, module) for module, tree in trees.items()})
-    trees, imports, functions, symbols = ({module: table[module] for module in modules} for table in parsed)
-    listed = dict(sources=sources, trees=trees, imports=imports, functions=functions,
+                  {module: _collect_symbols(tree, module) for module, tree in trees.items()},
+                  {module: _map_call_imports(tree, module) for module, tree in trees.items()})
+    trees, imports, functions, symbols, call_imports = ({module: table[module] for module in modules} for table in parsed)
+    listed = dict(sources=sources, trees=trees, imports=imports, functions=functions, call_imports=call_imports,
                   symbols=set().union(*symbols.values()),
                   callers={caller: (module, function) for module in modules
                            for caller, function in _collect_callers(trees[module], module).items()})
@@ -885,7 +936,7 @@ def inspect_packet_sources(sources, registry):
     readers = set(registry.get('readers', []))
     names = _collect_member_names(registry)
     nonmembers = set(registry.get('non_packet_names', {}))
-    trees, functions, imports, constants = {}, {}, {}, {}
+    trees, functions, imports, call_imports, constants = {}, {}, {}, {}, {}
     reader_modules = set()
     for reader in readers:
         candidates = [module for module in sources if reader.startswith(module + '.')]
@@ -898,6 +949,7 @@ def inspect_packet_sources(sources, registry):
         trees[module] = tree
         functions[module] = _collect_functions(tree)
         imports[module] = _collect_imports(tree, module)
+        call_imports[module] = _map_call_imports(tree, module)
         values = {}
         for node in tree.body:
             if isinstance(node, ast.Assign):
@@ -936,7 +988,7 @@ def inspect_packet_sources(sources, registry):
             node = functions[module].get(function)
             if node is None or compute_ast_digest(node) != digest:
                 errors.append(CERTIFICATE_CHANGED.format(site=module + '.' + function))
-    for difference in describe_call_rows(sources, registry, (trees, imports, functions, symbols)):
+    for difference in describe_call_rows(sources, registry, (trees, imports, functions, symbols, call_imports)):
         undeclared = ', '.join('digest {} at line {}'.format(site['digest'][:12], site['line'])
                                for site in difference.get('undeclared', []))
         errors.append(CALL_ROW_MESSAGES[difference['kind']].format(
@@ -988,7 +1040,7 @@ def inspect_packet_sources(sources, registry):
                     targets = item.targets if isinstance(item, ast.Assign) else [item.target]
                     packet_value = contains_packet(value) or isinstance(value, (ast.Dict, ast.DictComp))
                     if isinstance(value, ast.Call):
-                        packet_value = packet_value or _resolve_callee(module, value.func, imports, functions) in registry.get('builders', {})
+                        packet_value = packet_value or _resolve_callee(module, value, imports, functions, call_imports) in registry.get('builders', {})
                     for target in targets:
                         if isinstance(target, ast.Name):
                             derived = _read_strings(value, values)
@@ -1045,7 +1097,7 @@ def inspect_packet_sources(sources, registry):
                     if (isinstance(target, ast.Attribute) or isinstance(target, ast.Name) and target.id in globals_) and contains_packet(item.value):
                         errors.append(PACKET_ESCAPE.format(site=site))
             elif isinstance(item, ast.Call):
-                callee = _resolve_callee(module, item.func, imports, functions)
+                callee = _resolve_callee(module, item, imports, functions, call_imports)
                 receiver = item.func.value if isinstance(item.func, ast.Attribute) else None
                 method = item.func.attr if isinstance(item.func, ast.Attribute) else ''
                 if receiver is not None and contains_packet(receiver) and method in ('update', 'setdefault', '__setitem__', 'pop', 'clear', 'popitem'):
@@ -1090,12 +1142,14 @@ def inspect_packet_sources(sources, registry):
         if module in listed:
             continue
         tree = ast.parse(source)
-        alias = _collect_imports(tree, module)
+        module_imports = {module: _collect_imports(tree, module)}
+        module_call_imports = {module: _map_call_imports(tree, module)}
         for item in ast.walk(tree):
             if isinstance(item, ast.Call):
+                scope = _read_call_imports(module, item, module_imports, module_call_imports)
                 called = _resolve_name(item.func) or ''
                 root, _, tail = called.partition('.')
-                called = alias.get(root, root) + ('.' + tail if tail else '')
+                called = scope.get(root, root) + ('.' + tail if tail else '')
                 stores_assignment = any(isinstance(argument, ast.Constant) and argument.value == 'review_assignment'
                                         for argument in item.args) and isinstance(item.func, ast.Attribute) and item.func.attr in ('put', 'get')
                 if called in registry.get('builders', {}) or stores_assignment or called.endswith(('.send_request', '.observe')):

@@ -174,6 +174,14 @@ class PacketInventoryTests(unittest.TestCase):
             sources['consumer'] = consumer
             self.assertTrue(inspect_packet_sources(sources, registry))
 
+    def test_unlisted_module_calling_a_builder_through_the_import_of_the_module_fails(self):
+        from ci.capacity_packet_inventory import SOURCE_MISSING
+        # Another function of the consumer imports the same name from elsewhere; that import binds only there.
+        consumer = ('from builder import build_packet\n\n\ndef other():\n    from elsewhere import build_packet\n'
+                    '    return build_packet()\n\n\ndef save():\n    return build_packet({})\n')
+        sources = {'builder': 'def build_packet(packet):\n    return packet\n', 'consumer': consumer}
+        self.assertIn(SOURCE_MISSING.format(module='consumer'), inspect_packet_sources(sources, make_registry()))
+
     def test_ast_certificates_keep_39_empty_fields_and_required_none(self):
         from ci.source_inventory import describe_source_ast
         function = ast.parse('def build_packet(packet):\n    return packet\n').body[0]
