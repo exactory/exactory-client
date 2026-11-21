@@ -529,6 +529,8 @@ def _name_link(records, assignment, earlier_siblings, adoptions):
     context = assignment.get("context", {})
     if isinstance(context.get("context_repair"), dict):
         return "context_repair"
+    if isinstance(context.get("session_refresh"), dict):
+        return "problem_refresh"
     if context.get("prior_assignment_id") is not None:
         if any(item["kind"] == "value_review" for item in adoptions.get(context["prior_assignment_id"], [])):
             return "problem_refresh"

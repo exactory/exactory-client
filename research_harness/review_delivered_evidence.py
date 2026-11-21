@@ -142,11 +142,13 @@ def collect_exhaustion_predecessor_turns(records, artifacts, assignment):
     """Credit exact earlier inputs only across an exhaustion repair of the same identity and route."""
     from . import review_context_repair as repair
 
-    repairs = [row for row in repair._lineage(records, assignment)
-               if row.get('context', {}).get('context_repair') is not None]
-    if not repairs:
+    lineage = repair._lineage(records, assignment)
+    repairs = [index for index, row in enumerate(lineage) if row.get('context', {}).get('context_repair') is not None]
+    # A refresh of a chain of the session rules v4 is a new session, which no input of an earlier chain credits
+    # (rule F8).
+    if not repairs or any('session_refresh' in row.get('context', {}) for row in lineage[repairs[-1]:]):
         return []
-    bound = repairs[-1]
+    bound = lineage[repairs[-1]]
     binding = bound['context']['context_repair']
     if binding.get('exhaustion', {}).get('protocol') != repair.EXHAUSTION_PROTOCOL:
         return []

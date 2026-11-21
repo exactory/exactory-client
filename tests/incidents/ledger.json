@@ -8451,6 +8451,24 @@
         "test_review_route_plan.RetiredRouteStateTests.test_observed_answer_on_a_stale_route_is_recorded_after_the_retirement",
         "test_review_route_plan.RetiredRouteStateTests.test_answer_that_asks_for_a_source_on_a_retired_route_takes_the_repair"
       ]
+    },
+    {
+      "id": "recorded-v4-problem-review-has-no-refresh",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "refresh of a problem review under the session rules v4",
+      "summary": "After a problem bar recorded by a chain of the session rules v4 and an added problem area, plan_next planned a continuation of that chain with review-assignment, and the store refused the payload with review_resampling_forbidden; a new payload of the same reviewer with an empty context was refused the same way. A slate after an added candidate and a result after a changed review currency met the same refusal.",
+      "expected": "The refresh is a new v4 chain in the slot of the recorded review, named by the context member session_refresh: the plan gives its payload on the route record that select_step_route gives, or the renewal step while the store lacks that record; its packet is the first packet of the role with problem_refresh and the earlier review in historical_reviews; its final cites only what its own chain delivered; the capacity stop of rule V5 gives step 14 on each serving route; under the next rule set it is a new request without history; a refresh of an older rule set keeps its bytes.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_refresh.SessionRefreshTests.test_f1_bar_refresh_after_an_added_area_reaches_its_recorded_review",
+        "test_review_session_v4_refresh.SessionRefreshTests.test_f2_slate_refresh_after_an_added_candidate_states_both_candidate_sets",
+        "test_review_session_v4_refresh.SessionRefreshTests.test_f3_result_refresh_after_a_changed_currency_states_both_currencies",
+        "test_review_session_v4_refresh.SessionRefreshTests.test_f4_below_the_floor_the_stop_gives_one_new_chain_step_on_each_serving_route",
+        "test_review_session_v4_refresh.SessionRefreshTests.test_f7_a_final_of_the_refresh_chain_cannot_cite_a_text_that_only_the_earlier_chain_delivered",
+        "test_review_session_v4_refresh.SessionRefreshTests.test_f8_on_a_stale_route_record_the_plan_names_the_current_record_of_the_same_identity",
+        "test_review_session_v4_refresh.SessionRefreshTests.test_f9_under_the_next_rule_set_the_refresh_is_a_new_request_without_history"
+      ]
     }
   ]
 }

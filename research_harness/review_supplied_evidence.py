@@ -19,13 +19,14 @@ PROMPT = (
 
 
 def find_scientific_predecessor(assignment):
-    """Follow a fixed scientific slot across continuations, repairs and upgrades."""
+    """Follow a fixed scientific slot across continuations, repairs, refreshes of a chain of the session rules v4 and
+    upgrades."""
     if assignment.get('capacity_replacement_of') is not None:
         return assignment['capacity_replacement_of']
     context = assignment.get('context', {})
-    repair = context.get('context_repair')
-    if isinstance(repair, dict):
-        return repair.get('assignment_id')
+    for key in ('context_repair', 'session_refresh'):
+        if isinstance(context.get(key), dict):
+            return context[key].get('assignment_id')
     return context.get('prior_assignment_id') or context.get('staged_upgrade', {}).get('assignment_id')
 
 
