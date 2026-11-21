@@ -8433,6 +8433,24 @@
         "test_review_parts_v3.RecordedSeriesTests.test_Q17_repeated_occurrences_record_a_review_and_missing_turn_fails",
         "test_review_parts_v3.BuilderScaleTests.test_Q17_reference_shapes_keep_one_body_and_rebuild_every_occurrence"
       ]
+    },
+    {
+      "id": "failed-probe-keeps-a-retired-stale-route-record-unverified",
+      "record": "20261120001948-retired-stale-route-record-stays-unverified-after-a-failed-probe",
+      "class": "route state after a retirement",
+      "summary": "A probe of the route record of a carried chain failed without an answer after the cutoff of the carrying chain, and the installed reviewer runtime then changed, so the route record took no probe again. The record stayed unverified for good, also after its retirement: the carried turns were not ready, the carrying chain did not verify, its finding stayed stale, and a new chain carried nothing and read every text again.",
+      "expected": "On a route record that a route_retired event names, a probe without an answer decides nothing, and the record has the state of its latest probe with an answer. After the retirement the carried turns are ready, the carrying chain verifies, its finding is current, and a new chain carries the turns of both chains. A probe with an answer, parsed or not, decides as on any other route record.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_verification.RetiredRouteVerificationTests.test_carried_chain_on_a_retired_stale_route_record_verifies_again",
+        "test_research_route_retirement.RetiredRouteStateTests.test_probe_without_an_answer_decides_nothing_on_a_retired_route_record",
+        "test_research_route_retirement.RetiredRouteStateTests.test_probe_answer_that_is_no_json_decides_on_a_retired_route_record",
+        "test_research_route_retirement.RetiredRouteStateTests.test_probe_answer_with_an_excluded_control_and_no_json_decides_on_a_retired_route_record",
+        "test_review_route_plan.RetiredRouteStateTests.test_observed_answer_on_a_retired_route_is_recorded",
+        "test_review_route_plan.RetiredRouteStateTests.test_observed_answer_on_a_stale_route_is_recorded_after_the_retirement",
+        "test_review_route_plan.RetiredRouteStateTests.test_answer_that_asks_for_a_source_on_a_retired_route_takes_the_repair"
+      ]
     }
   ]
 }
