@@ -202,13 +202,17 @@ class ResearchVerificationTests(SynthesisCase):
         api = self.verifier()
         bound = self.bind(api)
         calls = []
-        def client(method, path, body=None):
+        def lose_the_answer(method, path, body=None):
             calls.append((method, path, body))
             raise OSError("Remote response lost after acceptance.")
         with self.assertRaises(OSError):
-            send_verdict(self.store, self.task, self.verdict(), client, expected_revision=self.store.revision, request_id="send-1")
+            send_verdict(self.store, self.task, self.verdict(), lose_the_answer, expected_revision=self.store.revision, request_id="send-1")
+        # The service filed the verdict, and the task read that the sender takes while it owns the verification shows it.
         observed = dict(self.task, viewerVerdictId="22222222-2222-4222-8222-222222222222")
-        self.assert_error("verdict_reconciliation_pending", lambda: send_verdict(self.store, observed, self.verdict(), client,
+        def answer(method, path, body=None):
+            calls.append((method, path, body))
+            return (observed, 200) if method == "GET" else ({"id": "33333333-3333-4333-8333-333333333333"}, 201)
+        self.assert_error("verdict_reconciliation_pending", lambda: send_verdict(self.store, observed, self.verdict(), answer,
             expected_revision=self.store.revision, request_id="attempt-2"))
         revised = dict(self.verdict(), summary="A separately assessed revision cannot resolve an unknown earlier body.",
                        supersedesVerdictId=observed["viewerVerdictId"])
@@ -216,13 +220,16 @@ class ResearchVerificationTests(SynthesisCase):
         payload.update(id="assessment-after-unknown", body=self.artifacts.put(json.dumps(revised).encode(), "application/json"))
         payload["assessment"]["assignment_id"] = verdict_assignment(self, payload)
         self.mutate(api.bind_verdict, payload)
-        self.assert_error("verdict_reconciliation_pending", lambda: send_verdict(self.store, observed, revised, client,
-            expected_revision=self.store.revision, request_id="attempt-different-assessment"))
-        self.assertEqual(len(calls), 1)
+        # A pending step stops only its own request: the separately assessed revision names the verdict that the
+        # task shows, so it is sent once and recorded, and the first intent stays in flight.
+        receipt = send_verdict(self.store, observed, revised, answer,
+            expected_revision=self.store.revision, request_id="attempt-different-assessment")
+        self.assertEqual(receipt["response"]["id"], "33333333-3333-4333-8333-333333333333")
+        self.assertEqual([call[2] for call in calls if call[0] == "POST"], [self.verdict(), revised])
         records = self.store.snapshot()["records"]
         self.assertEqual(records["remote_intent"]["send-1"]["status"], "in_flight")
         self.assertTrue(records["remote_observation"])
-        self.assertNotIn("verdict_receipt", records)
+        self.assertEqual(set(records["verdict_receipt"]), {"attempt-different-assessment"})
 
     def test_concurrent_verdict_assessments_cannot_create_two_posts_for_one_target(self):
         from research_harness import submission

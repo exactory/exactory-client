@@ -10,7 +10,7 @@ from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evidence import digest, derived_id, prepare_sources, put_sources
 from .extraction_units import ExtractionEngine, PROTOCOL, _SupervisedTools, _hold_owner
-from .finishing import retry_store_write
+from .finishing import retry_finishing_write, retry_store_write
 from .fulltext import PdfExtractor, GENERIC_BINARY_MEDIA_TYPES, parse_base_media_type
 from .fulltext_transfer import FulltextTransfer
 from .http import HttpClient, HttpFailure, RequestBudget, safe_url
@@ -39,6 +39,19 @@ def validate_allowances(value, previous=None):
     return result
 
 
+# The message of the start of a full-text job (fulltext-start), when the store refused it beyond the wait.
+FULLTEXT_START_STORE_BUSY_MSG = (
+    'The research store stayed busy, or kept changing the records that this write read. This full-text job was not '
+    'started. This command sent no request, and the store holds no record of the job. Run the same command again with '
+    'the same request ID.')
+# The message of a record of a full-text job that the store refused beyond the wait.
+FULLTEXT_JOB_STORE_BUSY_MSG = (
+    'The research store stayed busy, or kept changing the records that this write read. A record of this '
+    'full-text job was not written. Nothing false was recorded. The job keeps every unit that was recorded before. '
+    'Continue the job with fulltext-resume and a new request ID. It repeats at most the one unit whose record was '
+    'refused.')
+
+
 def read_job(store, job_id):
     text(job_id, 'Job ID')
     scope = store._read_scoped_preparation()
@@ -56,8 +69,9 @@ def commit_job(store, job_id, operation, payload, request_id, apply):
         return store.mutate_scoped(operation, payload, commit, request_id=request_id,
                                    _preparation=scope.release_proof())['result']
     # A transfer or extraction already spent its network requests and work; a refused write of its record is tried
-    # again instead of fetching or extracting again.
-    return retry_store_write(write, codes=('store_busy', 'stale_revision', 'storage_io'))
+    # again instead of fetching or extracting again. A busy store is waited for as for every finishing write, and an
+    # I/O error of the store is tried again within each attempt.
+    return retry_finishing_write(lambda: retry_store_write(write, codes=('storage_io',)), FULLTEXT_JOB_STORE_BUSY_MSG)
 
 
 def build_unit_key(job_id, stage, ordinal):
@@ -262,6 +276,9 @@ class JobArtifacts:
 
 def start_job(store, identifier, *, request_id, expected_revision, url=None, source_id=None,
               extraction_options=None, allowances=None, use_ranges=True):
+    """Start a full-text job, the first write of fulltext-start. The job commits against the records that its check
+    of the work and of a retained source read, within the wait for a busy store, so a commit of another command does
+    not refuse it. It needs the store at the caller's revision or a later one."""
     identifier = normalize_identifier(identifier)
     options = acquisition._extraction_options(extraction_options)
     limits = validate_allowances({} if allowances is None else allowances)
@@ -274,37 +291,48 @@ def start_job(store, identifier, *, request_id, expected_revision, url=None, sou
     if store.committed_request(request_id) is not None:
         return store.mutate('fulltext.start', payload, lambda tx: None, request_id=request_id,
                             expected_revision=expected_revision)['result']
-    scope = store._read_scoped_preparation()
-    work = exact_work(scope.records, identifier)
-    original = None
-    if source_id is not None:
-        source = captured_source(scope.records, ArtifactStore(store.root), source_id)
-        captures = [c for c in work['fulltexts'] if c.get('source_id') == source_id]
-        prior_job = scope.records.get('fulltext_job', {}).get(source.get('job_id')) if source.get('job_id') else None
-        if (source.get('origin_verified') is not True or source.get('capture_method') not in ('http', 'http_range_v1')
-                or source.get('requested_identifier') != identifier
-                or identifier.startswith('arxiv:') and source.get('observed_identifier') != identifier
-                or not (any(c.get('original') == source['response'] for c in captures)
-                        or prior_job is not None and prior_job['identifier'] == identifier
-                        and prior_job['original'] == source['response'] and prior_job['source_id'] == source_id)):
-            raise ResearchError('source_pending', 'Retained extraction requires a complete original of the exact version')
-        original = source['response']
-        if original['size'] > limits['retained_bytes']:
-            raise ResearchError('fulltext_storage_limit', 'Retained original exceeds the job storage allowance')
-        if original['size'] > limits['original_bytes']:
-            raise ResearchError('response_too_large', 'Retained original exceeds the job original-byte allowance')
-    job = dict(id=job_id, protocol=PROTOCOL, identifier=identifier, version=version_of(identifier),
-               url=url, source_id=source_id, original=original, transfer=None, assembly_id=None,
-               options=options, use_ranges=use_ranges, tool_versions=None, allowances=limits,
-               transfer_units=0, transferred_bytes=0, transfer_retained_bytes=0, completed_pages=0, page_count=None,
-               text_bytes=0, retained_bytes=original['size'] if original else 0, attempts_used=0, retained_attempts=0,
-               status='pending', pending=[{'code': 'fulltext_job_pending'}],
-               next_unit='page:1' if original else 'byte:0', capture=None)
-    def admission(transaction, revision):
-        transaction.put('fulltext_job', job_id, job)
-        return dict(job_id=job_id, status='pending', pending=job['pending'], revision=revision)
-    return store.mutate_scoped('fulltext.start', payload, admission, request_id=request_id,
-                               _preparation=scope.release_proof(), expected_revision=expected_revision)['result']
+    if type(expected_revision) is not int or expected_revision < 0:
+        raise ResearchError('invalid_input', 'Expected revision must be a nonnegative integer')
+
+    def start():
+        scope = store._read_scoped_preparation()
+        work = exact_work(scope.records, identifier)
+        original = None
+        if source_id is not None:
+            source = captured_source(scope.records, ArtifactStore(store.root), source_id)
+            captures = [c for c in work['fulltexts'] if c.get('source_id') == source_id]
+            prior_job = (scope.records.get('fulltext_job', {}).get(source.get('job_id')) if source.get('job_id')
+                         else None)
+            if (source.get('origin_verified') is not True
+                    or source.get('capture_method') not in ('http', 'http_range_v1')
+                    or source.get('requested_identifier') != identifier
+                    or identifier.startswith('arxiv:') and source.get('observed_identifier') != identifier
+                    or not (any(c.get('original') == source['response'] for c in captures)
+                            or prior_job is not None and prior_job['identifier'] == identifier
+                            and prior_job['original'] == source['response'] and prior_job['source_id'] == source_id)):
+                raise ResearchError('source_pending',
+                                    'Retained extraction requires a complete original of the exact version')
+            original = source['response']
+            if original['size'] > limits['retained_bytes']:
+                raise ResearchError('fulltext_storage_limit', 'Retained original exceeds the job storage allowance')
+            if original['size'] > limits['original_bytes']:
+                raise ResearchError('response_too_large', 'Retained original exceeds the job original-byte allowance')
+        job = dict(id=job_id, protocol=PROTOCOL, identifier=identifier, version=version_of(identifier),
+                   url=url, source_id=source_id, original=original, transfer=None, assembly_id=None,
+                   options=options, use_ranges=use_ranges, tool_versions=None, allowances=limits,
+                   transfer_units=0, transferred_bytes=0, transfer_retained_bytes=0, completed_pages=0, page_count=None,
+                   text_bytes=0, retained_bytes=original['size'] if original else 0, attempts_used=0,
+                   retained_attempts=0,
+                   status='pending', pending=[{'code': 'fulltext_job_pending'}],
+                   next_unit='page:1' if original else 'byte:0', capture=None)
+
+        def admission(transaction, revision):
+            acquisition._refuse_revision_ahead(expected_revision, revision)
+            transaction.put('fulltext_job', job_id, job)
+            return dict(job_id=job_id, status='pending', pending=job['pending'], revision=revision)
+        return store.mutate_scoped('fulltext.start', payload, admission, request_id=request_id,
+                                   _preparation=scope.release_proof())['result']
+    return retry_finishing_write(start, FULLTEXT_START_STORE_BUSY_MSG, codes=acquisition.ADMISSION_RETRY_CODES)
 
 
 def read_job_status(store, job_id, *, cursor=0, limit=30):
@@ -350,10 +378,11 @@ def resume_job(store, job_id, *, request_id, expected_revision, max_requests=Non
                 current['active_operation'] = request_id
                 current['next_response_request'] = current['attempts_used']
                 transaction.put('fulltext_job', job_id, current)
-            # Reserve only the bounded invocation, while every committed attempt charges independently.
+                # Reserve only the bounded invocation, while every committed attempt charges independently.
+                return maximum
             # Keep the caller's payload stable for replay, including its optional invocation bound.
             replay = acquisition._begin(store, 'fulltext.resume', payload, request_id, expected_revision,
-                                        target=job_id, apply=admission, reserved_requests=maximum)
+                                        target=job_id, apply=admission)
             if replay is not None:
                 return replay
             units, artifacts = JobUnits(store), ArtifactStore(store.root)

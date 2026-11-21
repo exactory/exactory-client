@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import patch
 
 from research_harness import record_check, review_protocol as protocol
+from research_harness import review_codex_transport as codex
 from research_harness import review_transport as transport
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
@@ -306,7 +307,14 @@ class FailedRequestHistoryTests(unittest.TestCase):
         readers = runpy.run_path(str(ROOT / 'ci/record_fingerprint.py'))
         for profile in PROFILES:
             with self.subTest(profile=profile):
-                records, invocation, kind = self.load_case(read_cases(profile)[0])
+                frozen = read_cases(profile)[0]
+                records, invocation, kind = self.load_case(frozen)
+                if frozen['route']['adapter'] == codex.ADAPTER:
+                    # The state memo of the fingerprint reads the runtime of the frozen Codex route. Install the
+                    # runtime that the route record pins.
+                    installed = patch.object(codex, 'runtime', return_value=frozen['route']['runtime'])
+                    installed.start()
+                    self.addCleanup(installed.stop)
                 store = Store(self.root, create=True)
                 def apply(transaction):
                     for record_kind, rows in records.items():

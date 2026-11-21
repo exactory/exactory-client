@@ -19,8 +19,9 @@ from types import MappingProxyType
 
 from . import openness_reading as reading, review_excerpts
 from .artifacts import describe_artifact
-from .errors import ResearchError
+from .errors import ResearchError, describe_error_at
 from .evidence import digest
+from .operations import JSON_TYPE_NAMES, describe_json_type
 from .problem_openness import serialize_record
 from .review_route_capacity import divide_room
 from . import review_route_capacity as capacity
@@ -40,18 +41,20 @@ LABEL_CHARACTERS = 120
 SELECTION_MISMATCH_MESSAGE = (
     'The carried selection of this chain does not verify. One of four cases is the cause. First, under '
     'exactory-openness-carried-selection-v2, the stored selection is not the selection that the harness makes again '
-    'on the store as it stood before the first assignment. Second, an earlier chain no longer authenticates up to '
-    'its last carried turn under the records as they stand now. A contamination event on a carried turn has this '
-    'effect, and so has a failed latest probe of the route record of a carried chain. Third, a stored item of a '
-    'carried turn does not match the authenticated turn that it comes from or the inventory of this chain. Fourth, '
-    'the stored selection has a form or a protocol that this release does not verify. The chain gives no finding, '
-    'and a finding that it recorded is stale. When the latest probe of the route record of a carried chain failed, '
-    'probe that route record again. A completed probe of that route record ends the refusal. No probe can end it '
-    'when review-probe refuses that route record with review_route_runtime_stale. In that case and in every other '
-    'case, check the record with record-check. When record-check reports the record ready, export a new packet with '
-    'the same reviewer_id. Assign it for a new finding. The new chain carries the turns of earlier chains that '
-    'still authenticate from their first turn on. It carries no turn of this chain, and it reads again what this '
-    'chain read itself.')
+    'on the store as it stood before the first assignment. Second, an earlier chain no longer authenticates up to its '
+    'last carried turn under the records as they stand now. A contamination event on a carried turn has this effect, '
+    'and so has a failed latest probe of the route record of a carried chain. Third, a stored item of a carried turn '
+    'does not match the authenticated turn that it comes from or the inventory of this chain. Fourth, the stored '
+    'selection has a form or a protocol that this release does not verify. A carried turn whose answer fails the '
+    'output check of its turn gives the first case under exactory-openness-carried-selection-v2 and the second case '
+    'under exactory-openness-carried-selection-v1. This holds with or without a refusal record for that answer. The '
+    'chain gives no finding, and a finding that it recorded is stale. When the latest probe of the route record of a '
+    'carried chain failed, probe that route record again. A completed probe of that route record ends the refusal. No '
+    'probe can end it when review-probe refuses that route record with review_route_runtime_stale. In that case and '
+    'in every other case, check the record with record-check. When record-check reports the record ready, export a '
+    'new packet with the same reviewer_id. Assign it for a new finding. The new chain carries the turns of earlier '
+    'chains that still authenticate from their first turn on. It carries no turn of this chain, and it reads again '
+    'what this chain read itself.')
 ALLOWANCES_CHARACTERS = 30000
 TARGET_LABELS_CHARACTERS = 100000
 # The largest finding index in the frame of a final, in the measure of the route. A chain records its size in
@@ -150,8 +153,12 @@ INVALID_READING_MESSAGE = (
     'delivers for that unit, or {keep,targets} for a carried entry whose unit was delivered whole. A gap is '
     '{formulation,text}, with a target handle and 1 to 600 characters. passage_requests holds at most ten requests, '
     'each {id,unit,anchor,characters} or {id,kind:"list_page",list,after} with an id of 1 to 120 characters, within '
-    'the passage allowance and with the cursor of its list; in a final turn it holds at least one. details names the '
-    'value that failed where the rule has one.')
+    'the passage allowance and with the cursor of its list; in a final turn it holds at least one. path names the '
+    'member of the answer that failed, and details gives the values that the rule compared. For the notes, characters '
+    'is their length, notes_cost the characters that they take in the next request, and bound allowances.notes. For '
+    'a list page, rows 0 marks a list that holds no row, ended a list that has ended, and expected_after the cursor '
+    'that the list expects. For a passage, requested and remaining are the characters that the request takes and '
+    'that the passage allowance has left.')
 NOTES_COST_TEXT = (
     ' The same bound holds for the size that the notes add to the next request, where escaping makes a quote, a '
     'backslash or a line break cost several characters.')
@@ -496,6 +503,28 @@ def find_list_supplier(name, state):
     return None
 
 
+def _require_type(value, expected, path):
+    _require_reading(isinstance(value, expected), path=path, expected_type=JSON_TYPE_NAMES[expected],
+                     received_type=describe_json_type(value))
+
+
+def _require_members(value, required, path):
+    _require_type(value, dict, path)
+    _require_reading(set(value) == set(required), path=path, expected_type='object', received_type='object',
+                     missing_fields=sorted(set(required) - set(value)),
+                     unexpected_fields=sorted(set(value) - set(required)))
+
+
+def _require_targets(value, targets, path):
+    _require_type(value, list, path)
+    _require_reading(bool(value), path=path, items=0, minimum_items=1)
+    named = set()
+    for index, target in enumerate(value):
+        _require_type(target, str, '%s/%d' % (path, index))
+        _require_reading(target in targets and target not in named, path='%s/%d' % (path, index), target=target)
+        named.add(target)
+
+
 def build_list_page(name, after, plan, state, route, material_allowance, *, artifacts=None):
     """Page the whole fixed list, independently of the packet's usage-sorted view."""
     rows = _validate_list_cursor(name, after, plan, state, artifacts=artifacts)
@@ -531,15 +560,20 @@ def build_list_page(name, after, plan, state, route, material_allowance, *, arti
                 next=selected[-1]['id'] if count < len(rows) else None, remaining=len(rows) - count)
 
 
-def _validate_list_cursor(name, after, plan, state, *, artifacts=None):
+def _validate_list_cursor(name, after, plan, state, *, artifacts=None, path=None):
+    """Check the cursor of a list. path is the JSON Pointer of the request when an answer is checked."""
+    def locate(member):
+        return {} if path is None else dict(path=path + member)
     supplier = find_list_supplier(name, state)
-    _require_reading(supplier is not None, list=name)
+    _require_reading(supplier is not None, list=name, **locate('/list'))
     previous = state.get('list_pages', {}).get(name)
+    expected = (dict(expected_after=None) if previous is None else dict(ended=True) if previous['ended']
+                else dict(expected_after=previous['next']))
     _require_reading((previous is None and after is None) or
                      previous is not None and not previous['ended'] and after == previous['next'],
-                     list=name, after=after)
+                     list=name, after=after, **expected, **locate('/after'))
     rows = supplier['supply'](plan, state, artifacts)
-    _require_reading(bool(rows), list=name, after=after)
+    _require_reading(bool(rows), list=name, after=after, rows=0, **locate('/list'))
     return rows
 
 
@@ -1693,10 +1727,13 @@ def prepare_carried_assignment(records, artifacts, value, route, logical, admiss
 
 
 def describe_uncarried_chains(records, artifacts, value, route, native):
-    """Report the selection v7 would carry when admission instead chooses v6; credit nothing."""
+    """Report the selection v7 would carry when admission instead chooses v6; credit nothing.
+
+    The report states a refusal of that selection in refusal, and the v6 chain starts.
+    """
     if has_binary_native_evidence(records, artifacts, native):
         return dict(chains=[], would_carry=[], passed_over=[])
-    from .openness_carried import STORE_REFUSAL_CODES, build_carried_selection, describe_carried_selection
+    from .openness_carried import build_carried_selection, describe_carried_selection
     overlay = _PlanningArtifacts(artifacts)
     built = build_inventory(records, overlay, native, review=value)
     built = prepare_inventory(built, native, route)
@@ -1706,8 +1743,6 @@ def describe_uncarried_chains(records, artifacts, value, route, native):
         selection = build_carried_selection(records, artifacts, built['inventory'], identity)['selection']
         report = describe_carried_selection(records, artifacts, built['inventory'], identity, selection)
     except ResearchError as error:
-        if error.code not in STORE_REFUSAL_CODES:
-            raise
         return dict(chains=[], would_carry=[], passed_over=[], refusal=dict(code=error.code, details=error.details))
     uncarried = dict(chains=[], would_carry=[row['chain'] for row in report['chains']],
                      passed_over=[dict(row, message=PASSED_OVER_TEXT.format(chain=row['chain']))
@@ -1732,7 +1767,7 @@ def read_carried_inventory(artifacts, first):
 def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
     """Validate the response once; retention charges are applied by projection."""
     binding = packet.get('reading_turn', packet.get('reading_final', packet.get('reading_combine')))
-    _require_reading(isinstance(output, dict))
+    _require_type(output, dict, '')
     if 'reading_combine' in packet:
         from .review_condensing import validate_combination
         from .openness_final_pages import read_page_plan
@@ -1773,21 +1808,28 @@ def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
         return
     required = {'schema_version', 'stage', 'subject_digest', 'claim_digest', 'reviewer',
                 'notes', 'excerpts', 'gaps', 'passage_requests'}
-    _require_reading(isinstance(output, dict) and set(output) == required)
-    _require_reading(type(output['schema_version']) is int and output['schema_version'] == 2
-                     and output['stage'] == 'reading')
-    _require_reading(all(output[key] == binding[key] for key in ('subject_digest', 'claim_digest', 'reviewer')))
-    _require_reading(isinstance(output['notes'], str) and 0 < len(output['notes']) <= binding['allowances']['notes'])
+    _require_members(output, required, '')
+    _require_reading(type(output['schema_version']) is int and output['schema_version'] == 2, path='/schema_version')
+    _require_reading(output['stage'] == 'reading', path='/stage')
+    for key in ('subject_digest', 'claim_digest', 'reviewer'):
+        _require_reading(output[key] == binding[key], path='/' + key)
+    notes = output['notes']
+    bound = binding['allowances']['notes']
+    _require_type(notes, str, '/notes')
     from .operations import text
-    text(output['notes'], 'Notes', code=reading.INVALID_RESPONSE)
+    with describe_error_at('/notes'):
+        text(notes, 'Notes', code=reading.INVALID_RESPONSE)
+    # The length and, with the store, the cost of the notes are within the bound; one refusal gives each number.
+    measured = dict(characters=len(notes), bound=bound)
     if artifacts is not None:
         plan = capacity.read_chain_capacity_plan(artifacts, assignment)
         # This route is used only to price serialized notes, never to admit or send a request.
         route = dict(adapter=plan['route_class']['adapter'], model=plan['route_class']['model'], endpoint='',
             configuration=dict(max_output_tokens=plan['limits']['output_tokens']['value'], effort=plan['route_class']['effort']))
-        cost = capacity.measure_capacity_value(route, output['notes']) - capacity.measure_capacity_value(route, '')
-        _require_reading(cost <= binding['allowances']['notes'], notes_cost=cost, bound=binding['allowances']['notes'])
-    _require_reading(isinstance(output['excerpts'], list) and isinstance(output['gaps'], list))
+        measured['notes_cost'] = capacity.measure_capacity_value(route, notes) - capacity.measure_capacity_value(route, '')
+    _require_reading(max(measured['characters'], measured.get('notes_cost', 0)) <= bound, path='/notes', **measured)
+    _require_type(output['excerpts'], list, '/excerpts')
+    _require_type(output['gaps'], list, '/gaps')
     targets = set(row['handle'] for row in binding.get('formulations', []) if isinstance(row, dict)) if isinstance(
         binding.get('formulations'), list) else None
     if targets is None:
@@ -1795,32 +1837,44 @@ def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
         targets = {'t%d' % number for number in range(1, count + 1)} if count is not None else set(binding.get('page', {}).get('targets', []))
     if 'page_plan_digest' in binding and artifacts is not None:
         targets = set(capacity.read_chain_capacity_plan(artifacts, assignment)['targets']['handles'])
+    delivered = {row['handle'] for row in binding.get('plan', {}).get('now', []) if row['kind'] != 'list_page'}
     kept = set()
     available = None
-    for row in output['excerpts']:
-        _require_reading(isinstance(row, dict))
+    for index, row in enumerate(output['excerpts']):
+        base = '/excerpts/%d' % index
+        _require_type(row, dict, base)
         if 'keep' in row:
-            _require_reading(set(row) == {'keep', 'targets'} and isinstance(row['keep'], str)
-                             and row['keep'] not in kept and artifacts is not None)
+            _require_members(row, ('keep', 'targets'), base)
+            _require_type(row['keep'], str, base + '/keep')
+            _require_reading(row['keep'] not in kept and artifacts is not None, path=base + '/keep', keep=row['keep'])
             if available is None:
                 available = _list_delivered_carried_entries(packet, artifacts, assignment)
-            _require_reading(row['keep'] in available)
+            _require_reading(row['keep'] in available, path=base + '/keep', keep=row['keep'])
             kept.add(row['keep'])
         else:
-            _require_reading(set(row) == {'unit', 'text', 'purpose', 'targets'})
-            _require_reading(isinstance(row['unit'], str) and isinstance(row['text'], str) and bool(row['text'])
-                             and _find_excerpt_span(packet, row['unit'], row['text']) is not None)
-            _require_reading(isinstance(row['purpose'], str) and len(row['purpose']) <= PURPOSE_CHARACTERS)
-        _require_reading(isinstance(row['targets'], list) and bool(row['targets'])
-                         and all(isinstance(target, str) and target in targets for target in row['targets'])
-                         and len(row['targets']) == len(set(row['targets'])))
-    for row in output['gaps']:
-        _require_reading(isinstance(row, dict) and set(row) == {'formulation', 'text'}
-                         and isinstance(row['formulation'], str) and row['formulation'] in targets
-                         and isinstance(row['text'], str)
-                         and 0 < len(row['text']) <= GAP_CHARACTERS)
+            _require_members(row, ('unit', 'text', 'purpose', 'targets'), base)
+            _require_type(row['unit'], str, base + '/unit')
+            _require_type(row['text'], str, base + '/text')
+            _require_reading(bool(row['text']), path=base + '/text', characters=0, minimum_characters=1)
+            _require_reading(row['unit'] in delivered, path=base + '/unit', unit=row['unit'])
+            _require_reading(_find_excerpt_span(packet, row['unit'], row['text']) is not None, path=base + '/text',
+                             unit=row['unit'], characters=len(row['text']))
+            _require_type(row['purpose'], str, base + '/purpose')
+            _require_reading(len(row['purpose']) <= PURPOSE_CHARACTERS, path=base + '/purpose',
+                             characters=len(row['purpose']), maximum_characters=PURPOSE_CHARACTERS)
+        _require_targets(row['targets'], targets, base + '/targets')
+    for index, row in enumerate(output['gaps']):
+        base = '/gaps/%d' % index
+        _require_members(row, ('formulation', 'text'), base)
+        _require_type(row['formulation'], str, base + '/formulation')
+        _require_reading(row['formulation'] in targets, path=base + '/formulation', target=row['formulation'])
+        _require_type(row['text'], str, base + '/text')
+        _require_reading(0 < len(row['text']) <= GAP_CHARACTERS, path=base + '/text', characters=len(row['text']),
+                         minimum_characters=1, maximum_characters=GAP_CHARACTERS)
     requests = output['passage_requests']
-    _require_reading(isinstance(requests, list) and len(requests) <= PASSAGE_REQUESTS)
+    _require_type(requests, list, '/passage_requests')
+    _require_reading(len(requests) <= PASSAGE_REQUESTS, path='/passage_requests', items=len(requests),
+                     maximum_items=PASSAGE_REQUESTS)
     bound_state = None
     if requests and artifacts is not None:
         plan, inventory, bound_state = read_bound_state(artifacts, assignment, packet)
@@ -1845,36 +1899,54 @@ def validate_turn_output(packet, output, *, artifacts=None, assignment=None):
                     pending[delivery['request']] = max(0, pending[delivery['request']] - delivery['characters'])
         passage_left -= sum(pending.values())
     seen, lists = set(), set()
-    for request in requests:
-        _require_reading(isinstance(request, dict) and isinstance(request.get('id'), str)
-                         and 0 < len(request['id']) <= reading.RESERVED_IDENTIFIER_CHARACTERS and request['id'] not in seen)
-        seen.add(request['id'])
+    for index, request in enumerate(requests):
+        base = '/passage_requests/%d' % index
+        _require_type(request, dict, base)
+        identifier = request.get('id')
+        _require_type(identifier, str, base + '/id')
+        _require_reading(0 < len(identifier) <= reading.RESERVED_IDENTIFIER_CHARACTERS, path=base + '/id',
+                         characters=len(identifier), minimum_characters=1,
+                         maximum_characters=reading.RESERVED_IDENTIFIER_CHARACTERS)
+        _require_reading(identifier not in seen, path=base + '/id', request_id=identifier)
+        seen.add(identifier)
         if bound_state is not None:
-            _require_reading(request['id'] not in active_requests, request_id=request['id'])
+            _require_reading(identifier not in active_requests, path=base + '/id', request_id=identifier)
         if request.get('kind') == 'list_page':
-            _require_reading(set(request) == {'id', 'kind', 'list', 'after'}
-                             and isinstance(request['list'], str) and find_list_supplier(request['list'], bound_state) is not None
-                             and request['list'] not in lists
-                             and (request['after'] is None or isinstance(request['after'], str)))
+            _require_members(request, ('id', 'kind', 'list', 'after'), base)
+            _require_type(request['list'], str, base + '/list')
+            _require_reading(find_list_supplier(request['list'], bound_state) is not None and request['list'] not in lists,
+                             path=base + '/list', list=request['list'])
+            if request['after'] is not None:
+                _require_type(request['after'], str, base + '/after')
             lists.add(request['list'])
             if artifacts is not None:
-                _validate_list_cursor(request['list'], request['after'], plan, bound_state, artifacts=artifacts)
+                _validate_list_cursor(request['list'], request['after'], plan, bound_state, artifacts=artifacts,
+                                      path=base)
         else:
-            _require_reading(set(request) == {'id', 'unit', 'anchor', 'characters'}
-                             and isinstance(request['unit'], str) and (request['anchor'] is None
-                                 or isinstance(request['anchor'], str) and 0 < len(request['anchor']) <= 600)
-                             and type(request['characters']) is int
-                             and 0 < request['characters'] <= 100000)
+            _require_members(request, ('id', 'unit', 'anchor', 'characters'), base)
+            _require_type(request['unit'], str, base + '/unit')
+            if request['anchor'] is not None:
+                _require_type(request['anchor'], str, base + '/anchor')
+                _require_reading(0 < len(request['anchor']) <= 600, path=base + '/anchor',
+                                 characters=len(request['anchor']), minimum_characters=1, maximum_characters=600)
+            _require_reading(type(request['characters']) is int, path=base + '/characters', expected_type='integer',
+                             received_type=describe_json_type(request['characters']))
+            _require_reading(0 < request['characters'] <= 100000, path=base + '/characters',
+                             characters=request['characters'], minimum_characters=1, maximum_characters=100000)
             if bound_state is not None:
                 unit = resolve_request_part(inventory, artifacts, request, bound_state)
-                _require_reading(unit is not None, unit=request['unit'], anchor=request['anchor'])
+                # A handle of the chain whose parts lack the anchor fails at the anchor; any other handle at the unit.
+                known = any(row['handle'] == request['unit'] for row in inventory['units'] + inventory['material'])
+                _require_reading(unit is not None, path=base + ('/anchor' if known else '/unit'),
+                                 unit=request['unit'], anchor=request['anchor'])
                 body = artifacts.read(unit['artifact']).decode('utf-8')
                 start = 0 if request['anchor'] is None else body.find(request['anchor'])
                 amount = min(request['characters'], len(body) - start)
-                _require_reading(amount <= passage_left, remaining=passage_left, requested=amount)
+                _require_reading(amount <= passage_left, path=base + '/characters', remaining=passage_left,
+                                 requested=amount)
                 passage_left -= amount
     if 'reading_final' in packet:
-        _require_reading(bool(requests))
+        _require_reading(bool(requests), path='/passage_requests', items=0, minimum_items=1)
 
 
 def project_own_turn(artifacts, route, packet, output, assignment_id, attempt_id, *, state=None, inventory=None):
@@ -2117,6 +2189,7 @@ def _project_observed_turn(records, artifacts, member, frozen, output, attempt_i
 
 def _rebuild_own_state(records, artifacts, prior, inventory, plan, route):
     from .review_protocol import assignment_state
+    from .review_refusal import classify_observed_output
     projections = []
     for member in reading._list_chain(records, prior):
         frozen = json.loads(artifacts.read(member['packet']))
@@ -2127,6 +2200,11 @@ def _rebuild_own_state(records, artifacts, prior, inventory, plan, route):
                                 'output that passed its checks, so the chain cannot continue from it. Run '
                                 'review-series on the chain and take the step that it plans.',
                                 dict(assignment_id=member['id'], obligations=observed['obligations']))
+        failure = classify_observed_output(records, artifacts, observed['attempt_id'])
+        if failure is not None:
+            raise ResearchError('review_source_continuation_unverified',
+                                UNCHECKED_HEAD_MESSAGE if member['id'] == prior['id'] else UNCHECKED_EARLIER_MESSAGE,
+                                dict(assignment_id=member['id'], attempt_id=observed['attempt_id'], refusal=failure))
         output = observed['output']
         if (output.get('stage') not in ('reading', 'material')
                 and not frozen.get('reading_combine')
@@ -2447,6 +2525,21 @@ def describe_turn_receipt(records, artifacts, assignment, route, packet, request
         protocol_selection=assignment.get('protocol_selection'))
 
 
+def describe_turn_forecast(records, artifacts, assignment, *, request=None):
+    """Describe the forecast of a chain over the inputs that remain at the turn of a stored assignment, as its receipt
+    and the lines of review-series give it, or the unavailable forecast when the stored inputs of the turn cannot be
+    read. request is the request of the turn, when the caller has built it."""
+    from .review_protocol import _read_json, build_assignment_request
+    try:
+        packet = _read_json(artifacts, assignment['packet'])
+        if request is None:
+            request = build_assignment_request(records, artifacts, assignment)
+        route = records['review_route'][assignment['route_id']]
+        return describe_turn_receipt(records, artifacts, assignment, route, packet, request)['capacity_forecast']
+    except (ResearchError, ValueError) as error:
+        return reading.describe_unavailable_forecast(error)
+
+
 def describe_admission_stop(records, artifacts, assignment, route, packet, selection):
     from .review_plan_steps import describe_step
     from .review_protocol import canonical_prompt
@@ -2522,17 +2615,20 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
                 details=dict(material_allowance=bounds['material_allowance'], answer_bound=bounds['answer_bound']))
 
 
-# The verification of a v7 chain has five conditions, and a chain that fails one gives no finding. Each condition has
-# its own refusal message. Condition 1 also refuses with SELECTION_MISMATCH_MESSAGE or with a refusal of the artifact
-# store.
+# The verification of a v7 chain has seven conditions, and a chain that fails one gives no finding. Each condition has
+# its own refusal message; condition 6 refuses with the messages of review_refusal_replacement. Condition 1 also
+# refuses with SELECTION_MISMATCH_MESSAGE, with a refusal of the artifact store, and with claim_reassessment_required
+# for records without a history. Every other refusal of an earlier chain passes through unchanged. In the second part
+# of condition 1, a refusal of the artifact store and a refusal in openness_carried.PREFIX_STATE_CODES give
+# SELECTION_MISMATCH_MESSAGE. Condition 7: the answer of every own turn passes the output check that its run applies
+# (review_refusal.classify_observed_output), also when the store holds no refusal record for it.
 ORIGIN_VERIFICATION_MESSAGE = (
-    'The harness cannot verify the carried selection of this chain from its first assignment. One of three cases is '
+    'The harness cannot verify the carried selection of this chain from its first assignment. One of two cases is '
     'the cause. First, the reference carried_selection of that assignment names a protocol or a digest other than '
-    'those of the stored selection. Second, under exactory-openness-carried-selection-v2, the records give no '
-    'history from which the harness reads the store as it stood before the first assignment. Third, under the same '
-    'protocol, recorded_revision of the first assignment is not the revision at which the history of the store '
-    'shows that assignment recorded. The chain gives no finding. Check the record with record-check. When '
-    'record-check reports the record ready, report this refusal.')
+    'those of the stored selection. Second, under exactory-openness-carried-selection-v2, recorded_revision of the '
+    'first assignment is not the revision at which the history of the store shows that assignment recorded. The '
+    'chain gives no finding. Check the record with record-check. When record-check reports the record ready, '
+    'report this refusal.')
 STATE_VERIFICATION_MESSAGE = (
     'A stored inventory or state of this chain differs from what the harness rebuilds from the native packet, the '
     'carried selection and the authenticated turns, or the state_digest in the packet of a turn does not name the '
@@ -2553,6 +2649,24 @@ COVERAGE_VERIFICATION_MESSAGE = (
     'or the unread set, the outcome unresolved, the citation of the set in the finding or the recorded finding '
     'differs from what the harness rebuilds. Run review-series '
     'on the chain and take the step that it plans.')
+ANSWER_VERIFICATION_MESSAGE = (
+    'The answer of the turn that details.assignment_id names fails the output check of its turn, and the store '
+    'holds no refusal record for it. details.refusal gives the code, the check and the details of the failure. The '
+    'chain gives no finding from that answer or from a turn after it. When a later turn of this chain follows the '
+    'named turn, that turn was built on the answer. Then export a new packet with the same reviewer_id and assign '
+    'it. The new chain can carry the reading turns of this chain that come before the named turn.')
+UNCHECKED_HEAD_MESSAGE = (
+    'The answer of the turn that details.assignment_id names fails the output check of its turn, and the store holds '
+    'no refusal record for it. details.refusal gives the code, the check and the details of the failure. No turn '
+    'continues from that answer. Run review-series on the chain and take the step that it plans. Its step for this '
+    'answer is the recorded review-run request, which calls no reviewer and records the refusal. The plan after that '
+    'request is the step for a refused answer.')
+UNCHECKED_EARLIER_MESSAGE = (
+    'The answer of the turn that details.assignment_id names fails the output check of its turn, and the store holds '
+    'no refusal record for it. details.refusal gives the code, the check and the details of the failure. A later turn '
+    'of this chain was built on that answer. The harness assigns no turn that continues this chain, and the chain '
+    'gives no finding. Export a new packet with the same reviewer_id and assign it. The new chain can carry the '
+    'reading turns of this chain that come before the named turn.')
 FINAL_VERIFICATION_MESSAGE = (
     'The turn that details.assignment_id names has no observed, authenticated output in a verified context, or its '
     'output stands at the wrong place. A chain of exactory-openness-reading-v7 ends with one final turn that '
@@ -2580,10 +2694,11 @@ def _verify_carried_origins(records, artifacts, first, native, route, plan, eval
     cutoff = None
     if reference['protocol'] == SELECTION_PROTOCOL:
         stamp = first['recorded_revision']
-        _require_verification(hasattr(evaluation.records, 'read_snapshot')
-            and evaluation.records.verify_record_version('review_assignment', first['id'], stamp, digest(first)),
-            ORIGIN_VERIFICATION_MESSAGE)
+        # Records without a history end here with the refusal of the evaluation, which is no state of a chain.
         cutoff = evaluation.read_snapshot(stamp - 1)
+        _require_verification(
+            evaluation.records.verify_record_version('review_assignment', first['id'], stamp, digest(first)),
+            ORIGIN_VERIFICATION_MESSAGE)
         _require_verification(first['id'] not in cutoff.records.get('review_assignment', {}),
                               ORIGIN_VERIFICATION_MESSAGE)
     base = read_carried_inventory(artifacts, first)
@@ -2747,6 +2862,7 @@ def verify_problem_coverage(records, artifacts, assignment, *, final=False):
     """Verify a v7 prefix/final from its stored selection and plan, without admission or planning."""
     from .native_review import load_packet
     from .review_protocol import assignment_state
+    from .review_refusal import classify_observed_output
     from .evaluation import Evaluation
     overlay = _PlanningArtifacts(artifacts)
     chain = reading._list_chain(records, assignment)
@@ -2779,6 +2895,9 @@ def verify_problem_coverage(records, artifacts, assignment, *, final=False):
         observed = assignment_state(records, overlay, member['id'])
         _require_verification(observed['ready'], FINAL_VERIFICATION_MESSAGE,
                               assignment_id=member['id'], obligations=observed['obligations'])
+        failure = classify_observed_output(records, overlay, observed['attempt_id'])
+        _require_verification(failure is None, ANSWER_VERIFICATION_MESSAGE,
+                              assignment_id=member['id'], attempt_id=observed['attempt_id'], refusal=failure)
         terminal = final and number == len(chain)
         _verify_final_attempt(records, overlay, member, observed, packet, final=terminal)
         projected = _project_observed_turn(records, overlay, member, packet, observed['output'],

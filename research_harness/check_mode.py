@@ -66,6 +66,18 @@ class _CheckingStore:
 
     committed_request = read_committed_request
 
+    def mutate_serialized(self, operation, payload, apply, *, request_id):
+        """A check answers the committed request of a write at the revision of the write lock, such as the admission
+        of an acquisition. A new one belongs to a command with external effects, which a check does not prepare."""
+        if request_id != self._request_id:
+            raise ResearchError("check_unsupported", "Check mode cannot prepare an operation requiring staged commits")
+        encoded_payload = _encode_mutation_input(operation, payload, apply, 0, request_id)
+        self._read_preparation()
+        original = _read_original_response(self._snapshot._original_request, operation, encoded_payload, request_id)
+        if original is None:
+            raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects")
+        raise _CheckComplete(original)
+
     def mutate(self, operation, payload, apply, *, expected_revision, request_id, _preparation=None):
         if request_id != self._request_id or operation == "workspace.probe_artifact_intent":
             raise ResearchError("check_unsupported", "Check mode cannot prepare an operation requiring staged commits")
@@ -87,7 +99,15 @@ class _CheckingStore:
         response = {"check": "accepted", "revision": self.revision, "recorded": False,
                               "operation": operation, "payload_digest": _digest(encoded_payload),
                               "snapshot_digest": snapshot_digest, "artifact_digests": self._artifacts.read_digests()}
-        if operation == 'review.assignment' and 'capacity_plan' in result:
+        if operation == 'review.assignment' and 'capacity_plan' in result and result.get('reading_chain'):
+            # A turn of a reading chain states the forecast over the inputs that remain, from its result below, or
+            # here for a replacement turn, whose result holds none.
+            from .openness_reading_v7 import describe_turn_forecast
+            from .review_route_capacity import read_chain_capacity_plan
+            response['capacity_plan'] = read_chain_capacity_plan(self._artifacts, result)
+            if 'capacity_forecast' not in result:
+                response['capacity_forecast'] = describe_turn_forecast(self._records, self._artifacts, result)
+        elif operation == 'review.assignment' and 'capacity_plan' in result:
             from .review_route_capacity import describe_assignment_capacity
             response.update(describe_assignment_capacity(self._records, self._artifacts, result))
         if operation == 'review.assignment' and 'session_admission' in result:

@@ -39,7 +39,7 @@ from .publication import latest_reviews
 from .review_context_repair import _lineage, _parent, historical_reviews, slot_id
 from .review_budget import CHARGE_KINDS
 from .review_protocol import _context_observed, has_ended_without_output, usage_report
-from .storage import Store
+from .storage import Store, wait_for_store_locks
 from .workspace import checked_parent, find_entry_kind, find_workspace, read_file, strict_json, write_projection
 
 
@@ -1177,15 +1177,18 @@ def render_views_after_command(start):
 
 
 def _render_safely(find_store_root, *, full=False, lock_wait=None):
+    """The render decides nothing, so its reads of the store wait the busy timeout, also inside a command that waits
+    for a busy store; a render that a busy store refuses leaves the views to the next command."""
     store_root = None
     rendering = False
     try:
         store_root = find_store_root()
         if store_root is None or find_entry_kind(store_root, ".exactory/research.sqlite3") != "regular":
             return None
-        store = Store(store_root)
-        rendering = True
-        return (render_all if full else render_pending)(store, lock_wait=lock_wait)
+        with wait_for_store_locks(None):
+            store = Store(store_root)
+            rendering = True
+            return (render_all if full else render_pending)(store, lock_wait=lock_wait)
     except Exception as error:  # The command's own result stands whatever its views do.
         failure = _describe_failure(error)
         place = " at " + failure["path"] if failure["path"] else ""

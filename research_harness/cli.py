@@ -18,6 +18,7 @@ from .drafting import find_draft_obligations
 from .errors import ResearchError, describe_tool_timeout
 from .evaluation import Evaluation
 from .evidence import digest
+from .finishing import wait_for_store_in_command
 from .gates import gate_state, require_ready
 from .integration import (adopt_workspace, current_store, export_workspace, matches_direct_deposit_files,
                           pin_artifact)
@@ -27,7 +28,7 @@ from .output_views import (PROBLEM_EXPORTS_FOLDER, find_view_advisories, find_wo
                            render_views_after_command, render_workspace_views)
 from .report_views import (annotate_parts_obligations, current_obligations, next_summary, obligations_page,
                            order_obligations, status_summary)
-from .storage import Store, check_command_bounds
+from .storage import Store, check_command_bounds, overlay_kinds
 from .source_deferrals import defer_source, resume_source, assess_deferrals
 from .publication_scope import record_publication_scope, select_publication_scope, record_scoped_readiness_review
 from .workspace import find_workspace, strict_json
@@ -538,7 +539,15 @@ def describe_review_receipt(store, command, payload, receipt):
             return receipt
         from .evaluation import Evaluation
         artifacts = Evaluation(records, store.build_artifact_store())
-        if 'capacity_plan_kind' in assignment:
+        if 'capacity_plan_kind' in assignment and assignment.get('reading_chain'):
+            # The one forecast of a reading turn covers the inputs that remain: the result holds it, and the receipt
+            # of a replacement turn, whose result holds none, gets it here.
+            from .openness_reading_v7 import describe_turn_forecast
+            from .review_route_capacity import read_chain_capacity_plan
+            receipt = dict(receipt, capacity_plan=read_chain_capacity_plan(artifacts, assignment))
+            if 'capacity_forecast' not in receipt['result']:
+                receipt['capacity_forecast'] = describe_turn_forecast(records, artifacts, assignment)
+        elif 'capacity_plan_kind' in assignment:
             from .review_route_capacity import describe_assignment_capacity
             receipt = dict(receipt, **describe_assignment_capacity(records, artifacts, assignment))
         warning = describe_assignment_warning(records, payload['id'], artifacts=artifacts)
@@ -718,8 +727,9 @@ def status_report(store, *, counters=False):
             failures.append(initial_failure)
         list_chain_heads(records, evaluation, context_failures=failures)
         excluded = {row['assignment_id'] for row in failures if 'assignment_id' in row}
-        inspection_records = dict(records, review_assignment={identifier: row
-            for identifier, row in records.get('review_assignment', {}).items() if identifier not in excluded})
+        # Both views keep the history of the store, which the verification of a carried selection reads.
+        inspection_records = overlay_kinds(records, dict(review_assignment={identifier: row
+            for identifier, row in records.get('review_assignment', {}).items() if identifier not in excluded}))
         evaluation = Evaluation(inspection_records, store.build_artifact_store())
         report = annotate_review_obligations(inspection_records, evaluation, report, context_failures=failures)
         if not any(row['code'] == initial_failure['code'] for row in failures):
@@ -736,7 +746,8 @@ def status_report(store, *, counters=False):
                          for kind, rows in records.items()}
             try:
                 report = _build_status_report(store, counters=counters, context_failures=failures,
-                                              snapshot=dict(snapshot, records=projected), started=started)
+                                              snapshot=dict(snapshot, records=overlay_kinds(records, projected)),
+                                              started=started)
             except (ResearchError, json.JSONDecodeError) as projection_error:
                 failure = describe_context_failure(projection_error)
                 if failure not in failures:
@@ -1294,7 +1305,7 @@ def main(argv=None, render_views=render_views_after_command):
     request a render after committing a new call's start, before sending it, without waiting for the render lock."""
     args = build_parser().parse_args(argv)
     try:
-        with describe_tool_timeout():
+        with describe_tool_timeout(), wait_for_store_in_command():
             result = run(args)
         if args.command == "review-series":
             raise SystemExit(result)

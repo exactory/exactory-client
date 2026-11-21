@@ -241,6 +241,7 @@ class CodexInvocationTests(unittest.TestCase):
                     return subprocess.CompletedProcess(command, 0, '\n'.join(map(json.dumps, stream)), '')
 
                 with patch.object(adapter, 'runtime', return_value=self.runtime), \
+                        patch('shutil.which', return_value='/fixture/codex'), \
                         patch.object(adapter, '_run_owned', side_effect=execute) as execute_mock, \
                         patch.object(adapter, '_rollout', side_effect=lambda *args: copy.deepcopy(observed_events)), \
                         patch.object(plain, '_rollout', side_effect=lambda *args: copy.deepcopy(observed_events)):

@@ -887,6 +887,11 @@ exception.
    Keep the whole text, with the line and the details, in `statement`. The reviews, the openness
    finding, the attempt and a formal statement concern all of it.
 
+   `problem-statement` applies the rules of the post to these texts: the title has 8-200
+   characters and the resolution criteria 50-5000, each after trimming, and no text holds a
+   control character other than a tab or a line break (`problem_statement_post_text_invalid`,
+   with `field` and `rule`).
+
    Among equivalent forms of the statement, pose the one that allows a reader more derivations
    and more checks. Simplicity stays a preference.
 
@@ -1339,6 +1344,10 @@ each of these refusals.
      (`review_source_continuation_unverified`), and do not assign a sibling turn
      (`review_source_continuation_fork`): run `review-series`, take the handoff or report the
      decision stop that it gives, and keep the diagnostics of both refusals in your report.
+   - When a step of `review-series` has the state `resume` and its `details` hold `refusal`,
+     the answer of that turn failed its check. Its refusal record was not written. The step
+     runs the recorded `review-run` request again, without a reviewer call, and records the
+     refusal. `review-series` takes the step itself. Take no step of your own for it.
    - The assignment after the last reading turn is the final turn (prompt template
      `exactory-openness-reading-v5/final`, or `exactory-openness-reading-v4/final` in a v4
      chain): the native packet with the reading record of the earlier turns. A v5 final turn
@@ -1717,10 +1726,15 @@ public text.
      becomes askable or reachable under each answer. Either a work names it, and the sentence
      cites that place, or you argue it, and the sentence says that it is the argument of the
      record and names its premises. Where you can name nothing for an answer, say so. Say also
-     what stays as it is. The joined text has 100 to 5,000 characters
-     (`problem_changes_if_resolved_length`).
+     what stays as it is. The joined text has 100 to 5,000 characters.
    - The current state gives the prior work on the statement itself, what the attempt proved,
      left unresolved or demonstrated, and the limits of the record's knowledge.
+
+   `problem-value` applies the rules of the post to the joined text of each of the three
+   sections. The motivation and the current state have 100 to 10,000 characters each, and no
+   text holds a control character other than a tab or a line break
+   (`problem_value_post_text_invalid`, with `section` and `rule`). A text that the post would
+   refuse is so refused before the reviews.
 
    A result stands once in the public text: in the motivation when it leads to the question,
    in the current state when it bears on the status of the statement. In all three texts,
@@ -2401,7 +2415,10 @@ accounts with the parts that the harness derives, and the records that their ent
      `details`; the harness cannot continue the chain. A refused action of the chain ends the
      command this way with the refusal's code (for example `review_input_too_large` or a
      `review_parts_*` code); when the refusal recorded an output refusal, or its code is
-     `review_invocation_pending`, the command plans again instead. Read `code`, `details` and
+     `review_invocation_pending`, the command plans again instead. After `store_busy` the
+     command also plans again by itself, at most 8 times in a row. When `review-series` or
+     `review-run` still ends with `store_busy`, read the message of that refusal. It names the
+     command that goes on, which is not always the refused command. Read `code`, `details` and
      `stop_class`. In a problem record no stop passes automatically: the stop binds no study
      stage, and `gate-auto-pass` refuses it with `gate_override_internal_only`, so report a
      `harness_defect` stop like a decision stop, and resume a `waiting` stop on its schedule as

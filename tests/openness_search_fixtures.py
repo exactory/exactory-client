@@ -5,8 +5,9 @@ import copy
 from research_harness.evidence import digest
 
 
-def build_fifteen_searches():
-    """Ten searches share 339 judgments, five share 271, with scope shared within each generation."""
+def build_fifteen_searches(question_template='Exact formulation %d of the finite bound problem.'):
+    """Ten searches share 339 judgments, five share 271, with scope shared within each generation. The question of each
+    search is question_template with the number of its formulation."""
     judgments = [[{'work_id': 'arxiv:2601.%05dv1' % number, 'disposition': 'out_of_scope',
                    'reason': ('The captured source establishes a different finite bound. ' * 14)
                              + 'Judgment %d.' % number}
@@ -14,7 +15,7 @@ def build_fifteen_searches():
     bindings = []
     for generation in range(3):
         for formulation, purpose in enumerate(('direct', 'originals', 'theory', 'adjacent', 'recent')):
-            question = 'Exact formulation %d of the finite bound problem.' % formulation
+            question = question_template % formulation
             search = {'id': 'search-%d-%d' % (generation, formulation), 'profile': 'research',
                       'purpose': purpose, 'question': question,
                       'scope': 'Scope of generation %d, with its exact dated enumeration.' % generation,

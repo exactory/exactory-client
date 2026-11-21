@@ -2,10 +2,12 @@
 
 The injected unit store implements read_units(job_id) and
 commit_unit(job_id, unit), in commit order. The job owner serializes run calls
-and authenticates those reads. Commits must be idempotent: storage_io/store_busy
-is retried using the same captured unit, never another network request. Only a
-successful commit advances coverage. Attempts contain artifact references, not
-in-memory bodies; the caller retains failed attempts from HttpFailure too.
+and authenticates those reads. Commits must be idempotent: storage_io is retried
+using the same captured unit, never another network request. A unit store waits
+for a busy store itself (fulltext_jobs.commit_job), so its store_busy ends the
+invocation. Only a successful commit advances coverage. Attempts contain
+artifact references, not in-memory bodies; the caller retains failed attempts
+from HttpFailure too.
 
 run returns capture provenance and attempts made during this invocation. Earlier
 attempts remain in committed units. Range assemblies have no HTTP status. No
@@ -95,7 +97,7 @@ class FulltextTransfer:
                 self.units.commit_unit(job_id, unit)
                 return
             except ResearchError as error:
-                if error.code not in ("storage_io", "store_busy") or retry == 2:
+                if error.code != "storage_io" or retry == 2:
                     raise
 
     def _build_result(self, unit, response, attempts, unit_count, deadline, *, assembled=False):

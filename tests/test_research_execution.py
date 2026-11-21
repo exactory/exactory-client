@@ -44,15 +44,20 @@ class ResearchExecutionTests(DevelopmentCase):
         from research_harness import execution
         from research_harness.errors import ResearchError
         admission = admit_lab(self, body="print('{\"metric\": 7}')\n")
-        mutate = self.store.mutate
         refused = set()
         operations = {'execution.prelaunch', 'development.execution', 'execution.observe', 'execution.reconcile'}
-        def refuse(operation, *args, **kwargs):
-            if operation in operations and operation not in refused:
-                refused.add(operation)
-                raise ResearchError('store_busy', 'Concurrent writer')
-            return mutate(operation, *args, **kwargs)
-        with mock.patch.object(self.store, 'mutate', side_effect=refuse), \
+        def refuse_once_before(commit):
+            # Every commit entry of the store is wrapped, so the test does not depend on which of them a write uses.
+            def refuse(operation, *args, **kwargs):
+                if operation in operations and operation not in refused:
+                    refused.add(operation)
+                    raise ResearchError('store_busy', 'Concurrent writer')
+                return commit(operation, *args, **kwargs)
+            return refuse
+        with mock.patch.object(self.store, 'mutate', side_effect=refuse_once_before(self.store.mutate)), \
+                mock.patch.object(self.store, 'mutate_scoped', side_effect=refuse_once_before(self.store.mutate_scoped)), \
+                mock.patch.object(self.store, 'mutate_serialized',
+                                  side_effect=refuse_once_before(self.store.mutate_serialized)), \
                 mock.patch('research_harness.storage._BUSY_TIMEOUT_SECONDS', 0.001), \
                 mock.patch.object(execution.subprocess, 'Popen', wraps=subprocess.Popen) as launch:
             result = execution.launch_execution(self.store, admission['id'], expected_revision=self.store.revision,
@@ -258,7 +263,7 @@ class ResearchExecutionTests(DevelopmentCase):
                               usage_unit="wall_seconds", reserved_units=0.01, max_units=0.1)
         api = importlib.import_module("research_harness.execution")
         original_record = api.record_execution
-        original_mutation = api.prepared_mutation
+        original_mutation = api.prepared_task_mutation
         legacy = legacy_execution_writers()
         old = {}
 
@@ -283,7 +288,7 @@ class ResearchExecutionTests(DevelopmentCase):
             return original_mutation(store, operation, *args, **kwargs)
 
         with mock.patch.object(api, "record_execution", side_effect=retain_pre_fix_outcome), \
-                mock.patch.object(api, "prepared_mutation", side_effect=retain_missing_observation):
+                mock.patch.object(api, "prepared_task_mutation", side_effect=retain_missing_observation):
             if interrupt_before_observation:
                 with self.assertRaisesRegex(OSError, "Historical interruption after outcome and before observation"):
                     api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
@@ -379,14 +384,14 @@ class ResearchExecutionTests(DevelopmentCase):
         admission = admit_lab(self, body="print('{\"metric\": 7}')\n", usage_unit="wall_seconds",
                               reserved_units=0.01, max_units=1)
         api = importlib.import_module("research_harness.execution")
-        original_mutation = api.prepared_mutation
+        original_mutation = api.prepared_task_mutation
 
         def stop_before_observation(store, operation, *args, **kwargs):
             if operation == "execution.observe":
                 raise OSError("Current interruption after accounted outcome")
             return original_mutation(store, operation, *args, **kwargs)
 
-        with mock.patch.object(api, "prepared_mutation", side_effect=stop_before_observation):
+        with mock.patch.object(api, "prepared_task_mutation", side_effect=stop_before_observation):
             with self.assertRaisesRegex(OSError, "Current interruption after accounted outcome"):
                 api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
                                      request_id="accounted-before-observation")
@@ -412,12 +417,12 @@ class ResearchExecutionTests(DevelopmentCase):
     def test_lost_observation_response_reconciles_existing_outcome_once(self):
         admission = admit_lab(self, body="print('{\"metric\": 7}')\n")
         api = importlib.import_module("research_harness.execution")
-        actual = api.prepared_mutation
+        actual = api.prepared_task_mutation
         def crash_before_observation(store, operation, *args, **kwargs):
             if operation == "execution.observe":
                 raise OSError("Simulated interruption after recording the actual outcome")
             return actual(store, operation, *args, **kwargs)
-        with mock.patch.object(api, "prepared_mutation", side_effect=crash_before_observation):
+        with mock.patch.object(api, "prepared_task_mutation", side_effect=crash_before_observation):
             with self.assertRaises(OSError):
                 api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision, request_id="lost")
         before = self.store.snapshot()["records"]
@@ -649,14 +654,16 @@ class ResearchExecutionTests(DevelopmentCase):
             workers.append(popen(argv, **options))
             return workers[-1]
 
-        def end_the_worker_then_prelaunch(*args):
-            # The worker is ready and waits for its token when it ends, as when it is killed.
+        def prelaunch_then_end_the_worker(*args):
+            # The worker is ready and waits for its token when it ends after the record that releases its program, as
+            # when it is killed. test_claimed_run_start covers a worker that ends before that record.
+            receipt = prelaunch(*args)
             workers[0].kill()
             workers[0].wait()
-            return prelaunch(*args)
+            return receipt
 
         with mock.patch.object(subprocess, "Popen", side_effect=start_and_keep), \
-                mock.patch.object(api, "_prelaunch", side_effect=end_the_worker_then_prelaunch), \
+                mock.patch.object(api, "_prelaunch", side_effect=prelaunch_then_end_the_worker), \
                 self.assertRaises(ResearchError) as raised:
             api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
                                  request_id="worker-ends-before-token")
@@ -677,13 +684,13 @@ class ResearchExecutionTests(DevelopmentCase):
 
     def assert_unstarted_worker_leaves_the_claimed_run_to_reconcile(self, api, admission, refusal_error, error_number):
         """The launch that ended with `refusal_error` keeps its claim without an outcome, and reconcile-run records it."""
-        self.assertEqual(refusal_error.as_dict(), {"code": "execution_recovery_required", "message":
-            "The worker process did not start. Use exactory-research reconcile-run to record the claimed run as "
-            "interrupted, with a reason.", "details": {"errno": error_number}})
         records = self.store.snapshot()["records"]
-        self.assertIn(admission["id"], records["execution_claim"])
+        self.assertEqual(refusal_error.as_dict(), {"code": "execution_recovery_required", "message":
+            api.RUN_WORKER_NOT_STARTED_MSG, "details": {"admission_id": admission["id"], "errno": error_number,
+                "request_id": records["execution_claim"][admission["id"]]["request_id"]}})
         self.assertNotIn("execution_outcome", records)
-        # The documented recovery records the claimed run as interrupted.
+        # The message names the same request first; recording the claimed run as interrupted, its other way on,
+        # ends the run.
         result = api.reconcile_execution(self.store, {"admission_id": admission["id"], "resolution": "interrupted",
             "reason": "The worker process did not start."}, expected_revision=self.store.revision,
             request_id="recover-unstarted-worker")
@@ -1275,17 +1282,17 @@ class ResearchExecutionTests(DevelopmentCase):
         # The earlier release recorded the outcome and stopped before the observation, which holds the seed.
         self.convert_integers_of_any_length()
         api = importlib.import_module("research_harness.execution")
-        original_prepared_mutation = api.prepared_mutation
+        original_prepared_task_mutation = api.prepared_task_mutation
 
         def stop_before_the_observation(store, operation, *args, **kwargs):
             if operation == "execution.observe":
                 raise OSError("The earlier release stopped before the observation")
-            return original_prepared_mutation(store, operation, *args, **kwargs)
+            return original_prepared_task_mutation(store, operation, *args, **kwargs)
 
         with self.write_as_earlier_release():
             admission = admit_lab(self, body="print('{\"metric\": 7}')\n", seed=10 ** 4300)
             self.launch_until_the_launcher_exits(admission)
-            with mock.patch.object(api, "prepared_mutation", side_effect=stop_before_the_observation), \
+            with mock.patch.object(api, "prepared_task_mutation", side_effect=stop_before_the_observation), \
                     self.assertRaisesRegex(OSError, "stopped before the observation"):
                 api.reconcile_execution(self.store, {"admission_id": admission["id"]},
                                         expected_revision=self.store.revision, request_id="earlier-reconcile")

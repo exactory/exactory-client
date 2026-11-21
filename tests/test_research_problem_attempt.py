@@ -299,7 +299,7 @@ class ProblemAttemptTests(ProblemCase):
         module = self.attempt_module()
         self.assertEqual(module.assess_attempt(self.store.snapshot()["records"], self.artifacts)[0]["code"], "problem_attempt_missing")
         self.record_attempt(self.solver_payload())
-        self.select_statement(identifier="statement-2", resolution_criteria="A changed resolution criterion.")
+        self.select_statement(identifier="statement-2", resolution_criteria="A changed resolution criterion: prove the bound or give a counterexample.")
         pending = module.assess_attempt(self.store.snapshot()["records"], self.artifacts)
         self.assertEqual([(row["code"], row["attempt_id"]) for row in pending], [("problem_attempt_stale", "attempt-1")])
         self.select_statement()

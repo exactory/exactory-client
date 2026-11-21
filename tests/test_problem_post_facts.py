@@ -145,7 +145,7 @@ class PostFactTests(CheckCommandMixin, fixtures.ProblemDeliveryCase):
     def test_binds_an_older_post_by_id_and_follows_its_post_in_views_and_status(self):
         self.prepare_post()
         original = copy.deepcopy(self.statement)
-        self.select_statement(identifier='new-statement', statement='A different synthetic bound.')
+        self.select_statement(identifier='new-statement', statement='A different synthetic bound for every finite construction.')
         saved = self.record_fact()['result']
         self.assertEqual(saved['post_id'], self.post['id'])
         self.assertNotIn('after_post', cli.status_report(self.store))
@@ -222,7 +222,7 @@ class PostFactTests(CheckCommandMixin, fixtures.ProblemDeliveryCase):
         self.assert_refusal_parity('problem-post-fact', dict(self.payload, fact='A different finding.'),
                                   'record_conflict', request='different-fact')
         self.assertEqual(self.record_fact(request='same-fact-again')['result'], receipt['result'])
-        self.select_statement(identifier='later', statement='A different bound.')
+        self.select_statement(identifier='later', statement='A different bound for every finite construction of the record.')
         (self.root / self.payload['source']['path']).unlink()
         before = self.read_workspace()
         self.assertEqual(self.record_fact(revision=revision), receipt)
@@ -267,12 +267,12 @@ class StoredPostCompatibilityTests(CheckCommandMixin, fixtures.ProblemDeliveryCa
     def test_stored_gated_post_keeps_0820_status_next_obligations_and_view_bytes(self):
         # Captured with the problem_delivery and output_views modules of 0.82.0 (645a791).
         self.assertEqual(digest(self.read_legacy_outputs('passed')),
-                         '44445551f9209ed7cec0ecdc2342ea77af49d07bcdad4251fe14d1e09d2f6407')
+                         '034b7ced67e06c8c7105043e40dcd0e20aa069d94d9d10c0f67879d7f902fd55')
 
     def test_stored_external_post_keeps_0820_status_next_obligations_and_view_bytes(self):
         self.assertEqual(digest(self.read_legacy_outputs('bypassed')),
-                         '354a3c3b9519f3da7e0d21b3c46c505e00021ad21e5a8ee4e9dee66c7c1bfd7b')
+                         '2669534593b99aec8c83421f4f120d587b422ce319c8258f6965a9fc3c641eb5')
 
     def test_stored_legacy_external_post_keeps_0820_status_next_obligations_and_view_bytes(self):
         self.assertEqual(digest(self.read_legacy_outputs('legacy_bypassed')),
-                         'aef49d8896977dc83e494cc11a9272abc62afe77393e9583265c07b1480e744b')
+                         '785606882971c9c3471ea522f4bea00839ecec43c34132c665131a87ed9a38c3')

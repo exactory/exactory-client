@@ -89,7 +89,7 @@ class PostTimeTests(CheckCommandMixin, fixtures.ProblemDeliveryCase):
         self.prepare_post()
         revision = self.store.revision
         original = self.record_time()
-        self.select_statement(identifier='new-statement', statement='A different synthetic bound.')
+        self.select_statement(identifier='new-statement', statement='A different synthetic bound for every finite construction.')
         render_all(self.store)
         before = self.read_workspace()
         self.assertEqual(self.record_time(copy.deepcopy(self.payload), revision=revision), original)
@@ -101,7 +101,7 @@ class PostTimeTests(CheckCommandMixin, fixtures.ProblemDeliveryCase):
 
     def test_old_post_is_found_by_id_after_current_statement_changes(self):
         self.prepare_post()
-        self.select_statement(identifier='new-statement', statement='A different synthetic bound.')
+        self.select_statement(identifier='new-statement', statement='A different synthetic bound for every finite construction.')
         self.assertEqual(self.record_time()['result']['post_id'], self.post_payload['id'])
 
     def test_a_workspace_without_a_problem_record_is_refused_without_writes(self):

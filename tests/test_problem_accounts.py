@@ -336,9 +336,9 @@ class ProblemAccountsTests(ProblemCase):
         accounts["places"] = [build_place([self.reading])]
         place = {"kind": "account", "id": "place"}
         value = {"id": "sidorenko-schema", "statement_id": selected["id"], "accounts": accounts,
-            "motivation": [{"text": "The reported construction marks a necessary hypothesis within its stated scope.", "evidence": [{"kind": "account", "id": "bnd-1"}, place]}],
+            "motivation": [{"text": "The reported construction marks a necessary hypothesis within its stated scope. The boundary entry gives that scope.", "evidence": [{"kind": "account", "id": "bnd-1"}, place]}],
             "changes_if_resolved": [{"text": CHANGES_IF_RESOLVED_TEXT, "evidence": [place]}],
-            "current_state": [{"text": "The leading-order mechanism stops on the stated class; other constructions remain open.", "evidence": [{"kind": "account", "id": "bnd-2"}]}]}
+            "current_state": [{"text": "The leading-order mechanism stops on the stated class; other constructions remain open. The second boundary entry states where.", "evidence": [{"kind": "account", "id": "bnd-2"}]}]}
         saved = self.record(value)
         self.assertEqual(len(saved["accounts"]["alternatives"]), 7)
         self.assertIn("conditional", saved["accounts"]["boundaries"][1]["scope"])

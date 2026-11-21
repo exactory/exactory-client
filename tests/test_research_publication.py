@@ -495,7 +495,7 @@ class ResearchPublicationTests(DevelopmentCase):
         receipt without a DOI. The read of the same deposition supplies the publication that the
         deposited gate and the submission need, and the first receipt stays as it was written."""
         import hashlib
-        from research_harness.remote import finish_intent, resolve_step
+        from research_harness.remote import ANSWER_MEMBERS, REMOTE_ANSWER_STORE_BUSY_MSG, finish_intent, resolve_step
         from research_harness.submission import validate_submission
         from research_harness.zenodo import continue_deposit, deposit
         binding = self.remote_binding()
@@ -518,7 +518,8 @@ class ResearchPublicationTests(DevelopmentCase):
             return {}
         self.assert_error("remote_reconciliation_required", lambda: deposit(
             self.store, binding, client, expected_revision=self.store.revision, request_id="deposit-1"))
-        resolve_step(self.store, "deposit-1", "publish", None, {"kind": "direct_response"})
+        resolve_step(self.store, "deposit-1", "publish", None, {"kind": "direct_response"},
+                     answer_members=ANSWER_MEMBERS[("deposit", "publish")], busy_msg=REMOTE_ANSWER_STORE_BUSY_MSG)
         state = {"environment": "production", "deposition_id": 91, "draft_url": "https://zenodo.org/deposit/91"}
         legacy = dict(state, intent_id="deposit-1", bundle_digest=binding["bundle_digest"], uploads=binding["uploads"],
                       published_response=None, prepared_revision=binding["prepared_revision"])
@@ -580,27 +581,34 @@ class ResearchPublicationTests(DevelopmentCase):
             if method == "POST":
                 if sum(call[0] == "POST" for call in calls) == 1:
                     raise OSError("The server accepted the request, then its response was lost")
-                return {"verificationId": task["verificationId"], "doi": task["doi"]}, 201
+                # The service answers a repeat with the open request of the paper (verificationSummarySchema).
+                return {"id": task["verificationId"], "status": "open", "doi": task["doi"],
+                        "createdAt": "2026-11-20T00:00:00.000Z", "webUrl": "https://www.exactory.ai/verifications/x",
+                        "supersedes": None, "supersededBy": None}, 200
             return (task, 200) if ingested[0] else ({}, 404)
         from research_harness.errors import ResearchError
         with self.assertRaises(OSError):
             submit_managed(self.store, {"doi": publication["doi"]}, client,
                 expected_revision=self.store.revision, request_id="lost-submission")
-        # The record URL names the same publication, so the managed path reaches
-        # the one intent the lost POST left and refuses before any second write.
+        # The record URL names the same publication, so the managed path continues the one intent that the lost
+        # POST left. The service shows no task of the record, so the request of that intent is sent again, which the
+        # service answers with the open request, and its answer is recorded.
         with self.assertRaises(ResearchError) as raised:
             submit_managed(self.store, {"url": publication["record_url"]}, client,
                 expected_revision=self.store.revision, request_id="same-record-url")
-        self.assertEqual(raised.exception.code, "remote_reconciliation_required")
+        self.assertEqual(raised.exception.code, "verification_ingest_pending")
         self.assertEqual(raised.exception.details["intent_id"], "lost-submission")
-        self.assertEqual(sum(call[0] == "POST" for call in calls), 1, calls)
-        self.assertEqual({record["id"] for record in self.store.snapshot()["records"]["remote_intent"].values()
-                          if record["kind"] == "submit"}, {"lost-submission"})
+        self.assertEqual([call[2] for call in calls if call[0] == "POST"], [{"doi": publication["doi"]}] * 2, calls)
+        intents = [record for record in self.store.snapshot()["records"]["remote_intent"].values()
+                   if record["kind"] == "submit"]
+        self.assertEqual([record["id"] for record in intents], ["lost-submission"])
+        self.assertIsNone(intents[0]["pending"])
+        self.assertEqual([entry["observation"]["kind"] for entry in intents[0]["discarded"]], ["remote_read"])
         ingested[0] = True
         receipt = continue_submission(self.store, "lost-submission", client)
         self.assertEqual(receipt["request_body"], {"doi": publication["doi"]})
         self.assertEqual(receipt["record_doi"], publication["doi"])
-        self.assertEqual(sum(call[0] == "POST" for call in calls), 1)
+        self.assertEqual(sum(call[0] == "POST" for call in calls), 2)
 
     def test_validate_assessor_is_shared_and_refuses_authors(self):
         api = self.publication()

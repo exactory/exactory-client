@@ -105,6 +105,10 @@ class StoredFindingCompatibilityTests(unittest.TestCase):
         runtime = patch.object(Store, 'describe_runtime', return_value={'fixture': 'stored-finding-compatibility'})
         runtime.start()
         self.addCleanup(runtime.stop)
+        from ci.reviewer_program_guard import use_absent_programs
+        # The state memo asks the Codex adapter for its runtime outside the blocks that install the runtime of a
+        # stored route. The test states that the machine has no Codex program.
+        use_absent_programs(self)
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.fixtures = []

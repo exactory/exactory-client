@@ -95,7 +95,8 @@ class ResearchStorePreparationTests(unittest.TestCase):
                         "Storage must issue an owned authenticated preparation")
         return store._read_preparation()
 
-    def test_register_artifact_with_two_full_validations_and_one_structural_check(self):
+    def test_register_artifact_with_two_full_validations_and_two_structural_checks(self):
+        # The structural checks are the open of the store and the look for the request before the write.
         calls = []
         original = storage._validate
 
@@ -107,7 +108,7 @@ class ResearchStorePreparationTests(unittest.TestCase):
             receipt = self.invoke_cli()
         self.assertEqual(receipt["revision"], 1)
         self.assertEqual(sum(replay for replay, _ in calls), 2, calls)
-        self.assertEqual(calls.count((False, 1)), 1, calls)
+        self.assertEqual(calls.count((False, 1)), 2, calls)
         self.assertEqual(calls.count((True, 0)), 1, calls)
         self.assertEqual(self.read_counts(), (2, 1, 1))
 

@@ -95,6 +95,10 @@ def build_assignment_report(records, artifacts, assignment, request=None, *, obs
         plan = read_chain_capacity_plan(artifacts, assignment)
     report = build_report(records, artifacts, route, assignment['role'], assignment['prompt'], packet, request,
                           capacity_plan=plan, turn_kind=assignment.get('capacity_plan_kind'), observations=observations)
+    if plan is not None and assignment.get('reading_chain'):
+        # The forecast of a turn of a reading chain covers the inputs that remain, as the receipt of the turn states it.
+        from .openness_reading_v7 import describe_turn_forecast
+        report['capacity_forecast'] = describe_turn_forecast(records, artifacts, assignment, request=request)
     if (assignment['role'] == 'native_math' and reading.find_stage(packet) is not None
             and reading.find_protocol(packet) not in reading.BOUNDED_CHAIN_PROTOCOLS
             and assignment.get('context', {}).get('native_packet')):

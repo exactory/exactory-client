@@ -469,14 +469,16 @@ class FulltextTransferTests(unittest.TestCase):
         self.assertEqual(caught.exception.attempts, [])
         self.assertEqual(wire.requests, [])
 
-    def test_busy_commit_retries_captured_unit_without_another_request(self):
+    def test_busy_commit_ends_the_invocation_without_another_request(self):
+        # A unit store waits for a busy store itself (fulltext_jobs.commit_job), so its store_busy is not tried again.
         self.units.fail_commits = 1
         self.units.fail_code = "store_busy"
         wire = RangeWire()
-        result = self.run_engine(self.make_engine(wire), budget=RequestBudget(3))
-        self.assertEqual(result["response"]["sha256"], hashlib.sha256(BODY).hexdigest())
-        self.assertEqual(len(wire.requests), 3)
-        self.assertEqual(self.units.commits, 4)
+        with self.assertRaises(HttpFailure) as caught:
+            self.run_engine(self.make_engine(wire), budget=RequestBudget(3))
+        self.assertEqual(caught.exception.code, "store_busy")
+        self.assertEqual((len(wire.requests), self.units.commits), (1, 1))
+        self.assertEqual(self.units.read_units("job"), [])
 
     def test_extreme_range_numbers_preserve_a_typed_refusal(self):
         wire = RangeWire(changed={"Content-Range": "bytes 0-3/" + "9" * 5000})

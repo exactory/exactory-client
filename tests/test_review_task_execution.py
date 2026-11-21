@@ -8,6 +8,7 @@ import tempfile
 import time
 import unittest
 
+from ci.reviewer_program_guard import use_absent_programs
 from research_harness import review_task_execution as execution
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
@@ -21,6 +22,9 @@ class TaskExecutionFixture(unittest.TestCase):
         self.root = Path(temporary.name) / "study"
         self.store = Store(self.root, create=True)
         self.put("review_route", "route", {"id": "route", "adapter": "codex_cli_v1", "configuration": {}})
+        # This route record pins no runtime, and the state memo asks its adapter for one. The test states that the
+        # machine has no Codex program.
+        use_absent_programs(self)
         self.put("review_epoch", "epoch", {"id": "epoch", "generation": 1, "context": "original"})
         self.put("context", "slot", {"version": 1})
         self.request = self.store.build_artifact_store().put(_canonical({"history": [], "packet": {}}).encode(),

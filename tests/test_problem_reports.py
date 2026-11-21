@@ -163,7 +163,7 @@ class ProblemReportTests(CheckCommandMixin, ProblemCase):
         self.select_statement(candidate_id="candidate-1")
         self.put_external_post()
         self.assertFalse(problem_reports.is_report_due(self.store.snapshot()["records"]))
-        self.select_statement(identifier="statement-2", candidate_id="candidate-2", statement="A different question.")
+        self.select_statement(identifier="statement-2", candidate_id="candidate-2", statement="A different question about every finite construction of the record.")
         self.mutate(problem_claims.record_decision, dict(id="withdraw", action="withdraw", review_ids=[], bar_review_ids=[], reason="The case is too weak."))
         self.assertTrue(problem_reports.is_report_due(self.store.snapshot()["records"]))
         report = self.record_report()
@@ -202,7 +202,7 @@ class ProblemReportTests(CheckCommandMixin, ProblemCase):
         self.put_candidate("candidate-2")
         self.put_slate(["candidate-1", "candidate-2"])
         self.select_statement(candidate_id="candidate-1")
-        self.select_statement(identifier="statement-2", candidate_id="candidate-2", statement="Another exact question.")
+        self.select_statement(identifier="statement-2", candidate_id="candidate-2", statement="Another exact question about every finite construction of the record.")
         self.select_statement(candidate_id="candidate-1")
         decision = self.mutate(problem_claims.record_decision, dict(id="withdraw", action="withdraw", review_ids=[],
             bar_review_ids=[], reason="The case is too weak."))["result"]
@@ -216,7 +216,7 @@ class ProblemReportTests(CheckCommandMixin, ProblemCase):
         self.put_candidate("candidate-2")
         self.put_slate(["candidate-1", "candidate-2"])
         self.select_statement(candidate_id="candidate-1")
-        self.select_statement(identifier="statement-2", candidate_id="candidate-2", statement="Another exact question.")
+        self.select_statement(identifier="statement-2", candidate_id="candidate-2", statement="Another exact question about every finite construction of the record.")
         self.select_statement(candidate_id="candidate-1")
         decision = dict(id="old-withdraw", action="withdraw", review_ids=[], bar_review_ids=[],
                         reason="The case is too weak.", problem_evidence_digest=None,
@@ -440,7 +440,7 @@ class ProblemReportTests(CheckCommandMixin, ProblemCase):
         accounts["gain"] = dict(id="gain", separate_grounds=[])
         self.put_gated_post(self.put_value(accounts=accounts))
         self.select_statement(identifier="same-text")
-        statement = self.select_statement(identifier="other-text", statement="A different bound.")
+        statement = self.select_statement(identifier="other-text", statement="A different bound for every finite construction of the record.")
         self.mutate(problem_claims.record_post_external, dict(id="outside", problem_id="656c336e-e892-4c47-80d2-a71d022f4116",
             statement_digest=problem_claims.compute_statement_digest(statement), reason="The owner requested it.", evidence="The request."))
         report = self.record_report()

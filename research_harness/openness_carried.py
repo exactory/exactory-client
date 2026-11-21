@@ -119,6 +119,8 @@ CHAIN_OBSERVERS = MappingProxyType({
     reading.MATH_PROTOCOL_V2: v7.observe_v7_chain,
 })
 STORE_REFUSAL_CODES = ('artifact_missing', 'artifact_corrupt', 'storage_io', 'unsafe_path')
+# The two refusals with which an observer states that a prefix of an earlier chain is no ready reading prefix.
+PREFIX_STATE_CODES = ('review_context_unverified', 'openness_reading_incomplete')
 
 
 def _describe_chain(records, artifacts, first, identity):
@@ -163,17 +165,15 @@ def list_qualifying_chains(records, artifacts, identity):
 
     identity is {reviewer_id, author_id, route, subject_digest, claim_digest, formulations,
     recorded_revision}. packet_kind is 'math' for a math packet; its default is 'problem'
-    for the existing problem callers. The revision is the new first assignment's cutoff, exclusive.
+    for the existing problem callers. The revision is the new first assignment's cutoff, exclusive. A refusal of
+    the qualification ends the selection.
     """
     chains = []
     for first in sorted(records.get('review_assignment', {}).values(),
                         key=lambda row: row['recorded_revision'], reverse=True):
         if normalized_text(first['reviewer_id']) != normalized_text(identity['reviewer_id']):
             continue
-        try:
-            chain = _describe_chain(records, artifacts, first, identity)
-        except ResearchError:
-            continue  # A packet that is no openness packet is not a candidate.
+        chain = _describe_chain(records, artifacts, first, identity)
         if chain is not None:
             chains.append(chain)
     return chains
@@ -183,7 +183,8 @@ def list_passed_over_chains(records, artifacts, identity):
     """Return {passed_over, unavailable_chains} for the chains under another reviewer, newest first.
 
     These rows belong to the report alone: no selection holds such a chain. A chain whose artifact the
-    store cannot give is a row of unavailable_chains, with the code and details of that refusal.
+    store cannot give is a row of unavailable_chains, with the code and details of that refusal. Every
+    other refusal ends the report.
     """
     passed_over, unavailable = [], []
     for first in sorted(records.get('review_assignment', {}).values(),
@@ -193,9 +194,10 @@ def list_passed_over_chains(records, artifacts, identity):
         try:
             chain = _describe_chain(records, artifacts, first, identity)
         except ResearchError as error:
-            if error.code in STORE_REFUSAL_CODES:
-                unavailable.append(dict(chain=first['id'], code=error.code, details=error.details,
-                                        message=v7.UNAVAILABLE_CHAIN_TEXT.format(chain=first['id'])))
+            if error.code not in STORE_REFUSAL_CODES:
+                raise
+            unavailable.append(dict(chain=first['id'], code=error.code, details=error.details,
+                                    message=v7.UNAVAILABLE_CHAIN_TEXT.format(chain=first['id'])))
             continue
         if chain is not None:
             passed_over.append(dict(chain, reason='reviewer_id'))
@@ -213,7 +215,8 @@ def observe_qualifying_chain(records, artifacts, chain, identity):
     """Authenticate the longest ready prefix before the cutoff with its own protocol's observer.
 
     A stopped/unready last turn cannot erase earlier ready readings. An invalid turn cannot be skipped
-    inside a prefix. The dispatch table is the only home for supported observer protocols.
+    inside a prefix. The dispatch table is the only home for supported observer protocols. Only a refusal
+    in PREFIX_STATE_CODES sends the observation to the turn before; every other refusal ends the selection.
     """
     eligible = _select_recorded_attempts(records, identity)
     artifacts = _SelectionEvaluation.of(eligible, artifacts)
@@ -225,8 +228,9 @@ def observe_qualifying_chain(records, artifacts, chain, identity):
     for assignment in sorted(members, key=lambda row: row['recorded_revision'], reverse=True):
         try:
             return observer(eligible, artifacts, assignment)
-        except ResearchError:
-            continue
+        except ResearchError as error:
+            if error.code not in PREFIX_STATE_CODES:
+                raise
     return []
 
 
@@ -486,7 +490,8 @@ def verify_carried_selection(records, artifacts, inventory, identity, selection,
 
     selection is its stored JSON value or artifact reference. Only named origin prefixes are authenticated.
     Later candidates cannot change a stored selection.
-    Any invalid selected item uses project_carried_turn's existing refusal and message.
+    Any invalid selected item uses project_carried_turn's existing refusal and message, and so do a refusal in
+    PREFIX_STATE_CODES or STORE_REFUSAL_CODES and a value of the wrong shape. Every other refusal passes through.
     """
     try:
         if isinstance(selection, dict) and 'path' in selection:
@@ -551,7 +556,11 @@ def verify_carried_selection(records, artifacts, inventory, identity, selection,
             else:
                 v7._require_selected(not any(row['notes']['classification'] == 'affected' for row in projections))
         return projections
-    except (ResearchError, KeyError, TypeError, ValueError, IndexError):
+    except ResearchError as error:
+        if error.code not in PREFIX_STATE_CODES + STORE_REFUSAL_CODES:
+            raise
+        v7._require_selected(False)
+    except (KeyError, TypeError, ValueError, IndexError):
         v7._require_selected(False)
 
 

@@ -182,6 +182,10 @@ A refused action of the
 chain ends the command this way with the refusal's code (for example a
 `review_parts_*` code); when the refusal recorded an output refusal, or its
 code is `review_invocation_pending`, the command plans again instead.
+After `store_busy` the command also plans again by itself, at most 8 times in
+a row. When `review-series` or `review-run` still ends with `store_busy`, read
+the message of that refusal. It names the command that goes on, which is not
+always the refused command.
 Read `code`, `details` and `stop_class`. When `stop_class` is
 `harness_defect` and the last line carries `stop_id`, request the automatic
 pass with that `stop_id`, as [The automatic pass](../../docs/research-workflow.md#the-automatic-pass)

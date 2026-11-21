@@ -187,7 +187,11 @@ class FinalPagesCommandTests(FinalPagesSupport):
         self.assertEqual(result['outcome'], 'unresolved')
         self.assertEqual(result['composite'],dict(id=composite['id'],digest=digest(composite)))
         self.assertEqual(result['reading_turns'][-1]['assignment_id'],final)
+        from ci.reviewer_program_guard import use_absent_programs
         from research_harness.record_check import check_record
+        # The record check lists the path of the Codex program beside each runtime read. The test states that
+        # the machine has none.
+        use_absent_programs(self)
         checked = check_record(self.root, isolate=False)
         self.assertTrue(checked['ready'], checked)
 
@@ -599,7 +603,11 @@ class IncidentFinalPagesTests(FinalPagesSupport):
         carried_units = sum(row['kind'] == 'carried_reading' for row in inventory['units'])
         self.assertGreater(carried_units, 0)
         self.assertGreater(len(composite['pages']), 1)
+        from ci.reviewer_program_guard import use_absent_programs
         from research_harness.record_check import check_record
+        # The record check lists the path of the Codex program beside each runtime read. The test states that
+        # the machine has none.
+        use_absent_programs(self)
         checked = check_record(self.root, isolate=False)
         self.assertTrue(checked['ready'], checked)
         print(json.dumps(dict(incident_final_pages=dict(pages=len(composite['pages']),

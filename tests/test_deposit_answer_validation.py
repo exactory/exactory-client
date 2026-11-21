@@ -11,7 +11,8 @@ import urllib.response
 
 from research_harness import zenodo
 from research_harness.artifacts import ArtifactStore
-from research_harness.remote import begin_intent, finish_intent, resolve_step
+from research_harness.remote import (ANSWER_MEMBERS, REMOTE_ANSWER_STORE_BUSY_MSG, begin_intent, finish_intent,
+                                     resolve_step)
 from research_harness.storage import Store
 from test_draft import (_FakeZenodoApi, _LostResponseZenodoApi, _PlainWorkspaceDepositTestCase,
                         _PublishedRecordZenodoApi, _draft, _read_request, _run_draft_command)
@@ -289,7 +290,8 @@ class TestManagedPublishAnswers(_PlainWorkspaceDepositTestCase):
         store = Store(self.workspace_dir)
         intent = self.read_intent()
         receipt_id = intent["id"] + ":resolve:" + str(store.revision)
-        resolve_step(store, intent["id"], "publish", answer, {"kind": "direct_response"})
+        resolve_step(store, intent["id"], "publish", answer, {"kind": "direct_response"},
+                     answer_members=ANSWER_MEMBERS[("deposit", "publish")], busy_msg=REMOTE_ANSWER_STORE_BUSY_MSG)
         return self.read_intent(), uploaded, receipt_id, store.committed_request(receipt_id)
 
     def test_an_old_saved_invalid_answer_recovers_without_changing_any_prior_receipt(self):

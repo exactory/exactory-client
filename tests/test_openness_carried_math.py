@@ -12,7 +12,7 @@ from research_harness import openness_reading_v7 as v7, review_protocol as proto
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from research_harness.problem_openness import serialize_record
-from test_openness_carried import build_identity
+from test_openness_carried import NO_STATE_REFUSAL_CODE, STAND_IN_REFUSAL_MESSAGE, build_identity
 
 
 class MathCarriedCase(OpennessReadingCase):
@@ -200,6 +200,52 @@ class MathCarriedSelectionTests(MathCarriedCase):
                           **{reading.MATH_PROTOCOL: observe_changed_span})):
             with self.assertRaises(ResearchError):
                 self.verify_selection(inputs, selection)
+
+
+class MathCarriedRefusalTests(MathCarriedCase):
+    """Only the two refusals that state that a prefix is not ready send the selection of a math chain to the turn
+    before (0.91.9, with the math observers of 0.92.0). A stand-in observer under the key of the math protocol gives
+    the refusal for the second turn and observes the first."""
+
+    def refuse_second_turn(self, code):
+        observe = carried.CHAIN_OBSERVERS[reading.MATH_PROTOCOL]
+
+        def refuse(records, artifacts, assignment):
+            if assignment['id'] == 'math-2':
+                raise ResearchError(code, STAND_IN_REFUSAL_MESSAGE)
+            return observe(records, artifacts, assignment)
+        return patch.object(carried, 'CHAIN_OBSERVERS', dict(carried.CHAIN_OBSERVERS, **{reading.MATH_PROTOCOL: refuse}))
+
+    def build_two_turns(self):
+        native = self.build_math_packet()
+        first = self.run_turn(native)
+        self.run_turn(native, 'math-2', 'math-1')
+        inputs = self.build_selection_inputs(native, first)
+        selection = self.build_selection(inputs)
+        self.assertEqual([row['origin']['assignment_id'] for row in selection['turns']], ['math-1', 'math-2'])
+        return inputs, selection
+
+    def test_math_selection_ends_with_a_refusal_that_is_no_state_and_goes_back_for_the_two(self):
+        inputs, _ = self.build_two_turns()
+        with self.refuse_second_turn(NO_STATE_REFUSAL_CODE), self.assertRaises(ResearchError) as refused:
+            self.build_selection(inputs)
+        self.assertEqual((refused.exception.code, refused.exception.message),
+                         (NO_STATE_REFUSAL_CODE, STAND_IN_REFUSAL_MESSAGE))
+        for code in carried.PREFIX_STATE_CODES:
+            with self.subTest(code=code), self.refuse_second_turn(code):
+                self.assertEqual([row['origin']['assignment_id'] for row in self.build_selection(inputs)['turns']],
+                                 ['math-1'])
+
+    def test_math_verification_passes_a_refusal_that_is_no_state_through(self):
+        inputs, selection = self.build_two_turns()
+        with self.refuse_second_turn(NO_STATE_REFUSAL_CODE), self.assertRaises(ResearchError) as refused:
+            self.verify_selection(inputs, selection)
+        self.assertEqual(refused.exception.code, NO_STATE_REFUSAL_CODE)
+        for code in carried.PREFIX_STATE_CODES + ('artifact_missing',):
+            with self.subTest(code=code), self.refuse_second_turn(code), self.assertRaises(ResearchError) as refused:
+                self.verify_selection(inputs, selection)
+            self.assertEqual((refused.exception.code, refused.exception.message),
+                             ('openness_reading_incomplete', v7.SELECTION_MISMATCH_MESSAGE))
 
 
 class MathPassageDependencyTests(MathCarriedCase):

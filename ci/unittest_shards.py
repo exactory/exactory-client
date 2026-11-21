@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Run and verify exhaustive partitions of ordinary unittest discovery."""
+"""Run and verify exhaustive partitions of ordinary unittest discovery, and run named test modules. The commands
+run and run-modules install the reviewer program guard (ci/reviewer_program_guard.py) before a test module loads."""
 import argparse
 import hashlib
 import json
@@ -23,7 +24,10 @@ def write_json(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def run_shard(suite, shard_index, shard_count, provenance, *, stream=None, record_path=None):
+def run_shard(suite, shard_index, shard_count, provenance, *, take_machine_reads, stream=None, record_path=None):
+    """Run the selected tests. take_machine_reads returns one error for each stopped lookup and each stub start that
+    the reviewer program guard recorded since its last call (ci/reviewer_program_guard.py). The runner reports a
+    test that passed after one of them as an error."""
     if shard_count < 1 or not 0 <= shard_index < shard_count:
         raise ValueError("Invalid shard index or count")
     tests = list(flatten(suite))
@@ -43,6 +47,21 @@ def run_shard(suite, shard_index, shard_count, provenance, *, stream=None, recor
         def startTest(self, test):
             report["executed_test_ids"].append(test.id())
             super().startTest(test)
+
+        def addSuccess(self, test):
+            # A test can pass after a read of the machine. The code under test can catch the stop of the guard. A
+            # thread does not pass the stop on. A child process cannot stop the test. A read since the end of the
+            # previous test counts against this test too, for example a stub start in setUpClass.
+            reads = take_machine_reads()
+            if reads:
+                self.addError(test, (type(reads[0]), reads[0], reads[0].__traceback__))
+            else:
+                super().addSuccess(test)
+
+        def stopTest(self, test):
+            # A test that did not pass has its outcome already. Its reads are not charged to the next test.
+            take_machine_reads()
+            super().stopTest(test)
 
     result = unittest.TextTestRunner(stream=stream, verbosity=2, resultclass=RecordedResult).run(
         unittest.TestSuite(tests[index] for index in selected)
@@ -131,6 +150,15 @@ def git_value(directory, expression):
     return subprocess.check_output(["git", "-C", str(directory), "rev-parse", expression], text=True).strip()
 
 
+def install_reviewer_program_guard(root):
+    """Put the plugin root on the import path, install the reviewer program guard, and return its function
+    take_machine_reads. The caller does this before a test module loads."""
+    sys.path.insert(0, str(root))
+    from ci import reviewer_program_guard
+    reviewer_program_guard.install_guard()
+    return reviewer_program_guard.take_machine_reads
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -141,6 +169,15 @@ def main():
     run.add_argument("--shard-count", type=int, required=True)
     run.add_argument("--marketplace", type=Path, required=True)
     run.add_argument("--result", type=Path, required=True)
+    named = commands.add_parser(
+        "run-modules",
+        help="Run named test modules, classes or methods with the reviewer program guard. Run this command in the "
+             "plugin root. The exit status is 0 only when every named test runs and passes. A skipped test and an "
+             "expected failure give status 1, as in a CI shard.")
+    named.add_argument("--top-level-directory", type=Path, default=Path("tests"),
+                       help="The directory that goes first on the import path (default: %(default)s). For the "
+                            "harness tests, use skills/math-solver/harness.")
+    named.add_argument("names", nargs="+", help="Test modules, classes or methods, such as tests.test_ci_shards.")
     verify = commands.add_parser("verify")
     verify.add_argument("--receipts", type=Path, required=True)
     verify.add_argument("--python-versions", nargs="+", required=True)
@@ -150,11 +187,11 @@ def main():
     verify.add_argument("--marketplace-commit", required=True)
     verify.add_argument("--result", type=Path, required=True)
     args = parser.parse_args()
-    if args.shard_count < 1:
+    if args.command != "run-modules" and args.shard_count < 1:
         parser.error("Shard count must be positive")
+    root = Path(__file__).resolve().parents[1]
     if args.command == "run":
-        root = Path(__file__).resolve().parents[1]
-        sys.path.insert(0, str(root))
+        take_machine_reads = install_reviewer_program_guard(root)
         provenance = {
             "client_commit": git_value(root, "HEAD"), "client_tree": git_value(root, "HEAD^{tree}"),
             "marketplace_commit": git_value(args.marketplace, "HEAD"),
@@ -164,7 +201,14 @@ def main():
         suite = unittest.TestLoader().discover(
             str(args.start_directory.resolve()), top_level_dir=top_level,
         )
-        report = run_shard(suite, args.shard_index, args.shard_count, provenance, record_path=args.result)
+        report = run_shard(suite, args.shard_index, args.shard_count, provenance, record_path=args.result,
+                           take_machine_reads=take_machine_reads)
+    elif args.command == "run-modules":
+        take_machine_reads = install_reviewer_program_guard(root)
+        sys.path.insert(0, str(args.top_level_directory.resolve()))
+        suite = unittest.TestLoader().loadTestsFromNames(args.names)
+        report = run_shard(suite, 0, 1, {"python_version": platform.python_version()},
+                           take_machine_reads=take_machine_reads)
     else:
         paths = sorted(args.receipts.rglob("shard-result.json"))
         report = verify_reports(

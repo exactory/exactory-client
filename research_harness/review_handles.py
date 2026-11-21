@@ -174,26 +174,28 @@ def _validate_v7_refs(packet, output, *, raw):
         return
     findings = output.get('findings')
     openness = findings.get('openness') if isinstance(findings, dict) else None
-    grounds = openness.get('grounds') if isinstance(openness, dict) else None
+    # Each place holds a list of grounds; a refused reference names its ground, and for a page its target.
+    located = [('/findings/openness/grounds', openness.get('grounds') if isinstance(openness, dict) else None)]
     if 'page_plan_digest' in packet['reading_final']:
         if 'closing' in packet['reading_final']:
-            grounds = output.get('grounds')
+            located = [('/grounds', output.get('grounds'))]
         elif isinstance(output.get('targets'), list):
-            grounds = [ground for target in output['targets'] if isinstance(target, dict)
-                       for ground in target.get('grounds', []) if isinstance(target.get('grounds'), list)]
-    for ground in grounds if isinstance(grounds, list) else []:
-        references = ground.get('refs') if isinstance(ground, dict) else None
-        if not isinstance(references, list):
-            continue  # The role validator reports the malformed container.
-        for reference in references:
-            if not raw and isinstance(reference, dict) and 'ref' not in reference:
-                continue  # Already expanded authenticated output.
-            handle = reference.get('ref') if isinstance(reference, dict) else None
-            if (not isinstance(reference, dict) or set(reference) != {'ref'}
-                    or not isinstance(handle, str) or handle[:1] not in (
-                        ('g', 'h', 'n', 'm', 'u', 'x') if packet['reading_final'].get('unread')
-                        else ('g', 'h', 'n', 'm'))):
-                _refuse_handle('/findings/openness/grounds/refs', handle)
+            located = [('/targets/%d/grounds' % index, target.get('grounds'))
+                       for index, target in enumerate(output['targets']) if isinstance(target, dict)]
+    for place, grounds in located:
+        for ground_index, ground in enumerate(grounds if isinstance(grounds, list) else []):
+            references = ground.get('refs') if isinstance(ground, dict) else None
+            if not isinstance(references, list):
+                continue  # The role validator reports the malformed container.
+            for reference_index, reference in enumerate(references):
+                if not raw and isinstance(reference, dict) and 'ref' not in reference:
+                    continue  # Already expanded authenticated output.
+                handle = reference.get('ref') if isinstance(reference, dict) else None
+                if (not isinstance(reference, dict) or set(reference) != {'ref'}
+                        or not isinstance(handle, str) or handle[:1] not in (
+                            ('g', 'h', 'n', 'm', 'u', 'x') if packet['reading_final'].get('unread')
+                            else ('g', 'h', 'n', 'm'))):
+                    _refuse_handle('%s/%d/refs/%d' % (place, ground_index, reference_index), handle)
 
 
 def expand_handles(packet, output, *, artifacts=None, assignment=None, raw=False):

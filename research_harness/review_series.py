@@ -156,9 +156,7 @@ def _enrich_line(store, row, capacity_records, *, usage_snapshot=None):
                 _record_omission(row, 'capacity_forecast', error)
                 _record_omission(row, 'capacity_warning', error)
                 if isinstance(error, (ResearchError, ValueError)):
-                    row['capacity_forecast'] = dict(status='unavailable', is_bound=False,
-                        message=openness_reading.FORECAST_NO_BOUND_MESSAGE,
-                        reason=error.code if isinstance(error, ResearchError) else type(error).__name__)
+                    row['capacity_forecast'] = openness_reading.describe_unavailable_forecast(error)
     return row
 
 
@@ -448,6 +446,10 @@ def _run_series(store, assignment_id, driver, *, emit=_emit_json):
     executed = {}
     refusals = 0
     ready_step = None
+    # A refusal whose details name the request of the step says that the same request goes on: after a recorded run
+    # whose output refusal the busy store refused, that request records the refusal. The series repeats that step with
+    # its request in place of a new plan until a step succeeds.
+    repeated_step = None
     last_plan = dict(state='stop', chain=None, head_id=assignment_id, progress=None)
     def read_boundary(*, settle=False):
         from .review_stop import read_driver_boundary
@@ -464,7 +466,9 @@ def _run_series(store, assignment_id, driver, *, emit=_emit_json):
         selected_action = None
         try:
             try:
-                if ready_step is None:
+                if repeated_step is not None:
+                    snapshot, plan = repeated_step
+                elif ready_step is None:
                     snapshot, plan = _read_plan(store, assignment_id)
                 else:
                     snapshot, plan = ready_step
@@ -615,6 +619,8 @@ def _run_series(store, assignment_id, driver, *, emit=_emit_json):
                         ending = dict(plan=row, error=error, exit_code=3, current=None)
                         break
                     emit_progress(row)
+                    if (error.details or {}).get('request_id') == request_id:
+                        repeated_step = snapshot, dict(plan, request_id=request_id)
                     continue
                 # Recording can persist an output refusal before raising it. Only
                 # that durable transition permits the planner to offer a retry.
@@ -643,6 +649,7 @@ def _run_series(store, assignment_id, driver, *, emit=_emit_json):
             if not waiting:
                 executed[position] = request_id
             refusals = 0
+            repeated_step = None
             row = dict(plan, request_id=request_id, revision=snapshot['revision'])
             try:
                 ready_step = _read_plan(store, assignment_id)

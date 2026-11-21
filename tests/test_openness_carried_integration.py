@@ -1040,6 +1040,7 @@ class StoredV1ChainTests(CarriedIntegrationSupport, OpennessReadingCase):
         return native, receipt
 
     def test_v7_chain_with_a_v1_selection_continues_and_verifies(self):
+        from ci.reviewer_program_guard import use_absent_programs
         from research_harness.record_check import check_record
         native, receipt = self.start_v1_chain()
         current = 'legacy'
@@ -1058,6 +1059,9 @@ class StoredV1ChainTests(CarriedIntegrationSupport, OpennessReadingCase):
         self.assertTrue(reading.verify_chain(records, self.artifacts, last))
         finding = self.mutate(self.load_problem_module().record_openness, dict(assignment_id=last['id']))['result']
         self.assertEqual(finding['outcome'], 'unresolved')
+        # The record check lists the path of the Codex program beside each runtime read. The test states that
+        # the machine has none.
+        use_absent_programs(self)
         checked = check_record(self.root, isolate=False)
         self.assertTrue(checked['ready'], checked)
         after = self.store.snapshot()['records']
@@ -1077,6 +1081,100 @@ class StoredV1ChainTests(CarriedIntegrationSupport, OpennessReadingCase):
         with self.assertRaises(ResearchError) as caught:
             reading.verify_chain(records, self.artifacts, last)
         self.assertEqual(caught.exception.code, 'openness_reading_incomplete')
+
+
+def list_openness_obligations(report):
+    return [(row['code'], row.get('cause')) for row in report['obligations'] if row['code'].startswith('problem_openness')]
+
+
+class HistoryViewTests(CarriedIntegrationSupport, OpennessReadingCase):
+    """A view of the records that a reader builds keeps the history that the verification of a carried selection
+    reads. Source: review finding C1 of record 20261113110022-every-open-record-and-review-capacity, and test N9 of
+    the design of its content change."""
+
+    def finish_carrying_chain(self):
+        """Chain A under v6 with two ready turns, then chain B under v7 that carries both and ends with its final."""
+        self.complete_earlier_readings()
+        native, receipt = self.start_chain()
+        self.assertEqual([turn['origin']['assignment_id'] for row in receipt['carried_readings']['chains']
+                          for turn in row['turns']], ['turn-1', 'earlier-2'])
+        packets = self.finish_chain(native)
+        return 'new' if len(packets) == 1 else 'new-%d' % len(packets)
+
+    def test_status_with_a_damaged_context_keeps_a_current_carried_finding_current(self):
+        from research_harness import cli, review_continuation
+        final = self.finish_carrying_chain()
+        self.mutate(self.load_problem_module().record_openness, dict(assignment_id=final))
+        self.assertEqual(list_openness_obligations(cli.status_report(self.store)),
+                         [('problem_openness_unresolved', None)])
+        # Retained content can be malformed although the command validated it: the context of an unrelated chain.
+        self.assign('unrelated', self.export(name='unrelated-export', assignment_id='unrelated'))
+        unrelated = self.store.snapshot()['records']['review_assignment']['unrelated']
+        self.put('review_assignment', 'unrelated', dict(unrelated, context=[]))
+        annotate = review_continuation.annotate_review_obligations
+        views = []
+
+        def annotate_and_keep_view(records, artifacts, report, **options):
+            views.append(records)
+            return annotate(records, artifacts, report, **options)
+        with patch.object(review_continuation, 'annotate_review_obligations', side_effect=annotate_and_keep_view):
+            report = cli.status_report(self.store)
+        self.assertEqual([(row['assignment_id'], row['code']) for row in report['review_context_failures']],
+                         [('unrelated', 'invalid_review_context')])
+        self.assertEqual(list_openness_obligations(report), [('problem_openness_unresolved', None)])
+        self.assertTrue(views)
+        self.assertEqual([hasattr(view, 'read_snapshot') for view in views], [True] * len(views))
+
+    def test_capacity_trial_view_of_a_route_renewal_keeps_the_history(self):
+        from research_harness import review_capacity_evidence, review_refusal_replacement as replacement
+        self.start_chain()
+        records = self.store.snapshot()['records']
+        views = []
+
+        def refuse_the_trial(view, artifacts, value, revision):
+            views.append(view)
+            raise ResearchError('review_input_too_large', 'A stand-in refusal of the test.')
+        trial = dict(form='stand-in', request_measure=dict(tokens_upper=2000, token_limit=1000,
+                                                           output_reservation_tokens=100))
+        with patch.object(review_capacity_evidence, 'describe_capacity_key', return_value='stand-in-key'), \
+                patch.object(replacement, 'prepare_replacement', side_effect=refuse_the_trial):
+            result = replacement.select_renewal_probe(records, self.artifacts, dict(route_id='route'),
+                                                      self.store.revision + 1, [trial])
+        self.assertEqual(result, dict(reason='limit'))
+        [view] = views
+        self.assertIn('renewal-capacity-evidence', view['review_route_probe'])
+        first = records['review_assignment']['new']
+        self.assertTrue(hasattr(view, 'read_snapshot') and view.verify_record_version(
+            'review_assignment', 'new', first['recorded_revision'], digest(first)))
+
+    def test_capture_selection_in_the_store_keeps_the_turns_of_an_earlier_v7_chain(self):
+        from research_harness.capture_selection import select_main_capture
+        self.finish_carrying_chain()
+        version = self.versions[0]
+        capture = self.store.snapshot()['records']['work'][version]['fulltexts'][0]
+        # The choice names the capture that is already the main capture, so no unit of a packet changes.
+        self.mutate(select_main_capture, dict(version_id=version, source_id=capture['source_id'],
+                                              reason='Keep the first extraction.'))
+        receipt = self.assign('later', self.export(name='later-export', assignment_id='later'))
+        report = receipt['carried_readings']
+        self.assertEqual({row['chain']: [turn['origin']['assignment_id'] for turn in row['turns']]
+                          for row in report['chains']}.get('new'), ['new'])
+        self.assertEqual({row['chain']: row['reading_turns'] for row in report['outputs']}['new'], 1)
+
+    def test_condition_of_a_gate_override_reads_a_current_carried_finding_as_current(self):
+        from research_harness import overrides
+        from test_override_instruction_parts import build_instruction_parts
+        final = self.finish_carrying_chain()
+        self.mutate(self.load_problem_module().record_openness, dict(assignment_id=final))
+        (self.root / 'context').mkdir(exist_ok=True)
+        (self.root / 'context/instruction.json').write_text(json.dumps(build_instruction_parts()), encoding='utf-8')
+        receipt = self.mutate(overrides.record_override, dict(id='conditional', gate='post',
+            instruction='context/instruction.json', reason='The owner asks for a release after an open finding.',
+            condition=dict(text='Publish after an open finding.', part=1, check='openness_supported_open')))
+        conditions = [row for authority in receipt['write_authorities'] for row in authority['conditions']]
+        self.assertTrue(conditions)
+        self.assertEqual([[(row['code'], row.get('cause')) for row in condition['obligations']]
+                          for condition in conditions], [[('problem_openness_unresolved', None)]] * len(conditions))
 
 
 class ReadScopeIntegrationTests(CarriedIntegrationSupport, OpennessReadingCase):

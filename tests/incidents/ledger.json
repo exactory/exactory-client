@@ -142,7 +142,7 @@
       "expected": "Ordinary file admission leaves authentication to the command. Artifact registration and canonical replays use two full validations and one structural check. Refused paths still authenticate historical receipts before replay, and all file payload commands retain their existing domain checks.",
       "test_kind": "real_shape",
       "tests": [
-        "test_research_store_preparation.ResearchStorePreparationTests.test_register_artifact_with_two_full_validations_and_one_structural_check",
+        "test_research_store_preparation.ResearchStorePreparationTests.test_register_artifact_with_two_full_validations_and_two_structural_checks",
         "test_payload_file_paths.PayloadFilePathTests.test_every_file_payload_command_keeps_its_validation_count",
         "test_payload_file_paths.PayloadFilePathTests.test_artifact_replays_keep_two_full_validations_without_reopening_input",
         "test_payload_file_paths.PayloadFilePathTests.test_0853_artifact_receipt_replays_without_reopening_the_old_input"
@@ -1053,7 +1053,7 @@
       "expected": "Repeated validation is reduced, but the idle 3.64 GB study store is not qualified in 0.73.0; its remaining performance incident stays open.",
       "test_kind": "same_path",
       "tests": [
-        "test_research_store_preparation.ResearchStorePreparationTests.test_register_artifact_with_two_full_validations_and_one_structural_check"
+        "test_research_store_preparation.ResearchStorePreparationTests.test_register_artifact_with_two_full_validations_and_two_structural_checks"
       ]
     },
     {
@@ -7837,6 +7837,357 @@
         "test_series_ending.SeriesEndingTests.test_keep_this_route_shows_its_own_observation_step",
         "test_series_ending.SeriesEndingTests.test_capture_answer_names_each_pending_source",
         "test_series_ending.SeriesEndingTests.test_every_planned_decision_keeps_its_steps_in_the_ending"
+      ]
+    },
+    {
+      "id": "account-entry-with-a-member-of-another-part-ends-with-a-python-exception",
+      "record": "20261119212253-impact-of-a-resolution-lineage-and-future",
+      "class": "shape of a payload before its members are read",
+      "summary": "problem-value told the part of an account entry by the members that the entry holds, and it read those members before it checked the member set of most parts. An explanatory_use entry, an alternative, a strength entry, a search_coverage entry or a separate_grounds entry that held establishing_ids or consequence ended with KeyError or TypeError in collect_entry_evidence, and an answer_evidence entry without alternative_id ended with KeyError in the check of a surplus. The independent review of 0.91.6 found the case of a place. An enumeration of changed payloads found 57 such payloads.",
+      "expected": "validate_accounts checks the member set of every entry of every part, and the type of each member that the entry registry, the walk of the references and the evidence check read, before any of them reads an entry. Every changed payload of problem-value and problem-statement ends with an acceptance or a refusal with a code. A payload that was valid stays valid.",
+      "fixed_in": "0.91.8",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_payload_changes.ValuePayloadChangeTests.test_an_object_that_holds_a_member_of_another_part_ends_with_a_refusal_or_an_acceptance",
+        "test_problem_payload_changes.ValuePayloadChangeTests.test_the_value_with_a_place",
+        "test_problem_payload_changes.ValuePayloadChangeTests.test_a_value_with_a_gain",
+        "test_problem_payload_changes.StatementPayloadChangeTests.test_a_statement_with_every_optional_member"
+      ]
+    },
+    {
+      "id": "record-takes-a-text-that-the-post-refuses",
+      "record": "20261119212253-impact-of-a-resolution-lineage-and-future",
+      "class": "rules of the post applied when the record takes a text",
+      "summary": "The record took the title, the statement, its details, the resolution criteria, the motivation and the current state without the length rule and the character rule of exactory post-problem. Since 0.91.6 it applied the length rule to changes_if_resolved only. A text that the post refuses was accepted at problem-statement or problem-value, and the refusal came at the post, after the reviews. The independent review of 0.91.6 found it by a reading of the code; no run met it.",
+      "expected": "problem-statement and problem-value apply the rules of the post to each of the seven texts when a new statement or a new value record is written, from one definition that exactory post-problem also reads. A text that breaks a rule is refused with problem_statement_post_text_invalid or problem_value_post_text_invalid, with the field or the section, the rule and its numbers. A stored statement or value record is not examined again.",
+      "fixed_in": "0.91.8",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_text_rules.StatementPostTextTests.test_each_text_is_refused_one_unit_outside_its_bounds_after_the_trim",
+        "test_problem_post_text_rules.StatementPostTextTests.test_a_refused_character_is_named_with_its_line_and_its_column_in_its_text",
+        "test_problem_post_text_rules.StatementPostTextTests.test_a_statement_with_two_lines_that_hold_only_the_separator_is_refused",
+        "test_problem_post_text_rules.ValuePostTextTests.test_each_section_is_refused_one_unit_outside_its_bounds_after_the_trim",
+        "test_problem_post_text_rules.ValuePostTextTests.test_a_refused_character_is_named_with_its_line_and_its_column_in_the_joined_text"
+      ]
+    },
+    {
+      "id": "declared-call-rows-not-compared-with-their-call-sites",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "closed-packet-inventory",
+      "summary": "No code compared a declared call row of the packet registry (an entry of callee_inventory, mapping_sites or non_packet_sites) with the source of its caller. A row whose call changed or left the source stayed in the registry, and packet_call_digests kept its digest, so the guard passed: on main at 0.91.7, six rows named no call of their caller, among them the row of the call from openness_carried._describe_chain to openness_reading.find_protocol, which 0.91.4 changed. A call that passes a packet needed no row once a lane renewed the digests of its module and its function: on main at 0.91.7, 211 such calls had no row, counted once for each caller and digest (the guard now reports 206 of them as missing and names the other 5 in its reports of the six rows above). The table certified_callers repeated the rows in another shape, and no production run read it.",
+      "expected": "Every declared call row names a call of its caller, or for mapping_sites a call or an assignment statement, and one list holds the rows of one call no more times than the caller holds the call, all of them equal. Every call in a function of a certified module that passes a packet, a part of it or a value computed from it has a row. A callee_inventory row whose call reaches a plugin function names that function. python3 -m ci.capacity_packet_inventory --write-call-rows adds the rows that the source determines and renews packet_call_digests. It removes a row that names nothing in the source of its caller, except when the caller still holds an undeclared call, or for mapping_sites an undeclared assignment statement, that names the callee of the row. The command keeps such a row and prints it with the digest and the line of each of those calls and statements for the reviewer. certified_callers leaves the registry, and the data-flow walk reads the caller edges from the rows.",
+      "fixed_in": "0.91.9",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_packet_call_rows.ProductionCallRowTests.test_the_changed_find_protocol_call_of_describe_chain_keeps_its_row",
+        "test_packet_call_rows.ProductionCallRowTests.test_a_stale_production_row_is_refused",
+        "test_packet_call_rows.ProductionCallRowTests.test_a_production_packet_call_without_its_row_is_refused",
+        "test_packet_call_rows.ProductionCallRowTests.test_a_new_packet_call_needs_a_row_after_the_certificate_is_renewed",
+        "test_packet_call_rows.ProductionCallRowTests.test_the_production_rows_and_call_sites_agree",
+        "test_packet_call_rows.CallRowTests.test_the_union_of_the_rows_of_two_versions_of_a_function_is_refused",
+        "test_packet_call_rows.CallRowTests.test_a_row_whose_call_changed_stays_for_the_reviewer_with_the_digest_of_the_new_call",
+        "test_packet_call_rows.CallRowCommandTests.test_the_command_writes_the_determined_rows_and_exits_with_zero"
+      ]
+    },
+    {
+      "id": "carried-selection-reads-any-refusal-as-a-turn-not-ready",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "carried selection",
+      "summary": "The selection of a new v7 chain read every refusal that the observer of an earlier chain raised as a turn that is not ready, and read the chain up to the turn before. It read every refusal of the qualification as a chain that does not qualify, the report of the chains under another reviewer left out a chain after every refusal that is no refusal of the store, and the second part of the verification turned every refusal into the selection refusal. A refusal that states nothing about a turn, such as review_route_capacity_plan_violated or invalid_native_review_packet, therefore shortened or dropped an earlier chain, at the first assignment and in the selection of the cutoff alike. No command reported such a refusal, and the builder and the verifier agreed on the shortened selection. Records without a history refused the verification with openness_reading_incomplete, a code that the selection reads as a turn that is not ready. The design check of 2026-11-20 found this in the code; on copies of the live problem records the handlers caught review_context_unverified and openness_reading_incomplete alone.",
+      "expected": "Only review_context_unverified and openness_reading_incomplete, the two refusals with which an observer states that a prefix is not ready, send the selection to the turn before. Every other refusal of an observer or of the qualification ends the selection with that refusal: at the first assignment and its check, which record nothing, in the report, and in the first part of the verification. The report of the chains under another reviewer keeps a row of unavailable_chains for a refusal of the store and ends with every other refusal. The report for a v6 chain states every refusal in refusal, and the v6 chain starts. The second part of the verification gives the selection refusal for the two codes, for a refusal of the store and for a stored value of the wrong shape, and passes every other refusal through. Records without a history end the verification of a selection of version 2 with claim_reassessment_required.",
+      "fixed_in": "0.91.9",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_carried.CarriedRefusalTests.test_observer_refusal_that_is_no_state_ends_the_selection",
+        "test_openness_carried.CarriedRefusalTests.test_qualification_refusal_ends_the_selection",
+        "test_openness_carried.CarriedRefusalTests.test_report_refusal_that_is_no_store_refusal_ends_the_report",
+        "test_openness_carried.CarriedRefusalTests.test_second_part_passes_a_refusal_that_is_no_state_through",
+        "test_openness_carried.CarriedRefusalTests.test_first_part_of_a_stored_selection_ends_with_the_refusal",
+        "test_openness_carried.CarriedRefusalTests.test_records_without_a_history_end_with_the_refusal_of_the_evaluation",
+        "test_openness_carried.CarriedRefusalTests.test_report_for_a_v6_chain_states_the_refusal_and_does_not_raise",
+        "test_openness_carried.CarriedRefusalTests.test_state_refusals_go_back_to_the_turn_before"
+      ]
+    },
+    {
+      "id": "record-views-without-the-history-of-the-store",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "carried selection",
+      "summary": "Four readers built a view of the records as a plain mapping, which holds no history of the store: status after a refused context check (two views), the capacity trial of a route renewal, the bound view of a packet in a store that holds a main_capture_selection record, and the authority of a gate override with a condition. The verification of a v7 chain whose carried selection is of version 2 reads the store as it stood before its first assignment from that history. On such a view, status and the condition check of a gate override reported the current finding of such a chain as problem_openness_stale with the cause openness_reading_incomplete, and in a store with a capture selection the first assignment of a later chain carried no turn of an earlier v7 chain and reported no refusal. The independent review of 2026-11-20 found the views of status and of the route renewal, the content-change design of 2026-11-20 found the bound view, and the trace of lane carry-handler-states found the view of the override authority. On the live problem records the context checks refused none of the assignments, and no live store held a capture selection or a v7 chain.",
+      "expected": "Every view of the records that status, a route renewal, the binding of capture selections and the authority of a gate override build keeps the history of the store. Beside a refused context, status reports the finding of a carried chain that is current as current; the condition check of a gate override reads it as current; and in a store with a capture selection a later chain carries the turns of an earlier v7 chain.",
+      "fixed_in": "0.91.9",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_carried_integration.HistoryViewTests.test_status_with_a_damaged_context_keeps_a_current_carried_finding_current",
+        "test_openness_carried_integration.HistoryViewTests.test_capacity_trial_view_of_a_route_renewal_keeps_the_history",
+        "test_openness_carried_integration.HistoryViewTests.test_capture_selection_in_the_store_keeps_the_turns_of_an_earlier_v7_chain",
+        "test_openness_carried_integration.HistoryViewTests.test_condition_of_a_gate_override_reads_a_current_carried_finding_as_current"
+      ]
+    },
+    {
+      "id": "finishing-write-gave-up-after-eight-seconds",
+      "record": "20261119223643-finishing-writes-give-up-after-eight-seconds",
+      "class": "concurrency",
+      "summary": "A record that finishes paid work was a compare-and-swap on the revision of the whole store. It was tried again for 8 seconds, or made once for a direct deposit and for the concept DOI of a version draft, while one write takes 4 to 48 seconds on a store of a study's size. Another command that wrote, or only read, refused it. exactory-lab run spent an admission before its program started, or ended refused after its program; a remote step kept an unknown outcome although the service had answered; an acquisition ended without the responses of its requests, a cohort collection without a page, and a direct deposit or the concept DOI of a version draft without its record.",
+      "expected": "The records of an admitted run, of a remote intent, of an acquisition, of a cohort page, of a full-text job, of a direct deposit and of the concept DOI of a version draft commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store for at most 600 seconds; within that wait a COMMIT that readers hold up keeps its transaction. A refusal after the wait is store_busy with a message that says what is kept and which command goes on, and the refusal of an answer of a remote step carries only the members that the step needs. The same exactory-lab run command starts a claimed local run whose program never started.",
+      "fixed_in": "0.91.11",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_finishing_write_commits.RunWriteTests.test_start_is_recorded_when_a_commit_meets_every_attempt",
+        "test_finishing_write_commits.RunWriteTests.test_run_is_recorded_when_a_commit_meets_every_write_after_the_program",
+        "test_finishing_write_commits.RemoteWriteTests.test_answer_of_a_step_is_recorded_when_a_commit_meets_every_attempt",
+        "test_finishing_write_commits.RemoteWriteTests.test_answer_refused_beyond_the_wait_carries_the_members_that_the_step_needs",
+        "test_finishing_write_commits.AcquisitionWriteTests.test_result_is_recorded_when_a_commit_meets_every_attempt",
+        "test_finishing_write_commits.AcquisitionWriteTests.test_pages_of_a_cohort_are_recorded_when_a_commit_meets_every_attempt",
+        "test_finishing_write_commits.DraftDepositWriteTests.test_direct_deposit_after_the_publish_is_recorded_when_a_commit_meets_every_attempt",
+        "test_finishing_write_commits.DraftDepositWriteTests.test_concept_of_a_version_draft_is_recorded_when_the_store_moves_once",
+        "test_finishing_write_commits.ReaderAtCommitTests.test_commit_of_a_finishing_write_that_a_reader_holds_up_is_tried_again_in_the_same_transaction",
+        "test_claimed_run_start.ClaimedRunStartTests.test_same_request_starts_a_claimed_run_whose_start_the_store_refused"
+      ]
+    },
+    {
+      "id": "colab-release-refused-by-another-writer",
+      "record": "20261119223643-finishing-writes-give-up-after-eight-seconds",
+      "class": "concurrency",
+      "summary": "The record that releases a Colab job was a compare-and-swap on the revision of the whole store with one attempt, and the launcher compared two revision reads before it wrote the signal of the runner. A commit of another command in between ended exactory-lab run before the runner started the program; the same command then released the job and was refused until the runner had finished.",
+      "expected": "The release commits against the records of the admission check and waits for a busy store for at most 600 seconds; its signal follows the commit; a release found without its signal is checked on a guarded read. A refusal after the wait is store_busy with a message that names the command that goes on.",
+      "fixed_in": "0.91.11",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_remaining_finishing_writes.ColabReleaseTests.test_release_is_recorded_and_signalled_when_a_commit_meets_every_attempt",
+        "test_remaining_finishing_writes.ColabReleaseTests.test_signal_follows_the_release_when_a_commit_lands_after_it",
+        "test_remaining_finishing_writes.ColabReleaseTests.test_retained_release_is_signalled_while_another_writer_waits_for_its_check",
+        "test_remaining_finishing_writes.ColabReleaseTests.test_launch_ends_with_the_run_when_commits_meet_the_release"
+      ]
+    },
+    {
+      "id": "records-before-a-reviewer-program-gave-up-after-eight-seconds",
+      "record": "20261119223643-finishing-writes-give-up-after-eight-seconds",
+      "class": "concurrency",
+      "summary": "The records before a reviewer program starts (the process that starts the program, and the claim, the ready record, the authorization and the start of the worker of a staged task) were tried for 8 seconds or once. A store that another command locked, or that the launching command itself read, ended the worker or the guardian before the reviewer program started, and an attempt of the task or of the turn was spent. The guardian wrote its record inside the time limit of the transport: on a store of 1,004 MB that record took 28 seconds, longer than the 15 seconds of the version check of a Codex route, so no Codex call started.",
+      "expected": "The owner of a call records the process that starts a reviewer program before the transport starts its time limit. The transport does not turn a refused record of that process into a failed observation: the command that owns the call is refused, and the program does not start. The five records wait for a locked store for at most 600 seconds, and the launch handshake waits as long. A refusal after the wait is store_busy with a message that says that no request was sent to the reviewer; the worker of a staged task writes it to its log or captures it as its failed observation.",
+      "fixed_in": "0.91.11",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_remaining_finishing_writes.ReviewerProgramStartTests.test_time_limit_of_a_reviewer_program_starts_after_its_record",
+        "test_remaining_finishing_writes.ReviewerProgramStartTests.test_reviewer_program_starts_after_the_store_was_locked_for_eleven_seconds",
+        "test_remaining_finishing_writes.ReviewerProgramStartTests.test_worker_takes_its_reservation_when_the_store_is_busy_for_nine_attempts",
+        "test_remaining_finishing_writes.ReviewerProgramStartTests.test_worker_starts_its_reservation_when_the_store_is_busy_for_nine_attempts",
+        "test_remaining_finishing_writes.ReviewerProgramStartTests.test_launch_is_authorized_when_the_store_is_busy_for_nine_attempts",
+        "test_remaining_finishing_writes.OwnedCallTransportTests.test_refused_record_of_the_version_check_inside_a_codex_send_starts_no_program",
+        "test_remaining_finishing_writes.OwnedCallTransportTests.test_refused_record_of_the_codex_call_itself_starts_no_program",
+        "test_remaining_finishing_writes.OwnedCallTransportTests.test_refused_record_of_the_version_check_inside_a_claude_send_starts_no_program",
+        "test_remaining_finishing_writes.OwnedCallTransportTests.test_refused_record_of_the_claude_call_itself_starts_no_program"
+      ]
+    },
+    {
+      "id": "output-refusal-record-lost-without-a-report",
+      "record": "20261119223643-finishing-writes-give-up-after-eight-seconds",
+      "class": "concurrency",
+      "summary": "The refusal record of a reviewer output that fails its contract was a compare-and-swap on the revision of the whole store with one attempt, and its failure was swallowed. After a commit of another command the run returned without output_refusal, the plan moved to the next turn on the refused answer, and the second run and the replacement that carries the refusal were refused.",
+      "expected": "The refusal record commits against the records that the check of the output read, and it and the read of the store after the run wait for a busy store for at most 600 seconds. A refusal after the wait refuses the command with store_busy and a message that names the command that records the refusal. After a run, that command is the same review-run request, and review-series runs it again by itself.",
+      "fixed_in": "0.91.11",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_remaining_finishing_writes.OutputRefusalTests.test_refusal_of_a_run_output_is_recorded_when_a_commit_meets_every_attempt",
+        "test_remaining_finishing_writes.OutputRefusalTests.test_refusal_refused_beyond_the_wait_refuses_the_run_and_the_same_request_records_it",
+        "test_remaining_finishing_writes.OutputRefusalTests.test_refusal_is_recorded_when_the_read_after_the_run_meets_a_busy_store",
+        "test_remaining_finishing_writes.OutputRefusalTests.test_series_runs_the_same_request_again_after_the_refusal_of_its_output_was_refused",
+        "test_remaining_finishing_writes.OutputRefusalTests.test_series_keeps_the_request_whose_refusal_is_pending_after_a_busy_read",
+        "test_remaining_finishing_writes.RecordingRefusalTests.test_recording_command_records_the_refusal_when_a_commit_meets_every_attempt",
+        "test_openness_unchecked_answer_busy_store.V7TurnRefusalWriteTests.test_run_refused_beyond_the_wait_is_resumed_and_its_step_records_the_refusal",
+        "test_openness_unchecked_answer_busy_store.V7TurnRefusalWriteTests.test_series_refused_again_at_resume_waits_and_a_later_series_goes_on",
+        "test_openness_unchecked_answer_busy_store.SingleReviewRefusalWriteTests.test_run_refused_beyond_the_wait_is_resumed_and_its_step_records_the_refusal",
+        "test_openness_unchecked_answer_busy_store.SingleReviewRefusalWriteTests.test_series_refused_again_at_resume_waits_and_a_later_series_goes_on"
+      ]
+    },
+    {
+      "id": "replay-and-reads-refused-beside-other-commands",
+      "record": "20261120104814-replay-and-first-writes-wait-for-readers-on-a-large-store",
+      "class": "concurrency",
+      "summary": "A command that repeated a committed request ran a write transaction that changed nothing. Its start waited for every writer and its COMMIT for every reader, so on a store of a study's size the repeat was refused with store_busy. Opening a store for creation had the same two waits. With the commit retry of the finishing writes, a read of another command that started while a COMMIT waited was refused after one second, also the first read of a command. The first write of an acquisition and the saved intent of a remote operation were refused when another command committed or held a lock.",
+      "expected": "A committed request is answered from a read, a write transaction that finds its request committed ends with ROLLBACK, and the open of an existing store for creation takes no write lock. Inside a command a read waits for a COMMIT in progress, and a COMMIT waits for the readers that hold the store, for at most 600 seconds. The admission of an acquisition commits at the revision that the write lock finds, and the saved intent of a remote operation without a revision of the user commits against the saved intents; both wait for a busy store for at most 600 seconds. A revision that the user of exactory submit or exactory verify gives keeps the compare-and-swap of the saved intent on it.",
+      "fixed_in": "0.91.11",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_replay_and_first_writes.ReplayTests.test_replay_returns_the_original_response_beside_a_reader",
+        "test_replay_and_first_writes.ReplayTests.test_replay_returns_the_original_response_beside_a_writer",
+        "test_replay_and_first_writes.ReplayTests.test_open_of_an_existing_store_for_creation_takes_no_write_lock",
+        "test_replay_and_first_writes.StoreWaitTests.test_reading_commands_wait_for_a_commit_in_progress",
+        "test_replay_and_first_writes.StoreWaitTests.test_mutation_of_a_command_commits_when_the_reader_has_ended",
+        "test_replay_and_first_writes.FirstWriteTests.test_admission_commits_after_another_command_committed",
+        "test_replay_and_first_writes.FirstWriteTests.test_resume_reserves_requests_by_the_collection_that_its_admission_reads",
+        "test_replay_and_first_writes.FirstWriteTests.test_intent_without_a_revision_is_saved_when_another_command_commits_before_it",
+        "test_replay_and_first_writes.VerdictCommandTests.test_verify_saves_its_intent_when_another_command_commits_before_it",
+        "test_replay_and_first_writes.VerdictCommandTests.test_verify_with_a_stale_revision_is_refused_before_its_request",
+        "test_replay_and_first_writes.SubmitCommandTests.test_submit_with_a_stale_revision_is_refused_before_its_request"
+      ]
+    },
+    {
+      "id": "refused-answer-without-its-refusal-record-was-read-as-checked",
+      "record": "20261120092352-next-v7-turn-reads-an-unchecked-refused-answer",
+      "class": "gate (gap)",
+      "summary": "The run of a reviewer turn records a refusal for an answer that fails its output check, in a second write that can be missing. Protocol v7 then read such an answer as a checked one at the next assignment, at the verification of the chain and in problem-openness. A malformed answer ended these commands and review-series with AttributeError, TypeError or KeyError. Other answers were used: the chain went on over the answer, a later chain carried the turn, and problem-openness recorded the finding of a final that fails its contract, so that the openness gate reported no obligation for supported_open with a ground. A single review of exactory-review-v7/native_math had the same gap from 0.90.0, and the gate never checked its answer again.",
+      "expected": "Each reader of an own answer of protocol v7, and problem-openness for an answer under the finding contract, applies the output check of the run before it reads the answer. A failed answer without its refusal record is refused with the code that the reader gives when the record exists, and details.refusal names the failure. The plan of such a head is resume: the recorded review-run request, which calls no reviewer and records the refusal. A finding that 0.90.0 to 0.91.10 recorded from such an answer is problem_openness_stale, with the cause openness_reading_incomplete for a chain and openness_native_review_unverified for a single review.",
+      "fixed_in": "0.91.11",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_next_turn_refuses_an_answer_that_failed_its_check",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_every_refused_reading_answer_is_refused_at_each_reader",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_later_chain_carries_no_answer_that_failed_its_check",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_later_chain_carries_the_turns_before_such_an_answer_and_verifies",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_plan_runs_the_recorded_request_again_and_then_replaces_the_turn",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_series_records_the_refusal_and_reaches_the_finding",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_final_answer_that_failed_its_check_gives_no_finding",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_finding_recorded_from_such_a_final_becomes_stale",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_chain_that_went_on_over_such_an_answer_gives_no_finding",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_later_chain_that_carried_such_an_answer_gives_no_finding",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_next_turn_names_an_earlier_answer_that_failed_its_check",
+        "test_openness_reading_v7_unchecked_answer.UncheckedAnswerTests.test_part_of_an_argument_at_a_final_turn_is_no_finding",
+        "test_openness_reading_v7_unchecked_answer.UncheckedV6FinalTests.test_v6_final_answer_that_failed_its_check_gives_no_finding",
+        "test_openness_reading_v7_unchecked_answer.UncheckedSingleReviewTests.test_single_review_answer_that_failed_its_check_gives_no_finding",
+        "test_openness_reading_v7_unchecked_answer.UncheckedSingleReviewTests.test_single_review_finding_recorded_from_such_an_answer_becomes_stale",
+        "test_openness_reading_v7_unchecked_answer.UncheckedSingleReviewTests.test_single_review_finding_whose_answer_the_store_cannot_give_is_stale",
+        "test_openness_unchecked_answer_busy_store.V7TurnRefusalWriteTests.test_run_refused_beyond_the_wait_is_resumed_and_its_step_records_the_refusal",
+        "test_openness_unchecked_answer_busy_store.V7TurnRefusalWriteTests.test_series_refused_again_at_resume_waits_and_a_later_series_goes_on",
+        "test_openness_unchecked_answer_busy_store.V7TurnRefusalWriteTests.test_read_after_the_run_refused_for_the_whole_wait_is_resumed_without_using_the_answer",
+        "test_openness_unchecked_answer_busy_store.SingleReviewRefusalWriteTests.test_run_refused_beyond_the_wait_is_resumed_and_its_step_records_the_refusal",
+        "test_openness_unchecked_answer_busy_store.SingleReviewRefusalWriteTests.test_series_refused_again_at_resume_waits_and_a_later_series_goes_on"
+      ]
+    },
+    {
+      "id": "tests-read-the-reviewer-program-of-the-machine",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "release-ci (local runs differ from CI)",
+      "summary": "Six places of the harness look for the codex or the claude program with shutil.which. Two readers above them turn a missing program into an ordinary value. A test that did not state its own answer got the answer of the machine. On a machine with the Codex program, the lookup returned the path of that program, and a runtime reader then started codex --version. CI ran the same test without the program. A child process of a test, such as ci/record_fingerprint.py, read the machine in the same way. Release 0.91.4 repaired such tests in two modules. After that repair, the five tests of test_visual_assignment_integration still read the machine through the second route record of their fixture. On 0.91.7, 62 tests in 15 modules read the machine, 13 of them only through a child process. No check kept a new test from a read of the machine.",
+      "expected": "The commands run and run-modules of ci/unittest_shards.py install a guard before a test module loads. In such a run, a lookup of codex or claude that the machine would answer stops the test with MachineReadError. A test gets each reviewer program from the test itself. Three ways exist: a patch of the lookup or of a reader above it, a program in a temporary directory of the test, and use_absent_programs. The first way includes a patch that installs the runtime that the route record of the test pins. A child process of a test finds a stub that records its start and refuses every call. The runner fails a test that passed after a stopped lookup or a stub start. The plugin tests directory stays without __init__.py, so the harness package keeps the name tests.",
+      "fixed_in": "0.91.12",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_this_run_has_the_guard",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_lookup_that_the_machine_would_answer_stops_the_test",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_each_runtime_reader_of_the_code_under_test_stops_at_the_guard",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_the_code_under_test_cannot_turn_the_stop_into_an_ordinary_refusal",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_other_programs_are_found_as_on_the_machine",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_stub_in_a_directory_of_the_test_is_the_installed_program",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_path_of_test_directories_alone_gives_its_own_answer",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_directory_outside_the_temporary_directory_is_a_directory_of_the_machine",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_test_states_that_the_machine_has_no_reviewer_program",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_child_process_finds_a_stub_that_refuses",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_the_stub_prints_its_message_as_written",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_forked_child_leaves_the_stubs_of_its_parent",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_test_that_states_absent_programs_can_start_child_processes",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_the_runner_fails_a_test_that_passes_after_a_stopped_lookup",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_the_runner_charges_a_read_of_a_class_fixture_to_the_next_test",
+        "test_ci_shards.CIShardTests.test_cli_run_gives_each_test_the_reviewer_program_guard",
+        "test_ci_shards.CIShardTests.test_cli_run_modules_gives_named_plugin_and_harness_modules_the_guard"
+      ]
+    },
+    {
+      "id": "v7-reading-refusal-gave-no-path-and-no-values",
+      "record": "20261120072937-v7-reading-refusals-without-bounds-and-an-empty-unread-list",
+      "class": "refusal notice of a v7 reading answer",
+      "summary": "In the paid verification of record 12, three v7 reading answers were refused with invalid_reading_response, and no refusal notice gave the reviewer a value. 19 of the 28 checks of a v7 reading response passed no detail, none passed path, and the notice replaced each detail whose name the check native.output does not register by its digest. Notes of 20,996 characters gave empty details. Notes whose cost of 20,111 characters passed the bound of 20,000 gave the digests of notes_cost and bound. A page request for the empty list unread gave the digests of list and after. A refused part of an argument and a refused citation by handle showed digests too, and the path of a refused citation named no member. The reviewer then guessed each cause and set itself limits that the harness does not have.",
+      "expected": "Each refusal of a v7 reading response gives path, the JSON Pointer of the member that failed, and the values that its rule compared: for the notes characters, notes_cost and bound; for a list request list, after and one of rows, ended and expected_after; for a passage request unit and anchor, or requested and remaining. These names are notice fields of native.output, and the six names of the checks of a part of an argument and of a citation are notice fields of review.shape, so the notice of the replacement shows the values. A refused citation names its ground and its reference. The check accepts and refuses the same answers, and a refusal and a notice that an earlier release recorded keep their bytes and the chain verifies.",
+      "fixed_in": "0.91.12",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_refusal_details.NotesRefusalTests.test_notes_longer_than_the_bound_give_their_length_their_cost_and_the_bound",
+        "test_openness_reading_v7_refusal_details.NotesRefusalTests.test_notes_within_the_length_whose_cost_passes_the_bound_give_the_same_three_numbers",
+        "test_openness_reading_v7_refusal_details.ListRefusalTests.test_a_request_for_a_list_without_rows_names_the_list_and_its_rows",
+        "test_openness_reading_v7_refusal_details.EveryRuleTests.test_every_refusal_names_the_member_that_failed",
+        "test_openness_reading_v7_refusal_details.NoticeValueTests.test_the_notice_shows_the_numbers_of_refused_notes",
+        "test_openness_reading_v7_refusal_details.NoticeValueTests.test_the_notice_shows_the_list_of_a_refused_page_request",
+        "test_openness_reading_v7_refusal_details.NoticeValueTests.test_the_notice_shows_the_values_of_a_refused_part_of_an_argument",
+        "test_openness_reading_v7_refusal_details.NoticeValueTests.test_the_notice_shows_the_place_and_the_handle_of_a_refused_citation",
+        "test_openness_reading_v7_turns.V7CommandTests.test_a_refusal_and_a_notice_that_an_earlier_release_recorded_keep_their_bytes_and_the_chain_verifies"
+      ]
+    },
+    {
+      "id": "v7-assignment-receipt-held-a-forecast-over-the-whole-plan",
+      "record": "20261120072937-v7-reading-refusals-without-bounds-and-an-empty-unread-list",
+      "class": "review capacity forecasts",
+      "summary": "The printed receipt of review-assignment of a v7 turn held two forecasts. Its stored result held the forecast over the inputs that remain, 13 turns at the first assignment of the paid verification of record 12, and the command added a forecast over the whole inventory of the plan, 40 turns that counted the 29 full texts which the carried turns had read. The receipt of a replacement turn held only the forecast over the whole plan. Status and the preflight report gave that forecast for every turn: on a fixture chain of three turns, 3, 3 and 3 turns where the receipts gave 3, 2 and 1.",
+      "expected": "The receipt of each v7 turn holds one forecast, over the inputs that remain: in the result for a turn that continues the chain, and beside the result for a replacement turn, computed as the lines of review-series compute it. The check receipt, status and the preflight report give the same forecast.",
+      "fixed_in": "0.91.12",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_turns.V7CommandTests.test_each_receipt_of_a_reading_chain_holds_one_forecast_over_the_inputs_that_remain",
+        "test_openness_reading_v7_turns.V7CommandTests.test_the_receipt_and_the_check_of_a_replacement_turn_hold_the_forecast_over_the_inputs_that_remain",
+        "test_openness_reading_v7_turns.V7CommandTests.test_status_and_preflight_give_the_forecast_over_the_inputs_that_remain"
+      ]
+    },
+    {
+      "id": "pending-step-sent-a-second-request",
+      "record": "20261120122159-verify-sends-a-verdict-again-while-its-answer-step-is-pending",
+      "class": "concurrency",
+      "summary": "With a pending step of a verdict or of a submission, exactory verify and exactory submit left the managed path. They sent the request directly, a second time. A step stayed pending in four cases: the store refused the record of the answer, the response was lost, the request did not arrive, or the server refused the request. The server answered the second verdict with 409 or 422. The text of the 422 refusal told the user to correct the body and send it again. The workspace kept no receipt, and its intent stayed pending for good. With --managed-only, a submission whose request never arrived had no command that sent it.",
+      "expected": "With a pending step, exactory verify, exactory submit and exactory reconcile read the task before they send a request, and the read that decides a pending verdict step is taken while the command owns the verification. On both paths, the commands send only a verdict file that names the verdict that the task shows as current. A pending verdict step whose predecessor is still current is cleared and sent once on the managed path, with its receipt. A pending step of the same verdict with a newer verdict of the account ends the command with verdict_reconciliation_pending. exactory reconcile with --verdict-id then records the answer. A pending submission is recorded from the task. If the server shows no task of the record, the submission is sent again on the managed path. A submission of the same record with other declarations is refused on the managed path with submission_declarations_mismatch. A verdict that the server refuses names the command that reads the task.",
+      "fixed_in": "0.91.12",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verify_after_a_refused_answer_record_sends_no_second_verdict",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verify_after_a_lost_response_sends_no_second_verdict_that_the_task_shows",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verify_decides_a_pending_step_by_a_task_read_taken_while_it_owns_the_verification",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verify_after_a_request_that_never_arrived_sends_it_once_and_writes_the_receipt",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_reconcile_with_the_verdict_id_records_the_answer_and_sends_nothing",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_reconcile_with_the_verdict_id_after_a_refused_receipt_records_the_receipt",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_reconcile_with_the_verdict_id_reads_nothing_while_another_sender_owns_the_verification",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verdict_id_for_a_submission_or_a_deposit_intent_is_refused",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_reconcile_after_a_request_that_never_arrived_sends_it_once",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_a_refused_observation_of_an_unrecorded_answer_ends_the_command_without_a_request",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_a_prepared_verdict_is_not_sent_while_the_task_shows_a_newer_verdict",
+        "test_pending_remote_requests.TestVerifyOnTheDirectPath.test_a_first_verdict_is_not_sent_while_the_task_shows_a_verdict_of_the_account",
+        "test_pending_remote_requests.TestVerifyOnTheDirectPath.test_a_revision_is_not_sent_while_the_task_shows_another_current_verdict",
+        "test_pending_remote_requests.TestVerifyOnTheDirectPath.test_a_verdict_is_not_sent_beside_a_store_that_does_not_open",
+        "test_pending_remote_requests.TestRefusedVerdictMessages.test_a_refused_verdict_on_the_direct_path_names_the_command_that_reads_the_task",
+        "test_pending_remote_requests.TestRefusedVerdictMessages.test_a_refused_verdict_on_the_managed_path_names_the_command_that_reads_the_task",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_after_a_refused_answer_record_reads_the_task_and_writes_the_receipt",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_with_another_spelling_of_the_record_continues_the_same_intent",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_while_the_service_shows_no_task_sends_the_request_on_the_managed_path",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_managed_only_submit_while_the_service_shows_no_task_sends_the_request",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_after_a_lost_response_joins_the_open_request_and_records_its_answer",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_with_other_declarations_than_a_pending_request_sends_them_directly",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_managed_only_submit_with_other_declarations_than_a_pending_request_is_refused",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_with_other_declarations_than_a_complete_request_sends_them_directly"
+      ]
+    },
+    {
+      "id": "submission-answer-read-for-a-member-the-server-never-sends",
+      "record": "20261120073605-continue-submission-reads-a-member-the-server-does-not-send",
+      "class": "identity (server and plugin)",
+      "summary": "continue_submission looked for verificationId in the answer of POST /api/v1/verifications. The server answers with the summary of the request (id, status, doi, createdAt, webUrl, supersedes, supersededBy) and never sends verificationId, so every path read the task by the concept DOI of the record. Three test stand-ins answered with verificationId and hid the dead read. No path failed.",
+      "expected": "The task of a submission is read by the concept DOI of the record, or its DOI, on every path, and no code reads a member of the answer that the server does not send. The test stand-ins answer the submission with the schema of the server, and two tests pin the DOI read after a 201 and after a 200 answer that hold only id.",
+      "fixed_in": "0.91.12",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_reads_the_task_by_the_concept_doi_after_the_answer_of_a_new_request",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_reads_the_task_by_the_concept_doi_after_the_answer_of_the_open_request",
+        "test_transport.TestSubmitDecision.test_submit_in_a_ready_study_writes_the_receipt"
+      ]
+    },
+    {
+      "id": "long-chain-of-account-references-meets-the-recursion-limit",
+      "record": "20261120203506-improvements-from-the-problem-value-cycle",
+      "class": "walk of the references of the accounts",
+      "summary": "problem-value followed the references between the entries of the accounts (evidence_ids, relation_ids and the other reference members) with a recursive function. A chain of more than about 1,000 entries, each citing the next, ended with RecursionError in collect_entry_evidence. A chain of 500 entries was accepted. The independent review of 0.91.8 found it with 1,200 entries; no run met it.",
+      "expected": "collect_entry_evidence walks the references with a stack of its own. A chain of any length gets the evidence that the entry reaches, each reference once, in the order of the recursive walk. A cycle is refused with problem_account_reference_cycle and an unknown ID with problem_account_reference_missing, as before.",
+      "fixed_in": "0.91.13",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_payload_changes.ValuePayloadChangeTests.test_a_chain_of_references_longer_than_the_recursion_limit_is_accepted"
+      ]
+    },
+    {
+      "id": "release-merged-with-a-failing-test-that-no-list-held",
+      "record": "20261120203506-improvements-from-the-problem-value-cycle",
+      "class": "must-pass set of a release",
+      "summary": "Release 0.91.8 changed the default statement of the problem fixtures in tests/test_research_problem_claims.py. tests.test_review_request_parity builds six of its cases through that default by way of other test modules and compares them with values frozen at an earlier commit, so it failed in 15 CI jobs of 0.91.8 on main, and 0.91.9 inherited the failure. The must-pass list of the release was built by hand from the names that the diff changed, and it did not hold the module. 0.91.10 corrected the cases. The same module had failed in the CI of 0.73.3 and of 0.91.4 after a merge.",
+      "expected": "ci/must_pass.py gives the must-pass set of a release from the diff. The set always holds the modules that compare with frozen values or pin a fixture, a version or a release file, with tests.test_review_request_parity among them, and it holds each test module that reaches a changed file of tests/ through the imports between the files of tests/. For the diff of 0.91.8 the set holds tests.test_review_request_parity.",
+      "fixed_in": "0.91.13",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_must_pass.MustPassSelectionTests.test_a_changed_fixture_builder_selects_the_test_that_reaches_it_through_other_test_modules",
+        "test_must_pass.MustPassSelectionTests.test_the_fixed_modules_exist"
       ]
     }
   ]

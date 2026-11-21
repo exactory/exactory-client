@@ -24,8 +24,9 @@ import test_openness_search_sharing as v5_fixtures
 import test_openness_v4_replay as v4_fixtures
 import test_problem_openness_native_reviews as native_fixtures
 import test_problem_result_history as history_fixtures
+import test_research_problem_claims as problem_fixtures
 import test_research_review_protocol as ordinary_fixtures
-from research_harness import bar_sources, cli, gates, openness_reading, review_protocol as protocol
+from research_harness import bar_sources, cli, gates, openness_reading, problem_claims, review_protocol as protocol
 from research_harness import review_request_evaluation, review_transport as transport
 from research_harness import review_route_capacity
 from research_harness import review_codex_invocation, review_request_restoration
@@ -79,6 +80,14 @@ def build_legacy_codex_response(route, request, output):
     return response
 
 
+def build_frozen_statement(case, identifier="statement-1", **changes):
+    """The default statement of a problem fixture as BASE_COMMIT built it, which the frozen cases hold."""
+    return dict({"id": identifier, "title": "A finite bound problem", "area": "math.CO",
+                 "statement": r"For every $n$, does $B(n)\leq n^2$ hold?",
+                 "resolution_criteria": r"Prove the bound for all $n$ or exhibit a counterexample.",
+                 "neighbours": [], "formal_statement": None}, **changes)
+
+
 @contextmanager
 def fix_external_inputs():
     """Fix external observations before storing them, rather than scrubbing requests."""
@@ -108,8 +117,11 @@ def fix_external_inputs():
 
     # Reconstruct the old admission policy, common prompt version and runtime,
     # then exercise current authentication and reports against unchanged bytes.
+    # The frozen statement has 40 characters, fewer than the post accepts, so it is recorded without the rules of the post (0.91.8).
     with patch.object(review_route_capacity, "require_covered_assignment", return_value=None), \
             patch.object(protocol, "COMMON_VERSION", 3), \
+            patch.object(problem_fixtures.ProblemCase, "build_statement", new=build_frozen_statement), \
+            patch.object(problem_claims, "find_post_text_violation", return_value=None), \
             patch.object(codex_fixtures, "install_codex_runtime", side_effect=install_historical_runtime), \
             patch.object(transport, "runtime", side_effect=describe_fixture_runtime), \
             patch.object(protocol, "prepare_capacity_notice", side_effect=lambda records, route, role, packet: packet), \

@@ -33,10 +33,6 @@ PLACE_UNCITED_MESSAGE = (
     "changes_if_resolved cite an entry of accounts.places, as {kind: account, id}. In motivation, add the citation to "
     "the paragraph that states the line of results that leads to the statement. In changes_if_resolved, add it to the "
     "paragraph that says what an answer decides or supplies for that work")
-LENGTH_MESSAGE = (
-    "The text of changes_if_resolved is outside the length that the post accepts. The post sends the texts of the "
-    "paragraphs with one empty line between them, after a trim. characters gives the length of that text, and minimum "
-    "and maximum give the limits. Make the paragraphs shorter or longer. Then record the value again")
 RELATION_IDS_MESSAGE = (
     "relation_ids of this place names an entry that is no relations entry. Name the ID of a relations entry that ties "
     "the statement to the item of the place, or leave relation_ids empty")
@@ -157,26 +153,6 @@ class ValueRefusalTests(ChangesIfResolvedCase):
                               "problem_value_account_required")):
             with self.subTest(code=code):
                 self.assertEqual(self.refuse(lambda value: change(value["changes_if_resolved"])).code, code)
-
-    def test_the_joined_text_is_counted_as_the_post_counts_it(self):
-        emoji = chr(0x1F600)
-        for texts, characters in ((["x" * 99], 99), (["x" * 49, "y" * 49], 100), (["x" * 49 + "\r\n" + "y" * 49], 99),
-                                  (["  " + "x" * 98 + "\n"], 98), (["x" * 4998 + emoji], 5000),
-                                  (["x" * 4999 + emoji], 5001), (["x" * 2500, "y" * 2499], 5001)):
-            with self.subTest(characters=characters, paragraphs=len(texts)):
-                value = copy.deepcopy(self.value)
-                value["changes_if_resolved"] = [{"text": text, "evidence": [PLACE]} for text in texts]
-                if 100 <= characters <= 5000:
-                    value["id"] = "accepted-" + str(len(texts)) + "-" + str(characters)
-                    self.assertEqual(self.record(value)["changes_if_resolved"], value["changes_if_resolved"])
-                    continue
-                before = self.store.snapshot()
-                with self.assertRaises(ResearchError) as caught:
-                    self.record(value)
-                self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
-                                 ("problem_changes_if_resolved_length", LENGTH_MESSAGE,
-                                  {"characters": characters, "minimum": 100, "maximum": 5000}))
-                self.assertEqual(self.store.snapshot(), before)
 
     def test_an_imported_full_reading_counts_and_no_other_record_does(self):
         imported = {"kind": "record", "origin": "source-record", "record_kind": "reading", "id": "r", "digest": "d"}

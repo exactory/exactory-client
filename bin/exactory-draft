@@ -45,10 +45,11 @@ from typing import BinaryIO, NamedTuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError, describe_tool_timeout
 from research_harness.file_streams import freeze_file
+from research_harness.finishing import retry_finishing_write, wait_for_store_in_command
 from research_harness.exactory_api import UUID_RE, read_api_base_url
-from research_harness.integration import (command_identity, current_store, export_workspace,
+from research_harness.integration import (command_identity, command_request_id, current_store, export_workspace,
                                           initialization_payload, initialize_workspace, record_direct_deposit)
-from research_harness.operations import prepared_mutation
+from research_harness.operations import prepared_task_mutation
 from research_harness.same_origin import (REQUEST_ERROR_TYPES, RefusedRedirectError,
                                           describe_request_error_cause, get_origin, get_request_error_cause,
                                           open_url_within_origin, read_error_detail, is_request_known_unsent)
@@ -390,6 +391,12 @@ def _build_zenodo_client(environment: str, token: str, failure_advice: _FailureA
     return call
 
 
+# The message of the concept DOI of a version draft that the store refused beyond the wait. The command prints it as
+# the cause, followed by the command that goes on.
+_VERSION_DRAFT_CONCEPT_STORE_BUSY_MSG = ("The research store stayed busy, or kept changing the records that this"
+                                         " write read. The concept DOI of this version draft was not recorded")
+
+
 def _continue_deposit_and_track_publish(store: Store, identifier: str, client, *,
                                         finish_only: bool = False) -> tuple[dict, bool]:
     """Continue a managed intent and report whether this run sent publish. A completed intent or
@@ -412,18 +419,23 @@ def _continue_deposit_and_track_publish(store: Store, identifier: str, client, *
     binding = get_intent(store, identifier)["binding"]
     if not binding.get("new_version") or not binding["prior"].get("concept_doi"):
         return record, did_send_publish
-    snapshot = store.snapshot()
-    current = snapshot["records"].get("workspace", {}).get("deposit", {})
     concept_doi = binding["prior"]["concept_doi"]
-    if (current.get("environment") != record["environment"] or current.get("deposition_id") != record["deposition_id"]
-            or current.get("doi") or current.get("concept_doi") == concept_doi):
-        return record, did_send_publish
-    state = dict(current, concept_doi=concept_doi)
-    try:
-        prepared_mutation(store, "workspace.version_draft_concept", {"deposit": state},
+
+    def record_concept() -> bool:
+        # The update depends on the workspace record alone, which must still name this draft without a DOI or the
+        # concept. The deposit is made, so a busy store is waited for as for every finishing write.
+        preparation = store._read_scoped_preparation()
+        current = preparation.records.get("workspace", {}).get("deposit", {})
+        if (current.get("environment") != record["environment"] or current.get("deposition_id") != record["deposition_id"]
+                or current.get("doi") or current.get("concept_doi") == concept_doi):
+            return False
+        prepared_task_mutation(store, "workspace.version_draft_concept", {"deposit": dict(current, concept_doi=concept_doi)},
             lambda records, value: ([("workspace", "deposit", value["deposit"])], value["deposit"]),
-            expected_revision=snapshot["revision"], request_id=identifier + ":version-draft-concept")
-        export_workspace(store)
+            _snapshot=preparation, request_id=identifier + ":version-draft-concept")
+        return True
+    try:
+        if retry_finishing_write(record_concept, _VERSION_DRAFT_CONCEPT_STORE_BUSY_MSG):
+            export_workspace(store)
     except (OSError, ResearchError) as error:
         _exit_with_error(f"The command could not finish recording the concept DOI of version draft deposition"
                          f" {record['deposition_id']}. Cause: {error}. Run exactory-draft reconcile {identifier}."
@@ -711,11 +723,10 @@ def _deposit_managed(store, report: dict, args: argparse.Namespace, base_url: st
     validate_caller_scope(scope, getattr(args, "scope_contract_id", None), getattr(args, "scope_target_digest", None))
     if scope is not None:
         binding["publication_scope"] = scope
-    identity = command_identity(store, args)
-    # CAS validates the snapshot that supplied the exact upload bytes.
-    if args.expected_revision is None:
-        identity["expected_revision"] = report["revision"]
-    intent = begin_deposit(store, binding, **identity)
+    # The intent sends nothing: each step of the deposit checks the manuscript and the reviews again, and claims the
+    # step at the revision of that check. A revision that the user gives makes the intent a compare-and-swap on it.
+    intent = begin_deposit(store, binding, expected_revision=args.expected_revision,
+                           request_id=command_request_id(args))
     journal = None
     if problem_target is not None and args.publish:
         # The intent's id is the operation's identity, so a rerun settles this intent whatever
@@ -964,6 +975,12 @@ def _require_deposition_answer(answer, deposition_id, retry_msg: str, *, publish
                          f" submitted true and a DOI. The operation stays unresolved. {retry_msg}")
 
 
+# The message of the record of a direct deposit that the store refused beyond the wait. The lines that follow it say
+# whether the store holds the record and where the local copy is.
+_DIRECT_DEPOSIT_STORE_BUSY_MSG = ("The research store stayed busy, or kept changing the records that this write read."
+                                  " The command did not confirm the record of this deposit in the store")
+
+
 def _save_deposit_state(store, store_open_error, state: dict) -> None:
     """Keep the local record of a direct deposit.
 
@@ -991,8 +1008,9 @@ def _save_deposit_state(store, store_open_error, state: dict) -> None:
         _stop_with_only_the_local_deposit_copy(Path.cwd(), state)
     request_id = "direct-deposit-" + uuid.uuid4().hex
     try:
-        record_direct_deposit(store, state, expected_revision=store.revision,
-                              request_id=request_id)
+        # The deposit is made, so a busy store is waited for as for every finishing write.
+        retry_finishing_write(lambda: record_direct_deposit(store, state, expected_revision=None, request_id=request_id),
+                              _DIRECT_DEPOSIT_STORE_BUSY_MSG)
     except (OSError, ResearchError) as error:
         # The integration call exports projections after committing. An export failure does not
         # prove that the store refused the record; its receipt is the authority for that question.
@@ -1120,7 +1138,7 @@ def _record_pending_deposit(store, state: dict) -> None:
     problem recovers from its own journal."""
     if store is not None:
         try:
-            record_direct_deposit(store, state, expected_revision=store.revision,
+            record_direct_deposit(store, state, expected_revision=None,
                                   request_id="direct-deposit-" + uuid.uuid4().hex)
         except (OSError, ResearchError):
             # The store write or its projection export failed. The file below keeps the record
@@ -1779,7 +1797,7 @@ def main(render_views=render_views_after_command) -> None:
         if getattr(args, "check", False):
             raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects",
                                 {"command": args.command})
-        with describe_tool_timeout():
+        with describe_tool_timeout(), wait_for_store_in_command():
             args.handler(args)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))

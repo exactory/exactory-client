@@ -227,6 +227,13 @@ class LegacySeriesCostTests(ResultPartsCase):
 
 
 class SourceProjectionCostTests(LiteratureCase):
+    def setUp(self):
+        super().setUp()
+        from ci.reviewer_program_guard import use_absent_programs
+        # The route record of these tests pins no runtime, and the state memo asks its adapter for one. The test
+        # states that the machine has no Codex program.
+        use_absent_programs(self)
+
     def test_staged_source_projection_keeps_native_snapshot_validation(self):
         from research_harness import review_transport as transport
         from test_review_source_capacity import source_packet

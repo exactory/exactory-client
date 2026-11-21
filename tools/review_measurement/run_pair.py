@@ -324,13 +324,15 @@ def build_workspace(case, root, configuration, dry_run):
     value_evidence = [dict(kind='account', id='local-arguments')]
     place_evidence = [dict(kind='account', id='local-notes')]
     workspace.execute('problem-value', dict(id='value', statement_id='statement', accounts=accounts,
-        motivation=[dict(text=('Check the local argument and its exact scope; '
+        motivation=[dict(text=('Check the local argument and its exact scope in the two supplied notes; '
                                'this is not a claim of research significance.'),
                          evidence=value_evidence + place_evidence)],
         changes_if_resolved=[dict(text=('A proof or a counterexample settles the local implication of the supplied '
                                         'notes; this calibration fixture names no further work that it would change.'),
                                   evidence=place_evidence)],
-        current_state=[dict(text='The supplied elementary examples do not establish openness.', evidence=value_evidence)]))
+        current_state=[dict(text=('The supplied elementary examples do not establish openness. The two synthetic notes '
+                                  'of this calibration fixture are the sources that the record read.'),
+                            evidence=value_evidence)]))
     workspace.execute('problem-attempt', dict(
         id='attempt', statement_id='statement', kind='literature', solver=None,
         literature=dict(readings=[{key: row[key] for key in ('version_id', 'reading_id')}

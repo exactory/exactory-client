@@ -371,6 +371,9 @@
         ],
         "research_harness/problem_openness.py:assess_openness#7": [
           "entry"
+        ],
+        "research_harness/problem_openness.py:assess_openness#8": [
+          "entry"
         ]
       },
       "problem_openness_unresolved": {

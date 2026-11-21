@@ -87,7 +87,7 @@ class AccountTestCreditTests(ProblemToolsCase):
             candidate_id="candidate-history", revises_statement_id=self.statement["id"])
         self.value["statement_id"] = revised["id"]
         self.record()
-        changed = self.select_statement(identifier="changed-text", statement="A corrected prediction.", neighbours=["A weaker bound."],
+        changed = self.select_statement(identifier="changed-text", statement="A corrected prediction: for every integer n in [0, 3], n squared is at most 10, with no claim of equality.", neighbours=["A weaker bound."],
             candidate_id="candidate-history", revises_statement_id=revised["id"])
         self.value.update(id="changed-value", statement_id=changed["id"])
         self.assert_error("problem_test_run_invalid", self.record)
@@ -145,7 +145,7 @@ class AccountTestCreditTests(ProblemToolsCase):
         from test_research_problem_forming import build_form, build_forming
         original = self.store.snapshot()["records"]["forming_call"]["forming-1"]
         execution = self.store.snapshot()["records"]["execution"][self.observed["id"]]
-        form = build_form("corrected", text="The corrected finite prediction.", previous={"form_id": "form-1", "reason": "An independent structural correction."},
+        form = build_form("corrected", text="For every integer n in [0, 3], the corrected finite prediction bounds n squared by 9, with equality at n = 3.", previous={"form_id": "form-1", "reason": "An independent structural correction."},
             grounds=[{"description": "The computation's checked scope is unchanged.", "evidence": [{"kind": "record", "record_kind": "execution", "id": execution["id"], "digest": digest(execution)}]}],
             correction_checks=[{"check_id": "check-1", "was_made": True, "keeps_prediction": True, "chosen_with_outcome": False, "execution_id": execution_id}])
         call = self.mutate(problem_forming.record_forming, build_forming("correction", forms=[form]))["result"]

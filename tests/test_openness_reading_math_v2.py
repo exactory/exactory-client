@@ -388,3 +388,27 @@ class MathV2RecoveryTests(MathV2Support):
         records = self.store.snapshot()['records']
         self.assertEqual(reading.find_final_assignment(records, self.artifacts, 'math-1')['id'], head)
         self.assert_final(head)
+
+
+class MathV2UncheckedAnswerTests(MathV2Support):
+    """A math v2 turn whose answer fails its check and has no refusal record (0.91.11 with the bounded chains of
+    0.92.0): review-series plans the recorded run request again, and no next turn is assigned on the answer."""
+
+    def test_reading_answer_that_failed_its_check_is_resumed_and_no_turn_follows_it(self):
+        from research_harness.review_continuation import UNRECORDED_REFUSAL_MESSAGE, plan_next
+        from test_openness_reading_v7_unchecked_answer import assert_unchecked, lose_refusal_record
+        native = self.build_math_packet()
+        self.assign('math-1', native)
+        packet = self.read_packet('math-1')
+        self.assertEqual(reading.find_protocol(packet), MATH_V2)
+        with lose_refusal_record():
+            receipt = self.invoke('math-1', dict(self.build_v7_answer(packet), notes=7))
+        self.assertNotIn('output_refusal', receipt)
+        plan = plan_next(self.store.snapshot()['records'], self.artifacts, 'math-1')
+        self.assertEqual((plan['state'], plan['command'], plan['request_id']),
+                         ('resume', 'review-run', 'invoke-attempt-math-1'), plan)
+        self.assertEqual(plan['details']['message'], UNRECORDED_REFUSAL_MESSAGE)
+        with self.assertRaises(ResearchError) as raised:
+            self.assign('math-2', native, prior='math-1')
+        assert_unchecked(self, raised.exception, 'review_source_continuation_unverified',
+                         (v7, 'UNCHECKED_HEAD_MESSAGE'), 'math-1', 'attempt-math-1')

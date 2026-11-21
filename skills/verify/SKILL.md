@@ -296,7 +296,11 @@ with a `stop`: a typed limit or refusal with its `code` and `details`; the
 harness cannot continue the chain. A refused action of the chain ends the
 command this way with the refusal's code (for example a `review_parts_*`
 code); when the refusal recorded an output refusal, or its code is
-`review_invocation_pending`, the command plans again instead. Read `code`,
+`review_invocation_pending`, the command plans again instead. After
+`store_busy` the command also plans again by itself, at most 8 times in a row.
+When `review-series` or `review-run` still ends with `store_busy`, read the
+message of that refusal. It names the command that goes on, which is not
+always the refused command. Read `code`,
 `details` and `stop_class`. A verification review binds no study stage, so no
 stop of it passes automatically (`gate-auto-pass` refuses it with
 `gate_override_internal_only`): report a `harness_defect` stop like a decision
@@ -417,6 +421,17 @@ Write mathematics in standard TeX notation: inline as `$...$`, and `$$...$$` onl
 a formula needs its own line. This applies to `summary`, `rationaleSections`,
 `wouldChange`, finding `statement`s, and `suggestions`. The page renders the math;
 the CLI and the API return the source verbatim.
+
+When `exactory verify` is refused with `store_busy`, read its message and take the step
+that it names. A message that says that the request was sent once means that the server
+holds the verdict. `details.response` then holds the members of the answer of the server
+that the step needs, among them the `id` of the verdict. Report them to the user. Then
+run `exactory reconcile` with the intent ID in `details.intent_id` and `--verdict-id`
+with that `id`. It records the verdict receipt and sends no request. When
+`exactory verify` is refused with `verdict_reconciliation_pending` or
+`verdict_revision_required`, the command sent nothing: the task shows another current
+verdict of this account than the file names. Read the message and take the step that it
+names. Do not change `supersedesVerdictId` to send the same verdict again.
 
 ### 5. Vote on the other verdicts
 

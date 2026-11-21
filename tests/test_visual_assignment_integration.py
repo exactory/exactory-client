@@ -9,6 +9,7 @@ from unittest.mock import patch
 from capacity_evidence_fixtures import build_capacity_runtime
 from research_harness import review_protocol as protocol, review_transport as transport
 from research_harness import review_claude_transport as claude, review_codex_visual_transport as visual
+from research_harness import review_codex_transport as codex
 from research_harness import review_visual_route as bridge
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
@@ -24,6 +25,8 @@ class VisualAssignmentIntegrationTests(unittest.TestCase):
         route = self.records['review_route']['visual']
         route['runtime'] = build_capacity_runtime(route['adapter'], fixture='visual-bridge-test')
         self.install_runtime(visual, route['runtime'])
+        # The records hold a second route record on the text adapter. The state memo reads its runtime too.
+        self.install_runtime(codex, self.records['review_route']['old']['runtime'])
         from visual_capacity_fixtures import install_bounded_visual_backend
         install_bounded_visual_backend(self, [route])
         self.records['workspace'] = {'problem': {'orchestration': 'problem_creation', 'authors': ['Author']}}

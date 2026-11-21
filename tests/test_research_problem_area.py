@@ -25,7 +25,7 @@ class ProblemStatementAreaTests(ProblemCase):
     def test_revised_statement_in_the_record_area_keeps_its_established_scope(self):
         marker = self.initialize_problem()
         self.select_statement()
-        changed = self.select_statement(identifier="statement-2", statement="A revised exact combinatorial problem.")
+        changed = self.select_statement(identifier="statement-2", statement="A revised exact combinatorial problem about every finite construction.")
         records = self.store.snapshot()["records"]
         self.assertEqual(changed["area"], "math.CO")
         self.assertEqual(records["problem_selection"]["current"], {"statement_id": "statement-2"})

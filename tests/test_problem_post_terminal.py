@@ -73,7 +73,7 @@ class PostedProblemTests(delivery.ProblemDeliveryCase):
         changed.pop("recorded_revision")
         changed.pop("accounts_version")
         changed["id"] = "value-after-post"
-        changed["motivation"][0]["text"] = "The same bound also connects two finite constructions."
+        changed["motivation"][0]["text"] = "The same bound also connects two finite constructions, which the source reads as two cases of one open question."
         self.mutate(self.load_problem_module().record_value, changed)
         report = self.assert_terminal(post, {"problem_evidence_unassessed", "problem_decision_stale"})
         self.assertNotEqual(report["problem_evidence_digest"], old_digest)
@@ -127,7 +127,7 @@ class PostedProblemTests(delivery.ProblemDeliveryCase):
         post = self.post_current_statement()
         self.select_statement(identifier="same-claim", title="A new title for the same claim", candidate_id="candidate-1")
         self.assert_terminal(post, {"problem_value_missing"})
-        self.select_statement(identifier="changed-claim", statement="Does the bound hold for every odd input?")
+        self.select_statement(identifier="changed-claim", statement="Does the bound hold for every odd input of the finite construction?")
         report = cli.status_report(self.store)
         self.assertNotEqual(report["next"]["code"], "problem_already_posted")
         self.assertEqual(report.get("after_post", []), [])

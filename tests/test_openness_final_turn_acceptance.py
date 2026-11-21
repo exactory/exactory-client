@@ -357,9 +357,11 @@ class KmpShapedChainAcceptanceTests(AcceptanceCase):
         return ''.join(characters)
 
     def build_statement(self, identifier='statement-1', **changes):
-        statement = super().build_statement(identifier, **changes)
-        missing = KMP_STATEMENT_SIZE - STATEMENT_RECORD_OVERHEAD - len(encode_exported_record(statement)) - 1
-        return dict(statement, resolution_criteria=statement['resolution_criteria'] + ' ' + build_filler(missing))
+        # The post takes at most 5,000 characters of criteria (0.91.8), so the record gets its size from the formal
+        # statement, which the packet carries wherever it carries the criteria.
+        statement = dict(super().build_statement(identifier, **changes), formal_statement={'language': 'Lean', 'text': ''})
+        missing = KMP_STATEMENT_SIZE - STATEMENT_RECORD_OVERHEAD - len(encode_exported_record(statement))
+        return dict(statement, formal_statement={'language': 'Lean', 'text': build_filler(missing)})
 
     def full_note(self, bundle, note_id='full', omit=()):
         note = super().full_note(bundle, note_id, omit)
