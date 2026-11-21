@@ -7686,6 +7686,117 @@
         "test_openness_unchecked_answer_busy_store.SingleReviewRefusalWriteTests.test_run_refused_beyond_the_wait_is_resumed_and_its_step_records_the_refusal",
         "test_openness_unchecked_answer_busy_store.SingleReviewRefusalWriteTests.test_series_refused_again_at_resume_waits_and_a_later_series_goes_on"
       ]
+    },
+    {
+      "id": "tests-read-the-reviewer-program-of-the-machine",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "release-ci (local runs differ from CI)",
+      "summary": "Six places of the harness look for the codex or the claude program with shutil.which. Two readers above them turn a missing program into an ordinary value. A test that did not state its own answer got the answer of the machine. On a machine with the Codex program, the lookup returned the path of that program, and a runtime reader then started codex --version. CI ran the same test without the program. A child process of a test, such as ci/record_fingerprint.py, read the machine in the same way. Release 0.91.4 repaired such tests in two modules. After that repair, the five tests of test_visual_assignment_integration still read the machine through the second route record of their fixture. On 0.91.7, 62 tests in 15 modules read the machine, 13 of them only through a child process. No check kept a new test from a read of the machine.",
+      "expected": "The commands run and run-modules of ci/unittest_shards.py install a guard before a test module loads. In such a run, a lookup of codex or claude that the machine would answer stops the test with MachineReadError. A test gets each reviewer program from the test itself. Three ways exist: a patch of the lookup or of a reader above it, a program in a temporary directory of the test, and use_absent_programs. The first way includes a patch that installs the runtime that the route record of the test pins. A child process of a test finds a stub that records its start and refuses every call. The runner fails a test that passed after a stopped lookup or a stub start. The plugin tests directory stays without __init__.py, so the harness package keeps the name tests.",
+      "fixed_in": "0.91.12",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_this_run_has_the_guard",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_lookup_that_the_machine_would_answer_stops_the_test",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_each_runtime_reader_of_the_code_under_test_stops_at_the_guard",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_the_code_under_test_cannot_turn_the_stop_into_an_ordinary_refusal",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_other_programs_are_found_as_on_the_machine",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_stub_in_a_directory_of_the_test_is_the_installed_program",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_path_of_test_directories_alone_gives_its_own_answer",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_directory_outside_the_temporary_directory_is_a_directory_of_the_machine",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_test_states_that_the_machine_has_no_reviewer_program",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_child_process_finds_a_stub_that_refuses",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_the_stub_prints_its_message_as_written",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_forked_child_leaves_the_stubs_of_its_parent",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_a_test_that_states_absent_programs_can_start_child_processes",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_the_runner_fails_a_test_that_passes_after_a_stopped_lookup",
+        "test_reviewer_program_guard.ReviewerProgramGuardTests.test_the_runner_charges_a_read_of_a_class_fixture_to_the_next_test",
+        "test_ci_shards.CIShardTests.test_cli_run_gives_each_test_the_reviewer_program_guard",
+        "test_ci_shards.CIShardTests.test_cli_run_modules_gives_named_plugin_and_harness_modules_the_guard"
+      ]
+    },
+    {
+      "id": "v7-reading-refusal-gave-no-path-and-no-values",
+      "record": "20261120072937-v7-reading-refusals-without-bounds-and-an-empty-unread-list",
+      "class": "refusal notice of a v7 reading answer",
+      "summary": "In the paid verification of record 12, three v7 reading answers were refused with invalid_reading_response, and no refusal notice gave the reviewer a value. 19 of the 28 checks of a v7 reading response passed no detail, none passed path, and the notice replaced each detail whose name the check native.output does not register by its digest. Notes of 20,996 characters gave empty details. Notes whose cost of 20,111 characters passed the bound of 20,000 gave the digests of notes_cost and bound. A page request for the empty list unread gave the digests of list and after. A refused part of an argument and a refused citation by handle showed digests too, and the path of a refused citation named no member. The reviewer then guessed each cause and set itself limits that the harness does not have.",
+      "expected": "Each refusal of a v7 reading response gives path, the JSON Pointer of the member that failed, and the values that its rule compared: for the notes characters, notes_cost and bound; for a list request list, after and one of rows, ended and expected_after; for a passage request unit and anchor, or requested and remaining. These names are notice fields of native.output, and the six names of the checks of a part of an argument and of a citation are notice fields of review.shape, so the notice of the replacement shows the values. A refused citation names its ground and its reference. The check accepts and refuses the same answers, and a refusal and a notice that an earlier release recorded keep their bytes and the chain verifies.",
+      "fixed_in": "0.91.12",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_refusal_details.NotesRefusalTests.test_notes_longer_than_the_bound_give_their_length_their_cost_and_the_bound",
+        "test_openness_reading_v7_refusal_details.NotesRefusalTests.test_notes_within_the_length_whose_cost_passes_the_bound_give_the_same_three_numbers",
+        "test_openness_reading_v7_refusal_details.ListRefusalTests.test_a_request_for_a_list_without_rows_names_the_list_and_its_rows",
+        "test_openness_reading_v7_refusal_details.EveryRuleTests.test_every_refusal_names_the_member_that_failed",
+        "test_openness_reading_v7_refusal_details.NoticeValueTests.test_the_notice_shows_the_numbers_of_refused_notes",
+        "test_openness_reading_v7_refusal_details.NoticeValueTests.test_the_notice_shows_the_list_of_a_refused_page_request",
+        "test_openness_reading_v7_refusal_details.NoticeValueTests.test_the_notice_shows_the_values_of_a_refused_part_of_an_argument",
+        "test_openness_reading_v7_refusal_details.NoticeValueTests.test_the_notice_shows_the_place_and_the_handle_of_a_refused_citation",
+        "test_openness_reading_v7_turns.V7CommandTests.test_a_refusal_and_a_notice_that_an_earlier_release_recorded_keep_their_bytes_and_the_chain_verifies"
+      ]
+    },
+    {
+      "id": "v7-assignment-receipt-held-a-forecast-over-the-whole-plan",
+      "record": "20261120072937-v7-reading-refusals-without-bounds-and-an-empty-unread-list",
+      "class": "review capacity forecasts",
+      "summary": "The printed receipt of review-assignment of a v7 turn held two forecasts. Its stored result held the forecast over the inputs that remain, 13 turns at the first assignment of the paid verification of record 12, and the command added a forecast over the whole inventory of the plan, 40 turns that counted the 29 full texts which the carried turns had read. The receipt of a replacement turn held only the forecast over the whole plan. Status and the preflight report gave that forecast for every turn: on a fixture chain of three turns, 3, 3 and 3 turns where the receipts gave 3, 2 and 1.",
+      "expected": "The receipt of each v7 turn holds one forecast, over the inputs that remain: in the result for a turn that continues the chain, and beside the result for a replacement turn, computed as the lines of review-series compute it. The check receipt, status and the preflight report give the same forecast.",
+      "fixed_in": "0.91.12",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_turns.V7CommandTests.test_each_receipt_of_a_reading_chain_holds_one_forecast_over_the_inputs_that_remain",
+        "test_openness_reading_v7_turns.V7CommandTests.test_the_receipt_and_the_check_of_a_replacement_turn_hold_the_forecast_over_the_inputs_that_remain",
+        "test_openness_reading_v7_turns.V7CommandTests.test_status_and_preflight_give_the_forecast_over_the_inputs_that_remain"
+      ]
+    },
+    {
+      "id": "pending-step-sent-a-second-request",
+      "record": "20261120122159-verify-sends-a-verdict-again-while-its-answer-step-is-pending",
+      "class": "concurrency",
+      "summary": "With a pending step of a verdict or of a submission, exactory verify and exactory submit left the managed path. They sent the request directly, a second time. A step stayed pending in four cases: the store refused the record of the answer, the response was lost, the request did not arrive, or the server refused the request. The server answered the second verdict with 409 or 422. The text of the 422 refusal told the user to correct the body and send it again. The workspace kept no receipt, and its intent stayed pending for good. With --managed-only, a submission whose request never arrived had no command that sent it.",
+      "expected": "With a pending step, exactory verify, exactory submit and exactory reconcile read the task before they send a request, and the read that decides a pending verdict step is taken while the command owns the verification. On both paths, the commands send only a verdict file that names the verdict that the task shows as current. A pending verdict step whose predecessor is still current is cleared and sent once on the managed path, with its receipt. A pending step of the same verdict with a newer verdict of the account ends the command with verdict_reconciliation_pending. exactory reconcile with --verdict-id then records the answer. A pending submission is recorded from the task. If the server shows no task of the record, the submission is sent again on the managed path. A submission of the same record with other declarations is refused on the managed path with submission_declarations_mismatch. A verdict that the server refuses names the command that reads the task.",
+      "fixed_in": "0.91.12",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verify_after_a_refused_answer_record_sends_no_second_verdict",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verify_after_a_lost_response_sends_no_second_verdict_that_the_task_shows",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verify_decides_a_pending_step_by_a_task_read_taken_while_it_owns_the_verification",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verify_after_a_request_that_never_arrived_sends_it_once_and_writes_the_receipt",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_reconcile_with_the_verdict_id_records_the_answer_and_sends_nothing",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_reconcile_with_the_verdict_id_after_a_refused_receipt_records_the_receipt",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_reconcile_with_the_verdict_id_reads_nothing_while_another_sender_owns_the_verification",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verdict_id_for_a_submission_or_a_deposit_intent_is_refused",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_reconcile_after_a_request_that_never_arrived_sends_it_once",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_a_refused_observation_of_an_unrecorded_answer_ends_the_command_without_a_request",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_a_prepared_verdict_is_not_sent_while_the_task_shows_a_newer_verdict",
+        "test_pending_remote_requests.TestVerifyOnTheDirectPath.test_a_first_verdict_is_not_sent_while_the_task_shows_a_verdict_of_the_account",
+        "test_pending_remote_requests.TestVerifyOnTheDirectPath.test_a_revision_is_not_sent_while_the_task_shows_another_current_verdict",
+        "test_pending_remote_requests.TestVerifyOnTheDirectPath.test_a_verdict_is_not_sent_beside_a_store_that_does_not_open",
+        "test_pending_remote_requests.TestRefusedVerdictMessages.test_a_refused_verdict_on_the_direct_path_names_the_command_that_reads_the_task",
+        "test_pending_remote_requests.TestRefusedVerdictMessages.test_a_refused_verdict_on_the_managed_path_names_the_command_that_reads_the_task",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_after_a_refused_answer_record_reads_the_task_and_writes_the_receipt",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_with_another_spelling_of_the_record_continues_the_same_intent",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_while_the_service_shows_no_task_sends_the_request_on_the_managed_path",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_managed_only_submit_while_the_service_shows_no_task_sends_the_request",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_after_a_lost_response_joins_the_open_request_and_records_its_answer",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_with_other_declarations_than_a_pending_request_sends_them_directly",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_managed_only_submit_with_other_declarations_than_a_pending_request_is_refused",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_with_other_declarations_than_a_complete_request_sends_them_directly"
+      ]
+    },
+    {
+      "id": "submission-answer-read-for-a-member-the-server-never-sends",
+      "record": "20261120073605-continue-submission-reads-a-member-the-server-does-not-send",
+      "class": "identity (server and plugin)",
+      "summary": "continue_submission looked for verificationId in the answer of POST /api/v1/verifications. The server answers with the summary of the request (id, status, doi, createdAt, webUrl, supersedes, supersededBy) and never sends verificationId, so every path read the task by the concept DOI of the record. Three test stand-ins answered with verificationId and hid the dead read. No path failed.",
+      "expected": "The task of a submission is read by the concept DOI of the record, or its DOI, on every path, and no code reads a member of the answer that the server does not send. The test stand-ins answer the submission with the schema of the server, and two tests pin the DOI read after a 201 and after a 200 answer that hold only id.",
+      "fixed_in": "0.91.12",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_reads_the_task_by_the_concept_doi_after_the_answer_of_a_new_request",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_reads_the_task_by_the_concept_doi_after_the_answer_of_the_open_request",
+        "test_transport.TestSubmitDecision.test_submit_in_a_ready_study_writes_the_receipt"
+      ]
     }
   ]
 }

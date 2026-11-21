@@ -29,21 +29,21 @@ REMOTE_ANSWER_STORE_BUSY_MSG = (
     'The research store stayed busy, or kept changing the records that this write read. The answer of the remote '
     'service to this step was not recorded. The request was sent once, and the service answered. details.response '
     'holds the members of the answer that the step needs, and no record holds them. The intent keeps the step as '
-    'pending. While it is pending, exactory submit and exactory verify do not take their managed path. exactory '
-    'verify then sends the verdict directly, a second time. exactory submit sends its request directly, a second '
-    'time, unless it runs with --managed-only. Do not run them again for this request, and do not send the request '
-    'another way. For a deposit, run exactory-draft reconcile with the intent ID in details.intent_id. For a '
-    'submission, run exactory reconcile with that intent ID. Each of them reads the service and records the step. A '
-    'verdict has no such read: give details.response to the user.')
+    'pending. Do not send the request another way. For a deposit, run exactory-draft reconcile with the intent ID in '
+    'details.intent_id. It reads the service and records the step. For a submission, run exactory reconcile with '
+    'that intent ID. It reads the task and records the step. While the service shows no task of the paper, that '
+    'command sends the request again, and the service answers with the open request. For a verdict, run exactory '
+    'reconcile with that intent ID, and give the id in details.response to --verdict-id. That command checks that '
+    'the task shows this verdict. Then it records the step.')
 REMOTE_READ_STORE_BUSY_MSG = (
     'The research store stayed busy, or kept changing the records that this write read. What a read of the '
     'service showed about the pending step was not recorded. This command sent no write to the service. The intent '
     'keeps the step as pending. Run the same command again. It reads the service again and records the step.')
 REMOTE_DISCARD_STORE_BUSY_MSG = (
     'The research store stayed busy, or kept changing the records that this write read. The release of a pending '
-    'step of this remote operation was not recorded. This command sent no request of this step. The intent keeps the '
-    'step as pending. For a deposit, run the same command again. It checks the state of the step again before it '
-    'sends a request. For a submission or a verdict, report this refusal to the user.')
+    'step of this remote operation was not recorded. This command sent no request of this step. The intent keeps '
+    'the step as pending. Run the same command again. It checks the state of the step again before it sends a '
+    'request.')
 REMOTE_RECEIPT_STORE_BUSY_MSG = (
     'The research store stayed busy, or kept changing the records that this write read. The receipt of this '
     'remote operation was not recorded. Every step of the operation is confirmed and recorded in its intent, and no '
@@ -64,8 +64,7 @@ ANSWER_MEMBERS = {
     ("deposit", "preview"): ("id",),
     ("deposit", "publish"): _DEPOSITION_ANSWER_MEMBERS,
     ("deposit", "deposition_read"): _DEPOSITION_ANSWER_MEMBERS,
-    ("submit", "submit"): ("id", "verificationId", "status", "doi", "webUrl", "createdAt", "supersedes",
-                           "supersededBy"),
+    ("submit", "submit"): ("id", "status", "doi", "webUrl", "createdAt", "supersedes", "supersededBy"),
     ("submit", "task_read"): ("verificationId", "doi"),
     ("verdict", "verdict"): ("id", "status", "stance", "supersedesVerdictId", "createdAt"),
 }

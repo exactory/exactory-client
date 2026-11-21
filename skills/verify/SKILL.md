@@ -425,9 +425,13 @@ the CLI and the API return the source verbatim.
 When `exactory verify` is refused with `store_busy`, read its message and take the step
 that it names. A message that says that the request was sent once means that the server
 holds the verdict. `details.response` then holds the members of the answer of the server
-that the step needs, among them the `id` of the verdict. Report them to the user. Do not
-run `exactory verify` again for that verdict. The workspace keeps the step as pending,
-and with a pending step the command sends the verdict directly, a second time.
+that the step needs, among them the `id` of the verdict. Report them to the user. Then
+run `exactory reconcile` with the intent ID in `details.intent_id` and `--verdict-id`
+with that `id`. It records the verdict receipt and sends no request. When
+`exactory verify` is refused with `verdict_reconciliation_pending` or
+`verdict_revision_required`, the command sent nothing: the task shows another current
+verdict of this account than the file names. Read the message and take the step that it
+names. Do not change `supersedesVerdictId` to send the same verdict again.
 
 ### 5. Vote on the other verdicts
 

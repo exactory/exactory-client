@@ -1038,6 +1038,7 @@ class StoredV1ChainTests(CarriedIntegrationSupport, OpennessReadingCase):
         return native, receipt
 
     def test_v7_chain_with_a_v1_selection_continues_and_verifies(self):
+        from ci.reviewer_program_guard import use_absent_programs
         from research_harness.record_check import check_record
         native, receipt = self.start_v1_chain()
         current = 'legacy'
@@ -1056,6 +1057,9 @@ class StoredV1ChainTests(CarriedIntegrationSupport, OpennessReadingCase):
         self.assertTrue(reading.verify_chain(records, self.artifacts, last))
         finding = self.mutate(self.load_problem_module().record_openness, dict(assignment_id=last['id']))['result']
         self.assertEqual(finding['outcome'], 'unresolved')
+        # The record check lists the path of the Codex program beside each runtime read. The test states that
+        # the machine has none.
+        use_absent_programs(self)
         checked = check_record(self.root, isolate=False)
         self.assertTrue(checked['ready'], checked)
         after = self.store.snapshot()['records']

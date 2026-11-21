@@ -1523,6 +1523,12 @@ def describe_reading_receipt(records, artifacts, assignment, route, logical, pac
                 capacity_warning=warnings, reading_chain_admission=admission)
 
 
+def describe_unavailable_forecast(error):
+    """Describe the forecast of a turn whose stored inputs the harness cannot read, with the reason."""
+    return dict(status='unavailable', is_bound=False, message=FORECAST_NO_BOUND_MESSAGE,
+                reason=error.code if isinstance(error, ResearchError) else type(error).__name__)
+
+
 def _fits(route, prompt, packet, artifacts_now):
     """Whether the route's actual fitted request for a packet fits its input limit and delivers every listed body
     complete."""

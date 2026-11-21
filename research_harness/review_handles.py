@@ -114,11 +114,11 @@ def _validate_v7_refs(packet, output, *, raw):
     findings = output.get('findings')
     openness = findings.get('openness') if isinstance(findings, dict) else None
     grounds = openness.get('grounds') if isinstance(openness, dict) else None
-    for ground in grounds if isinstance(grounds, list) else []:
+    for ground_index, ground in enumerate(grounds if isinstance(grounds, list) else []):
         references = ground.get('refs') if isinstance(ground, dict) else None
         if not isinstance(references, list):
             continue  # The role validator reports the malformed container.
-        for reference in references:
+        for reference_index, reference in enumerate(references):
             if not raw and isinstance(reference, dict) and 'ref' not in reference:
                 continue  # Already expanded authenticated output.
             handle = reference.get('ref') if isinstance(reference, dict) else None
@@ -126,7 +126,7 @@ def _validate_v7_refs(packet, output, *, raw):
                     or not isinstance(handle, str) or handle[:1] not in (
                         ('g', 'h', 'n', 'm', 'u', 'x') if packet['reading_final'].get('unread')
                         else ('g', 'h', 'n', 'm'))):
-                _refuse_handle('/findings/openness/grounds/refs', handle)
+                _refuse_handle('/findings/openness/grounds/%d/refs/%d' % (ground_index, reference_index), handle)
 
 
 def expand_handles(packet, output, *, artifacts=None, assignment=None, raw=False):

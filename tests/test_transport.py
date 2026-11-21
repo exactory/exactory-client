@@ -411,8 +411,11 @@ class TestSubmitDecision(_TransportTestCase):
 
         deposit(case.store, binding, publisher,
                 expected_revision=case.store.revision, request_id="transport-publication")
-        self.responses[("POST", "/api/v1/verifications")] = ({"verificationId": _VERIFICATION_ID}, 201)
-        self.responses[("GET", "/api/v1/tasks/" + _VERIFICATION_ID)] = ({"verificationId": _VERIFICATION_ID,
+        self.responses[("POST", "/api/v1/verifications")] = ({"id": _VERIFICATION_ID, "status": "open",
+            "doi": "10.5281/zenodo.0", "createdAt": "2026-11-20T00:00:00.000Z",
+            "webUrl": "https://www.exactory.ai/verifications/" + _VERIFICATION_ID, "supersedes": None,
+            "supersededBy": None}, 201)
+        self.responses[("GET", "/api/v1/tasks/10.5281/zenodo.0")] = ({"verificationId": _VERIFICATION_ID,
             "doi": "10.5281/zenodo.0", "source": "zenodo", "sourceId": "1", "sourceVersion": None,
             "url": "https://zenodo.org/records/1"}, 200)
 
@@ -420,44 +423,12 @@ class TestSubmitDecision(_TransportTestCase):
         self._publish_the_reviewed_bundle()
         _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"])
         self.assertEqual(stderr_text, "")
-        self.assertEqual(self.requested_paths, ["/api/v1/verifications", "/api/v1/tasks/" + _VERIFICATION_ID])
+        self.assertEqual(self.requested_paths, ["/api/v1/verifications", "/api/v1/tasks/10.5281/zenodo.0"])
         self.assertEqual(self.request_bodies, [{"doi": "10.5281/zenodo.1"}, None])
         from research_harness.storage import Store
         receipts = Store(self.scratch_dir).snapshot()["records"]["submission_receipt"]
         self.assertEqual(len(receipts), 1)
         self.assertTrue(next(iter(receipts.values()))["matched"])
-
-    def test_submit_after_an_unknown_submission_outcome_notes_the_skip_and_posts(self) -> None:
-        self._publish_the_reviewed_bundle()
-        record_request = _transport._send_request
-
-        def lose_the_submission_response(method: str, path: str, body: dict | None = None,
-                                         *, allow_missing: bool = False) -> tuple[dict, int]:
-            response = record_request(method, path, body, allow_missing=allow_missing)
-            if method == "POST":
-                _transport._exit_with_error("The client cannot reach the server.")
-            return response
-
-        _transport._send_request = lose_the_submission_response
-        self._run(["submit", "--doi", "10.5281/zenodo.1"], expected_exit_code=1)
-        _transport._send_request = record_request
-        self.requested_paths.clear()
-        self.request_bodies.clear()
-        # The concept DOI is the locator a stranded intent reads instead of the
-        # lost verification id, and the server has no task under it.
-        self.responses[("GET", "/api/v1/tasks/10.5281/zenodo.0")] = ({}, 404)
-
-        _, stderr_text = self._run(["submit", "--doi", "10.5281/zenodo.1"])
-        self.assertEqual(stderr_text, "Managed record skipped (remote_reconciliation_required):"
-                                      " A prior submission POST has an unknown outcome. Reconcile that intent"
-                                      " before this study records another submission\n")
-        self.assertEqual(self.requested_paths, ["/api/v1/verifications"])
-        self.assertEqual(self.request_bodies, [{"doi": "10.5281/zenodo.1"}])
-        from research_harness.storage import Store
-        records = Store(self.scratch_dir).snapshot()["records"]
-        self.assertEqual([intent["status"] for intent in records["remote_intent"].values()
-                          if intent["kind"] == "submit"], ["in_flight"])
-        self.assertNotIn("submission_receipt", records)
 
 
 class TestSubmitInAStudyWorkspaceWithNoDraftMarker(_TransportTestCase):
@@ -610,37 +581,6 @@ class TestVerify(_TransportTestCase):
         self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
         from research_harness.storage import Store
         self.assertNotIn("verdict_receipt", Store(self.scratch_dir).snapshot()["records"])
-
-    def test_verify_after_an_unknown_verdict_outcome_notes_the_skip_and_posts(self) -> None:
-        self._bind_the_verdict_in_a_verification_workspace()
-        record_request = _transport._send_request
-
-        def lose_the_verdict_response(method: str, path: str, body: dict | None = None,
-                                      *, allow_missing: bool = False) -> tuple[dict, int]:
-            response = record_request(method, path, body, allow_missing=allow_missing)
-            if method == "POST":
-                _transport._exit_with_error("The client cannot reach the server.")
-            return response
-
-        _transport._send_request = lose_the_verdict_response
-        self._run_verify(expected_exit_code=1)
-        _transport._send_request = record_request
-        self.requested_paths.clear()
-        self.request_bodies.clear()
-
-        _, stderr_text = self._run_verify()
-        self.assertEqual(stderr_text, "Managed record skipped (verdict_reconciliation_pending):"
-                                      " The previous POST has an unknown outcome. The task exposes only your verdict ID,"
-                                      " so the existing API cannot confirm the exact body without exposing other verdicts\n")
-        self.assertEqual(self.requested_paths,
-                         [f"/api/v1/tasks/{_VERIFICATION_ID}", f"/api/v1/verifications/{_VERIFICATION_ID}/verdicts"])
-        self.assertEqual(self.request_bodies[1], json.loads((self.scratch_dir / "verdict.json").read_text()))
-        from research_harness.storage import Store
-        records = Store(self.scratch_dir).snapshot()["records"]
-        self.assertEqual([intent["status"] for intent in records["remote_intent"].values()], ["in_flight"])
-        self.assertEqual([observation["status"] for observation in records["remote_observation"].values()],
-                         ["verdict_response_unknown"])
-        self.assertNotIn("verdict_receipt", records)
 
 
 class TestTasksSearchFlags(_TransportTestCase):

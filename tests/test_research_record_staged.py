@@ -8,6 +8,7 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import patch
 
+from ci.reviewer_program_guard import use_absent_programs
 from research_harness import review_staged_protocol as staged
 from research_harness.record_check import OfflineStore, check_continuation, check_reconstruction, run_timed_check
 import test_review_staged_frontier as fixtures
@@ -19,6 +20,9 @@ class StagedRecordCheckTests(unittest.TestCase):
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
         self.controller = self.fixture.create_controller()
+        # The record checks of these tests, and the fingerprint command that one of them starts as a child
+        # process, look for the Codex program. The test states that the machine has none.
+        use_absent_programs(self)
 
     def dispatch(self):
         result = self.fixture.command('review-assignment', {'controller_assignment_id': self.controller['id']})

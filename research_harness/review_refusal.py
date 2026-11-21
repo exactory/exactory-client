@@ -84,11 +84,17 @@ OUTPUT_REFUSAL_AFTER_RECORDING_STORE_BUSY_MSG = (
 _SHAPE_NOTICE_FIELDS = ('expected_type', 'received_type', 'missing_fields', 'unexpected_fields')
 _TEXT_NOTICE_FIELDS = ('characters', 'minimum_characters', 'maximum_characters', 'normalized_characters')
 _DELIVERY_NOTICE_FIELDS = ('record_kind', 'id', 'digest', 'sha256', 'locator')
+# What the checks of a part of an argument and of a citation by handle compare (review_handles).
+_MATERIAL_NOTICE_FIELDS = ('ref', 'pending', 'expected_part', 'maximum_parts', 'answer_bound', 'maximum_characters')
+# What a check of a reading response compares: values of the answer, and counts of the frozen packet and state.
+_READING_NOTICE_FIELDS = ('request_id', 'notes_cost', 'bound', 'list', 'after', 'expected_after', 'ended', 'rows',
+                          'unit', 'anchor', 'requested', 'remaining', 'keep', 'target', 'items', 'minimum_items',
+                          'maximum_items')
 CONTRACT_CHECKS = {
     'evidence.shape': {'notice_fields': _SHAPE_NOTICE_FIELDS + ('refused_indexes', 'refused_count', 'notice')},
     'evidence.fulltext': {'notice_fields': ('version_id', 'source_id', 'artifact', 'delivered_depth', 'notice')},
     'evidence.locator': {'notice_fields': _SHAPE_NOTICE_FIELDS + ('part_relative_span',)},
-    'review.shape': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'review.shape': {'notice_fields': _SHAPE_NOTICE_FIELDS + _MATERIAL_NOTICE_FIELDS},
     'review.value': {'notice_fields': _SHAPE_NOTICE_FIELDS + _TEXT_NOTICE_FIELDS +
                      ('required', 'bar_ids', 'candidate_id', 'candidate_ids', 'items', 'minimum_items')},
     'review.objections': {'notice_fields': _SHAPE_NOTICE_FIELDS + ('objection_id', 'candidate_ids')},
@@ -104,7 +110,7 @@ CONTRACT_CHECKS = {
     'adjudication.reassessment': {'notice_fields': _SHAPE_NOTICE_FIELDS + _DELIVERY_NOTICE_FIELDS},
     'adjudication.evidence_delivery': {'notice_fields': _DELIVERY_NOTICE_FIELDS},
     'verification.parts': {'notice_fields': _SHAPE_NOTICE_FIELDS},
-    'native.output': {'notice_fields': _SHAPE_NOTICE_FIELDS + _TEXT_NOTICE_FIELDS + ('request_id',)},
+    'native.output': {'notice_fields': _SHAPE_NOTICE_FIELDS + _TEXT_NOTICE_FIELDS + _READING_NOTICE_FIELDS},
     'openness.finding': {'notice_fields': _SHAPE_NOTICE_FIELDS + ('rule', 'forecast')},
 }
 

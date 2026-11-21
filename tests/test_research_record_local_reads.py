@@ -29,8 +29,12 @@ class LocalReadTests(unittest.TestCase):
             self.assertEqual([row['kind'] for row in reads], ['route_runtime:claude_cli_v1'])
 
     def test_runtime_read_reached_during_real_parts_continuation_is_listed(self):
+        from ci.reviewer_program_guard import use_absent_programs
         from research_harness.record_check import check_record
         import test_review_parts_views as parts_fixtures
+        # The record check lists the path of the Codex program beside each runtime read. The test states that
+        # the machine has none.
+        use_absent_programs(self)
         fixture = parts_fixtures.PartsViewCase()
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)

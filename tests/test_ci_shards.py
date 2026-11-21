@@ -11,6 +11,8 @@ import sys
 import tempfile
 import unittest
 
+from ci.reviewer_program_guard import take_machine_reads
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -51,7 +53,7 @@ class CIShardTests(unittest.TestCase):
             self.fixture(outcome), index, 4,
             {"client_commit": "client-commit", "client_tree": "client-tree",
              "marketplace_commit": "marketplace-commit", "python_version": "3.9.25"},
-            stream=io.StringIO(),
+            stream=io.StringIO(), take_machine_reads=take_machine_reads,
         )
 
     def test_partition_executes_every_discovered_entry_including_duplicate_ids(self):
@@ -106,15 +108,16 @@ class CIShardTests(unittest.TestCase):
         api = self.api()
         for index, count in ((-1, 4), (4, 4), (0, 0)):
             with self.assertRaises(ValueError):
-                api.run_shard(self.fixture(), index, count, {}, stream=io.StringIO())
+                api.run_shard(self.fixture(), index, count, {}, stream=io.StringIO(),
+                              take_machine_reads=take_machine_reads)
         with self.assertRaises(ValueError):
-            api.run_shard(unittest.TestSuite(), 0, 4, {}, stream=io.StringIO())
+            api.run_shard(unittest.TestSuite(), 0, 4, {}, stream=io.StringIO(), take_machine_reads=take_machine_reads)
 
     def test_discovery_import_errors_remain_failed_test_entries(self):
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, "test_broken_import.py").write_text("raise RuntimeError('broken import')\n")
             suite = unittest.TestLoader().discover(directory)
-            report = self.api().run_shard(suite, 0, 1, {}, stream=io.StringIO())
+            report = self.api().run_shard(suite, 0, 1, {}, stream=io.StringIO(), take_machine_reads=take_machine_reads)
             self.assertFalse(report["success"])
             self.assertEqual(report["tests_run"], 1)
             self.assertEqual(len(report["errors"]), 1)
@@ -131,13 +134,84 @@ class CIShardTests(unittest.TestCase):
         subprocess.run(["git", "-C", str(path), "update-ref", "HEAD", commit], check=True)
         return commit, tree
 
+    def copy_runner(self, client):
+        (client / "ci").mkdir(parents=True)
+        for name in ("unittest_shards.py", "reviewer_program_guard.py"):
+            shutil.copyfile(ROOT / "ci" / name, client / "ci" / name)
+
+    def write_guarded_sample(self, path):
+        # test_b catches the stop of the guard, so it passes in a run without the runner.
+        path.write_text(
+            "import shutil\nimport unittest\nfrom ci.reviewer_program_guard import is_guard_installed\n"
+            "class Sample(unittest.TestCase):\n"
+            "    def test_a(self): self.assertTrue(is_guard_installed())\n"
+            "    def test_b(self):\n"
+            "        try:\n            shutil.which('codex')\n"
+            "        except BaseException:\n            pass\n"
+            "    def test_c(self): self.assertIsNotNone(shutil.which('sh'))\n"
+        )
+
+    def test_cli_run_gives_each_test_the_reviewer_program_guard(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            client = base / "client"
+            self.copy_runner(client)
+            (client / "tests").mkdir()
+            self.write_guarded_sample(client / "tests/test_sample.py")
+            self.git_fixture(client)
+            self.git_fixture(base / "marketplace")
+            result = base / "result.json"
+            run = subprocess.run([sys.executable, str(client / "ci/unittest_shards.py"), "run", "--shard-index", "0",
+                                  "--shard-count", "1", "--marketplace", str(base / "marketplace"),
+                                  "--result", str(result)], cwd=client, capture_output=True, text=True, timeout=60)
+            report = json.loads(result.read_text())
+            self.assertEqual(run.returncode, 1, run.stderr)
+            self.assertEqual(report["tests_run"], 3)
+            self.assertEqual(report["errors"], ["test_sample.Sample.test_b"])
+            self.assertEqual(report["failures"], [])
+            self.assertIn("looked for the reviewer program codex", run.stderr)
+
+    def test_cli_run_modules_gives_named_plugin_and_harness_modules_the_guard(self):
+        with tempfile.TemporaryDirectory() as directory:
+            client = Path(directory) / "client"
+            self.copy_runner(client)
+            (client / "tests").mkdir()
+            self.write_guarded_sample(client / "tests/test_sample.py")
+            (client / "tests/test_other.py").write_text(
+                "import unittest\nclass Other(unittest.TestCase):\n    def test_d(self): pass\n")
+            # The plugin tests directory is not a package, so the harness package keeps the name tests.
+            harness = client / "harness" / "tests"
+            harness.mkdir(parents=True)
+            (harness / "__init__.py").write_text("")
+            (harness / "support.py").write_text("VALUE = 'harness sibling support'\n")
+            (harness / "test_inner.py").write_text(
+                "import unittest\nfrom ci.reviewer_program_guard import is_guard_installed\n"
+                "from tests.support import VALUE\n"
+                "class Inner(unittest.TestCase):\n"
+                "    def test_e(self):\n"
+                "        self.assertTrue(is_guard_installed())\n"
+                "        self.assertEqual(VALUE, 'harness sibling support')\n"
+            )
+            command = [sys.executable, str(client / "ci/unittest_shards.py"), "run-modules"]
+            plugin = subprocess.run(command + ["tests.test_sample", "test_other"], cwd=client,
+                                    capture_output=True, text=True, timeout=60)
+            self.assertEqual(plugin.returncode, 1, plugin.stderr)
+            summary = json.loads(plugin.stdout)
+            self.assertEqual(summary["tests_run"], 4)
+            self.assertEqual(summary["errors"], ["tests.test_sample.Sample.test_b"])
+            self.assertEqual(summary["failures"], [])
+            self.assertIn("looked for the reviewer program codex", plugin.stderr)
+            inner = subprocess.run(command + ["--top-level-directory", "harness", "tests.test_inner"], cwd=client,
+                                   capture_output=True, text=True, timeout=60)
+            self.assertEqual(inner.returncode, 0, inner.stderr)
+            self.assertEqual(json.loads(inner.stdout)["tests_run"], 1)
+
     def run_package_fixture(self, outcome, with_top_level=True):
         scratch = tempfile.TemporaryDirectory(prefix="ci package ")
         self.addCleanup(scratch.cleanup)
         base = Path(scratch.name)
         client = base / "client"
-        (client / "ci").mkdir(parents=True)
-        shutil.copyfile(ROOT / "ci/unittest_shards.py", client / "ci/unittest_shards.py")
+        self.copy_runner(client)
         tests = client / "harness" / "tests"
         tests.mkdir(parents=True)
         (tests / "__init__.py").write_text("")
@@ -199,9 +273,8 @@ class CIShardTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory)
             client = base / "client"
-            (client / "ci").mkdir(parents=True)
+            self.copy_runner(client)
             (client / "tests").mkdir()
-            shutil.copyfile(ROOT / "ci/unittest_shards.py", client / "ci/unittest_shards.py")
             (client / "tests/test_sample.py").write_text(
                 "import unittest\nclass Sample(unittest.TestCase):\n"
                 "    def test_a(self): pass\n"
