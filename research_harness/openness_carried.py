@@ -1,9 +1,10 @@
 """Pure D2 selection of earlier problem or math readings for a new chain.
 
 The caller supplies the new first assignment's identity and recorded revision. The verifier compares
-a stored selection of version 2 with the selection of the store as it stood before that assignment,
-and it authenticates each carried item of a stored selection under the records as they stand. Route
-equality uses review_context_repair.is_same_route(first, second), with the identity of Ruling 2.
+a stored selection of version 2 or 3 with the selection of the store as it stood before that assignment,
+and it authenticates each carried item of a stored selection under the records as they stand. Version 3
+observes each earlier chain on the content records as they stood at the start of that chain (C16 to C22).
+Route equality uses review_context_repair.is_same_route(first, second), with the identity of Ruling 2.
 """
 
 import copy
@@ -22,7 +23,12 @@ from .problem_openness import serialize_record
 from .workspace import strict_json
 
 SELECTION_PROTOCOL_V1 = 'exactory-openness-carried-selection-v1'
-SELECTION_PROTOCOL = 'exactory-openness-carried-selection-v2'
+SELECTION_PROTOCOL_V2 = 'exactory-openness-carried-selection-v2'
+SELECTION_PROTOCOL_V3 = 'exactory-openness-carried-selection-v3'
+# The protocol of the selection that a new first assignment stores.
+SELECTION_PROTOCOL = SELECTION_PROTOCOL_V3
+# The protocols whose verification first compares the stored turns with the selection of the cutoff.
+CUTOFF_PROTOCOLS = (SELECTION_PROTOCOL_V2, SELECTION_PROTOCOL_V3)
 
 
 def _verify_math_prefix(records, artifacts, native, chain, rows, observations):
@@ -211,14 +217,36 @@ def _select_recorded_attempts(records, identity):
                             for kind in ('review_attempt', 'review_invocation')})
 
 
-def observe_qualifying_chain(records, artifacts, chain, identity):
+def read_chain_records(records, first, protocol):
+    """Return the records on which a selection under protocol observes the chain that first starts.
+
+    Version 3 reads the content kinds as they stood at the start of the chain, the revision before the one at which
+    the history shows first recorded, and every other kind as records give it (C17, C18). Every other protocol reads
+    records as given. Records without that history, or a stamp of first that the history does not show, end the
+    selection with claim_reassessment_required (C21).
+    """
+    if protocol != SELECTION_PROTOCOL_V3:
+        return records
+    stamp = first['recorded_revision']
+    view = storage.pin_kinds(records, reading.READING_CONTENT_KINDS, stamp - 1)
+    if (not records.verify_record_version('review_assignment', first['id'], stamp, digest(first))
+            or first['id'] in records.read_snapshot(stamp - 1).get('review_assignment', {})):
+        raise ResearchError('claim_reassessment_required', 'The recorded input snapshot is unavailable; reassess the '
+                            'bound record.', {'record_id': 'review_assignment:' + first['id']})
+    return view
+
+
+def observe_qualifying_chain(records, artifacts, chain, identity, *, protocol=None):
     """Authenticate the longest ready prefix before the cutoff with its own protocol's observer.
 
     A stopped/unready last turn cannot erase earlier ready readings. An invalid turn cannot be skipped
     inside a prefix. The dispatch table is the only home for supported observer protocols. Only a refusal
     in PREFIX_STATE_CODES sends the observation to the turn before; every other refusal ends the selection.
+    protocol names the selection whose rule reads the records (read_chain_records); without it the chain is
+    observed on records as given, the rule of versions 1 and 2.
     """
-    eligible = _select_recorded_attempts(records, identity)
+    eligible = read_chain_records(_select_recorded_attempts(records, identity),
+                                  records['review_assignment'][chain['chain']], protocol)
     artifacts = _SelectionEvaluation.of(eligible, artifacts)
     members = [row for row in records['review_assignment'].values()
                if row['recorded_revision'] < identity['recorded_revision']
@@ -409,11 +437,12 @@ class _SelectionEvaluation(Evaluation):
             raise
 
 
-def select_carried_readings(records, artifacts, inventory, identity):
+def select_carried_readings(records, artifacts, inventory, identity, *, protocol):
     """Select R67 candidates latest chain first, then turn number, walking inventory units in order.
 
     Take an overlapping range whole only when it contributes a character not already taken.
     Emit carried turns in recorded order, using only the form consumed by project_carried_turn.
+    protocol names the selection whose rule observes each earlier chain (read_chain_records).
     """
     while isinstance(artifacts, Evaluation):
         artifacts = artifacts.store
@@ -422,7 +451,7 @@ def select_carried_readings(records, artifacts, inventory, identity):
     try:
         candidates, chains = [], []
         for chain in list_qualifying_chains(records, artifacts, identity):
-            observations = observe_qualifying_chain(records, artifacts, chain, identity)
+            observations = observe_qualifying_chain(records, artifacts, chain, identity, protocol=protocol)
             first = records['review_assignment'][chain['chain']]
             classes = classify_carried_notes(inventory, observations,
                 search_dependencies=_list_search_dependencies(records, artifacts, first,
@@ -466,8 +495,8 @@ def select_carried_readings(records, artifacts, inventory, identity):
 
 def build_carried_selection(records, artifacts, inventory, identity):
     """Return {selection, artifact, content}, ready for the caller's atomic publication; write nothing."""
-    selection = dict(protocol=SELECTION_PROTOCOL, inventory_digest=digest(inventory),
-                     turns=select_carried_readings(records, artifacts, inventory, identity))
+    turns = select_carried_readings(records, artifacts, inventory, identity, protocol=SELECTION_PROTOCOL)
+    selection = dict(protocol=SELECTION_PROTOCOL, inventory_digest=digest(inventory), turns=turns)
     content = serialize_record(selection)
     return dict(selection=selection, artifact=describe_artifact(content, 'application/json'), content=content)
 
@@ -500,7 +529,7 @@ def verify_carried_selection(records, artifacts, inventory, identity, selection,
             v7._require_selected(serialize_record(selection) == content)
         keys = ('protocol', 'inventory_digest', 'turns')
         _require_shape(selection, keys + ('affected_notes',) if 'affected_notes' in selection else keys)
-        v7._require_selected(selection['protocol'] in (SELECTION_PROTOCOL_V1, SELECTION_PROTOCOL)
+        v7._require_selected(selection['protocol'] in (SELECTION_PROTOCOL_V1,) + CUTOFF_PROTOCOLS
                              and selection['inventory_digest'] == digest(inventory)
                              and isinstance(selection['turns'], list))
         eligible = _select_recorded_attempts(records, identity)
@@ -520,7 +549,8 @@ def verify_carried_selection(records, artifacts, inventory, identity, selection,
             chain = _describe_chain(records, artifacts, first, identity)
             v7._require_selected(chain is not None
                                  and normalized_text(first['reviewer_id']) == normalized_text(identity['reviewer_id']))
-            observed = CHAIN_OBSERVERS[chain['protocol']](eligible, artifacts, endpoint)
+            view = read_chain_records(eligible, first, selection['protocol'])
+            observed = CHAIN_OBSERVERS[chain['protocol']](view, Evaluation.of(view, artifacts), endpoint)
             classes = classify_carried_notes(inventory, observed,
                 search_dependencies=_list_search_dependencies(records, artifacts, first,
                     packet_kind=identity.get('packet_kind', 'problem')))
@@ -565,7 +595,8 @@ def verify_carried_selection(records, artifacts, inventory, identity, selection,
 
 
 def verify_stored_selection(records, artifacts, inventory, identity, selection, *, cutoff=None, plan=None):
-    """Require a v2 stored selection to equal the cutoff selection, then authenticate its items today.
+    """Require a stored selection of CUTOFF_PROTOCOLS to equal the selection of the cutoff under its own protocol,
+    then authenticate its items today.
 
     Version 1 retains its item-only verification. Artifact refusals from selecting the cutoff
     pass through unchanged, before any comparison with the stored turns.
@@ -578,9 +609,9 @@ def verify_stored_selection(records, artifacts, inventory, identity, selection, 
         protocol = selection['protocol']
     except (ResearchError, KeyError, TypeError, ValueError):
         v7._require_selected(False)
-    if protocol == SELECTION_PROTOCOL:
+    if protocol in CUTOFF_PROTOCOLS:
         v7._require_selected(cutoff is not None)
-        expected = select_carried_readings(cutoff.records, cutoff, inventory, identity)
+        expected = select_carried_readings(cutoff.records, cutoff, inventory, identity, protocol=protocol)
         v7._require_selected(selection.get('turns') == expected)
     return verify_carried_selection(records, artifacts, inventory, identity, selection, plan=plan)
 
@@ -598,7 +629,8 @@ def _describe_missing_ranges(unit, spans):
 
 def _describe_outputs(records, artifacts, inventory, identity, selection, qualifying):
     """Account for every verified excerpt and delivered passage of each qualifying chain."""
-    chains = [(chain['chain'], [row for row in observe_qualifying_chain(records, artifacts, chain, identity)
+    chains = [(chain['chain'], [row for row in observe_qualifying_chain(records, artifacts, chain, identity,
+                                                                         protocol=selection['protocol'])
                if row['origin']['chain'] == chain['chain'] and row['turn']['kind'] == 'reading'])
               for chain in qualifying]
     credits = {row['origin']['assignment_id']: row for row in selection['turns']}

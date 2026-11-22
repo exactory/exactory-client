@@ -25,15 +25,15 @@ class RecordedSelectionSupport:
         before = copy.deepcopy(records)
         head = records['review_assignment'][first]
         selection = json.loads(self.artifacts.read(head['carried_selection']['artifact']))
-        self.assertEqual(selection['protocol'], 'exactory-openness-carried-selection-v2')
+        self.assertEqual(selection['protocol'], 'exactory-openness-carried-selection-v3')
         cutoff_revision = head['recorded_revision'] - 1
         cutoff = Evaluation.of(records, self.artifacts).read_snapshot(cutoff_revision)
         cutoff_digest = digest({kind: dict(rows) for kind, rows in cutoff.records.items()})
         inventory = v7.read_carried_inventory(self.artifacts, head)
         identity = v7._describe_carried_identity(records, head, records['review_route'][head['route_id']],
             json.loads(self.artifacts.read(head['context']['native_packet'])))
-        self.assertEqual(openness_carried.select_carried_readings(cutoff.records, cutoff, inventory, identity),
-                         selection['turns'])
+        self.assertEqual(openness_carried.select_carried_readings(cutoff.records, cutoff, inventory, identity,
+                                                                  protocol=selection['protocol']), selection['turns'])
         with patch.object(v7, 'check_v7_admission', side_effect=AssertionError('replanning')):
             result = stage3.record_finding(self, final['id'])
         self.assertTrue(result['reading_turns'])
@@ -41,7 +41,7 @@ class RecordedSelectionSupport:
         later_cutoff = Evaluation.of(after, self.artifacts).read_snapshot(cutoff_revision)
         self.assertEqual(digest({kind: dict(rows) for kind, rows in later_cutoff.records.items()}), cutoff_digest)
         self.assertEqual(openness_carried.select_carried_readings(later_cutoff.records, later_cutoff,
-            inventory, identity), selection['turns'])
+            inventory, identity, protocol=selection['protocol']), selection['turns'])
         for kind in ('review_assignment', 'review_attempt', 'review_invocation'):
             self.assertEqual(before[kind], after[kind])
         return packets

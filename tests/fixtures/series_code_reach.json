@@ -570,9 +570,11 @@
           "research_harness/claim_dependencies.py:verify_record_dependency#1": ["record"],
           "research_harness/development.py:_Context.require_reassessment#1": ["record"],
           "research_harness/evaluation.py:Evaluation.read_snapshot#1": ["harness","record"],
+          "research_harness/openness_carried.py:read_chain_records#1": ["content"],
           "research_harness/publication_scope.py:find_required_corrections#1": ["record"],
           "research_harness/storage.py:_HistoricalSnapshot.read_snapshot#1": ["record"],
-          "research_harness/storage.py:_HistoricalSnapshot.read_snapshot#2": ["harness"]
+          "research_harness/storage.py:_HistoricalSnapshot.read_snapshot#2": ["harness"],
+          "research_harness/storage.py:pin_kinds#1": ["harness","record"]
         },
         "claim_source_support_unresolved": {
           "research_harness/synthesis.py:_Assessment.claim#1": ["entry"]

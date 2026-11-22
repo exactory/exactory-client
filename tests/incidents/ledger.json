@@ -8513,6 +8513,19 @@
         "test_ci_shards.CIShardTests.test_a_module_with_a_test_above_300_seconds_keeps_its_shard_when_tests_are_added_before_it",
         "test_ci_shards.CIShardTests.test_each_module_of_a_shard_group_is_a_test_module_of_one_group_and_no_shard_holds_two_groups"
       ]
+    },
+    {
+      "id": "content-change-after-a-cutoff-discards-carried-readings",
+      "record": "20261120002019-content-change-after-cutoff-discards-carried-readings",
+      "class": "carried selection",
+      "summary": "A selection of carried readings observed each earlier chain on the content records of the present. Two kinds of change that commands write made the earlier units no longer the units that the harness derives: bundle, when its bundle names a capture that an earlier packet delivered as a supplement, and fulltext, when it brings the first fetched copy of a work whose delivered text was supplied with import-fulltext. After either, the observer of the earlier v6 chain refused every prefix, the v7 chain that carried it was refused, and the first assignment of a later chain carried no turn: it read 109,211 characters again (109,223 in the second case), of which 100,000 were two full texts that did not change. No live record was in this state.",
+      "expected": "A first assignment stores its selection under exactory-openness-carried-selection-v3, which observes each earlier chain on the content records as they stood at the start of that chain and on the review records as they stand. After such a change a later chain carries the ready reading turns of every earlier chain for the units that did not change, and reads the units that are new or changed. A stored selection of version 1 or 2 keeps its rule.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_carried_integration.ContentChangeCarryTests.test_supplement_bundle_keeps_the_readings_of_the_unchanged_units",
+        "test_openness_carried_integration.SuppliedTextContentChangeTests.test_fetched_copy_after_a_supplied_text_keeps_the_readings_of_the_unchanged_units"
+      ]
     }
   ]
 }

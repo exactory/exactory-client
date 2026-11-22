@@ -484,7 +484,8 @@ class MathReadScopeTests(MathCarriedCase):
         self.assertNotIn('reading_chain', assignments['single'])
         with patch.object(self.artifacts, 'read', wraps=self.artifacts.read) as read:
             with patch.object(carried, 'load_packet', wraps=carried.load_packet) as loaded:
-                turns = carried.select_carried_readings(records, self.artifacts, inventory, identity)
+                turns = carried.select_carried_readings(records, self.artifacts, inventory, identity,
+                                                        protocol=carried.SELECTION_PROTOCOL)
         paths = {call.args[0]['path'] for call in read.call_args_list}
         names = ('other-reviewer', 'other-route', 'single', 'problem', 'other-statement', 'math-1')
         self.assertEqual({identifier: [name for name, reference in (
@@ -514,7 +515,8 @@ class MathReadScopeTests(MathCarriedCase):
         first, records, inventory, identity = self.start_math_chain()
         other = dict(identity, reviewer_id='another-reviewer')
         with remove_artifact(self, first['packet']):
-            self.assertEqual(carried.select_carried_readings(records, self.artifacts, inventory, other), [])
+            self.assertEqual(carried.select_carried_readings(records, self.artifacts, inventory, other,
+                                                             protocol=carried.SELECTION_PROTOCOL), [])
             report = self.describe_selection(records, inventory, other)
             self.assertEqual((report['chains'], report['passed_over'], report['outputs']), ([], [], []))
             self.assertEqual(report['unavailable_chains'], [dict(chain='math-1', code='artifact_missing',
@@ -554,7 +556,8 @@ class MathReadScopeTests(MathCarriedCase):
                 self.assertNotIn('unavailable_chains', report)
                 # The chain of the statement reads the same artifact, and the store refuses it.
                 with self.assertRaises(ResearchError) as caught:
-                    carried.select_carried_readings(records, self.artifacts, inventory, identity)
+                    carried.select_carried_readings(records, self.artifacts, inventory, identity,
+                                                    protocol=carried.SELECTION_PROTOCOL)
                 self.assertEqual(caught.exception.code, 'artifact_missing')
 
     def test_replacement_of_a_first_turn_has_no_row_of_its_own(self):

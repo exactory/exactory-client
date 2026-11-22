@@ -631,7 +631,7 @@ class _PostCreationSnapshot(dict):
 class _RecordedSnapshot(_PostCreationSnapshot):
     """Current JSON records or a shallow historical overlay with authenticated inputs.
 
-    Managed research and v2 carried selections retain indexed history. Copies
+    Managed research and stores with a reading chain retain indexed history. Copies
     share its immutable compressed values; historical reads need no connection.
     """
 
@@ -666,9 +666,50 @@ def overlay_kinds(records, kinds):
     return _RecordedSnapshot(overlay, history=records._history, revision=records.read_revision(), current_source=source)
 
 
+class _PinnedKind(Mapping):
+    """One kind as it stood at a revision. It reads a row from the history when asked and keeps what it decoded.
+
+    It is no _HistoricalKind, because an Evaluation binds each _HistoricalKind of a view to the revision of the view.
+    """
+
+    def __init__(self, history, kind, revision):
+        self._history, self._kind, self._revision, self._rows = history, kind, revision, {}
+
+    def __getitem__(self, key):
+        if key not in self._rows:
+            self._rows[key] = self._history.read_record(self._kind, key, self._revision)
+        return self._rows[key]
+
+    def __iter__(self):
+        versions = self._history._versions[self._kind]
+        return (key for key in sorted(versions) if versions[key][0][0] <= self._revision)
+
+    def __len__(self):
+        return sum(1 for _ in self)
+
+
+def pin_kinds(records, kinds, revision):
+    """Return records with each of kinds as it stood at revision and every other kind as records give it.
+
+    A kind that the store did not hold at revision is absent. The view keeps the authenticated history. Records
+    without a history, and a revision outside them, end with the refusal of an unavailable snapshot.
+    """
+    if (getattr(records, "read_snapshot", None) is None or type(revision) is not int
+            or not 0 <= revision <= records.read_revision()):
+        raise ResearchError("claim_reassessment_required",
+                            "The recorded input snapshot is unavailable; reassess the bound record.",
+                            {"record_id": "snapshot:" + str(revision)})
+    history = records._history
+    overlay = {kind: rows for kind, rows in records.items() if kind not in kinds}
+    for kind in kinds:
+        if any(versions[0][0] <= revision for versions in history._versions.get(kind, {}).values()):
+            overlay[kind] = _PinnedKind(history, kind, revision)
+    source = records if records._current_source is None else records._current_source
+    return _RecordedSnapshot(overlay, history=history, revision=records.read_revision(), current_source=source)
+
+
 def _read_snapshot(connection: sqlite3.Connection, *, fingerprint=None, requests=None) -> dict:
     from .claim_dependencies import uses_claim_dependencies
-    from .openness_carried import SELECTION_PROTOCOL
     # This untrusted precheck controls allocation only. _validate authenticates
     # every event and current record before any history or snapshot is returned.
     markers = {}
@@ -682,10 +723,11 @@ def _read_snapshot(connection: sqlite3.Connection, *, fingerprint=None, requests
     creation_revisions = {}
     retain_history = uses_claim_dependencies(markers)
     if not retain_history:
+        # C21: a selection of carried readings reads each earlier reading chain on the content of its start, and a
+        # selection is stored on the first assignment of a reading chain.
         for row in connection.execute("SELECT value FROM records WHERE kind = 'review_assignment' AND instr(value, ?) > 0",
-                                      (SELECTION_PROTOCOL,)):
-            selection = _load(row["value"], dict).get("carried_selection")
-            if isinstance(selection, dict) and selection.get("protocol") == SELECTION_PROTOCOL:
+                                      ('"reading_chain"',)):
+            if isinstance(_load(row["value"], dict).get("reading_chain"), dict):
                 retain_history = True
                 break
     history = _RecordHistory(creation_revisions) if retain_history else None

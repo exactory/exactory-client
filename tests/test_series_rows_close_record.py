@@ -115,7 +115,7 @@ class RecordGroupGuardTests(unittest.TestCase):
                     expected = ('stored_state' if conditions <= {'store', 'content', 'payload'} else 'named_cause')
                     self.assertEqual(group, expected)
                     total += len(sites)
-        self.assertEqual(total, 170)
+        self.assertEqual(total, 172)
 
 
 if __name__ == '__main__':

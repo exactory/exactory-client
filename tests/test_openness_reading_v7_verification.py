@@ -33,7 +33,7 @@ class VerificationCases(CarriedIntegrationSupport):
         records = self.store.snapshot()['records']
         first = records['review_assignment']['new']
         selection = json.loads(self.artifacts.read(first['carried_selection']['artifact']))
-        self.assertEqual(selection['protocol'], 'exactory-openness-carried-selection-v2')
+        self.assertEqual(selection['protocol'], 'exactory-openness-carried-selection-v3')
         cutoff_revision = first['recorded_revision'] - 1
         cutoff = Evaluation.of(records, self.artifacts).read_snapshot(cutoff_revision)
         cutoff_digest = digest({kind: dict(rows) for kind, rows in cutoff.records.items()})
@@ -49,16 +49,17 @@ class VerificationCases(CarriedIntegrationSupport):
         identity = v7._describe_carried_identity(records, first, records['review_route'][first['route_id']],
             json.loads(self.artifacts.read(first['context']['native_packet'])))
         self.assertEqual(openness_carried.select_carried_readings(later_cutoff.records, later_cutoff,
-            inventory, identity), selection['turns'])
+            inventory, identity, protocol=selection['protocol']), selection['turns'])
         for group in ('review_assignment', 'review_attempt', 'review_invocation'):
             for key, row in self.old_records.get(group, {}).items():
                 self.assertEqual(digest(row), digest(records[group][key]))
 
     def test_malformed_selection_json_is_refused_with_the_origin_code(self):
         _, receipt = self.start_chain()
-        self.assertEqual(receipt['carried_selection']['protocol'], 'exactory-openness-carried-selection-v2')
+        self.assertEqual(receipt['carried_selection']['protocol'], 'exactory-openness-carried-selection-v3')
         original = self.store.snapshot()['records']
-        for protocol_name in ('exactory-openness-carried-selection-v1', 'exactory-openness-carried-selection-v2'):
+        for protocol_name in ('exactory-openness-carried-selection-v1', 'exactory-openness-carried-selection-v2',
+                              'exactory-openness-carried-selection-v3'):
             for value in ([], None, 'not a selection'):
                 with self.subTest(protocol=protocol_name, value=value):
                     records = copy.deepcopy(original)
@@ -72,7 +73,7 @@ class VerificationCases(CarriedIntegrationSupport):
 
     def test_unsafe_artifact_descriptors_refuse_the_selection(self):
         _, receipt = self.start_chain()
-        self.assertEqual(receipt['carried_selection']['protocol'], 'exactory-openness-carried-selection-v2')
+        self.assertEqual(receipt['carried_selection']['protocol'], 'exactory-openness-carried-selection-v3')
         original = self.store.snapshot()['records']
         inventory = v7.read_carried_inventory(self.artifacts, receipt)
         identity = v7._describe_carried_identity(original, receipt, original['review_route'][receipt['route_id']],
@@ -83,7 +84,8 @@ class VerificationCases(CarriedIntegrationSupport):
                 records = copy.deepcopy(original)
                 records[kind][key][field]['path'] = 'research/sources/objects/../unsafe'
                 with self.assertRaises(ResearchError) as refused:
-                    openness_carried.select_carried_readings(records, self.artifacts, inventory, identity)
+                    openness_carried.select_carried_readings(records, self.artifacts, inventory, identity,
+                                                             protocol=openness_carried.SELECTION_PROTOCOL)
                 self.assertEqual(refused.exception.code, 'unsafe_path')
 
     def test_guard4_changed_observation_selection_projection_and_source_are_refused(self):
