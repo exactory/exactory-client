@@ -359,6 +359,76 @@ class SessionRecordTests(unittest.TestCase):
 
 
 class SessionPlanTests(unittest.TestCase):
+    def test_admission_charges_both_identity_copies_in_a_loaded_second_request(self):
+        from research_harness import review_protocol, review_session_v4 as session
+        route = build_route(effort='xhigh')
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = ArtifactStore(Path(directory))
+            records = build_store(artifacts, 1, 250000)
+            for length, expected in ((65000, 'record'), (155000, 'stop')):
+                with self.subTest(reviewer_characters=length):
+                    reviewer = 'r' * length
+                    logical = dict(protocol=bar_sources.PROTOCOL, role='bar', reviewer_id=reviewer,
+                                   dossier_id='dossier', evidence=[])
+                    files = set(artifacts.root.rglob('*'))
+                    admission = session.check_v4_admission(records, artifacts, route, 'bar', logical)
+                    self.assertEqual(set(artifacts.root.rglob('*')), files)
+                    if admission['state'] == 'stop':
+                        self.assertEqual(admission['state'], expected)
+                        self.assertEqual(admission['reason'], 'below_floor')
+                        self.assertEqual(admission['code'], 'review_route_capacity_below_floor')
+                        continue
+                    plan = admission['capacity_plan']
+                    inventory = admission['inventory']['inventory']
+                    for unit in inventory['units']:
+                        artifacts.put(admission['inventory']['bodies'][unit['sha256']], unit['artifact']['media_type'])
+                    fulltext = next(unit for unit in inventory['units'] if unit['kind'] == 'fulltext')
+                    observation = dict(number=1, assignment_id='first', attempt_id='attempt', deliveries=[],
+                        output=dict(schema_version=1, stage='request', notes='n' * plan['allocation']['notes'],
+                            excerpts=[], settled_requests=[], requests=[dict(id='full', kind='unit',
+                                                                            unit=fulltext['handle'])]))
+                    state = session.build_session_state(inventory, [observation], route, plan)['state']
+                    for kind in ('request', 'final'):
+                        limits = capacity.derive_plan_task_limits(plan, kind)
+                        packet = session.build_session_packet(artifacts, route, logical, 'chain', 2,
+                                                              inventory, state, plan, limits, kind)
+                        binding = session.read_session_binding(packet)
+                        self.assertEqual(packet['reviewer_id'], reviewer)
+                        self.assertEqual(binding['frame']['reviewer_id'], reviewer)
+                        prompt = session.build_turn_prompt('bar', kind, binding['capacity'], orchestration=None)
+                        request = review_protocol.transport.request_body(route, prompt['text'], packet, [], order=())
+                        actual = capacity.measure_request(route, request)['text_characters']
+                        self.assertLessEqual(actual, limits['request_bound']['text_characters'])
+                    self.assertEqual(admission['state'], expected)
+
+    def test_repair_frame_reserves_predecessor_and_separates_event_history(self):
+        from research_harness import review_protocol, review_session_v4 as session
+        route = build_route()
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = ArtifactStore(Path(directory))
+            repair = dict(assignment_id='predecessor', slot_id='slot', probe_id='probe',
+                          event_ids=['event-%d' % i for i in range(300)])
+            logical = dict(protocol=review_protocol._PROBLEM_PROTOCOL, role='bar', dossier_id=None,
+                           subject=dict(kind='problem', statement_id=None), reviewer_id='reviewer',
+                           context_repair=repair)
+            admission = session.check_v4_admission({}, artifacts, route, 'bar', logical)
+            self.assertEqual(admission['state'], 'record', admission.get('details'))
+            inventory = admission['inventory']['inventory']
+            for unit in inventory['units']:
+                artifacts.put(admission['inventory']['bodies'][unit['sha256']], unit['artifact']['media_type'])
+            plan = admission['capacity_plan']
+            state = session.build_session_state(inventory, [], route, plan)['state']
+            for kind in ('request', 'final'):
+                limits = capacity.derive_plan_task_limits(plan, kind)
+                packet = session.build_session_packet(artifacts, route, logical, 'chain', 1,
+                                                      inventory, state, plan, limits, kind)
+                frame = session.read_session_binding(packet)['frame']['context_repair']
+                self.assertEqual({key: frame.get(key) for key in ('assignment_id', 'slot_id', 'probe_id')},
+                                 {key: repair[key] for key in ('assignment_id', 'slot_id', 'probe_id')})
+                unit = next(unit for unit in inventory['units'] if unit['handle'] == frame['event_ids']['handle'])
+                self.assertEqual(unit['identity']['field'], ['context_repair', 'event_ids'])
+                self.assertEqual(json.loads(admission['inventory']['bodies'][unit['sha256']]), repair['event_ids'])
+
     def test_declaration_is_admitted_for_each_route_class_and_request_counts_carried_state(self):
         session = importlib.import_module('research_harness.review_session_v4')
         from test_openness_reading_v7_turns import MemoryArtifacts
