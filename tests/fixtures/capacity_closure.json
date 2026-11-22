@@ -5099,6 +5099,94 @@
         "tests": [
           "test_openness_final_pages.FinalLevelSuccessorTests.test_completed_pages_replay_high_low_and_ratio_successors"
         ]
+      },
+      {
+        "family": "math-v2",
+        "subject": "*",
+        "property": "every_allowance",
+        "tests": [
+          "test_property_drivers_b.MathPropertyDrivers.test_math_allowances"
+        ]
+      },
+      {
+        "family": "math-v2",
+        "subject": "*",
+        "property": "over_bound",
+        "tests": [
+          "test_property_drivers_b.MathPropertyDrivers.test_math_over_bound"
+        ]
+      },
+      {
+        "family": "math-v2",
+        "subject": "*",
+        "property": "output_limit_floor",
+        "tests": [
+          "test_property_drivers_b.MathPropertyDrivers.test_math_output_limit_floor"
+        ]
+      },
+      {
+        "family": "math-v2",
+        "subject": "*",
+        "property": "failed_attempts",
+        "tests": [
+          "test_property_drivers_b.MathPropertyDrivers.test_math_failed_attempts"
+        ]
+      },
+      {
+        "family": "math-v2",
+        "subject": "*",
+        "property": "late_units",
+        "tests": [
+          "test_property_drivers_b.MathPropertyDrivers.test_math_late_units_and_denser_ratio"
+        ]
+      },
+      {
+        "family": "math-v2",
+        "subject": "*",
+        "property": "denser_ratio",
+        "tests": [
+          "test_property_drivers_b.MathPropertyDrivers.test_math_late_units_and_denser_ratio"
+        ]
+      },
+      {
+        "family": "v7-pages",
+        "subject": "*",
+        "property": "over_bound",
+        "tests": [
+          "test_property_drivers_b.V7PagesPropertyDrivers.test_v7_pages_over_bound"
+        ]
+      },
+      {
+        "family": "v7-pages",
+        "subject": "*",
+        "property": "output_limit_floor",
+        "tests": [
+          "test_property_drivers_b.V7PagesPropertyDrivers.test_v7_pages_output_limit_floor"
+        ]
+      },
+      {
+        "family": "v7-pages",
+        "subject": "*",
+        "property": "failed_attempts",
+        "tests": [
+          "test_property_drivers_b.V7PagesPropertyDrivers.test_v7_pages_failed_attempts"
+        ]
+      },
+      {
+        "family": "v7-pages",
+        "subject": "*",
+        "property": "late_units",
+        "tests": [
+          "test_property_drivers_b.V7PagesPropertyDrivers.test_v7_pages_late_units"
+        ]
+      },
+      {
+        "family": "v7-pages",
+        "subject": "*",
+        "property": "k6_three_allowances",
+        "tests": [
+          "test_property_drivers_b.V7PagesPropertyDrivers.test_v7_pages_k6_three_allowances"
+        ]
       }
     ],
     "gaps": [
@@ -5153,80 +5241,14 @@
       {
         "family": "math-v2",
         "subject": "*",
-        "property": "every_allowance",
-        "reason": "No test of the base drives this family with this stub to a recorded review."
-      },
-      {
-        "family": "math-v2",
-        "subject": "*",
-        "property": "over_bound",
-        "reason": "No test of the base drives this family with this stub to a recorded review."
-      },
-      {
-        "family": "math-v2",
-        "subject": "*",
-        "property": "output_limit_floor",
-        "reason": "The math tests replace an output at the limit by the next lower level (MathV2RecoveryTests.test_reading_at_output_limit_is_replaced_at_next_lower_level); none goes down to the floor."
-      },
-      {
-        "family": "math-v2",
-        "subject": "*",
-        "property": "failed_attempts",
-        "reason": "No test of the base drives this family with this stub to a recorded review."
-      },
-      {
-        "family": "math-v2",
-        "subject": "*",
-        "property": "late_units",
-        "reason": "No test of the base drives this family with this stub to a recorded review."
-      },
-      {
-        "family": "math-v2",
-        "subject": "*",
-        "property": "denser_ratio",
-        "reason": "No test of the base drives this family with this stub to a recorded review."
-      },
-      {
-        "family": "math-v2",
-        "subject": "*",
         "property": "k6_three_allowances",
-        "reason": "The kinds are those of protocol v7, whose K6 shapes run with a final in one request; none runs under math v2."
+        "reason": "F-B2 and F-B3: the reading prompt omits the list-page request form, and a carried affected note leaves the approval without earlier evidence citations. Both pending Math K6 tests reproduce the gaps."
       },
       {
         "family": "v7-pages",
         "subject": "*",
         "property": "every_allowance",
-        "reason": "The allowance and over-bound stubs of the reading chains run with V7_FINAL_FORMS (\"request\",); none runs a final in pages."
-      },
-      {
-        "family": "v7-pages",
-        "subject": "*",
-        "property": "over_bound",
-        "reason": "As every_allowance."
-      },
-      {
-        "family": "v7-pages",
-        "subject": "*",
-        "property": "output_limit_floor",
-        "reason": "The floor test of the reading chains runs with a final in one request; a page is split, not taken to the floor."
-      },
-      {
-        "family": "v7-pages",
-        "subject": "*",
-        "property": "failed_attempts",
-        "reason": "The thirty-failure test runs with a final in one request."
-      },
-      {
-        "family": "v7-pages",
-        "subject": "*",
-        "property": "late_units",
-        "reason": "No test of the base drives this family with this stub to a recorded review."
-      },
-      {
-        "family": "v7-pages",
-        "subject": "*",
-        "property": "k6_three_allowances",
-        "reason": "As failed_attempts."
+        "reason": "F-B1: the closing turn advertises more answer room than its composition validator accepts. PendingV7Allowance.test_v7_pages_allowances reproduces the refusal."
       },
       {
         "family": "parts-v3",
