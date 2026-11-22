@@ -47,7 +47,8 @@ SHARD_GROUPS = (
     # The 11 recorded series of ProblemResultHistoryTests: 107 s.
     ("test_problem_result_history",),
     # The deposit workspace of ManagedStreamingTests with two files above 1 MiB: 38 s.
-    ("test_publication_streaming",),
+    # The published submission template is built once for TestSubmitWithAPendingRequest: 52 s for the class.
+    ("test_publication_streaming", "test_pending_remote_requests"),
     # The slate of incident A1 with 28,600,000 characters, whose size is the cause of the incident: 3,217 s of 3,243 s.
     ("test_review_parts_slate",),
     # The paged finding after 57 carried turns: 857 s of 1,394 s.

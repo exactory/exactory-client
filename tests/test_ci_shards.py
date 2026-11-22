@@ -287,6 +287,17 @@ class CIShardTests(unittest.TestCase):
                 self.assertTrue((ROOT / "tests" / (module + ".py")).is_file())
         self.assertLessEqual(len(api.SHARD_GROUPS), api.SHARD_COUNT)
 
+    def test_published_submission_template_is_built_in_one_shard(self):
+        api = self.api()
+        suite = unittest.defaultTestLoader.loadTestsFromName("test_pending_remote_requests")
+        ids = [test.id() for test in api.flatten(suite)]
+        prefix = "test_pending_remote_requests.TestSubmitWithAPendingRequest."
+        submission_tests = [test_id for test_id in ids if test_id.startswith(prefix)]
+        self.assertGreater(len(submission_tests), 1)
+        groups = [[ids[i] for i in api.select_shard_indices(ids, shard, api.SHARD_COUNT) if ids[i].startswith(prefix)]
+                  for shard in range(api.SHARD_COUNT)]
+        self.assertEqual([group for group in groups if group], [submission_tests])
+
     def test_the_shard_count_is_the_count_of_the_ci_workflow(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         count = self.api().SHARD_COUNT

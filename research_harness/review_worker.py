@@ -45,8 +45,11 @@ from .workspace import checked_parent
 CALL_CHILD_STORE_BUSY_MSG = (
     'The research store stayed busy, and a transport process of this reviewer call was not recorded. That process '
     'started no program, and no request was sent to the reviewer. Run review-run with a payload containing '
-    'action "reconcile" and the operation and invocation_id from details. This records the call as interrupted. '
-    'For a review chain, review-series on its assignment can also reconcile the call.')
+    'action "reconcile" and the operation and invocation_id from details. Reconciliation can record the call as '
+    'interrupted once termination is confirmed. If result.released is false, the call is still pending. Wait until '
+    'termination can be confirmed, then poll again with a fresh request ID and the current expected revision. '
+    'If you lost the response to a poll, retry it with the same request ID. If the call has a review chain '
+    'assignment, review-series on that assignment can also reconcile it.')
 WORKER_CHILD_STORE_BUSY_MSG = (
     'The research store stayed busy, and a transport process of the reviewer call of this review task was not '
     'recorded. That process started no program, and no request was sent to the reviewer. The worker captures this '

@@ -18,6 +18,7 @@ from codex_route_fixtures import build_codex_response
 from development_fixtures import DevelopmentCase
 from finishing_write_fixtures import OtherWriters, WaitlessTime
 from integration_fixtures import admit_lab
+from literature_fixtures import LiteratureCase
 from openness_reading_fixtures import OpennessReadingCase
 from research_harness import (cli, execution, finishing, remote_execution, review_call_capture,
                               review_protocol as protocol, review_refusal, review_series, storage)
@@ -29,6 +30,7 @@ from research_harness.operations import immutable_record, prepared_mutation
 from research_harness.storage import Store, _canonical
 from test_research_codex_timeout import PROCESS_FIXTURE
 from test_review_task_execution import TaskExecutionFixture
+from test_review_route_renewal import ROUTE
 
 REFUSAL_MEMBERS_0_91_7 = ["assignment_id", "attempt_id", "check", "code", "details", "id", "output_digest", "protocol",
                           "recorded_revision", "request_digest"]
@@ -469,6 +471,62 @@ class OwnedCallTransportTests(TaskExecutionFixture):
         self.assertTrue(self.has_called())
 
 
+class OwnedCallReconciliationTests(LiteratureCase):
+    def test_busy_call_reconciliation_replays_pending_then_releases_on_a_fresh_poll(self):
+        self.mutate(protocol.record_route, dict(ROUTE, id="route"))
+
+        def start_guardian(*args, **kwargs):
+            subprocess.run([sys.executable, "-c", "pass"], start_new_session=True, check=True)
+            self.fail("An unrecorded transport child ran")
+
+        for write_module, observation in (
+                (review_worker, {"side_effect": start_guardian}),
+                (review_call_capture,
+                 {"return_value": {"status": "failed", "request": None, "response": None, "output": None}})):
+            with self.subTest(write=write_module.__name__):
+                invocation_id = write_module.__name__.split(".")[-1]
+                with mock.patch.object(protocol, "_observed", **observation), \
+                        mock.patch.object(write_module, "_mutate_current",
+                                          side_effect=ResearchError("store_busy", "Synthetic busy store")), \
+                        mock.patch.object(finishing, "time", WaitlessTime(ticking=True)), \
+                        self.assertRaises(ResearchError) as caught:
+                    self.mutate(protocol.probe_route, {"id": invocation_id, "route_id": "route"})
+
+                refusal = caught.exception
+                self.assertEqual(refusal.code, "store_busy")
+                identity = {key: refusal.details[key] for key in ("operation", "invocation_id")}
+                self.assertEqual(identity, {"operation": "review.route_probe", "invocation_id": invocation_id})
+                payload = self.root / "reconcile.json"
+                payload.write_text(json.dumps(dict(action="reconcile", **identity)))
+
+                def poll(request_id):
+                    args = cli.build_parser().parse_args([
+                        "review-run", "--workspace", str(self.root), "--file", str(payload),
+                        "--expected-revision", str(self.store.revision), "--request-id", request_id,
+                    ])
+                    return cli.run(args)
+
+                lifecycle = review_task_execution.identify_call(**identity)
+                request_id = invocation_id + "-poll"
+                with review_worker._owner(self.root, lifecycle, worker=True):
+                    pending = poll(request_id)
+                self.assertIs(pending["result"]["released"], False)
+                self.assertEqual(poll(request_id), pending)
+                self.assertNotIn(invocation_id, self.store.snapshot()["records"].get("review_route_probe", {}))
+                self.assertIs(poll(request_id + "-fresh")["result"]["released"], True)
+                record = self.store.snapshot()["records"]["review_route_probe"][invocation_id]
+                self.assertEqual(record["error"]["code"], "review_invocation_interrupted")
+
+                standalone, chain, alternative = refusal.message.partition("review-series")
+                for instruction in ('review-run', 'action "reconcile"', 'operation', 'invocation_id',
+                                    'result.released is false', 'termination can be confirmed', 'fresh request ID',
+                                    'current expected revision', 'lost the response', 'same request ID'):
+                    self.assertIn(instruction, standalone)
+                self.assertTrue(chain)
+                self.assertIn("assignment", standalone)
+                self.assertIn("assignment", alternative)
+
+
 class ColabReleaseTests(OtherWriters, DevelopmentCase):
     """The record that releases a Colab job, and the signal that follows it."""
 
@@ -851,17 +909,6 @@ class OutputRefusalTests(OtherWriters, OpennessReadingCase):
         self.assertEqual((attempt["status"], attempt["error"]["code"]), ("failed", "review_invocation_interrupted"))
         receipt = self.invoke("turn-1", answer, attempt="attempt-turn-1-retry")
         self.assertEqual(receipt["result"]["status"], "completed")
-
-    def test_call_refusals_offer_standalone_reconciliation_before_the_chain_step(self):
-        for message in (review_worker.CALL_CHILD_STORE_BUSY_MSG, review_call_capture.CALL_CAPTURE_STORE_BUSY_MSG):
-            with self.subTest(message=message):
-                standalone, condition, chain = message.partition("For a review chain,")
-                self.assertTrue(condition)
-                self.assertIn('review-run', standalone)
-                self.assertIn('action "reconcile"', standalone)
-                self.assertIn('operation and invocation_id', standalone)
-                self.assertNotIn('review-series', standalone)
-                self.assertIn('review-series on its assignment', chain)
 
     def test_finish_refused_beyond_the_wait_is_recorded_by_the_same_request_without_a_call(self):
         answer = self.build_reading_response(self.packet)

@@ -212,7 +212,7 @@ def launch_colab(store, claim):
             if time.monotonic() < deadline:
                 snapshot = read_polling_store(store.snapshot)
     return reconcile_execution(store, {"admission_id": claim["admission_id"]}, expected_revision=None,
-        request_id="remote-observe-" + digest(claim), owned=True, _snapshot=snapshot)
+        request_id="remote-observe-" + digest(claim), owned=True, snapshot=snapshot)
 
 
 def collect_colab(store, claim):

@@ -66,11 +66,14 @@ class _StandInService:
 
     def open_url(self, request: urllib.request.Request, *, timeout: float) -> _FakeResponse:
         path = urllib.parse.unquote(urllib.parse.urlsplit(request.full_url).path)
-        if request.get_method() == "GET":
+        method = request.get_method()
+        if method == "GET":
             self.reads.append(path)
             answer, status = self._read_task(path)
-        else:
+        elif method == "POST":
             answer, status = self.receive_post(path, json.loads(request.data))
+        else:
+            raise AssertionError(f"Unexpected HTTP method {method} for {path}")
         body = json.dumps(answer).encode()
         if status >= 400:
             raise urllib.error.HTTPError(request.full_url, status, "Fixture response", {}, io.BytesIO(body))
@@ -184,16 +187,30 @@ class _PendingStepTestCase(test_transport._OpenUrlTransportTestCase):
         self.assertEqual(len(intents), 1)
         return intents[0]
 
-    def check_pending_verdict_receipt(self, intent, expected_posts) -> None:
+    def read_receipt(self, kind: str, intent_id: str) -> dict:
+        receipts = self.read_records().get(kind, {})
+        self.assertEqual(list(receipts), [intent_id])
+        return receipts[intent_id]
+
+    def check_receipt_replay(self, command, kind, intent_id, receipt) -> None:
+        stdout, _ = self.run_done(command)
+        self.assertEqual(json.loads(stdout), receipt)
+        self.assertEqual(self.read_receipt(kind, intent_id), receipt)
+
+    def check_pending_verdict_receipt(self, intent, expected_posts, receipt=None) -> None:
+        intent_id = intent["id"]
         filed = self.service.read_current_verdict_id()
-        reconcile = ["reconcile", intent["id"]]
+        reconcile = ["reconcile", intent_id]
         wrong = self.run_refused(reconcile + ["--verdict-id", str(uuid.uuid4())])
         self.assertEqual(wrong.code, "remote_reconciliation_conflict")
-        for command in (reconcile + ["--verdict-id", filed], self._ARGV):
-            stdout, _ = self.run_done(command)
-            self.assertEqual(json.loads(stdout)["response"]["id"], filed)
+        stdout, _ = self.run_done(reconcile + ["--verdict-id", filed])
+        stored = self.read_receipt("verdict_receipt", intent_id)
+        if receipt is not None:
+            self.assertEqual(stored, receipt)
+        self.assertEqual(json.loads(stdout), stored)
+        self.assertEqual(stored["response"]["id"], filed)
         self.assertEqual(self.read_intent("verdict")["status"], "complete")
-        self.assertEqual(list(self.read_records()["verdict_receipt"]), [intent["id"]])
+        self.check_receipt_replay(self._ARGV, "verdict_receipt", intent_id, stored)
         self.assertEqual(self.service.posts, expected_posts)
 
     def check_applied_verdict(self) -> None:
@@ -253,16 +270,18 @@ class TestVerifyWithAPendingVerdict(_PendingStepTestCase):
         pending = self.read_intent("verdict")
         self.assertEqual(pending["pending"]["name"], "verdict")
 
-        _, stderr_text = self.run_done(self._ARGV)
+        stdout, stderr_text = self.run_done(self._ARGV)
 
         self.assertEqual(stderr_text, "")
+        receipt = self.read_receipt("verdict_receipt", pending["id"])
+        self.assertEqual(json.loads(stdout), receipt)
+        self.assertEqual(receipt["response"]["id"], self.service.read_current_verdict_id())
         intent = self.read_intent("verdict")
         self.assertEqual(intent["status"], "complete")
         self.assertEqual(intent["discarded"], [{"name": "verdict",
                                                 "observation": {"kind": "remote_read", "viewerVerdictId": None}}])
-        stdout, _ = self.run_done(["reconcile", pending["id"]])
-        self.assertEqual(json.loads(stdout)["response"]["id"], self.service.read_current_verdict_id())
-        self.check_pending_verdict_receipt(pending, first_posts + [(_VERDICTS_PATH, 201)])
+        self.check_receipt_replay(["reconcile", pending["id"]], "verdict_receipt", pending["id"], receipt)
+        self.check_pending_verdict_receipt(pending, first_posts + [(_VERDICTS_PATH, 201)], receipt)
 
     def test_verify_after_a_request_that_never_arrived_sends_it_once_and_writes_the_receipt(self) -> None:
         self.check_retry_after_unapplied_verdict("never_arrives", [(_VERDICTS_PATH, None)])
@@ -654,11 +673,13 @@ class TestSubmitWithAPendingRequest(_PendingStepTestCase):
         self.assertEqual(self.run_refused(reconcile).code, "verification_ingest_pending")
         self.assertEqual(self.service.posts, expected_posts)
         self.service.is_ingested = True
-        self.run_done(argv)
-        self.run_done(reconcile)
-        self.assertEqual(self.service.posts, expected_posts)
+        stdout, _ = self.run_done(argv)
+        receipt = self.read_receipt("submission_receipt", intent_id)
+        self.assertEqual(json.loads(stdout), receipt)
+        self.assertEqual(receipt["task"]["verificationId"], _VERIFICATION_ID)
         self.assertEqual(self.read_intent("submit")["status"], "complete")
-        self.assertEqual(list(self.read_records()["submission_receipt"]), [intent_id])
+        self.check_receipt_replay(reconcile, "submission_receipt", intent_id, receipt)
+        self.assertEqual(self.service.posts, expected_posts)
 
     def test_submit_after_a_refused_answer_record_joins_the_request_before_ingest(self) -> None:
         """The verified publication lets the command retain the joined request through ingest."""

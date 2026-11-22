@@ -512,7 +512,7 @@ def _reconcile(store, payload, expected_revision, request_id, *, snapshot=None):
         return _finish_reconciliation(store, payload, observation, request_id, claim, busy_msg)
 
 
-def reconcile_execution(store, payload, *, expected_revision, request_id, owned=False, _snapshot=None):
+def reconcile_execution(store, payload, *, expected_revision, request_id, owned=False, snapshot=None):
     """Record the outcome of a claimed run: from its terminal outcome and its kept files, or, for a claim without a
     terminal outcome, from the resolution of the payload. The reconcile-run command gives the revision that it read;
     the launcher, which reconciles its own run, gives None and can pass its first polling snapshot."""
@@ -521,7 +521,7 @@ def reconcile_execution(store, payload, *, expected_revision, request_id, owned=
     if expected_revision is not None and (type(expected_revision) is not int or expected_revision < 0):
         raise ResearchError("invalid_input", "Expected revision must be a nonnegative integer")
     if owned:
-        return _reconcile(store, payload, expected_revision, request_id, snapshot=_snapshot)
+        return _reconcile(store, payload, expected_revision, request_id, snapshot=snapshot)
     with _owner(store.root, payload["admission_id"]):
         return _reconcile(store, payload, expected_revision, request_id)
 

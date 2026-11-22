@@ -16,8 +16,10 @@ PROTOCOL = 'review-call-observation-v1'
 CALL_CAPTURE_STORE_BUSY_MSG = (
     'The research store stayed busy, and the observation of this reviewer call was not captured. No record holds what '
     'the reviewer returned. Run review-run with a payload containing action "reconcile" and the operation and '
-    'invocation_id from details. This records the call as interrupted. For a review chain, review-series on its '
-    'assignment can also reconcile the call.')
+    'invocation_id from details. Reconciliation can record the call as interrupted once termination is confirmed. '
+    'If result.released is false, the call is still pending. Wait until termination can be confirmed, then poll again '
+    'with a fresh request ID and the current expected revision. If you lost the response to a poll, retry it with the '
+    'same request ID. If the call has a review chain assignment, review-series on that assignment can also reconcile it.')
 
 
 def _check_bindings(records, artifacts, captured, operation, payload, request_id):
