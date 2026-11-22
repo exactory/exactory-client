@@ -8500,6 +8500,19 @@
         "test_visual_manifest_recorded_profile.NewWorkTests.test_value_review_of_a_stored_answer_is_recorded_under_another_renderer",
         "test_visual_manifest_recorded_profile.NewWorkWriterTests.test_every_writer_of_new_reviewer_work_stands_behind_a_renderer_comparison"
       ]
+    },
+    {
+      "id": "heavy-test-moved-into-the-shard-of-the-costliest-fixture",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "time of the suite",
+      "summary": "The shard of a test outside a shard group was its rank among the discovered tests, so each added test moved the tests after it to the next shard. In the CI run of c75977ef the slate test of incident A1 (2,121 s to 3,217 s) moved from shard 2 into shard 0, which holds the cut of record 12. On Python 3.9.25 that shard had run 8,007 s when the slate test started, and the job was cancelled at its limit of 180 minutes.",
+      "expected": "A test module that holds a test above 300 s has a fixed shard (SHARD_GROUPS of ci/unittest_shards.py), one such group in each shard. A test that is added before such a module does not change its shard, and the shard of the slate test is not the shard of the cut of record 12.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_ci_shards.CIShardTests.test_a_module_with_a_test_above_300_seconds_keeps_its_shard_when_tests_are_added_before_it",
+        "test_ci_shards.CIShardTests.test_each_module_of_a_shard_group_is_a_test_module_of_one_group_and_no_shard_holds_two_groups"
+      ]
     }
   ]
 }
