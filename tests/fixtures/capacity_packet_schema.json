@@ -29999,7 +29999,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.problem_accounts": {
-      "ast_sha256": "fef9c6f7d5bedaecf882e8ac8f8d15bf550d5ecd10aa42995ee5bb89d09f4175",
+      "ast_sha256": "011cf601626050ed7b71d428f835e516970f296e359d4e05bc6b7accce67a6ea",
       "functions": {
         "collect_account_evidence": "75b28f01bcd1ecc1f3b2de937cd21a1ff425239022ade25af1fa41c10dee7940",
         "collect_candidate_form_history": "cec18153174e589f30d75fde922f35e00c9aa88f4bcb477ab571c73e5c04b763",
@@ -30019,19 +30019,19 @@
         "require_prior_form": "f81c98e9b67371866fc6d50ab0d0f6247f1103156e30ffbf2b7bacda99097932",
         "resolve_entry": "e37c971f0a38318e7eb38ab3143ac917b305ce3459b7ceea989bcf0277011353",
         "validate_account_evidence": "760b08b3dc12c15d401d5290b2aad582c2a990197d0a530d304a748a049d98bd",
-        "validate_accounts": "d142a5a28acb7ba7bae90fc051b644ccff68ecc2a21497a25c7331c5e1e3daf6",
+        "validate_accounts": "ffd7994fbdda5f758423e4156acb130bd8ca3a994b171b7285779c67bfb628bc",
         "validate_alternatives": "d00c59220aad696337bf17113e219a99228ac344861a411b093b2555781cd17f",
-        "validate_entry_shapes": "09bbe82f063400687ecb6d95356487be455e75b106470db19d74c4305f69b6a4",
+        "validate_entry_shapes": "e848aec14e73e48bc983e8adcc8d9d53686e643373f9becf4b25d06e94b87ba4",
         "validate_fact": "41cb4cabbf3dbb684b0ed2dfe316bcc5d12dadded92fd4a1ec9bc7bbfd5ab257",
         "validate_paragraph": "f638d8e2eb2ab67a9c5b530d737e44b21141f22de8faa2e958cfa5e5c107fb7e",
         "validate_places": "dc3e1eeb2f1db0313949dee6c53d38c767a43de1c60b4bcf497de71b22ca45c0",
         "validate_relations": "523b7fd4ba5128a49cac7f9a10725996da1ce9b4305654da8d476389571ac94f",
         "validate_replacement": "04cbccb01dd6e9ec46f8c3954edc32ffa96ee6d05432bd9c8e231e5b1e70e71c",
-        "validate_test": "ece29122c8068550d0325d5fd649a25193958d22462de19c92a9aa2a58728eaf",
-        "validate_tier_two": "6bebde63f558d2754ca31007de58d396012393ad4609caf79874e7ecbadc97b1"
+        "validate_test": "91bde74c2965add6ddb56429608cfe887a8a6b35346a5136b330e1104dc0dcb5",
+        "validate_tier_two": "994b7316a0f44fd711a96f93aa325a9c5ebae4a7d3c5115f1ca9874c8d39e3f6"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in describe_account_records; version 1 follows its existing projection. Reviewed 0.91.2 snapshot and reading dates, versioned history diagnostics and form checks. Traced entry_id and undated through validate_value to command refusals and problem_delivery._assess_minimum gate/status obligations only; classified both as non-packet names after verifying that packet obligations instead come from collect_results/assess_account_currency. The already reviewed version 2 probe projection and accounts_version declarations remain intact; no further packet members or closed shapes change. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.6: validate_accounts accepts the optional part places and validates each entry as a fact with a role and relation_ids; is_full_reading holds the full-reading test that validate_tier_two used inline before; value.accounts.places is declared for the result and adjudicator packets; validate_place_shape checks the members and the role of a place before the registry of the entries is built, so that the checks of every entry read a place of a checked shape; it writes no packet member. Reviewed 0.91.8: validate_entry_shapes checks the members of every account entry from ACCOUNT_MEMBERS, and the types that the entry registry, collect_entry_evidence and validate_account_evidence read, before the registry is built; it takes the place of validate_place_shape and of the later member checks of the parts, validate_account_evidence keeps the checks of the evidence references, and no packet member or shape changes. Reviewed 0.91.13: collect_entry_evidence walks the references of an entry with a stack of its own and no recursion, and list_entry_references names the cited entries in the order of that walk; the evidence that an entry reaches, its order and both refusals are those of the recursive walk, and the module builds no packet."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in describe_account_records; version 1 follows its existing projection. Reviewed 0.91.2 snapshot and reading dates, versioned history diagnostics and form checks. Traced entry_id and undated through validate_value to command refusals and problem_delivery._assess_minimum gate/status obligations only; classified both as non-packet names after verifying that packet obligations instead come from collect_results/assess_account_currency. The already reviewed version 2 probe projection and accounts_version declarations remain intact; no further packet members or closed shapes change. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.6: validate_accounts accepts the optional part places and validates each entry as a fact with a role and relation_ids; is_full_reading holds the full-reading test that validate_tier_two used inline before; value.accounts.places is declared for the result and adjudicator packets; validate_place_shape checks the members and the role of a place before the registry of the entries is built, so that the checks of every entry read a place of a checked shape; it writes no packet member. Reviewed 0.91.8: validate_entry_shapes checks the members of every account entry from ACCOUNT_MEMBERS, and the types that the entry registry, collect_entry_evidence and validate_account_evidence read, before the registry is built; it takes the place of validate_place_shape and of the later member checks of the parts, validate_account_evidence keeps the checks of the evidence references, and no packet member or shape changes. Reviewed 0.91.13: collect_entry_evidence walks the references of an entry with a stack of its own and no recursion, and list_entry_references names the cited entries in the order of that walk; the evidence that an entry reaches, its order and both refusals are those of the recursive walk, and the module builds no packet. Reviewed lane record-copies (task T2.3, requirement R1.6): the six member checks of the accounts for the root, the role of a place, the target of a check, the independence, the prior knowledge and the lineage read their member sets from ACCOUNT_MEMBERS, with the same required and optional names and the same error codes; the value command accepts the same values."
     },
     "research_harness.problem_areas": {
       "ast_sha256": "bd7409ab6ad4c0cb5283bf7676cc985299d034a8e2829f5791537dd87e65faaa",
@@ -35811,32 +35811,6 @@
         }
       }
     },
-    "field_1abebfecd013": {
-      "class": "fixed",
-      "members": {
-        "answer_argument": {
-          "class": "fixed"
-        },
-        "date": {
-          "$ref": "field_bc83c31e0106"
-        },
-        "evidence": {
-          "$ref": "field_8ad6fb353e05"
-        },
-        "evidence_ids": {
-          "$ref": "field_d75dad0f8df0"
-        },
-        "fact": {
-          "$ref": "field_bc83c31e0106"
-        },
-        "id": {
-          "$ref": "field_bc83c31e0106"
-        },
-        "scope": {
-          "$ref": "field_bc83c31e0106"
-        }
-      }
-    },
     "field_2980d727e5f1": {
       "bound": "open",
       "class": "open",
@@ -35848,35 +35822,6 @@
       },
       "quantity": "units",
       "sample": "x"
-    },
-    "field_2b36b8e4239c": {
-      "bound": "open",
-      "class": "open",
-      "entry": "Q2",
-      "fixture": "adjudicator/exactory-problem-review-v2",
-      "grows": true,
-      "items": {
-        "$ref": "field_1abebfecd013"
-      },
-      "quantity": "units",
-      "sample": "x"
-    },
-    "field_2c1c7eb42d00": {
-      "class": "fixed",
-      "members": {
-        "evidence_ids": {
-          "$ref": "field_d75dad0f8df0"
-        },
-        "id": {
-          "$ref": "field_bc83c31e0106"
-        },
-        "status": {
-          "$ref": "field_bc83c31e0106"
-        },
-        "text": {
-          "class": "fixed"
-        }
-      }
     },
     "field_33e43eb5b056": {
       "class": "fixed",
@@ -36001,18 +35946,6 @@
       "quantity": "citations",
       "sample": "x"
     },
-    "field_3e8c965a8593": {
-      "bound": "open",
-      "class": "open",
-      "entry": "Q2",
-      "fixture": "adjudicator/exactory-problem-review-v2",
-      "grows": true,
-      "items": {
-        "$ref": "field_b6ade5137023"
-      },
-      "quantity": "units",
-      "sample": "x"
-    },
     "field_48f660eea5de": {
       "bound": "open",
       "class": "open",
@@ -36065,38 +35998,6 @@
       },
       "quantity": "units",
       "sample": "x"
-    },
-    "field_51f07a1d61eb": {
-      "class": "fixed",
-      "members": {
-        "alternatives": {
-          "$ref": "field_d75dad0f8df0"
-        },
-        "answer": {
-          "$ref": "field_2c1c7eb42d00"
-        },
-        "answer_evidence": {
-          "$ref": "field_d75dad0f8df0"
-        },
-        "boundaries": {
-          "$ref": "field_d75dad0f8df0"
-        },
-        "explanatory_use": {
-          "$ref": "field_2b36b8e4239c"
-        },
-        "places": {
-          "$ref": "value_places"
-        },
-        "refuted_conjectures": {
-          "$ref": "field_d75dad0f8df0"
-        },
-        "relations": {
-          "$ref": "field_d75dad0f8df0"
-        },
-        "strength": {
-          "$ref": "field_3e8c965a8593"
-        }
-      }
     },
     "field_51fbda84fba0": {
       "bound": "open",
@@ -36356,18 +36257,6 @@
         }
       }
     },
-    "field_8ad6fb353e05": {
-      "bound": "open",
-      "class": "open",
-      "entry": "Q2",
-      "fixture": "adjudicator/exactory-problem-review-v2",
-      "grows": true,
-      "items": {
-        "$ref": "field_8e932116c18a"
-      },
-      "quantity": "units",
-      "sample": "x"
-    },
     "field_8ad78c37eeb1": {
       "class": "fixed",
       "members": {
@@ -36437,20 +36326,6 @@
         },
         "findings": {
           "class": "fixed"
-        }
-      }
-    },
-    "field_8e932116c18a": {
-      "class": "fixed",
-      "members": {
-        "kind": {
-          "class": "fixed"
-        },
-        "reading_id": {
-          "$ref": "field_bc83c31e0106"
-        },
-        "version_id": {
-          "$ref": "field_bc83c31e0106"
         }
       }
     },
@@ -36649,26 +36524,6 @@
       "quantity": "units",
       "sample": "x"
     },
-    "field_b6ade5137023": {
-      "class": "fixed",
-      "members": {
-        "alternative_ids": {
-          "$ref": "field_d75dad0f8df0"
-        },
-        "description": {
-          "$ref": "field_bc83c31e0106"
-        },
-        "head": {
-          "$ref": "field_bc83c31e0106"
-        },
-        "id": {
-          "$ref": "field_bc83c31e0106"
-        },
-        "no_alternative_reason": {
-          "$ref": "field_bc83c31e0106"
-        }
-      }
-    },
     "field_b79f3293c131": {
       "class": "fixed",
       "members": {
@@ -36688,15 +36543,6 @@
       "grows": true,
       "items": {},
       "quantity": "units",
-      "sample": "x"
-    },
-    "field_bc83c31e0106": {
-      "bound": "open",
-      "class": "open",
-      "entry": "Q3",
-      "fixture": "adjudicator/exactory-problem-review-v2",
-      "grows": true,
-      "quantity": "texts",
       "sample": "x"
     },
     "field_beb943612c92": {
@@ -36820,16 +36666,6 @@
       "fixture": "result/exactory-problem-review-v2",
       "grows": true,
       "quantity": "texts",
-      "sample": "x"
-    },
-    "field_d75dad0f8df0": {
-      "bound": "open",
-      "class": "open",
-      "entry": "Q2",
-      "fixture": "adjudicator/exactory-problem-review-v2",
-      "grows": true,
-      "items": {},
-      "quantity": "units",
       "sample": "x"
     },
     "field_d8e93aa68d39": {
@@ -37336,20 +37172,6 @@
         }
       }
     },
-    "q6_344239a8b2b3": {
-      "class": "fixed",
-      "members": {
-        "kind": {
-          "class": "fixed"
-        },
-        "reading_id": {
-          "$ref": "q6_d5e12cc512c3"
-        },
-        "version_id": {
-          "$ref": "q6_d5e12cc512c3"
-        }
-      }
-    },
     "q6_3b642d6e1798": {
       "class": "fixed",
       "members": {
@@ -37398,37 +37220,6 @@
       },
       "class": "fixed",
       "ground": "Canonical record kind or content-addressed artifact descriptor; evidence.digest, artifacts.validate_reference, and record-unit constructors."
-    },
-    "q6_bb704edcdc4f": {
-      "bound": "open",
-      "class": "open",
-      "entry": "Q2",
-      "fixture": "result/exactory-problem-review-v2",
-      "grows": true,
-      "items": {},
-      "quantity": "units",
-      "sample": "x"
-    },
-    "q6_d5e12cc512c3": {
-      "bound": "open",
-      "class": "open",
-      "entry": "Q3",
-      "fixture": "result/exactory-problem-review-v2",
-      "grows": true,
-      "quantity": "texts",
-      "sample": "x"
-    },
-    "q6_f7210f95251e": {
-      "bound": "open",
-      "class": "open",
-      "entry": "Q2",
-      "fixture": "result/exactory-problem-review-v2",
-      "grows": true,
-      "items": {
-        "$ref": "q6_344239a8b2b3"
-      },
-      "quantity": "units",
-      "sample": "x"
     },
     "stage2_output_refusal_notice": {
       "bound": {
@@ -43471,18 +43262,7 @@
             "class": "fixed",
             "ground": "Since 0.91.6 problem_evidence.describe_evidence delivers the accounts of a value record whole in every frame of a result or adjudicator turn, places among them. review_parts refuses a frame that leaves no room on the selected route (review_parts_frame_too_large), and review_route_capacity.require_covered_assignment measures every request before admission.",
             "items": {
-              "class": "fixed",
-              "members": {
-                "kind": {
-                  "class": "fixed"
-                },
-                "reading_id": {
-                  "class": "fixed"
-                },
-                "version_id": {
-                  "class": "fixed"
-                }
-              }
+              "$ref": "value_evidence_reference"
             }
           },
           "evidence_ids": {
@@ -56629,7 +56409,7 @@
       "class": "fixed",
       "members": {
         "accounts": {
-          "$ref": "field_51f07a1d61eb"
+          "$ref": "value_accounts"
         },
         "accounts_version": {
           "class": "fixed"
@@ -56661,7 +56441,7 @@
       "class": "fixed",
       "members": {
         "accounts": {
-          "$ref": "field_51f07a1d61eb"
+          "$ref": "value_accounts"
         },
         "accounts_version": {
           "class": "fixed"
@@ -61771,6 +61551,885 @@
           "$ref": "q6_d8e93aa68d39~67bc5483dc1b"
         }
       }
+    },
+    "value_accounts": {
+      "class": "fixed",
+      "members": {
+        "answer": {
+          "class": "fixed",
+          "members": {
+            "id": {
+              "class": "fixed"
+            },
+            "status": {
+              "class": "fixed"
+            },
+            "text": {
+              "class": "fixed"
+            },
+            "evidence_ids": {
+              "bound": {
+                "serialized_characters": "selected_request_input_limit"
+              },
+              "class": "fixed",
+              "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+              "items": {
+                "class": "fixed"
+              }
+            }
+          }
+        },
+        "answer_evidence": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+          "items": {
+            "class": "fixed",
+            "members": {
+              "id": {
+                "class": "fixed"
+              },
+              "fact": {
+                "class": "fixed"
+              },
+              "scope": {
+                "class": "fixed"
+              },
+              "evidence": {
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "class": "fixed",
+                "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                "items": {
+                  "$ref": "value_evidence_reference"
+                }
+              },
+              "evidence_ids": {
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "class": "fixed",
+                "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                "items": {
+                  "class": "fixed"
+                }
+              },
+              "kind": {
+                "$ref": "value_description"
+              },
+              "direction": {
+                "class": "fixed"
+              },
+              "alternative_id": {
+                "class": "fixed"
+              },
+              "date": {
+                "class": "fixed"
+              },
+              "check_id": {
+                "class": "fixed"
+              }
+            }
+          }
+        },
+        "boundaries": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+          "items": {
+            "class": "fixed",
+            "members": {
+              "id": {
+                "class": "fixed"
+              },
+              "fact": {
+                "class": "fixed"
+              },
+              "scope": {
+                "class": "fixed"
+              },
+              "evidence": {
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "class": "fixed",
+                "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                "items": {
+                  "$ref": "value_evidence_reference"
+                }
+              },
+              "evidence_ids": {
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "class": "fixed",
+                "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                "items": {
+                  "class": "fixed"
+                }
+              },
+              "argument": {
+                "class": "fixed"
+              },
+              "date": {
+                "class": "fixed"
+              },
+              "check_id": {
+                "class": "fixed"
+              }
+            }
+          }
+        },
+        "explanatory_use": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+          "items": {
+            "class": "fixed",
+            "members": {
+              "id": {
+                "class": "fixed"
+              },
+              "fact": {
+                "class": "fixed"
+              },
+              "scope": {
+                "class": "fixed"
+              },
+              "evidence": {
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "class": "fixed",
+                "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                "items": {
+                  "$ref": "value_evidence_reference"
+                }
+              },
+              "evidence_ids": {
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "class": "fixed",
+                "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                "items": {
+                  "class": "fixed"
+                }
+              },
+              "answer_argument": {
+                "class": "fixed"
+              },
+              "date": {
+                "class": "fixed"
+              },
+              "check_id": {
+                "class": "fixed"
+              }
+            }
+          }
+        },
+        "alternatives": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+          "items": {
+            "class": "fixed",
+            "members": {
+              "id": {
+                "class": "fixed"
+              },
+              "neighbour": {
+                "class": "fixed"
+              },
+              "form_id": {
+                "class": "fixed"
+              },
+              "role": {
+                "class": "fixed"
+              },
+              "relation_id": {
+                "class": "fixed"
+              },
+              "surplus": {
+                "class": "fixed",
+                "members": {
+                  "description": {
+                    "class": "fixed"
+                  },
+                  "status": {
+                    "class": "fixed"
+                  },
+                  "evidence_ids": {
+                    "bound": {
+                      "serialized_characters": "selected_request_input_limit"
+                    },
+                    "class": "fixed",
+                    "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                    "items": {
+                      "class": "fixed"
+                    }
+                  },
+                  "relation_ids": {
+                    "bound": {
+                      "serialized_characters": "selected_request_input_limit"
+                    },
+                    "class": "fixed",
+                    "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                    "items": {
+                      "class": "fixed"
+                    }
+                  }
+                }
+              },
+              "reason": {
+                "class": "fixed"
+              },
+              "search_ids": {
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "class": "fixed",
+                "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                "items": {
+                  "class": "fixed"
+                }
+              }
+            }
+          }
+        },
+        "strength": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+          "items": {
+            "class": "fixed",
+            "members": {
+              "id": {
+                "class": "fixed"
+              },
+              "head": {
+                "class": "fixed"
+              },
+              "description": {
+                "class": "fixed"
+              },
+              "alternative_ids": {
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "class": "fixed",
+                "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                "items": {
+                  "class": "fixed"
+                }
+              },
+              "no_alternative_reason": {
+                "class": "fixed"
+              }
+            }
+          }
+        },
+        "relations": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+          "items": {
+            "class": "fixed",
+            "members": {
+              "id": {
+                "class": "fixed"
+              },
+              "relation": {
+                "class": "fixed"
+              },
+              "target": {
+                "class": "fixed"
+              },
+              "alternative_id": {
+                "class": "fixed"
+              },
+              "standing": {
+                "class": "fixed"
+              },
+              "scope": {
+                "class": "fixed"
+              },
+              "evidence": {
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "class": "fixed",
+                "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                "items": {
+                  "$ref": "value_evidence_reference"
+                }
+              },
+              "evidence_ids": {
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "class": "fixed",
+                "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                "items": {
+                  "class": "fixed"
+                }
+              },
+              "earlier_statement": {
+                "class": "fixed"
+              },
+              "consequence": {
+                "class": "fixed",
+                "members": {
+                  "assertion": {
+                    "class": "fixed"
+                  },
+                  "instances_or_translation": {
+                    "class": "fixed"
+                  },
+                  "credited_to": {
+                    "class": "fixed"
+                  },
+                  "weaker_derivations": {
+                    "bound": {
+                      "serialized_characters": "selected_request_input_limit"
+                    },
+                    "class": "fixed",
+                    "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                    "items": {
+                      "class": "fixed",
+                      "members": {
+                        "id": {
+                          "class": "fixed"
+                        },
+                        "alternative_id": {
+                          "class": "fixed"
+                        },
+                        "status": {
+                          "class": "fixed"
+                        },
+                        "reason": {
+                          "class": "fixed"
+                        },
+                        "evidence_ids": {
+                          "bound": {
+                            "serialized_characters": "selected_request_input_limit"
+                          },
+                          "class": "fixed",
+                          "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                          "items": {
+                            "class": "fixed"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "date": {
+                "class": "fixed"
+              }
+            }
+          }
+        },
+        "checks": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+          "items": {
+            "class": "fixed",
+            "members": {
+              "id": {
+                "class": "fixed"
+              },
+              "target": {
+                "class": "fixed",
+                "members": {
+                  "kind": {
+                    "class": "fixed"
+                  },
+                  "description": {
+                    "class": "fixed"
+                  }
+                }
+              },
+              "contradiction": {
+                "class": "fixed"
+              },
+              "no_contradiction_reason": {
+                "class": "fixed"
+              },
+              "result": {
+                "class": "fixed"
+              },
+              "standing": {
+                "class": "fixed"
+              },
+              "passed": {
+                "class": "fixed"
+              },
+              "alternative_id": {
+                "class": "fixed"
+              },
+              "evidence": {
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "class": "fixed",
+                "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                "items": {
+                  "$ref": "value_evidence_reference"
+                }
+              },
+              "evidence_ids": {
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "class": "fixed",
+                "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                "items": {
+                  "class": "fixed"
+                }
+              },
+              "independence": {
+                "class": "fixed",
+                "members": {
+                  "status": {
+                    "class": "fixed"
+                  },
+                  "reason": {
+                    "class": "fixed"
+                  },
+                  "prior_knowledge": {
+                    "bound": {
+                      "serialized_characters": "selected_request_input_limit"
+                    },
+                    "class": "fixed",
+                    "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                    "items": {
+                      "class": "fixed",
+                      "members": {
+                        "source_index": {
+                          "class": "fixed"
+                        },
+                        "status": {
+                          "class": "fixed"
+                        },
+                        "reason": {
+                          "class": "fixed"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "date": {
+                "class": "fixed"
+              },
+              "lineage": {
+                "class": "fixed",
+                "members": {
+                  "form_id": {
+                    "class": "fixed"
+                  },
+                  "check_id": {
+                    "class": "fixed"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "search_coverage": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+          "items": {
+            "class": "fixed",
+            "members": {
+              "id": {
+                "class": "fixed"
+              },
+              "purpose": {
+                "class": "fixed"
+              },
+              "search_ids": {
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "class": "fixed",
+                "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                "items": {
+                  "class": "fixed"
+                }
+              },
+              "unreached": {
+                "class": "fixed"
+              }
+            }
+          }
+        },
+        "refuted_conjectures": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+          "items": {
+            "class": "fixed",
+            "members": {
+              "id": {
+                "class": "fixed"
+              },
+              "statement": {
+                "class": "fixed"
+              },
+              "identified_by": {
+                "class": "fixed"
+              },
+              "sources": {
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "class": "fixed",
+                "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                "items": {
+                  "$ref": "value_source_reference"
+                }
+              },
+              "evidence_ids": {
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "class": "fixed",
+                "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                "items": {
+                  "class": "fixed"
+                }
+              }
+            }
+          }
+        },
+        "replacement": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+          "items": {
+            "class": "fixed",
+            "members": {
+              "id": {
+                "class": "fixed"
+              },
+              "refuted_id": {
+                "class": "fixed"
+              },
+              "form_id": {
+                "class": "fixed"
+              },
+              "evidence_ids": {
+                "bound": {
+                  "serialized_characters": "selected_request_input_limit"
+                },
+                "class": "fixed",
+                "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                "items": {
+                  "class": "fixed"
+                }
+              },
+              "account": {
+                "class": "fixed"
+              }
+            }
+          }
+        },
+        "places": {
+          "$ref": "value_places"
+        },
+        "gain": {
+          "class": "fixed",
+          "members": {
+            "id": {
+              "class": "fixed"
+            },
+            "form": {
+              "class": "fixed"
+            },
+            "claim": {
+              "class": "fixed"
+            },
+            "relation_ids": {
+              "bound": {
+                "serialized_characters": "selected_request_input_limit"
+              },
+              "class": "fixed",
+              "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+              "items": {
+                "class": "fixed"
+              }
+            },
+            "separate_grounds": {
+              "bound": {
+                "serialized_characters": "selected_request_input_limit"
+              },
+              "class": "fixed",
+              "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+              "items": {
+                "class": "fixed",
+                "members": {
+                  "id": {
+                    "class": "fixed"
+                  },
+                  "relation_id": {
+                    "class": "fixed"
+                  },
+                  "evidence_ids": {
+                    "bound": {
+                      "serialized_characters": "selected_request_input_limit"
+                    },
+                    "class": "fixed",
+                    "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                    "items": {
+                      "class": "fixed"
+                    }
+                  }
+                }
+              }
+            },
+            "conjunction": {
+              "class": "fixed",
+              "members": {
+                "description": {
+                  "class": "fixed"
+                },
+                "status": {
+                  "class": "fixed"
+                },
+                "evidence_ids": {
+                  "bound": {
+                    "serialized_characters": "selected_request_input_limit"
+                  },
+                  "class": "fixed",
+                  "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+                  "items": {
+                    "class": "fixed"
+                  }
+                }
+              }
+            },
+            "establishing_ids": {
+              "bound": {
+                "serialized_characters": "selected_request_input_limit"
+              },
+              "class": "fixed",
+              "ground": "In a single-request packet or parts v2 turn of exactory-problem-review-v2, describe_evidence copies the value accounts whole. The parts v2 frame must leave room on the selected route (review_parts_frame_too_large), and require_covered_assignment measures the built request before admission. Parts v3 has separate bounds for its frame and material.",
+              "items": {
+                "class": "fixed"
+              }
+            },
+            "new_object_justification": {
+              "class": "fixed"
+            }
+          }
+        }
+      }
+    },
+    "value_evidence_reference": {
+      "class": "fixed",
+      "members": {
+        "kind": {
+          "class": "fixed"
+        },
+        "reading_id": {
+          "class": "fixed"
+        },
+        "version_id": {
+          "class": "fixed"
+        },
+        "execution_id": {
+          "class": "fixed"
+        },
+        "output_id": {
+          "class": "fixed"
+        },
+        "formal_check": {
+          "$ref": "value_formal_request"
+        },
+        "attempt_id": {
+          "class": "fixed"
+        },
+        "acceptance_id": {
+          "class": "fixed"
+        },
+        "native_attempt_digest": {
+          "class": "fixed"
+        },
+        "purpose": {
+          "class": "fixed"
+        },
+        "extension_reason": {
+          "class": "fixed"
+        },
+        "id": {
+          "class": "fixed"
+        },
+        "record_kind": {
+          "class": "fixed"
+        },
+        "digest": {
+          "class": "fixed"
+        },
+        "origin": {
+          "class": "fixed"
+        }
+      },
+      "ground": "An evidence reference of an account entry. problem_accounts.validate_account_evidence accepts a reading (problem_evidence.validate_reading), a computation (validate_computation), a result (validate_result, in its two forms), a probe of an exploratory check, and an imported record (problem_forming_import.open_imported_record). Each check accepts a closed set of members. The reference travels with the accounts."
+    },
+    "value_formal_request": {
+      "class": "fixed",
+      "members": {
+        "claim": {
+          "class": "fixed",
+          "members": {
+            "statement": {
+              "class": "fixed"
+            },
+            "quantifiers": {
+              "class": "fixed"
+            },
+            "assumption_ids": {
+              "bound": {
+                "serialized_characters": "selected_request_input_limit"
+              },
+              "class": "fixed",
+              "ground": "The formal request of a computation reference: null or the object that problem_evidence.validate_formal_request accepts, with a closed set of members at each level.",
+              "items": {
+                "class": "fixed"
+              }
+            },
+            "proof_policy": {
+              "class": "fixed"
+            },
+            "scope": {
+              "class": "fixed",
+              "members": {
+                "kind": {
+                  "class": "fixed"
+                },
+                "name": {
+                  "class": "fixed"
+                },
+                "case_ids": {
+                  "bound": {
+                    "serialized_characters": "selected_request_input_limit"
+                  },
+                  "class": "fixed",
+                  "ground": "The formal request of a computation reference: null or the object that problem_evidence.validate_formal_request accepts, with a closed set of members at each level.",
+                  "items": {
+                    "class": "fixed"
+                  }
+                },
+                "lower": {
+                  "class": "fixed"
+                },
+                "upper": {
+                  "class": "fixed"
+                },
+                "lower_inclusive": {
+                  "class": "fixed"
+                },
+                "upper_inclusive": {
+                  "class": "fixed"
+                }
+              }
+            }
+          }
+        },
+        "required_deliverables": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "ground": "The formal request of a computation reference: null or the object that problem_evidence.validate_formal_request accepts, with a closed set of members at each level.",
+          "items": {
+            "class": "fixed"
+          }
+        }
+      },
+      "ground": "The formal request of a computation reference: null or the object that problem_evidence.validate_formal_request accepts, with a closed set of members at each level."
+    },
+    "value_description": {
+      "class": "fixed",
+      "members": {
+        "kind": {
+          "class": "fixed"
+        },
+        "description": {
+          "class": "fixed"
+        }
+      },
+      "ground": "An open value {kind, description} that problem_forming.validate_description accepts: the kind of an answer_evidence entry."
+    },
+    "value_source_reference": {
+      "class": "fixed",
+      "members": {
+        "kind": {
+          "class": "fixed"
+        },
+        "record_kind": {
+          "class": "fixed"
+        },
+        "id": {
+          "class": "fixed"
+        },
+        "digest": {
+          "class": "fixed"
+        },
+        "origin": {
+          "class": "fixed"
+        },
+        "path": {
+          "class": "fixed"
+        },
+        "sha256": {
+          "class": "fixed"
+        },
+        "size": {
+          "class": "fixed"
+        },
+        "media_type": {
+          "class": "fixed"
+        },
+        "link": {
+          "bound": {
+            "serialized_characters": "selected_request_input_limit"
+          },
+          "class": "fixed",
+          "ground": "A source of a refuted conjecture. strategy.evidence_fields accepts an artifact descriptor, a source link or a record reference, each with a closed set of members; source_links.validate_link_fields checks the link. The reference travels with the accounts.",
+          "opaque_json": {
+            "limit_characters": "request_limit",
+            "provenance": "research_harness.source_links.validate_link_fields"
+          }
+        }
+      },
+      "ground": "A source of a refuted conjecture. strategy.evidence_fields accepts an artifact descriptor, a source link or a record reference, each with a closed set of members; source_links.validate_link_fields checks the link. The reference travels with the accounts."
     }
   },
   "fixtures": {
@@ -72938,190 +73597,6 @@
         "route_limit": 150000
       }
     },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.alternatives": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.answer.evidence_ids": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.answer.id": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.answer.status": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.answer_evidence": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.boundaries": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use.*.date": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use.*.evidence": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use.*.evidence.*.reading_id": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use.*.evidence.*.version_id": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use.*.evidence_ids": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use.*.fact": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use.*.id": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use.*.scope": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.refuted_conjectures": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.relations": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.strength": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.strength.*.alternative_ids": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.strength.*.description": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.strength.*.head": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.strength.*.id": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.strength.*.no_alternative_reason": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.alternatives": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.answer.evidence_ids": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.answer.id": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.answer.status": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.answer_evidence": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.boundaries": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.explanatory_use": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.explanatory_use.*.date": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.explanatory_use.*.evidence": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.explanatory_use.*.evidence.*.reading_id": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.explanatory_use.*.evidence.*.version_id": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.explanatory_use.*.evidence_ids": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.explanatory_use.*.fact": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.explanatory_use.*.id": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.explanatory_use.*.scope": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.refuted_conjectures": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.relations": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.strength": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.strength.*.alternative_ids": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.strength.*.description": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.strength.*.head": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.strength.*.id": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.strength.*.no_alternative_reason": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
     "adjudicator/exactory-review-staged-v2:staged_review.originals.*.text": {
       "canonical": {
         "dimension": "characters",
@@ -74300,98 +74775,6 @@
         "property_kind": "canonical_record_identifier_text",
         "quantity": "identifiers"
       }
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.alternatives": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.answer.evidence_ids": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.answer.id": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.answer.status": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.answer_evidence": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.boundaries": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use.*.date": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use.*.evidence": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use.*.evidence.*.reading_id": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use.*.evidence.*.version_id": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use.*.evidence_ids": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use.*.fact": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use.*.id": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.explanatory_use.*.scope": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.refuted_conjectures": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.relations": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.strength": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.strength.*.alternative_ids": {
-      "declared_entry": "Q2",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.strength.*.description": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.strength.*.head": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.strength.*.id": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
-    },
-    "result/exactory-problem-review-v2:problem_evidence.value.accounts.strength.*.no_alternative_reason": {
-      "declared_entry": "Q3",
-      "gap": "A1_frame_metadata"
     },
     "result/exactory-problem-review-v2:source_rules": {
       "declared_entry": "Q3",
@@ -99290,108 +99673,7 @@
                   "class": "fixed",
                   "members": {
                     "accounts": {
-                      "class": "fixed",
-                      "members": {
-                        "alternatives": {
-                          "$ref": "q6_bb704edcdc4f"
-                        },
-                        "answer": {
-                          "class": "fixed",
-                          "members": {
-                            "evidence_ids": {
-                              "$ref": "q6_bb704edcdc4f"
-                            },
-                            "id": {
-                              "$ref": "q6_d5e12cc512c3"
-                            },
-                            "status": {
-                              "$ref": "q6_d5e12cc512c3"
-                            },
-                            "text": {
-                              "class": "fixed"
-                            }
-                          }
-                        },
-                        "answer_evidence": {
-                          "$ref": "q6_bb704edcdc4f"
-                        },
-                        "boundaries": {
-                          "$ref": "q6_bb704edcdc4f"
-                        },
-                        "explanatory_use": {
-                          "bound": "open",
-                          "class": "open",
-                          "entry": "Q2",
-                          "fixture": "result/exactory-problem-review-v2",
-                          "grows": true,
-                          "items": {
-                            "class": "fixed",
-                            "members": {
-                              "answer_argument": {
-                                "class": "fixed"
-                              },
-                              "date": {
-                                "$ref": "q6_d5e12cc512c3"
-                              },
-                              "evidence": {
-                                "$ref": "q6_f7210f95251e"
-                              },
-                              "evidence_ids": {
-                                "$ref": "q6_bb704edcdc4f"
-                              },
-                              "fact": {
-                                "$ref": "q6_d5e12cc512c3"
-                              },
-                              "id": {
-                                "$ref": "q6_d5e12cc512c3"
-                              },
-                              "scope": {
-                                "$ref": "q6_d5e12cc512c3"
-                              }
-                            }
-                          },
-                          "quantity": "units",
-                          "sample": "x"
-                        },
-                        "places": {
-                          "$ref": "value_places"
-                        },
-                        "refuted_conjectures": {
-                          "$ref": "q6_bb704edcdc4f"
-                        },
-                        "relations": {
-                          "$ref": "q6_bb704edcdc4f"
-                        },
-                        "strength": {
-                          "bound": "open",
-                          "class": "open",
-                          "entry": "Q2",
-                          "fixture": "result/exactory-problem-review-v2",
-                          "grows": true,
-                          "items": {
-                            "class": "fixed",
-                            "members": {
-                              "alternative_ids": {
-                                "$ref": "q6_bb704edcdc4f"
-                              },
-                              "description": {
-                                "$ref": "q6_d5e12cc512c3"
-                              },
-                              "head": {
-                                "$ref": "q6_d5e12cc512c3"
-                              },
-                              "id": {
-                                "$ref": "q6_d5e12cc512c3"
-                              },
-                              "no_alternative_reason": {
-                                "$ref": "q6_d5e12cc512c3"
-                              }
-                            }
-                          },
-                          "quantity": "units",
-                          "sample": "x"
-                        }
-                      }
+                      "$ref": "value_accounts"
                     },
                     "accounts_version": {
                       "class": "fixed"
@@ -100445,6 +100727,21 @@
                                 },
                                 "quantity": "units",
                                 "sample": "x"
+                              },
+                              "accounts": {
+                                "$ref": "value_accounts"
+                              },
+                              "accounts_version": {
+                                "class": "fixed"
+                              },
+                              "cite": {
+                                "$ref": "field_3ff3645b576a~cb8bf143827a"
+                              },
+                              "derived_accounts": {
+                                "$ref": "field_e9a01064815b~9bd412cbee07"
+                              },
+                              "digest": {
+                                "class": "fixed"
                               }
                             }
                           }
@@ -110194,5 +110491,147 @@
     "dict.values",
     "dict.copy"
   ],
-  "version": 1
+  "version": 1,
+  "record_copies": [
+    {
+      "member": "accounts",
+      "definition": "value_accounts",
+      "caller": "research_harness.problem_evidence.describe_evidence",
+      "ast_sha256": "44586e94e7d998b1a59a9cb7da576364f90ee87e2394cc2e73a761398d1ebc28",
+      "table": "research_harness.problem_accounts.ACCOUNT_MEMBERS",
+      "member_check": "research_harness.operations.fields",
+      "paths": {
+        "accounts": [],
+        "answer": [
+          "answer"
+        ],
+        "answer_evidence": [
+          "answer_evidence",
+          "*"
+        ],
+        "boundaries": [
+          "boundaries",
+          "*"
+        ],
+        "explanatory_use": [
+          "explanatory_use",
+          "*"
+        ],
+        "alternatives": [
+          "alternatives",
+          "*"
+        ],
+        "strength": [
+          "strength",
+          "*"
+        ],
+        "relations": [
+          "relations",
+          "*"
+        ],
+        "checks": [
+          "checks",
+          "*"
+        ],
+        "search_coverage": [
+          "search_coverage",
+          "*"
+        ],
+        "refuted_conjectures": [
+          "refuted_conjectures",
+          "*"
+        ],
+        "replacement": [
+          "replacement",
+          "*"
+        ],
+        "places": [
+          "places",
+          "*"
+        ],
+        "gain": [
+          "gain"
+        ],
+        "separate_grounds": [
+          "gain",
+          "separate_grounds",
+          "*"
+        ],
+        "consequence": [
+          "relations",
+          "*",
+          "consequence"
+        ],
+        "weaker_derivations": [
+          "relations",
+          "*",
+          "consequence",
+          "weaker_derivations",
+          "*"
+        ],
+        "surplus": [
+          "alternatives",
+          "*",
+          "surplus"
+        ],
+        "conjunction": [
+          "gain",
+          "conjunction"
+        ],
+        "role": [
+          "places",
+          "*",
+          "role"
+        ],
+        "target": [
+          "checks",
+          "*",
+          "target"
+        ],
+        "independence": [
+          "checks",
+          "*",
+          "independence"
+        ],
+        "prior_knowledge": [
+          "checks",
+          "*",
+          "independence",
+          "prior_knowledge",
+          "*"
+        ],
+        "lineage": [
+          "checks",
+          "*",
+          "lineage"
+        ]
+      },
+      "external": [
+        "value_description",
+        "value_evidence_reference",
+        "value_source_reference"
+      ],
+      "other_member_checks": [
+        {
+          "ast_sha256": "b5510d194b6aeacea980253e618c0046b9c148ff083b950054be73388c5528f5",
+          "call": "fields(reference, ('kind',), None)",
+          "count": 1,
+          "reason": "The first check of an evidence reference, which reads kind alone and leaves the other members to the check of that kind in validate_account_evidence. The definition value_evidence_reference declares the members of each kind."
+        },
+        {
+          "ast_sha256": "90f461d2ed1238adf27f24cb226414d71c48d365c862f30de565c11ed340ec4d",
+          "call": "fields(paragraph, ('text', 'evidence'), ('field_fact',))",
+          "count": 1,
+          "reason": "A paragraph of a value section. It is no part of the accounts."
+        },
+        {
+          "ast_sha256": "93c46a5d5f4dabfa30023f4bc0b8d56d4e2bb7181ff10d026c298491365becc1",
+          "call": "fields(reference, ('kind', 'id'))",
+          "count": 2,
+          "reason": "The probe reference of an exploratory check, and the citation {kind: account, id} of a value paragraph. The definition value_evidence_reference declares the members of an evidence reference; a paragraph is no part of the accounts."
+        }
+      ],
+      "reason": "problem_evidence.describe_evidence copies accounts into result and adjudicator packets under exactory-problem-review-v2. This declaration covers single-request packets and parts v2. Parts v3 carries problem_evidence in its opaque frame member or, on overflow, in opaque review_parts_material. ACCOUNT_MEMBERS gives the member names accepted by the value validator."
+    }
+  ]
 }

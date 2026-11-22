@@ -8583,6 +8583,21 @@
         "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e4_late_predecessor_event_after_refresh_start_keeps_the_stale_repair",
         "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e7_current_readers_agree_for_each_late_event_and_the_clean_control"
       ]
+    },
+    {
+      "id": "packet-schema-value-accounts",
+      "record": "20261120121345-packet-schema-does-not-name-six-parts-of-the-value-accounts",
+      "class": "packet member declaration",
+      "summary": "Result and adjudicator packets carried value accounts with members missing from the packet registry, and the source inventory could not compare the copied member with the value validator.",
+      "expected": "All value account member names are declared, and a change to the validator table or copy statement fails the inventory until the declaration is reviewed.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_record_copies.WholeAccountsTests.test_whole_accounts_of_a_recorded_value_have_a_declaration_at_every_member",
+        "test_record_copies.RecordCopyInventoryTests.test_production_declaration_equals_the_member_table",
+        "test_record_copies.RecordCopyInventoryTests.test_a_new_member_of_an_entry_fails_until_the_definition_declares_it",
+        "test_record_copies.RecordCopyInventoryTests.test_the_copy_statement_is_pinned"
+      ]
     }
   ]
 }
