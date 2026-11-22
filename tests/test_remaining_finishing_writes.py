@@ -18,6 +18,7 @@ from codex_route_fixtures import build_codex_response
 from development_fixtures import DevelopmentCase
 from finishing_write_fixtures import OtherWriters, WaitlessTime
 from integration_fixtures import admit_lab
+from literature_fixtures import LiteratureCase
 from openness_reading_fixtures import OpennessReadingCase
 from research_harness import (cli, execution, finishing, remote_execution, review_call_capture,
                               review_protocol as protocol, review_refusal, review_series, storage)
@@ -29,6 +30,7 @@ from research_harness.operations import immutable_record, prepared_mutation
 from research_harness.storage import Store, _canonical
 from test_research_codex_timeout import PROCESS_FIXTURE
 from test_review_task_execution import TaskExecutionFixture
+from test_review_route_renewal import ROUTE
 
 REFUSAL_MEMBERS_0_91_7 = ["assignment_id", "attempt_id", "check", "code", "details", "id", "output_digest", "protocol",
                           "recorded_revision", "request_digest"]
@@ -420,6 +422,10 @@ class OwnedCallTransportTests(TaskExecutionFixture):
                 self.run_call("call")
         self.assertEqual((caught.exception.code, caught.exception.message),
                          ("store_busy", review_worker.CALL_CHILD_STORE_BUSY_MSG))
+        self.assertEqual(
+            {key: caught.exception.details.get(key) for key in ("reservation_id", "operation", "invocation_id")},
+            {"reservation_id": review_task_execution.identify_call("review.invoke", "call"),
+             "operation": "review.invoke", "invocation_id": "call"})
         self.assertFalse(self.has_called())
         records = self.store.snapshot()["records"]
         self.assertNotIn("call", records.get("review_attempt", {}))
@@ -463,6 +469,67 @@ class OwnedCallTransportTests(TaskExecutionFixture):
         self.assertTrue(self.membership("call")["released"])
         self.assertEqual(self.run_call("next")["result"]["status"], "completed")
         self.assertTrue(self.has_called())
+
+
+class OwnedCallReconciliationTests(LiteratureCase):
+    def test_busy_call_reconciliation_replays_pending_then_releases_on_a_fresh_poll(self):
+        self.mutate(protocol.record_route, dict(ROUTE, id="route"))
+
+        def start_guardian(*args, **kwargs):
+            subprocess.run([sys.executable, "-c", "pass"], start_new_session=True, check=True)
+            self.fail("An unrecorded transport child ran")
+
+        for write_module, observation in (
+                (review_worker, {"side_effect": start_guardian}),
+                (review_call_capture,
+                 {"return_value": {"status": "failed", "request": None, "response": None, "output": None}})):
+            with self.subTest(write=write_module.__name__):
+                invocation_id = write_module.__name__.split(".")[-1]
+                with mock.patch.object(protocol, "_observed", **observation), \
+                        mock.patch.object(write_module, "_mutate_current",
+                                          side_effect=ResearchError("store_busy", "Synthetic busy store")), \
+                        mock.patch.object(finishing, "time", WaitlessTime(ticking=True)), \
+                        self.assertRaises(ResearchError) as caught:
+                    self.mutate(protocol.probe_route, {"id": invocation_id, "route_id": "route"})
+
+                refusal = caught.exception
+                self.assertEqual(refusal.code, "store_busy")
+                identity = {key: refusal.details[key] for key in ("operation", "invocation_id")}
+                self.assertEqual(identity, {"operation": "review.route_probe", "invocation_id": invocation_id})
+                payload = self.root / "reconcile.json"
+                payload.write_text(json.dumps(dict(action="reconcile", **identity)))
+
+                def poll(request_id):
+                    args = cli.build_parser().parse_args([
+                        "review-run", "--workspace", str(self.root), "--file", str(payload),
+                        "--expected-revision", str(self.store.revision), "--request-id", request_id,
+                    ])
+                    return cli.run(args)
+
+                lifecycle = review_task_execution.identify_call(**identity)
+                request_id = invocation_id + "-poll"
+                with review_worker._owner(self.root, lifecycle, worker=True):
+                    pending = poll(request_id)
+                self.assertIs(pending["result"]["released"], False)
+                self.assertEqual(poll(request_id), pending)
+                self.assertNotIn(invocation_id, self.store.snapshot()["records"].get("review_route_probe", {}))
+                self.assertIs(poll(request_id + "-fresh")["result"]["released"], True)
+                record = self.store.snapshot()["records"]["review_route_probe"][invocation_id]
+                self.assertEqual(record["error"]["code"], "review_invocation_interrupted")
+
+                standalone, chain, alternative = refusal.message.partition("review-series")
+                for instruction in ('review-run', 'action "reconcile"', 'operation', 'invocation_id'):
+                    self.assertIn(instruction, standalone)
+                _, pending_condition, recovery = standalone.partition('result.released is false')
+                pending_poll, lost_response_condition, retry = recovery.partition('lost the response')
+                self.assertTrue(pending_condition and lost_response_condition)
+                self.assertIn('termination can be confirmed', pending_poll)
+                self.assertIn('fresh request ID', pending_poll)
+                self.assertIn('current expected revision', pending_poll)
+                self.assertIn('same request ID', retry)
+                self.assertTrue(chain)
+                self.assertIn("assignment", standalone)
+                self.assertIn("assignment", alternative)
 
 
 class ColabReleaseTests(OtherWriters, DevelopmentCase):
@@ -840,8 +907,9 @@ class OutputRefusalTests(OtherWriters, OpennessReadingCase):
         self.assertIn(refusal.details["cause"]["code"], finishing.SCOPED_FINISH_RETRY_CODES)
         # The way on that the message names: the reconciliation records the call as interrupted, and the next run
         # calls the reviewer.
-        review_task_execution.reconcile_call(self.store, {"operation": "review.invoke", "invocation_id": "attempt-turn-1"},
-                                             request_id="reconcile-capture")
+        reconcile_payload = {key: refusal.details.get(key) for key in ("operation", "invocation_id")}
+        self.assertEqual(reconcile_payload, {"operation": "review.invoke", "invocation_id": "attempt-turn-1"})
+        review_task_execution.reconcile_call(self.store, reconcile_payload, request_id="reconcile-capture")
         attempt = self.store.snapshot()["records"]["review_attempt"]["attempt-turn-1"]
         self.assertEqual((attempt["status"], attempt["error"]["code"]), ("failed", "review_invocation_interrupted"))
         receipt = self.invoke("turn-1", answer, attempt="attempt-turn-1-retry")

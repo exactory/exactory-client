@@ -7980,7 +7980,9 @@
         "test_remaining_finishing_writes.OwnedCallTransportTests.test_refused_record_of_the_version_check_inside_a_codex_send_starts_no_program",
         "test_remaining_finishing_writes.OwnedCallTransportTests.test_refused_record_of_the_codex_call_itself_starts_no_program",
         "test_remaining_finishing_writes.OwnedCallTransportTests.test_refused_record_of_the_version_check_inside_a_claude_send_starts_no_program",
-        "test_remaining_finishing_writes.OwnedCallTransportTests.test_refused_record_of_the_claude_call_itself_starts_no_program"
+        "test_remaining_finishing_writes.OwnedCallTransportTests.test_refused_record_of_the_claude_call_itself_starts_no_program",
+        "test_review_correction_recorded_runtime.StandaloneRouteProbeTests.test_route_probe_records_its_transport_child",
+        "test_review_correction_recorded_runtime.ClaudeRouteAdmissionTests.test_output_correction_records_its_transport_child"
       ]
     },
     {
@@ -8001,7 +8003,8 @@
         "test_openness_unchecked_answer_busy_store.V7TurnRefusalWriteTests.test_run_refused_beyond_the_wait_is_resumed_and_its_step_records_the_refusal",
         "test_openness_unchecked_answer_busy_store.V7TurnRefusalWriteTests.test_series_refused_again_at_resume_waits_and_a_later_series_goes_on",
         "test_openness_unchecked_answer_busy_store.SingleReviewRefusalWriteTests.test_run_refused_beyond_the_wait_is_resumed_and_its_step_records_the_refusal",
-        "test_openness_unchecked_answer_busy_store.SingleReviewRefusalWriteTests.test_series_refused_again_at_resume_waits_and_a_later_series_goes_on"
+        "test_openness_unchecked_answer_busy_store.SingleReviewRefusalWriteTests.test_series_refused_again_at_resume_waits_and_a_later_series_goes_on",
+        "test_research_problem_adjudication_resolution.ReviewOutputRefusalTests.test_adjudicator_undelivered_output_is_refused_and_retried_via_cli"
       ]
     },
     {
@@ -8152,7 +8155,16 @@
         "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_after_a_lost_response_joins_the_open_request_and_records_its_answer",
         "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_with_other_declarations_than_a_pending_request_sends_them_directly",
         "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_managed_only_submit_with_other_declarations_than_a_pending_request_is_refused",
-        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_with_other_declarations_than_a_complete_request_sends_them_directly"
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_with_other_declarations_than_a_complete_request_sends_them_directly",
+        "test_pending_remote_requests.TestVerifyWithAPendingRevision.test_verify_does_not_resend_a_revision_after_a_refused_answer_record",
+        "test_pending_remote_requests.TestVerifyWithAPendingRevision.test_verify_does_not_resend_a_revision_after_its_response_was_lost",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verify_after_a_refused_connection_sends_the_pending_verdict_once",
+        "test_pending_remote_requests.TestVerifyWithAPendingVerdict.test_verify_after_a_rate_limit_response_retries_on_the_managed_path",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_after_a_refused_answer_record_joins_the_request_before_ingest",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_managed_only_submit_after_a_refused_answer_record_joins_the_request_before_ingest",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_managed_only_submit_after_a_lost_response_joins_the_request_before_ingest",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_submit_after_a_refused_connection_sends_the_pending_request",
+        "test_pending_remote_requests.TestSubmitWithAPendingRequest.test_managed_only_submit_after_a_refused_connection_sends_the_pending_request"
       ]
     },
     {
@@ -8376,7 +8388,8 @@
       "tests": [
         "test_review_session_v4_prompt.StudyBarFormsTests.test_s2_refused_final_with_written_out_entries_is_replaced_and_recorded_after_a_handle",
         "test_review_session_v4_prompt.RolePromptRenderTests.test_s1_study_final_page_and_closing_prompts_hold_the_forms_and_problem_prompts_do_not",
-        "test_review_session_v4_prompt.RolePromptRenderTests.test_s3_study_series_final_holds_the_forms_and_a_v2_series_final_keeps_its_bytes"
+        "test_review_session_v4_prompt.RolePromptRenderTests.test_s3_study_series_final_holds_the_forms_and_a_v2_series_final_keeps_its_bytes",
+        "test_study_series_second_turn.StudySeriesSecondTurnTests.test_study_series_below_v4_floor_reaches_a_recorded_final"
       ]
     },
     {
@@ -8625,6 +8638,83 @@
       "test_kind": "real_shape",
       "tests": [
         "test_call_context_present.CallContextStaleRouteTests.test_planned_replacement_on_a_stale_route_record_with_a_failed_probe_keeps_the_stale_route_handoff"
+      ]
+    },
+    {
+      "id": "study-parts-v3-second-turn-lost-reviewer-binding",
+      "record": "20261121234749-switch-to-the-new-review-forms",
+      "class": "parts review identity delivery",
+      "summary": "A study result started a parts v3 read under a constrained route. The request projected its reviewer ID as a frame unit, so the continuation could not authenticate the first observed request.",
+      "expected": "Each new planned turn keeps the exact binding in its frame, including both serialized copies of the session v4 identity, and stays under its request bound. Stored plans retain their kept members and nested projection. The study result continues to its observed final and records its support. A route that cannot hold the binding and the material floor returns review_route_capacity_below_floor.",
+      "fixed_in": "0.92.1",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_study_series_second_turn.StudySeriesSecondTurnTests.test_study_series_below_v4_floor_reaches_a_recorded_final",
+        "test_review_field_classes.FieldClassTests.test_new_plans_reserve_exact_identity_and_old_bounds_replay",
+        "test_review_field_classes.FieldClassTests.test_stored_parts_frame_keeps_its_members_after_binding_table_changes",
+        "test_review_field_classes.FieldClassTests.test_stored_binding_wrapper_keeps_its_nested_field_projection",
+        "test_review_field_classes.FieldClassTests.test_reference_digests_stay_in_the_frame_without_binding_declarations",
+        "test_study_series_second_turn.StudySeriesSecondTurnTests.test_parts_frames_retain_repair_continuation_and_verification_identities",
+        "test_review_session_v4_pages.SessionPagesTests.test_single_request_v4_packet_prompt_and_plan_bytes_match_base",
+        "test_review_session_v4_record.SessionPlanTests.test_repair_frame_reserves_predecessor_and_separates_event_history",
+        "test_review_session_v4_record.SessionPlanTests.test_admission_charges_both_identity_copies_in_a_loaded_second_request"
+      ]
+    },
+    {
+      "id": "study-parts-serving-route-unclassified-excerpts",
+      "record": "20261121234749-switch-to-the-new-review-forms",
+      "class": "capacity refusal and packet field ownership",
+      "summary": "A study result capacity stop searched verified serving routes. The field classifier raised ValueError while planning a candidate route on a packet carrying reviewer_excerpts.",
+      "expected": "The classifier recognizes the emitted excerpt and source-continuation members. The caller receives review_route_capacity_below_floor and the serving routes. A packet with an unknown field receives review_input_unreadable and the field location.",
+      "fixed_in": "0.92.1",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_study_series_second_turn.StudySeriesSecondTurnTests.test_base_capacity_stop_lists_a_serving_route",
+        "test_review_field_classes.FieldClassTests.test_builder_copy_with_added_field_names_the_unclassified_field",
+        "test_review_field_classes.FieldClassTests.test_source_continuation_builders_declare_every_field",
+        "test_review_field_classes.FieldClassTests.test_repair_builders_declare_raw_and_normalized_history",
+        "test_review_field_classes.FieldClassTests.test_registered_stored_role_members_have_field_classes"
+      ]
+    },
+    {
+      "id": "colab-first-reconciliation-read-refused-after-done",
+      "record": "20261119223643-finishing-writes-give-up-after-eight-seconds",
+      "class": "concurrency",
+      "summary": "After the Colab runner wrote DONE, a busy first reconciliation read ended the launch before it recorded the result.",
+      "expected": "After DONE, the launch gives the first reconciliation read the command's normal store wait. Further polling retries only that read. If the store remains busy, the refusal identifies the original admission and job for reconcile-run.",
+      "fixed_in": "0.92.1",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_store_polling_busy.RemotePollingTests.test_first_reconciliation_read_after_done_retries_a_busy_store",
+        "test_store_polling_busy.RemotePollingTests.test_done_near_deadline_keeps_the_command_store_wait",
+        "test_store_polling_busy.RemotePollingTests.test_busy_reconciliation_read_after_done_names_the_original_job"
+      ]
+    },
+    {
+      "id": "review-call-busy-refusal-omits-reconciliation-identity",
+      "record": "20261119223643-finishing-writes-give-up-after-eight-seconds",
+      "class": "concurrency",
+      "summary": "A busy child-record or capture refusal did not give the operation and invocation ID required to reconcile the owned call.",
+      "expected": "Both busy refusals include operation and invocation_id. A standalone review-run reconciliation reports pending until termination is confirmable, then a fresh poll can record interruption.",
+      "fixed_in": "0.92.1",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_remaining_finishing_writes.OwnedCallTransportTests.test_refused_record_of_the_codex_call_itself_starts_no_program",
+        "test_remaining_finishing_writes.OutputRefusalTests.test_capture_refused_beyond_the_wait_leaves_the_call_to_its_reconciliation",
+        "test_remaining_finishing_writes.OwnedCallReconciliationTests.test_busy_call_reconciliation_replays_pending_then_releases_on_a_fresh_poll"
+      ]
+    },
+    {
+      "id": "phenomenon-render-series-repeated-verification",
+      "record": "20261114165500-math-conjecturer-phenomenon-run-observations",
+      "class": "repeated legacy parts verification during output render",
+      "summary": "A write rendered each legacy parts turn by listing its series twice and parsing the tip twice per list.",
+      "expected": "Each verification lists its series once and parses each listed packet once. Rendered files, marker contents apart from file times, and refusals retain released behavior.",
+      "fixed_in": "0.92.1",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_series_verification_costs.SeriesVerificationCosts.test_render_lists_once_per_parts_verification",
+        "test_series_verification_costs.SeriesListingCosts.test_listing_parses_each_packet_once"
       ]
     }
   ]

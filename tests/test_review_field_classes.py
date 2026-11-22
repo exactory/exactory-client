@@ -4,10 +4,12 @@ import importlib
 import json
 import tempfile
 from pathlib import Path
+from contextlib import ExitStack
 import unittest
 from unittest.mock import patch
 
 from research_harness import review_protocol, review_route_capacity as capacity
+from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from test_review_route_capacity import build_route
 
@@ -163,6 +165,197 @@ class FieldClassTests(unittest.TestCase):
         for packet in (build_scaled_record_units('texts', 128), build_scaled_stage2_native_records('sources', 2)):
             self.fields.classify_packet(self.route, packet['role'], packet)
 
+    def test_source_continuation_builders_declare_every_field(self):
+        from research_harness import (bar_sources, capture_selection, problem_claims, review_context_repair,
+                                      review_prompt_paragraphs)
+        from research_harness.artifacts import ArtifactStore
+        from test_review_prompt_paragraphs import build_packet as build_paragraph_source
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = ArtifactStore(Path(directory))
+            selection = dict(version_id='work', source_id='capture', original_sha256='a' * 64,
+                             text_sha256='b' * 64, protocol=capture_selection.PROTOCOL)
+            for problem in (False, True):
+                records = {capture_selection.SELECTION_KIND: {'capture': selection}}
+                if problem:
+                    records['workspace'] = {'problem': {'area': 'finite', 'field': 'finite'}}
+                predecessor = dict(source_inventory=bar_sources.inventory(records, artifacts), pending_source_requests=[],
+                    bar_ids=[], candidates=[], candidate_set_digest=digest([]),
+                    context_repair=dict(assignment_id='predecessor', slot_id='slot'))
+                for rules in (bar_sources.PROTOCOL, bar_sources.PROTOCOL_V3):
+                    for role in bar_sources.ROLES:
+                        with self.subTest(problem=problem, role=role, rules=rules), ExitStack() as stack:
+                            previous = dict(predecessor)
+                            if problem and role == 'result':
+                                previous.update(build_paragraph_source(accounts=True),
+                                    problem_evidence_digest=problem_claims.compute_problem_evidence_digest(records, artifacts))
+                            if rules == bar_sources.PROTOCOL_V3:
+                                previous.update(source_rules=rules, settled_source_requests=[
+                                    dict(request=dict(id='held'), limitations=['Uncaptured.'])])
+                            for module, name, result in (
+                                    (bar_sources, 'SESSION_PROTOCOL', rules),
+                                    (review_protocol, '_source_parent', (dict(id='prior',
+                                        packet_digest=digest(previous)), {'output': {}})),
+                                    (review_protocol, 'source_delivery_packet', previous),
+                                    (review_protocol, '_find_session_bodies', {}),
+                                    (review_protocol, 'add_direction_evidence', None),
+                                    (review_protocol, 'add_problem_bars', []),
+                                    (review_protocol, 'require_calibrated_bars', None),
+                                    (review_context_repair, 'collect_problem_review_history', [])):
+                                target = patch.object(module, name, result) if name == 'SESSION_PROTOCOL' else (
+                                    patch.object(module, name, return_value=result))
+                                stack.enter_context(target)
+                            packet = review_protocol.build_packet(records, artifacts, None if problem else 'dossier',
+                                                                  role, 'reviewer', prior_assignment_id='prior')
+                            if problem and role == 'result':
+                                self.assertIn('accounts', packet[review_prompt_paragraphs.CONDITIONS])
+                                self.assertEqual(packet['history_delivery'], review_protocol.transport.HISTORY_COMPACT_V2)
+                            _, table = self.fields._select_table(role, packet)
+                            self.assertEqual(packet.keys() - table.keys(), set())
+                            self.fields.classify_packet(self.route, role, packet)
+
+    def test_repair_builders_declare_raw_and_normalized_history(self):
+        from research_harness import bar_sources, review_parts_repair, review_supplied_evidence
+        from research_harness.artifacts import ArtifactStore
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = ArtifactStore(Path(directory))
+            for problem in (False, True):
+                for role in (*bar_sources.ROLES, 'adjudicator'):
+                    for rules in (bar_sources.PROTOCOL, bar_sources.PROTOCOL_V3):
+                        if role == 'adjudicator' and rules == bar_sources.PROTOCOL_V3:
+                            continue
+                        with self.subTest(problem=problem, role=role, rules=rules), ExitStack() as stack:
+                            form = (review_protocol._PROBLEM_PROTOCOL if problem else
+                                    review_supplied_evidence.PROTOCOL if role == 'adjudicator' else bar_sources.PROTOCOL)
+                            records = {'workspace': {'problem': {'area': 'A', 'field': 'F'}}} if problem else {}
+                            previous = dict(protocol=form, role=role, evidence=[])
+                            if rules == bar_sources.PROTOCOL_V3:
+                                previous['source_rules'] = rules
+                            repair = dict(packet=previous, scientific_history=[
+                                dict(assignment_id='prior', packet=previous, observed_output={})],
+                                predecessor=dict(id='prior'), slot_id='slot', event_ids=[], probe_id='probe',
+                                cause='a context event', historical_reviews=[])
+                            value = dict(role=role, reviewer_id='new', dossier_id=None if problem else 'dossier')
+                            if problem:
+                                value['subject'] = dict(kind='problem', statement_id=None)
+                            stack.enter_context(patch.object(bar_sources, 'describe_settlements', return_value=[
+                                dict(request=dict(id='held'), limitations=['Uncaptured.'])]))
+                            for name, result in (('add_problem_bars', []), ('add_problem_evidence', None),
+                                    ('add_problem_objections', None), ('compute_problem_review_currency', digest([])),
+                                    ('collect_historical_bar_objections', []), ('add_direction_evidence', None),
+                                    ('_find_session_bodies', {})):
+                                stack.enter_context(patch.object(review_protocol, name, return_value=result))
+                            packet = review_protocol._repair_packet(records, artifacts, value, repair)
+                            self.assertEqual(packet['protocol'], form)
+                            self.assertIn('previously_supplied_evidence', packet)
+                            self.fields.classify_packet(self.route, role, packet)
+                            normalized = review_parts_repair.prepare_history(records, artifacts, packet, history=[])
+                            self.fields.classify_packet(self.route, role, normalized)
+
+    def test_registered_stored_role_members_have_field_classes(self):
+        from ci.capacity_packet_inventory import iter_packet_schemas, read_packet_registry
+        for role, form, schema in iter_packet_schemas(read_packet_registry()):
+            if form in self.fields.FIELD_CLASSES.get(role, {}):
+                with self.subTest(role=role, form=form):
+                    self.assertEqual(schema.get('members', {}).keys() - self.fields.FIELD_CLASSES[role][form].keys(),
+                                     set())
+
+    def test_new_plans_reserve_exact_identity_and_old_bounds_replay(self):
+        packet = dict(protocol='exactory-problem-review-v2', role='result', dossier_id=None,
+                      subject=dict(kind='problem', statement_id='s'), reviewer_id='r' * 2000)
+        frames = self.fields.describe_role_frame(self.route, 'result', packet, ('request',))
+        profile = capacity.read_output_profile({}, self.route)
+        plan = capacity.plan_chain_capacity(self.route, profile, frames=frames, inventory=[], targets=[])
+        bounds = plan['frame']['request']['bounded_fields']
+        projected = self.fields.classify_packet(self.route, 'result', packet, bounded_fields=bounds)
+        self.assertEqual(projected['frame'], packet)
+        self.assertEqual(projected['units'], [])
+        tokens = capacity.describe_route_capacity(self.route, profile)['input_tokens']['value']
+        minimum = (sum(frames['request'].values()) + capacity.describe_material_levels('request')[-1]
+                   + capacity.NOTES_MAXIMUM_CHARACTERS + capacity.measure_capacity_value(self.route, []))
+        from research_harness.review_refusal_notice import BOUNDED_NOTICE_CHARACTERS
+        minimum += BOUNDED_NOTICE_CHARACTERS
+        measure = dict(rule='calibrated', characters_per_token=(minimum - 0.5) / tokens)
+        with self.assertRaises(ResearchError) as raised:
+            capacity.plan_chain_capacity(self.route, profile, frames=frames, inventory=[], targets=[], measure=measure)
+        self.assertEqual(raised.exception.code, 'review_route_capacity_below_floor')
+        self.assertEqual(raised.exception.details['minimum'], minimum)
+        old_bounds = {'reviewer_id': 200, '$unit:reviewer_id': 0}
+        old = self.fields.classify_packet(self.route, 'result', packet, bounded_fields=old_bounds)
+        self.assertEqual(old['frame']['reviewer_id']['sha256'], digest(packet['reviewer_id']))
+        self.assertEqual(old['units'][0]['sha256'], digest(packet['reviewer_id']))
+        self.assertEqual(self.fields.classify_packet(
+            self.route, 'result', packet, bounded_fields=dict(old_bounds, **{'$binding': 0})), old)
+
+    def test_stored_parts_frame_keeps_its_members_after_binding_table_changes(self):
+        from research_harness import bar_sources, review_parts_v3 as parts
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.problem_openness import serialize_record
+
+        packet = dict(protocol=bar_sources.PROTOCOL, role='result', dossier_id='dossier', reviewer_id='r' * 520,
+                      assessor=dict(id='r' * 520, kind='agent'), dossier={}, evidence=[],
+                      readiness=dict(kind='readiness', inputs={}),
+                      support_contract=dict(candidate_digest='c' * 64, scope_note='s' * 40,
+                                            evidence=[dict(reference='r' * 4100)]))
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = ArtifactStore(Path(directory))
+            admission = parts.admit_packet({}, artifacts, self.route, packet, 'study_readiness')
+            self.assertEqual(admission['state'], 'accept', admission.get('details'))
+            plan, inventory = admission['plan'], admission['inventory']
+            stored = dict(capacity_plan=dict(protocol=capacity.CAPACITY_PLAN_PROTOCOL, digest=digest(plan),
+                         artifact=artifacts.put(serialize_record(plan), 'application/json')))
+            before = parts._build_frame(self.route, inventory, plan, 'final')
+            self.assertEqual(before['support_contract']['candidate_digest'], 'c' * 64)
+            original_bounds = plan['frame']['final']['bounded_fields']
+            original_units = self.fields.list_frame_units(self.route, 'result', inventory['frame_source'], original_bounds)
+            self.assertIn('$binding-paths:support_contract', original_bounds)
+            for added in ('scope_note', 'evidence'):
+                table = copy.deepcopy(self.fields.ROLE_BINDING_PATHS)
+                table['result']['support_contract'] |= {added}
+                with self.subTest(added=added), patch.object(self.fields, 'ROLE_BINDING_PATHS', table):
+                    replay = capacity.read_chain_capacity_plan(artifacts, stored)
+                    after = parts._build_frame(self.route, inventory, replay, 'final')
+                    self.assertEqual(serialize_record(after), serialize_record(before))
+                    self.assertEqual(self.fields.list_frame_units(self.route, 'result', inventory['frame_source'],
+                                      replay['frame']['final']['bounded_fields']), original_units)
+
+    def test_stored_binding_wrapper_keeps_its_nested_field_projection(self):
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.problem_openness import serialize_record
+
+        role = 'native_math'
+        form = review_protocol.PROTOCOL
+        packet = dict(protocol=form, role=role, reviewer_id='reviewer',
+                      native=dict(kind='result', subject='s' * 17000, scientific_context=dict(
+                                  minimum_gaps=['gap'], openness_minimum=dict(scope='finite'))))
+        frames = self.fields.describe_role_frame(self.route, role, packet, ('request',))
+        self.assertIn('$binding-paths:native', frames['request'])
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = ArtifactStore(Path(directory))
+            declaration = dict(kind='request', frames=frames, inventory=[], targets=[])
+            stored = capacity.prepare_assignment_capacity({}, artifacts, self.route, declaration)
+            before = self.fields.classify_packet(self.route, role, packet, bounded_fields=frames['request'])
+            self.assertEqual(before['frame']['native']['scientific_context']['minimum_gaps']['entries'], 1)
+            with patch.dict(self.fields.FIELD_CLASSES[role][form], {
+                    'native': dict(self.fields.FIELD_CLASSES[role][form]['native'], characters=1),
+                    'native.scientific_context.minimum_gaps': {'class': 'fixed', 'characters': 0}}):
+                replay = capacity.read_chain_capacity_plan(artifacts, stored)
+                after = self.fields.classify_packet(self.route, role, packet,
+                    bounded_fields=replay['frame']['request']['bounded_fields'])
+            self.assertEqual(serialize_record(after['frame']), serialize_record(before['frame']))
+            self.assertEqual(after['units'], before['units'])
+
+    def test_reference_digests_stay_in_the_frame_without_binding_declarations(self):
+        digests = ('candidate_set_digest', 'problem_evidence_digest', 'problem_review_currency')
+        for role, forms in self.fields.FIELD_CLASSES.items():
+            self.assertFalse(set(digests) & self.fields._find_binding_paths(role).keys())
+            for form, table in forms.items():
+                packet = {name: 'a' * 64 for name in digests if name in table}
+                if packet:
+                    packet['protocol'] = form
+                    classified = self.fields.classify_packet(self.route, role, packet)
+                    self.assertEqual(classified['frame'], packet)
+                    self.assertEqual(classified['units'], [])
+
     def test_all_real_logical_neutral_native_staged_and_parts_forms_keep_base_bytes(self):
         expected = json.loads((Path(__file__).parent / 'fixtures/review_field_class_packets.json').read_text())
         reached = set()
@@ -180,15 +373,19 @@ class FieldClassTests(unittest.TestCase):
     def test_unknown_roles_and_packet_forms_name_the_missing_declaration(self):
         for role, packet, missing in (('new_role', {}, 'new_role'),
                                       ('bar', {'protocol': 'new_protocol'}, 'new_protocol')):
-            with self.assertRaisesRegex(ValueError, missing):
+            with self.assertRaises(ResearchError) as raised:
                 self.fields.classify_packet(self.route, role, packet)
+            self.assertEqual(raised.exception.code, 'review_input_unreadable')
+            self.assertIn(missing, raised.exception.details.values())
 
     def test_builder_copy_with_added_field_names_the_unclassified_field(self):
         original = build_problem_packets()['bar']
         def build_changed():
             return dict(copy.deepcopy(original), undeclared_field='new')
-        with self.assertRaisesRegex(ValueError, r'bar.*undeclared_field'):
+        with self.assertRaises(ResearchError) as raised:
             self.fields.classify_packet(self.route, 'bar', build_changed())
+        self.assertEqual(raised.exception.code, 'review_input_unreadable')
+        self.assertEqual(raised.exception.details['field'], 'undeclared_field')
 
     def test_fixed_value_at_bound_stays_and_one_more_becomes_a_unit(self):
         rule = self.fields.FIELD_CLASSES['bar']['exactory-problem-review-v2']['field']
@@ -316,7 +513,7 @@ class FieldClassTests(unittest.TestCase):
 
     def test_moved_field_declarations_reserve_the_complete_named_descriptors(self):
         packet = self.build_result_frame_packet()
-        moved = ('readiness', 'role')
+        moved = ('readiness', 'support_contract')
         frames = self.fields.describe_role_frame(self.route, 'result', packet, ('request',), unit_fields=moved)
         bounded = json.loads(json.dumps(frames['request'], sort_keys=True))
         classified = self.fields.classify_packet(self.route, 'result', packet, bounded_fields=bounded)
@@ -357,6 +554,9 @@ class FieldClassTests(unittest.TestCase):
             classified = self.fields.classify_packet(self.route, 'result', packet, bounded_fields=grant['bounded_fields'])
             self.assertLessEqual(capacity.measure_capacity_value(self.route, classified['frame']), grant['bound'])
             for name in initial['frame'][kind]['unit_fields']:
+                if name in ('protocol', 'reviewer_id', 'role'):
+                    self.assertEqual(classified['frame'][name], packet[name])
+                    continue
                 descriptor = classified['frame'][name]
                 self.assertEqual(set(descriptor), {'handle', 'sha256', 'characters'})
                 unit = by_handle[descriptor['handle']]

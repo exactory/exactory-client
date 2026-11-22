@@ -6,7 +6,9 @@ from unittest.mock import patch
 import test_research_problem_delivery as delivery_fixtures
 import test_research_problem_objections as objection_fixtures
 
-from research_harness import bar_sources, research_decisions as decisions, review_protocol as protocol
+from finishing_write_fixtures import WaitlessTime
+from research_harness import bar_sources, finishing, research_decisions as decisions, review_protocol as protocol
+from research_harness import review_refusal
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 
@@ -1734,7 +1736,28 @@ class ReviewOutputRefusalTests(delivery_fixtures.ProblemDeliveryCase):
                     objection_id="unsupported-implication")
         output = {"objection_id": "unsupported-implication", "disposition": "not_upheld", "reason": "Exact evidence resolves it.",
             "evidence": [self.artifacts.put(b"Undelivered adjudicator content.", "text/plain")], "correction_admissible": None}
-        self.assertEqual(self.refuse(output, "focused", command="review-adjudication").code, "review_evidence_undelivered")
+        self.invoke_output(output, "focused")
+        commit = review_refusal.prepared_task_mutation
+        busy = [ResearchError("store_busy", "Synthetic writer during the refusal write")]
+
+        def commit_refusal(*args, **kwargs):
+            if busy:
+                raise busy.pop()
+            return commit(*args, **kwargs)
+
+        request = "refused-adjudication"
+        with patch.object(review_refusal, "prepared_task_mutation", side_effect=commit_refusal), \
+                patch.object(finishing, "time", WaitlessTime()), self.assertRaises(ResearchError) as caught:
+            self.record_cli(output, "focused", "review-adjudication", request=request)
+        self.assertEqual(busy, [])
+        self.assertEqual(caught.exception.code, "review_evidence_undelivered")
+        records = self.records()
+        refusal = records["review_output_refusal"]["refused-1"]
+        self.assertEqual(refusal["request_digest"], records["review_attempt"]["refused-1"]["request_digest"])
+        self.assertEqual(refusal["output_digest"], digest(output))
+        committed = self.store.committed_request(request + ":refusal")
+        self.assertEqual((committed["operation"], committed["response"]["result"]), ("review.refusal", refusal))
+        self.assertFalse(records.get("review_adjudication"))
         self.assert_refused(["refused-1"], "focused")
         output["evidence"] = [self.supporting]
         self.invoke_output(output, "focused", "valid-2")

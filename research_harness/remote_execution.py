@@ -38,6 +38,9 @@ REMOTE_RELEASE_STORE_BUSY_MSG = (
     'reconcile-run for the admission ID in details.admission_id. Each of them records the release and signals the '
     'runner. Until the runner finishes the program, each of them is then refused with execution_recovery_required. '
     'After that, the same command records the run.')
+REMOTE_RESULT_READ_STORE_BUSY_MSG = (
+    'The Colab runner reported completion, but the research store stayed busy before the result could be collected. '
+    'Run exactory-research reconcile-run for the admission ID in details.admission_id to collect the same job.')
 
 
 def transport_root():
@@ -183,14 +186,33 @@ def launch_colab(store, claim):
     from .review_worker import read_polling_store
     root, job = _publish_job(store, claim)
     deadline = time.monotonic() + claim["config"]["timeout_seconds"] + _interval("EXACTORY_LAB_COLAB_WAIT", 1800)
+    done = root / "results" / job["job_id"] / "DONE"
     while True:
         released = _release(store, claim, root, job, read_store=read_polling_store)
-        if released is not _POLLING_READ_BUSY and (root / "results" / job["job_id"] / "DONE").exists():
-            return reconcile_execution(store, {"admission_id": claim["admission_id"]}, expected_revision=None,
-                request_id="remote-observe-" + digest(claim), owned=True)
+        if released is not _POLLING_READ_BUSY and done.exists():
+            break
         if time.monotonic() >= deadline:
             raise ResearchError("execution_recovery_required", "The Colab runner has no confirmed terminal outcome. Check RUNNER_ALIVE heartbeat and reconcile the same admitted identity; its reservation remains charged.", {"job_id": job["job_id"]})
         time.sleep(max(0.01, _interval("EXACTORY_LAB_COLAB_POLL", 10)))
+
+    # A completed job gets the command's ordinary store wait, even if DONE arrived near the launch deadline.
+    try:
+        snapshot = store.snapshot()
+    except ResearchError as error:
+        if error.code != "store_busy":
+            raise
+        snapshot = None
+        while snapshot is None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise ResearchError("store_busy", REMOTE_RESULT_READ_STORE_BUSY_MSG, {
+                    "admission_id": claim["admission_id"], "job_id": job["job_id"], "cause": error.as_dict(),
+                }) from error
+            time.sleep(min(remaining, max(0.01, _interval("EXACTORY_LAB_COLAB_POLL", 10))))
+            if time.monotonic() < deadline:
+                snapshot = read_polling_store(store.snapshot)
+    return reconcile_execution(store, {"admission_id": claim["admission_id"]}, expected_revision=None,
+        request_id="remote-observe-" + digest(claim), owned=True, snapshot=snapshot)
 
 
 def collect_colab(store, claim):

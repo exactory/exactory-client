@@ -18,6 +18,7 @@ import urllib.parse
 import urllib.request
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from integration_fixtures import build_unconfirmed_write_msg
 from research_harness.same_origin import RefusedRedirectError
@@ -94,8 +95,8 @@ def _invoke_cli(test_case: unittest.TestCase, argv: list[str],
     args = _transport._build_parser().parse_args(argv)
     def invoke():
         # Each invocation stands for a process, whose configuration is checked once at boot.
-        _transport._API_BASE_URL = _transport._read_checked_api_base_url()
-        args.handler(args)
+        with patch.object(_transport, "_API_BASE_URL", _transport._read_checked_api_base_url(), create=True):
+            args.handler(args)
     stdout_sink, stderr_sink = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(stdout_sink), contextlib.redirect_stderr(stderr_sink):
         if expected_exit_code is None:
@@ -196,8 +197,6 @@ class _OpenUrlTransportTestCase(unittest.TestCase):
         self.addCleanup(_restore_env)
         os.environ["EXACTORY_API_KEY"] = "test-key"
         os.environ["EXACTORY_API_URL"] = "https://api.test"
-        _transport._API_BASE_URL = _transport._read_checked_api_base_url()
-
         self.sent_requests: list[urllib.request.Request] = []
         self.response_status = 200
         self.response_body = b"{}"
@@ -219,6 +218,17 @@ class _OpenUrlTransportTestCase(unittest.TestCase):
 
 
 class TestPaperSubcommand(_TransportTestCase):
+    def test_cli_restores_the_api_url_on_success_and_on_exit(self) -> None:
+        sentinel = "https://before-test.invalid"
+        with self.subTest(initial_url=sentinel), patch.object(_transport, "_API_BASE_URL", sentinel, create=True):
+            self._run(["paper", "2301.00001"])
+            self.assertEqual(_transport._API_BASE_URL, sentinel)
+        with self.subTest(initial_url=None), patch.dict(_transport.__dict__, {"_API_BASE_URL": sentinel}):
+            del _transport._API_BASE_URL
+            with patch.object(_transport, "_send_request", side_effect=SystemExit(1)):
+                self._run(["paper", "2301.00001"], expected_exit_code=1)
+            self.assertFalse(hasattr(_transport, "_API_BASE_URL"))
+
     def test_a_bare_arxiv_id_maps_to_its_datacite_doi(self) -> None:
         self._run(["paper", "2301.00001"])
         self.assertEqual(self.requested_paths, ["/api/v1/papers/10.48550/arxiv.2301.00001"])
@@ -519,14 +529,14 @@ class TestVerify(_TransportTestCase):
         self.assertEqual(json.loads(stdout_text)["id"], "22222222-2222-4222-8222-222222222222")
         self.assertEqual(stderr_text, "")
 
-    def _bind_the_verdict_in_a_verification_workspace(self) -> None:
+    def _bind_the_verdict_in_a_verification_workspace(self, **verdict_overrides: object) -> None:
         """Pin the task and bind an evidence-linked assessment of verdict.json, as the managed path requires."""
         from integration_fixtures import prepare_verification
         from reviewer_fixtures import verdict_assignment
         from research_harness.verification import bind_verdict, record_task
 
         case = prepare_verification(self.scratch_dir)
-        _write_verdict_file(self.scratch_dir / "verdict.json")
+        _write_verdict_file(self.scratch_dir / "verdict.json", **verdict_overrides)
         pinned = case.mutate(record_task, {"task": self._task()})["result"]
         payload = {"id": "transport-verdict", "task_digest": pinned["digest"],
             "body": case.artifacts.put((self.scratch_dir / "verdict.json").read_bytes(), "application/json"),
@@ -1380,8 +1390,9 @@ class TestLoginSubcommand(_OpenUrlTransportTestCase):
 
     def test_an_allowed_missing_response_is_closed(self) -> None:
         error = self._fail_next_request(404, {"error": "not_found"})
-        self.assertEqual(_transport._send_request(
-            "GET", "/missing", authenticated=False, allow_missing=True), ({}, 404))
+        with patch.object(_transport, "_API_BASE_URL", _transport._read_checked_api_base_url(), create=True):
+            self.assertEqual(_transport._send_request(
+                "GET", "/missing", authenticated=False, allow_missing=True), ({}, 404))
         self.assertTrue(error.closed)
 
     def test_a_missing_key_elsewhere_names_the_login_command(self) -> None:

@@ -1834,7 +1834,7 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
     under their own protocol version.
     """
     from .review_refusal_notice import BOUNDED_NOTICE_CHARACTERS
-    from .review_field_classes import FRAME_DESCRIPTOR_FIELD, FRAME_UNIT_FIELD_PREFIX
+    from .review_field_classes import FRAME_BINDING_PATH_PREFIX, FRAME_DESCRIPTOR_FIELD, FRAME_UNIT_FIELD_PREFIX
     from .errors import ResearchError
     limits = describe_route_capacity(route, profile, records=records, artifacts=artifacts)
     if measure is not None:
@@ -1884,8 +1884,9 @@ def plan_chain_capacity(route, profile, *, frames, inventory, targets, carried_b
             bound = min(bound, lowered)
         minimums = {name[len(FRAME_UNIT_FIELD_PREFIX):]: fields[name[len(FRAME_UNIT_FIELD_PREFIX):]]
                     for name in fields if name.startswith(FRAME_UNIT_FIELD_PREFIX)}
-        if FRAME_DESCRIPTOR_FIELD in fields:
-            minimums[FRAME_DESCRIPTOR_FIELD] = fields[FRAME_DESCRIPTOR_FIELD]
+        minimums.update((name, size) for name, size in fields.items()
+                        if name == FRAME_DESCRIPTOR_FIELD
+                        or name.startswith(FRAME_BINDING_PATH_PREFIX))
         descriptor_minimum = sum(minimums.values())
         if bound < descriptor_minimum:
             raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,

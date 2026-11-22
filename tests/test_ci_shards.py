@@ -287,6 +287,14 @@ class CIShardTests(unittest.TestCase):
                 self.assertTrue((ROOT / "tests" / (module + ".py")).is_file())
         self.assertLessEqual(len(api.SHARD_GROUPS), api.SHARD_COUNT)
 
+    def test_published_submission_template_is_built_in_one_shard(self):
+        api = self.api()
+        prefix = "test_pending_remote_requests.TestSubmitWithAPendingRequest."
+        ids = [prefix + "test_managed_only_submit_after_a_refused_connection_sends_the_pending_request",
+               prefix + "test_managed_only_submit_while_the_service_shows_no_task_sends_the_request"]
+        groups = [api.select_shard_indices(ids, shard, api.SHARD_COUNT) for shard in range(api.SHARD_COUNT)]
+        self.assertEqual([group for group in groups if group], [[0, 1]])
+
     def test_the_shard_count_is_the_count_of_the_ci_workflow(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         count = self.api().SHARD_COUNT
@@ -386,6 +394,13 @@ class CIShardTests(unittest.TestCase):
             "        except BaseException:\n            pass\n"
             "    def test_c(self): self.assertIsNotNone(shutil.which('sh'))\n"
         )
+
+    def test_run_modules_help_describes_the_reviewer_program_guard(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run([sys.executable, str(ROOT / "ci/unittest_shards.py"), "run-modules", "--help"],
+                                    cwd=directory, capture_output=True, text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("reviewer program guard", " ".join(result.stdout.split()))
 
     def test_cli_run_gives_each_test_the_reviewer_program_guard(self):
         with tempfile.TemporaryDirectory() as directory:

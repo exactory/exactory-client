@@ -116,6 +116,8 @@ class CallAdmissionBoundaryTests(TaskExecutionFixture):
             # The owner of the call records the process group of its started guardian, process 20.
             owner = Mock(spec=worker._CallAuthority) if call else SimpleNamespace()
             owner.root, owner.reservation_id, owner.token = store.root, reservation_id, token
+            if call:
+                owner.operation, owner.invocation_id = 'review.invoke', invocation['id']
             worker._register_child(owner, SimpleNamespace(pid=20))
         with ExitStack() as stack:
             stack.enter_context(patch.object(execution, 'runtime_provenance', return_value=dict(version='0.85.3')))

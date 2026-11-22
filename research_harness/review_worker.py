@@ -44,9 +44,12 @@ from .workspace import checked_parent
 # writes, and the records with which the worker takes and starts its reservation and captures its call.
 CALL_CHILD_STORE_BUSY_MSG = (
     'The research store stayed busy, and a transport process of this reviewer call was not recorded. That process '
-    'started no program, and no request was sent to the reviewer. The call has no outcome yet. Run review-series on '
-    'its assignment, or review-run with action reconcile, the operation of the call and the id of the call as '
-    'invocation_id. Each of them records the call as interrupted. The next run then starts the reviewer.')
+    'started no program, and no request was sent to the reviewer. Run review-run with a payload containing '
+    'action "reconcile" and the operation and invocation_id from details. Reconciliation can record the call as '
+    'interrupted once termination is confirmed. If result.released is false, the call is still pending. Wait until '
+    'termination can be confirmed, then poll again with a fresh request ID and the current expected revision. '
+    'If you lost the response to a poll, retry it with the same request ID. If the call has a review chain '
+    'assignment, review-series on that assignment can also reconcile it.')
 WORKER_CHILD_STORE_BUSY_MSG = (
     'The research store stayed busy, and a transport process of the reviewer call of this review task was not '
     'recorded. That process started no program, and no request was sent to the reviewer. The worker captures this '
@@ -204,8 +207,9 @@ def read_call_termination(store, lifecycle_id):
 class _CallAuthority:
     """Live inline ownership for ordinary capture and guarded termination."""
 
-    def __init__(self, store, operation, lifecycle_id, descriptor, ownership):
+    def __init__(self, store, operation, invocation_id, lifecycle_id, descriptor, ownership):
         self.root, self.operation, self.reservation_id = store.root, operation, lifecycle_id
+        self.invocation_id = invocation_id
         self.descriptor, self.token, self.identity = descriptor, uuid.uuid4().hex, _identity()
         self._ownership = ownership
 
@@ -229,7 +233,7 @@ def own_call(store, operation, invocation_id):
     with _owner(store.root, lifecycle_id):
         with ExitStack() as ownership:
             descriptor = ownership.enter_context(_owner(store.root, lifecycle_id, worker=True))
-            yield _CallAuthority(store, operation, lifecycle_id, descriptor, ownership)
+            yield _CallAuthority(store, operation, invocation_id, lifecycle_id, descriptor, ownership)
 
 
 
@@ -397,10 +401,13 @@ def _register_child(authority, process):
         check_launch(records, "review.worker_child", reservation, token=token, read_identity=_identity)
         return _transition(tx, reservation, revision, children=reservation["children"] + [identity])
     # Opening the store is part of each attempt, so a store that is busy at that moment is waited for as well.
+    kept = {"reservation_id": reservation_id}
+    if is_call:
+        kept.update(operation=authority.operation, invocation_id=authority.invocation_id)
     retry_finishing_write(lambda: _mutate_current(Store(authority.root),
         "review.call_child" if is_call else "review.worker_child", {"reservation_id": reservation_id, "child": identity},
         apply, request_id=("review-call-child:" if is_call else "review-worker-child:") + digest([reservation_id, identity])),
-        CALL_CHILD_STORE_BUSY_MSG if is_call else WORKER_CHILD_STORE_BUSY_MSG, kept={"reservation_id": reservation_id},
+        CALL_CHILD_STORE_BUSY_MSG if is_call else WORKER_CHILD_STORE_BUSY_MSG, kept=kept,
         codes=LOCK_RETRY_CODES)
     return identity
 
