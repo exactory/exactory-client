@@ -4535,8 +4535,126 @@ def has_verified_history(state):
         for item in state['obligations']))
 
 
+# Working texts of rule PC5 for the writer's pass. One text serves the plan and the refusal of one code.
+CONTEXT_UNVERIFIED_MSG = (
+    'The review records give no verified context for a turn of this review. The latest probe of the route record '
+    'of that turn did not verify the route. The harness starts no reviewer call of this review while this state '
+    'lasts. details.turn names the turn. Its member route gives the route record and the state of the record. Its '
+    'member count gives the number of turns of this review in this state. The plan names the step: under '
+    'details.step in a plan, and under details.next in a refusal. Take that step. Then run review-series on this '
+    'review again. When the route record takes a probe, the step probes it. A completed probe ends the state, and '
+    'the review continues from its last turn. A route record that pins another reviewer runtime than the installed '
+    'one takes no probe. For such a record the step retires it. After the retirement, the state of the record is '
+    'the state that its latest probe with an answer gives. When that state does not verify the route either, no '
+    'probe ends the state, and the step of the role starts the review again.')
+CONTEXT_CONTAMINATED_MSG = (
+    'The review records give no verified context for a turn of this review. A contamination event names that '
+    'turn, or the latest probe of its route record found a control of an excluded source. The harness starts no '
+    'reviewer call of this review. details.turn names the turn. Its member events lists the contamination events '
+    'that name it. Its member route gives the route record and the state of the record. Its member count gives the '
+    'number of turns of this review without a verified context. When events holds an event, no probe ends the '
+    'state, and this review gives no result that counts. The plan names the step: under details.step in a plan, '
+    'and under details.next in a refusal. Take that step. For an openness chain the step is a new packet. A new '
+    'chain under the same reviewer_id can carry the turns of this chain before the named turn. When events is '
+    'empty, a completed probe of that route record also ends the state.')
+
+
+def list_review_turns(records, assignment):
+    """The turns on which the result of a review rests, the assignment among them (rule PC2).
+
+    For a slot of bar, slate or result they are the turns whose reviewer context reaches the assignment since the
+    latest context repair, which decide whether its review counts (context_repair.historical_reviews), and since the
+    latest refresh of a chain of the session rules v4: a refresh is a new chain, and its calls read its own turns.
+    For every other review they are the turns that its request continues, by history_assignment_id or
+    context.prior_assignment_id: the links that the state of an assignment, the verification of a reading chain and
+    the verification of a parts series read.
+
+    A link that the reader of the exposure lineage refuses, such as the empty history id of a legacy record in a
+    store without a post, is read as the planner reads it there: the line of prior turns that the store holds."""
+    if assignment['role'] in context_repair.ROLES:
+        try:
+            turns = context_repair.list_context_turns(records, assignment)
+        except ResearchError as error:
+            if error.code != 'invalid_review_context':
+                raise
+        else:
+            refresh = max((index for index, turn in enumerate(turns)
+                           if turn.get('context', {}).get('session_refresh') is not None), default=0)
+            return turns[refresh:]
+    turns, seen = [assignment], {assignment['id']}
+    while True:
+        parent = turns[-1].get('history_assignment_id') or turns[-1].get('context', {}).get('prior_assignment_id')
+        row = records.get('review_assignment', {}).get(parent)
+        if row is None or parent in seen:
+            return turns[::-1]
+        seen.add(parent)
+        turns.append(row)
+
+
+def find_unverified_context(records, artifacts, assignment):
+    """Read the context of a review from the review records of the present (rule PC1).
+
+    For the assignment and for each earlier turn of its review: the state of the route record of the turn, as its
+    latest probe gives it, and the contamination events that name the turn. Return None when every turn has a
+    verified context. Else return the turn that decides the step, {assignment_id, events, route: {id,
+    context_status}, count}: the first turn that a contamination event names, or else the first turn whose route
+    record is not verified. count is the number of turns without a verified context. The function authenticates no
+    attempt and rebuilds no packet."""
+    named = {}
+    for key, event in read_filtered_records(records, 'review_context_event', kind='contamination').items():
+        if event['kind'] == 'contamination':
+            named.setdefault(event['assignment_id'], []).append(key)
+    lost = []
+    for turn in list_review_turns(records, assignment):
+        route = route_state(records, artifacts, turn['route_id'])
+        events = sorted(named.get(turn['id'], []))
+        if events or route['context_status'] != 'verified_for_route':
+            lost.append(dict(assignment_id=turn['id'], events=events,
+                             route=dict(id=turn['route_id'], context_status=route['context_status'])))
+    if not lost:
+        return None
+    return dict(next((row for row in lost if row['events']), lost[0]), count=len(lost))
+
+
+def find_blocking_context(records, artifacts, assignment):
+    """The turn of find_unverified_context that stops a call and a plan of this assignment (rules PC3, PC4 and PC6),
+    or None. While the route record of the assignment differs from the one that the assignment recorded, or is stale
+    or retired, and no contamination names a turn, the rules of that route record decide the refusal and the plan, as
+    before: a changed record takes no call (review_route_changed), a stale record takes no probe, and a retired one
+    takes no run."""
+    lost = find_unverified_context(records, artifacts, assignment)
+    if lost is None or is_contaminated_context(lost):
+        return lost
+    if digest(records.get('review_route', {}).get(assignment['route_id'])) != assignment['route_digest']:
+        return None
+    from .review_route_plan import read_route_standing
+    standing = read_route_standing(records, artifacts, assignment['route_id'])
+    return None if standing['stale'] or standing['retired'] else lost
+
+
+def is_contaminated_context(lost):
+    """Whether a lost context of find_unverified_context gives the code review_context_contaminated: an event names
+    the turn, or the latest probe of its route record found a control of an excluded source."""
+    return bool(lost['events']) or lost['route']['context_status'] == 'contaminated'
+
+
+def require_verified_context(records, artifacts, assignment):
+    """Refuse a new call of a review, or its next assignment, while the review records of the present give no
+    verified context for one of its turns (rules PC3, PC5 and PC7). The details hold the plan of the head under
+    next."""
+    lost = find_blocking_context(records, artifacts, assignment)
+    if lost is None:
+        return
+    from .review_continuation import plan_next
+    details = dict(assignment_id=assignment['id'], turn=lost, next=plan_next(records, artifacts, assignment['id']))
+    if is_contaminated_context(lost):
+        raise ResearchError('review_context_contaminated', CONTEXT_CONTAMINATED_MSG, details)
+    raise ResearchError('review_context_unverified', CONTEXT_UNVERIFIED_MSG, details)
+
+
 def require_verified_assignment(records, artifacts, assignment):
-    """Admit a new call only from the context frozen by a verified route."""
+    """Admit a new call only from a verified context: the context that the assignment froze when it was recorded,
+    and the context that the review records of the present give for the turns of its review."""
     if assignment['context_state']['context_status'] != 'verified_for_route':
         from .review_continuation import plan_next
         raise ResearchError('review_context_unverified',
@@ -4547,6 +4665,7 @@ def require_verified_assignment(records, artifacts, assignment):
             'review, a new packet. An assignment that already ran stops for a decision about its route.',
             dict(assignment_id=assignment['id'], route_id=assignment['route_id'],
                  next=plan_next(records, artifacts, assignment['id'])))
+    require_verified_context(records, artifacts, assignment)
 
 
 # Required, then optional members of the payload of an ordinary reviewer call, staged or not. The start checks
