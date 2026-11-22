@@ -5187,56 +5187,202 @@
         "tests": [
           "test_property_drivers_b.V7PagesPropertyDrivers.test_v7_pages_k6_three_allowances"
         ]
+      },
+      {
+        "family": "session-v4",
+        "subject": "*",
+        "property": "over_bound",
+        "tests": [
+          "test_property_drivers_a_session.SessionProperties.test_over_bound_final_is_recorded_and_authenticates"
+        ]
+      },
+      {
+        "family": "session-v4",
+        "subject": "*",
+        "property": "failed_attempts",
+        "tests": [
+          "test_property_drivers_a_session.SessionProperties.test_failed_attempts_reach_the_position_stop"
+        ]
+      },
+      {
+        "family": "session-v4",
+        "subject": "*",
+        "property": "q18_answer_bound",
+        "tests": [
+          "test_property_drivers_a_session.SessionProperties.test_q18_every_answer_is_at_its_bound"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "*",
+        "property": "over_bound",
+        "tests": [
+          "test_property_drivers_a_parts.PartsProperties.test_over_bound_final_is_recorded_and_authenticates"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "*",
+        "property": "failed_attempts",
+        "tests": [
+          "test_property_drivers_a_parts.PartsProperties.test_failed_attempts_reach_the_position_stop"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_adjudicator",
+        "property": "d31_group_credit",
+        "tests": [
+          "test_property_drivers_a_parts_roles.AdjudicationProperties.test_problem_adjudicator"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_adjudicator",
+        "property": "d31_card_refusal",
+        "tests": [
+          "test_property_drivers_a_parts_roles.AdjudicationProperties.test_problem_adjudicator"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_adjudicator",
+        "property": "d31_uncarded_citation",
+        "tests": [
+          "test_property_drivers_a_parts_roles.AdjudicationProperties.test_problem_adjudicator"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_adjudicator",
+        "property": "d31_middle_unit_change",
+        "tests": [
+          "test_property_drivers_a_parts_roles.AdjudicationProperties.test_problem_adjudicator"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "problem_adjudicator",
+        "property": "d31_late_reserve",
+        "tests": [
+          "test_property_drivers_a_late.LateAdjudicatorProperties.test_d31_late_reserve"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "native_math",
+        "property": "d31_group_credit",
+        "tests": [
+          "test_property_drivers_a_parts.PartsProperties.test_d31_group_credit"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "native_math",
+        "property": "d31_card_refusal",
+        "tests": [
+          "test_property_drivers_a_parts.PartsProperties.test_d31_card_refusal"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "native_math",
+        "property": "d31_uncarded_citation",
+        "tests": [
+          "test_property_drivers_a_parts.PartsProperties.test_d31_uncarded_citation"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "native_math",
+        "property": "d31_middle_unit_change",
+        "tests": [
+          "test_property_drivers_a_parts.PartsProperties.test_d31_middle_unit_change"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_verification",
+        "property": "d31_group_credit",
+        "tests": [
+          "test_property_drivers_a_parts_roles.VerificationProperties.test_study_verification"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_verification",
+        "property": "d31_card_refusal",
+        "tests": [
+          "test_property_drivers_a_parts_roles.VerificationProperties.test_study_verification"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_verification",
+        "property": "d31_uncarded_citation",
+        "tests": [
+          "test_property_drivers_a_parts_roles.VerificationProperties.test_study_verification"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_verification",
+        "property": "d31_middle_unit_change",
+        "tests": [
+          "test_property_drivers_a_parts_roles.VerificationProperties.test_study_verification"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_readiness",
+        "property": "d31_group_credit",
+        "tests": [
+          "test_property_drivers_a_parts_roles.StrategicProperties.test_study_readiness"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_readiness",
+        "property": "d31_card_refusal",
+        "tests": [
+          "test_property_drivers_a_parts_roles.StrategicProperties.test_study_readiness"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_readiness",
+        "property": "d31_uncarded_citation",
+        "tests": [
+          "test_property_drivers_a_parts_roles.StrategicProperties.test_study_readiness"
+        ]
+      },
+      {
+        "family": "parts-v3",
+        "subject": "study_readiness",
+        "property": "d31_middle_unit_change",
+        "tests": [
+          "test_property_drivers_a_parts_roles.StrategicProperties.test_study_readiness"
+        ]
       }
     ],
     "gaps": [
       {
         "family": "session-v4",
         "subject": "*",
-        "property": "over_bound",
-        "reason": "No test of the base drives this family with this stub to a recorded review."
-      },
-      {
-        "family": "session-v4",
-        "subject": "*",
-        "property": "failed_attempts",
-        "reason": "No test of the base drives this family with this stub to a recorded review."
-      },
-      {
-        "family": "session-v4",
-        "subject": "*",
         "property": "late_units",
-        "reason": "No test of the base drives this family with this stub to a recorded review."
-      },
-      {
-        "family": "session-v4",
-        "subject": "*",
-        "property": "q18_answer_bound",
-        "reason": "No test drives a session with a reviewer stub whose every response is at its answer bound (row Q18 of the triage); the allowance stubs fill the notes to their allowance only."
+        "reason": "D1 decision 30 and review_session_v4 freeze the inventory at first assignment. A later turn can deliver an existing optional unit."
       },
       {
         "family": "session-v4",
         "subject": "*",
         "property": "k6_three_allowances",
-        "reason": "Only full texts are delivered at more than one turn (test_n3_six_large_texts_deliver_bounded_parts_and_assessment_once); no test delivers a source, abstract, artifact, history or frame unit at three material allowances."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "*",
-        "property": "over_bound",
-        "reason": "No test of the base drives this family with this stub to a recorded review."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "*",
-        "property": "failed_attempts",
-        "reason": "No test of the base drives this family with this stub to a recorded review."
+        "reason": "F-C3. The delivered abstract cannot be cited by its advertised session handle. Remaining K6 unit kinds still need drives."
       },
       {
         "family": "parts-v3",
         "subject": "*",
         "property": "k6_three_allowances",
-        "reason": "Record and reference units are delivered in segments by the builder tests; no test delivers a frame or a source unit at three material allowances."
+        "reason": "The frame and optional source delivery shapes still need a complete segmented drive."
       },
       {
         "family": "math-v2",
@@ -5254,181 +5400,79 @@
         "family": "parts-v3",
         "subject": "context_repair",
         "property": "d31_group_credit",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
+        "reason": "The repair trial entered parts and reached a typed route-capacity floor. The recorded repair property path remains open."
       },
       {
         "family": "parts-v3",
         "subject": "context_repair",
         "property": "d31_card_refusal",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
+        "reason": "The repair trial entered parts and reached a typed route-capacity floor. The recorded repair property path remains open."
       },
       {
         "family": "parts-v3",
         "subject": "context_repair",
         "property": "d31_uncarded_citation",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
+        "reason": "The repair trial entered parts and reached a typed route-capacity floor. The recorded repair property path remains open."
       },
       {
         "family": "parts-v3",
         "subject": "context_repair",
         "property": "d31_middle_unit_change",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
+        "reason": "The repair trial entered parts and reached a typed route-capacity floor. The recorded repair property path remains open."
       },
       {
         "family": "parts-v3",
         "subject": "context_repair",
         "property": "d31_late_reserve",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
+        "reason": "A prompt-only late reserve overflow through this adapter and its recording command remains open."
       },
       {
         "family": "parts-v3",
         "subject": "problem_slate",
         "property": "d31_group_credit",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
+        "reason": "PDA-1. Alternate-route admission reclassifies a built v3 slate packet and raises an unclassified review_parts_context error."
       },
       {
         "family": "parts-v3",
         "subject": "problem_slate",
         "property": "d31_card_refusal",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
+        "reason": "PDA-1. Alternate-route admission reclassifies a built v3 slate packet and raises an unclassified review_parts_context error."
       },
       {
         "family": "parts-v3",
         "subject": "problem_slate",
         "property": "d31_uncarded_citation",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
+        "reason": "PDA-1. Alternate-route admission reclassifies a built v3 slate packet and raises an unclassified review_parts_context error."
       },
       {
         "family": "parts-v3",
         "subject": "problem_slate",
         "property": "d31_middle_unit_change",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
+        "reason": "PDA-1. Alternate-route admission reclassifies a built v3 slate packet and raises an unclassified review_parts_context error."
       },
       {
         "family": "parts-v3",
         "subject": "problem_slate",
         "property": "d31_late_reserve",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "problem_adjudicator",
-        "property": "d31_group_credit",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "problem_adjudicator",
-        "property": "d31_card_refusal",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "problem_adjudicator",
-        "property": "d31_uncarded_citation",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "problem_adjudicator",
-        "property": "d31_middle_unit_change",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "problem_adjudicator",
-        "property": "d31_late_reserve",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "native_math",
-        "property": "d31_group_credit",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "native_math",
-        "property": "d31_card_refusal",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "native_math",
-        "property": "d31_uncarded_citation",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "native_math",
-        "property": "d31_middle_unit_change",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
+        "reason": "A prompt-only late reserve overflow through this adapter and its recording command remains open."
       },
       {
         "family": "parts-v3",
         "subject": "native_math",
         "property": "d31_late_reserve",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "study_verification",
-        "property": "d31_group_credit",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "study_verification",
-        "property": "d31_card_refusal",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "study_verification",
-        "property": "d31_uncarded_citation",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "study_verification",
-        "property": "d31_middle_unit_change",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
+        "reason": "review_parts_native.read_prior_assignment requires the unchanged native_packet reference, so an export addition requires a new series."
       },
       {
         "family": "parts-v3",
         "subject": "study_verification",
         "property": "d31_late_reserve",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "study_readiness",
-        "property": "d31_group_credit",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "study_readiness",
-        "property": "d31_card_refusal",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "study_readiness",
-        "property": "d31_uncarded_citation",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
-      },
-      {
-        "family": "parts-v3",
-        "subject": "study_readiness",
-        "property": "d31_middle_unit_change",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
+        "reason": "A prompt-only late reserve overflow through this adapter and its recording command remains open."
       },
       {
         "family": "parts-v3",
         "subject": "study_readiness",
         "property": "d31_late_reserve",
-        "reason": "The decision 31 test exists for the adapter problem_result only."
+        "reason": "A prompt-only late reserve overflow through this adapter and its recording command remains open."
       }
     ]
   }
