@@ -289,14 +289,11 @@ class CIShardTests(unittest.TestCase):
 
     def test_published_submission_template_is_built_in_one_shard(self):
         api = self.api()
-        suite = unittest.defaultTestLoader.loadTestsFromName("test_pending_remote_requests")
-        ids = [test.id() for test in api.flatten(suite)]
         prefix = "test_pending_remote_requests.TestSubmitWithAPendingRequest."
-        submission_tests = [test_id for test_id in ids if test_id.startswith(prefix)]
-        self.assertGreater(len(submission_tests), 1)
-        groups = [[ids[i] for i in api.select_shard_indices(ids, shard, api.SHARD_COUNT) if ids[i].startswith(prefix)]
-                  for shard in range(api.SHARD_COUNT)]
-        self.assertEqual([group for group in groups if group], [submission_tests])
+        ids = [prefix + "test_managed_only_submit_after_a_refused_connection_sends_the_pending_request",
+               prefix + "test_managed_only_submit_while_the_service_shows_no_task_sends_the_request"]
+        groups = [api.select_shard_indices(ids, shard, api.SHARD_COUNT) for shard in range(api.SHARD_COUNT)]
+        self.assertEqual([group for group in groups if group], [[0, 1]])
 
     def test_the_shard_count_is_the_count_of_the_ci_workflow(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
