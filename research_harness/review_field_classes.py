@@ -9,8 +9,10 @@ import copy
 import json
 from pathlib import Path
 
+from .capture_selection import PACKET_KEY as MAIN_CAPTURE_SELECTIONS
+from .errors import ResearchError
 from .evidence import digest
-from .review_route_capacity import measure_capacity_value, plan_chain_capacity, read_output_profile
+from .review_route_capacity import BELOW_FLOOR_MESSAGE, measure_capacity_value, plan_chain_capacity, read_output_profile
 
 # 787 stored descriptor samples: maximum reference rows 4,956, median 68.
 # Rounded to the next 1,000 characters; delivery belongs to parts protocol v3.
@@ -250,6 +252,7 @@ FIELD_CLASSES = {
             'historical_reviews': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'history_delivery': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'intent': {'class': 'fixed', 'characters': 16000, 'overflow_unit': True},
+            MAIN_CAPTURE_SELECTIONS: {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'output_refusal': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'pending_source_requests': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'previously_supplied_evidence': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
@@ -263,6 +266,7 @@ FIELD_CLASSES = {
             'role': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'route_capacity': {'class': 'fixed', 'characters': 4000, 'overflow_unit': True},
             'scientific_history': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'settled_source_requests': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_artifacts': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_deliveries': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_inventory': {'class': 'reference', 'characters': 256, 'unit_rule': 'bound_digest'},
@@ -328,6 +332,7 @@ FIELD_CLASSES = {
             'historical_reviews': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'history_delivery': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'intent': {'class': 'fixed', 'characters': 16000, 'overflow_unit': True},
+            MAIN_CAPTURE_SELECTIONS: {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'output_refusal': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'pending_source_requests': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'previously_supplied_evidence': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
@@ -350,6 +355,7 @@ FIELD_CLASSES = {
             'role': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'route_capacity': {'class': 'fixed', 'characters': 4000, 'overflow_unit': True},
             'scientific_history': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'settled_source_requests': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_artifacts': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_deliveries': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_inventory': {'class': 'reference', 'characters': 256, 'unit_rule': 'bound_digest'},
@@ -461,8 +467,15 @@ FIELD_CLASSES = {
         'exactory-independent-review-sources-v2': {
             'bar_ids': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'bars': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            'complete_source_delivery': {'class': 'fixed', 'characters': 15000, 'overflow_unit': True},
+            'context_repair': {'class': 'fixed', 'characters': 2000, 'overflow_unit': True},
+            'continuation': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
+            MAIN_CAPTURE_SELECTIONS: {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'own_bars': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'historical_reviews': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            'prior_context': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            'reviewer_excerpts': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'settled_source_requests': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_artifacts': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'assessor': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'commitments': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
@@ -596,6 +609,7 @@ FIELD_CLASSES = {
             'history_delivery': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'intent': {'class': 'fixed', 'characters': 16000, 'overflow_unit': True},
             'lead_records': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            MAIN_CAPTURE_SELECTIONS: {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'material_objections': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'objection_bodies': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'output_refusal': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
@@ -621,6 +635,7 @@ FIELD_CLASSES = {
             'problem_evidence_digest': {'class': 'reference', 'characters': 256, 'unit_rule': 'bound_digest'},
             'problem_evidence_parts': {'class': 'fixed', 'characters': 7000, 'overflow_unit': True},
             'problem_forming_imports': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            'problem_objection_carry': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'problem_refresh': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'problem_review_currency': {'class': 'reference', 'characters': 256, 'unit_rule': 'bound_digest'},
             'protocol': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
@@ -638,6 +653,7 @@ FIELD_CLASSES = {
             'role': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'route_capacity': {'class': 'fixed', 'characters': 4000, 'overflow_unit': True},
             'scientific_history': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'settled_source_requests': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_artifacts': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_deliveries': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_inventory': {'class': 'reference', 'characters': 256, 'unit_rule': 'bound_digest'},
@@ -728,6 +744,7 @@ FIELD_CLASSES = {
             'history_delivery': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'intent': {'class': 'fixed', 'characters': 16000, 'overflow_unit': True},
             'lead_records': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            MAIN_CAPTURE_SELECTIONS: {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'output_refusal': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'own_bars': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'pending_source_requests': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
@@ -742,6 +759,7 @@ FIELD_CLASSES = {
             'role': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'route_capacity': {'class': 'fixed', 'characters': 4000, 'overflow_unit': True},
             'scientific_history': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'settled_source_requests': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_artifacts': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_deliveries': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_inventory': {'class': 'reference', 'characters': 256, 'unit_rule': 'bound_digest'},
@@ -815,19 +833,23 @@ FIELD_CLASSES = {
             'historical_reviews': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'history_delivery': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'intent': {'class': 'fixed', 'characters': 16000, 'overflow_unit': True},
+            MAIN_CAPTURE_SELECTIONS: {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'material_objections': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'own_bars': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'place_review': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'pending_source_requests': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'problem_areas': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'problem_forming_imports': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
+            'problem_objection_carry': {'class': 'fixed', 'characters': 512, 'overflow_unit': True},
             'problem_refresh': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'prior_context': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'protocol': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
+            'reviewer_excerpts': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
             'reviewer_id': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'role': {'class': 'fixed', 'characters': 1000, 'overflow_unit': True},
             'route_capacity': {'class': 'fixed', 'characters': 4000, 'overflow_unit': True},
             'scientific_history': {'class': 'carried', 'characters': 256, 'unit_rule': 'stored_plan'},
+            'settled_source_requests': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_artifacts': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_deliveries': {'class': 'collection', 'characters': 256, 'unit_rule': 'each_entry'},
             'source_inventory': {'class': 'reference', 'characters': 256, 'unit_rule': 'bound_digest'},
@@ -887,6 +909,9 @@ FIELD_CLASSES = {
 # Tags survive canonical JSON ordering when a stored plan is read back.
 FRAME_DESCRIPTOR_FIELD = '$descriptors'
 FRAME_UNIT_FIELD_PREFIX = '$unit:'
+FRAME_BINDING_FIELD = '$binding'
+REVIEW_BINDING_FIELDS = frozenset(('protocol', 'role', 'reviewer_id', 'dossier_id', 'subject'))
+ROLE_BINDING_FIELDS = {'native_math': 'native', 'verification': 'paper'}
 UNCLASSIFIED_FIELD_MESSAGE = 'Packet field {role}/{form}:{field} has no field class.'
 
 
@@ -901,8 +926,13 @@ def _select_table(role, packet):
     else:
         form = packet.get('protocol', '')
     if form not in forms:
-        raise ValueError(UNCLASSIFIED_FIELD_MESSAGE.format(role=role, form=form, field='<packet>'))
+        _refuse_unclassified_field(role, form, '<packet>')
     return form, forms[form]
+
+
+def _refuse_unclassified_field(role, form, field):
+    details = dict(role=role, form=form, field=field)
+    raise ResearchError('review_input_unreadable', UNCLASSIFIED_FIELD_MESSAGE.format(**details), details)
 
 
 def _find_declared_row(table, path):
@@ -996,17 +1026,41 @@ def _build_classified_frame(route, role, packet, bounded_fields, unit_fields=())
     frame, units, owners = {}, [], {}
     moved = set(unit_fields) | {name[len(FRAME_UNIT_FIELD_PREFIX):] for name in bounded_fields
                                if name.startswith(FRAME_UNIT_FIELD_PREFIX)}
+    # Older plans carry their original per-field bounds and unit tags.
+    binding = _find_binding_fields(role, packet) if FRAME_BINDING_FIELD in bounded_fields else ()
     for name in sorted(packet):
         row = table.get(name)
         if row is None:
-            raise ValueError(UNCLASSIFIED_FIELD_MESSAGE.format(role=role, form=form, field=name))
-        overhead = _measure_field_overhead(route, name)
-        bound = (0 if name in moved else
-                 min(row['characters'], max(0, bounded_fields.get(name, row['characters'] + overhead) - overhead)))
-        frame[name], additions, places = _project_field(route, packet[name], (name,), row, bound, table)
+            _refuse_unclassified_field(role, form, name)
+        if name in binding:
+            frame[name], additions, places = _project_children(route, packet[name], (name,), table)
+            places[(name,)] = 'frame'
+        else:
+            overhead = _measure_field_overhead(route, name)
+            bound = (0 if name in moved else
+                     min(row['characters'], max(0, bounded_fields.get(name, row['characters'] + overhead) - overhead)))
+            frame[name], additions, places = _project_field(route, packet[name], (name,), row, bound, table)
         units.extend(additions)
         owners.update(places)
+    binding_bound = bounded_fields.get(FRAME_BINDING_FIELD)
+    if binding_bound is not None:
+        size = _measure_binding_fields(route, frame, binding)
+        if size > binding_bound:
+            raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
+                                dict(room=binding_bound, minimum=size, field=FRAME_BINDING_FIELD, command='review-route'))
     return table, frame, units, owners
+
+
+def _find_binding_fields(role, packet):
+    fields = packet.keys() & REVIEW_BINDING_FIELDS
+    role_field = ROLE_BINDING_FIELDS.get(role)
+    if role_field in packet:
+        fields.add(role_field)
+    return fields
+
+
+def _measure_binding_fields(route, frame, binding):
+    return sum(measure_capacity_value(route, {name: frame[name]}) for name in binding)
 
 
 def classify_packet(route, role, packet, *, bounded_fields=None):
@@ -1040,14 +1094,25 @@ def describe_role_frame(route, role, packet, kinds, *, unit_fields=()):
     size, including handle, digest, characters and native field envelope. A
     zero-cost tag preserves that ownership through a stored plan's JSON order.
     The aggregate reserve holds the envelope and non-fixed frame metadata.
+    If the fixed allowances would move part of the identity, reserve the
+    exact binding outside the movable fields. Frames whose identity already
+    fits keep their original declarations.
     """
     moved = unit_fields if isinstance(unit_fields, dict) else tuple(unit_fields)
+    binding = _find_binding_fields(role, packet)
     frames = {}
     for kind in kinds:
         table, frame, _, owners = _build_classified_frame(
             route, role, packet, {}, moved.get(kind, ()) if isinstance(moved, dict) else moved)
+        moved_binding = {name for name in binding if owners[(name,)] == 'unit'}
         fields = {FRAME_DESCRIPTOR_FIELD: measure_capacity_value(route, {})}
+        if moved_binding:
+            for name in moved_binding:
+                frame[name], _, _ = _project_children(route, packet[name], (name,), table)
+            fields[FRAME_BINDING_FIELD] = _measure_binding_fields(route, frame, binding)
         for name in sorted(packet):
+            if moved_binding and name in binding:
+                continue
             if table[name]['class'] != 'fixed':
                 fields[FRAME_DESCRIPTOR_FIELD] += measure_capacity_value(route, {name: frame[name]})
                 fields[name] = 0

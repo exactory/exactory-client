@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from research_harness import review_protocol, review_route_capacity as capacity
+from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from test_review_route_capacity import build_route
 
@@ -163,6 +164,63 @@ class FieldClassTests(unittest.TestCase):
         for packet in (build_scaled_record_units('texts', 128), build_scaled_stage2_native_records('sources', 2)):
             self.fields.classify_packet(self.route, packet['role'], packet)
 
+    def test_source_continuation_builders_declare_every_field(self):
+        from research_harness import bar_sources, capture_selection, review_context_repair
+        from research_harness.artifacts import ArtifactStore
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = ArtifactStore(Path(directory))
+            selection = dict(version_id='work', source_id='capture', original_sha256='a' * 64,
+                             text_sha256='b' * 64, protocol=capture_selection.PROTOCOL)
+            for problem in (False, True):
+                records = {capture_selection.SELECTION_KIND: {'capture': selection}}
+                if problem:
+                    records['workspace'] = {'problem': {'area': 'finite', 'field': 'finite'}}
+                previous = dict(source_inventory=bar_sources.inventory(records, artifacts),
+                    source_rules=bar_sources.PROTOCOL_V3, pending_source_requests=[],
+                    settled_source_requests=[dict(request=dict(id='held'), limitations=['Uncaptured.'])],
+                    bar_ids=[], candidates=[], candidate_set_digest=digest([]),
+                    context_repair=dict(assignment_id='predecessor', slot_id='slot'))
+                with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL_V3), \
+                        patch.object(review_protocol, '_source_parent', return_value=(dict(id='prior',
+                            packet_digest=digest(previous)), {'output': {}})), \
+                        patch.object(review_protocol, 'source_delivery_packet', return_value=previous), \
+                        patch.object(review_protocol, '_find_session_bodies', return_value={}), \
+                        patch.object(review_protocol, 'add_direction_evidence'), \
+                        patch.object(review_protocol, 'add_problem_bars', return_value=[]), \
+                        patch.object(review_protocol, 'require_calibrated_bars'), \
+                        patch.object(review_context_repair, 'collect_problem_review_history', return_value=[]):
+                    for role in bar_sources.ROLES:
+                        with self.subTest(problem=problem, role=role):
+                            packet = review_protocol.build_packet(records, artifacts, None if problem else 'dossier',
+                                                                  role, 'reviewer', prior_assignment_id='prior')
+                            _, table = self.fields._select_table(role, packet)
+                            self.assertEqual(packet.keys() - table.keys(), set())
+
+    def test_new_plans_reserve_exact_identity_and_old_bounds_replay(self):
+        packet = dict(protocol='exactory-problem-review-v2', role='result', dossier_id=None,
+                      subject=dict(kind='problem', statement_id='s'), reviewer_id='r' * 2000)
+        frames = self.fields.describe_role_frame(self.route, 'result', packet, ('request',))
+        profile = capacity.read_output_profile({}, self.route)
+        plan = capacity.plan_chain_capacity(self.route, profile, frames=frames, inventory=[], targets=[])
+        bounds = plan['frame']['request']['bounded_fields']
+        projected = self.fields.classify_packet(self.route, 'result', packet, bounded_fields=bounds)
+        self.assertEqual(projected['frame'], packet)
+        self.assertEqual(projected['units'], [])
+        tokens = capacity.describe_route_capacity(self.route, profile)['input_tokens']['value']
+        minimum = (sum(frames['request'].values()) + capacity.describe_material_levels('request')[-1]
+                   + capacity.NOTES_MAXIMUM_CHARACTERS + capacity.measure_capacity_value(self.route, []))
+        from research_harness.review_refusal_notice import BOUNDED_NOTICE_CHARACTERS
+        minimum += BOUNDED_NOTICE_CHARACTERS
+        measure = dict(rule='calibrated', characters_per_token=(minimum - 0.5) / tokens)
+        with self.assertRaises(ResearchError) as raised:
+            capacity.plan_chain_capacity(self.route, profile, frames=frames, inventory=[], targets=[], measure=measure)
+        self.assertEqual(raised.exception.code, 'review_route_capacity_below_floor')
+        self.assertEqual(raised.exception.details['minimum'], minimum)
+        old_bounds = {'reviewer_id': 200, '$unit:reviewer_id': 0}
+        old = self.fields.classify_packet(self.route, 'result', packet, bounded_fields=old_bounds)
+        self.assertEqual(old['frame']['reviewer_id']['sha256'], digest(packet['reviewer_id']))
+        self.assertEqual(old['units'][0]['sha256'], digest(packet['reviewer_id']))
+
     def test_all_real_logical_neutral_native_staged_and_parts_forms_keep_base_bytes(self):
         expected = json.loads((Path(__file__).parent / 'fixtures/review_field_class_packets.json').read_text())
         reached = set()
@@ -180,15 +238,19 @@ class FieldClassTests(unittest.TestCase):
     def test_unknown_roles_and_packet_forms_name_the_missing_declaration(self):
         for role, packet, missing in (('new_role', {}, 'new_role'),
                                       ('bar', {'protocol': 'new_protocol'}, 'new_protocol')):
-            with self.assertRaisesRegex(ValueError, missing):
+            with self.assertRaises(ResearchError) as raised:
                 self.fields.classify_packet(self.route, role, packet)
+            self.assertEqual(raised.exception.code, 'review_input_unreadable')
+            self.assertIn(missing, raised.exception.details.values())
 
     def test_builder_copy_with_added_field_names_the_unclassified_field(self):
         original = build_problem_packets()['bar']
         def build_changed():
             return dict(copy.deepcopy(original), undeclared_field='new')
-        with self.assertRaisesRegex(ValueError, r'bar.*undeclared_field'):
+        with self.assertRaises(ResearchError) as raised:
             self.fields.classify_packet(self.route, 'bar', build_changed())
+        self.assertEqual(raised.exception.code, 'review_input_unreadable')
+        self.assertEqual(raised.exception.details['field'], 'undeclared_field')
 
     def test_fixed_value_at_bound_stays_and_one_more_becomes_a_unit(self):
         rule = self.fields.FIELD_CLASSES['bar']['exactory-problem-review-v2']['field']
@@ -316,7 +378,7 @@ class FieldClassTests(unittest.TestCase):
 
     def test_moved_field_declarations_reserve_the_complete_named_descriptors(self):
         packet = self.build_result_frame_packet()
-        moved = ('readiness', 'role')
+        moved = ('readiness', 'support_contract')
         frames = self.fields.describe_role_frame(self.route, 'result', packet, ('request',), unit_fields=moved)
         bounded = json.loads(json.dumps(frames['request'], sort_keys=True))
         classified = self.fields.classify_packet(self.route, 'result', packet, bounded_fields=bounded)
@@ -357,6 +419,9 @@ class FieldClassTests(unittest.TestCase):
             classified = self.fields.classify_packet(self.route, 'result', packet, bounded_fields=grant['bounded_fields'])
             self.assertLessEqual(capacity.measure_capacity_value(self.route, classified['frame']), grant['bound'])
             for name in initial['frame'][kind]['unit_fields']:
+                if name in ('protocol', 'reviewer_id', 'role'):
+                    self.assertEqual(classified['frame'][name], packet[name])
+                    continue
                 descriptor = classified['frame'][name]
                 self.assertEqual(set(descriptor), {'handle', 'sha256', 'characters'})
                 unit = by_handle[descriptor['handle']]
