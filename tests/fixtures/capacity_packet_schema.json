@@ -28382,21 +28382,17 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.exactory_api": {
-      "ast_sha256": "e7086914dfe3711dbd59615795313b9e46afe59e5f4fca0f402e0196c89d6d8a",
+      "ast_sha256": "d5399b2da086a80a8d3ea6bb39cc0930ae99bcbf17aa9fb8fa62529e77a60626",
       "functions": {
-        "_is_citation_locator": "f9c57f3faf286256ca74b78b37010d20929985f6ec8f101ed3c14b7b505b32f0",
-        "_is_https_url": "880977f9bdf35d881368bff81e1b821d3cc6a00738ee01a32d7cec2620837c6c",
         "count_utf16_units": "94b34cedaf49f6292a6c2aaa8363a389ee4b53d2874ebd1aebd5b6f17b9f2a7a",
         "find_non_plain_text_character": "ae78413e9c507f6e9460dfd32c6b4cf17a9af2fc324ebe6daa02f29f41002f11",
         "find_post_text_violation": "705dcb7d8e30411e193287eb16bbccf766ba1f298a33ad0a15968ba42fb27f7a",
         "normalize_plain_text_line_breaks": "aeb8517887eb671bf88ca6db552b134b4d7169db47a5d5090fc0bad2e227c9fa",
         "read_api_base_url": "638470d0529b8ad80f32b4b7888087cd52f61da1c6589929ac147e9be655d472",
-        "split_statement_details": "79fbce67e4ca3b9e85bbf2711d5ff8d5d825ad51473801dfcc3ca91d6a23b274",
-        "validate_post_citation_field": "e5ae517b0ff452e1a38d2d95644bb3366fb28c03cc052ca8e8e8c0197666b572",
-        "validate_post_citations": "34026a27f6ee6dcaae3775015c2ef958b9cbdac3c7916644cde0aa1a7fe8a97e"
+        "split_statement_details": "79fbce67e4ca3b9e85bbf2711d5ff8d5d825ad51473801dfcc3ca91d6a23b274"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.91.6: the text limits, the trim characters, the line-break rule and the UTF-16 count of the post command have their home here; the module builds no packet. Reviewed 0.91.8: POST_TEXT_BOUNDS holds the bounds of every text field of a problem post in place of the two limits of What a resolution would change, and find_non_plain_text_character, split_statement_details and find_post_text_violation hold the character rule, the split at the --- line and the order of the rules of a post text, which bin/exactory and problem_claims read; the module builds no packet. Reviewed lane citation-rules (task T4.11, requirement R5.2): validate_post_citation_field and validate_post_citations are the one definition of the rules of a post for a citation and its locator (the characters, the length, the form of the locator, the count and the shape of the list), with the locator patterns that the post command held."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.91.6: the text limits, the trim characters, the line-break rule and the UTF-16 count of the post command have their home here; the module builds no packet. Reviewed 0.91.8: POST_TEXT_BOUNDS holds the bounds of every text field of a problem post in place of the two limits of What a resolution would change, and find_non_plain_text_character, split_statement_details and find_post_text_violation hold the character rule, the split at the --- line and the order of the rules of a post text, which bin/exactory and problem_claims read; the module builds no packet."
     },
     "research_harness.execution": {
       "ast_sha256": "b5a0d0df8f91af4cad1630bd069ffb8a47a3ca4e7372b7954e078c1c7b1e3032",
@@ -30047,20 +30043,20 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.problem_attempt": {
-      "ast_sha256": "b9fbec0d8f099923774e7dda517df04b9e2605d55e63890ba4a9819f2d5d1d2a",
+      "ast_sha256": "e0794115160f3d77a2bc06079ccf42d91ed3c7e8cb79c61b8b3f721b71ccf949",
       "functions": {
         "assess_attempt": "b52b2ea9cb5fe0c5bf2a465b0e3f41dac68b68773ce7454476938b35d724245d",
         "find_attempt": "55088ae70feda8ae6a9c39ca805cc541faaddb2342d0bc16c1c195eadf21cabd",
         "find_current_attempt": "7f0407e770f13ae0aeb2bb45f85ef5da3afaa45f504e5f50a3f02048890fa8a2",
         "find_latest_native_attempt": "f209309b9210ec29b45bfa220b061e2a3dbe965476b81fbcdfc9d762866b2ed7",
         "is_native_resolved": "36b08e20f8aa1a7a9806044e621913c03636927c3b5c568d4c476791272eef37",
-        "record_attempt": "757e3aea036b04bada4e7901ee5a27fad3bdd377132e2f26ab08ab71e664ce53",
+        "record_attempt": "7ef4a408f3cc4ff4f7974d579eed794fae51f007c3eeb17e5fb2b52f6b7495e7",
         "validate_attempt": "701f222a5934670e7f251edb7f2360edbff3a7ac734d6bece196ddd81625df26",
         "validate_attempt_extension": "bf7b669e62ef5718892442ceae22a96c6d204de17c758e95a702cf4bc74b6b07",
         "validate_extension_reason": "afd3bcdaaf030cb0c25d461ec1592c67046430b396d34717e4913bcb4afd7c85"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed lane citation-rules (task T4.11, requirement R5.2): record_attempt applies the rules of a post to the citations of the readings of a literature attempt."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.problem_candidate_transfers": {
       "ast_sha256": "e4de886cf91e7d61d8b3f996dc059d17585eb4930859629c70c90a928f6d28bd",
@@ -30093,26 +30089,24 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.91.3: record_candidate refuses the removed kind of start before any record is built; no packet field or shape changes."
     },
     "research_harness.problem_citation_metadata": {
-      "ast_sha256": "f68729450ce98401c75c628be7192c4bd7fa5d7376fbb64c7124e1c94f4e1fe2",
+      "ast_sha256": "32445d71db4d932ec24a5b584b171dbe2be5b1f6d43ec9df3f11f59fd11f49ec",
       "functions": {
         "_field_map": "8da61721b17d558cea047690628a28697f93b0c92a2fa7a803b65cb28e026eef",
         "_field_spans": "347463f7e3da64c18932e91bd5cb8f4550320b0c2ab84a3859b0527c433a6cfa",
         "_resolve_span": "c3ee37611a959454eb096820fa4a8d5de24a24a6dec540c706a12c82caed4f65",
         "_validate_schema": "8d880950d60be579d71de850e3523b40082efaf659e41c2c83093e9569b5c855",
-        "compose_citation": "cda77452b49b16caa08b8c5a8fda23a453d63c1e5b4122e2562a99f6e80b5fd9",
-        "compose_citation_text": "948d55ed4bb9ee94bb86d8a90437d4d03fca99778f1622c0f34b6680e46eb5d7",
+        "compose_citation": "3a06d458e1e83e09faa07e5d1e795bbf7a659e56abb6b79ec31694f5f2c07ef9",
         "describe_citation_metadata": "41025b298759985549a6e14e5ea5ee147f365063d5e7911a5f65ecc16d048442",
         "find_citation_metadata": "bfed4542998bca258e25c94c48cb2d72848c5da1fde8880babe33deda292106b",
         "read_registry_assertion": "4d8b13eee6118d1db67b46b3254d6cdb6746f7ae1c9c569db6843a8c9f913599",
-        "record_citation_metadata": "520e5cf7c534d78020af7dcfaa3474c90bd38d36f5463af854c2bf11bbd509cd",
-        "select_citation_text": "15db191314b1923c8d6940afaf82335d8a75801bdcd6ea807d1302082d6a8a21",
+        "record_citation_metadata": "faace7ebc47b880d051ef3d33153b1c44065247baa1b0d23cb14998819fb7514",
         "validate_citation_metadata": "63b2e772b3993a350f8b0d834f5df05b3ef6ebe63c32a65a44950ffdb0a005f9"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed lane citation-rules (task T4.11, requirement R5.2): record_citation_metadata applies the rules of a post to the citation text of new metadata; select_citation_text and compose_citation_text give the one selection and composition of that text, which compose_citation reads."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.problem_claims": {
-      "ast_sha256": "99a2b015724f846b4f8af390ddc2af2b0124a944dfff69c3e38cd8218288e44b",
+      "ast_sha256": "f460d380852728f2474a8d818526993af863dfa1f439dac056f9a6b0a4036cfa",
       "functions": {
         "assess_assessment": "c76361c42d4646f58cde01126a23215e05c0bcaa5a8b5e84cda3e7c6c6f22600",
         "compute_problem_evidence_digest": "a3db49acd6cc12448c855b12c7f0cac6923493ae6aeb259a09577f8a0436c834",
@@ -30125,11 +30119,11 @@
         "find_value": "886d73105aba50e22e7101cfff5321449afda845d7c8588065fdd22a1e6263db",
         "has_retired_kind": "0c83aa565c874bf42ef105ef3875c32c40136e4b336d6bd6b61d9dccf452124d",
         "initialize_problem": "f6d847d214ac141e666b280ce1e8511e729244a7b45e04606806f7b8739cf1ae",
-        "prepare_value": "460bbf5eb5b58db64e5122609e204d989fc68412900a579c21a7d0fb3e6623a3",
-        "record_assessment": "c0d5e59daec8e2f8f50135ec2ec5c5ab09ed448b8f98f04a54034a1e69bad721",
+        "prepare_value": "673119628bfe3c7c3ceb8cd2aa2279558a0a5102e2881ff68f4209d926ae153f",
+        "record_assessment": "e7e433c59e41766bdef4c1a4c52c60151bc68bde4e26c941fc9d1b6f4c605f18",
         "record_decision": "e5c74364a8b3be9de54ca3fc45e2beeb5605cb17fe865b304c6c73a62f139e67",
         "record_formal_check": "f6ac1dd2a649667278fb34f238433687b3421fd30499c6f5618adb03a46bcf3a",
-        "record_openness": "8a86d6d601b627d3b8ac60cb579a2be149009f3a95430516bbb53b7a03e1ac9c",
+        "record_openness": "876d6fc1cf201b4c78cf23cca00f33fe59839857f125429c897d7a9eff7a909f",
         "record_post_external": "f3ffc32349c9b4bbcbe7404214842958cf0bf186d2208ddc9fb54c18e7fe9623",
         "record_post_time": "56572bb78c98d98f74226b2b56b0dbf4a640a165a524830b1160887b34975e7b",
         "record_posted": "b4340fae5603e4925ffbbd9323407d68f05ec02393f005b7ffdf0849067e0421",
@@ -30140,10 +30134,10 @@
         "validate_area": "169a62a8bd4e54e05e164ae4ad900ff23b22296f199fbdb9f77f66ebae85a75a"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in describe_value_size; version 1 follows its existing projection. Reviewed 0.91.2 record_value accounts_version=2: result and adjudicator value schemas already declare accounts_version, and describe_value_size preserves the reviewed versioned account projection. No additional packet fields or shapes change. Reviewed 0.91.3: initialize_problem refuses the removed kind of start before any record is built; no packet field or shape changes. Reviewed 0.91.6: record_value requires changes_if_resolved in a new value record, requires accounts.places through validate_value, and checks the length of the joined text; a stored value record keeps its validation. Reviewed 0.91.8: record_statement refuses a new statement whose title, statement, details or resolution criteria the post would refuse, prepare_value holds the checks of record_value and refuses a section text that the post would refuse, and require_post_texts raises both refusals; the statement and value records and every packet keep their shapes. Reviewed lane citation-rules (task T4.11, requirement R5.2): prepare_value, record_assessment and record_openness apply the rules of a post to the citations of the readings that the new record selects."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in describe_value_size; version 1 follows its existing projection. Reviewed 0.91.2 record_value accounts_version=2: result and adjudicator value schemas already declare accounts_version, and describe_value_size preserves the reviewed versioned account projection. No additional packet fields or shapes change. Reviewed 0.91.3: initialize_problem refuses the removed kind of start before any record is built; no packet field or shape changes. Reviewed 0.91.6: record_value requires changes_if_resolved in a new value record, requires accounts.places through validate_value, and checks the length of the joined text; a stored value record keeps its validation. Reviewed 0.91.8: record_statement refuses a new statement whose title, statement, details or resolution criteria the post would refuse, prepare_value holds the checks of record_value and refuses a section text that the post would refuse, and require_post_texts raises both refusals; the statement and value records and every packet keep their shapes."
     },
     "research_harness.problem_delivery": {
-      "ast_sha256": "1b4ab6add14821a01d4b88bb911b0392e1e0a1809cfaf821e9530c712f998f5e",
+      "ast_sha256": "5ca6840d438a2173ab3d0fffcf7f1ea70244c6f93ea32cef68450209675f19f8",
       "functions": {
         "_assess_minimum": "ecb1c33ec3fbad01a5e4b11834a564b8f6b18725dc9a53a58771b684e337f430",
         "_find_scoped_review_closure_root": "20dce9ae1fcfc14981aa8dd62d6eacdac1b4283c83173afed367ad0396cd688a",
@@ -30151,7 +30145,7 @@
         "assess_minimum": "f501558f433c3a78604eb4c0d22f8ff069cd58160413ba3568a21d0b491c4f72",
         "assess_post": "b1630ef23018cf0cb942546316745144655f03049e0e60377ae63118e0b10297",
         "assess_source_requests": "2203be2436808642390cef40ae79115ceacf1a11ca8ca2b1b4b522899cf651eb",
-        "build_override_projection": "7e3f186320d02214bfffc81ac092a88b668ae3754f2a14b6e635fed2c3c4db6d",
+        "build_override_projection": "db02b31f94a6d96ab3f99e9821718402d10c75fad15d563fb124352cb93119c0",
         "build_post_files": "1d2cdd5a1558bd5b757ffbd3e47c8f22f3badd04f54a55ab372e514a0630ad14",
         "build_projection": "750522936742dc92c024260d7f70bc0303f62557b4cb58d5bba2d0f8821e45c6",
         "collect_review_outcomes": "1d100a14e7728e81ebe742860fa333668da192ba81ece78c4c5abe451b77ce92",
@@ -30182,22 +30176,20 @@
         "804ebb1f3c49410ddda82c2bcf6dc9810af3d3ec1af698a638f8366881cd0d8f",
         "e740187afbb3c932c54f16c9575be7bbab5fd954752b1ee78b9b78fdcc79619a"
       ],
-      "reason": "Reviewed optional per-head posted-call status isolation with strict default behavior and no scientific-record changes. Changed AST requires declaration review. Reviewed 0.91.6: build_post_files adds changes-if-resolved.md only for a value record that holds the section; the packet members stay as they are. Reviewed lane citation-rules (task T4.11, requirement R5.2): build_override_projection reads the count limit of a post from exactory_api."
+      "reason": "Reviewed optional per-head posted-call status isolation with strict default behavior and no scientific-record changes. Changed AST requires declaration review. Reviewed 0.91.6: build_post_files adds changes-if-resolved.md only for a value record that holds the section; the packet members stay as they are."
     },
     "research_harness.problem_evidence": {
-      "ast_sha256": "f7e0bab9cbd59cc8944527f7aaa8357f05c916a86a14eb2fb00225f9be590f60",
+      "ast_sha256": "3a391e04419efaf4e657483779b14c0091629bfb5ba738ca9d10e4cabf44106f",
       "functions": {
         "assess_formal_checks": "84e5b9a8cf0c65c76a297d029c5507be6742eebdf8b8f7537bd77ab2fa20f75b",
         "bind_formal_check": "b1572b21240e3889f4e6b74c1d5d1676a10cf861ad47ba8bca6c2d0c7a4a3bb4",
         "cite_record": "3f4b6aeb29b726cab44c4cc23f0785c95b741a7c13d4dd1404a473a6afc5e1ce",
         "collect_binding_record_kinds": "9f4710f2f3f9e1b2900b86cbf7eb4820ce5e2add7aedbd4bf23b994ae29a5c0c",
-        "collect_openness_reading_ids": "d96f1b4f552e2b5bd4bb386e5b9a45c6cfd560bd2d6d251da2bb7d869c6bab43",
         "collect_override_readings": "f1600ce0d9b2a5c342a0b5d465038b4695339a3b1b0bef89a66cc7930c291bee",
-        "collect_readings": "aed5bd2903fbd250a2e56ab55d340a4d363f80c8fb8a8543cbcfd87d3e06c8bb",
+        "collect_readings": "6420b5431ca0d0ec42bd008a300c96e0f54fabe790f396d68538c6ee92eb0eab",
         "collect_results": "7880ce5d20cc9611849e08cf653dac956ce3fdf219cf21115324e85df63af24e",
-        "collect_source_reading_ids": "2b56c6c3b2cf80800241204ae8c200c258a85e598973dfa978977fe9b055efec",
         "collect_value_items": "687040874da9b73530197842252dfb47b66e1319283204e93a3d8b42825c1969",
-        "compose_citations": "8f85da080e1159577fbfab937f0c9511a67a387816cca2028000156a2359130c",
+        "compose_citations": "8e17d0f5879398b0b920a2f9826a8b5a6b681f3796737fe41d819c6c73094025",
         "compute_override_source_digest": "ac5e9b297c9ec08f3837e7712204447d2202f8b78086b4652320a1a30e0b9c62",
         "describe_binding": "d353d3b9b0065ba751cf999a8aabccd046457be7cbaa6171bd9a3eab3dea25cd",
         "describe_evidence": "dd35be30acb8da76c0ac95f1d6e8384cf88975171c9430c474284ce1b9befc63",
@@ -30205,15 +30197,13 @@
         "describe_result": "70339550a4e89544ba09dd5279b5eda3366aa9e023b4f4517001f6d9d241aa68",
         "find_citation_locator": "a2ae52cb7fd590c058125eb8bc189de75ccb33625355a3c7c44e374171b05408",
         "find_formal_checks": "2b590aea60afd4fb0cb01c9cf44b23f31e8fe1f043c506741877bc5d9f3299ce",
-        "find_projected_citation_locator": "686f6a17c6f19b43f777fdfb831c1f85e8336ae36b47363ca37f1d88ac79ae3e",
         "find_reading_locator": "5d87e2da4116b30104edb2f5059f40f557034215c2adbcff6b9f1dfda0245586",
         "group_citation_readings": "868f125f982a932040ec4f2ad62a9ba3271134ec42c3ed1b02fa8549961d5e6d",
         "list_value_sections": "95d71b1c2e1e55e07c5618fe4ba54d0a4527d296dc9ae5e25e695bb04313977a",
         "project_citations": "3a44a6ca623baa348df79c00ec44a8be3f4b0a33abab8f71de5c5484df33a2d4",
         "project_override_citations": "af9744d5a67cc2b2726bbe200a7327c8c15f08c8744dd32001c517f05d473eed",
-        "record_citation_locator": "1dabfdc747751c09b6a74e4ee0ba786730df80c8c7d2bcaded1057f69f3715f2",
-        "require_reading_citations": "2ba5fca794467c0d9837aff432f81d6afdbe894c41043a65207942c641a4b8f5",
-        "resolve_assessment_evidence": "6f2a1d50ce85b8ef7163790c5f5be3ad06022522a3b44bd67b479b91942ce89c",
+        "record_citation_locator": "b332270d171bb44a5cda3538e96e3c7c092d7c34dd240958dcd3826b90751885",
+        "resolve_assessment_evidence": "c261524f5e967e5ee327a8ef379ecde0ac94724b0e4ec5731ddf2c60e54327dc",
         "resolve_assessment_record": "84e3ec4adc472f1477941c794284b38f5294f0d8beec23afab09a7ff48638f67",
         "select_citation_readings": "5e06632d7db0e46b08e9ba443b0034d0f2500f3628c6f21992b95e1151a5dc20",
         "validate_citation_locator": "27f2258b7d4581583496377552452a15b9d8e04d27de470d43952fe57972c449",
@@ -30225,7 +30215,7 @@
         "validate_value": "f8f4e3002590407e3f09dfaa8ab1f126dfa94cae89c7fd82b8efea9b623a9929"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in collect_binding_record_kinds, describe_binding, describe_evidence; version 1 follows its existing projection. Unrelated earlier certificate drift is retained. Reviewed 0.91.6: one helper lists the sections of a value record; validate_value requires a nonempty places and a place cited in motivation and in changes_if_resolved only for a value record that holds changes_if_resolved; describe_evidence delivers changes_if_resolved with delivered_evidence only for a value record that holds it, and the member is declared for the result and adjudicator packets. Reviewed lane citation-rules (task T4.11, requirement R5.2): require_reading_citations applies the rules of a post to the citation and the locator of each selected reading; record_citation_locator applies them to a new locator; find_projected_citation_locator, collect_source_reading_ids and collect_openness_reading_ids give one selection for the recording and for the reading, with the same result for compose_citations, collect_readings and resolve_assessment_evidence."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed T5 version 2 probe delivery in collect_binding_record_kinds, describe_binding, describe_evidence; version 1 follows its existing projection. Unrelated earlier certificate drift is retained. Reviewed 0.91.6: one helper lists the sections of a value record; validate_value requires a nonempty places and a place cited in motivation and in changes_if_resolved only for a value record that holds changes_if_resolved; describe_evidence delivers changes_if_resolved with delivered_evidence only for a value record that holds it, and the member is declared for the result and adjudicator packets."
     },
     "research_harness.problem_export_history": {
       "ast_sha256": "ec8163fa7cf3248444f56508484f05f3110e38926dffe4ef9e83f889f37f624b",
@@ -35167,7 +35157,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review."
     },
     "research_harness.stop_classes": {
-      "ast_sha256": "78cfdbf465cd5953ef1b5f084e81f494759b17b560c3a92376896a7f5ffe00de",
+      "ast_sha256": "5a7a315c752a49ad46abe4a38024d0e8f7047f0040adfda6ca9448248c7367e0",
       "functions": {
         "classify_stop": "1e04321928b9c5cc04066efccb15f9066e30223fdeaf252aa1f9b578ec3b4dab",
         "describe_terminal": "20690a1fc049ae05acff22cc5884c3300aa6633de018845ab12fde47019c4038",
@@ -35175,7 +35165,7 @@
         "validate_registry": "6619e05e41649d4165c7960423e883318d3c9e454d2a03a246db865e2af3c0cd"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed 0.92.0: the issue code composite_missing of a v3 series in pages joins the named-cause closing codes beside final_pending. Reviewed 0.91.6: the step of problem-value names changes_if_resolved among its fields; the packet members stay as they are. Reviewed the merge of 0.91.5 to 0.91.7 into 0.92.0: the step of problem-value chooses changes_if_resolved, as 0.91.6 does, beside the named-cause and stored-state codes of 0.92.0. Reviewed lane session-v4-refresh-edges (task T2.14, rules E1 to E5 of designs/session-v4-refresh-edges.md): the row of review_route_retired states the command review-assignment and no fixed step, because the step is the refresh for a recorded v4 review and the repair for every other head (rule E1). Reviewed lane citation-rules (task T4.11, requirement R5.2): the five refusal codes of a citation field have their rows (a decision with the outcome scientific_refused)."
+      "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed 0.92.0: the issue code composite_missing of a v3 series in pages joins the named-cause closing codes beside final_pending. Reviewed 0.91.6: the step of problem-value names changes_if_resolved among its fields; the packet members stay as they are. Reviewed the merge of 0.91.5 to 0.91.7 into 0.92.0: the step of problem-value chooses changes_if_resolved, as 0.91.6 does, beside the named-cause and stored-state codes of 0.92.0. Reviewed lane session-v4-refresh-edges (task T2.14, rules E1 to E5 of designs/session-v4-refresh-edges.md): the row of review_route_retired states the command review-assignment and no fixed step, because the step is the refresh for a recorded v4 review and the repair for every other head (rule E1)."
     },
     "research_harness.storage": {
       "ast_sha256": "0923ee1461c0011259413f5ce93532804634281e63542f277ba5818dc18cfee7",

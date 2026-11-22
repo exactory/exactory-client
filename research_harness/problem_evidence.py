@@ -5,7 +5,6 @@ from urllib.parse import urlsplit
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
-from .exactory_api import POST_CITATION_LIMIT, validate_post_citation_field
 from .graph import obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .problem_claims import find_current_statement, find_latest, find_value, find_assessment, compute_statement_digest
@@ -24,6 +23,8 @@ BINDING_RECORD_KINDS = (
     "execution", "cycle_assessment", "problem_formal_check", "native_closure", "native_import_identity",
     "probe", "probe_artifact", "probe_launch", "local_artifact",
 )
+
+POST_CITATION_LIMIT = 50
 
 DISPOSITIONS_NOTE = (
     "Each entry holds text submitted as a user instruction and its submitted provenance. reported_by_agent means "
@@ -478,7 +479,9 @@ def resolve_assessment_evidence(records):
                 resolved.append(dict(reference, record=record))
             elif reference.get("kind") == "source":
                 link = reference["link"]
-                readings = sorted(collect_source_reading_ids(records, link))
+                readings = [identifier for identifier, reading in sorted(records.get("reading", {}).items())
+                            if reading["depth"] == "fulltext" and (reading["version_id"] == link["version_id"]
+                                or any(inspection["link"] == link for inspection in reading["inspections"]))]
                 if not readings:
                     raise ResearchError("problem_assessment_evidence_missing",
                                         "Deliver full readings of the source cited by this assessment", {"item": item, "link": link})
@@ -488,22 +491,12 @@ def resolve_assessment_evidence(records):
     return resolved
 
 
-def collect_source_reading_ids(records, link):
-    return {identifier for identifier, reading in records.get("reading", {}).items()
-            if reading["depth"] == "fulltext" and (reading["version_id"] == link["version_id"]
-                or any(inspection["link"] == link for inspection in reading["inspections"]))}
-
-
-def collect_openness_reading_ids(records, finding):
-    minimum = (finding or {}).get("minimum") or {}
-    digests = set(minimum.get("reading_digests", []))
-    return {identifier for identifier, row in records.get("reading", {}).items() if digest(row) in digests} if digests else set()
-
-
 def collect_readings(records):
     from .problem_attempt import find_attempt
+    openness = find_latest(records, "problem_openness")
+    minimum = (openness or {}).get("minimum") or {}
+    digests = set(minimum.get("reading_digests", []))
     identifiers = {item["reading_id"] for item in collect_value_items(find_value(records)) if item["kind"] == "reading"}
-    identifiers.update(collect_openness_reading_ids(records, find_latest(records, "problem_openness")))
     for reference in resolve_assessment_evidence(records):
         if reference.get("kind") == "source":
             identifiers.update(reference["reading_ids"])
@@ -512,7 +505,7 @@ def collect_readings(records):
             and attempt["kind"] == "literature"):
         identifiers.update(row["reading_id"] for row in attempt["literature"]["readings"])
     return [row for identifier, row in sorted(records.get("reading", {}).items())
-            if identifier in identifiers]
+            if identifier in identifiers or digest(row) in digests]
 
 
 def validate_citation_locator(records, artifacts, value):
@@ -563,11 +556,7 @@ def record_citation_locator(store, payload, *, expected_revision, request_id):
         saved = records.get("citation_locator", {}).get(value["id"])
         record = dict(value, **provenance,
                       recorded_revision=saved["recorded_revision"] if saved else expected_revision + 1)
-        change = immutable_record(records, "citation_locator", value["id"], record)
-        if saved is None:
-            validate_post_citation_field("locator", value["url"], version_id=value["version_id"],
-                                         reading_id=value["reading_id"])
-        return [change], record
+        return [immutable_record(records, "citation_locator", value["id"], record)], record
 
     return prepared_mutation(store, "literature.citation_locator", payload, prepare,
                              expected_revision=expected_revision, request_id=request_id)
@@ -629,40 +618,18 @@ def select_citation_readings(records, readings):
     return [group[0] for group in group_citation_readings(records, readings)]
 
 
-def find_projected_citation_locator(records, artifacts, reading, work, *, named_version=None):
-    bundle = records.get("source_bundle", {}).get(reading.get("bundle_id"))
-    location = find_reading_locator(records, artifacts, reading)
-    locator = find_citation_locator(work, (bundle or {}).get("units", []), named_version=named_version)
-    return location["url"] if locator is None and location is not None else locator
-
-
-def require_reading_citations(records, artifacts, reading_ids):
-    """Apply the post's field rules to the citations selected by a new record."""
-    from .identities import normalize_identifier
-    from .problem_citation_metadata import select_citation_text
-    readings = [records["reading"][identifier] for identifier in sorted(set(reading_ids))]
-    for reading in select_citation_readings(records, readings):
-        version = reading["version_id"]
-        work = records["work"][version]
-        locator = find_projected_citation_locator(records, artifacts, reading, work)
-        context = {"version_id": version, "reading_id": reading["id"]}
-        registry_identifier = None
-        if locator is not None:
-            normalized = validate_post_citation_field("locator", locator, **context)
-            if not normalized.startswith("https://"):
-                registry_identifier = normalize_identifier(normalized)
-        citation, _, _, _ = select_citation_text(records, artifacts, work, registry_identifier)
-        validate_post_citation_field("citation", citation, **context)
-
-
 def compose_citations(records, artifacts, readings, *, use_registry=True, named_versions=()):
     from .problem_citation_metadata import compose_citation
     composed = []
     for reading in readings:
         version = reading["version_id"]
         work = records["work"][version]
-        locator = find_projected_citation_locator(records, artifacts, reading, work,
-            named_version=version if use_registry and version in named_versions else None)
+        bundle = records.get("source_bundle", {}).get(reading.get("bundle_id"))
+        location = find_reading_locator(records, artifacts, reading)
+        locator = find_citation_locator(work, (bundle or {}).get("units", []),
+                                       named_version=version if use_registry and version in named_versions else None)
+        if locator is None and location is not None:
+            locator = location["url"]
         if locator is None:
             raise ResearchError("problem_citation_locator_missing", "Record a DOI, arXiv id or HTTPS locator for the read source",
                                 {"version_id": version, "reading_id": reading["id"]})
