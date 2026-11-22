@@ -1469,9 +1469,15 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
 
 def _bars(records, artifacts, intent_id, *, subject=None):
     selected = []
+    historical = set()
+    if subject is not None:
+        from .evaluation import Evaluation
+        artifacts = Evaluation.of(records, artifacts)
+        historical = {review['id'] for review in context_repair.historical_reviews(
+            records, None, 'bar', evaluation=artifacts, refresh_only=True)}
     for saved in records.get('value_review', {}).values():
         review = _payload(saved)
-        if review.get('stage') != 'bar':
+        if review.get('stage') != 'bar' or saved['id'] in historical:
             continue
         if subject is not None:
             if saved.get('subject', {}).get('kind') != 'problem':
@@ -2227,7 +2233,7 @@ def _find_session_bodies(records, artifacts, prior, *, evaluate_states=True):
 def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
     """Build the role allowlist; caller-authored prompts and narrative substitutes are rejected."""
     canonical_prompt(role)
-    fields(context, (), ('artifact_refs', 'bundle', 'objection_id', 'review_ids', 'correction', 'prior_assignment_id', 'source_links', 'context_repair', 'verification_task_id', 'native_packet', 'source_delivery', 'reading_replacement', 'unread'))
+    fields(context, (), ('artifact_refs', 'bundle', 'objection_id', 'review_ids', 'correction', 'prior_assignment_id', 'source_links', 'context_repair', 'verification_task_id', 'native_packet', 'source_delivery', 'reading_replacement', 'unread', 'session_refresh'))
     if 'source_delivery' in context:
         from .review_source_complete import MODE
         if context['source_delivery'] != MODE or role != 'result' or 'prior_assignment_id' not in context:
@@ -2243,7 +2249,10 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
             packet['problem_areas'] = list(records['problem_area'].values())
     projected = False
     if role in bar_sources.ROLES:
-        fields(context, (), ('source_links', 'prior_assignment_id') if role == 'bar' else ('prior_assignment_id', 'source_delivery'), code='invalid_review_context')
+        fields(context, (), ('source_links', 'prior_assignment_id', 'session_refresh') if role == 'bar'
+               else ('prior_assignment_id', 'source_delivery', 'session_refresh'), code='invalid_review_context')
+        if 'session_refresh' in context:
+            return _build_session_refresh_packet(records, artifacts, dossier_id, role, reviewer_id, context)
         packet['protocol'] = _PROBLEM_PROTOCOL if problem else bar_sources.PROTOCOL
         if bar_sources.SESSION_PROTOCOL == bar_sources.PROTOCOL_V3:
             packet['source_rules'] = bar_sources.PROTOCOL_V3
@@ -2997,7 +3006,10 @@ def route_state(records, artifacts, route_id):
 
 
 def _route_state(records, artifacts, route_id):
-    from .review_codex_invocation import has_supported_binding
+    """The state of a route record: the state that its latest probe gives. On a retired route record a probe without
+    an answer decides nothing, so a latest probe that gives unverified without an answer leaves the state of the
+    latest probe with an answer. A retired record takes no assignment and no run, so such a probe has no new work to
+    hold back."""
     route = records.get('review_route', {}).get(route_id)
     status, proof = 'unverified', None
     if route:
@@ -3008,32 +3020,58 @@ def _route_state(records, artifacts, route_id):
             records, evaluation, 'review_route_probe', 'route_id', route_id, order='recorded_revision')
             if saved['route_id'] == route_id and saved.get('route_digest') == route_digest
             and saved.get('runtime') == route['runtime']]
-        for saved in matching[-1:]:
-            try:
-                request = _read_json(artifacts, saved['request'])
-                output = _read_json(artifacts, saved['output']) if saved['output'] else {}
-                controls = _read_json(artifacts, saved['controls'])
-                positive = saved['positive_controls']
-                no_excluded = not any(token in json.dumps(request) for token in controls.values())
-                if not no_excluded or any(token in json.dumps(output) for token in controls.values()):
-                    status = 'contaminated'
-                complete_sources = set(controls) == set(transport.EXCLUDED_SOURCES)
-                positives = all(output.get(key) == positive[key] for key in ('allowed_control', 'evidence_control'))
-                bounded = request.get('tools') == [] and request.get('store') is False and 'previous_response_id' not in request
-                if (has_supported_binding(saved) and saved['status'] == 'completed'
-                        and saved['request_digest'] == digest(request) and no_excluded
-                        and complete_sources and positives and bounded and output.get('excluded_controls') == []
-                        and derive_output(dict(saved, output=output), _read_json(artifacts, saved['response'])) == output
-                        and verify_route_context(artifacts, route, request, _read_json(artifacts, saved['response']),
-                                                 required=saved.get('codex_invocation') is not None)):
-                    status, proof = 'verified_for_route', saved['id']
-            except (ResearchError, ValueError, TypeError, KeyError):
-                continue
+        if matching:
+            status, proof = _judge_route_probe(artifacts, route, matching[-1])
+            if status == 'unverified' and not _has_probe_answer(artifacts, matching[-1]):
+                # The retirement is read only when an earlier probe holds an answer.
+                answered = next((saved for saved in reversed(matching[:-1])
+                                 if _has_probe_answer(artifacts, saved)), None)
+                if answered is not None and route_id in retired_routes(records):
+                    status, proof = _judge_route_probe(artifacts, route, answered)
     return {'context_status': status, 'probe_id': proof,
             'author_history_isolation': status, 'prior_assessment_isolation': status,
             'identity_arm_masking': 'not_established',
             'residual_exposures': ['Provider training knowledge and internal service configuration are not audited.',
                                   'The packet can identify published work; no model-family independence is claimed.']}
+
+
+def _judge_route_probe(artifacts, route, saved):
+    """The context status that one probe record gives its route record, and the probe id when the probe verifies
+    the record. A control of an excluded source in the request or in the output gives contaminated."""
+    from .review_codex_invocation import has_supported_binding
+    status = 'unverified'
+    try:
+        request = _read_json(artifacts, saved['request'])
+        output = _read_json(artifacts, saved['output']) if saved['output'] else {}
+        controls = _read_json(artifacts, saved['controls'])
+        positive = saved['positive_controls']
+        no_excluded = not any(token in json.dumps(request) for token in controls.values())
+        if not no_excluded or any(token in json.dumps(output) for token in controls.values()):
+            status = 'contaminated'
+        complete_sources = set(controls) == set(transport.EXCLUDED_SOURCES)
+        positives = all(output.get(key) == positive[key] for key in ('allowed_control', 'evidence_control'))
+        bounded = request.get('tools') == [] and request.get('store') is False and 'previous_response_id' not in request
+        verified = (has_supported_binding(saved) and saved['status'] == 'completed'
+                    and saved['request_digest'] == digest(request) and no_excluded
+                    and complete_sources and positives and bounded and output.get('excluded_controls') == []
+                    and derive_output(dict(saved, output=output), _read_json(artifacts, saved['response'])) == output
+                    and verify_route_context(artifacts, route, request, _read_json(artifacts, saved['response']),
+                                             required=saved.get('codex_invocation') is not None))
+    except (ResearchError, ValueError, TypeError, KeyError):
+        verified = False
+    return ('verified_for_route', saved['id']) if verified else (status, None)
+
+
+def _has_probe_answer(artifacts, saved):
+    """Whether the reviewer answered this probe: its response holds answer text, parsed or not. A response that
+    cannot be read counts as an answer."""
+    if saved.get('response') is None:
+        return False
+    try:
+        answer = extract_answer_text(_read_json(artifacts, saved['response']))
+    except (ResearchError, ValueError, TypeError, KeyError):
+        return True
+    return bool((answer or '').strip())
 
 
 def previous_problem_result_prompt(repair=False, repair_prompt=None, common_version=1):
@@ -3571,7 +3609,9 @@ def _is_problem_refresh(records, artifacts, prior, previous):
 
 
 def _find_problem_refresh_parent(records, artifacts, value):
-    """Continue the same reviewer when its completed problem review no longer binds the current record."""
+    """The context that continues the same reviewer when its completed problem review no longer binds the current
+    record: the next turn of its session, or for a review that a chain of the session rules v4 recorded, a new chain
+    in its slot (rule F4). None when no refresh applies."""
     if value['role'] not in bar_sources.ROLES or value.get('subject', {}).get('kind') != 'problem' or value['context']:
         return None
     prior = max((saved for saved in read_filtered_records(records, 'review_assignment',
@@ -3581,7 +3621,89 @@ def _find_problem_refresh_parent(records, artifacts, value):
                 key=lambda saved: saved['recorded_revision'], default=None)
     if prior is None or not any(review['assignment_id'] == prior['id'] for review in records.get('value_review', {}).values()):
         return None
-    return prior['id'] if _is_problem_refresh(records, artifacts, prior, _read_json(artifacts, prior['packet'])) else None
+    if prior.get('session_chain'):
+        if is_session_refresh(records, artifacts, prior):
+            return {'session_refresh': {'assignment_id': prior['id']}}
+        return None
+    if _is_problem_refresh(records, artifacts, prior, _read_json(artifacts, prior['packet'])):
+        return {'prior_assignment_id': prior['id']}
+    return None
+
+
+def is_session_refresh(records, artifacts, prior):
+    """Rule F4: whether this assignment ended a chain of the session rules v4 with a recorded problem review that no
+    longer binds the current record. The refresh of that review is a new chain in the slot of this assignment. The
+    evaluation of one command keeps the result, so a command evaluates the refresh check of an assignment once."""
+    if (not prior.get('session_chain') or prior.get('subject', {}).get('kind') != 'problem'
+            or not any(review['assignment_id'] == prior['id'] for review in records.get('value_review', {}).values())):
+        return False
+    from .evaluation import Evaluation
+    evaluation = Evaluation.of(records, artifacts)
+    return evaluation.once(('session_refresh', prior['id']), lambda: _is_problem_refresh(
+        records, evaluation, prior, _read_json(evaluation, prior['packet'])))
+
+
+def _read_session_refresh(records, artifacts, binding, dossier_id, reviewer_id, role):
+    """Rule F4: the assignment that holds the recorded review which a new chain refreshes, named by the member
+    session_refresh of its context. It is the same phase, reviewer and dossier, and its refresh check holds."""
+    fields(binding, ('assignment_id',), code='invalid_review_context')
+    text(binding['assignment_id'], 'Refreshed assignment ID', code='invalid_review_context')
+    prior = _get(records, 'review_assignment', binding['assignment_id'])
+    if (prior['role'] != role or prior['dossier_id'] != dossier_id
+            or normalized_text(prior['reviewer_id']) != normalized_text(reviewer_id)):
+        raise ResearchError('review_source_continuation_mismatch', 'Continue the exact same phase, reviewer and dossier')
+    if not is_session_refresh(records, artifacts, prior):
+        raise ResearchError('review_resampling_forbidden', 'A final phase assessment cannot be continued or sampled again')
+    return prior
+
+
+def _build_session_refresh_packet(records, artifacts, dossier_id, role, reviewer_id, context):
+    """Rule F2: the packet of a first review of the role on the record as it is now, with the members of a refresh.
+
+    A bar keeps the source links of the first assignment of the earlier chain that holds some. historical_reviews
+    holds the entries of the first packet, then each review of the slot that they do not hold. problem_refresh holds
+    the members that the role gets on a refresh of an older rule set, without the members of a change of template;
+    the values of the earlier review come from the logical packet of the earlier chain."""
+    fields(context, ('session_refresh',), code='invalid_review_context')
+    prior = _read_session_refresh(records, artifacts, context['session_refresh'], dossier_id, reviewer_id, role)
+    earlier = _read_json(artifacts, prior['session_chain']['logical'])
+    first = {}
+    if role == 'bar':
+        links = next((row['context']['source_links'] for row in context_repair._lineage(records, prior)
+                      if row.get('context', {}).get('source_links')), None)
+        if links:
+            first['source_links'] = links
+    packet = build_packet(records, artifacts, dossier_id, role, reviewer_id, **first)
+    packet.pop('evidence')
+    packet.pop('digest')
+    historical = context_repair.collect_problem_review_history(records, prior)
+    delivered = {entry.get('review', entry)['id'] for entry in packet.get('historical_reviews', [])}
+    packet['historical_reviews'] = packet.get('historical_reviews', []) + [
+        deliver_review(records, _payload(review)) for review in historical if review['id'] not in delivered]
+    refresh = {'assignment_id': prior['id']}
+    if role != 'bar':
+        add_problem_bars(records, artifacts, packet, reviewer_id, slot=context_repair.slot_id(records, prior))
+        refresh['review_ids'] = [review['id'] for review in historical]
+    if role == 'slate':
+        refresh.update(previous_candidate_set_digest=earlier['candidate_set_digest'],
+                       candidate_set_digest=packet['candidate_set_digest'],
+                       previous_bar_ids=earlier['bar_ids'], bar_ids=packet['bar_ids'])
+    elif role == 'result':
+        refresh.update(previous_problem_evidence_digest=earlier['problem_evidence_digest'],
+                       problem_evidence_digest=packet['problem_evidence_digest'],
+                       previous_problem_review_currency=earlier.get('problem_review_currency'),
+                       problem_review_currency=packet['problem_review_currency'])
+    unsupported = [review['id'] for review in historical if review['assignment_id'] == prior['id']
+                   and _is_evidence_refresh_needed(records, artifacts, review)]
+    if unsupported:
+        named = refresh.get('review_ids', [])
+        refresh.update(reason='evidence_undelivered', review_ids=named + [i for i in unsupported if i not in named])
+    packet['problem_refresh'] = refresh
+    if packet.get('source_rules') == bar_sources.PROTOCOL_V3:
+        packet['source_artifacts'] = bar_sources.collect_record_artifacts(packet)
+    packet['evidence'] = _evidence(artifacts, packet, records=records)
+    packet['digest'] = digest(packet)
+    return packet
 
 
 def _initial_size_failure(records, artifacts, prior, value):
@@ -3712,6 +3834,9 @@ def prepare_capacity_notice(records, route, role, packet):
     return packet
 
 
+RETIRED_ROUTE_ASSIGNMENT_MSG = 'Choose another verified route and follow the current head plan for a preserved slot.'
+
+
 def record_assignment(store, payload, *, expected_revision, request_id):
     # Archived builders reconstruct scientific bytes; receipts use the installed capacity policy.
     from . import openness_reading as reading_capacity
@@ -3749,8 +3874,10 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                     # chain even though its own subject has no statement ID.
                     context = value['context']
                     repair, upgrade = context.get('context_repair'), context.get('staged_upgrade')
+                    refresh = context.get('session_refresh')
                     predecessor_id = ((repair.get('assignment_id') if isinstance(repair, dict) else None)
                                       or context.get('prior_assignment_id')
+                                      or (refresh.get('assignment_id') if isinstance(refresh, dict) else None)
                                       or (upgrade.get('assignment_id') if isinstance(upgrade, dict) else None))
                     predecessor = (records.get('review_assignment', {}).get(predecessor_id)
                                    if isinstance(predecessor_id, str) else None)
@@ -3767,13 +3894,22 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             raise ResearchError('review_not_independent', 'The author cannot provide an independent assessment')
         route = _get(records, 'review_route', value['route_id'])
         if value['route_id'] in retired_routes(records):
-            raise ResearchError('review_route_retired', 'The route was retired; assign on another route, and continue a preserved slot through a context repair')
+            raise ResearchError('review_route_retired', RETIRED_ROUTE_ASSIGNMENT_MSG)
         require_installed_runtime(records, artifacts, route, value)
         if value['dossier_id'] is not None:
             d = _payload(_get(records, 'strategy_dossier', value['dossier_id']))
             intent = _payload(_get(records, 'research_intent', d['intent_id']))
             if normalized_text(value['reviewer_id']) in {normalized_text(a) for a in intent.get('authors', [])}:
                 raise ResearchError('review_not_independent', 'An intent author cannot provide an independent assessment')
+        # A replacement sends the turn of the assignment that it replaces again, so that turn is compared with the
+        # installed renderer before the replacement is built.
+        refusal = value['context'].get('output_refusal')
+        replaced_id = value['context'].get('capacity_replacement') or (
+            refusal.get('assignment_id') if isinstance(refusal, dict) else None)
+        replaced = records.get('review_assignment', {}).get(replaced_id) if isinstance(replaced_id, str) else None
+        if replaced is not None:
+            from .review_visual_sources import require_installed_renderer
+            require_installed_renderer(records, artifacts, replaced)
         if 'capacity_replacement' in value['context']:
             previous = _get(records, 'review_assignment', value['context']['capacity_replacement'])
             if previous.get('session_chain'):
@@ -3804,14 +3940,15 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 inherited = {key: prior['context'][key] for key in ('review_ids', 'objection_id', 'correction')
                              if key in prior['context']}
                 value = dict(value, context=dict(inherited, **value['context']))
-        refresh_parent = _find_problem_refresh_parent(records, artifacts, value) if problem and upgrade is None else None
-        if refresh_parent is not None:
-            value = dict(value, context={'prior_assignment_id': refresh_parent})
+        refresh_context = _find_problem_refresh_parent(records, artifacts, value) if problem and upgrade is None else None
+        if refresh_context is not None:
+            value = dict(value, context=refresh_context)
         repair_records = _read_context_records(records, value)
         repair = (context_repair.prepare_repair(repair_records, Evaluation.of(repair_records, artifacts), value)
                   if value['role'] in bar_sources.ROLES or
                   value['role'] == 'adjudicator' and 'context_repair' in value['context'] else None)
         parent = None
+        refreshed = None
         visual_transition = False
         if value['role'] == 'verification' and 'prior_assignment_id' in value['context']:
             parent = _get(records, 'review_assignment', value['context']['prior_assignment_id'])
@@ -3867,6 +4004,19 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 from .review_source_complete import MARKER as COMPLETE_MARKER, MODE
                 if COMPLETE_MARKER in _read_json(artifacts, parent['packet']):
                     value = dict(value, context=dict(value['context'], source_delivery=MODE))
+        elif value['role'] in bar_sources.ROLES and 'session_refresh' in value['context']:
+            # Rules F1, F3 and F4: the refresh of a review that a chain of the session rules v4 recorded is a new chain
+            # in the slot of that chain, on any verified route record. It keeps the author of its predecessor, and one
+            # recorded review takes one refresh.
+            refreshed = _read_session_refresh(records, artifacts, value['context']['session_refresh'],
+                                              value['dossier_id'], value['reviewer_id'], value['role'])
+            if normalized_text(refreshed['author_id']) != normalized_text(value['author_id']):
+                raise ResearchError('review_source_continuation_mismatch', 'Continue the exact same route and author boundary')
+            if any(later['recorded_revision'] > refreshed['recorded_revision'] and later['role'] == refreshed['role']
+                   and not has_ended_without_output(records, later['id']) and not is_dead_assignment(records, later)
+                   for later in read_filtered_records(records, 'review_assignment',
+                       slot_id=context_repair.slot_id(records, refreshed)).values()):
+                raise ResearchError('review_source_continuation_fork', 'Continue the latest source turn without forking the reviewer session')
         if value['context'].get('source_delivery') and route['adapter'] not in ('codex_cli_v1', 'codex_cli_visual_v1'):
             raise ResearchError('review_complete_source_route', 'Complete visible source input retains the existing Codex local route')
         staged_repair = repair is not None and repair['predecessor'].get('staged_review') is not None
@@ -3888,7 +4038,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         if upgrade_parent is not None:
             slot_identifier = context_repair.slot_id(records, upgrade_parent)
         elif value['role'] in bar_sources.ROLES or repair is not None or repair_adjudicator:
-            slot_identifier = (context_repair.slot_id(records, parent) if parent is not None else
+            slot_identifier = (context_repair.slot_id(records, parent or refreshed) if parent or refreshed else
                                repair['slot_id'] if repair is not None else _initial_slot(records, artifacts, value))
         if (slot_identifier is None and value['role'] in ('verification', 'manuscript', 'standalone')
                 and not value['context'].get('prior_assignment_id')):
@@ -4149,7 +4299,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 {'role': 'assistant', 'content': json.dumps(state['output'], sort_keys=True)}]
             session_id = history_parent['session_id']
             history_assignment_id = history_parent['id']
-        elif (value['role'] == 'slate' or (problem and value['role'] == 'result')) and repair is None:
+        # A new slate or result continues the session of its own bar. A refresh of a chain of the session rules v4
+        # starts its own session without history (rule F1).
+        elif (value['role'] == 'slate' or (problem and value['role'] == 'result')) and repair is None and refreshed is None:
             own = packet['own_bars'][-1]
             prior = _get(records, 'review_assignment', own['assignment_id'])
             prior_state = assignment_state(records, artifacts, prior['id'])
@@ -4192,6 +4344,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 records, artifacts, value, route, packet, prompt, history, history_assignment_id)
             if route['adapter'] == 'codex_cli_visual_v1':
                 from . import review_visual_sources, review_visual_route
+                review_visual_sources.require_installed_renderer(
+                    records, artifacts, dict(value, history_assignment_id=history_assignment_id))
                 review_visual_sources.prepare_packet(records, artifacts, packet, history=history)
                 if visual_transition:
                     packet[review_visual_route.MARKER] = review_visual_route.validate_transition(
@@ -4390,8 +4544,137 @@ def has_verified_history(state):
         for item in state['obligations']))
 
 
+# Working texts of rule PC5 for the writer's pass. One text serves the plan and the refusal of one code.
+CONTEXT_UNVERIFIED_MSG = (
+    'The review records give no verified context for a turn of this review. The latest probe of the route record '
+    'of that turn did not verify the route. The harness starts no reviewer call of this review while this state '
+    'lasts. details.turn names the turn. Its member route gives the route record and the state of the record. Its '
+    'member count gives the number of turns of this review in this state. The plan names the step: under '
+    'details.step in a plan, and under details.next in a refusal. Take that step. Then run review-series on this '
+    'review again. When the route record takes a probe, the step probes it. A completed probe ends the state, and '
+    'the review continues from its last turn. A route record that pins another reviewer runtime than the installed '
+    'one takes no probe. For such a record the step retires it. After the retirement, the state of the record is '
+    'the state that its latest probe with an answer gives. When that state does not verify the route either, no '
+    'probe ends the state, and the step of the role starts the review again.')
+CONTEXT_CONTAMINATED_MSG = (
+    'The review records give no verified context for a turn of this review. A contamination event names that '
+    'turn, or the latest probe of its route record found a control of an excluded source. The harness starts no '
+    'reviewer call of this review. details.turn names the turn. Its member events lists the contamination events '
+    'that name it. Its member route gives the route record and the state of the record. Its member count gives the '
+    'number of turns of this review without a verified context. When events holds an event, no probe ends the '
+    'state, and this review gives no result that counts. The plan names the step: under details.step in a plan, '
+    'and under details.next in a refusal. Take that step. For an openness chain the step is a new packet. A new '
+    'chain under the same reviewer_id can carry the turns of this chain before the named turn. When events is '
+    'empty, a completed probe of that route record also ends the state.')
+
+
+def list_review_turns(records, assignment):
+    """Return the turns whose route state applies to a new call (rule PC2)."""
+    return _read_review_turns(records, assignment)[0]
+
+
+def _read_review_turns(records, assignment):
+    """Return the route turns and, for a scientific slot, their full exposure lineage.
+
+    For a bar, slate or result, route state follows the exposure since the latest repair and the latest refresh.
+    For other reviews, it follows history_assignment_id or context.prior_assignment_id.
+    A link that the reader of the exposure lineage refuses, such as the empty history id of a legacy record in a
+    store without a post, is read as the planner reads it there: the line of prior turns that the store holds."""
+    if assignment['role'] in context_repair.ROLES:
+        try:
+            exposure = context_repair._exposure_lineage(records, assignment)
+        except ResearchError as error:
+            if error.code != 'invalid_review_context':
+                raise
+        else:
+            turns = context_repair.list_context_turns(records, assignment, exposure=exposure)
+            refresh = max((index for index, turn in enumerate(turns)
+                           if turn.get('context', {}).get('session_refresh') is not None), default=0)
+            return turns[refresh:], exposure
+    turns, seen = [assignment], {assignment['id']}
+    while True:
+        parent = turns[-1].get('history_assignment_id') or turns[-1].get('context', {}).get('prior_assignment_id')
+        row = records.get('review_assignment', {}).get(parent)
+        if row is None or parent in seen:
+            return turns[::-1], None
+        seen.add(parent)
+        turns.append(row)
+
+
+def find_unverified_context(records, artifacts, assignment):
+    """Read the context of a review from the review records of the present (rule PC1).
+
+    Route state follows the current review chain. Contamination events in a refreshed slot follow E5's exposure.
+    Return the first turn named by an event, or the first turn with an unverified route, with its events and the
+    count of affected turns. Include the named route's context_status when the route check reads that record."""
+    turns, exposure = _read_review_turns(records, assignment)
+    named = {}
+    for event in read_filtered_records(records, 'review_context_event', kind='contamination').values():
+        if event['kind'] == 'contamination':
+            named.setdefault(event['assignment_id'], []).append(event)
+    contaminated = [(turn, named[turn['id']]) for turn in turns if turn['id'] in named]
+    if named and exposure and any('session_refresh' in turn.get('context', {}) for turn in exposure):
+        # The exposure walk already read every scientific predecessor.
+        ancestors = {'review_assignment': {turn['id']: turn for turn in exposure}}
+        chain = context_repair._lineage(ancestors, assignment)
+        if any('session_refresh' in turn.get('context', {}) for turn in chain):
+            repair = context_repair.find_last_repair_index(chain)
+            contaminated = list(context_repair.iter_refresh_contaminations(
+                records, chain, repair, named, exposure=exposure))
+    routes = {identifier: dict(id=identifier, context_status=route_state(records, artifacts, identifier)['context_status'])
+              for identifier in dict.fromkeys(turn['route_id'] for turn in turns)}
+    unverified = [turn for turn in turns if routes[turn['route_id']]['context_status'] != 'verified_for_route']
+    if contaminated:
+        turn, events = contaminated[0]
+    elif unverified:
+        turn, events = unverified[0], []
+    else:
+        return None
+    affected = {row['id'] for row, _ in contaminated} | {row['id'] for row in unverified}
+    route_id = turn['route_id']
+    return dict(assignment_id=turn['id'], events=sorted(event['id'] for event in events),
+                route=routes.get(route_id, {'id': route_id}), count=len(affected))
+
+
+def find_blocking_context(records, artifacts, assignment):
+    """The turn of find_unverified_context that stops a call and a plan of this assignment (rules PC3, PC4 and PC6),
+    or None. While the route record of the assignment differs from the one that the assignment recorded, or is stale
+    or retired, and no contamination names a turn, the rules of that route record decide the refusal and the plan, as
+    before: a changed record takes no call (review_route_changed), a stale record takes no probe, and a retired one
+    takes no run."""
+    lost = find_unverified_context(records, artifacts, assignment)
+    if lost is None or is_contaminated_context(lost):
+        return lost
+    if digest(records.get('review_route', {}).get(assignment['route_id'])) != assignment['route_digest']:
+        return None
+    from .review_route_plan import read_route_standing
+    standing = read_route_standing(records, artifacts, assignment['route_id'])
+    return None if standing['stale'] or standing['retired'] else lost
+
+
+def is_contaminated_context(lost):
+    """Whether a lost context of find_unverified_context gives the code review_context_contaminated: an event names
+    the turn, or the latest probe of its route record found a control of an excluded source."""
+    return bool(lost['events']) or lost['route']['context_status'] == 'contaminated'
+
+
+def require_verified_context(records, artifacts, assignment):
+    """Refuse a new call of a review, or its next assignment, while the review records of the present give no
+    verified context for one of its turns (rules PC3, PC5 and PC7). The details hold the plan of the head under
+    next."""
+    lost = find_blocking_context(records, artifacts, assignment)
+    if lost is None:
+        return
+    from .review_continuation import plan_next
+    details = dict(assignment_id=assignment['id'], turn=lost, next=plan_next(records, artifacts, assignment['id']))
+    if is_contaminated_context(lost):
+        raise ResearchError('review_context_contaminated', CONTEXT_CONTAMINATED_MSG, details)
+    raise ResearchError('review_context_unverified', CONTEXT_UNVERIFIED_MSG, details)
+
+
 def require_verified_assignment(records, artifacts, assignment):
-    """Admit a new call only from the context frozen by a verified route."""
+    """Admit a new call only from a verified context: the context that the assignment froze when it was recorded,
+    and the context that the review records of the present give for the turns of its review."""
     if assignment['context_state']['context_status'] != 'verified_for_route':
         from .review_continuation import plan_next
         raise ResearchError('review_context_unverified',
@@ -4402,11 +4685,13 @@ def require_verified_assignment(records, artifacts, assignment):
             'review, a new packet. An assignment that already ran stops for a decision about its route.',
             dict(assignment_id=assignment['id'], route_id=assignment['route_id'],
                  next=plan_next(records, artifacts, assignment['id'])))
+    require_verified_context(records, artifacts, assignment)
 
 
 # Required, then optional members of the payload of an ordinary reviewer call, staged or not. The start checks
 # and every rebuild of the payload of a started call (review_task_execution.rebuild_call_payload) read it.
 INVOKE_PAYLOAD_FIELDS = (('id', 'assignment_id'), ())
+RETIRED_ROUTE_RUN_MSG = 'The route of this assignment was retired. Follow the current head plan for this slot.'
 
 
 def invoke_assignment(store, payload, *, expected_revision, request_id, credential=None, after_start=None):
@@ -4422,7 +4707,7 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         require_unposted_review(records, assignment, artifacts)
         require_verified_assignment(records, artifacts, assignment)
         if assignment['route_id'] in retired_routes(records):
-            raise ResearchError('review_route_retired', 'The route of this assignment was retired; continue its slot through a context repair on another route')
+            raise ResearchError('review_route_retired', RETIRED_ROUTE_RUN_MSG)
         if find_replacement(records, assignment) is not None:
             raise ResearchError('review_assignment_replaced', 'This turn ended without output and a later '
                                 'continuation replaced it; run the replacement')
@@ -4476,6 +4761,8 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
             handoff = describe_ratio_handoff(records, artifacts, assignment)
             if handoff is not None:
                 raise ResearchError(openness_reading.PROJECTION_STOP, RATIO_EXPORT_MESSAGE, handoff['details'])
+        from .review_visual_sources import require_installed_renderer
+        require_installed_renderer(records, artifacts, assignment)
         from .review_source_complete import validate
         validate(records, artifacts, assignment, packet)
         if assignment.get('session_chain'):
@@ -4776,15 +5063,17 @@ def _assignment_state(records, artifacts, assignment_id):
         state['context_status'] = 'unverified' if not events else 'contaminated'
     if state['context_status'] != 'verified_for_route':
         state['obligations'].append(obligation('review_context_' + state['context_status'], ROUTE_CONTEXT_MSG, assignment_id=assignment_id))
+    refresh_contaminated = False
     try:
-        from .evaluation import Evaluation
         repair_records = _read_context_records(records, assignment)
-        context_repair.validate_repair_binding(repair_records, Evaluation.of(repair_records, artifacts), assignment)
+        context_repair.validate_repair_binding(records, artifacts, assignment, origin_records=repair_records)
         from .review_refusal_replacement import validate_replacement_origin
         validate_replacement_origin(records, artifacts, assignment)
     except ResearchError as error:
-        state['obligations'].append(obligation(error.code, str(error)))
-        if error.code == 'review_context_repair_stale':
+        refresh_contaminated = error.code == 'review_context_contaminated'
+        if not (refresh_contaminated and events):
+            state['obligations'].append(obligation(error.code, str(error)))
+        if refresh_contaminated or error.code == 'review_context_repair_stale':
             state['context_status'] = 'contaminated'
     if inventory_issue is not None:
         state['obligations'].append(inventory_issue)
@@ -4872,7 +5161,8 @@ def _assignment_state(records, artifacts, assignment_id):
     if history_parent is not None and assignment.get('session_chain'):
         inherited_status = review_session_v4.describe_history_status(records, assignment)
     if inherited_status is not None:
-        state['context_status'] = inherited_status
+        if not refresh_contaminated:
+            state['context_status'] = inherited_status
         state['obligations'].append(obligation('review_source_parent_unverified', 'The complete scientific and source-request history must remain independently verified.'))
     if state['output'] is not None and state['raw_output'] is None:
         raw = read_raw_observation(records, artifacts, state['attempt_id'])

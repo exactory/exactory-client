@@ -40,6 +40,28 @@ JOIN_GROUND_MESSAGE = ('A capacity prior joins other keys without a documented g
                        'Give it documented_ground with a statement and an https URL, or remove joined_keys.')
 MERGE_MESSAGE = ('An installed unit did not add the tests or the stops of its merge obligation to this entry. '
                  'Add the tests and the stop codes that the obligation lists for the entry.')
+GAP_TABLE_MESSAGE = ('An entry has the coverage stop_before_call, and no later release closes it and missing_evidence does '
+                     'not state what its evidence lacks; or missing_evidence names an entry with another coverage. '
+                     'Give the entry its evidence and coverage, or state what is missing under missing_evidence in '
+                     'tests/fixtures/capacity_closure.json.')
+STAGE3_TABLE_MESSAGE = ('A role or a turn kind of a chain protocol of 0.92.0 lacks its field-class table, its delivery row, '
+                        'its task or its recovery row; or the combine row of a chain without a kind combine does not '
+                        'take the final handler; or review_composition.ROLES_WITHOUT_RULES holds a role that a chain '
+                        'family serves. Add the missing row, or remove that role from ROLES_WITHOUT_RULES.')
+PROPERTY_COVERAGE_MESSAGE = ('A chain family, a subject or a property of guard part 3 is neither driven to a recorded '
+                             'review by a named test nor in the table of gaps, or it is in both. Name the tests under '
+                             'property_coverage.rows of tests/fixtures/capacity_closure.json, or state the gap under '
+                             'property_coverage.gaps.')
+# The turn kinds of the chain protocols of 0.92.0, as list_capacity_recovery_rows gives them.
+STAGE3_TURN_KINDS = {
+    'exactory-openness-reading-v7': ('reading', 'final', 'combine'),
+    'exactory-openness-reading-math-v2': ('reading', 'final', 'combine'),
+    'exactory-independent-review-sources-v4': ('request', 'final', 'combine'),
+    'exactory-review-parts-v3': ('read', 'combine', 'check', 'final'),
+}
+# The condensing turn of these protocols takes the task of the kind final (decision 29).
+FINAL_TASK_COMBINE_PROTOCOLS = ('exactory-openness-reading-v7', 'exactory-openness-reading-math-v2',
+                                'exactory-independent-review-sources-v4')
 PACKET_KIND_MESSAGE = ('This packet, or the registry declaration that it is checked against, failed validation, '
                        'so the packet gets no task kind. Correct the registry declarations and the open-member baseline, '
                        'and declare the role, protocol and members of the packet in tests/fixtures/capacity_packet_schema.json.')
@@ -116,18 +138,83 @@ def validate_matrix(matrix, outcomes=None):
 
 
 def build_gap_table(matrix):
+    missing = matrix.get('missing_evidence', {})
     return dict(rows=[dict(id=entry['id'], kinds=entry['kinds'], quantity=entry['quantity'],
             pending_units=sorted((set(entry['units']['path']) | set(entry['units']['construction'])) -
-                set(matrix['installed_units']))) for entry in matrix['entries']
-            if entry['coverage'] == 'stop_before_call'],
+                set(matrix['installed_units'])), missing_evidence=missing.get(entry['id']))
+            for entry in matrix['entries'] if entry['coverage'] == 'stop_before_call'],
         gaps=sorted(entry['id'] for entry in matrix['entries'] if entry['coverage'] == 'stop_before_call'),
         without_construction=sorted(entry['id'] for entry in matrix['entries']
             if not entry['units']['construction']))
 
 
+def inspect_gap_table(matrix, later_release_gaps):
+    """The gap table holds the entries that a later release closes and the entries that name their missing evidence."""
+    missing = matrix.get('missing_evidence', {})
+    gaps = set(build_gap_table(matrix)['gaps'])
+    if (gaps != set(later_release_gaps) | set(missing) or not set(missing).isdisjoint(later_release_gaps)
+            or not all(missing.values())):
+        return [GAP_TABLE_MESSAGE]
+    return []
+
+
+def inspect_stage3_tables(inventory, recovery_rows, roles, roles_without_rules, field_class_roles):
+    """Guard part 2 for the forms of 0.92.0: roles, turn kinds and the roles without a composition rule.
+
+    Every role has a field-class table and a delivery row. Every turn kind of a new chain protocol has a recovery
+    row with a handler and a task with its levels and its answer bound. A condensing turn of a chain whose plan holds
+    no kind combine takes the task of the kind final (decision 29): the combine row of such a protocol names the
+    handler of its final. Only the paper roles, which no chain family serves, are without a composition rule.
+    """
+    from research_harness.review_protocol import PAPER_ROLES
+    errors = []
+    rows = {(row['kind'], row['protocol']): row for row in recovery_rows}
+    for protocol, kinds in STAGE3_TURN_KINDS.items():
+        for kind in kinds:
+            row = rows.get((kind, protocol))
+            if row is None or row['handler'] == 'nothing' or kind not in inventory['task_rules']:
+                errors.append(STAGE3_TABLE_MESSAGE + ' ' + protocol + ':' + kind)
+        if protocol in FINAL_TASK_COMBINE_PROTOCOLS and rows.get(('combine', protocol), {}).get('handler') != rows.get(
+                ('final', protocol), {}).get('handler'):
+            errors.append(STAGE3_TABLE_MESSAGE + ' ' + protocol + ':combine')
+    if set(roles_without_rules) != set(PAPER_ROLES):
+        errors.append(STAGE3_TABLE_MESSAGE + ' roles without rules')
+    errors.extend(STAGE3_TABLE_MESSAGE + ' ' + role for role in roles
+                  if role not in field_class_roles or role not in inventory['roles'])
+    return errors
+
+
+def read_family_subjects(declaration):
+    """Read the subjects of a chain family from the source constant that it names, or from its own list."""
+    import importlib
+    if 'subjects_source' in declaration:
+        module, _, name = declaration['subjects_source'].rpartition('.')
+        return tuple(getattr(importlib.import_module(module), name))
+    return tuple(declaration['subjects'])
+
+
+def inspect_property_coverage(matrix):
+    """Guard parts 3 and 5 for the chain families of 0.92.0: every subject and property is driven or a named gap."""
+    coverage = matrix['property_coverage']
+    driven = {(row['family'], row['subject'], row['property']) for row in coverage['rows'] if row['tests']}
+    gaps = {(row['family'], row['subject'], row['property']) for row in coverage['gaps'] if row['reason']}
+    required = set()
+    for family, declaration in coverage['families'].items():
+        subjects = read_family_subjects(declaration)
+        required.update((family, subject, 'recorded_review') for subject in subjects)
+        required.update((family, '*', name) for name in declaration['properties'])
+        required.update((family, subject, name) for subject in subjects
+                        for name in declaration.get('subject_properties', ()))
+    if driven & gaps or driven | gaps != required or len(driven) != len(coverage['rows']) or len(gaps) != len(coverage['gaps']):
+        return [PROPERTY_COVERAGE_MESSAGE]
+    return []
+
+
 def collect_evidence_tests(matrix):
+    property_tests = [test for row in matrix.get('property_coverage', {}).get('rows', []) for test in row['tests']]
     return sorted({test for entry in matrix['entries'] for test in entry['tests'] +
-        entry['evidence']['tests'] + [test for stop in entry['required_stops'] for test in stop['tests']]})
+        entry['evidence']['tests'] + [test for stop in entry['required_stops'] for test in stop['tests']]}
+        | set(property_tests))
 
 
 def read_plugin_sources(root):

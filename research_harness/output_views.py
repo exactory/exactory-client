@@ -263,14 +263,15 @@ def _has_staged_successor(records, assignment):
     return False
 
 
-def _find_current_value_reviews(records):
+def _find_current_value_reviews(records, artifacts=None):
     """(current, historical) value review ids. historical_reviews names the reviews whose independence a later
     repair or a contamination ended; of the others, the latest review of each dossier, stage, subject and slot is
     current, as the harness selects bars and problem reviews."""
     reviews = records.get("value_review", {})
+    evaluation = Evaluation.of(records, artifacts) if artifacts is not None else None
     historical = set()
     for dossier_id, stage in {(review.get("dossier_id"), review["payload"]["stage"]) for review in reviews.values()}:
-        historical.update(review["id"] for review in historical_reviews(records, dossier_id, stage))
+        historical.update(review["id"] for review in historical_reviews(records, dossier_id, stage, evaluation=evaluation))
     standing = {"value_review": {key: review for key, review in reviews.items() if key not in historical}}
     current = _find_latest_keys(standing, "value_review", lambda review: (
         review.get("dossier_id"), review["payload"]["stage"], digest(review.get("subject")),
@@ -409,7 +410,7 @@ def _build_records(records, artifacts, inputs):
 
 def _build_value_reviews(records, artifacts, inputs):
     """Recorded reviews under the role of their assignment; the index names the research support recorded with one."""
-    current, historical = _find_current_value_reviews(records)
+    current, historical = _find_current_value_reviews(records, artifacts)
     files = {}
     for key, review in records.get("value_review", {}).items():
         status = "historical" if key in historical else "current" if key in current else "superseded"
@@ -529,6 +530,8 @@ def _name_link(records, assignment, earlier_siblings, adoptions):
     context = assignment.get("context", {})
     if isinstance(context.get("context_repair"), dict):
         return "context_repair"
+    if isinstance(context.get("session_refresh"), dict):
+        return "problem_refresh"
     if context.get("prior_assignment_id") is not None:
         if any(item["kind"] == "value_review" for item in adoptions.get(context["prior_assignment_id"], [])):
             return "problem_refresh"

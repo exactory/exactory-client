@@ -23,6 +23,10 @@ REFUSES_RETIRED_ROUTE = {'review-assignment': True, 'review-run': True, 'review-
                          'review-probe': False}
 
 
+def describe(plan):
+    return plan['state'], plan.get('code'), plan.get('command')
+
+
 def list_steps(plan):
     return [(step.get('id'), step['command'], (step.get('payload') or {}).get('route_id'))
             for step in plan['details'].get('steps', [plan['details']['step']])]
@@ -475,6 +479,172 @@ class RoutePlanGuardTests(RoutePlanCase):
             finally:
                 case.doCleanups()
         self.assertEqual(refused, {})
+
+
+class RetiredRouteStateTests(RoutePlanCase):
+    """The joint tests J1 to J4 of this rule and rule RS1 (lane retired-route-state, decision D14 of the design of
+    this module): a head on the retired route record "route", whose latest probe has no answer and whose earlier
+    probe verified it."""
+
+    def fail_probe_without_an_answer(self):
+        with patch.object(transport, 'send_request',
+                          side_effect=ResearchError('review_provider_failure', 'A provider error.')):
+            failed = self.probe('route', 'probe-without-an-answer')
+        self.assertEqual((failed['status'], failed['response']), ('failed', None))
+
+    def test_observed_answer_on_a_retired_route_is_recorded(self):
+        """J1, row C of the design of this module."""
+        head = self.build_answered_head()
+        self.fail_probe_without_an_answer()
+        self.retire(head, 'retire-route')
+        # On the base the plan is the handoff review_context_unverified with the probe of the retired record.
+        self.assertEqual(self.plan(head['id'])['state'], 'record')
+
+    def test_observed_answer_on_a_stale_route_is_recorded_after_the_retirement(self):
+        """J2, row D of the design of this module."""
+        head = self.build_answered_head()
+        self.fail_probe_without_an_answer()
+        self.make_stale()
+        plan = self.plan(head['id'])
+        self.assertEqual((plan['state'], plan['code']), ('handoff', 'review_route_runtime_stale'))
+        self.assertEqual(list_steps(plan), [(8, 'review-context', None), (None, 'review-series', None)])
+        self.take_retirement(plan['details']['steps'][0])
+        # On the base the plan after the retirement is the handoff review_route_retired with steps 7 and 1.
+        self.assertEqual(self.plan(head['id'])['state'], 'record')
+
+    def test_answer_that_asks_for_a_source_on_a_retired_route_takes_the_repair(self):
+        """J3, row E of the design of this module."""
+        head = self.build_next_turn_head()
+        self.fail_probe_without_an_answer()
+        self.retire(head, 'retire-route')
+        plan = self.plan(head['id'])
+        # On the base the plan is the handoff review_context_unverified with the probe of the retired record.
+        self.assertEqual((plan['state'], plan['code'], list_steps(plan)),
+                         ('handoff', 'review_route_retired', [(1, 'review-assignment', None)]))
+
+    def test_head_recorded_while_its_route_was_unverified_takes_the_repair_after_the_retirement(self):
+        """J4, row A of the design of this module."""
+        self.fail_probe_without_an_answer()
+        head = self.assign_first_turn()
+        self.assertEqual(head['context_state']['context_status'], 'unverified')
+        self.retire(head, 'retire-route')
+        plan = self.plan(head['id'])
+        self.assertEqual((plan['state'], plan['code'], list_steps(plan)),
+                         ('handoff', 'review_route_retired', [(1, 'review-assignment', None)]))
+
+
+class EarlierTurnRouteTests(unittest.TestCase):
+    """The joint test of this rule with rule PC5 of lane call-context-present (finding F1 of the review of its
+    design): a turn of the review stands on another route record than the head, and that record takes no probe. The
+    store of tests/test_visual_result_delivery.py: the problem result 'visual-result' on the codex_cli_visual_v1
+    route record 'visual-route' continues the turns of its session on the codex_cli_v1 route record 'route', whose
+    earlier probe verified it."""
+
+    def setUp(self):
+        import test_visual_result_delivery as fixtures
+        self.fixture = fixtures.VisualResultDeliveryTests()
+        self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
+        self.case, self.head = self.fixture.case, self.fixture.assignment
+
+    def plan(self):
+        return plan_next(self.case.read_records(), self.fixture.artifacts, self.head['id'])
+
+    def run_head(self, identifier):
+        """review-run of the head. Return (the refusal or None, the number of requests that were sent)."""
+        sent = []
+
+        def respond(route, request, credential):
+            sent.append(route['id'])
+            return self.fixture.response(route, request, self.case.build_review_output('result'))
+        with patch.object(transport, 'send_request', side_effect=respond):
+            try:
+                self.case.mutate(protocol.invoke_assignment, dict(id=identifier, assignment_id=self.head['id']),
+                                 credential='test-only')
+            except ResearchError as error:
+                return error, len(sent)
+        return None, len(sent)
+
+    def make_stale(self, route_id):
+        """This route record alone pins another runtime than the installed one."""
+        installed = transport.runtime
+
+        def read_runtime(route=None):
+            runtime = installed(route)
+            return dict(runtime, implementation_sha256='0' * 64) if route and route['id'] == route_id else runtime
+        stale = patch.object(transport, 'runtime', side_effect=read_runtime)
+        stale.start()
+        self.addCleanup(stale.stop)
+
+    def test_earlier_turn_on_a_stale_route_record_takes_the_retirement_of_that_record(self):
+        self.assertEqual(self.plan()['state'], 'run')
+        with patch.object(transport, 'send_request', side_effect=ResearchError('review_provider_failure', 'A provider error.')):
+            self.case.mutate(protocol.probe_route, dict(id='probe-without-an-answer', route_id='route'),
+                             credential='test-only')
+        plan = self.plan()
+        # The probe step names the route record of the named turn, not the route of the head.
+        self.assertEqual(describe(plan),
+                         ('handoff', 'review_context_unverified', 'review-probe'))
+        self.assertEqual(plan['details']['step']['payload'], dict(route_id='route'))
+        turn = plan['details']['turn']
+        self.assertEqual((turn['events'], turn['route']), ([], dict(id='route', context_status='unverified')))
+        self.make_stale('route')
+        records = self.case.read_records()
+        self.assertEqual(read_standing(records, 'route'), dict(retired=False, stale=True))
+        self.assertEqual(read_standing(records, 'visual-route'), dict(retired=False, stale=False))
+        plan = self.plan()
+        self.assertEqual(describe(plan),
+                         ('handoff', 'review_context_unverified', 'review-context'))
+        self.assertEqual(plan['details']['turn'], turn)
+        self.assertEqual(list_steps(plan), [(8, 'review-context', None), (None, 'review-series', None)])
+        retirement = plan['details']['steps'][0]
+        self.assertEqual((retirement['route_id'], retirement['payload']),
+                         ('route', dict(assignment_id=turn['assignment_id'], source='owner', kind='route_retired')))
+        from research_harness.review_route_plan import find_refused_use
+        self.assertIsNone(find_refused_use(records, self.fixture.artifacts, self.head, plan))
+        self.assertEqual(list_refused_uses(records, self.head, plan), [])
+        refusal, sent = self.run_head('refused-run')
+        self.assertEqual((refusal.code, sent), ('review_context_unverified', 0))
+        self.assertEqual(refusal.details['next'], plan)
+        payload = dict(retirement['payload'], id='retire-route', reason='The owner retired the stale route record.',
+                       evidence=[self.fixture.artifacts.put(b'The instruction of the owner.', 'text/plain')])
+        self.case.mutate(cli.OPERATIONS['review-context'], payload)
+        # The retired route record takes the state of its earlier probe with an answer (rule RS1).
+        self.assertEqual(self.plan()['state'], 'run')
+        refusal, sent = self.run_head('head-run')
+        self.assertEqual((refusal, sent), (None, 1))
+
+    def test_earlier_turn_on_a_retired_stale_route_record_that_stays_unverified_takes_the_step_of_the_role(self):
+        """The latest probe with an answer of the route record of the turn does not verify it, so the retirement
+        leaves the record unverified, and no probe and no retirement ends the state."""
+        native = self.fixture.native
+
+        def answer_wrong_control(route, request, credential):
+            packet = json.loads(request['input'][0]['content'][len(transport.PACKET_LABEL):])
+            return native.response(route, request, dict(allowed_control='another value',
+                                   evidence_control=packet['evidence_control'], excluded_controls=[]))
+        with patch.object(transport, 'send_request', side_effect=answer_wrong_control):
+            self.case.mutate(protocol.probe_route, dict(id='probe-with-a-wrong-control', route_id='route'),
+                             credential='test-only')
+        self.make_stale('route')
+        plan = self.plan()
+        self.assertEqual(describe(plan), ('handoff', 'review_context_unverified', 'review-context'))
+        self.assertEqual(list_steps(plan), [(8, 'review-context', None), (None, 'review-series', None)])
+        payload = dict(plan['details']['steps'][0]['payload'], id='retire-route',
+                       reason='The owner retired the stale route record.',
+                       evidence=[self.fixture.artifacts.put(b'The instruction of the owner.', 'text/plain')])
+        self.case.mutate(cli.OPERATIONS['review-context'], payload)
+        records = self.case.read_records()
+        self.assertEqual(read_standing(records, 'route'), dict(retired=True, stale=True))
+        plan = self.plan()
+        self.assertEqual(describe(plan),
+                         ('handoff', 'review_context_unverified', 'review-assignment'))
+        self.assertEqual(plan['details']['turn']['route'], dict(id='route', context_status='unverified'))
+        self.assertEqual(list_steps(plan), [(1, 'review-assignment', None)])
+        self.assertEqual(plan['details']['step']['payload']['context']['context_repair']['event_ids'], ['retire-route'])
+        self.assertEqual(list_refused_uses(records, self.head, plan), [])
+        refusal, sent = self.run_head('refused-run')
+        self.assertEqual((refusal.code, sent), ('review_context_unverified', 0))
 
 
 class CorrectionRouteTests(unittest.TestCase):

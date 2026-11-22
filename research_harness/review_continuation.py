@@ -13,6 +13,17 @@ from .evidence import digest
 from .operations import text
 from .review_task_execution import has_call_terminated, identify_call, rebuild_call_payload
 
+# A working text for the writer's pass of task T5.1.
+REFRESH_ROUTE_MSG = (
+    'The refresh of the recorded review of this head is a new chain in its slot, and the route record of the head '
+    'pins another reviewer runtime than the installed one. details.renewal.lacks names what the store lacks. The '
+    'value record means a route record with the same adapter, model, endpoint and configuration that pins the '
+    'installed runtime. The value probe means a probe that verifies the route record that details.renewal.route_id '
+    'names. Take details.step. Then run review-series on this head again. It then names the refresh on that route '
+    'record.')
+CAPACITY_SCHEDULER_MSG = (
+    'Record details.scheduler as the scheduler member of the next review-assignment for this record.')
+
 
 def describe_context_failure(error, assignment_id=None):
     """Keep a retained-context refusal visible in a read-only inspection."""
@@ -314,6 +325,7 @@ def _plan_capacity(records, assignment, action, artifacts=None):
     if can_admit_route(active, policy, assignment['route_id']) and not eligible:
         return action
     capacity = describe_capacity_wait(records, artifacts, assignment['route_id'], active, waits)
+    guidance = dict(message=CAPACITY_SCHEDULER_MSG) if 'scheduler' in capacity else {}
     for owned in active:
         if owned['id'] in records.get('review_reservation', {}):
             call = dict(operation='review.task_reserve', reservation_id=owned['id'])
@@ -331,9 +343,10 @@ def _plan_capacity(records, assignment, action, artifacts=None):
             if row['state'] == 'interrupted' or not has_live_call_processes(lifecycle):
                 return dict(state='wait', not_before=_describe_wait(), code='review_capacity_wait',
                             details=dict(calls_before=len(active) + len(ahead), **capacity),
-                            **build_reconciliation_step(records, call))
+                            **build_reconciliation_step(records, call), **guidance)
     return dict(action, state='wait', not_before=_describe_wait(), code='review_capacity_wait',
-                details=dict(calls_before=len(active) + len(ahead), reservations=[row['id'] for row in active], **capacity))
+                details=dict(calls_before=len(active) + len(ahead), reservations=[row['id'] for row in active], **capacity),
+                **guidance)
 
 
 UNRECORDED_REFUSAL_MESSAGE = (
@@ -474,6 +487,8 @@ def _plan_staged_action(records, epoch, task, action, artifacts=None):
             controller = records['review_assignment'][epoch['controller_assignment_id']]
             result['details'].update(describe_capacity_wait(records, artifacts, controller['route_id'],
                 list_active_calls(records), list_waiting_calls(records)))
+            if 'scheduler' in result['details']:
+                result['message'] = CAPACITY_SCHEDULER_MSG
     return result
 
 
@@ -512,6 +527,37 @@ def _plan_openness_freshness(records, artifacts, assignment, packet=None):
                              added=freshness['added'], removed=freshness['removed']))
 
 
+def _plan_session_refresh(records, artifacts, assignment):
+    """Rules F3 and F5: the refresh of the review that this head of a chain of the session rules v4 recorded is a new
+    chain in its slot, which names the head in the context member session_refresh. Its route record is the one that
+    select_step_route gives for the route of the head. While the store lacks that record or its probe, the plan is the
+    step that gives it, then review-series. After retirement, complete_plan uses this payload for the handoff."""
+    from .review_route_plan import plan_retired_route, select_step_route
+    found = select_step_route(records, artifacts, assignment['route_id'])
+    if found['lacks'] is not None:
+        return dict(state='handoff', command='review-route', code='review_route_runtime_stale',
+                    details=dict(assignment_id=assignment['id'], route_id=assignment['route_id'],
+                                 renewal=dict(admitted=True, **found), message=REFRESH_ROUTE_MSG))
+    payload = _build_assignment_payload(records, assignment)
+    payload['context'] = {'session_refresh': {'assignment_id': assignment['id']}}
+    if found['route_id'] is None:
+        return dict(plan_retired_route(assignment), payload=payload)
+    payload['route_id'] = found['route_id']
+    return dict(state='continue', command='review-assignment', payload=payload)
+
+
+def _plan_context_handoff(assignment, lost):
+    """The handoff of a head while the review records give no verified context for a turn of its review (rules PC4
+    and PC5). complete_plan adds the step: the probe of the route record of the turn, its retirement when that record
+    takes no probe, or the step of the role."""
+    details = dict(assignment_id=assignment['id'], turn=lost, route_id=lost['route']['id'])
+    if protocol.is_contaminated_context(lost):
+        return dict(state='handoff', command='review-assignment', code='review_context_contaminated',
+                    details=dict(details, message=protocol.CONTEXT_CONTAMINATED_MSG))
+    return dict(state='handoff', command='review-probe', code='review_context_unverified',
+                details=dict(details, message=protocol.CONTEXT_UNVERIFIED_MSG))
+
+
 def _plan_head(records, artifacts, assignment):
     pending = _plan_pending_call(records, assignment)
     if pending is not None:
@@ -548,6 +594,12 @@ def _plan_head(records, artifacts, assignment):
             return dict(state='replace', command='review-assignment', code='review_context_unverified',
                         payload=_build_assignment_payload(records, assignment, replace=True),
                         details=dict(assignment_id=assignment['id']))
+    # Rule PC4: in every state of a head whose result is not recorded, the context of the present comes before the
+    # failure plan and the state of the head. A staged controller reads it in its own state.
+    if not assignment.get('staged_review') and not _list_recorded_finals(records, {assignment['id']}):
+        lost = protocol.find_blocking_context(records, artifacts, assignment)
+        if lost is not None:
+            return _plan_context_handoff(assignment, lost)
     if assignment.get('staged_review'):
         state = protocol.assignment_state(records, artifacts, assignment['id'])
         blocking = [item for item in state['obligations'] if item['code'] != 'review_task_pending']
@@ -659,6 +711,8 @@ def _plan_head(records, artifacts, assignment):
         unrecorded = _plan_unrecorded_refusal(records, artifacts, assignment, state, packet)
         if unrecorded is not None:
             return unrecorded
+    if assignment.get('session_chain') and protocol.is_session_refresh(records, artifacts, assignment):
+        return _plan_session_refresh(records, artifacts, assignment)
     is_parts = review_parts.KEY in assignment
     continuing = (is_parts and (assignment[review_parts.KEY]['kind'] != 'final'
                                 or packet[review_parts.KEY].get('final_form') == 'page'
@@ -671,7 +725,7 @@ def _plan_head(records, artifacts, assignment):
                   or bool(state.get('pending_source_requests'))
                   or bool(state['output'].get('settled_requests'))
                   or (assignment.get('subject', {}).get('kind') == 'problem'
-                      and assignment['role'] in bar_sources.ROLES
+                      and assignment['role'] in bar_sources.ROLES and not assignment.get('session_chain')
                       and _list_recorded_finals(records, {assignment['id']})
                       and protocol._is_problem_refresh(records, artifacts, assignment, packet)))
     if continuing:
@@ -803,12 +857,31 @@ def describe_next_actions(records, artifacts, assignment_id, actions=(), *, cont
             action.pop(key, None)
             if key in selected:
                 action[key] = copy.deepcopy(selected[key])
+        if selected.get('code') == 'review_capacity_wait' and 'message' in selected:
+            action['message'] = selected['message']
         action['state'] = selected['state']
         if is_posted:
             action.pop('workflow', None)
             action.pop('scope', None)
         result.append(action)
     return result
+
+
+def _describe_initial_problem_bar_step(records, artifacts):
+    from .research_decisions import select_problem_slot_assignments
+    from .review_call_admission import describe_route_scheduler
+    from .review_task_execution import COVERED_ADAPTERS
+
+    routes = records.get('review_route', {}).keys() - protocol.retired_routes(records)
+    if not routes or len(select_problem_slot_assignments(records, 'bar', None)) >= 2:
+        return None
+    payload = dict(role='bar', dossier_id=None)
+    if 'store' not in records.get('review_capacity_policy', {}):
+        scheduler = describe_route_scheduler(records, artifacts, routes, COVERED_ADAPTERS)
+        if scheduler['store_limit'] >= 2:
+            payload['scheduler'] = scheduler
+    return dict(command='review-assignment', payload=payload,
+                chooses=['id', 'route_id', 'reviewer_id', 'author_id', 'context'])
 
 
 def annotate_review_obligations(records, artifacts, report, *, context_failures=None):
@@ -864,6 +937,17 @@ def annotate_review_obligations(records, artifacts, report, *, context_failures=
                         continue
                 state = protocol.assignment_state(records, artifacts, identifier)
                 pending = [dict(item, assignment_id=identifier) for item in state.get('obligations', [])]
+                if (not assignment.get('staged_review') and not _list_recorded_finals(records, {identifier})
+                        and not any(item['code'] in ('review_context_unverified', 'review_context_contaminated')
+                                    for item in pending)):
+                    # Rule PC8: the row of a head whose review has a turn without a verified context.
+                    lost = protocol.find_blocking_context(records, artifacts, assignment)
+                    if lost is not None:
+                        from .graph import obligation
+                        pending.append(obligation(
+                            'review_context_contaminated' if protocol.is_contaminated_context(lost)
+                            else 'review_context_unverified', protocol.ROUTE_CONTEXT_MSG,
+                            assignment_id=identifier, turn=lost))
                 binding = records.get('review_attempt', {}).get(state.get('attempt_id'))
                 if (not state.get('obligations') and binding is not None
                         and not state.get('output_correction_id')
@@ -901,6 +985,10 @@ def annotate_review_obligations(records, artifacts, report, *, context_failures=
         rows = []
         for original in report[key]:
             item = dict(original)
+            if 'review' in report and item['code'] == 'problem_bar_pending':
+                step = _describe_initial_problem_bar_step(records, artifacts)
+                if step is not None:
+                    item['next'] = [step]
             identifier = item.get('assignment_id') or item.get('controller_assignment_id')
             with _collect_context_failure(context_failures, identifier):
                 if identifier in records.get('review_assignment', {}):

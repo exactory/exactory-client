@@ -310,6 +310,9 @@ def _describe_session_route_steps(records, artifacts, assignment):
     return steps
 
 
+REFRESH_ROUTE_CHOICE = 'Choose a verified route record for the refresh.'
+
+
 def complete_plan(records, artifacts, assignment, plan):
     """Add executable payload rules to external boundaries without changing call payloads."""
     if plan['state'] not in ('stop', 'handoff'):
@@ -370,6 +373,12 @@ def complete_plan(records, artifacts, assignment, plan):
         return dict(plan, **describe_role_handoff(records, artifacts, assignment, code, details))
     context_status = assignment.get('context_state', {}).get('context_status')
     head_ran = protocol.describe_assignment_calls(records, assignment)['ran']
+    turn_route = None
+    if code == 'review_context_unverified' and 'turn' in details:
+        # The handoff of rule PC4 names a turn of the review and its route record, which can be another record than
+        # the route of the head.
+        from .review_route_plan import read_route_standing
+        turn_route = read_route_standing(records, artifacts, details['route_id'])
     if code == 'review_pending_delivery_over_plan':
         from .review_route_capacity import (SESSION_FORECAST_DECISION, SESSION_CAPTURE_ANSWER,
             SESSION_CAPTURE_REPAIR_ANSWER, SESSION_ROUTE_ANSWER, SESSION_ARTIFACT_DECISION, SESSION_STOP_ANSWER)
@@ -413,8 +422,29 @@ def complete_plan(records, artifacts, assignment, plan):
         plan.update(state='handoff', command=details['step']['command'])
     elif code == 'review_context_unverified' and head_ran and context_status not in (None, 'verified_for_route'):
         plan['state'] = 'stop'
+    elif turn_route is not None and turn_route['stale'] and not turn_route['retired']:
+        # The route record of the named turn takes no probe. Its retirement on that turn gives it the state of its
+        # latest probe with an answer, and review-series then names what follows.
+        turn = records['review_assignment'][details['turn']['assignment_id']]
+        details['steps'] = [describe_step(records, artifacts, turn, 8),
+                            dict(command='review-series', assignment_id=assignment['id'])]
+        details['step'] = details['steps'][0]
+        plan.update(state='handoff', command=details['step']['command'])
+    elif code == 'review_route_retired' and (
+            (plan.get('payload') or {}).get('context', {}).get('session_refresh')
+            or details.get('step', {}).get('id') == 14):
+        if 'payload' in plan:
+            payload = plan.pop('payload')
+            payload.pop('route_id')
+            details['step'] = dict(id=14, command='review-assignment', payload=payload, chooses=['route_id'],
+                                   prerequisites=[dict(condition=REFRESH_ROUTE_CHOICE)])
+        plan.update(state='handoff', command='review-assignment')
     elif code in ('review_context_contaminated', 'review_route_retired', 'review_context_repair_required',
-                  'review_context_repair_stale', 'review_context_repair_mismatch', 'review_context_repair_unverified'):
+                  'review_context_repair_stale', 'review_context_repair_mismatch', 'review_context_repair_unverified'
+                  ) or turn_route is not None and turn_route['stale']:
+        # This branch also takes the handoff of rule PC4 whose named turn stands on a retired and stale route record
+        # that its latest probe with an answer does not verify: no probe and no retirement ends that state, so the
+        # step is the step of the role.
         if code == 'review_context_repair_stale':
             repairs = [row for row in protocol.context_repair._lineage(records, assignment)
                        if row.get('context', {}).get('context_repair') is not None]
@@ -472,11 +502,12 @@ def complete_plan(records, artifacts, assignment, plan):
         plan.update(state='handoff', command='review-probe' if code != 'review_route_runtime_stale' else 'review-route')
         if plan['command'] == 'review-probe':
             # The probe that ends an unverified context is the probe of the route record that causes it: the record
-            # of an accepted output correction when that one is not verified, otherwise the route of the assignment.
+            # that the plan names (the record of a turn under rule PC5), else the record of an accepted output
+            # correction when that one is not verified, otherwise the route of the assignment.
             route_id = assignment['route_id']
             if code == 'review_context_unverified':
                 from .review_route_plan import find_unverified_route
-                route_id = find_unverified_route(records, artifacts, assignment)
+                route_id = details.get('route_id') or find_unverified_route(records, artifacts, assignment)
             prerequisites = details['step']['prerequisites']
             details['step'] = describe_route_probe_step(records, artifacts, assignment, route_id)
             details['step']['prerequisites'] = prerequisites

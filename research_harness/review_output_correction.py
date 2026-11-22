@@ -236,8 +236,13 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
         if any(invocation['assignment_id'] == value['assignment_id']
                for invocation in records.get('review_output_correction_invocation', {}).values()):
             raise ResearchError('review_correction_exhausted', 'One correction invocation exhausts this assignment, including failure or decline.')
+        from .review_visual_sources import require_installed_renderer
+        require_installed_renderer(records, artifacts, assignment)
         built = build_request(records, artifacts, value['assignment_id'], value['route_id'])
         packet, route, request = (built['packet'], built['route'], built['request'])
+        # Rule PC3: the packet checks the context of the result itself; the earlier turns of its review also have a
+        # verified context at the time of the call.
+        protocol.require_verified_context(records, artifacts, assignment)
         # The one correction of the assignment is recorded only for a call that can start: the route record pins the
         # installed runtime, and the reviewer program is installed. The Claude runtime reads no program, so the
         # program is read here as the sender reads it.

@@ -384,12 +384,13 @@ def _bind_unread_state(records, artifacts, assignment, inventory, state, *, publ
 def prepare_unread_assignment(records, artifacts, value, route, logical):
     """Admit only the exact R72 step selected by the planner at this position."""
     from .review_failure_class import plan_after_failure
-    from .review_protocol import find_replacement
+    from .review_protocol import find_replacement, require_verified_context
     identifier = value['context']['unread']['assignment_id']
     reading.require_reserved_identifier(value['id'], PROTOCOL)
     prior = records.get('review_assignment', {}).get(identifier)
     if prior is None or find_replacement(records, prior) is not None:
         raise ResearchError('invalid_review_context', UNREAD_FINAL_MESSAGE)
+    require_verified_context(records, artifacts, prior)
     action = plan_after_failure(records, artifacts, identifier)
     expected = action.get('payload', {})
     if (action['state'] != 'replace' or action.get('details', {}).get('reason') != 'unread'
@@ -1702,12 +1703,16 @@ def prepare_first_assignment(records, artifacts, value, route, logical, carried_
 
 def _describe_carried_identity(records, value, route, native):
     minimum = native['scientific_context']['openness_minimum']
+    revision = value.get('recorded_revision')
+    if revision is None:
+        # One pass over every record, made only for a value that holds no stamp.
+        revision = 1 + max((row.get('recorded_revision', 0) for group in records.values() for row in group.values()),
+                           default=0)
     return dict(**describe_protocol(native=native)['carried_identity'],
         reviewer_id=value['reviewer_id'], author_id=value['author_id'], route=route,
         subject_digest=native['subject_digest'], claim_digest=native['claim_digest'],
         formulations=dict(statement=minimum['statement'], neighbours=minimum['neighbours']),
-        recorded_revision=value.get('recorded_revision', 1 + max(
-            (row.get('recorded_revision', 0) for group in records.values() for row in group.values()), default=0)))
+        recorded_revision=revision)
 
 
 def prepare_carried_assignment(records, artifacts, value, route, logical, admission):
@@ -2231,7 +2236,8 @@ def compute_notice_material_charge(kind, notice):
 
 def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_replacement=True):
     """Continue authenticated own turns, or rebuild one failed pending position."""
-    from .review_protocol import assignment_state, find_replacement, has_ended_without_output, is_dead_assignment
+    from .review_protocol import (assignment_state, find_replacement, has_ended_without_output, is_dead_assignment,
+                                  require_verified_context)
     from .operations import normalized_text
     reading.require_reserved_identifier(value['id'], describe_protocol(native=logical['native'])['id'])
     replacement = value['context'].get('reading_replacement')
@@ -2255,6 +2261,7 @@ def prepare_next_assignment(records, artifacts, value, route, logical, *, prove_
         raise ResearchError('review_source_continuation_fork',
             'Another turn already continues the named turn, and a reading chain has one line of turns. Continue '
             'from the latest turn of the chain, which review-series resolves from any of its assignments.')
+    require_verified_context(records, artifacts, prior)
     if replacement and prove_replacement:
         from .review_failure_class import plan_after_failure
         recovery = plan_after_failure(records, artifacts, prior_id)
@@ -2344,6 +2351,7 @@ def prepare_refusal_assignment(records, artifacts, value, revision, prior, froze
     from . import review_refusal_notice as notices
     from .operations import immutable_record
     reading.require_reserved_identifier(value['id'], reading.find_protocol(frozen))
+    protocol.require_verified_context(records, artifacts, prior)
     plan, inventory, state = read_bound_state(artifacts, prior, frozen)
     route = records['review_route'][prior['route_id']]
     stage = reading.find_stage(frozen)
@@ -2682,17 +2690,17 @@ def _require_verification(condition, message, **details):
 def _verify_carried_origins(records, artifacts, first, native, route, plan, evaluation):
     """Condition 1: authenticate named origin prefixes through their protocol observers.
 
-    Version 2 first checks the complete selection against the authenticated store before this assignment.
+    Versions 2 and 3 first check the complete selection against the authenticated store before this assignment.
     Origin observers recurse only into assignments recorded before this first turn.
     """
-    from .openness_carried import SELECTION_PROTOCOL, verify_stored_selection
+    from .openness_carried import CUTOFF_PROTOCOLS, verify_stored_selection
     reference = first['carried_selection']
     selection = json.loads(artifacts.read(reference['artifact']))
     _require_verification(isinstance(selection, dict) and reference['protocol'] == selection.get('protocol')
                           and reference['digest'] == digest(selection),
                           ORIGIN_VERIFICATION_MESSAGE)
     cutoff = None
-    if reference['protocol'] == SELECTION_PROTOCOL:
+    if reference['protocol'] in CUTOFF_PROTOCOLS:
         stamp = first['recorded_revision']
         # Records without a history end here with the refusal of the evaluation, which is no state of a chain.
         cutoff = evaluation.read_snapshot(stamp - 1)

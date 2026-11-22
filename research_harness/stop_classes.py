@@ -122,7 +122,6 @@ for _code, _step, _command in (
         ('review_runtime_missing', 7, 'review-probe'), ('review_route_runtime_stale', 7, 'review-route'),
         ('review_context_unverified', 7, 'review-probe'),
         ('review_context_contaminated', 1, 'review-assignment'),
-        ('review_route_retired', 1, 'review-assignment'),
         ('review_context_repair_required', 1, 'review-assignment'),
         ('review_context_repair_mismatch', 1, 'review-assignment'),
         ('review_context_repair_unverified', 1, 'review-assignment'),
@@ -137,6 +136,7 @@ for _code, _command in (
         ('review_source_no_progress', 'fulltext'),
         ('native_review_acceptance_required', 'search accept'),
         ('verification_verdict_body_required', 'bind-verdict'),
+        ('review_route_retired', 'review-assignment'),
         ('review_recording_required', 'review'),
         ('review_worker_reconciliation_required', 'review-attempt'),
         ('review_parts_pending', 'review-series'),
@@ -296,6 +296,13 @@ _STORED_STATE_CODES_DECISION = (
 )
 
 for _code in ('invalid_rubric_grades', 'invalid_strategy'):
+    STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
+        next=dict(kind='outcome', outcome='scientific_refused'))
+
+# A new citation needs corrected evidence or metadata before the refused write can succeed.
+for _code in ('problem_citation_text_character', 'problem_citation_text_length',
+              'problem_citation_locator_character', 'problem_citation_locator_length',
+              'problem_citation_locator_format'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
         next=dict(kind='outcome', outcome='scientific_refused'))
 

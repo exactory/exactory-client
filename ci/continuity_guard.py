@@ -108,34 +108,134 @@ def list_size_cases(kinds):
     return [(kind, outcome, detail) for kind in kinds for outcome, detail in SIZE_OUTCOMES]
 
 
+def is_complete_size_row(row):
+    """A size row holds its retained call and an executed boundary: an eligible assignment after the stopped head that
+    passed the preflight, or the receipt of a recorded action."""
+    if not isinstance(row, dict):
+        return False
+    boundary = row.get('boundary', {})
+    call = row.get('call', {})
+    if not (row.get('attempt_id') and row.get('request_digest') and row.get('accepted_commands')
+            and call.get('id') == row['attempt_id']
+            and call.get('request_digest') == row['request_digest']
+            and call.get('request') and call.get('recorded_revision')):
+        return False
+    if boundary.get('kind') == 'assignment':
+        return bool(boundary.get('eligible') and boundary.get('id') != row.get('assignment_id')
+            and boundary.get('prior_head') == row.get('assignment_id') and boundary.get('preflight')
+            and boundary.get('record', {}).get('id') == boundary.get('id')
+            and boundary.get('record', {}).get('recorded_revision')
+            and boundary.get('subject') == row.get('subject'))
+    receipt = boundary.get('receipt', {})
+    return bool(boundary.get('kind') == 'action' and isinstance(receipt, dict)
+        and receipt.get('id') and receipt.get('recorded_revision')
+        and boundary.get('command') in row['accepted_commands'])
+
+
 def validate_size_matrix(executed, kinds):
     """Require retained-call receipts and an executed boundary for every row."""
-    covered = set()
-    for row in executed:
-        if not isinstance(row, dict):
-            return [SIZE_MATRIX_MESSAGE]
-        boundary = row.get('boundary', {})
-        call = row.get('call', {})
-        if not (row.get('attempt_id') and row.get('request_digest') and row.get('accepted_commands')
-                and call.get('id') == row['attempt_id']
-                and call.get('request_digest') == row['request_digest']
-                and call.get('request') and call.get('recorded_revision')):
-            return [SIZE_MATRIX_MESSAGE]
-        if boundary.get('kind') == 'assignment':
-            complete = (boundary.get('eligible') and boundary.get('id') != row.get('assignment_id')
-                and boundary.get('prior_head') == row.get('assignment_id') and boundary.get('preflight')
-                and boundary.get('record', {}).get('id') == boundary.get('id')
-                and boundary.get('record', {}).get('recorded_revision')
-                and boundary.get('subject') == row.get('subject'))
-        else:
-            receipt = boundary.get('receipt', {})
-            complete = (boundary.get('kind') == 'action' and isinstance(receipt, dict)
-                and receipt.get('id') and receipt.get('recorded_revision')
-                and boundary.get('command') in row['accepted_commands'])
-        if not complete:
-            return [SIZE_MATRIX_MESSAGE]
-        covered.add((row.get('kind'), row.get('outcome'), row.get('detail')))
+    if not all(is_complete_size_row(row) for row in executed):
+        return [SIZE_MATRIX_MESSAGE]
+    covered = {(row.get('kind'), row.get('outcome'), row.get('detail')) for row in executed}
     return [] if covered == set(list_size_cases(kinds)) else [SIZE_MATRIX_MESSAGE]
+
+
+# The chain kinds of 0.92.0 (task T2.2): the protocol of each family, as list_capacity_recovery_rows names it.
+FORM_FAMILIES = {
+    'exactory-openness-reading-v7': 'v7-pages',
+    'exactory-openness-reading-math-v2': 'math-v2',
+    'exactory-independent-review-sources-v4': 'session-v4',
+    'exactory-review-parts-v3': 'parts-v3',
+}
+# The rows of protocol v7 that 0.91.0 installed have their size rows in test_continuity_guard_stage3.
+FORM_ROWS_OF_0910 = frozenset((('exactory-openness-reading-v7', 'reading', None),
+                               ('exactory-openness-reading-v7', 'final', 'request'),
+                               ('exactory-openness-reading-v7', 'combine', None)))
+# Turns of the table that no builder of the guard reaches yet, each with its reason (lane report, point 2).
+FORM_SIZE_GAPS = {
+    ('parts-v3', 'condense'): ('A condensing turn of a series needs a block of entries above the allowance of a turn; '
+                               'the paged series that the guard reuses reaches its closing without one.'),
+    ('parts-v3', 'check'): ('A check turn needs a combine answer that names a combination; the turn answers of the '
+                            'unit fixture that the guard reuses name none.'),
+    ('parts-v3', 'final'): ('The paged series that the guard reuses gives its final in pages; a final of the parts '
+                            'protocol v3 in one request has no builder in the guard.'),
+}
+# Cells whose rows hold the behaviour of the tree for a defect that this guard found; the lane report gives the
+# failing test of each for the supervisor. A fix of the unit removes its cell.
+MATH_V2_PROJECTION_FINDING = (
+    'review_plan_steps.complete_plan gives a math v2 final the answers of a problem chain: '
+    'describe_projection_decision treats only the math protocol v1 as a math chain, so both answers export a '
+    'problem openness packet (step 4) and the store accepts it as the next chain of the math review.')
+SERIES_READ_COMPACTION_FINDING = (
+    'review_failure_class.classify_final_capacity_attempt reads every failed read turn of a parts v3 series through '
+    'review_parts.find_failed_replacement first, so an input that the transport compacted is classified '
+    'output_over_cap; the row ends at the same replacement.')
+REPAIR_HISTORY_FINDING = (
+    'review_context_repair refuses the context repair of a parts v3 series after an answered page with '
+    'review_context_repair_history_unrecorded: it reads each answered page as an observed final that a value review '
+    'must record first, so the answer "Move to another route" (steps 8, 7, 1) of a stop on the closing page ends at a '
+    'refused review-assignment.')
+RUNTIME_PROBE_FINDING = (
+    'review_failure_class.plan_after_failure keeps the handoff review_runtime_missing (step 7, review-probe) after '
+    'the probe verified the route and after its not_before: the plan of the head is the same handoff until an attempt '
+    'that no plan names is recorded, so review-series ends with the same line again. This holds for every chain kind, '
+    'the reading chains of 0.91.0 included.')
+SMALLER_STATEMENT_FINDING = (
+    'The stop review_route_capacity_below_floor of a first assignment of a v7 chain offers the answer "Record a '
+    'statement with fewer neighbours" also when details.largest_one_request_targets is 0, that is when the route '
+    'cannot answer the statement alone: the check of review-assignment in its steps refuses every smaller export with '
+    'the same stop.')
+SPLIT_POSITION_FINDING = (
+    'review_failure_class.count_position counts a page of a split of a session v4 or of a series v3 in the position '
+    'of the page that it splits (list_turn_assignments holds the parent), while the pages of a split of a v7 and a '
+    'math v2 final, and the verification criterion of ci/route_capacity_profile, give each half a new position (D2 '
+    'G4; finding 3 of the Astra review of the plan, part c): the failures of the parent count against the halves.')
+FORM_DEFECTS = {
+    ('session-v4', 'page', 'split'): SPLIT_POSITION_FINDING,
+    ('parts-v3', 'page', 'split'): SPLIT_POSITION_FINDING,
+    ('v7-pages', 'admission', 'Record a statement with fewer neighbours'): SMALLER_STATEMENT_FINDING,
+    ('handoff', 'review_runtime_missing'): RUNTIME_PROBE_FINDING,
+    ('parts-v3', 'closing', 'Move to another route'): REPAIR_HISTORY_FINDING,
+    ('math-v2', 'final', 'input_over_limit', None): MATH_V2_PROJECTION_FINDING,
+    ('math-v2', 'final', 'input_over_limit', 'compacted'): MATH_V2_PROJECTION_FINDING,
+    ('parts-v3', 'read', 'input_over_limit', 'compacted'): SERIES_READ_COMPACTION_FINDING,
+}
+FORM_ROWS_MESSAGE = ('A turn of a chain kind of this release has a size outcome without an executed row, a row lacks its '
+                     'retained call or its executed boundary, or a gap names a cell that a row covers. Execute one '
+                     'complete row for each cell of FORM_FAMILIES, or name the cell in the gap table with its reason.')
+
+
+def name_form_turn(kind, form):
+    """The turn of a chain that a builder of the guard reaches for a row of list_capacity_recovery_rows."""
+    if form in (None, 'request'):
+        return kind
+    return 'combine' if form == 'scientific' else form
+
+
+def list_form_turns(recovery_rows):
+    """(family, turn) for every kind and form of the chain protocols of 0.92.0, from the table of recovery rows."""
+    turns = []
+    for row in recovery_rows:
+        family = FORM_FAMILIES.get(row['protocol'])
+        for form in row.get('forms', [None]):
+            if family is None or (row['protocol'], row['kind'], form) in FORM_ROWS_OF_0910:
+                continue
+            turns.append((family, name_form_turn(row['kind'], form)))
+    return turns
+
+
+def validate_form_size_rows(executed, turns, gaps):
+    """K8 for the chain kinds of 0.92.0: each (family, turn) of the table holds a complete executed row for each size
+    outcome, or stands in the gap table with its reason; no gap names a turn that a row covers."""
+    if not all(is_complete_size_row(row) for row in executed):
+        return [FORM_ROWS_MESSAGE]
+    covered = {(row.get('family'), row.get('turn'), row.get('outcome'), row.get('detail')) for row in executed}
+    required = {(family, turn, outcome, detail) for family, turn in turns if (family, turn) not in gaps
+                for outcome, detail in SIZE_OUTCOMES}
+    named = {(family, turn) for family, turn in gaps}
+    if covered != required or not named <= set(turns) or any(not reason for reason in gaps.values()):
+        return [FORM_ROWS_MESSAGE]
+    return []
 
 
 def validate_stop_journeys(stop, journeys, registry):

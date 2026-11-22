@@ -31,9 +31,16 @@ INVALID_BUDGETS_ERR_MSG = ("ci/budgets.json needs a positive whole number for te
                            "object core_operations.")
 # The count of the slowest tests that the summary of a run prints. The result file holds the time of every test.
 SLOWEST_TEST_COUNT = 10
-# The test modules that share a costly fixture, so that the fixture has one build in a run (principle 3): the tests
-# of the modules of one group run in one shard (select_shard_indices). A group names only modules whose shared
-# fixture was measured; the times are those of the CI of 0.91.14 on Python 3.12.14.
+# The test modules with a fixed shard: the tests of the modules of one group run in one shard
+# (select_shard_indices). A group has one of two measured reasons.
+# - Its modules share a costly fixture, so that the fixture has one build in a run (principle 3). The times of the
+#   first three groups are those of the CI of 0.91.14 on Python 3.12.14.
+# - Its module holds a test above 300 s. The shard of every other test is its rank among the discovered tests, so
+#   each added test moves the tests after it to the next shard. In the CI run of c75977ef the slate test of 3,217 s
+#   moved into shard 0 beside the first group, and that shard passed the limit of 180 minutes on Python 3.9.25.
+#   With a fixed shard for each such module, the largest shard of that discovery is 6,766 s for every shift of the
+#   ranks (10,442 s before). The times of these groups are the largest test of the module and the whole module, in
+#   the CI run of d3d6aab7 on Python 3.9.25.
 SHARD_GROUPS = (
     # The cut of the verification of record 12 (57 review turns), built once in a process: 1,371 s to 1,645 s.
     ("test_openness_carried_integration", "test_openness_reading_v7_refusal"),
@@ -41,6 +48,16 @@ SHARD_GROUPS = (
     ("test_problem_result_history",),
     # The deposit workspace of ManagedStreamingTests with two files above 1 MiB: 38 s.
     ("test_publication_streaming",),
+    # The slate of incident A1 with 28,600,000 characters, whose size is the cause of the incident: 3,217 s of 3,243 s.
+    ("test_review_parts_slate",),
+    # The paged finding after 57 carried turns: 857 s of 1,394 s.
+    ("test_openness_final_pages",),
+    # The final pages for 5,000 and 20,000 targets: 816 s of 1,183 s.
+    ("test_route_capacity_properties",),
+    # The adapter journeys and the recorded series of the parts protocol v3: 356 s of 1,364 s.
+    ("test_review_parts_v3",),
+    # The dossier result of a session of the rules v4: 300 s of 582 s.
+    ("test_review_session_v4_turns",),
 )
 
 

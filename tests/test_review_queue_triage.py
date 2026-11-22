@@ -1,6 +1,7 @@
 """Capacity diagnostics and autonomous drivers over synthetic verified routes."""
 
 import copy
+import io
 import json
 import os
 from pathlib import Path
@@ -8,9 +9,11 @@ import subprocess
 import sys
 import time
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import patch
 
 from codex_route_fixtures import record_codex_route
+from literature_fixtures import LiteratureCase
 from research_harness import cli, review_call_admission as admission
 from research_harness import review_continuation, review_protocol as protocol
 from research_harness import review_task_execution as execution, review_worker as worker
@@ -94,23 +97,74 @@ with patch.object(review_transport, 'send_request', side_effect=send):
                 patch.object(review_series, '_read_plan', side_effect=plan), \
                 patch.object(review_series, 'render_workspace_views', return_value=None):
             sys.exit(review_series.run_series(store, assignment_id))
-    cli.OPERATIONS['review-run'](store, dict(id='call-' + assignment_id, assignment_id=assignment_id),
+    payload = json.loads(sys.argv[4]) if len(sys.argv) > 4 else dict(
+        id='call-' + assignment_id, assignment_id=assignment_id)
+    cli.OPERATIONS['review-run'](store, payload,
                                expected_revision=store.revision, request_id='invoke-' + assignment_id)
 '''
+
+
+def read_next(root):
+    output = io.StringIO()
+    with redirect_stdout(output):
+        cli.main(['next', '--workspace', str(root)])
+    return json.loads(output.getvalue())['obligations']
+
+
+def read_bar_step(root):
+    pending = next(row for row in read_next(root) if row['code'] == 'problem_bar_pending')
+    return pending['next'][0]
+
+
+class BarAssignmentPlanTests(LiteratureCase):
+    def setUp(self):
+        super().setUp()
+        self.mutate(cli.OPERATIONS['problem-init'], dict(slug='bounded-sequences', area='math.CO',
+            field='Extremal bounded sequences', authors=['author']))
+        record_codex_route(self, 'route-a')
+
+    def test_next_offers_the_two_route_scheduler_for_the_first_bar_assignment(self):
+        record_codex_route(self, 'route-b', model='fixture-second-model')
+        route = self.store.snapshot()['records']['review_route']['route-a']
+        unverified = {key: route[key] for key in ('adapter', 'model', 'endpoint', 'configuration')}
+        self.mutate(protocol.record_route, dict(unverified, id='unverified'))
+        before = self.store.snapshot()
+        step = read_bar_step(self.root)
+        self.assertEqual(step['command'], 'review-assignment')
+        self.assertEqual(step['payload'], dict(role='bar', dossier_id=None,
+            scheduler=dict(store_limit=2, route_limits={'route-a': 1, 'route-b': 1})))
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_next_offers_bar_assignment_without_scheduler_for_one_route_or_a_recorded_policy(self):
+        with self.subTest(policy='default', routes=1):
+            step = read_bar_step(self.root)
+            self.assertEqual(step['command'], 'review-assignment')
+            self.assertEqual(step['payload'], dict(role='bar', dossier_id=None))
+        record_codex_route(self, 'route-b', model='fixture-second-model')
+        execution.record_capacity(self.store, dict(store_limit=1, route_limits={}),
+                                  request_id='explicit-default-limits')
+        with self.subTest(policy='recorded', routes=2):
+            before = self.store.snapshot()
+            step = read_bar_step(self.root)
+            self.assertEqual(step['command'], 'review-assignment')
+            self.assertEqual(step['payload'], dict(role='bar', dossier_id=None))
+            self.assertEqual(self.store.snapshot(), before)
 
 
 class QueueTriageTests(unittest.TestCase):
     def setUp(self):
         self.case = fixtures.ProblemReviewTests()
-        self.case.setUp()
         self.addCleanup(self.case.doCleanups)
+        self.case.setUp()
         self.store, self.root = self.case.store, self.case.root
         self.case.supporting = self.case.artifacts.put(b'A synthetic field standard.', 'text/plain')
-        for route_id in ('route-a', 'route-b', 'idle-route'):
-            record_codex_route(self.case, route_id)
+        record_codex_route(self.case, 'route-a')
+        record_codex_route(self.case, 'route-b', model='fixture-second-model')
+        (self.root / 'reviewer-output.json').write_text(json.dumps(self.case.build_review_output('bar')))
+
+    def assign_bar_pair(self):
         self.first = self.assign('bar-a', 'route-a', 'first')
         self.second = self.assign('bar-b', 'route-b', 'second')
-        (self.root / 'reviewer-output.json').write_text(json.dumps(self.case.build_review_output('bar')))
 
     def assign(self, identifier, route_id, reviewer, *, role='bar', **extra):
         context = (self.case.deliver_supporting(reviewer) if role == 'bar' else
@@ -148,11 +202,14 @@ class QueueTriageTests(unittest.TestCase):
             self.assertLess(time.monotonic(), deadline, 'The reviewer did not reach the expected state')
             time.sleep(.02)
 
-    def launch(self, assignment, mode):
+    def launch(self, assignment, mode, *, payload=None):
         environment = dict(os.environ)
         paths = [str(Path(__file__).resolve().parent), environment.get('PYTHONPATH', '')]
         environment['PYTHONPATH'] = os.pathsep.join(path for path in paths if path)
-        process = subprocess.Popen([sys.executable, '-c', REVIEWER_PROGRAM, str(self.root), assignment['id'], mode],
+        command = [sys.executable, '-c', REVIEWER_PROGRAM, str(self.root), assignment['id'], mode]
+        if payload is not None:
+            command.append(json.dumps(payload))
+        process = subprocess.Popen(command,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True,
                                    env=environment)
         def cleanup():
@@ -164,6 +221,7 @@ class QueueTriageTests(unittest.TestCase):
         return process
 
     def test_reviewer_child_imports_fixtures_without_inherited_pythonpath(self):
+        self.assign_bar_pair()
         with patch.dict(os.environ, {'PYTHONPATH': ''}):
             process = self.launch(self.first, 'hold')
         self.await_condition(lambda: process.poll() is not None or (self.root / 'bar-a-started').exists())
@@ -175,15 +233,21 @@ class QueueTriageTests(unittest.TestCase):
         self.assertEqual(process.returncode, 0, out + err)
 
     def test_planned_store_wait_names_its_limit_and_the_two_route_scheduler(self):
+        self.assign_bar_pair()
         self.start(self.first)
         before = self.store.snapshot()
         plan = review_continuation.plan_next(before['records'], self.case.artifacts, self.second['id'])
         self.assertEqual((plan['state'], plan['code']), ('wait', 'review_capacity_wait'))
         self.assertEqual(plan['details']['blocking_limits'], ['store_limit'])
         self.assertEqual(plan['details']['scheduler'], dict(store_limit=2, route_limits={'route-a': 1, 'route-b': 1}))
+        self.assertIn('message', plan)
+        pending = next(row for row in read_next(self.root)
+                       if row['code'] == 'review_output_pending' and row['assignment_id'] == self.second['id'])
+        self.assertEqual(pending['next'][0]['message'], plan['message'])
         self.assertEqual(self.store.snapshot(), before)
 
     def test_staged_wait_keeps_the_own_task_action_and_names_the_capacity_limit(self):
+        self.assign_bar_pair()
         self.start(self.first)
         action = dict(command='review-run', payload=dict(id='frame-call', assignment_id=self.second['id'],
                       epoch_id='epoch', task_id='frame'))
@@ -194,8 +258,11 @@ class QueueTriageTests(unittest.TestCase):
         self.assertEqual(plan['payload'], action['payload'])
         self.assertEqual(plan['details']['blocking_limits'], ['store_limit'])
         self.assertEqual(plan['details']['scheduler'], dict(store_limit=2, route_limits={'route-a': 1, 'route-b': 1}))
+        self.assertIn('message', plan)
 
     def test_queue_counts_only_verified_participants_and_keeps_stored_waits_unchanged(self):
+        record_codex_route(self.case, 'idle-route')
+        self.assign_bar_pair()
         self.start(self.first)
         wait = self.enqueue(self.second)
         idle = dict(self.second, id='idle-wait', route_id='idle-route', slot_id=None)
@@ -214,8 +281,7 @@ class QueueTriageTests(unittest.TestCase):
         self.assertNotIn('scheduler', rows['unverified'])
         self.assertNotIn('idle-route', rows)
         self.assertEqual(self.store.snapshot(), before)
-        execution.record_capacity(self.store, dict(store_limit=2, route_limits={'route-a': 1, 'route-b': 1}),
-                                  request_id='raise-capacity')
+        self.assign('policy-assignment', 'route-b', 'third', role='standalone', scheduler=rows['route-b']['scheduler'])
         row = next(row for row in self.project_queue() if row['id'] == wait['id'])
         self.assertEqual(row['blocking_limits'], [])
         self.assertNotIn('scheduler', row)
@@ -223,6 +289,7 @@ class QueueTriageTests(unittest.TestCase):
         self.assertEqual(digest(self.store.committed_request(wait['id'])), digest(receipt))
 
     def test_route_wait_names_the_route_limit_without_suggesting_a_store_change(self):
+        self.assign_bar_pair()
         same_route = self.assign('same-route', 'route-a', 'third', role='standalone')
         execution.record_capacity(self.store, dict(store_limit=2, route_limits={'route-a': 1}), request_id='capacity')
         self.start(self.first)
@@ -234,6 +301,7 @@ class QueueTriageTests(unittest.TestCase):
             self.assertNotIn('scheduler', described)
 
     def test_same_route_wait_reports_both_limits_and_no_scheduler(self):
+        self.assign_bar_pair()
         same_route = self.assign('same-route', 'route-a', 'third', role='standalone')
         self.start(self.first)
         self.enqueue(same_route)
@@ -243,6 +311,7 @@ class QueueTriageTests(unittest.TestCase):
             self.assertNotIn('scheduler', described)
 
     def test_fifo_wait_does_not_claim_that_free_capacity_is_full(self):
+        self.assign_bar_pair()
         self.enqueue(self.first)
         self.enqueue(self.second)
         plan = review_continuation.plan_next(self.case.read_records(), self.case.artifacts, self.second['id'])
@@ -252,27 +321,41 @@ class QueueTriageTests(unittest.TestCase):
             self.assertNotIn('scheduler', described)
 
     def test_recording_the_suggested_scheduler_allows_two_verified_routes_to_run_together(self):
-        first = self.launch(self.first, 'hold')
-        self.await_condition(lambda: (self.root / 'bar-a-started').exists())
-        second = self.launch(self.second, 'hold')
-        self.await_condition(lambda: bool(self.case.read_records().get('review_call_wait')))
-        row = self.project_queue()[0]
-        self.assertEqual(row['blocking_limits'], ['store_limit'])
-        scheduler = row['scheduler']
-        self.assertEqual(scheduler, dict(store_limit=2, route_limits={'route-a': 1, 'route-b': 1}))
-        self.assign('policy-assignment', 'route-b', 'third', role='standalone', scheduler=scheduler)
-        self.await_condition(lambda: (self.root / 'bar-b-started').exists())
-        self.assertIsNone(first.poll())
-        self.assertIsNone(second.poll())
+        """Two live caller processes are needed to hold independent store reservations at once."""
+        assignments = []
+        for identifier, route, reviewer in (('bar-a', 'route-a', 'first'), ('bar-b', 'route-b', 'second')):
+            step = read_bar_step(self.root)
+            self.assertEqual(step['command'], 'review-assignment')
+            payload = dict(step['payload'], id=identifier, route_id=route, reviewer_id=reviewer,
+                           author_id='author', context=self.case.deliver_supporting(reviewer))
+            assignments.append(self.case.mutate(cli.OPERATIONS[step['command']], payload)['result'])
+        steps = {row['assignment_id']: row['next'][0] for row in read_next(self.root)
+                 if row['code'] == 'review_output_pending'}
+        processes = []
+        for assignment in assignments:
+            step = steps[assignment['id']]
+            self.assertEqual(step['command'], 'review-run')
+            process = self.launch(assignment, 'hold', payload=step['payload'])
+            processes.append(process)
+            started = self.root / (assignment['id'] + '-started')
+            self.await_condition(lambda: process.poll() is not None or started.exists())
+            if process.poll() is not None:
+                out, err = process.communicate()
+                self.fail(out + err)
+        self.assertTrue(all(process.poll() is None for process in processes))
         records = self.case.read_records()
         active = [row for row in records['review_pool_membership'].values() if not row['released']]
-        self.assertEqual({row['route_id'] for row in active}, {'route-a', 'route-b'})
-        for assignment, process in ((self.first, first), (self.second, second)):
+        self.assertCountEqual([row['route_id'] for row in active], ['route-a', 'route-b'])
+        for assignment, process in zip(assignments, processes):
             (self.root / (assignment['id'] + '-finish')).touch()
             out, err = process.communicate(timeout=30)
             self.assertEqual(process.returncode, 0, out + err)
+        attempts = self.case.read_records()['review_attempt']
+        self.assertCountEqual([(row['assignment_id'], row['status']) for row in attempts.values()],
+                              [('bar-a', 'completed'), ('bar-b', 'completed')])
 
     def test_three_series_drivers_finish_in_request_order_without_external_commands(self):
+        self.assign_bar_pair()
         # The reviewer, not the parent, waits until all three drivers have asked.
         second = self.assign('same-route-second', 'route-a', 'fourth', role='standalone')
         third = self.assign('same-route-third', 'route-a', 'fifth', role='standalone')

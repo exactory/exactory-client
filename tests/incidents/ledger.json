@@ -5355,7 +5355,9 @@
       "test_kind": "real_shape",
       "tests": [
         "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry",
-        "test_d2_outcomes.OutcomeTests.test_recovery_results_have_one_shape_and_keep_the_route"
+        "test_d2_outcomes.OutcomeTests.test_recovery_results_have_one_shape_and_keep_the_route",
+        "test_review_session_v4_turns.SessionTurnsTests.test_opus_max_138371_replaces_request_on_same_route_then_records_bar",
+        "test_continuity_guard_forms.FormSizeRowTests.test_k8_session_v4_request_final_and_pages"
       ]
     },
     {
@@ -6921,7 +6923,9 @@
         "test_openness_page_replacement.PageFloorTests.test_single_target_page_after_condensing_keeps_request_refusal_position",
         "test_openness_page_replacement.PageFloorTests.test_capacity_rows_cover_request_page_closing_and_combine",
         "test_openness_page_replacement.PageFloorTests.test_one_target_one_block_above_pinned_floor_gets_condensing_then_page",
-        "test_openness_page_replacement.PageFloorTests.test_closing_with_three_rows_splits_even_when_each_half_is_one_small_block"
+        "test_openness_page_replacement.PageFloorTests.test_closing_with_three_rows_splits_even_when_each_half_is_one_small_block",
+        "test_review_session_v4_pages.SessionPagesTests.test_refused_page_replaced_at_same_level_with_notice_then_records",
+        "test_review_parts_v3_pages.PagedSeriesTests.test_a6_refused_closing_is_replaced_with_notice_then_records"
       ],
       "class": "refused output continuity"
     },
@@ -8392,6 +8396,244 @@
         "test_review_route_plan.SuccessorRouteTests.test_export_of_a_stopped_chain_names_a_route_record_that_takes_its_assignment",
         "test_review_route_plan.SuccessorRouteTests.test_verified_record_that_does_not_admit_the_new_chain_gives_the_stop_of_its_admission",
         "test_review_route_plan.MathSuccessorRouteTests.test_math_successor_answer_on_a_stale_route_gives_the_route_step_and_then_the_successor_step"
+      ]
+    },
+    {
+      "id": "session-v4-bar-turns-over-the-output-limit",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "session request turn at the output limit",
+      "summary": "Three turns of a bar session under the rules v3 at effort max reached the output limit, and the session had no smaller request form.",
+      "expected": "Under the rules v4 a request turn at the output limit is replaced at the next lower level on the same route and the bar is recorded; the lowest level ends in the decision stop.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_turns.SessionTurnsTests.test_opus_max_138371_replaces_request_on_same_route_then_records_bar",
+        "test_review_session_v4_turns.SessionTurnsTests.test_capacity_at_every_request_level_lowers_then_retries_floor_and_stops",
+        "test_review_session_v4_pages.SessionPagesTests.test_incident_opus_max_five_sources_records_bar_and_reports_final_turns"
+      ]
+    },
+    {
+      "id": "session-v4-final-cites-a-text-of-turn-three",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "session final citing an earlier turn",
+      "summary": "A bar final that cited a text delivered in turn 3 of its session was refused, because the final no longer held that text.",
+      "expected": "Under the rules v4 the final cites the text of turn 3 by its handle, the citation passes, and a page of a final in pages that cites it is credited by the composite audit.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_turns.SessionTurnsTests.test_forty_source_turns_are_bounded_and_turn_three_handle_records_bar",
+        "test_review_session_v4_pages.SessionPagesTests.test_page_cites_text_delivered_on_turn_three_and_composite_audit_credits_it"
+      ]
+    },
+    {
+      "id": "parts-v3-reference-rows-of-a-unit",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "reference rows of a series unit",
+      "summary": "Under the parts protocol v2 every delivery of a unit held its whole lists of occurrences, citations and aliases, so a unit of 11 body characters with many occurrences made a request too large (row Q17).",
+      "expected": "Under the parts protocol v3 a descriptor shows its reference rows within a stated size, the other rows are delivered in segments once each, and the frozen packet is rebuilt with every occurrence; a series with 1,000 occurrences records a review.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_v3.RecordedSeriesTests.test_Q17_repeated_occurrences_record_a_review_and_missing_turn_fails",
+        "test_review_parts_v3.BuilderScaleTests.test_Q17_reference_shapes_keep_one_body_and_rebuild_every_occurrence"
+      ]
+    },
+    {
+      "id": "failed-probe-keeps-a-retired-stale-route-record-unverified",
+      "record": "20261120001948-retired-stale-route-record-stays-unverified-after-a-failed-probe",
+      "class": "route state after a retirement",
+      "summary": "A probe of the route record of a carried chain failed without an answer after the cutoff of the carrying chain, and the installed reviewer runtime then changed, so the route record took no probe again. The record stayed unverified for good, also after its retirement: the carried turns were not ready, the carrying chain did not verify, its finding stayed stale, and a new chain carried nothing and read every text again.",
+      "expected": "On a route record that a route_retired event names, a probe without an answer decides nothing, and the record has the state of its latest probe with an answer. After the retirement the carried turns are ready, the carrying chain verifies, its finding is current, and a new chain carries the turns of both chains. A probe with an answer, parsed or not, decides as on any other route record.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_reading_v7_verification.RetiredRouteVerificationTests.test_carried_chain_on_a_retired_stale_route_record_verifies_again",
+        "test_research_route_retirement.RetiredRouteStateTests.test_probe_without_an_answer_decides_nothing_on_a_retired_route_record",
+        "test_research_route_retirement.RetiredRouteStateTests.test_probe_answer_that_is_no_json_decides_on_a_retired_route_record",
+        "test_research_route_retirement.RetiredRouteStateTests.test_probe_answer_with_an_excluded_control_and_no_json_decides_on_a_retired_route_record",
+        "test_review_route_plan.RetiredRouteStateTests.test_observed_answer_on_a_retired_route_is_recorded",
+        "test_review_route_plan.RetiredRouteStateTests.test_observed_answer_on_a_stale_route_is_recorded_after_the_retirement",
+        "test_review_route_plan.RetiredRouteStateTests.test_answer_that_asks_for_a_source_on_a_retired_route_takes_the_repair"
+      ]
+    },
+    {
+      "id": "recorded-v4-problem-review-has-no-refresh",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "refresh of a problem review under the session rules v4",
+      "summary": "After a problem bar recorded by a chain of the session rules v4 and an added problem area, plan_next planned a continuation of that chain with review-assignment, and the store refused the payload with review_resampling_forbidden; a new payload of the same reviewer with an empty context was refused the same way. A slate after an added candidate and a result after a changed review currency met the same refusal.",
+      "expected": "The refresh is a new v4 chain in the slot of the recorded review, named by the context member session_refresh: the plan gives its payload on the route record that select_step_route gives, or the renewal step while the store lacks that record; its packet is the first packet of the role with problem_refresh and the earlier review in historical_reviews; its final cites only what its own chain delivered; the capacity stop of rule V5 gives step 14 on each serving route; under the next rule set it is a new request without history; a refresh of an older rule set keeps its bytes.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_refresh.SessionRefreshTests.test_f1_bar_refresh_after_an_added_area_reaches_its_recorded_review",
+        "test_review_session_v4_refresh.SessionRefreshTests.test_f2_slate_refresh_after_an_added_candidate_states_both_candidate_sets",
+        "test_review_session_v4_refresh.SessionRefreshTests.test_f3_result_refresh_after_a_changed_currency_states_both_currencies",
+        "test_review_session_v4_refresh.SessionRefreshTests.test_f4_below_the_floor_the_stop_gives_one_new_chain_step_on_each_serving_route",
+        "test_review_session_v4_refresh.SessionRefreshTests.test_f7_a_final_of_the_refresh_chain_cannot_cite_a_text_that_only_the_earlier_chain_delivered",
+        "test_review_session_v4_refresh.SessionRefreshTests.test_f8_on_a_stale_route_record_the_plan_names_the_current_record_of_the_same_identity",
+        "test_review_session_v4_refresh.SessionRefreshTests.test_f9_under_the_next_rule_set_the_refresh_is_a_new_request_without_history"
+      ]
+    },
+    {
+      "id": "page-manifest-read-against-installed-renderer",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "authentication of a stored observation",
+      "summary": "A recorded page manifest of a visual route was verified only while the installed PDF renderer had the render profile that the manifest records. After an update of the renderer, or without it, a stored attempt whose lineage holds a visual transition did not authenticate and its assignment showed review_invocation_unverified.",
+      "expected": "A recorded manifest that records the profile of the installed renderer is verified by a fresh derivation of each page. A recorded manifest that records another profile, or that is read without a renderer, is verified from the store: its profile is a profile of the protocol, and each page image is the stored PNG artifact with the recorded size. A stored review on a visual route keeps its authentication in both cases, a changed page is refused in both, and the value review of an answer that the store holds is recorded in both. New reviewer work for an assignment on a visual route is a new assignment or a new call. It is admitted only when the installed renderer is the one that the manifests of its request and of the visual transitions in its lineage record. Otherwise it is refused with review_visual_source_mismatch before a page is rendered, a record is written or a call is sent. Each function that writes a record of new reviewer work stands behind that comparison.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_visual_manifest_recorded_profile.RecordedProfileTests.test_stored_visual_review_stands_under_another_renderer_without_a_new_derivation",
+        "test_visual_manifest_recorded_profile.RecordedProfileTests.test_stored_visual_review_stands_without_a_renderer",
+        "test_visual_manifest_recorded_profile.RecordedProfileTests.test_recorded_manifest_with_a_changed_page_is_refused_by_its_stored_image",
+        "test_visual_manifest_recorded_profile.RecordedProfileTests.test_recorded_profile_keeps_the_fixed_members_of_the_protocol",
+        "test_visual_manifest_recorded_profile.RecordedProfileTests.test_fixed_profile_members_are_those_of_the_installed_renderer",
+        "test_visual_manifest_recorded_profile.RecordedProfileTests.test_manifest_of_another_renderer_is_verified_as_stored_and_enters_no_new_delivery",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_new_assignment_after_a_renderer_update_is_refused_before_any_page_is_rendered",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_run_after_a_renderer_update_is_refused_before_any_call",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_run_of_a_transition_child_after_a_renderer_update_is_refused_before_any_call",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_staged_packet_with_a_native_page_verifies_as_stored_under_another_renderer",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_frontier_after_a_renderer_update_is_refused_and_no_child_is_recorded",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_staged_dispatch_after_a_renderer_update_is_refused_before_any_worker_starts",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_refusal_replacement_after_a_renderer_update_is_refused_and_not_recorded",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_output_correction_after_a_renderer_update_is_refused_before_any_record",
+        "test_visual_manifest_recorded_profile.NewWorkTests.test_value_review_of_a_stored_answer_is_recorded_under_another_renderer",
+        "test_visual_manifest_recorded_profile.NewWorkWriterTests.test_every_writer_of_new_reviewer_work_stands_behind_a_renderer_comparison"
+      ]
+    },
+    {
+      "id": "heavy-test-moved-into-the-shard-of-the-costliest-fixture",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "time of the suite",
+      "summary": "The shard of a test outside a shard group was its rank among the discovered tests, so each added test moved the tests after it to the next shard. In the CI run of c75977ef the slate test of incident A1 (2,121 s to 3,217 s) moved from shard 2 into shard 0, which holds the cut of record 12. On Python 3.9.25 that shard had run 8,007 s when the slate test started, and the job was cancelled at its limit of 180 minutes.",
+      "expected": "A test module that holds a test above 300 s has a fixed shard (SHARD_GROUPS of ci/unittest_shards.py), one such group in each shard. A test that is added before such a module does not change its shard, and the shard of the slate test is not the shard of the cut of record 12.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_ci_shards.CIShardTests.test_a_module_with_a_test_above_300_seconds_keeps_its_shard_when_tests_are_added_before_it",
+        "test_ci_shards.CIShardTests.test_each_module_of_a_shard_group_is_a_test_module_of_one_group_and_no_shard_holds_two_groups"
+      ]
+    },
+    {
+      "id": "content-change-after-a-cutoff-discards-carried-readings",
+      "record": "20261120002019-content-change-after-cutoff-discards-carried-readings",
+      "class": "carried selection",
+      "summary": "A selection of carried readings observed each earlier chain on the content records of the present. Two kinds of change that commands write made the earlier units no longer the units that the harness derives: bundle, when its bundle names a capture that an earlier packet delivered as a supplement, and fulltext, when it brings the first fetched copy of a work whose delivered text was supplied with import-fulltext. After either, the observer of the earlier v6 chain refused every prefix, the v7 chain that carried it was refused, and the first assignment of a later chain carried no turn: it read 109,211 characters again (109,223 in the second case), of which 100,000 were two full texts that did not change. No live record was in this state.",
+      "expected": "A first assignment stores its selection under exactory-openness-carried-selection-v3, which observes each earlier chain on the content records as they stood at the start of that chain and on the review records as they stand. After such a change a later chain carries the ready reading turns of every earlier chain for the units that did not change, and reads the units that are new or changed. A stored selection of version 1 or 2 keeps its rule.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_carried_integration.ContentChangeCarryTests.test_supplement_bundle_keeps_the_readings_of_the_unchanged_units",
+        "test_openness_carried_integration.SuppliedTextContentChangeTests.test_fetched_copy_after_a_supplied_text_keeps_the_readings_of_the_unchanged_units"
+      ]
+    },
+    {
+      "id": "reviewer-call-on-a-context-that-the-present-does-not-verify",
+      "record": "20261120124838-a-call-for-a-chain-reads-the-context-frozen-at-its-assignment",
+      "class": "dead-end",
+      "summary": "review-run read only the context that an assignment froze when it was recorded. After a probe of the route record of a turn returned no answer, or after a contamination event named the assignment or an earlier turn of its review, review-run given directly sent the request in every role but a staged task, and review-series sent one more call when the head had a failed call. After a contamination that call could give no result that counts.",
+      "expected": "review-run, the dispatch of a staged task, review-output-correction and review-assignment after the first turn of a v7 or math v2 chain read the review records of the present: the state of the route record of each turn of the review and the contamination events that name each turn. While a turn has no verified context they send no request and record nothing, and they refuse with review_context_unverified or review_context_contaminated, details.turn and the plan of the head under details.next. plan_next gives the same code as a handoff in every state of a head whose result is not recorded, with the step that ends the state: the probe of the route record of the named turn, its retirement when that record takes no probe, or the step of the role. status lists the row of the head. A replayed request passes as before, and a head on a stale or retired route record keeps the refusal and the plan of that route record.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_call_context_present.CallContextRoleTests.test_w1_review_run_waits_for_a_probe_of_its_route_record_in_every_role",
+        "test_call_context_present.CallContextRoleTests.test_w2_review_run_is_refused_after_a_contamination_of_its_assignment_in_every_role",
+        "test_call_context_present.CallContextChainTests.test_w9_series_sends_no_recorded_assignment_after_a_contamination_of_an_own_earlier_turn",
+        "test_call_context_present.CallContextChainTests.test_w12_series_makes_no_call_on_a_route_record_whose_probe_failed_after_a_failed_call",
+        "test_review_route_plan.EarlierTurnRouteTests.test_earlier_turn_on_a_stale_route_record_takes_the_retirement_of_that_record"
+      ]
+    },
+    {
+      "id": "retired-recorded-v4-review-plans-repair-instead-of-refresh",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "retired reviewer route with a recorded v4 review",
+      "summary": "After a route retirement and an added problem area, the head's refresh plan was replaced by a repair of the earlier packet.",
+      "expected": "The retirement handoff keeps the already planned refresh payload and leaves the verified route as its only choice. The new chain records a review of the added area in the same slot.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e1_retirement_handoff_offers_only_the_planned_refresh"
+      ]
+    },
+    {
+      "id": "v4-refresh-inherits-the-reassessment-of-an-earlier-repair",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "review refresh after context repair",
+      "summary": "The refresh prompt delivered historical findings without a repair binding, but the final validator and the repair overflow readers still used the earlier repair.",
+      "expected": "The refresh link ends reassessment and exhaustion credit while preserving all scientific history. A subsequent genuine repair addresses every earlier final.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e2_refresh_after_repair_records_an_ordinary_final",
+        "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e3_refresh_refuses_the_still_valid_old_reassessment",
+        "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e6_fallback_v3_and_its_later_turn_owe_no_reassessment",
+        "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e8_new_repair_disposes_the_whole_slot_then_refreshes",
+        "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e9_incomplete_refresh_attempt_does_not_exhaust_the_earlier_repair"
+      ]
+    },
+    {
+      "id": "refreshed-review-retains-independent-credit-after-contamination",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "present-day review independence after a refresh",
+      "summary": "A later event on the original final, repair final or refresh root made different current readers disagree about the same slot.",
+      "expected": "State, plan, rendered reviews and current reviewers use the same present-day exposure check. A contaminated refresh becomes historical, leaves its observations readable and offers repair with the full cause binding.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e4_late_predecessor_event_after_refresh_start_keeps_the_stale_repair",
+        "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e7_current_readers_agree_for_each_late_event_and_the_clean_control"
+      ]
+    },
+    {
+      "id": "packet-schema-value-accounts",
+      "record": "20261120121345-packet-schema-does-not-name-six-parts-of-the-value-accounts",
+      "class": "packet member declaration",
+      "summary": "Result and adjudicator packets carried value accounts with members missing from the packet registry, and the source inventory could not compare the copied member with the value validator.",
+      "expected": "All value account member names are declared, and a change to the validator table or copy statement fails the inventory until the declaration is reviewed.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_record_copies.WholeAccountsTests.test_whole_accounts_of_a_recorded_value_have_a_declaration_at_every_member",
+        "test_record_copies.RecordCopyInventoryTests.test_production_declaration_equals_the_member_table",
+        "test_record_copies.RecordCopyInventoryTests.test_a_new_member_of_an_entry_fails_until_the_definition_declares_it",
+        "test_record_copies.RecordCopyInventoryTests.test_the_copy_statement_is_pinned"
+      ]
+    },
+    {
+      "id": "problem-record-accepts-unpostable-citation",
+      "record": "20261120203506-improvements-from-the-problem-value-cycle",
+      "class": "post citation validation",
+      "summary": "The record accepted a citation that the posting command refused after review.",
+      "expected": "New citation records apply the same field rules as the posting command and refuse unsupported text or locators with a code. Earlier citations still read and render.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_citation_rules.OpennessCitationRulesTests.test_openness_refuses_an_unpostable_locator_of_a_decisive_reading",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_assessment_refuses_a_new_citation_with_unpostable_work_metadata",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_attempt_refuses_a_new_citation_with_unpostable_work_metadata",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_locator_refuses_a_post_locator_above_the_maximum_length",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_locator_refuses_a_post_locator_character",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_locator_refuses_a_post_locator_with_an_invalid_host",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_metadata_refuses_a_post_citation_above_the_maximum_length",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_metadata_refuses_a_post_citation_below_the_minimum_length",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_metadata_refuses_a_post_citation_character",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_value_refuses_a_new_citation_with_unpostable_work_metadata"
+      ]
+    },
+    {
+      "id": "initial-bar-assignment-omits-two-route-scheduler",
+      "record": "20261114053500-bar-chain-delivers-two-full-texts-per-turn-and-store-runs-one-reviewer",
+      "class": "review capacity guidance",
+      "summary": "T2.5: the documented initial bar assignments omitted the capacity policy, so two verified routes used the default one-call store limit.",
+      "expected": "Detailed next offers a bar assignment with the shared scheduler suggestion when at least two covered routes are verified and the store has no recorded policy. The documented assignments let two bar calls overlap, preserve any recorded policy, and keep the scheduler recording instruction visible in wait plans that suggest it.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_queue_triage.BarAssignmentPlanTests.test_next_offers_the_two_route_scheduler_for_the_first_bar_assignment",
+        "test_review_queue_triage.BarAssignmentPlanTests.test_next_offers_bar_assignment_without_scheduler_for_one_route_or_a_recorded_policy",
+        "test_review_queue_triage.QueueTriageTests.test_recording_the_suggested_scheduler_allows_two_verified_routes_to_run_together",
+        "test_review_queue_triage.QueueTriageTests.test_planned_store_wait_names_its_limit_and_the_two_route_scheduler",
+        "test_review_queue_triage.QueueTriageTests.test_staged_wait_keeps_the_own_task_action_and_names_the_capacity_limit"
       ]
     }
   ]

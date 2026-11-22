@@ -645,6 +645,9 @@
         "research_harness/review_parts_v3.py:prepare_capacity_assignment#1": [
           "form"
         ],
+        "research_harness/review_protocol.py:_read_session_refresh#1": [
+          "form"
+        ],
         "research_harness/review_protocol.py:_source_parent#1": [
           "form"
         ],
@@ -661,6 +664,9 @@
           "form"
         ],
         "research_harness/review_protocol.py:record_assignment.prepare#2": [
+          "form"
+        ],
+        "research_harness/review_protocol.py:record_assignment.prepare#3": [
           "form"
         ],
         "research_harness/review_single_request.py:prepare_replacement#1": [

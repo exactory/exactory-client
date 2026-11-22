@@ -14,10 +14,14 @@ ACCOUNT_LIST_PARTS = ("answer_evidence", "boundaries", "explanatory_use", "alter
 STRENGTH_HEADS = ("range_of_instances", "constants", "exponents", "exactness")
 RELATION_KINDS = ("implies", "follows_from", "equivalent_to", "incompatible_with", "strengthens", "generalizes", "presents_anew")
 ALTERNATIVE_ROLES = ("stronger", "weaker", "same_assertion", "other_assertion", "no_alternative")
-# The members of each entry of the accounts, and of the objects that the registry of the entries and the walk of the
-# references read in an entry, as the arguments of fields(). Every check of these members reads its set here.
+# The members of the accounts and of every object in them, as the arguments of fields(). Every check of these members
+# reads its set here. An evidence reference, the kind of an answer_evidence entry and a source of a refuted conjecture
+# have their checks elsewhere (validate_account_evidence, problem_forming.validate_description, strategy.evidence).
 _FACT_MEMBERS = ("id", "fact", "scope", "evidence", "evidence_ids")
 ACCOUNT_MEMBERS = dict(
+    accounts=dict(required=("answer", "answer_evidence", "boundaries", "explanatory_use", "alternatives", "strength",
+                            "relations", "refuted_conjectures"),
+                  optional=("checks", "gain", "search_coverage", "replacement", "places")),
     answer=dict(required=("id", "status", "text", "evidence_ids")),
     answer_evidence=dict(required=_FACT_MEMBERS + ("kind", "direction", "alternative_id"), optional=("date", "check_id")),
     boundaries=dict(required=_FACT_MEMBERS + ("argument",), optional=("date", "check_id")),
@@ -41,6 +45,11 @@ ACCOUNT_MEMBERS = dict(
     weaker_derivations=dict(required=("id", "alternative_id", "status", "reason", "evidence_ids")),
     surplus=dict(required=("description", "status", "evidence_ids", "relation_ids")),
     conjunction=dict(required=("description", "status", "evidence_ids")),
+    role=dict(required=("kind", "description")),
+    target=dict(required=("kind", "description")),
+    independence=dict(required=("status", "reason"), optional=("prior_knowledge",)),
+    prior_knowledge=dict(required=("source_index", "status", "reason")),
+    lineage=dict(required=("form_id", "check_id")),
 )
 HISTORY_MISSING_MESSAGE = ("A gain claim and a passed test need a history. The candidate of the "
                            "statement must cite, in source.evidence, a forming call or a form outcome whose form was "
@@ -416,7 +425,7 @@ def validate_entry_shapes(accounts):
         text(place["fact"], "The fact of a place")
         text(place["scope"], "The scope of a place")
         try:
-            fields(place["role"], ("kind", "description"))
+            fields(place["role"], **ACCOUNT_MEMBERS["role"])
             for key in ("kind", "description"):
                 text(place["role"][key], "The " + key + " of the role of a place")
         except ResearchError as error:
@@ -468,8 +477,7 @@ def validate_accounts(records, artifacts, value):
     from .problem_claims import find_current_statement
     from .problem_forming import validate_description
     accounts = copy.deepcopy(value["accounts"])
-    fields(accounts, ("answer", "answer_evidence", "boundaries", "explanatory_use", "alternatives", "strength", "relations", "refuted_conjectures"),
-           ("checks", "gain", "search_coverage", "replacement", "places"))
+    fields(accounts, **ACCOUNT_MEMBERS["accounts"])
     validate_entry_shapes(accounts)
     entries = {}
     for entry in collect_entries(accounts):
@@ -650,7 +658,7 @@ def validate_test(records, entry, entries, alternatives, statement, revision, *,
         raise ResearchError(code,
                             "A check with the standing test needs independence: {status: outcome_not_known, reason}. "
                             "If the outcome was known, record the check with the standing observation")
-    fields(independence, ("status", "reason"), ("prior_knowledge",), code=code)
+    fields(independence, **ACCOUNT_MEMBERS["independence"], code=code)
     text(independence["reason"], "The reason of the independence of a test", code=code)
     if independence["status"] != "outcome_not_known":
         raise ResearchError(code,
@@ -704,7 +712,7 @@ def validate_test(records, entry, entries, alternatives, statement, revision, *,
         strategy.items(knowledge, "The prior_knowledge findings of the independence of a test", code=code)
         indices = []
         for finding in knowledge:
-            fields(finding, ("source_index", "status", "reason"), code=code)
+            fields(finding, **ACCOUNT_MEMBERS["prior_knowledge"], code=code)
             if type(finding["source_index"]) is not int or finding["status"] != "outcome_not_known":
                 raise ResearchError(code,
                                     "Each source of the prior-knowledge account of the plan needs a finding "
@@ -770,7 +778,7 @@ def validate_tier_two(records, value, accounts, entries, alternatives):
                             "A gain claim and a passed test need the second tier of the accounts. "
                             "Give checks, gain (null when the record claims no gain) and a nonempty search_coverage")
     for entry in checks.values():
-        fields(entry["target"], ("kind", "description"))
+        fields(entry["target"], **ACCOUNT_MEMBERS["target"])
         strategy.choice(entry["target"]["kind"], ("instance", "family", "consequence", "asymptotic_regime"), "The kind of the target of a check", "invalid_input")
         text(entry["target"]["description"], "The description of the target of a check")
         strategy.choice(entry["standing"], ("planned", "observation", "origin", "test"), "The standing of a check", "invalid_input")
@@ -790,7 +798,7 @@ def validate_tier_two(records, value, accounts, entries, alternatives):
             text(entry["alternative_id"], "The alternative_id of a check")
             resolve_entry(entries, entry["alternative_id"])
         if "lineage" in entry:
-            fields(entry["lineage"], ("form_id", "check_id"))
+            fields(entry["lineage"], **ACCOUNT_MEMBERS["lineage"])
             for key in ("form_id", "check_id"):
                 text(entry["lineage"][key], "The lineage field " + key)
         if entry["standing"] == "test":

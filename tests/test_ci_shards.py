@@ -261,6 +261,32 @@ class CIShardTests(unittest.TestCase):
             with self.subTest(test_id=test_id):
                 self.assertEqual(api.read_test_module(test_id), "test_x")
 
+    def test_a_module_with_a_test_above_300_seconds_keeps_its_shard_when_tests_are_added_before_it(self):
+        api = self.api()
+        carried = "test_openness_carried_integration.Record12ShapeTests.test_0"
+        slate = "test_review_parts_slate.SlateSeriesTests.test_A1_incident_28600000_character_slate_reaches_value_review"
+        shards_of_slate = set()
+        for added in range(api.SHARD_COUNT + 1):
+            # The discovery of the incident: other tests, the first group, other tests, the slate test.
+            ids = (["test_alpha.Case.test_%d" % index for index in range(added)] + [carried]
+                   + ["test_beta.Case.test_%d" % index for index in range(3)] + [slate])
+            holders = {test_id: shard for shard in range(api.SHARD_COUNT)
+                       for index in api.select_shard_indices(ids, shard, api.SHARD_COUNT)
+                       for test_id in [ids[index]]}
+            self.assertEqual(len(holders), len(ids))
+            self.assertNotEqual(holders[slate], holders[carried])
+            shards_of_slate.add(holders[slate])
+        self.assertEqual(len(shards_of_slate), 1)
+
+    def test_each_module_of_a_shard_group_is_a_test_module_of_one_group_and_no_shard_holds_two_groups(self):
+        api = self.api()
+        modules = [module for group in api.SHARD_GROUPS for module in group]
+        self.assertEqual(len(modules), len(set(modules)))
+        for module in modules:
+            with self.subTest(module=module):
+                self.assertTrue((ROOT / "tests" / (module + ".py")).is_file())
+        self.assertLessEqual(len(api.SHARD_GROUPS), api.SHARD_COUNT)
+
     def test_the_shard_count_is_the_count_of_the_ci_workflow(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         count = self.api().SHARD_COUNT

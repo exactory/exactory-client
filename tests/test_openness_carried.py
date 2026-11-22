@@ -38,6 +38,7 @@ def build_identity(records, artifacts, assignment, revision=None):
 
 
 SELECTION_V2 = 'exactory-openness-carried-selection-v2'
+SELECTION_V3 = 'exactory-openness-carried-selection-v3'
 
 
 def read_cutoff(case, first):
@@ -110,7 +111,7 @@ class CarriedSelectionSupport:
 
     def select_readings(self, inventory=None, identity=None, records=None):
         return self.carried.select_carried_readings(records or self.records, self.artifacts,
-            inventory or self.inventory, identity or self.identity)
+            inventory or self.inventory, identity or self.identity, protocol=SELECTION_V3)
 
     def change_unit(self, inventory, unit):
         unit['sha256'] = 'f' * 64
@@ -271,7 +272,7 @@ class CarriedSelectionCases(CarriedSelectionSupport):
                 else:
                     selection['inventory_digest'] = '0' * 64
                 with self.assertRaises(ResearchError) as caught:
-                    if selection['protocol'] == SELECTION_V2:
+                    if selection['protocol'] in self.carried.CUTOFF_PROTOCOLS:
                         from research_harness.evaluation import Evaluation
                         self.carried.verify_stored_selection(self.records, self.artifacts, self.inventory,
                             self.identity, selection, cutoff=Evaluation.of(self.records, self.artifacts))
@@ -282,7 +283,7 @@ class CarriedSelectionCases(CarriedSelectionSupport):
 
     def test_stored_selection_is_the_selection_of_the_cutoff(self):
         first, inventory, identity, selection = start_v7(self)
-        self.assertEqual(first['carried_selection']['protocol'], SELECTION_V2)
+        self.assertEqual(first['carried_selection']['protocol'], SELECTION_V3)
         cutoff = read_cutoff(self, first)
         built = self.carried.build_carried_selection(cutoff.records, cutoff, inventory, identity)['selection']
         self.assertEqual(set(built), {'protocol', 'inventory_digest', 'turns'})
@@ -295,7 +296,7 @@ class CarriedSelectionCases(CarriedSelectionSupport):
         records = self.store.snapshot()['records']
         fresh_cutoff = read_cutoff(self, first)
         self.assertEqual(self.carried.select_carried_readings(fresh_cutoff.records, fresh_cutoff,
-            inventory, identity), selection['turns'])
+            inventory, identity, protocol=selection['protocol']), selection['turns'])
         self.carried.verify_stored_selection(records, self.artifacts, inventory, identity, selection,
                                                cutoff=fresh_cutoff)
         v7.verify_problem_coverage(records, self.artifacts, records['review_assignment']['new'])
@@ -312,7 +313,7 @@ class CarriedSelectionCases(CarriedSelectionSupport):
 
     def test_chain_recorded_later_does_not_change_a_stored_selection(self):
         first, inventory, identity, selection = start_v7(self)
-        self.assertEqual(first['carried_selection']['protocol'], SELECTION_V2)
+        self.assertEqual(first['carried_selection']['protocol'], SELECTION_V3)
         later = self.export(name='later-export', assignment_id='later')
         self.assign('later', later)
         self.invoke('later', self.build_reading_response(self.read_packet('later'), excerpts=[]))
@@ -321,8 +322,8 @@ class CarriedSelectionCases(CarriedSelectionSupport):
             records, self.artifacts, identity)])
         cutoff = read_cutoff(self, first)
         self.carried.verify_stored_selection(records, self.artifacts, inventory, identity, selection, cutoff=cutoff)
-        self.assertEqual(self.carried.select_carried_readings(cutoff.records, cutoff, inventory, identity),
-                         selection['turns'])
+        self.assertEqual(self.carried.select_carried_readings(cutoff.records, cutoff, inventory, identity,
+                                                              protocol=selection['protocol']), selection['turns'])
 
     def test_turn_that_becomes_ready_after_the_cutoff_does_not_change_a_stored_selection(self):
         from codex_route_fixtures import record_codex_route, probe_codex_route
@@ -333,14 +334,14 @@ class CarriedSelectionCases(CarriedSelectionSupport):
             protocol.probe_route(self.store, dict(id='failed-probe', route_id='route'), credential='test-only',
                 expected_revision=self.store.revision, request_id='failed-probe')
         first, inventory, identity, selection = start_v7(self, route='second-route')
-        self.assertEqual(first['carried_selection']['protocol'], SELECTION_V2)
+        self.assertEqual(first['carried_selection']['protocol'], SELECTION_V3)
         self.assertEqual(selection['turns'], [])
         probe_codex_route(self, 'recovered-probe')
         records = self.store.snapshot()['records']
         self.carried.verify_stored_selection(records, self.artifacts, inventory, identity, selection,
                                                cutoff=read_cutoff(self, first))
         second, _, _, following = start_v7(self, identifier='following', route='second-route')
-        self.assertEqual(second['carried_selection']['protocol'], SELECTION_V2)
+        self.assertEqual(second['carried_selection']['protocol'], SELECTION_V3)
         self.assertIn('turn-1', [row['origin']['chain'] for row in following['turns']])
         final = finish_v7(self, first)
         reading.verify_chain(self.store.snapshot()['records'], self.artifacts, final)
@@ -351,7 +352,7 @@ class CarriedSelectionCases(CarriedSelectionSupport):
         self.assign('rereading', later)
         self.invoke('rereading', self.build_reading_response(self.read_packet('rereading'), excerpts=[]))
         first, inventory, identity, selection = start_v7(self)
-        self.assertEqual(first['carried_selection']['protocol'], SELECTION_V2)
+        self.assertEqual(first['carried_selection']['protocol'], SELECTION_V3)
         self.assertNotIn('turn-1', [row['origin']['chain'] for row in selection['turns']])
         final = finish_v7(self, first)
         exposure = self.artifacts.put(b'Authored evidence of context exposure.', 'text/plain')
@@ -380,7 +381,7 @@ class CarriedSelectionCases(CarriedSelectionSupport):
         records = self.store.snapshot()['records']
         identity = build_identity(records, self.artifacts, self.first)
         built = self.carried.build_carried_selection(records, self.artifacts, self.inventory, identity)
-        self.assertEqual(built['selection']['protocol'], SELECTION_V2)
+        self.assertEqual(built['selection']['protocol'], SELECTION_V3)
         earlier = next(row for row in built['selection']['turns'] if row['origin']['chain'] == 'turn-1')
         self.assertIn(dict(kind='excerpt', index=1), earlier['entries'])
         self.assertNotIn(dict(kind='excerpt', index=0), earlier['entries'])
@@ -554,7 +555,8 @@ class V6CarriedSelectionTests(CarriedSelectionCases, OpennessReadingCase):
         self.assertNotIn('reading_chain', assignments['single'])
         identity = build_identity(records, self.artifacts, self.first)
         with patch.object(self.artifacts, 'read', wraps=self.artifacts.read) as read:
-            turns = self.carried.select_carried_readings(records, self.artifacts, self.inventory, identity)
+            turns = self.carried.select_carried_readings(records, self.artifacts, self.inventory, identity,
+                                                         protocol=SELECTION_V3)
         paths = {call.args[0]['path'] for call in read.call_args_list}
         self.assertEqual({identifier: [name for name, reference in (
                               ('packet', assignments[identifier]['packet']),
@@ -571,7 +573,7 @@ class V6CarriedSelectionTests(CarriedSelectionCases, OpennessReadingCase):
         bindings = bind_statement_searches(self, 'other-statement', ['Neighbour 0.'])
         with patch.object(reading, 'NEW_PROBLEM_CHAIN_PROTOCOLS', (v7.PROTOCOL, reading.PROTOCOL_V6)):
             first = self.assign_first('new', bindings)
-        self.assertEqual(first['carried_selection']['protocol'], SELECTION_V2)
+        self.assertEqual(first['carried_selection']['protocol'], SELECTION_V3)
         final = finish_v7(self, first)
         with remove_artifact(self, self.first['context']['native_packet']), self.assertRaises(ResearchError) as caught:
             reading.verify_chain(self.store.snapshot()['records'], self.artifacts, final)
@@ -683,7 +685,7 @@ class CarriedRefusalTests(CarriedSelectionSupport, OpennessReadingCase):
         observe_v7(self, first)
         records = self.store.snapshot()['records']
         assignment = records['review_assignment'][first['id']]
-        self.assertEqual(assignment['carried_selection']['protocol'], SELECTION_V2)
+        self.assertEqual(assignment['carried_selection']['protocol'], SELECTION_V3)
         with self.assertRaises(ResearchError) as refused:
             v7.verify_problem_coverage(dict(records), self.artifacts, assignment)
         self.assertEqual(refused.exception.code, 'claim_reassessment_required')
@@ -693,6 +695,22 @@ class CarriedRefusalTests(CarriedSelectionSupport, OpennessReadingCase):
         with self.assertRaises(ResearchError) as refused:
             self.carried.observe_qualifying_chain(dict(records), self.artifacts, chain, later)
         self.assertEqual(refused.exception.code, 'claim_reassessment_required')
+
+    def test_records_without_a_history_end_the_selection_of_version_3(self):
+        """N7 (C21): a selection of version 3 reads the start of each earlier chain from the history, and so do records
+        whose stamp of a first assignment the history does not show. On the base the selection of plain records
+        gives the turn of the present content and no refusal."""
+        with self.assertRaises(ResearchError) as refused:
+            self.carried.build_carried_selection(dict(self.records), self.artifacts, self.inventory, self.identity)
+        self.assertEqual(refused.exception.code, 'claim_reassessment_required')
+        for stamp in (self.first['recorded_revision'] - 1, self.first['recorded_revision'] + 1):
+            with self.subTest(spoofed_stamp=stamp):
+                changed = copy.copy(self.records)
+                changed['review_assignment'] = dict(self.records['review_assignment'],
+                                                    **{'turn-1': dict(self.first, recorded_revision=stamp)})
+                with self.assertRaises(ResearchError) as refused:
+                    self.carried.build_carried_selection(changed, self.artifacts, self.inventory, self.identity)
+                self.assertEqual(refused.exception.code, 'claim_reassessment_required')
 
     def test_report_for_a_v6_chain_states_the_refusal_and_does_not_raise(self):
         from research_harness.native_review import load_packet
@@ -876,7 +894,7 @@ class PartialSearchCases(PartialSearchSupport):
     def test_verifier_refuses_a_selection_that_lacks_a_turn_the_end_of_a_chain_or_a_chain(self):
         _, _, _, partials, _ = self.build_partial_chain(stop_at_partial=2)
         first, inventory, identity, selection = start_v7(self)
-        self.assertEqual(first['carried_selection']['protocol'], SELECTION_V2)
+        self.assertEqual(first['carried_selection']['protocol'], SELECTION_V3)
         cutoff = read_cutoff(self, first)
         records = self.store.snapshot()['records']
         self.assertFalse(next(row for row in selection['turns']
@@ -895,7 +913,7 @@ class PartialSearchCases(PartialSearchSupport):
         self.assign('overlap', overlap)
         self.invoke('overlap', self.build_reading_response(self.read_packet('overlap'), excerpts=[]))
         first, inventory, identity, selection = start_v7(self)
-        self.assertEqual(first['carried_selection']['protocol'], SELECTION_V2)
+        self.assertEqual(first['carried_selection']['protocol'], SELECTION_V3)
         cutoff = read_cutoff(self, first)
         records = self.store.snapshot()['records']
         for mutation in ('entry', 'superseded-entry', 'search', 'move-credit'):
@@ -922,7 +940,7 @@ class PartialSearchCases(PartialSearchSupport):
         self.invoke('overlap-2', self.build_reading_response(self.read_packet('overlap-2'), excerpts=[]))
         current = self.store.snapshot()['records']
         later_turns = self.carried.select_carried_readings(current, self.artifacts, inventory,
-            build_identity(current, self.artifacts, first))
+            build_identity(current, self.artifacts, first), protocol=SELECTION_V3)
         extra = next(row for row in later_turns if row['origin']['assignment_id'] == 'overlap-2')
         changed = copy.deepcopy(selection)
         changed['turns'].append(extra)
@@ -1013,7 +1031,8 @@ def select_rule_fixture(carried, artifacts, inventory, chains, records):
     candidates = [dict(chain=chain, protocol=turns[0]['origin']['protocol'],
         recorded_revision=records['review_assignment'][chain]['recorded_revision']) for chain, turns in chains]
     with patch.object(carried, 'list_qualifying_chains', return_value=candidates), \
-            patch.object(carried, 'observe_qualifying_chain', side_effect=lambda r, a, chain, i: observations[chain['chain']]), \
+            patch.object(carried, 'observe_qualifying_chain',
+                         side_effect=lambda r, a, chain, i, **options: observations[chain['chain']]), \
             patch.object(carried, '_list_search_dependencies', return_value={}):
         return carried.build_carried_selection(records, artifacts, inventory, dict(recorded_revision=100))['selection']
 
@@ -1030,7 +1049,7 @@ class CarryRuleTests(unittest.TestCase):
     def test_supersession_follows_the_credit_of_later_chains(self):
         inventory, chains, records = build_rule_fixture()
         selected = select_rule_fixture(self.carried, self.artifacts, inventory, chains, records)
-        self.assertEqual(selected['protocol'], SELECTION_V2)
+        self.assertEqual(selected['protocol'], SELECTION_V3)
         for protocol in ('exactory-openness-reading-v5', 'exactory-openness-reading-v6'):
             for complete in (True, False):
                 with self.subTest(protocol=protocol, complete_search=complete):
@@ -1047,14 +1066,90 @@ class CarryRuleTests(unittest.TestCase):
                     self.assertEqual(turns['newer-3']['ranges'], [])
 
     def test_selection_of_version_2_keeps_its_result(self):
-        inventory, chains, records = build_rule_fixture()
-        selection = select_rule_fixture(self.carried, self.artifacts, inventory, chains, records)
-        expected = json.loads((Path(__file__).parent / 'fixtures/carried_selection_v2.json').read_text())
-        self.assertEqual(selection, expected)
-        inventory, chains, records = build_rule_fixture('exactory-openness-reading-v6')
-        for turn in expected['turns']:
-            turn['origin']['protocol'] = 'exactory-openness-reading-v6'
-        self.assertEqual(select_rule_fixture(self.carried, self.artifacts, inventory, chains, records), expected)
+        """V11 of the carry design. The fixture replaces the observation, so the selection of version 3 differs from
+        the stored selection of version 2 in its protocol alone."""
+        stored = json.loads((Path(__file__).parent / 'fixtures/carried_selection_v2.json').read_text())
+        for name in (SELECTION_V2, SELECTION_V3):
+            for reading_protocol in ('exactory-openness-reading-v5', 'exactory-openness-reading-v6'):
+                with self.subTest(selection=name, reading=reading_protocol), \
+                        patch.object(self.carried, 'SELECTION_PROTOCOL', name):
+                    expected = copy.deepcopy(dict(stored, protocol=name))
+                    for turn in expected['turns']:
+                        turn['origin']['protocol'] = reading_protocol
+                    inventory, chains, records = build_rule_fixture(reading_protocol)
+                    self.assertEqual(select_rule_fixture(self.carried, self.artifacts, inventory, chains, records),
+                                     expected)
+
+
+class StoredSelectionNameTests(CarriedSelectionSupport, OpennessReadingCase):
+    """C20: a stored selection is verified under the protocol that it names."""
+
+    def test_stored_selection_of_each_earlier_name_keeps_its_rule(self):
+        """The smallest stored selection of version 1 and of version 2, one carried turn, observes the earlier chain on
+        the records as they stand: after a bundle names the capture that the chain read as a supplement, both are
+        refused, as before. A selection of version 3 observes the chain on the content of its start and verifies."""
+        from openness_legacy_fixtures import select_as_0_91_1
+        from research_harness.evaluation import Evaluation
+        from test_openness_carried_integration import StoredSelectionIntegrationTests
+        cutoff = Evaluation.of(self.records, self.artifacts)
+        stored = {}
+        for name in ('exactory-openness-carried-selection-v1', SELECTION_V2, SELECTION_V3):
+            turns = (select_as_0_91_1(self.records, self.artifacts, self.inventory, self.identity)
+                     if name == 'exactory-openness-carried-selection-v1' else self.carried.select_carried_readings(
+                         self.records, self.artifacts, self.inventory, self.identity, protocol=name))
+            selection = dict(protocol=name, inventory_digest=digest(self.inventory), turns=turns)
+            stored[name] = self.artifacts.put(serialize_record(selection), 'application/json')
+            self.assertEqual(len(self.carried.verify_stored_selection(self.records, self.artifacts, self.inventory,
+                                                                      self.identity, stored[name], cutoff=cutoff)), 1)
+        StoredSelectionIntegrationTests.hide_extraction_in_bundle(self)
+        records = self.store.snapshot()['records']
+        for name, reference in stored.items():
+            with self.subTest(protocol=name):
+                if name == SELECTION_V3:
+                    self.assertEqual(len(self.carried.verify_stored_selection(
+                        records, self.artifacts, self.inventory, self.identity, reference, cutoff=cutoff)), 1)
+                    continue
+                with self.assertRaises(ResearchError) as refused:
+                    self.carried.verify_stored_selection(records, self.artifacts, self.inventory, self.identity,
+                                                         reference, cutoff=cutoff)
+                self.assertEqual((refused.exception.code, refused.exception.message),
+                                 ('openness_reading_incomplete', v7.SELECTION_MISMATCH_MESSAGE))
+
+
+class ContentKindsTests(OpennessReadingCase):
+    """N8 (C16), a contract test: the derivation of the reading units of a packet and the check of the texts of a v5
+    or v6 final turn read the kinds of READING_CONTENT_KINDS alone. On the base that name does not exist."""
+    reading_protocol = None
+
+    def test_unit_derivation_reads_the_content_kinds_alone(self):
+        from research_harness import problem_openness_sources as sources
+        kinds = set()
+
+        class NotingRecords(dict):
+            def __getitem__(self, kind):
+                kinds.add(kind)
+                return dict.__getitem__(self, kind)
+
+            def get(self, kind, default=None):
+                kinds.add(kind)
+                return dict.get(self, kind, default)
+
+            def __contains__(self, kind):
+                kinds.add(kind)
+                return dict.__contains__(self, kind)
+
+        records = self.store.snapshot()['records']
+        native = json.loads(self.artifacts.read(self.export()))
+        # The delivery contract of a packet that binds native reviews; classify_selected_texts reads it.
+        proof = self.artifacts.put(b'Independent required proof.', 'text/plain')
+        native['evidence'].append(dict(digest=proof['sha256'], kind='artifact', artifact=proof))
+        native['scientific_context']['native_reviews'] = [dict(required_evidence_digests=[proof['sha256']])]
+        native['scientific_context']['openness_delivery'] = sources.build_delivery(records, self.artifacts, native)
+        rows = reading.list_reading_rows(NotingRecords(records), self.artifacts, native)
+        v7.build_inventory(NotingRecords(records), self.artifacts, native)
+        self.assertTrue(sources.classify_selected_texts(NotingRecords(records), self.artifacts, native, rows))
+        self.assertTrue(kinds)
+        self.assertLessEqual(kinds, set(reading.READING_CONTENT_KINDS))
 
 
 class AcceptanceSelectionTests(OpennessReadingCase):
@@ -1108,7 +1203,7 @@ class AcceptanceSelectionTests(OpennessReadingCase):
             changed = copy.deepcopy(inventory)
             unit = next(row for row in changed['units'] if row['kind'] == 'fulltext')
             unit['sha256'] = 'f' * 64
-            turns = carried.select_carried_readings(records, self.artifacts, changed, identity)
+            turns = carried.select_carried_readings(records, self.artifacts, changed, identity, protocol=SELECTION_V3)
             self.assertNotIn(unit['handle'], {r['unit'] for t in turns for r in t['ranges']})
             for key in ('reviewer_id', 'subject_digest', 'route_model', 'route_effort'):
                 other = copy.deepcopy(identity)
@@ -1119,7 +1214,8 @@ class AcceptanceSelectionTests(OpennessReadingCase):
                         other['route']['configuration']['effort'] = 'another-effort'
                 else:
                     other[key] = 'another'
-                self.assertEqual(carried.select_carried_readings(records, self.artifacts, inventory, other), [])
+                self.assertEqual(carried.select_carried_readings(records, self.artifacts, inventory, other,
+                                                                 protocol=SELECTION_V3), [])
         self.assertEqual({attempt_id: {key: self.artifacts.read(records['review_attempt'][attempt_id][key])
                          for key in ('request', 'output')} for attempt_id in old_bytes}, old_bytes)
 

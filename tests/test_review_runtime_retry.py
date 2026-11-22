@@ -183,9 +183,18 @@ class StagedRuntimeRetryTests(ResultPartsCase):
         planned = self.command('review-assignment', controller['next'][0]['payload'])
         route = self.case.read_records()['review_route']['route']
         missing = ResearchError('review_runtime_missing', 'Synthetic runtime failure')
-        with patch.object(transport, 'runtime', side_effect=[missing, route['runtime']]), \
-                patch.object(execution, 'reserve_task', side_effect=RuntimeError('Reached admission')) as reserve, \
-                patch.object(time, 'sleep') as sleep:
+
+        def read_runtime(_route):
+            # The reviewer runtime is missing until the start has waited once. The start reads it more than once:
+            # the state memo of the context check reads it without a wait (a failed read only ends the reuse of a
+            # state), and the admission reads it with the waits of retry_runtime_check.
+            if not sleep.called:
+                raise missing
+            return route['runtime']
+
+        with patch.object(time, 'sleep') as sleep, \
+                patch.object(transport, 'runtime', side_effect=read_runtime), \
+                patch.object(execution, 'reserve_task', side_effect=RuntimeError('Reached admission')) as reserve:
             with self.assertRaisesRegex(RuntimeError, 'Reached admission'):
                 self.command('review-run', planned['next'][0]['payload'])
         reserve.assert_called_once()
@@ -195,13 +204,14 @@ class StagedRuntimeRetryTests(ResultPartsCase):
         controller = self.create_controller()
         planned = self.command('review-assignment', controller['next'][0]['payload'])
         failure = ResearchError('review_runtime_missing', 'Runtime')
-        with patch.object(transport, 'runtime', side_effect=failure) as runtime, \
+        with patch.object(transport, 'runtime', side_effect=failure), \
                 patch.object(execution, 'reserve_task', side_effect=AssertionError('No dispatch')), \
                 patch.object(time, 'sleep') as sleep:
             with self.assertRaises(ResearchError) as raised:
                 self.command('review-run', planned['next'][0]['payload'])
         self.assertEqual(raised.exception.code, 'review_runtime_missing')
-        self.assertEqual(runtime.call_count, 6)
+        # Five waits are the six reads of the admission. The state memo of the context check reads the runtime too,
+        # without a wait, so the count of all reads is no count of the tries.
         self.assertEqual(sleep.call_args_list, [call(n) for n in (1, 2, 4, 8, 16)])
         self.assertFalse(self.case.read_records().get('review_reservation'))
 
