@@ -6,7 +6,6 @@ import shlex
 
 from .errors import ResearchError
 from .evidence import digest
-from .exactory_api import validate_post_citation_field
 from .operations import fields, immutable_record, prepared_mutation, text
 from .problem_claims import require_problem
 
@@ -49,36 +48,26 @@ def read_registry_assertion(records, artifacts, identifier):
                 and row["source_locator"] == assertion["source_locator"])
 
 
-def select_citation_text(records, artifacts, work, registry_identifier):
-    metadata = find_citation_metadata(records, work["id"])
-    if metadata is not None:
-        validate_citation_metadata(records, artifacts, metadata)
-    registry = (read_registry_assertion(records, artifacts, registry_identifier)
-                if registry_identifier is not None else None)
-    values = registry if registry is not None else metadata if metadata is not None else work
-    authors = [row if isinstance(row, str) else row.get("name", "") for row in values.get("authors", [])]
-    year = (metadata if metadata is not None else work).get("year")
-    citation = compose_citation_text(values["title"], authors, year)
-    return citation, values["title"], authors, registry is not None
-
-
-def compose_citation_text(title, authors, year):
-    return ". ".join(part for part in (", ".join(authors), title, str(year or "")) if part)
-
-
 def compose_citation(records, artifacts, work, locator, *, use_registry=True):
     """Compose both citation files from the same locator and metadata values."""
     from .identities import normalize_identifier
     identifier = normalize_identifier("url:" + locator if locator.startswith("https://") else locator)
     registry_identifier = identifier if identifier.startswith(("doi:", "arxiv:")) else None
-    citation, title, authors, has_registry = select_citation_text(
-        records, artifacts, work, registry_identifier if use_registry else None)
-    bibliography = {"title": title, "authors": authors}
+    metadata = find_citation_metadata(records, work["id"])
+    if metadata is not None:
+        validate_citation_metadata(records, artifacts, metadata)
+    registry = (read_registry_assertion(records, artifacts, registry_identifier)
+                if use_registry and registry_identifier is not None else None)
+    values = registry if registry is not None else metadata if metadata is not None else work
+    authors = [row if isinstance(row, str) else row.get("name", "") for row in values.get("authors", [])]
+    citation = ". ".join(part for part in (", ".join(authors), values["title"],
+                        str((metadata if metadata is not None else work).get("year") or "")) if part)
+    bibliography = {"title": values["title"], "authors": authors}
     if registry_identifier is not None:
         kind, value = registry_identifier.split(":", 1)
         bibliography["doi" if kind == "doi" else "arxivId"] = value
     fallback = None
-    if use_registry and registry_identifier is not None and not has_registry:
+    if use_registry and registry_identifier is not None and registry is None:
         provider = "arxiv" if identifier.startswith("arxiv:") else None
         payload = {"identifier": identifier}
         if provider is not None:
@@ -230,11 +219,7 @@ def record_citation_metadata(store, payload, *, expected_revision, request_id):
         saved = records.get("problem_citation_metadata", {}).get(value["id"])
         record = dict(value, provenance=provenance,
                       recorded_revision=saved["recorded_revision"] if saved else expected_revision + 1)
-        change = immutable_record(records, "problem_citation_metadata", value["id"], record)
-        if saved is None:
-            citation = compose_citation_text(value["title"], value["authors"], value.get("year"))
-            validate_post_citation_field("citation", citation, version_id=value["version_id"])
-        return [change], record
+        return [immutable_record(records, "problem_citation_metadata", value["id"], record)], record
 
     return prepared_mutation(store, "problem.citation_metadata", payload, prepare,
                              expected_revision=expected_revision, request_id=request_id)

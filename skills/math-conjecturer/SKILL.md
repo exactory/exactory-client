@@ -799,7 +799,12 @@ significance.
    runs the Claude Code CLI itself as an isolated reviewer on the owner's subscription; in a
    Codex session a `codex_cli_v1` route. Two reviewers are two routes with distinct models or
    reviewer ids. Assign each bar with `review-assignment`, role `bar` and `dossier_id: null`;
-   the harness uses the template `exactory-problem-review-v5/bar`. Run the assignment with
+   the harness uses the template `exactory-problem-review-v5/bar`. A record without a
+   recorded capacity policy runs one reviewer call at a time. `next` gives the bar
+   assignment as a step under `problem_bar_pending`. When its payload holds `scheduler`,
+   keep that member in the first bar assignment: the two bars then run at the same time on
+   their two routes ([the CLI reference](../../docs/research-cli.md#staged-problem-reviews),
+   "Capacity"). Run the assignment with
    `review-run` and record the observed bar with `value-review`. The bars fix what levels 2 and 3
    of significance and priority mean in this field before the candidates can shape the answer.
    When the record names further areas, the bar prompt carries the areas paragraph
@@ -1441,6 +1446,20 @@ each of these refusals.
      the packet does not bind, recorded while the chain runs, ends the chain in this
      handoff. A changed capture of a decisive work does so when it changes the gaps of the
      minimum; another extraction of the same original need not.
+   - Since 0.92.0, `review-series` and `review-run` end with `review_context_unverified` or
+     `review_context_contaminated` and the member `details.turn` when the review records
+     give no verified context for a turn of the chain. No reviewer call starts. Read
+     `details.message` and take `details.step`; in a refusal of `review-run`, take the step
+     of the plan under `details.next`. When the step is `review-probe`, probe the named
+     route record and run `review-series` on the same head again. The chain then continues.
+     When the step is `review-context`, the named route record takes no probe: the step
+     retires it, with the owner's instruction as evidence, and `review-series` on the same
+     head names what follows. When the step is `export`, a contamination event names a turn
+     of the chain, or the latest probe of its route record found a control of an excluded
+     source (`details.turn.events` is then empty). Export a new packet and assign it. The
+     stopped chain starts no further reviewer call. When `details.turn.events` is empty, a
+     probe that verifies the named route record also ends the state, and the chain
+     continues.
    - The reading record has a third allowance, `allowances.record`, which bounds what the
      chain keeps of the reviewer's excerpts and passages. `allowances.record.not_retained`
      counts the entries that it could not keep. Report these counts with the finding.
@@ -1540,13 +1559,18 @@ each of these refusals.
      chain is admitted, the command ends with the handoff `export`, which states that chain:
      `details.successor.protocol`, `details.successor.carried_readings` for a v7 chain or
      `details.successor.planned_reading_turns` for a v6 chain that reads again, and
-     `details.message`. Take `details.step`: export under a new assignment id with the same
-     `reviewer_id`, check the assignment, and assign it on the same route. When the check or
-     the assignment is refused with `review_route_runtime_stale`, the route record of the
-     stopped chain pins another reviewer runtime than the installed one, and nothing is
-     recorded. Record and probe a route with the same adapter, model, endpoint and
-     configuration, and assign the same export on that route. A v7 chain carries the same
-     turns there. When none is
+     `details.message`. Take `details.step`. Export under a new assignment id with the same
+     `reviewer_id`. Check the assignment. Then assign it on the route record that the step
+     names. That is the route of the stopped chain. When that route record pins another
+     reviewer runtime than the installed one, the step names another route record. That route
+     record is verified, has the same route identity, and pins the installed runtime.
+     `details.successor.route_id` then names it. When the store lacks such a route record or
+     its probe, the command ends with the handoff `review_route_runtime_stale` instead. Take
+     its `details.step`, which records and probes a route or probes the named route record.
+     Then run `review-series` on the same head again. It then states the admission on the new
+     route record. When that record admits the new chain, it names the export there. Otherwise
+     it ends with the stop of that admission. A v7 chain carries the same turns on the new
+     route record. When none is
      admitted, the command ends with the decision stop of the next item. Every other handoff
      `export`, for example `openness_packet_outdated` or `openness_review_not_approved`,
      keeps the instructions of its own code and carries no `details.successor`.
@@ -1621,7 +1645,12 @@ each of these refusals.
    `review-route-assess --route-id ID` for each. When its `context_status` is not
    `verified_for_route`, probe that route record again with `review-probe`. A completed probe
    makes the finding current again. When `review-probe` refuses that route record with
-   `review_route_runtime_stale`, no probe can end the state, and the step is a new export.
+   `review_route_runtime_stale`, no probe can end the state. The step is then the retirement
+   of that route record: `review-context` with the kind `route_retired` on an assignment of
+   the carried chain, with the owner's instruction as evidence. The retirement makes the
+   finding current again when the failed probe holds no answer and the latest earlier probe
+   with an answer verified the record (`review-route-assess` then shows
+   `verified_for_route`). When it does not, the step is a new export.
    Otherwise run `record-check`. It stays ready after a contamination of a carried turn, and
    its step `authentication` lists that turn under `assignments` with
    `review_context_contaminated`. When it reports the record ready, export again. The new
@@ -2367,14 +2396,18 @@ accounts with the parts that the harness derives, and the records that their ent
      the chain, and with the new assignment id when the step starts a new chain.
      `review_slot_exhausted` names `review-output-correction` when that operation admits the
      head and its request fits the route (the one metadata correction of a problem result
-     reassessment; replacements can then remain). When `review-output-correction` is then
-     refused with `review_route_runtime_stale`, the route record that the command named pins
-     another reviewer runtime than the installed one, and nothing is recorded. Record a route
-     with the same adapter, model, endpoint and configuration, probe it, and run the command
-     with the id of that route as `route_id`. A correction can run on another route record
-     than its assignment. When the latest probe of that record does not verify, the state of
-     the assignment shows `review_context_unverified` or `review_context_contaminated`. Its
-     handoff then names a probe of the route of the assignment or a context repair. Probe the
+     reassessment; replacements can then remain). The handoff names a route record that takes
+     the correction. That is the route of the assignment. When that route record is stale, it
+     is a verified route record with the same route identity (adapter, model, endpoint and
+     configuration) that pins the installed runtime. When the store lacks such a route record
+     or its probe, the handoff is `review_route_runtime_stale` with the step for it, as below.
+     When `review-output-correction` itself gives `review_route_runtime_stale`, the runtime
+     changed after the plan, and nothing is recorded. Then run `review-series` on the head
+     again. A correction can run on another route record than its assignment. When the latest
+     probe of that route record does not verify, the state of the assignment shows
+     `review_context_unverified` or `review_context_contaminated`. The handoff of
+     `review_context_unverified` names the probe of the route record of the correction. The
+     handoff of `review_context_contaminated` names a context repair. In that case, probe the
      route record of the correction instead. When `review-output-correction` does not admit
      the head, the turn position is exhausted, and
      `review_slot_exhausted` names the step of the role of the head: `export`, kind
@@ -2391,24 +2424,33 @@ accounts with the parts that the harness derives, and the records that their ent
      `problem-openness` (Openness, step 7). `review_resampling_forbidden`
      (an initial bar, slate or result review ended without an output, and the same reviewer
      identity is not sampled again) names `review-assignment` for a new eligible reviewer.
-     `review_context_*` and `review_route_retired` name `review-assignment` for the context
-     repair of step 2. `review_route_runtime_stale` (the head's route pins another reviewer
-     runtime than the installed one) names `review-route`, or for a head that holds a refused
-     answer the command of `details.step`. `review-assignment` records no assignment on such
-     a route. When the handoff carries `details.renewal` with `admitted: true`, the
-     replacement of the refused answer can run on another route record. `details.step` then
-     names what that needs: a new route record and its probe, a probe, or a capacity probe. A
-     capacity probe is a paid call, so obtain the owner's authorization before you run it.
-     Take the step, and then run `review-series` on the same head again. When `admitted` is
-     false, or the member is absent, the planner keeps the route of the chain, so
-     `review-series` on the same head gives this handoff again. Record a new route with a new
-     id and the same adapter, model, endpoint and configuration. Probe it. Then follow the
-     stale-route procedure of the [route
-     instructions](../../docs/research-decisions.md#commands-and-shared-state): assign the
-     role again on the new route, or, for a slot with history, retire the stale route and
-     continue the slot through the context repair of step 2. When `admitted` is false,
-     `details.steps` lists these steps in the order to take them. Then run `review-series`
-     with the new assignment.
+     `review_context_*` and `review_route_retired` name the command of `details.step`, the
+     step that the plan of the head names: `review-probe` of the route record that the step
+     names, `review-context` for the retirement of a route record that takes no probe, or
+     the step of the role of the head. That step is `review-assignment` for the context
+     repair of step 2 for a bar, a slate and a result, and `export`, kind
+     `problem-openness`, for an openness chain. When the handoff holds `details.turn`, the
+     review records give no verified context for that turn of the review, and
+     `details.message` states the state and the step (for an openness chain, Openness,
+     step 6a). `review_route_runtime_stale` names the command of `details.step`. The route
+     record of the head pins another reviewer runtime than the installed one. Such a route
+     record takes no assignment, no run, no probe and no output correction. The handoff carries
+     `details.renewal`. With `admitted: true`, work of the head can run on another route
+     record. This work is the replacement of a refused answer, the output correction, or the
+     new chain of a stopped chain. `details.step` then names what the store lacks for that
+     route record: a new route record and its probe, a probe, or a capacity probe. A capacity
+     probe is a paid call, so obtain the owner's authorization before you run it. Take the
+     step. Then run `review-series` on the same head again. With `admitted: false`, the next
+     step of the head cannot move to another route record. `details.steps` then lists the steps
+     of the stale-route procedure in the order to take them. For a slot, the first step is the
+     retirement of the stale route. The second step is the probe of a route record with the
+     same route identity (adapter, model, endpoint and configuration) that pins the installed
+     runtime. When the store holds no such route record, the second step is `review-route` and
+     its probe. The third step is the context repair of step 2. Keep that order, because the
+     repair needs a probe that is later than the retirement. Then run `review-series` with the
+     new assignment. When `details.steps` lists the retirement and `review-series` alone, the
+     head holds an observed answer. Then retire the route. After the retirement, run
+     `review-series` on the same head again.
      `review_worker_reconciliation_required` is the handoff of a staged
      review, and `assessment_incomplete` is its stop, below.
    - Exit status 3 with a `stop` on the last line: a typed limit or refusal, with its `code` and

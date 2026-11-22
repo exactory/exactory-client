@@ -826,8 +826,7 @@ def build_override_projection(records, artifacts, override, *, include_reference
     statement = find_current_statement(records)
     citation_metadata, projected = {}, None
     if citation_spec is not None:
-        from .exactory_api import POST_CITATION_LIMIT
-        from .problem_evidence import project_override_citations
+        from .problem_evidence import POST_CITATION_LIMIT, project_override_citations
         projected = project_override_citations(records, artifacts, citation_spec, use_registry=use_registry)
         citation_metadata = {key: projected[key] for key in (
             "citation_counts", "uncited_relevant_works")}

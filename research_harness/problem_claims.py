@@ -183,7 +183,7 @@ def find_assessment(records):
 
 
 def record_assessment(store, payload, *, expected_revision, request_id):
-    from .problem_evidence import collect_source_reading_ids, require_reading_citations, resolve_assessment_record
+    from .problem_evidence import resolve_assessment_record
     artifacts = store.build_artifact_store()
 
     def prepare(records, value):
@@ -194,7 +194,6 @@ def record_assessment(store, payload, *, expected_revision, request_id):
         if statement is None or value["statement_id"] != statement["id"]:
             raise ResearchError("problem_statement_missing", "Select the exact current problem statement")
         problem_rubric.validate_grades(value["grades"])
-        sources = {}
         for item in problem_rubric.ITEMS:
             entry = value["items"].get(item) if isinstance(value["items"], dict) else None
             if not isinstance(entry, dict) or not entry.get("evidence"):
@@ -204,9 +203,6 @@ def record_assessment(store, payload, *, expected_revision, request_id):
                 if isinstance(reference, dict) and reference.get("kind") == "record":
                     resolve_assessment_record(records, item, reference)
             strategy.evidence(records, artifacts, entry["evidence"])
-            for reference in entry["evidence"]:
-                if reference.get("kind") == "source":
-                    sources[digest(reference["link"])] = reference["link"]
             text(entry["note"], "Rubric item note")
         fields(value["items"], problem_rubric.ITEMS)
         fields(value["primary"], ("ground", "criterion"))
@@ -214,8 +210,6 @@ def record_assessment(store, payload, *, expected_revision, request_id):
         if (primary["ground"] not in problem_rubric.GROUNDS or primary["criterion"] not in problem_rubric.CRITERIA
                 or value["grades"]["significance"][primary["ground"]] == 0):
             raise ResearchError("invalid_input", "Name a nonzero significance ground and a criterion V1 to V8")
-        require_reading_citations(records, artifacts,
-            {identifier for link in sources.values() for identifier in collect_source_reading_ids(records, link)})
         record = dict(value, recorded_revision=expected_revision + 1)
         return [immutable_record(records, "problem_assessment", value["id"], record)], record
 
@@ -262,14 +256,12 @@ def prepare_value(records, artifacts, value, revision):
     statement = find_current_statement(records)
     if statement is None or value["statement_id"] != statement["id"]:
         raise ResearchError("problem_statement_missing", "Select the exact current problem statement")
-    from .problem_evidence import collect_value_items, list_value_sections, require_reading_citations, validate_value
+    from .problem_evidence import list_value_sections, validate_value
     validated = validate_value(records, artifacts, dict(value, accounts_version=2))
     # The post would refuse such a text after the reviews, so the write refuses it now. The post joins the paragraphs.
     require_post_texts("problem_value_post_text_invalid", _VALUE_POST_TEXT_ERR_MSGS, "section",
                        {section: "\n\n".join(paragraph["text"] for paragraph in value[section])
                         for section in list_value_sections(value)})
-    require_reading_citations(records, artifacts,
-        {item["reading_id"] for item in collect_value_items(validated) if item["kind"] == "reading"})
     record = dict(validated, recorded_revision=revision)
     return [immutable_record(records, "problem_value", value["id"], record)], record
 
@@ -330,17 +322,11 @@ def compute_problem_evidence_digest(records, artifacts):
 
 
 def record_openness(store, payload, *, expected_revision, request_id):
-    from .problem_evidence import collect_openness_reading_ids, require_reading_citations
     from .problem_openness import prepare_openness
     artifacts = store.build_artifact_store()
-
-    def prepare(records, value):
-        changes, finding = prepare_openness(records, artifacts, value, expected_revision + 1)
-        require_reading_citations(records, artifacts, collect_openness_reading_ids(records, finding))
-        return changes, finding
-
-    return prepared_mutation(store, "problem.openness", payload, prepare,
-                             expected_revision=expected_revision, request_id=request_id)
+    return prepared_mutation(store, "problem.openness", payload,
+        lambda records, value: prepare_openness(records, artifacts, value, expected_revision + 1),
+        expected_revision=expected_revision, request_id=request_id)
 
 
 def record_decision(store, payload, *, expected_revision, request_id):

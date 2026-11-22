@@ -310,7 +310,7 @@ def _describe_session_route_steps(records, artifacts, assignment):
     return steps
 
 
-REFRESH_ROUTE_CHOICE = 'Choose a verified route record for the refresh.'
+REFRESH_ROUTE_CHOICE = 'Choose a route record that is verified and not retired, and set route_id to its id.'
 
 
 def complete_plan(records, artifacts, assignment, plan):

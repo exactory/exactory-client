@@ -3834,7 +3834,10 @@ def prepare_capacity_notice(records, route, role, packet):
     return packet
 
 
-RETIRED_ROUTE_ASSIGNMENT_MSG = 'Choose another verified route and follow the current head plan for a preserved slot.'
+RETIRED_ROUTE_ASSIGNMENT_MSG = (
+    'The route record that route_id names is retired, so it takes no assignment. For a slot that already holds '
+    'work, run review-series on its head and take the step that it plans. Where that step leaves route_id to you, '
+    'and for a new review, name a route record that is verified and not retired.')
 
 
 def record_assignment(store, payload, *, expected_revision, request_id):
@@ -4544,28 +4547,28 @@ def has_verified_history(state):
         for item in state['obligations']))
 
 
-# Working texts of rule PC5 for the writer's pass. One text serves the plan and the refusal of one code.
+# The texts of rule PC5. One text serves the plan and the refusal of one code.
 CONTEXT_UNVERIFIED_MSG = (
-    'The review records give no verified context for a turn of this review. The latest probe of the route record '
-    'of that turn did not verify the route. The harness starts no reviewer call of this review while this state '
-    'lasts. details.turn names the turn. Its member route gives the route record and the state of the record. Its '
-    'member count gives the number of turns of this review in this state. The plan names the step: under '
-    'details.step in a plan, and under details.next in a refusal. Take that step. Then run review-series on this '
-    'review again. When the route record takes a probe, the step probes it. A completed probe ends the state, and '
-    'the review continues from its last turn. A route record that pins another reviewer runtime than the installed '
-    'one takes no probe. For such a record the step retires it. After the retirement, the state of the record is '
-    'the state that its latest probe with an answer gives. When that state does not verify the route either, no '
-    'probe ends the state, and the step of the role starts the review again.')
+    'The review records give no verified context for a turn of this review, so the harness starts no reviewer call '
+    'of this review. details.turn names the turn. Its member route gives the route record of the turn and the state '
+    'of that record, which is not verified_for_route. Its member count gives the number of turns of this review '
+    'without a verified context. Take the step that the plan names, then run review-series on this review again. A '
+    'handoff holds the step under details.step, and a refusal holds the plan under details.next. When the route '
+    'record takes a probe, the step probes it. A probe that verifies the record ends the state, and the review '
+    'continues from its last turn. A route record that pins another reviewer runtime than the installed one takes '
+    'no probe, and the step retires it. After the retirement, the state of the record is the state that its latest '
+    'probe with an answer gives. When that state does not verify the record either, no probe ends the state. The '
+    'step is then that of the role of the head: a context repair, a new packet or a new assignment.')
 CONTEXT_CONTAMINATED_MSG = (
-    'The review records give no verified context for a turn of this review. A contamination event names that '
-    'turn, or the latest probe of its route record found a control of an excluded source. The harness starts no '
-    'reviewer call of this review. details.turn names the turn. Its member events lists the contamination events '
-    'that name it. Its member route gives the route record and the state of the record. Its member count gives the '
-    'number of turns of this review without a verified context. When events holds an event, no probe ends the '
-    'state, and this review gives no result that counts. The plan names the step: under details.step in a plan, '
-    'and under details.next in a refusal. Take that step. For an openness chain the step is a new packet. A new '
-    'chain under the same reviewer_id can carry the turns of this chain before the named turn. When events is '
-    'empty, a completed probe of that route record also ends the state.')
+    'The review records give no verified context for a turn of this review, so the harness starts no reviewer call '
+    'of this review. A contamination event names that turn, or the latest probe of its route record found a control '
+    'of an excluded source. details.turn names the turn. Its member events lists the contamination events that name '
+    'it. Its member route gives the route record of the turn and the state of that record. Its member count gives '
+    'the number of turns of this review without a verified context. Take the step that the plan names. A handoff '
+    'holds the step under details.step, and a refusal holds the plan under details.next. The step is that of the '
+    'role of the head: a context repair, a new packet or a new assignment. When events holds an event, no probe '
+    'ends the state, and this review gives no result that counts. When events is empty, a probe that verifies that '
+    'route record also ends the state.')
 
 
 def list_review_turns(records, assignment):
@@ -4691,7 +4694,9 @@ def require_verified_assignment(records, artifacts, assignment):
 # Required, then optional members of the payload of an ordinary reviewer call, staged or not. The start checks
 # and every rebuild of the payload of a started call (review_task_execution.rebuild_call_payload) read it.
 INVOKE_PAYLOAD_FIELDS = (('id', 'assignment_id'), ())
-RETIRED_ROUTE_RUN_MSG = 'The route of this assignment was retired. Follow the current head plan for this slot.'
+RETIRED_ROUTE_RUN_MSG = (
+    'The route record of this assignment is retired, so the assignment takes no reviewer call. Run review-series '
+    'on this assignment and take the step that it plans.')
 
 
 def invoke_assignment(store, payload, *, expected_revision, request_id, credential=None, after_start=None):

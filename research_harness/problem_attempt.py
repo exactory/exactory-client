@@ -145,15 +145,12 @@ def validate_attempt(records, artifacts, value):
 
 
 def record_attempt(store, payload, *, expected_revision, request_id):
-    from .problem_evidence import require_reading_citations
     artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         require_problem(records)
         fields(value, ("id", "statement_id", "kind", "solver", "literature", "outcomes", "proportion"))
         validate_attempt(records, artifacts, value)
-        if value["kind"] == "literature":
-            require_reading_citations(records, artifacts, {row["reading_id"] for row in value["literature"]["readings"]})
         record = dict(value, recorded_revision=expected_revision + 1)
         return [immutable_record(records, "problem_attempt", value["id"], record)], record
 

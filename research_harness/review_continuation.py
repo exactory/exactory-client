@@ -22,7 +22,10 @@ REFRESH_ROUTE_MSG = (
     'names. Take details.step. Then run review-series on this head again. It then names the refresh on that route '
     'record.')
 CAPACITY_SCHEDULER_MSG = (
-    'Record details.scheduler as the scheduler member of the next review-assignment for this record.')
+    'The store limit of the capacity policy holds this call back while its own route runs no call. '
+    'details.scheduler is a policy that admits one call at a time on each verified route among the route of this '
+    'call and the routes of the active and the waiting calls. To record it, give it as the member scheduler of the '
+    'next review-assignment of this record. Calls on different routes then run at the same time.')
 
 
 def describe_context_failure(error, assignment_id=None):

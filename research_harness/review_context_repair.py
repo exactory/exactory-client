@@ -34,7 +34,11 @@ EXHAUSTION_PROBE_MSG = (
 # The recorded events that end a reviewer context: a contamination of the context, or the retirement of its route.
 CAUSE_KINDS = ('contamination', 'route_retired')
 REPAIR_STALE_MSG = 'Later predecessor contamination requires explicit reassessment of the new evidence'
-REFRESH_CONTAMINATED_MSG = 'Contamination in the refresh lineage requires a repair of the current head.'
+REFRESH_CONTAMINATED_MSG = (
+    'A contamination is recorded on a turn of this slot that no context repair covers: a turn of its latest repair '
+    'chain or of a refresh chain after it, or, in a slot without a repair, a turn of the lineage of this head. The '
+    'review of this head does not count as an independent review now. Run review-series on this head and take the '
+    'step that it plans, the context repair of this head.')
 # The suffix of 0.56.0 and earlier, kept so that assignments recorded with it stay verified: it said "Return an
 # additional reassessment object", which reviewers read as a second JSON object after the role's object.
 PROMPT_0560 = (

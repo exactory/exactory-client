@@ -299,13 +299,6 @@ for _code in ('invalid_rubric_grades', 'invalid_strategy'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
         next=dict(kind='outcome', outcome='scientific_refused'))
 
-# A new citation needs corrected evidence or metadata before the refused write can succeed.
-for _code in ('problem_citation_text_character', 'problem_citation_text_length',
-              'problem_citation_locator_character', 'problem_citation_locator_length',
-              'problem_citation_locator_format'):
-    STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
-        next=dict(kind='outcome', outcome='scientific_refused'))
-
 # These commands and their input choices come from the CLI reference. A decision
 # carries its own payload rule, so a non-review command receives no assignment_id.
 for _codes, _command, _payload, _chooses in (

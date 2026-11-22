@@ -63,7 +63,11 @@ readings of all relevant or contradictory hits and roots, applicable source-vali
 `standards`, and a current Grand Challenge record. A deferred decisive source
 remains a gap. Two assessors establish the Q1 bar with the candidate withheld:
 field and venues, acceptable advance over closest prior work, evidence standard
-and disqualifying conditions. Each reviewer must receive complete inspected
+and disqualifying conditions. A record without a recorded capacity policy runs
+one reviewer call at a time. To run the two bars at the same time on two
+verified routes, give the first bar `review-assignment` the member `scheduler`
+([the CLI reference](../../docs/research-cli.md#staged-problem-reviews),
+"Capacity"). Each reviewer must receive complete inspected
 ranges and every named image asset in the request of its own authenticated
 review, which includes the earlier packets of its session that the request
 replays. Coverage checks the delivered source bytes and provenance. Missing
@@ -149,27 +153,37 @@ standalone `export` with kind `outputs` completes its delivery, and
 `review_resampling_forbidden` (an initial bar, slate or result review ended
 without an output, and the same reviewer identity is not sampled again) names
 `review-assignment` for a new eligible reviewer. `review_context_*` and
-`review_route_retired` name `review-assignment` for a context repair.
+`review_route_retired` name the command of `details.step`, the step that the
+plan of the head names: `review-probe` of the route record that the step
+names, `review-context` for the retirement of a route record that takes no
+probe, or the step of the role of the head, which for a bar, a slate and a
+result is `review-assignment` for a context repair. When the handoff holds
+`details.turn`, the review records give no verified context for that turn of
+the review, and `details.message` states the state and the step.
 `review_recording_required` names the recording step of another role:
 `manuscript-review`, `export` with kind `outputs` for a standalone review, or
-`review`. `review_route_runtime_stale` names `review-route`, or for a head that
-holds a refused answer the command of `details.step`. The route record of the
-head pins another reviewer runtime than the installed one, and
-`review-assignment` records no assignment on such a route. When the handoff
-carries `details.renewal` with `admitted: true`, the replacement of the refused
-answer can run on another route record. `details.step` then names what that
-needs: a new route record and its probe, a probe, or a capacity probe. A
-capacity probe is a paid call, so obtain the owner's authorization before you
-run it. Take the step, and then run `review-series` on the same head again.
-When `admitted` is false, or the member is absent, the planner keeps the route
-of the chain, so `review-series` on the same head gives this handoff again.
-Record a new route with a new id and the same adapter, model, endpoint and
-configuration. Probe it. Then follow the stale-route procedure of the [route
-instructions](../../docs/research-decisions.md#commands-and-shared-state):
-assign the role again on the new route, or, for a slot with history, retire the
-stale route and continue the slot through a context repair. When `admitted` is
-false, `details.steps` lists these steps in the order to take them. Then run
-`review-series` with the new assignment. Exit status 3 with a
+`review`. `review_route_runtime_stale` names the command of `details.step`. The
+route record of the head pins another reviewer runtime than the installed one.
+Such a route record takes no assignment, no run, no probe and no output
+correction. The handoff carries `details.renewal`. With `admitted: true`, work
+of the head can run on another route record. This work is the replacement of a
+refused answer, the output correction, or the new chain of a stopped chain.
+`details.step` then names what the store lacks for that route record: a new
+route record and its probe, a probe, or a capacity probe. A capacity probe is a
+paid call, so obtain the owner's authorization before you run it. Take the
+step. Then run `review-series` on the same head again. With `admitted: false`,
+the next step of the head cannot move to another route record. `details.steps`
+then lists the steps of the stale-route procedure in the order to take them.
+For a slot, the first step is the retirement of the stale route. The second
+step is the probe of a route record with the same route identity (adapter,
+model, endpoint and configuration) that pins the installed runtime. When the
+store holds no such route record, the second step is `review-route` and its
+probe. The third step is the context repair. Keep that order, because the
+repair needs a probe that is later than the retirement. Then run
+`review-series` with the new assignment. When `details.steps` lists the
+retirement and `review-series` alone, the head holds an observed answer. Then
+retire the route. After the retirement, run `review-series` on the same head
+again. Exit status 3 with a
 `stop` on the last line: a typed limit or refusal with its `code` and
 `details`; the harness cannot continue the chain. `review_slot_exhausted`
 (the turn position is exhausted: no correction and no replacement that carries

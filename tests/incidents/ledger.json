@@ -8600,27 +8600,6 @@
       ]
     },
     {
-      "id": "problem-record-accepts-unpostable-citation",
-      "record": "20261120203506-improvements-from-the-problem-value-cycle",
-      "class": "post citation validation",
-      "summary": "The record accepted a citation that the posting command refused after review.",
-      "expected": "New citation records apply the same field rules as the posting command and refuse unsupported text or locators with a code. Earlier citations still read and render.",
-      "fixed_in": "0.92.0",
-      "test_kind": "real_shape",
-      "tests": [
-        "test_problem_post_citation_rules.OpennessCitationRulesTests.test_openness_refuses_an_unpostable_locator_of_a_decisive_reading",
-        "test_problem_post_citation_rules.PostCitationRulesTests.test_assessment_refuses_a_new_citation_with_unpostable_work_metadata",
-        "test_problem_post_citation_rules.PostCitationRulesTests.test_attempt_refuses_a_new_citation_with_unpostable_work_metadata",
-        "test_problem_post_citation_rules.PostCitationRulesTests.test_locator_refuses_a_post_locator_above_the_maximum_length",
-        "test_problem_post_citation_rules.PostCitationRulesTests.test_locator_refuses_a_post_locator_character",
-        "test_problem_post_citation_rules.PostCitationRulesTests.test_locator_refuses_a_post_locator_with_an_invalid_host",
-        "test_problem_post_citation_rules.PostCitationRulesTests.test_metadata_refuses_a_post_citation_above_the_maximum_length",
-        "test_problem_post_citation_rules.PostCitationRulesTests.test_metadata_refuses_a_post_citation_below_the_minimum_length",
-        "test_problem_post_citation_rules.PostCitationRulesTests.test_metadata_refuses_a_post_citation_character",
-        "test_problem_post_citation_rules.PostCitationRulesTests.test_value_refuses_a_new_citation_with_unpostable_work_metadata"
-      ]
-    },
-    {
       "id": "initial-bar-assignment-omits-two-route-scheduler",
       "record": "20261114053500-bar-chain-delivers-two-full-texts-per-turn-and-store-runs-one-reviewer",
       "class": "review capacity guidance",
@@ -8634,6 +8613,18 @@
         "test_review_queue_triage.QueueTriageTests.test_recording_the_suggested_scheduler_allows_two_verified_routes_to_run_together",
         "test_review_queue_triage.QueueTriageTests.test_planned_store_wait_names_its_limit_and_the_two_route_scheduler",
         "test_review_queue_triage.QueueTriageTests.test_staged_wait_keeps_the_own_task_action_and_names_the_capacity_limit"
+      ]
+    },
+    {
+      "id": "planning-overlay-passes-no-runtime-reading",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "dead-end",
+      "summary": "The plan of a v7 reading turn whose call ended over the input limit ended with an AttributeError, with no plan and no code, when the latest probe of its route record had returned no answer and the route record pinned another reviewer runtime than the installed one. The planner simulated the capacity replacement on its overlay of the artifacts, the check of the continued turn read the standing of the route record through that overlay, and the overlay passed no runtime reading on. The independent review of the diff of the context check found it before a release held the check.",
+      "expected": "The planning overlay passes the runtime reading of the artifacts under it on. The plan of that head is the handoff review_route_runtime_stale, as it was before the context check.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_call_context_present.CallContextStaleRouteTests.test_planned_replacement_on_a_stale_route_record_with_a_failed_probe_keeps_the_stale_route_handoff"
       ]
     }
   ]

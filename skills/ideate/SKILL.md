@@ -45,7 +45,12 @@ lists each obligation code.
 
 Two independent assessors first state the field and Q1 venues considered,
 acceptable advance over closest prior work for the intent, evidence standard
-and disqualifying conditions with the candidate withheld. Persist both bars
+and disqualifying conditions with the candidate withheld. A record without a
+recorded capacity policy runs one reviewer call at a time. To run the two
+bars at the same time on two verified routes, give the first bar
+`review-assignment` the member `scheduler`
+([the CLI reference](../../docs/research-cli.md#staged-problem-reviews),
+"Capacity"). Persist both bars
 before slate delivery. Each reviewer must receive the decisive source content
 and claim in the request of its own authenticated review, which includes the
 earlier packets of its session that the request replays. Coverage requires

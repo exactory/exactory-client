@@ -282,16 +282,18 @@ ways. Exit status 3 with the handoff `verification_verdict_body_required`
 (command `bind-verdict`): a final returned `{verdict, checks}`, and recording
 needs the verdict body; continue with the next paragraph, and after
 `bind-verdict` run `review-series` again, which ends with `done` once the
-verdict assessment is recorded. Exit status 3 with
-the handoff `review_route_runtime_stale` (command `review-route`): the head's
-route pins another reviewer runtime. The planner keeps the route of the chain,
-so `review-series` on the same head gives this handoff again. Record a new
-route with a new id and the same adapter, model, endpoint and configuration.
-Probe it. Then assign the verification review again on the new route, as a
-new first assignment with `context: {verification_task_id}` (the stale-route
-procedure of the
-[route instructions](../../docs/research-decisions.md#commands-and-shared-state)).
-Then run `review-series` with the new assignment. Exit status 3
+verdict assessment is recorded. Exit status 3 with the handoff
+`review_route_runtime_stale`: the head's route pins another reviewer runtime.
+Such a route record takes no assignment, no run and no probe. `details.steps`
+lists the steps in the order to take them. The first step gives a route record
+with the same route identity (adapter, model, endpoint and configuration) that
+pins the installed runtime. The second step is the verification review as a new
+first assignment on that route record, with `context: {verification_task_id}`.
+`details.renewal.lacks` says what the store holds for the first step. For
+`record`, record such a route with a new id and probe it. For `probe`, probe
+the route record that `details.renewal.route_id` names. For null, that route
+record is verified, and the list holds the assignment alone. Then run
+`review-series` with the new assignment. Exit status 3
 with a `stop`: a typed limit or refusal with its `code` and `details`; the
 harness cannot continue the chain. A refused action of the chain ends the
 command this way with the refusal's code (for example a `review_parts_*`

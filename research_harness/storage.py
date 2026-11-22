@@ -697,7 +697,10 @@ def pin_kinds(records, kinds, revision):
     if (getattr(records, "read_snapshot", None) is None or type(revision) is not int
             or not 0 <= revision <= records.read_revision()):
         raise ResearchError("claim_reassessment_required",
-                            "The recorded input snapshot is unavailable; reassess the bound record.",
+                            "The store cannot give its records as they stood at an earlier revision: the records "
+                            "were read without their history, or the revision lies outside it. details.record_id "
+                            "names the revision as snapshot:<revision>. Check the record with record-check, and "
+                            "report this refusal with its details.",
                             {"record_id": "snapshot:" + str(revision)})
     history = records._history
     overlay = {kind: rows for kind, rows in records.items() if kind not in kinds}
