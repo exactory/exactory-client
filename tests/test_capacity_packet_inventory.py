@@ -651,7 +651,7 @@ class ProductionPacketInventoryTests(unittest.TestCase):
         for member in find_members(registry).values():
             kind = next(iter(member['bound']))
             bounds[kind] = bounds.get(kind, 0) + 1
-        self.assertEqual(bounds, dict(field_class=6588, request_admission=1428, chain_stop=21,
+        self.assertEqual(bounds, dict(field_class=6683, request_admission=1428, chain_stop=21,
                                       serialized_characters=35))
         # A copy of the registry with one more open member fails, and so does a packet checked against it.
         changed = copy.deepcopy(registry)
@@ -662,7 +662,7 @@ class ProductionPacketInventoryTests(unittest.TestCase):
         self.assertTrue(validate_packet('bar', dict(protocol='exactory-problem-review-v2'), changed))
 
     def test_k5_every_bounded_member_executes_its_field_class_or_its_admission_stop(self):
-        """Each of the 8,037 bounded members is classified by the frame builder one character above its size.
+        """Each of the 8,132 bounded members is classified by the frame builder one character above its size.
 
         Assertion K5 executes every declared member, so the count is that of the registry, and the size is the
         smallest at which the frame moves the member. Measured in the must-pass run: 8.7 s on 3.12, 11.5 s on 3.9."""
