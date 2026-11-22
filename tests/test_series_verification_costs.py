@@ -1,12 +1,36 @@
 """Work bounds for legacy parts verification on recorded turns and small delivered packets."""
 
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
-from research_harness import (bar_sources, output_views, review_excerpts, review_parts as parts,
+from research_harness import (bar_sources, review_excerpts, review_parts as parts,
                               review_protocol, workspace)
+from research_harness.artifacts import ArtifactStore, describe_artifact
+from render_reference import use_reference_functions
 from review_parts_fixtures import make_output, make_packet, observe, plan
 import test_research_output_views as views
+from test_render_bytes import render_with_list_counts
+
+
+class SeriesListingCosts(unittest.TestCase):
+    def test_listing_parses_each_packet_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = ArtifactStore(Path(directory))
+            binding = dict(protocol=parts.PROTOCOL, kind='read', series_assignment_id='first',
+                           series_key='fixture', adapter='problem_result')
+            assignments = {}
+            for turn, identifier in enumerate(('first', 'second'), 1):
+                packet = {parts.KEY: dict(binding, turn=turn)}
+                reference = review_protocol._put_json(artifacts, packet)
+                assignments[identifier] = dict(id=identifier, packet=reference, role='result', route_id='route',
+                                               session_id='fixture', reviewer_id='reviewer', author_id='author')
+            assignments['second'].update(history_assignment_id='first', context=dict(prior_assignment_id='first'))
+            with patch.object(workspace, 'strict_json', wraps=workspace.strict_json) as parse:
+                chain = parts._list_series(dict(review_assignment=assignments), artifacts, 'second')
+        self.assertEqual([assignment['id'] for assignment, _ in chain], ['first', 'second'])
+        self.assertEqual(parse.call_count, len(chain))
 
 
 class SeriesVerificationCosts(views.PartsViewCase):
@@ -17,51 +41,23 @@ class SeriesVerificationCosts(views.PartsViewCase):
             self.addCleanup(selection.stop)
         super().setUp()
 
-    def start_two_turns(self):
+    def test_render_lists_once_per_parts_verification(self):
         self.prepare_parts(count=3)
         first = self.assign()
         self.invoke(first)
         second = self.assign('next-turn', first['id'])
-        return self.case.read_records(), second
+        summary, calls = render_with_list_counts(self.case.store)
+        self.assertEqual(summary['errors'], 0)
+        self.assertCountEqual(calls, [(first['id'], 1), (second['id'], 1)])
 
-    def test_verification_lists_once(self):
-        records, second = self.start_two_turns()
-        with patch.object(parts, '_list_series', wraps=parts._list_series) as listing:
-            result = parts.verify_series(records, self.case.artifacts, second['id'])
-        self.assertTrue(result['packets'])
-        self.assertEqual(listing.call_count, 1)
-
-    def test_listing_parses_each_packet_once(self):
-        records, second = self.start_two_turns()
-        with patch.object(workspace, 'strict_json', wraps=workspace.strict_json) as parse:
-            chain = parts._list_series(records, self.case.artifacts, second['id'])
-        self.assertEqual(len(chain), 2)
-        self.assertEqual(parse.call_count, len(chain))
-
-    def test_render_lists_once_per_parts_verification(self):
-        records, _ = self.start_two_turns()
-        parts_turns = {identifier for identifier, assignment in records['review_assignment'].items()
-                       if parts.KEY in assignment}
-        verify = parts.verify_series
-        calls = {}
-
-        def count_lists(records, artifacts, identifier):
-            with patch.object(parts, '_list_series', wraps=parts._list_series) as listing:
-                result = verify(records, artifacts, identifier)
-            calls[identifier] = listing.call_count
-            return result
-
-        with patch.object(parts, 'verify_series', side_effect=count_lists):
-            self.assertEqual(output_views.render_all(self.case.store)['errors'], 0)
-        self.assertEqual(calls, dict.fromkeys(parts_turns, 1))
-
-    def test_observation_reuses_the_listing_and_preserves_the_result(self):
-        records, second = self.start_two_turns()
-        chain = parts._list_series(records, self.case.artifacts, second['id'])
-        expected = parts.observe_series(records, self.case.artifacts, second['id'])
+        records, artifacts = self.case.read_records(), self.case.artifacts
+        with use_reference_functions():
+            expected = parts.observe_series(records, artifacts, second['id'])
         self.assertTrue(expected)
+        self.assertEqual(parts.observe_series(records, artifacts, second['id']), expected)
+        chain = parts._list_series(records, artifacts, second['id'])
         with patch.object(parts, '_list_series', wraps=parts._list_series) as listing:
-            actual = parts.observe_series(records, self.case.artifacts, second['id'], chain=chain)
+            actual = parts.observe_series(records, artifacts, second['id'], chain=chain)
         self.assertEqual(actual, expected)
         listing.assert_not_called()
 
@@ -100,7 +96,47 @@ class StatementVerificationCosts(unittest.TestCase):
         packet = plan(make_packet(1, 200))
         inventory = packet['_test_inventory']
         statements = [dict(text='xxxxxxxx', why='The record contains the quoted text.')]
-        expected = parts._verify_statements(packet, 'u1', statements, inventory, 0)
+        with use_reference_functions():
+            expected = parts._verify_statements(packet, 'u1', statements, inventory, 0)
         self.assertEqual(len(expected[0]), 1)
+        self.assertEqual(parts._verify_statements(packet, 'u1', statements, inventory, 0), expected)
         items = parts.read_delivered_items(packet)
-        self.assertEqual(parts._verify_statements(packet, 'u1', statements, inventory, 0, items), expected)
+        with patch.object(parts, 'read_delivered_items', wraps=parts.read_delivered_items) as read:
+            supplied = parts._verify_statements(packet, 'u1', statements, inventory, 0, items)
+            empty = parts._verify_statements(packet, 'u1', statements, inventory, 0, {})
+        read.assert_not_called()
+        self.assertEqual(supplied, expected)
+        self.assertEqual(empty, ([], 1, len(statements[0]['text'])))
+
+    def test_check_shares_body_offsets_between_units_without_changing_locations(self):
+        body = 'Lead. Quoted source. Quoted source.'
+        reference = describe_artifact(body.encode(), 'text/plain')
+        logical = dict(evidence=[dict(artifact=reference, content=body, encoding='utf-8')],
+                       original_evidence=[dict(page=page, artifact=reference) for page in (1, 2)])
+        inventory = parts.build_inventory(logical, 'problem_adjudicator')
+        units = parts.enumerate_units(logical, 'problem_adjudicator', inventory)
+        handles = [unit['handle'] for unit in units]
+        self.assertEqual(len(handles), 2)
+        first = body.index('Quoted')
+        last = body.rindex('Quoted')
+        fragment = 'Quoted source.'
+        selections = [dict(unit=handle, body=reference['sha256'], start=start, end=start + len(fragment))
+                      for handle, start in zip(handles, (first, last))]
+        packet = parts.project_packet(parts.build_frame(logical, units), units, selections,
+            dict(protocol=parts.PROTOCOL, kind='check', turn=3, check_combinations=['c'],
+                 output_allowance=1000, findings_budget_remaining=2000),
+            dict(cards=[], combinations=[], findings=[]))
+        statements = [dict(unit=handle, text='Quoted', why='Read the exact source.') for handle in handles]
+        output = dict(kind='check', turn=3, findings=[
+            dict(combination='c', finding='The source supports this finding.', effect='supports', statements=statements)])
+        with use_reference_functions():
+            expected = parts.validate_output(packet, output, inventory)
+        with patch.object(review_excerpts, 'normalize_with_offsets',
+                          wraps=review_excerpts.normalize_with_offsets) as normalize:
+            actual = parts.validate_output(packet, output, inventory)
+        self.assertEqual(actual, expected)
+        self.assertEqual(actual['findings'][0]['statements'], [
+            dict(statement, text='Quoted',
+                 at=dict(unit=handles[0], body=reference['sha256'], start=first, end=first + len('Quoted')))
+            for statement in statements])
+        self.assertEqual([call.args[0] for call in normalize.call_args_list].count(fragment), 1)

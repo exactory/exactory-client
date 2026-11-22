@@ -1,14 +1,16 @@
 """Stored parts series render the integration base's bytes with one listing per verification."""
 
 from collections import Counter
-from contextlib import nullcontext
+from contextlib import nullcontext, redirect_stdout
+from io import StringIO
 import json
 from pathlib import Path
 import tempfile
 from unittest.mock import patch
 
-from research_harness import (bar_sources, output_views, review_output_correction, review_parts as parts, review_parts_v3,
-                              review_protocol, review_route_capacity)
+from codex_route_fixtures import build_codex_response
+from research_harness import (bar_sources, cli, output_views, research_decisions, review_output_correction,
+                              review_parts as parts, review_parts_v3, review_protocol, review_route_capacity)
 from research_harness.evidence import digest
 from render_reference import read_render_outcome, use_reference_functions
 from review_parts_fixtures import PartsResultCase as PartsFixture, make_output
@@ -17,7 +19,7 @@ import test_review_parts_repair_journey as repair
 import test_review_parts_v3 as v3_fixtures
 
 
-def render_with_list_counts(store, *, reference=False):
+def render_with_list_counts(store, *, reference=False, render=output_views.render_all):
     with use_reference_functions() if reference else nullcontext():
         verify = parts.verify_series
         counts = []
@@ -29,8 +31,17 @@ def render_with_list_counts(store, *, reference=False):
             return result
 
         with patch.object(parts, 'verify_series', side_effect=count_lists):
-            summary = output_views.render_all(store)
+            summary = render(store)
         return summary, counts
+
+
+def copy_render_inputs(source, destination):
+    store = views.copy_store(source, destination)
+    for relative in output_views._CHECK_REPORT_PATHS:
+        path = source / relative
+        if path.is_file():
+            (destination / relative).write_bytes(path.read_bytes())
+    return store
 
 
 class RenderComparison:
@@ -40,12 +51,16 @@ class RenderComparison:
         self.addCleanup(select_bar.stop)
         super().setUp()
 
-    def compare_renders(self, *, missing=()):
+    def compare_renders(self, *, missing=(), after_write=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            current = views.copy_store(self.case.root, root / 'current')
-            reference = views.copy_store(self.case.root, root / 'reference')
-            current_summary, current_counts = render_with_list_counts(current)
+            if after_write is None:
+                current = copy_render_inputs(self.case.root, root / 'current')
+                current_summary, current_counts = render_with_list_counts(current)
+            else:
+                current = self.case.store
+                current_summary, current_counts = render_with_list_counts(current, render=after_write)
+            reference = copy_render_inputs(self.case.root, root / 'reference')
             base_summary, base_counts = render_with_list_counts(reference, reference=True)
             self.assertEqual(current_summary, base_summary)
             self.assertEqual(current_summary['errors'], 0)
@@ -65,6 +80,8 @@ class RenderComparison:
 
 
 class RenderBytesTests(RenderComparison, views.PartsViewCase):
+    continue_repair = repair.ResultRepairJourneyTests.continue_repair
+
     def setUp(self):
         select_legacy = patch.object(parts, 'NEW_SERIES_PROTOCOLS', (parts.PROTOCOL,))
         select_legacy.start()
@@ -75,36 +92,100 @@ class RenderBytesTests(RenderComparison, views.PartsViewCase):
         self.prepare_parts(count=3)
         return self.assign()
 
-    def start_check(self, *, compare_turns=False):
+    def start_check(self, *, after_turn=None):
         assignment = self.start_series()
         while self.packet(assignment)[parts.KEY]['kind'] == 'read':
             self.invoke(assignment)
-            if compare_turns:
+            if after_turn is not None:
                 with self.subTest(turn=assignment['id']):
-                    self.compare_renders()
+                    after_turn()
             assignment = self.assign('next-' + assignment['id'], assignment['id'])
         packet = self.packet(assignment)
         self.assertEqual(packet[parts.KEY]['kind'], 'combine')
         combination = dict(units=['u1'], question='What does the original support?',
                            view='Read its opening.', read=[dict(unit='u1', item=True, start=0, end=100)])
         self.invoke(assignment, make_output(packet, [combination]))
-        if compare_turns:
+        if after_turn is not None:
             with self.subTest(turn=assignment['id']):
-                self.compare_renders()
+                after_turn()
         check = self.assign('check', assignment['id'])
         self.assertEqual(self.packet(check)[parts.KEY]['kind'], 'check')
         return check
 
+    def seed_view_groups(self):
+        bundle = dict(id='bundle', files={})
+        bundle['digest'] = digest(bundle)
+        for kind, identifier, fields in (
+            ('publication_bundle', 'bundle', bundle),
+            ('publication_receipt', 'deposit', dict(intent_id='deposit', bundle_digest=bundle['digest'])),
+            ('manuscript_review', 'score', dict(bundle_digest=bundle['digest'], assessor=dict(id='assessor'), core={})),
+            ('review_capacity_policy', 'policy', {}),
+            ('problem_candidate', 'candidate', {}),
+            ('forming_call', 'forming', dict(forms=[dict(id='form')])),
+            ('probe_intent', 'probe', {}),
+            ('execution', 'execution', dict(payload=dict(outputs=[]))),
+            ('remote_intent', 'remote', {}),
+        ):
+            self.case.put(kind, identifier, dict(fields, id=identifier))
+        report = b'{ "ok": true }\n'
+        (self.case.root / '.exactory/citation-check.json').write_bytes(report)
+        return report
+
+    def write_form_outcome(self, store):
+        revision = store.revision
+        identifier = 'outcome-' + str(revision)
+        payload = dict(id=identifier, form_id='form', target=dict(kind='form', id=None),
+                       standing='unresolved', disposition=dict(status='open', reason='Keep the form open.',
+                                                               form_id=None, candidate_id=None),
+                       lack_of_means=None, outcome='No determination yet.', evidence=[], reason='Keep examining it.')
+        path = store.root / 'outcome.json'
+        path.write_text(json.dumps(payload), encoding='utf-8')
+        with redirect_stdout(StringIO()):
+            cli.main(['form-outcome', '--workspace', str(store.root), '--file', str(path),
+                      '--request-id', identifier, '--expected-revision', str(revision)])
+        marker = output_views._read_marker(store.root)
+        self.assertEqual(store.revision, revision + 1)
+        self.assertEqual(marker['revision'], revision + 1)
+        self.assertIsNone(marker['failure'])
+        self.assertIn('intermediate/problem/form-outcomes/' + identifier + '.json', marker['files'])
+        return output_views._summarize(marker)
+
     def test_read_combine_check_and_final_keep_their_bytes(self):
-        """Render each completed turn to compare the bytes of every prefix."""
-        check = self.start_check(compare_turns=True)
+        """Compare automatic renders of each recorded parts prefix and a final exercising every view group."""
+        report = self.seed_view_groups()
+
+        def compare_after_write():
+            return self.compare_renders(after_write=self.write_form_outcome)
+
+        check = self.start_check(after_turn=compare_after_write)
         self.invoke(check)
         with self.subTest(turn=check['id']):
-            self.compare_renders()
+            compare_after_write()
         final = self.assign('final', check['id'])
         self.record_final(final)
-        with self.subTest(turn=final['id']):
-            self.compare_renders()
+        paths = compare_after_write()
+        group_paths = {
+            'records': 'final/problem/statements/statement-1.json',
+            'value_reviews': 'final/reviews/result/review-final.json',
+            'bundles': 'final/study/manuscripts/bundle/bundle.json',
+            'deposits': 'final/study/deposits/deposit/receipt.json',
+            'review_series': 'intermediate/reviews/result/part-1/series.json',
+            'staged_reviews': 'intermediate/reviews/staged/review_capacity_policy/policy.json',
+            'review_routes': 'intermediate/reviews/routes/route/route.json',
+            'review_usage': 'intermediate/reviews/usage.json',
+            'problem_candidates': 'intermediate/problem/candidates/candidate.json',
+            'problem_forming': 'intermediate/problem/forming/forming.json',
+            'lab_probes': 'intermediate/lab/probes/probe/probe.json',
+            'lab_runs': 'intermediate/lab/executions/execution.json',
+            'remote': 'intermediate/study/remote-intents/remote.json',
+            'score_history': 'intermediate/study/score-history.json',
+            'check_reports': 'intermediate/checks/citation-check.json',
+        }
+        self.assertEqual(set(group_paths), {group.name for group in output_views.VIEW_GROUPS})
+        for group, path in group_paths.items():
+            with self.subTest(group=group):
+                self.assertIn(path, paths)
+        self.assertEqual(paths[group_paths['check_reports']], report)
 
     def test_check_keeps_a_match_and_an_unmatched_statement_on_the_same_unit(self):
         check = self.start_check()
@@ -117,39 +198,56 @@ class RenderBytesTests(RenderComparison, views.PartsViewCase):
         self.assertNotIn('output_refusal', result)
         records = self.case.read_records()
         observation = parts.observe_series(records, self.case.artifacts, check['id'])[-1]
+        with use_reference_functions():
+            reference = parts.observe_series(records, self.case.artifacts, check['id'])[-1]
+        self.assertEqual(observation['delta'], reference['delta'])
         finding = observation['delta']['findings'][0]
         self.assertEqual((len(finding['statements']), finding['unverified_statements']), (1, 1))
         self.compare_renders()
 
     def test_refused_raw_final_and_accepted_correction_keep_their_bytes(self):
-        first = self.start_series()
-        _, final = self.finish_series(first)
-        corrected = self.final_output()
-        self.invoke(final, dict(stage='result'), attempt='raw')
-        records = self.case.read_records()
-        self.assertIn('raw', records.get('review_output_refusal', {}))
-        invocation = dict(id='fix', assignment_id=final['id'], diagnostic=dict(attempt_id='raw'),
-                          recorded_revision=self.case.store.revision + 1)
-        correction = dict(invocation, status='completed', correction_status='accepted',
-                          output=review_protocol._put_json(self.case.artifacts, dict(findings=[])),
-                          corrected_output=review_protocol._put_json(self.case.artifacts, corrected))
-        self.case.put('review_output_correction_invocation', 'fix', invocation)
-        self.case.put('review_output_correction', 'fix', correction)
-
-        select = review_output_correction.selected_correction
-
-        def select_observed_correction(records, artifacts, identifier):
-            if identifier != final['id']:
-                return select(records, artifacts, identifier)
-            return dict(id='fix', attempt_id='raw', output=corrected, route_id=final['route_id'],
-                        source_raw_output_digest=digest(dict(stage='result')),
-                        corrected_raw_output_digest=digest(corrected))
-
-        # The correction authentication has its own journey tests. Fix its result
-        # here so the two real renders exercise the same selected correction.
-        with patch.object(review_output_correction, 'selected_correction', side_effect=select_observed_correction):
-            paths = self.compare_renders()
-        self.assertTrue(any(path.startswith('final/') and path.endswith('.fix.corrected.json') for path in paths))
+        """Reach a repaired parts final, record two native refusals, and authenticate their correction."""
+        predecessor = self.assign('predecessor')
+        prior_output = self.case.build_review_output('result')
+        prior_review = self.record_final(predecessor, prior_output)
+        self.prepare_parts(count=3)
+        binding = repair.ResultRepairJourneyTests.contaminate(self, predecessor)
+        first = repair.ResultRepairJourneyTests.repair_assignment(self, predecessor, binding)
+        final = repair.ResultRepairJourneyTests.finish_repair(self, first)
+        self.assertEqual(final[parts.KEY]['kind'], 'final')
+        raw = self.final_output()
+        raw['value']['reason'] = 'The assessment now rests on the delivered search.'
+        raw['reassessment'] = dict(assignment_id=predecessor['id'], findings=[
+            dict(review_id=prior_review['id'], disposition='confirmed', reason='Reassess the earlier finding.',
+                 evidence=raw['value']['evidence'])])
+        for attempt in ('refused-one', 'refused-two'):
+            self.invoke(final, raw, attempt=attempt)
+            refusal = self.case.read_records()['review_output_refusal'][attempt]
+            self.assertEqual(refusal['code'], 'review_reassessment_mismatch')
+        delta = dict(source_output_digest=digest(raw), findings=[
+            dict(review_id=prior_review['id'], disposition='revised', reason='The scientific assessment differs.')])
+        with patch.object(review_protocol.transport, 'send_request',
+                          side_effect=lambda route, request, credential: build_codex_response(route, request, delta)):
+            result = self.case.mutate(review_output_correction.invoke_correction,
+                dict(id='fix', assignment_id=final['id'], route_id=final['route_id']), credential='test-only')
+        self.assertEqual(result['result']['correction_status'], 'accepted')
+        selected = review_output_correction.selected_correction(
+            self.case.read_records(), self.case.artifacts, final['id'])
+        self.assertIsNotNone(selected)
+        self.assertEqual((selected['id'], selected['attempt_id']), ('fix', 'refused-two'))
+        self.assertNotEqual(selected['output'], raw)
+        paths = self.compare_renders()
+        turns = [turn for path, content in paths.items() if path.endswith('/series.json')
+                 for turn in json.loads(content)['turns'] if turn['assignment_id'] == final['id']]
+        self.assertEqual(len(turns), 1)
+        run = next(run for run in turns[0]['runs'] if run['run_id'] == 'refused-two')
+        self.assertTrue(run['selected'])
+        self.assertEqual(run['refusal']['code'], 'review_reassessment_mismatch')
+        self.assertEqual(json.loads(paths[run['output_path']]), raw)
+        correction = run['correction']
+        self.assertTrue(correction['selected'])
+        self.assertTrue(correction['corrected_output_path'].startswith('final/'))
+        self.assertEqual(json.loads(paths[correction['corrected_output_path']]), selected['output'])
 
     def test_context_repair_keeps_its_bytes(self):
         predecessor = self.start_series()
@@ -180,19 +278,30 @@ class V3RenderBytesTests(RenderComparison, PartsFixture):
     output_tokens = 128000
 
     def test_recorded_v3_dispatch_preserves_render_and_ignores_a_legacy_listing(self):
-        self.oversized(count=1, characters=50000, limit=1300000)
+        self.oversized(count=1, characters=20, limit=1300000)
         with patch.object(review_route_capacity, 'read_profile_priors', return_value=[]), \
                 patch.object(parts, 'NEW_SERIES_PROTOCOLS', (review_parts_v3.PROTOCOL, parts.PROTOCOL)):
             assignment = self.assign()
         packet = self.packet(assignment)
         self.assertEqual(packet[parts.KEY]['protocol'], review_parts_v3.PROTOCOL)
-        self.invoke(assignment, v3_fixtures.make_turn_output(packet))
+        output = v3_fixtures.make_turn_output(packet)
+        header = packet[parts.KEY]
+        inventory = parts.read_inventory(self.case.artifacts, header['inventory'], header['inventory_digest'])
+        fragment = review_parts_v3._list_packet_fragments(packet, inventory)[0]
+        output['cards'][0]['statements'] = [dict(unit=fragment['unit'], text='bounded sequence',
+                                                 why='This text was delivered.')]
+        self.invoke(assignment, output)
         self.compare_renders()
         records = self.case.read_records()
         artifacts = self.case.artifacts
-        expected = parts.observe_series(records, artifacts, assignment['id'])
-        self.assertTrue(expected)
+        with use_reference_functions():
+            expected = parts.observe_series(records, artifacts, assignment['id'])
+        self.assertEqual(expected[0]['delta']['cards'][0]['statements'][0]['text'], 'bounded sequence')
+        with patch.object(parts, '_list_series', wraps=parts._list_series) as listing:
+            ordinary = parts.observe_series(records, artifacts, assignment['id'])
+        listing.assert_not_called()
         with patch.object(parts, '_list_series', wraps=parts._list_series) as listing:
             observation = parts.observe_series(records, artifacts, assignment['id'], chain=[])
         listing.assert_not_called()
+        self.assertEqual(ordinary, expected)
         self.assertEqual(observation, expected)

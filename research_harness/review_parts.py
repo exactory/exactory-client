@@ -1126,10 +1126,17 @@ def _list_delivered_texts(packet, handle, inventory, items):
     return texts
 
 
-def _normalize_delivered_texts(packet, handle, inventory, items):
-    """The delivered texts of one card unit, each with its normalized form and the offsets of that form."""
-    return [(source, *review_excerpts.normalize_with_offsets(source['content']))
-            for source in _list_delivered_texts(packet, handle, inventory, items)]
+def _normalize_delivered_texts(packet, handle, inventory, items, normalized_by_content=None):
+    """Reuse normalization across shared text while keeping each source's location and order."""
+    if normalized_by_content is None:
+        normalized_by_content = {}
+    sources = []
+    for source in _list_delivered_texts(packet, handle, inventory, items):
+        content = source['content']
+        if content not in normalized_by_content:
+            normalized_by_content[content] = review_excerpts.normalize_with_offsets(content)
+        sources.append((source, *normalized_by_content[content]))
+    return sources
 
 
 def _verify_statements(packet, handle, statements, inventory, used, items=None):
@@ -1286,6 +1293,7 @@ def _validate_check(packet, output, inventory):
     used = 0
     items = read_delivered_items(packet)
     sources = {}
+    normalized_by_content = {}
     for finding in output['findings']:
         fields(finding, ('combination', 'finding', 'effect', 'statements'), code='invalid_value_review')
         identifier = finding['combination']
@@ -1304,7 +1312,7 @@ def _validate_check(packet, output, inventory):
                      'A finding statement names a known unit')
             unit = statement['unit']
             if unit not in sources:
-                sources[unit] = _normalize_delivered_texts(packet, unit, inventory, items)
+                sources[unit] = _normalize_delivered_texts(packet, unit, inventory, items, normalized_by_content)
             verified, count, used = _match_statements(
                 [dict(text=statement['text'], why=statement['why'])], sources[unit], used)
             statements.extend(dict(entry, unit=statement['unit']) for entry in verified)
