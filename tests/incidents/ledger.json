@@ -8598,6 +8598,27 @@
         "test_record_copies.RecordCopyInventoryTests.test_a_new_member_of_an_entry_fails_until_the_definition_declares_it",
         "test_record_copies.RecordCopyInventoryTests.test_the_copy_statement_is_pinned"
       ]
+    },
+    {
+      "id": "problem-record-accepts-unpostable-citation",
+      "record": "20261120203506-improvements-from-the-problem-value-cycle",
+      "class": "post citation validation",
+      "summary": "The record accepted a citation that the posting command refused after review.",
+      "expected": "New citation records apply the same field rules as the posting command and refuse unsupported text or locators with a code. Earlier citations still read and render.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_citation_rules.OpennessCitationRulesTests.test_openness_refuses_an_unpostable_locator_of_a_decisive_reading",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_assessment_refuses_a_new_citation_with_unpostable_work_metadata",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_attempt_refuses_a_new_citation_with_unpostable_work_metadata",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_locator_refuses_a_post_locator_above_the_maximum_length",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_locator_refuses_a_post_locator_character",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_locator_refuses_a_post_locator_with_an_invalid_host",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_metadata_refuses_a_post_citation_above_the_maximum_length",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_metadata_refuses_a_post_citation_below_the_minimum_length",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_metadata_refuses_a_post_citation_character",
+        "test_problem_post_citation_rules.PostCitationRulesTests.test_value_refuses_a_new_citation_with_unpostable_work_metadata"
+      ]
     }
   ]
 }
