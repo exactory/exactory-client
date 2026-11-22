@@ -261,7 +261,7 @@ def validate_final(records, artifacts, assignment, output, *, attempt=None):
 
 def has_over_cap_attempt(records, value, slot_id, predecessor=None):
     """Only a completed invocation of this repair binding can force a fresh series."""
-    from .review_context_repair import _lineage, slot_id as find_slot
+    from .review_context_repair import find_latest_chain_repair, slot_id as find_slot
 
     predecessor = predecessor or value.get('context', {}).get('context_repair', {}).get('assignment_id')
     if predecessor is None:
@@ -270,10 +270,8 @@ def has_over_cap_attempt(records, value, slot_id, predecessor=None):
         if (assignment.get('role') != value['role'] or assignment.get('dossier_id') != value['dossier_id']
                 or find_slot(records, assignment) != slot_id):
             continue
-        binding = next((ancestor['context']['context_repair']
-                        for ancestor in reversed(_lineage(records, assignment))
-                        if 'context_repair' in ancestor.get('context', {})), {})
-        if binding.get('assignment_id') != predecessor:
+        bound = find_latest_chain_repair(records, assignment)
+        if bound is None or bound['context']['context_repair']['assignment_id'] != predecessor:
             continue
         maximum = records['review_route'][assignment['route_id']]['configuration']['max_output_tokens']
         for attempt in records.get('review_attempt', {}).values():
@@ -286,11 +284,10 @@ def has_over_cap_attempt(records, value, slot_id, predecessor=None):
 
 
 def has_exhausted_over_cap_repair(records, artifacts, assignment):
-    from .review_context_repair import _lineage
+    from .review_context_repair import find_latest_chain_repair
     from .review_refusal import refused_attempts
 
-    if not any('context_repair' in ancestor.get('context', {})
-               for ancestor in _lineage(records, assignment)):
+    if find_latest_chain_repair(records, assignment) is None:
         return False
     attempts = [attempt for attempt in records.get('review_attempt', {}).values()
                 if attempt['assignment_id'] == assignment['id']]

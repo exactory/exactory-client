@@ -1469,9 +1469,15 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
 
 def _bars(records, artifacts, intent_id, *, subject=None):
     selected = []
+    historical = set()
+    if subject is not None:
+        from .evaluation import Evaluation
+        artifacts = Evaluation.of(records, artifacts)
+        historical = {review['id'] for review in context_repair.historical_reviews(
+            records, None, 'bar', evaluation=artifacts, refresh_only=True)}
     for saved in records.get('value_review', {}).values():
         review = _payload(saved)
-        if review.get('stage') != 'bar':
+        if review.get('stage') != 'bar' or saved['id'] in historical:
             continue
         if subject is not None:
             if saved.get('subject', {}).get('kind') != 'problem':
@@ -3828,6 +3834,9 @@ def prepare_capacity_notice(records, route, role, packet):
     return packet
 
 
+RETIRED_ROUTE_ASSIGNMENT_MSG = 'Choose another verified route and follow the current head plan for a preserved slot.'
+
+
 def record_assignment(store, payload, *, expected_revision, request_id):
     # Archived builders reconstruct scientific bytes; receipts use the installed capacity policy.
     from . import openness_reading as reading_capacity
@@ -3885,7 +3894,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             raise ResearchError('review_not_independent', 'The author cannot provide an independent assessment')
         route = _get(records, 'review_route', value['route_id'])
         if value['route_id'] in retired_routes(records):
-            raise ResearchError('review_route_retired', 'The route was retired; assign on another route, and continue a preserved slot through a context repair')
+            raise ResearchError('review_route_retired', RETIRED_ROUTE_ASSIGNMENT_MSG)
         require_installed_runtime(records, artifacts, route, value)
         if value['dossier_id'] is not None:
             d = _payload(_get(records, 'strategy_dossier', value['dossier_id']))
@@ -4552,6 +4561,7 @@ def require_verified_assignment(records, artifacts, assignment):
 # Required, then optional members of the payload of an ordinary reviewer call, staged or not. The start checks
 # and every rebuild of the payload of a started call (review_task_execution.rebuild_call_payload) read it.
 INVOKE_PAYLOAD_FIELDS = (('id', 'assignment_id'), ())
+RETIRED_ROUTE_RUN_MSG = 'The route of this assignment was retired. Follow the current head plan for this slot.'
 
 
 def invoke_assignment(store, payload, *, expected_revision, request_id, credential=None, after_start=None):
@@ -4567,7 +4577,7 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         require_unposted_review(records, assignment, artifacts)
         require_verified_assignment(records, artifacts, assignment)
         if assignment['route_id'] in retired_routes(records):
-            raise ResearchError('review_route_retired', 'The route of this assignment was retired; continue its slot through a context repair on another route')
+            raise ResearchError('review_route_retired', RETIRED_ROUTE_RUN_MSG)
         if find_replacement(records, assignment) is not None:
             raise ResearchError('review_assignment_replaced', 'This turn ended without output and a later '
                                 'continuation replaced it; run the replacement')
@@ -4923,15 +4933,17 @@ def _assignment_state(records, artifacts, assignment_id):
         state['context_status'] = 'unverified' if not events else 'contaminated'
     if state['context_status'] != 'verified_for_route':
         state['obligations'].append(obligation('review_context_' + state['context_status'], ROUTE_CONTEXT_MSG, assignment_id=assignment_id))
+    refresh_contaminated = False
     try:
-        from .evaluation import Evaluation
         repair_records = _read_context_records(records, assignment)
-        context_repair.validate_repair_binding(repair_records, Evaluation.of(repair_records, artifacts), assignment)
+        context_repair.validate_repair_binding(records, artifacts, assignment, origin_records=repair_records)
         from .review_refusal_replacement import validate_replacement_origin
         validate_replacement_origin(records, artifacts, assignment)
     except ResearchError as error:
-        state['obligations'].append(obligation(error.code, str(error)))
-        if error.code == 'review_context_repair_stale':
+        refresh_contaminated = error.code == 'review_context_contaminated'
+        if not (refresh_contaminated and events):
+            state['obligations'].append(obligation(error.code, str(error)))
+        if refresh_contaminated or error.code == 'review_context_repair_stale':
             state['context_status'] = 'contaminated'
     if inventory_issue is not None:
         state['obligations'].append(inventory_issue)
@@ -5019,7 +5031,8 @@ def _assignment_state(records, artifacts, assignment_id):
     if history_parent is not None and assignment.get('session_chain'):
         inherited_status = review_session_v4.describe_history_status(records, assignment)
     if inherited_status is not None:
-        state['context_status'] = inherited_status
+        if not refresh_contaminated:
+            state['context_status'] = inherited_status
         state['obligations'].append(obligation('review_source_parent_unverified', 'The complete scientific and source-request history must remain independently verified.'))
     if state['output'] is not None and state['raw_output'] is None:
         raw = read_raw_observation(records, artifacts, state['attempt_id'])

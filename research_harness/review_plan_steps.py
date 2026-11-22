@@ -310,6 +310,9 @@ def _describe_session_route_steps(records, artifacts, assignment):
     return steps
 
 
+REFRESH_ROUTE_CHOICE = 'Choose a verified route record for the refresh.'
+
+
 def complete_plan(records, artifacts, assignment, plan):
     """Add executable payload rules to external boundaries without changing call payloads."""
     if plan['state'] not in ('stop', 'handoff'):
@@ -413,6 +416,15 @@ def complete_plan(records, artifacts, assignment, plan):
         plan.update(state='handoff', command=details['step']['command'])
     elif code == 'review_context_unverified' and head_ran and context_status not in (None, 'verified_for_route'):
         plan['state'] = 'stop'
+    elif code == 'review_route_retired' and (
+            (plan.get('payload') or {}).get('context', {}).get('session_refresh')
+            or details.get('step', {}).get('id') == 14):
+        if 'payload' in plan:
+            payload = plan.pop('payload')
+            payload.pop('route_id')
+            details['step'] = dict(id=14, command='review-assignment', payload=payload, chooses=['route_id'],
+                                   prerequisites=[dict(condition=REFRESH_ROUTE_CHOICE)])
+        plan.update(state='handoff', command='review-assignment')
     elif code in ('review_context_contaminated', 'review_route_retired', 'review_context_repair_required',
                   'review_context_repair_stale', 'review_context_repair_mismatch', 'review_context_repair_unverified'):
         if code == 'review_context_repair_stale':

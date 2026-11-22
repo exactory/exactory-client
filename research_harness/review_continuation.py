@@ -525,17 +525,18 @@ def _plan_session_refresh(records, artifacts, assignment):
     """Rules F3 and F5: the refresh of the review that this head of a chain of the session rules v4 recorded is a new
     chain in its slot, which names the head in the context member session_refresh. Its route record is the one that
     select_step_route gives for the route of the head. While the store lacks that record or its probe, the plan is the
-    step that gives it, then review-series. After a retirement the payload names the route of the head, and the route
-    rule of plan_next gives the plan of that retirement."""
-    from .review_route_plan import select_step_route
+    step that gives it, then review-series. After retirement, complete_plan uses this payload for the handoff."""
+    from .review_route_plan import plan_retired_route, select_step_route
     found = select_step_route(records, artifacts, assignment['route_id'])
     if found['lacks'] is not None:
         return dict(state='handoff', command='review-route', code='review_route_runtime_stale',
                     details=dict(assignment_id=assignment['id'], route_id=assignment['route_id'],
                                  renewal=dict(admitted=True, **found), message=REFRESH_ROUTE_MSG))
     payload = _build_assignment_payload(records, assignment)
-    payload.update(route_id=found['route_id'] or assignment['route_id'],
-                   context={'session_refresh': {'assignment_id': assignment['id']}})
+    payload['context'] = {'session_refresh': {'assignment_id': assignment['id']}}
+    if found['route_id'] is None:
+        return dict(plan_retired_route(assignment), payload=payload)
+    payload['route_id'] = found['route_id']
     return dict(state='continue', command='review-assignment', payload=payload)
 
 
