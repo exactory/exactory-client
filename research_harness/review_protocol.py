@@ -4569,33 +4569,34 @@ CONTEXT_CONTAMINATED_MSG = (
 
 
 def list_review_turns(records, assignment):
-    """The turns on which the result of a review rests, the assignment among them (rule PC2).
+    """Return the turns whose route state applies to a new call (rule PC2)."""
+    return _read_review_turns(records, assignment)[0]
 
-    For a slot of bar, slate or result they are the turns whose reviewer context reaches the assignment since the
-    latest context repair, which decide whether its review counts (context_repair.historical_reviews), and since the
-    latest refresh of a chain of the session rules v4: a refresh is a new chain, and its calls read its own turns.
-    For every other review they are the turns that its request continues, by history_assignment_id or
-    context.prior_assignment_id: the links that the state of an assignment, the verification of a reading chain and
-    the verification of a parts series read.
 
+def _read_review_turns(records, assignment):
+    """Return the route turns and, for a scientific slot, their full exposure lineage.
+
+    For a bar, slate or result, route state follows the exposure since the latest repair and the latest refresh.
+    For other reviews, it follows history_assignment_id or context.prior_assignment_id.
     A link that the reader of the exposure lineage refuses, such as the empty history id of a legacy record in a
     store without a post, is read as the planner reads it there: the line of prior turns that the store holds."""
     if assignment['role'] in context_repair.ROLES:
         try:
-            turns = context_repair.list_context_turns(records, assignment)
+            exposure = context_repair._exposure_lineage(records, assignment)
         except ResearchError as error:
             if error.code != 'invalid_review_context':
                 raise
         else:
+            turns = context_repair.list_context_turns(records, assignment, exposure=exposure)
             refresh = max((index for index, turn in enumerate(turns)
                            if turn.get('context', {}).get('session_refresh') is not None), default=0)
-            return turns[refresh:]
+            return turns[refresh:], exposure
     turns, seen = [assignment], {assignment['id']}
     while True:
         parent = turns[-1].get('history_assignment_id') or turns[-1].get('context', {}).get('prior_assignment_id')
         row = records.get('review_assignment', {}).get(parent)
         if row is None or parent in seen:
-            return turns[::-1]
+            return turns[::-1], None
         seen.add(parent)
         turns.append(row)
 
@@ -4603,26 +4604,36 @@ def list_review_turns(records, assignment):
 def find_unverified_context(records, artifacts, assignment):
     """Read the context of a review from the review records of the present (rule PC1).
 
-    For the assignment and for each earlier turn of its review: the state of the route record of the turn, as its
-    latest probe gives it, and the contamination events that name the turn. Return None when every turn has a
-    verified context. Else return the turn that decides the step, {assignment_id, events, route: {id,
-    context_status}, count}: the first turn that a contamination event names, or else the first turn whose route
-    record is not verified. count is the number of turns without a verified context. The function authenticates no
-    attempt and rebuilds no packet."""
+    Route state follows the current review chain. Contamination events in a refreshed slot follow E5's exposure.
+    Return the first turn named by an event, or the first turn with an unverified route, with its events and the
+    count of affected turns. Include the named route's context_status when the route check reads that record."""
+    turns, exposure = _read_review_turns(records, assignment)
     named = {}
-    for key, event in read_filtered_records(records, 'review_context_event', kind='contamination').items():
+    for event in read_filtered_records(records, 'review_context_event', kind='contamination').values():
         if event['kind'] == 'contamination':
-            named.setdefault(event['assignment_id'], []).append(key)
-    lost = []
-    for turn in list_review_turns(records, assignment):
-        route = route_state(records, artifacts, turn['route_id'])
-        events = sorted(named.get(turn['id'], []))
-        if events or route['context_status'] != 'verified_for_route':
-            lost.append(dict(assignment_id=turn['id'], events=events,
-                             route=dict(id=turn['route_id'], context_status=route['context_status'])))
-    if not lost:
+            named.setdefault(event['assignment_id'], []).append(event)
+    contaminated = [(turn, named[turn['id']]) for turn in turns if turn['id'] in named]
+    if named and exposure and any('session_refresh' in turn.get('context', {}) for turn in exposure):
+        # The exposure walk already read every scientific predecessor.
+        ancestors = {'review_assignment': {turn['id']: turn for turn in exposure}}
+        chain = context_repair._lineage(ancestors, assignment)
+        if any('session_refresh' in turn.get('context', {}) for turn in chain):
+            repair = context_repair.find_last_repair_index(chain)
+            contaminated = list(context_repair.iter_refresh_contaminations(
+                records, chain, repair, named, exposure=exposure))
+    routes = {identifier: dict(id=identifier, context_status=route_state(records, artifacts, identifier)['context_status'])
+              for identifier in dict.fromkeys(turn['route_id'] for turn in turns)}
+    unverified = [turn for turn in turns if routes[turn['route_id']]['context_status'] != 'verified_for_route']
+    if contaminated:
+        turn, events = contaminated[0]
+    elif unverified:
+        turn, events = unverified[0], []
+    else:
         return None
-    return dict(next((row for row in lost if row['events']), lost[0]), count=len(lost))
+    affected = {row['id'] for row, _ in contaminated} | {row['id'] for row in unverified}
+    route_id = turn['route_id']
+    return dict(assignment_id=turn['id'], events=sorted(event['id'] for event in events),
+                route=routes.get(route_id, {'id': route_id}), count=len(affected))
 
 
 def find_blocking_context(records, artifacts, assignment):

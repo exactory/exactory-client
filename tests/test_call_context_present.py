@@ -8,12 +8,15 @@ with the route rule, a turn on another route record that is stale, is in tests/t
 """
 
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from codex_route_fixtures import build_codex_response, invoke_codex, probe_codex_route, record_codex_route
 from openness_reading_fixtures import OpennessReadingCase
 from test_openness_carried_integration import CarriedIntegrationSupport
+import test_review_session_v4_refresh_edges as refresh_edges
 from research_harness import cli, openness_reading_v7 as v7, review_output_correction as correction
 from research_harness import review_excerpts, review_protocol as protocol, review_transport as transport
 from research_harness.artifacts import ArtifactStore
@@ -401,30 +404,6 @@ class CallContextRoleTests(RoleFixtures, unittest.TestCase):
         refusal, sent = run_directly(case, 'repair-a')
         self.assertEqual((refusal, sent), (None, 1))
 
-    def test_k8_refresh_chain_reads_its_own_turns(self):
-        """The refresh of a review that a chain of the session rules v4 recorded is a new chain in the slot (rules F1
-        and F4 of its design), so rule PC1 reads its own turns and not the turns of the earlier chain that its
-        context names in session_refresh. The review of the slot counts by rule E5 of the refresh edges, which reads
-        a contamination across that link: after a contamination event on the final of the earlier chain, the plan of
-        the refresh head is the handoff to the repair of the head with that event."""
-        import test_review_session_v4_refresh as refresh
-        fixture = refresh.SessionRefreshTests()
-        fixture.setUp()
-        self.addCleanup(fixture.doCleanups)
-        final = fixture.record_bar()
-        fixture.add_area()
-        first = fixture.assign_refresh(final)
-        contaminate(fixture.case, final['id'])
-        records = fixture.case.read_records()
-        self.assertEqual([turn['id'] for turn in protocol.list_review_turns(records, first)], [first['id']])
-        self.assertIsNone(protocol.find_unverified_context(records, fixture.case.artifacts, first))
-        plan = fixture.plan(first['id'])
-        self.assertEqual((plan['state'], plan['command'], plan['code']),
-                         ('handoff', 'review-assignment', 'review_context_contaminated'))
-        repair = plan['details']['step']['payload']['context']['context_repair']
-        self.assertEqual((plan['details']['step']['id'], repair['assignment_id']), (1, first['id']))
-        self.assertEqual(len(repair['event_ids']), 1)
-
     def test_k3_recorded_request_is_replayed_after_the_event(self):
         """A review-run request that is already committed returns its receipt after the probe failed: the replay
         starts no call, so it passes no check of a new call."""
@@ -440,6 +419,110 @@ class CallContextRoleTests(RoleFixtures, unittest.TestCase):
             again = protocol.invoke_assignment(case.store, dict(id='observed', assignment_id=head),
                 credential='test-only', expected_revision=first, request_id='observed-call')
         self.assertEqual(again['result']['id'], receipt['result']['id'])
+
+
+class CallContextRefreshTests(refresh_edges.EdgeFixture):
+    @classmethod
+    def setUpClass(cls):
+        fixture = refresh_edges.EdgeFixture()
+        cls.addClassCleanup(fixture.doCleanups)
+        fixture.setUp()
+        fixture.add_sources([100])
+        first = fixture.case.assign('bar', 'first', identifier='request', **fixture.case.deliver_supporting('first'))
+        cls.original, unit = fixture.drive(first)
+        fixture.finish(cls.original, [dict(ref=unit['handle'])])
+        fixture.route('refresh-route', timeout=7)
+        cls.original_case = fixture.case
+        seeds = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(seeds.cleanup)
+        with fixture.fork():
+            fixture.add_area()
+            plan = fixture.plan(cls.original['id'])
+            payload = dict(plan['payload'], route_id='refresh-route')
+            cls.refresh = fixture.record(payload)
+            fixture.assert_new_chain_in_slot(cls.refresh, cls.original)
+            cls.refresh_seed = fixture.save(Path(seeds.name) / 'refresh')
+
+    def setUp(self):
+        self.case = self.original_case
+
+    def assert_readers(self, assignment, context_status, obligation_code, action):
+        identifier = assignment['id']
+        state = protocol.assignment_state(self.case.read_records(), self.case.artifacts, identifier)
+        self.assertEqual(state['context_status'], context_status)
+        self.assertEqual([row['code'] for row in state['obligations'] if row['code'].startswith('review_context_')],
+                         [obligation_code] if obligation_code.startswith('review_context_') else [])
+        self.assertIn(obligation_code, [row['code'] for row in state['obligations']])
+        plan = self.plan(identifier)
+        self.assertEqual((plan['state'], plan.get('command'), plan.get('code')), action)
+        report = cli._build_status_report(self.case.store)
+        rows = [row for row in report['obligations'] if row.get('assignment_id') == identifier]
+        self.assertEqual([row['code'] for row in rows if row['code'].startswith('review_context_')],
+                         [obligation_code] if obligation_code.startswith('review_context_') else [])
+        row = next(row for row in rows if row['code'] == obligation_code)
+        fields = ('state', 'command', 'code', 'details', 'payload')
+        self.assertEqual([[step.get(key) for key in fields] for step in row['next']],
+                         [[plan.get(key) for key in fields]])
+        return plan
+
+    def test_k8_refresh_call_hands_off_uncovered_earlier_contamination(self):
+        with self.fork(self.refresh_seed):
+            self.event(self.original, 'exposure')
+            head = self.refresh['id']
+            revision = self.case.store.revision
+            refusal, sent = run_directly(self.case, head)
+            self.assertIsNotNone(refusal)
+            self.assertEqual((refusal.code, sent, self.case.store.revision), (CONTAMINATED, 0, revision))
+            self.assertIn('turn', refusal.details or {})
+            turn = refusal.details['turn']
+            self.assertEqual((turn['assignment_id'], turn['events'], turn['route']['id'], turn['count']),
+                             (self.original['id'], ['exposure'], self.original['route_id'], 1))
+            plan = self.assert_readers(self.refresh, 'contaminated', CONTAMINATED,
+                                       ('handoff', 'review-assignment', CONTAMINATED))
+            self.assertEqual(refusal.details['next'], plan)
+            step = plan['details']['step']
+            binding = step['payload']['context']['context_repair']
+            self.assertEqual((step['id'], step['command'], binding['assignment_id'], binding['event_ids']),
+                             (1, 'review-assignment', head, ['exposure']))
+            self.route()
+            accepted = self.repair(self.refresh, step)
+            self.assertEqual(accepted['context']['context_repair']['event_ids'], ['exposure'])
+
+    def test_refresh_call_ignores_a_failed_probe_of_the_earlier_route(self):
+        with self.fork(self.refresh_seed):
+            old_route = self.original['route_id']
+            self.assertNotEqual(old_route, self.refresh['route_id'])
+            fail_probe(self.case, old_route)
+            records = self.case.read_records()
+            self.assertEqual(protocol.route_state(records, self.case.artifacts, old_route)['context_status'],
+                             'unverified')
+            self.assert_readers(self.refresh, 'verified_for_route', 'review_output_pending', ('run', 'review-run', None))
+            self.assertEqual(run_directly(self.case, self.refresh['id']), (None, 1))
+
+    def test_refresh_call_admitted_when_earlier_contamination_is_covered(self):
+        with self.fork():
+            self.event(self.original, 'covered')
+            self.route()
+            repair = self.repair(self.original)
+            binding = self.read_logical(repair)['context_repair']
+            self.assertEqual(binding['event_ids'], ['covered'])
+            final, unit = self.drive(repair)
+            self.record_final(final, self.final_answer(unit, binding))
+            self.add_area()
+            head = self.assign_refresh(final)
+            self.assert_readers(head, 'verified_for_route', 'review_output_pending', ('run', 'review-run', None))
+            with self.fork():
+                self.event(self.original, 'late')
+                stale = 'review_context_repair_stale'
+                plan = self.assert_readers(head, 'contaminated', stale, ('handoff', 'review-assignment', stale))
+                step = plan['details']['step']
+                binding = step['payload']['context']['context_repair']
+                self.assertEqual((step['id'], binding['event_ids']), (1, ['covered', 'late']))
+                refusal, sent = run_directly(self.case, head['id'])
+                self.assertIsNotNone(refusal)
+                self.assertEqual((refusal.code, sent), (stale, 0))
+                self.assertIsNone(refusal.details)
+            self.assertEqual(run_directly(self.case, head['id']), (None, 1))
 
 
 class CallContextCorrectionTests(unittest.TestCase):

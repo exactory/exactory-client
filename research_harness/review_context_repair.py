@@ -308,13 +308,17 @@ def _exposure_lineage(records, assignment):
     return ordered
 
 
-def list_context_turns(records, assignment):
+def find_last_repair_index(turns):
+    return next((i for i in range(len(turns) - 1, -1, -1)
+                 if turns[i].get('context', {}).get('context_repair') is not None), None)
+
+
+def list_context_turns(records, assignment, *, exposure=None):
     """The turns whose reviewer context reaches an assignment: its exposure lineage from the latest context repair
     on. A repair starts a new observed context, so a turn before it is no turn of this context."""
-    exposure = _exposure_lineage(records, assignment)
-    last_repair = max((index for index, item in enumerate(exposure)
-                       if item.get('context', {}).get('context_repair') is not None), default=0)
-    return exposure[last_repair:]
+    if exposure is None:
+        exposure = _exposure_lineage(records, assignment)
+    return exposure[find_last_repair_index(exposure):]
 
 
 def cause_events(records, identifiers, *, events_by_assignment=None):
@@ -337,19 +341,30 @@ def _index_context_events(records, evaluation):
     return index
 
 
+def iter_refresh_contaminations(records, chain, repair_index, events_by_assignment, *, exposure=None):
+    """Yield turns named by contamination events in the refresh exposure, earliest turn first."""
+    if repair_index is not None:
+        exposure = chain[repair_index:]
+    elif exposure is None:
+        exposure = _exposure_lineage(records, chain[-1])
+    for turn in exposure:
+        events = [event for event in events_by_assignment.get(turn['id'], ())
+                  if event['kind'] == 'contamination']
+        if events:
+            yield turn, events
+
+
 def find_review_context_issue(records, assignment, *, evaluation=None, lineage=None, events_by_assignment=None):
     """Return the context refusal for present independent credit, if any."""
     def check():
         chain = _lineage(records, assignment) if lineage is None else lineage
-        repair_index = next((i for i in range(len(chain) - 1, -1, -1)
-                             if chain[i].get('context', {}).get('context_repair') is not None), None)
+        repair_index = find_last_repair_index(chain)
         refreshed = any('session_refresh' in row.get('context', {}) for row in chain)
         events = events_by_assignment
         if refreshed:
             if events is None:
                 events = _index_context_events(records, evaluation)
-            exposure = (_exposure_lineage(records, assignment) if repair_index is None else chain[repair_index:])
-            if any(event['kind'] == 'contamination' for row in exposure for event in events.get(row['id'], ())):
+            if next(iter_refresh_contaminations(records, chain, repair_index, events), None) is not None:
                 return 'review_context_contaminated'
         if repair_index is not None:
             repair = chain[repair_index]['context']['context_repair']
