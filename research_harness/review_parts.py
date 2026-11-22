@@ -1292,7 +1292,6 @@ def _validate_check(packet, output, inventory):
     findings = []
     used = 0
     items = read_delivered_items(packet)
-    sources = {}
     normalized_by_content = {}
     for finding in output['findings']:
         fields(finding, ('combination', 'finding', 'effect', 'statements'), code='invalid_value_review')
@@ -1311,10 +1310,9 @@ def _validate_check(packet, output, inventory):
             _require(isinstance(statement['unit'], str) and statement['unit'] in handles,
                      'A finding statement names a known unit')
             unit = statement['unit']
-            if unit not in sources:
-                sources[unit] = _normalize_delivered_texts(packet, unit, inventory, items, normalized_by_content)
             verified, count, used = _match_statements(
-                [dict(text=statement['text'], why=statement['why'])], sources[unit], used)
+                [dict(text=statement['text'], why=statement['why'])],
+                _normalize_delivered_texts(packet, unit, inventory, items, normalized_by_content), used)
             statements.extend(dict(entry, unit=statement['unit']) for entry in verified)
             unmatched += count
         findings.append(dict(copy.deepcopy(finding), turn=packet[KEY]['turn'],

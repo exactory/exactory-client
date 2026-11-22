@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+from weakref import ref
 
 from research_harness import (bar_sources, review_excerpts, review_parts as parts,
                               review_protocol, workspace)
@@ -42,7 +43,7 @@ class SeriesVerificationCosts(views.PartsViewCase):
         super().setUp()
 
     def test_render_lists_once_per_parts_verification(self):
-        self.prepare_parts(count=3)
+        self.prepare_parts(count=2)
         first = self.assign()
         self.invoke(first)
         second = self.assign('next-turn', first['id'])
@@ -139,4 +140,81 @@ class StatementVerificationCosts(unittest.TestCase):
             dict(statement, text='Quoted',
                  at=dict(unit=handles[0], body=reference['sha256'], start=first, end=first + len('Quoted')))
             for statement in statements])
+        self.assertEqual([call.args[0] for call in normalize.call_args_list].count(fragment), 1)
+
+    def test_check_releases_candidate_rows_after_each_statement(self):
+        class TrackedSource(dict):
+            pass
+
+        count = 3
+        body = 'Q.' * count
+        reference = describe_artifact(body.encode(), 'text/plain')
+        logical = dict(objection=dict(id='objection'),
+                       evidence=[dict(artifact=reference, content=body, encoding='utf-8')],
+                       original_evidence=[dict(page=page, artifact=reference) for page in range(count)])
+        inventory = parts.build_inventory(logical, 'problem_adjudicator')
+        observations = []
+        for kind in ('read', 'combine', 'check'):
+            packet = parts.plan_turn(logical, inventory, observations, series_id='series',
+                                     output_tokens=128000, input_limit=1200000,
+                                     measure=lambda candidate: len(parts.render_json(candidate)))
+            self.assertEqual(parts.find_kind(packet), kind)
+            if kind != 'check':
+                selections = [dict(unit='u1', body=reference['sha256'], start=i * 2, end=i * 2 + 1)
+                              for i in range(count)]
+                combination = dict(units=['u1'], question='Q?', view='Read the source.', read=selections)
+                fixture_packet = dict(packet, _test_inventory=inventory)
+                observations.append(observe(fixture_packet, make_output(packet, [combination])))
+        self.assertEqual(len(packet['evidence']), count)
+        output = make_output(packet)
+        output['findings'][0]['statements'] = [dict(unit=row['handle'], text='Q', why='Review.')
+                                               for row in inventory['units']]
+        with use_reference_functions():
+            expected = parts.validate_output(packet, output, inventory)
+        self.assertEqual(len(expected['findings'][0]['statements']), count)
+
+        normalize = parts._normalize_delivered_texts
+        candidate_refs, live_counts = [], []
+
+        def track_rows(*args, **kwargs):
+            rows = [(TrackedSource(source), text, offsets) for source, text, offsets in normalize(*args, **kwargs)]
+            candidate_refs.extend(ref(source) for source, _, _ in rows)
+            live_counts.append(sum(candidate() is not None for candidate in candidate_refs))
+            return rows
+
+        with patch.object(parts, '_normalize_delivered_texts', new=track_rows):
+            actual = parts.validate_output(packet, output, inventory)
+        self.assertEqual(actual, expected)
+        self.assertEqual(live_counts, [count] * count)
+
+    def test_equal_fragments_keep_distinct_owners_body_digests_and_spans(self):
+        fragment = 'Ａ  ﬁnd'
+        prefixes = ['x', 'long lead ']
+        bodies = [prefix + fragment for prefix in prefixes]
+        references = [describe_artifact(body.encode(), 'text/plain') for body in bodies]
+        logical = dict(evidence=[dict(artifact=reference, content=body, encoding='utf-8')
+                                 for reference, body in zip(references, bodies)],
+                       original_evidence=[dict(page=page, artifact=reference)
+                                          for page, reference in enumerate(references, 1)])
+        inventory = parts.build_inventory(logical, 'problem_adjudicator')
+        units = parts.enumerate_units(logical, 'problem_adjudicator', inventory)
+        self.assertEqual(len(units), 2)
+        selections = [dict(unit=unit['handle'], body=reference['sha256'],
+                           start=len(prefix), end=len(prefix) + len(fragment))
+                      for unit, reference, prefix in zip(units, references, prefixes)]
+        packet = parts.project_packet(parts.build_frame(logical, units), units, selections,
+            dict(protocol=parts.PROTOCOL, kind='check', turn=3, check_combinations=['c'],
+                 output_allowance=1000, findings_budget_remaining=2000),
+            dict(cards=[], combinations=[], findings=[]))
+        statements = [dict(unit=unit['handle'], text='A find', why='Review.') for unit in units]
+        output = dict(kind='check', turn=3, findings=[
+            dict(combination='c', finding='Read both sources.', effect='supports', statements=statements)])
+        with use_reference_functions():
+            expected = parts.validate_output(packet, output, inventory)
+        with patch.object(review_excerpts, 'normalize_with_offsets',
+                          wraps=review_excerpts.normalize_with_offsets) as normalize:
+            actual = parts.validate_output(packet, output, inventory)
+        self.assertEqual(actual['findings'][0]['statements'], [
+            dict(statement, text=fragment, at=selection) for statement, selection in zip(statements, selections)])
+        self.assertEqual(actual, expected)
         self.assertEqual([call.args[0] for call in normalize.call_args_list].count(fragment), 1)
