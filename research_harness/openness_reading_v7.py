@@ -200,6 +200,13 @@ class _PlanningArtifacts:
         source = self.source.store if isinstance(self.source, Evaluation) else self.source
         source.require_local_read(purpose)
 
+    def read_runtime_fingerprint(self, route):
+        """The installed runtime of a route, as the artifacts under this overlay read it: a check of the
+        standing of a route record inside a planned admission reads it here (review_protocol.is_route_stale)."""
+        from .evaluation import Evaluation
+        source = self.source.store if isinstance(self.source, Evaluation) else self.source
+        return source.read_runtime_fingerprint(route)
+
     def put(self, content, media_type):
         reference = describe_artifact(content, media_type)
         self.bodies[reference['sha256']] = content

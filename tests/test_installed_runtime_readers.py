@@ -29,6 +29,7 @@ DECLARED_SITES = {
     'review_protocol.require_installed_runtime': 'reader',
     'artifacts.ArtifactStore.read_runtime_fingerprint': 'reader',
     'record_check.OfflineArtifacts.read_runtime_fingerprint': 'reader',
+    'openness_reading_v7._PlanningArtifacts.read_runtime_fingerprint': 'reader',
     'review_state_evaluation._runtime_fingerprint': 'reader',
     'review_route_capacity.read_installed_cli_version': 'reader',
     'review_protocol.record_route': 'new_record',

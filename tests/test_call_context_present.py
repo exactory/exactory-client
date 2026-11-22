@@ -577,6 +577,39 @@ class CallContextStaleRouteTests(unittest.TestCase):
         self.assertEqual([call for call in fixture.calls if call[0] == 'review'], [])
 
 
+    def test_planned_replacement_on_a_stale_route_record_with_a_failed_probe_keeps_the_stale_route_handoff(self):
+        """A v7 reading turn whose call ended over the input limit plans its capacity replacement. The latest probe
+        of its route record then returns no answer, and the installed runtime changes. The planner simulates the
+        replacement on its overlay of the artifacts, and the check of the continued turn (rule PC7) reads the
+        standing of the route record through that overlay (rule PC6). The plan of the head stays the handoff of
+        the stale route record. Before the repair the overlay passed no runtime reading on, and the plan ended
+        with an AttributeError."""
+        from test_openness_reading_v7_refusal import V7RefusalTests
+        from test_review_output_profile import build_row
+        from research_harness import review_route_capacity as capacity
+        fixture = V7RefusalTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        priors = patch.object(capacity, 'read_profile_priors', return_value=[
+            build_row(level=None, thinking=1000, count=8, over=1)])
+        priors.start()
+        self.addCleanup(priors.stop)
+        native = fixture.export()
+        fixture.assign('turn-1', native)
+        fixture.invoke('turn-1', fixture.build_v7_answer(fixture.read_packet('turn-1')))
+        head = fixture.assign('size-position', native, prior='turn-1')['id']
+        with patch.object(protocol.transport, 'send_request', side_effect=ResearchError(
+                'review_input_too_large', 'The authored input limit.')):
+            fixture.mutate(protocol.invoke_assignment, dict(id='size-call', assignment_id=head),
+                           credential='fixture')
+        self.assertEqual(describe_plan(fixture, head), ('replace', 'review-assignment', 'review_input_too_large'))
+        fail_probe(fixture, 'route')
+        pinned = read_records(fixture)['review_route']['route']['runtime']
+        with patch.object(protocol.transport, 'runtime', return_value=dict(pinned, implementation_sha256='0' * 64)):
+            self.assertEqual(describe_plan(fixture, head),
+                             ('handoff', 'review-route', 'review_route_runtime_stale'))
+
+
 class CallContextChainTests(V7ChainSupport, OpennessReadingCase):
     def test_w7_recorded_assignment_is_not_sent_after_a_contamination_of_an_own_earlier_turn(self):
         """On 12ce6199 review-run sends the request: 'ResearchError not raised'."""

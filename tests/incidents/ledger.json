@@ -8614,6 +8614,18 @@
         "test_review_queue_triage.QueueTriageTests.test_planned_store_wait_names_its_limit_and_the_two_route_scheduler",
         "test_review_queue_triage.QueueTriageTests.test_staged_wait_keeps_the_own_task_action_and_names_the_capacity_limit"
       ]
+    },
+    {
+      "id": "planning-overlay-passes-no-runtime-reading",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "dead-end",
+      "summary": "The plan of a v7 reading turn whose call ended over the input limit ended with an AttributeError, with no plan and no code, when the latest probe of its route record had returned no answer and the route record pinned another reviewer runtime than the installed one. The planner simulated the capacity replacement on its overlay of the artifacts, the check of the continued turn read the standing of the route record through that overlay, and the overlay passed no runtime reading on. The independent review of the diff of the context check found it before a release held the check.",
+      "expected": "The planning overlay passes the runtime reading of the artifacts under it on. The plan of that head is the handoff review_route_runtime_stale, as it was before the context check.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_call_context_present.CallContextStaleRouteTests.test_planned_replacement_on_a_stale_route_record_with_a_failed_probe_keeps_the_stale_route_handoff"
+      ]
     }
   ]
 }
