@@ -929,10 +929,9 @@ FIELD_CLASSES = {
 # Tags survive canonical JSON ordering when a stored plan is read back.
 FRAME_DESCRIPTOR_FIELD = '$descriptors'
 FRAME_UNIT_FIELD_PREFIX = '$unit:'
-FRAME_BINDING_FIELD = '$binding'
 FRAME_BINDING_PATH_PREFIX = '$binding-paths:'
+FRAME_BINDING_MEMBERS_PREFIX = '$binding-members:'
 REVIEW_BINDING_FIELDS = frozenset(('protocol', 'role', 'reviewer_id', 'dossier_id', 'subject'))
-ROLE_BINDING_FIELDS = {'native_math': 'native', 'verification': 'paper'}
 # Values copied into a response or compared with its assignment belong in the frame.
 # None keeps a complete value. A set keeps only the listed members if the wrapper overflows.
 SHARED_BINDING_PATHS = {
@@ -941,9 +940,6 @@ SHARED_BINDING_PATHS = {
     'problem_refresh': frozenset(('assignment_id', 'previous_candidate_set_digest', 'candidate_set_digest',
         'previous_problem_evidence_digest', 'problem_evidence_digest', 'previous_problem_review_currency',
         'problem_review_currency')),
-    'candidate_set_digest': None,
-    'problem_evidence_digest': None,
-    'problem_review_currency': None,
 }
 ROLE_BINDING_PATHS = {
     'result': {
@@ -1099,53 +1095,35 @@ def _build_classified_frame(route, role, packet, bounded_fields, unit_fields=())
     frame, units, owners = {}, [], {}
     moved = set(unit_fields) | {name[len(FRAME_UNIT_FIELD_PREFIX):] for name in bounded_fields
                                if name.startswith(FRAME_UNIT_FIELD_PREFIX)}
-    # Older plans carry their original per-field bounds and unit tags.
-    binding = _find_binding_fields(role, packet) if FRAME_BINDING_FIELD in bounded_fields else ()
-    binding_paths = _find_binding_paths(role)
+    binding_members = {}
+    for tag in bounded_fields:
+        if tag.startswith(FRAME_BINDING_MEMBERS_PREFIX):
+            name, encoded = tag[len(FRAME_BINDING_MEMBERS_PREFIX):].split(':', 1)
+            binding_members[name] = json.loads(encoded)
     for name in sorted(packet):
-        row = table.get(name)
-        if row is None:
-            _refuse_unclassified_field(role, form, name)
         tag = FRAME_BINDING_PATH_PREFIX + name
         if tag in bounded_fields:
-            frame[name], additions, places = _project_binding_field(route, packet[name], name, binding_paths[name], table)
+            members, rows = binding_members[name]
+            frame[name], additions, places = _project_binding_field(route, packet[name], name, members, dict(rows))
             size = measure_capacity_value(route, {name: frame[name]})
             if size > bounded_fields[tag]:
                 raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
                                     dict(room=bounded_fields[tag], minimum=size, field=name, command='review-route'))
-        elif name in binding:
-            frame[name], additions, places = _project_children(route, packet[name], (name,), table)
-            places[(name,)] = 'frame'
         else:
+            row = table.get(name)
+            if row is None:
+                _refuse_unclassified_field(role, form, name)
             overhead = _measure_field_overhead(route, name)
             bound = (0 if name in moved else
                      min(row['characters'], max(0, bounded_fields.get(name, row['characters'] + overhead) - overhead)))
             frame[name], additions, places = _project_field(route, packet[name], (name,), row, bound, table)
         units.extend(additions)
         owners.update(places)
-    binding_bound = bounded_fields.get(FRAME_BINDING_FIELD)
-    if binding_bound is not None:
-        size = _measure_binding_fields(route, frame, binding)
-        if size > binding_bound:
-            raise ResearchError('review_route_capacity_below_floor', BELOW_FLOOR_MESSAGE,
-                                dict(room=binding_bound, minimum=size, field=FRAME_BINDING_FIELD, command='review-route'))
     return table, frame, units, owners
-
-
-def _find_binding_fields(role, packet):
-    fields = packet.keys() & REVIEW_BINDING_FIELDS
-    role_field = ROLE_BINDING_FIELDS.get(role)
-    if role_field in packet:
-        fields.add(role_field)
-    return fields
 
 
 def _find_binding_paths(role):
     return dict.fromkeys(REVIEW_BINDING_FIELDS) | SHARED_BINDING_PATHS | ROLE_BINDING_PATHS.get(role, {})
-
-
-def _measure_binding_fields(route, frame, binding):
-    return sum(measure_capacity_value(route, {name: frame[name]}) for name in binding)
 
 
 def classify_packet(route, role, packet, *, bounded_fields=None):
@@ -1180,8 +1158,9 @@ def describe_role_frame(route, role, packet, kinds, *, unit_fields=()):
     zero-cost tag preserves that ownership through a stored plan's JSON order.
     The aggregate reserve holds the envelope and non-fixed frame metadata.
     If the fixed allowances would move part of the identity, reserve the
-    exact binding outside the movable fields. Frames whose identity already
-    fits keep their original declarations.
+    exact binding outside the movable fields. A zero-cost tag preserves its
+    kept members and nested field classes for replay. Frames whose identity
+    already fits keep their original declarations.
     """
     moved = unit_fields if isinstance(unit_fields, dict) else tuple(unit_fields)
     binding = _find_binding_paths(role)
@@ -1200,8 +1179,14 @@ def describe_role_frame(route, role, packet, kinds, *, unit_fields=()):
         fields = {FRAME_DESCRIPTOR_FIELD: measure_capacity_value(route, {})}
         for name in sorted(packet):
             if name in moved_binding:
-                projected, _, _ = _project_binding_field(route, packet[name], name, binding[name], table)
+                members = binding[name]
+                rows = [] if members is None else [(key, row) for key, row in table.items()
+                                                   if key == name or key.startswith(name + '.')]
+                projected, _, _ = _project_binding_field(route, packet[name], name, members, dict(rows))
                 fields[FRAME_BINDING_PATH_PREFIX + name] = measure_capacity_value(route, {name: projected})
+                kept = None if members is None else sorted(members)
+                encoded = json.dumps([kept, rows], sort_keys=True, separators=(',', ':'))
+                fields[FRAME_BINDING_MEMBERS_PREFIX + name + ':' + encoded] = 0
             elif table[name]['class'] != 'fixed':
                 fields[FRAME_DESCRIPTOR_FIELD] += measure_capacity_value(route, {name: frame[name]})
                 fields[name] = 0

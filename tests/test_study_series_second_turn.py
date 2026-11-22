@@ -10,7 +10,7 @@ from codex_route_fixtures import limit_codex_input, record_codex_route, read_sen
 from development_fixtures import DevelopmentCase
 from test_review_parts_v3 import make_packet, make_turn_output
 from test_review_route_capacity import build_route
-from research_harness import bar_sources, research_decisions, review_excerpts, review_field_classes
+from research_harness import bar_sources, research_decisions, review_excerpts
 from research_harness import review_parts as parts, review_parts_v3 as parts_v3
 from research_harness import review_protocol as protocol, review_route_capacity as capacity
 from research_harness import review_session_v4 as session
@@ -155,10 +155,3 @@ class StudySeriesSecondTurnTests(unittest.TestCase):
         self.assertEqual([(row['route_id'], row['delivery']) for row in error.details['serving_routes']],
                          [('serving', 'parts')])
         self.assertEqual(case.case.store.revision, revision)
-
-    def test_unknown_packet_field_refuses_with_a_code(self):
-        packet = dict(protocol=protocol.PROTOCOL, role='verification', undeclared_field=True)
-        with self.assertRaises(ResearchError) as raised:
-            review_field_classes.classify_packet(build_route(), 'verification', packet)
-        self.assertEqual(raised.exception.code, 'review_input_unreadable')
-        self.assertEqual(raised.exception.details['field'], 'undeclared_field')

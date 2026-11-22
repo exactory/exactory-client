@@ -283,6 +283,78 @@ class FieldClassTests(unittest.TestCase):
         old = self.fields.classify_packet(self.route, 'result', packet, bounded_fields=old_bounds)
         self.assertEqual(old['frame']['reviewer_id']['sha256'], digest(packet['reviewer_id']))
         self.assertEqual(old['units'][0]['sha256'], digest(packet['reviewer_id']))
+        self.assertEqual(self.fields.classify_packet(
+            self.route, 'result', packet, bounded_fields=dict(old_bounds, **{'$binding': 0})), old)
+
+    def test_stored_parts_frame_keeps_its_members_after_binding_table_changes(self):
+        from research_harness import bar_sources, review_parts_v3 as parts
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.problem_openness import serialize_record
+
+        packet = dict(protocol=bar_sources.PROTOCOL, role='result', dossier_id='dossier', reviewer_id='r' * 520,
+                      assessor=dict(id='r' * 520, kind='agent'), dossier={}, evidence=[],
+                      readiness=dict(kind='readiness', inputs={}),
+                      support_contract=dict(candidate_digest='c' * 64, scope_note='s' * 40,
+                                            evidence=[dict(reference='r' * 4100)]))
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = ArtifactStore(Path(directory))
+            admission = parts.admit_packet({}, artifacts, self.route, packet, 'study_readiness')
+            self.assertEqual(admission['state'], 'accept', admission.get('details'))
+            plan, inventory = admission['plan'], admission['inventory']
+            stored = dict(capacity_plan=dict(protocol=capacity.CAPACITY_PLAN_PROTOCOL, digest=digest(plan),
+                         artifact=artifacts.put(serialize_record(plan), 'application/json')))
+            before = parts._build_frame(self.route, inventory, plan, 'final')
+            self.assertEqual(before['support_contract']['candidate_digest'], 'c' * 64)
+            original_bounds = plan['frame']['final']['bounded_fields']
+            original_units = self.fields.list_frame_units(self.route, 'result', inventory['frame_source'], original_bounds)
+            self.assertIn('$binding-paths:support_contract', original_bounds)
+            for added in ('scope_note', 'evidence'):
+                table = copy.deepcopy(self.fields.ROLE_BINDING_PATHS)
+                table['result']['support_contract'] |= {added}
+                with self.subTest(added=added), patch.object(self.fields, 'ROLE_BINDING_PATHS', table):
+                    replay = capacity.read_chain_capacity_plan(artifacts, stored)
+                    after = parts._build_frame(self.route, inventory, replay, 'final')
+                    self.assertEqual(serialize_record(after), serialize_record(before))
+                    self.assertEqual(self.fields.list_frame_units(self.route, 'result', inventory['frame_source'],
+                                      replay['frame']['final']['bounded_fields']), original_units)
+
+    def test_stored_binding_wrapper_keeps_its_nested_field_projection(self):
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.problem_openness import serialize_record
+
+        role = 'native_math'
+        form = review_protocol.PROTOCOL
+        packet = dict(protocol=form, role=role, reviewer_id='reviewer',
+                      native=dict(kind='result', subject='s' * 17000, scientific_context=dict(
+                                  minimum_gaps=['gap'], openness_minimum=dict(scope='finite'))))
+        frames = self.fields.describe_role_frame(self.route, role, packet, ('request',))
+        self.assertIn('$binding-paths:native', frames['request'])
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = ArtifactStore(Path(directory))
+            declaration = dict(kind='request', frames=frames, inventory=[], targets=[])
+            stored = capacity.prepare_assignment_capacity({}, artifacts, self.route, declaration)
+            before = self.fields.classify_packet(self.route, role, packet, bounded_fields=frames['request'])
+            self.assertEqual(before['frame']['native']['scientific_context']['minimum_gaps']['entries'], 1)
+            with patch.dict(self.fields.FIELD_CLASSES[role][form], {
+                    'native': dict(self.fields.FIELD_CLASSES[role][form]['native'], characters=1),
+                    'native.scientific_context.minimum_gaps': {'class': 'fixed', 'characters': 0}}):
+                replay = capacity.read_chain_capacity_plan(artifacts, stored)
+                after = self.fields.classify_packet(self.route, role, packet,
+                    bounded_fields=replay['frame']['request']['bounded_fields'])
+            self.assertEqual(serialize_record(after['frame']), serialize_record(before['frame']))
+            self.assertEqual(after['units'], before['units'])
+
+    def test_reference_digests_stay_in_the_frame_without_binding_declarations(self):
+        digests = ('candidate_set_digest', 'problem_evidence_digest', 'problem_review_currency')
+        for role, forms in self.fields.FIELD_CLASSES.items():
+            self.assertFalse(set(digests) & self.fields._find_binding_paths(role).keys())
+            for form, table in forms.items():
+                packet = {name: 'a' * 64 for name in digests if name in table}
+                if packet:
+                    packet['protocol'] = form
+                    classified = self.fields.classify_packet(self.route, role, packet)
+                    self.assertEqual(classified['frame'], packet)
+                    self.assertEqual(classified['units'], [])
 
     def test_all_real_logical_neutral_native_staged_and_parts_forms_keep_base_bytes(self):
         expected = json.loads((Path(__file__).parent / 'fixtures/review_field_class_packets.json').read_text())
