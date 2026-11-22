@@ -95,6 +95,16 @@ def can_admit_route(active, policy, route_id):
             < policy['route_limits'].get(route_id, policy['store_limit']))
 
 
+def describe_route_scheduler(records, artifacts, route_ids, covered_adapters):
+    """Suggest one call per verified route covered by the capacity policy."""
+    from .review_protocol import route_state
+    routes = records.get('review_route', {})
+    route_limits = {identifier: 1 for identifier in sorted(route_ids)
+                    if routes.get(identifier, {}).get('adapter') in covered_adapters
+                    and route_state(records, artifacts, identifier)['context_status'] == 'verified_for_route'}
+    return dict(store_limit=len(route_limits), route_limits=route_limits)
+
+
 def describe_capacity_wait(records, artifacts, route_id, active, waits):
     """Project current limits and a scheduler for verified participating routes."""
     from .review_task_execution import _policy
@@ -107,14 +117,10 @@ def describe_capacity_wait(records, artifacts, route_id, active, waits):
         limits.append('route_limit')
     result = dict(blocking_limits=limits)
     if 'store_limit' in limits and not own_active and artifacts is not None:
-        from .review_protocol import route_state
         participants = {row['route_id'] for row in active + waits} | {route_id}
-        routes = records.get('review_route', {})
-        verified = sorted(identifier for identifier in participants
-            if routes.get(identifier, {}).get('adapter') in policy['covered_adapters']
-            and route_state(records, artifacts, identifier)['context_status'] == 'verified_for_route')
-        if route_id in verified:
-            result['scheduler'] = dict(store_limit=len(verified), route_limits={identifier: 1 for identifier in verified})
+        scheduler = describe_route_scheduler(records, artifacts, participants, policy['covered_adapters'])
+        if route_id in scheduler['route_limits']:
+            result['scheduler'] = scheduler
     return result
 
 

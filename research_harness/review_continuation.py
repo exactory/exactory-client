@@ -21,6 +21,8 @@ REFRESH_ROUTE_MSG = (
     'installed runtime. The value probe means a probe that verifies the route record that details.renewal.route_id '
     'names. Take details.step. Then run review-series on this head again. It then names the refresh on that route '
     'record.')
+CAPACITY_SCHEDULER_MSG = (
+    'Record details.scheduler as the scheduler member of the next review-assignment for this record.')
 
 
 def describe_context_failure(error, assignment_id=None):
@@ -323,6 +325,7 @@ def _plan_capacity(records, assignment, action, artifacts=None):
     if can_admit_route(active, policy, assignment['route_id']) and not eligible:
         return action
     capacity = describe_capacity_wait(records, artifacts, assignment['route_id'], active, waits)
+    guidance = dict(message=CAPACITY_SCHEDULER_MSG) if 'scheduler' in capacity else {}
     for owned in active:
         if owned['id'] in records.get('review_reservation', {}):
             call = dict(operation='review.task_reserve', reservation_id=owned['id'])
@@ -340,9 +343,10 @@ def _plan_capacity(records, assignment, action, artifacts=None):
             if row['state'] == 'interrupted' or not has_live_call_processes(lifecycle):
                 return dict(state='wait', not_before=_describe_wait(), code='review_capacity_wait',
                             details=dict(calls_before=len(active) + len(ahead), **capacity),
-                            **build_reconciliation_step(records, call))
+                            **build_reconciliation_step(records, call), **guidance)
     return dict(action, state='wait', not_before=_describe_wait(), code='review_capacity_wait',
-                details=dict(calls_before=len(active) + len(ahead), reservations=[row['id'] for row in active], **capacity))
+                details=dict(calls_before=len(active) + len(ahead), reservations=[row['id'] for row in active], **capacity),
+                **guidance)
 
 
 UNRECORDED_REFUSAL_MESSAGE = (
@@ -483,6 +487,8 @@ def _plan_staged_action(records, epoch, task, action, artifacts=None):
             controller = records['review_assignment'][epoch['controller_assignment_id']]
             result['details'].update(describe_capacity_wait(records, artifacts, controller['route_id'],
                 list_active_calls(records), list_waiting_calls(records)))
+            if 'scheduler' in result['details']:
+                result['message'] = CAPACITY_SCHEDULER_MSG
     return result
 
 
@@ -851,12 +857,31 @@ def describe_next_actions(records, artifacts, assignment_id, actions=(), *, cont
             action.pop(key, None)
             if key in selected:
                 action[key] = copy.deepcopy(selected[key])
+        if selected.get('code') == 'review_capacity_wait' and 'message' in selected:
+            action['message'] = selected['message']
         action['state'] = selected['state']
         if is_posted:
             action.pop('workflow', None)
             action.pop('scope', None)
         result.append(action)
     return result
+
+
+def _describe_initial_problem_bar_step(records, artifacts):
+    from .research_decisions import select_problem_slot_assignments
+    from .review_call_admission import describe_route_scheduler
+    from .review_task_execution import COVERED_ADAPTERS
+
+    routes = records.get('review_route', {}).keys() - protocol.retired_routes(records)
+    if not routes or len(select_problem_slot_assignments(records, 'bar', None)) >= 2:
+        return None
+    payload = dict(role='bar', dossier_id=None)
+    if 'store' not in records.get('review_capacity_policy', {}):
+        scheduler = describe_route_scheduler(records, artifacts, routes, COVERED_ADAPTERS)
+        if scheduler['store_limit'] >= 2:
+            payload['scheduler'] = scheduler
+    return dict(command='review-assignment', payload=payload,
+                chooses=['id', 'route_id', 'reviewer_id', 'author_id', 'context'])
 
 
 def annotate_review_obligations(records, artifacts, report, *, context_failures=None):
@@ -960,6 +985,10 @@ def annotate_review_obligations(records, artifacts, report, *, context_failures=
         rows = []
         for original in report[key]:
             item = dict(original)
+            if 'review' in report and item['code'] == 'problem_bar_pending':
+                step = _describe_initial_problem_bar_step(records, artifacts)
+                if step is not None:
+                    item['next'] = [step]
             identifier = item.get('assignment_id') or item.get('controller_assignment_id')
             with _collect_context_failure(context_failures, identifier):
                 if identifier in records.get('review_assignment', {}):
