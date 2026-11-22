@@ -13,6 +13,9 @@ certified module has a row.
 The command python3 -m ci.capacity_packet_inventory --write-call-rows repairs the differences
 that the source determines and renews packet_call_digests from the rows. It changes no other
 value of a certificate.
+
+A record_copies row pins a statement that copies a stored member into a packet.
+The guard compares its declaration with the validator's member table.
 """
 import argparse
 import ast
@@ -20,6 +23,7 @@ import builtins
 import copy
 import hashlib
 import json
+from collections import Counter
 from pathlib import Path
 
 from ci.source_inventory import describe_source_ast
@@ -126,6 +130,25 @@ QUANTITY_ROUTE_CHANGED = ('The route allowance of the canonical quantity fixture
                           'Give the route a positive allowance, then set route_limit to that allowance.')
 QUANTITY_NOT_SCALED = ('The canonical factory did not grow packet property {path} to its declared scale. '
                        'Scale the input of the factory until the property reaches that size.')
+RECORD_TABLE_UNREADABLE = ('Cannot read {table} for the record copy {member}. Provide its module and define the table '
+                           'once as a dict literal or a dict call with keywords. Use tuples of strings for the member '
+                           'names and leave the table unmodified.')
+RECORD_ENTRY_UNMAPPED = ('Entry {entry} must appear in both {table} and the paths for {member}. Declare its object '
+                         'in {definition} and give its path, or remove the obsolete path.')
+RECORD_MEMBERS_DIFFER = ('Members differ for {table}[{entry}] at {member}.{path}. Missing from {definition}: '
+                        '{undeclared}. Missing from the table: {unknown}. Bring the table and declaration into agreement.')
+RECORD_OBJECT_UNMAPPED = ('Object {member}.{path} in {definition} has no entry in {table}. Add its table entry and '
+                          'path, or reference a shared definition that another validator checks.')
+RECORD_COPY_REDECLARED = ('The declaration of {member} at {path} must reference {definition}. Replace it with '
+                          '{{"$ref": "{definition}"}}.')
+RECORD_COPY_STALE = ('Cannot find the statement for record copy {member} in {site} (digest {digest}). Review the '
+                     'copy and update its statement digest or its declaration.')
+RECORD_MEMBER_CHECK_UNLISTED = ('The member check at {module}:{line} (digest {digest}) must read {name}. If it '
+                                'checks a different record member, list its digest, count and reason in other_member_checks.')
+RECORD_MEMBER_CHECK_COUNT = ('The check {call} in {module} (digest {digest}) appears {held} times. The row for '
+                             '{member} lists {listed}. Review the calls and update the count or use the member table.')
+RECORD_DECLARATION_INCOMPLETE = ('The declaration {definition} is incomplete at {member}.{path}. Check the definition '
+                                 'and its references. Give each member a class and each list a closed bound and a ground.')
 OPAQUE_VALUE_INVALID = ('Packet member {path} must be a JSON value within its declared serialized character bound. '
                         'A request-bound value requires the measured route allowance as validation context.')
 OPEN_MEMBER_PRESENT = ('Packet member {path} has the bound open. Give it the class and the bound of its field class, '
@@ -135,12 +158,7 @@ MEMBER_BOUND_INVALID = ('The bound of packet member {path} differs from the row 
                         'bound that the table gives, or name the entry, the rule and a required stop with tests.')
 MEMBER_FRAME_UNBOUNDED = ('Packet member {path}, one character above the size of its field class, stays in the frame '
                           'above that size. Correct its row in review_field_classes or the frame builder.')
-# The growing members under the value accounts keep the bound open until lane record-copies declares the accounts
-# (REC/reviews/opus-record-copies.md, finding F3): 23 members under each prefix, 69 in all. That lane empties this.
-RECORD_COPY_OPEN_PREFIXES = (
-    'result/exactory-problem-review-v2:problem_evidence.value.accounts.',
-    'adjudicator/exactory-problem-review-v2:problem_evidence.value.accounts.',
-    'adjudicator/exactory-problem-review-v2:scientific_history.*.packet.problem_evidence.value.accounts.')
+RECORD_COPY_OPEN_PREFIXES = ()
 # A packet of these roles is sent as one request: no parts adapter, chain family or session serves it in this
 # release. The request is sent only when its measure admits it; otherwise the stop ends it before a call.
 PAPER_REQUEST_ADMISSION = dict(entry='A23', rule='research_harness.review_route_capacity.require_covered_assignment',
@@ -1045,6 +1063,199 @@ def _collect_packet_call_digests(registry):
     return digests
 
 
+def _find_modified_bindings(tree):
+    """Return names which cannot be read as one simple assignment."""
+    assignments = {node.targets[0] for node in tree.body
+                   if isinstance(node, ast.Assign) and len(node.targets) == 1
+                   and isinstance(node.targets[0], ast.Name)}
+    names = set()
+    for node in ast.walk(tree):
+        if node in assignments:
+            continue
+        if isinstance(node, (ast.Name, ast.Subscript, ast.Attribute)) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            names.add(_read_root(node))
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            names.add(_read_root(node.func))
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.ExceptHandler)):
+            names.add(node.name)
+        elif isinstance(node, ast.alias):
+            names.add(node.asname or node.name.split('.')[0])
+        elif isinstance(node, ast.arg):
+            names.add(node.arg)
+    names.update(name for name, count in Counter(node.id for node in assignments).items() if count > 1)
+    return names
+
+
+def _read_member_tables(tree):
+    """Read statically assigned tables of required and optional member names."""
+    modified = _find_modified_bindings(tree)
+    tuples, tables = {}, {}
+
+    def read_names(node):
+        if isinstance(node, ast.Tuple) and all(isinstance(item, ast.Constant) and isinstance(item.value, str)
+                                               for item in node.elts):
+            return tuple(item.value for item in node.elts)
+        if isinstance(node, ast.Name):
+            return tuples.get(node.id)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            left, right = read_names(node.left), read_names(node.right)
+            if left is not None and right is not None:
+                return left + right
+        return None
+
+    def read_mapping(node):
+        if isinstance(node, ast.Dict) and all(isinstance(key, ast.Constant) and isinstance(key.value, str)
+                                              for key in node.keys):
+            return {key.value: value for key, value in zip(node.keys, node.values)}
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'dict'
+                and 'dict' not in modified and 'dict' not in assigned and not node.args
+                and all(keyword.arg is not None for keyword in node.keywords)):
+            return {keyword.arg: keyword.value for keyword in node.keywords}
+        return None
+
+    assigned = set()
+    for node in tree.body:
+        if not (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)):
+            continue
+        name = node.targets[0].id
+        if name in modified:
+            continue
+        names = read_names(node.value)
+        if names is not None:
+            tuples[name] = names
+        else:
+            entries = read_mapping(node.value)
+            if entries:
+                members = {}
+                for entry, value in entries.items():
+                    parts = read_mapping(value)
+                    if parts is None or 'required' not in parts or parts.keys() - {'required', 'optional', 'code'}:
+                        break
+                    required = read_names(parts['required'])
+                    optional = read_names(parts['optional']) if 'optional' in parts else ()
+                    if required is None or optional is None:
+                        break
+                    members[entry] = frozenset(required + optional)
+                else:
+                    tables[name] = members
+        assigned.add(name)
+    return tables
+
+
+def _walk_copy_objects(node, definitions, external, path=(), seen=()):
+    """Yield declarations by path. A missing or cyclic reference yields None."""
+    if not isinstance(node, dict):
+        yield path, None
+    elif '$ref' in node:
+        name = node['$ref']
+        if name in seen or name not in definitions:
+            yield path, None
+        elif name not in external:
+            yield from _walk_copy_objects(definitions[name], definitions, external, path, seen + (name,))
+    else:
+        yield path, node
+        for name, child in node.get('members', {}).items():
+            yield from _walk_copy_objects(child, definitions, external, path + (name,), seen)
+        for key in ('items', 'values'):
+            if key in node:
+                yield from _walk_copy_objects(node[key], definitions, external, path + ('*',), seen)
+
+
+def _inspect_record_copy_declarations(registry, row, members):
+    member, definition, table = row['member'], row['definition'], row['table']
+    definitions = registry.get('definitions', {})
+    paths = {entry: tuple(path) for entry, path in row['paths'].items()}
+    declared = dict(_walk_copy_objects(definitions.get(definition), definitions, set(row.get('external', []))))
+    errors = []
+    for entry in sorted(members.keys() ^ paths.keys()):
+        errors.append(RECORD_ENTRY_UNMAPPED.format(table=table, member=member, entry=entry, definition=definition))
+    for entry in sorted(members.keys() & paths.keys()):
+        path = paths[entry]
+        node = declared.get(path)
+        names = set(node.get('members', {})) if node is not None else set()
+        if node is None or 'members' not in node or names != members[entry]:
+            errors.append(RECORD_MEMBERS_DIFFER.format(
+                member=member, table=table, entry=entry, path='.'.join(path) or '(root)', definition=definition,
+                undeclared=', '.join(sorted(members[entry] - names)) or 'none',
+                unknown=', '.join(sorted(names - members[entry])) or 'none'))
+    described = {paths[entry] for entry in members.keys() & paths.keys()}
+    for path, node in declared.items():
+        location = '.'.join(path) or '(root)'
+        if node is None or ('opaque_json' not in node and (not node.get('class') or 'items' in node and (
+                not node.get('ground') or not node.get('bound') or node['bound'] == 'open'))):
+            errors.append(RECORD_DECLARATION_INCOMPLETE.format(definition=definition, member=member, path=location))
+        if node is not None and 'members' in node and path not in described:
+            errors.append(RECORD_OBJECT_UNMAPPED.format(definition=definition, member=member, path=location, table=table))
+    for role, protocol, schema in iter_packet_schemas(registry):
+        for path, node in _walk_copy_objects(schema, definitions, {definition}):
+            if node is None or not path or path[-1] != 'value':
+                continue
+            held = node.get('members', {})
+            if member in held and held[member] != {'$ref': definition}:
+                location = role + '/' + protocol + ':' + '.'.join(path + (member,))
+                errors.append(RECORD_COPY_REDECLARED.format(member=member, definition=definition, path=location))
+    return errors
+
+
+def _inspect_record_member_checks(tree, module, table_name, row):
+    checker = row['member_check']
+    imports = {module: _collect_imports(tree, module)}
+    functions = {module: _collect_functions(tree)}
+    call_imports = {module: _map_call_imports(tree, module)}
+    listed = {check['ast_sha256']: check for check in row.get('other_member_checks', [])}
+    held = Counter()
+    errors = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or _resolve_callee(module, node, imports, functions, call_imports) != checker:
+            continue
+        if any(keyword.arg is None and isinstance(keyword.value, ast.Subscript)
+               and isinstance(keyword.value.value, ast.Name) and keyword.value.value.id == table_name
+               for keyword in node.keywords):
+            continue
+        digest = compute_ast_digest(node)
+        held[digest] += 1
+        if digest not in listed:
+            errors.append(RECORD_MEMBER_CHECK_UNLISTED.format(
+                line=node.lineno, module=module, digest=digest[:12], name=table_name))
+    for digest, check in listed.items():
+        if held[digest] != check['count']:
+            errors.append(RECORD_MEMBER_CHECK_COUNT.format(
+                member=row['member'], call=check.get('call', checker), module=module, digest=digest[:12],
+                listed=check['count'], held=held[digest]))
+    return errors
+
+
+def inspect_record_copies(sources, registry):
+    """Compare each declared copy of a stored record member with the member table of its validator. Source only.
+
+    A row of record_copies declares one member that a builder copies whole from a stored record into a packet: the
+    statement of the copy (caller, ast_sha256), the name of the member, the one definition that declares it, the
+    member table of the module that validates the stored record, the path of each entry of the table in the
+    definition, the shared definitions that other checks own (external), and the calls of the member check in the
+    module of the table that check no object of the member (other_member_checks).
+    """
+    errors = []
+    for row in registry.get('record_copies', []):
+        module, _, table_name = row['table'].rpartition('.')
+        tree = ast.parse(sources[module]) if module in sources else None
+        members = _read_member_tables(tree).get(table_name) if tree is not None else None
+        if members is None:
+            errors.append(RECORD_TABLE_UNREADABLE.format(table=row['table'], member=row['member']))
+        elif row['definition'] not in registry.get('definitions', {}):
+            errors.append(RECORD_DECLARATION_INCOMPLETE.format(
+                definition=row['definition'], member=row['member'], path='(root)'))
+        else:
+            errors.extend(_inspect_record_copy_declarations(registry, row, members))
+            errors.extend(_inspect_record_member_checks(tree, module, table_name, row))
+        caller = row['caller']
+        module = _find_caller_module(caller, sources)
+        function = _collect_callers(ast.parse(sources[module]), module).get(caller) if module is not None else None
+        if function is None or not any(isinstance(node, ast.Assign)
+                                       for node in _index_sites(function).get(row['ast_sha256'], ())):
+            errors.append(RECORD_COPY_STALE.format(member=row['member'], site=caller, digest=row['ast_sha256'][:12]))
+    return sorted(set(errors))
+
+
 def inspect_packet_sources(sources, registry):
     """Inspect source text only; never import builders or read a record.
 
@@ -1055,6 +1266,7 @@ def inspect_packet_sources(sources, registry):
     for role, protocol, schema in iter_packet_schemas(registry):
         _check_declarations(schema, registry, role + '/' + protocol, errors)
     errors.extend(validate_open_members(registry))
+    errors.extend(inspect_record_copies(sources, registry))
     listed = set(registry.get('modules', []))
     readers = set(registry.get('readers', []))
     names = _collect_member_names(registry)

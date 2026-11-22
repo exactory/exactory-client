@@ -400,15 +400,10 @@ class QuantityFactoryTests(unittest.TestCase):
         hidden = copy.deepcopy(registry)
         identity = next(iter(hidden['shipped_quantity_properties']))
         hidden['quantity_contracts'][identity] = {'gap': 'A1_frame_metadata', 'declared_entry': 'Q3'}
-        self.assertTrue(inspect_quantity_factories(hidden, read_matrix(), FACTORIES))
-        # field-classes is installed: a gap of that unit passes only for the members that lane record-copies
-        # declares. Without that exception, the 23 members under the first prefix fail before any execution.
         matrix = read_matrix()
         self.assertIn('field-classes', matrix['installed_units'])
-        with patch.object(inventory, 'RECORD_COPY_OPEN_PREFIXES', inventory.RECORD_COPY_OPEN_PREFIXES[1:]):
-            errors = inspect_quantity_factories(registry, matrix, FACTORIES)
-        self.assertIn(inventory.QUANTITY_COVERAGE_MISSING.format(
-            path=inventory.RECORD_COPY_OPEN_PREFIXES[0] + 'alternatives'), errors)
+        self.assertIn(inventory.QUANTITY_COVERAGE_MISSING.format(path=identity),
+                      inspect_quantity_factories(hidden, matrix, FACTORIES))
 
     def test_new_bounded_member_requires_reachable_executable_variant_not_a_legacy_gap(self):
         from research_harness import review_packets
@@ -649,17 +644,14 @@ class ProductionPacketInventoryTests(unittest.TestCase):
 
     def test_k4_only_the_record_copy_members_keep_the_bound_open(self):
         registry = read_packet_registry()
-        opened = inventory.list_open_members(registry)
-        for prefix in inventory.RECORD_COPY_OPEN_PREFIXES:
-            self.assertEqual(len([identity for identity in opened if identity.startswith(prefix)]), 23, prefix)
-        self.assertEqual(len(opened), 69)
+        self.assertEqual(inventory.RECORD_COPY_OPEN_PREFIXES, ())
+        self.assertEqual(inventory.list_open_members(registry), set())
         self.assertEqual(validate_open_members(registry), [])
-        members = find_members(registry)
         bounds = {}
-        for identity, member in members.items():
-            kind = 'open' if member['bound'] == 'open' else next(iter(member['bound']))
+        for member in find_members(registry).values():
+            kind = next(iter(member['bound']))
             bounds[kind] = bounds.get(kind, 0) + 1
-        self.assertEqual(bounds, dict(open=69, field_class=6583, request_admission=1428, chain_stop=21,
+        self.assertEqual(bounds, dict(field_class=6588, request_admission=1428, chain_stop=21,
                                       serialized_characters=35))
         # A copy of the registry with one more open member fails, and so does a packet checked against it.
         changed = copy.deepcopy(registry)
@@ -670,7 +662,7 @@ class ProductionPacketInventoryTests(unittest.TestCase):
         self.assertTrue(validate_packet('bar', dict(protocol='exactory-problem-review-v2'), changed))
 
     def test_k5_every_bounded_member_executes_its_field_class_or_its_admission_stop(self):
-        """Each of the 8,032 bounded members is classified by the frame builder one character above its size.
+        """Each of the 8,037 bounded members is classified by the frame builder one character above its size.
 
         Assertion K5 executes every declared member, so the count is that of the registry, and the size is the
         smallest at which the frame moves the member. Measured in the must-pass run: 8.7 s on 3.12, 11.5 s on 3.9."""
