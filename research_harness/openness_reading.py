@@ -26,7 +26,7 @@ import hashlib
 import json
 import math
 
-from . import review_excerpts
+from . import capture_selection, review_excerpts
 from . import review_transport as transport
 from .bar_sources import _reference, descriptor
 from .errors import ResearchError, describe_error_at
@@ -929,6 +929,13 @@ def list_result_texts(artifacts, native):
             rows.append(dict(kind='result_text', native_attempt_digest=result['native_attempt_digest'],
                 acceptance_id=result['acceptance_id'], text_sha256=sha256, artifact=carried[sha256]))
     return rows
+
+
+# C16: the content records. The reading units of a packet derive from the first five kinds, and the check of the texts
+# of a v5 or v6 final turn reads bundle_selection beside them. A selection of carried readings of version 3 reads these
+# kinds as they stood at the start of each earlier chain, and every other kind as it reads it today.
+READING_CONTENT_KINDS = ('work', 'source', 'source_bundle', 'reading', capture_selection.SELECTION_KIND,
+                         'bundle_selection')
 
 
 def list_reading_rows(records, artifacts, native, *, review=None):

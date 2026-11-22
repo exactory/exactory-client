@@ -1702,12 +1702,16 @@ def prepare_first_assignment(records, artifacts, value, route, logical, carried_
 
 def _describe_carried_identity(records, value, route, native):
     minimum = native['scientific_context']['openness_minimum']
+    revision = value.get('recorded_revision')
+    if revision is None:
+        # One pass over every record, made only for a value that holds no stamp.
+        revision = 1 + max((row.get('recorded_revision', 0) for group in records.values() for row in group.values()),
+                           default=0)
     return dict(**describe_protocol(native=native)['carried_identity'],
         reviewer_id=value['reviewer_id'], author_id=value['author_id'], route=route,
         subject_digest=native['subject_digest'], claim_digest=native['claim_digest'],
         formulations=dict(statement=minimum['statement'], neighbours=minimum['neighbours']),
-        recorded_revision=value.get('recorded_revision', 1 + max(
-            (row.get('recorded_revision', 0) for group in records.values() for row in group.values()), default=0)))
+        recorded_revision=revision)
 
 
 def prepare_carried_assignment(records, artifacts, value, route, logical, admission):
@@ -2682,17 +2686,17 @@ def _require_verification(condition, message, **details):
 def _verify_carried_origins(records, artifacts, first, native, route, plan, evaluation):
     """Condition 1: authenticate named origin prefixes through their protocol observers.
 
-    Version 2 first checks the complete selection against the authenticated store before this assignment.
+    Versions 2 and 3 first check the complete selection against the authenticated store before this assignment.
     Origin observers recurse only into assignments recorded before this first turn.
     """
-    from .openness_carried import SELECTION_PROTOCOL, verify_stored_selection
+    from .openness_carried import CUTOFF_PROTOCOLS, verify_stored_selection
     reference = first['carried_selection']
     selection = json.loads(artifacts.read(reference['artifact']))
     _require_verification(isinstance(selection, dict) and reference['protocol'] == selection.get('protocol')
                           and reference['digest'] == digest(selection),
                           ORIGIN_VERIFICATION_MESSAGE)
     cutoff = None
-    if reference['protocol'] == SELECTION_PROTOCOL:
+    if reference['protocol'] in CUTOFF_PROTOCOLS:
         stamp = first['recorded_revision']
         # Records without a history end here with the refusal of the evaluation, which is no state of a chain.
         cutoff = evaluation.read_snapshot(stamp - 1)

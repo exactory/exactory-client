@@ -22,6 +22,9 @@
           "harness",
           "record"
         ],
+        "research_harness/openness_carried.py:read_chain_records#1": [
+          "content"
+        ],
         "research_harness/publication_scope.py:find_required_corrections#1": [
           "record"
         ],
@@ -30,6 +33,10 @@
         ],
         "research_harness/storage.py:_HistoricalSnapshot.read_snapshot#2": [
           "harness"
+        ],
+        "research_harness/storage.py:pin_kinds#1": [
+          "harness",
+          "record"
         ]
       },
       "component_evidence_uninspected": {

@@ -34,12 +34,14 @@ def build_nested_value(levels, container=list):
 
 
 class ResearchStorageTests(unittest.TestCase):
-    def test_store_with_a_selection_of_version_2_gives_its_records_at_the_cutoff(self):
-        protocol = "exactory-openness-carried-selection-v2"
+    def test_store_with_a_reading_chain_keeps_its_history(self):
+        """N6 (C21): a store whose review assignment belongs to a reading chain keeps the history, so that a selection
+        reads each earlier chain at its start; assignments without a reading chain give none. On the base a store
+        without a selection of version 2 has no history."""
         store = Store(self.workspace, create=True)
         self.add(store)
         before = store.snapshot()
-        assignment = {"recorded_revision": 2, "carried_selection": {"protocol": protocol}}
+        assignment = {"recorded_revision": 2, "reading_chain": {"first_assignment_id": "chain", "turn": 1}}
         def assign(tx):
             tx.put("review_assignment", "chain", assignment)
             tx.put("review_attempt", "attempt", {"assignment_id": "chain"})
@@ -62,7 +64,7 @@ class ResearchStorageTests(unittest.TestCase):
         self.assertEqual(current.read_snapshot(2)["review_assignment"]["chain"], assignment)
 
         legacy = {"carried_selection": {"protocol": "exactory-openness-carried-selection-v1"}}
-        unrelated = {"reviewer_id": protocol}
+        unrelated = {"reviewer_id": "reading_chain", "reading_chain": None}
         for index, assignments in enumerate(((legacy,), (unrelated,), (legacy, unrelated))):
             with self.subTest(assignments=assignments):
                 other = Store(self.workspace / str(index), create=True)
