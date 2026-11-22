@@ -518,10 +518,15 @@ class OwnedCallReconciliationTests(LiteratureCase):
                 self.assertEqual(record["error"]["code"], "review_invocation_interrupted")
 
                 standalone, chain, alternative = refusal.message.partition("review-series")
-                for instruction in ('review-run', 'action "reconcile"', 'operation', 'invocation_id',
-                                    'result.released is false', 'termination can be confirmed', 'fresh request ID',
-                                    'current expected revision', 'lost the response', 'same request ID'):
+                for instruction in ('review-run', 'action "reconcile"', 'operation', 'invocation_id'):
                     self.assertIn(instruction, standalone)
+                _, pending_condition, recovery = standalone.partition('result.released is false')
+                pending_poll, lost_response_condition, retry = recovery.partition('lost the response')
+                self.assertTrue(pending_condition and lost_response_condition)
+                self.assertIn('termination can be confirmed', pending_poll)
+                self.assertIn('fresh request ID', pending_poll)
+                self.assertIn('current expected revision', pending_poll)
+                self.assertIn('same request ID', retry)
                 self.assertTrue(chain)
                 self.assertIn("assignment", standalone)
                 self.assertIn("assignment", alternative)

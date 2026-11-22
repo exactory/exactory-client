@@ -4,9 +4,9 @@ import os
 import sqlite3
 import threading
 import time
-import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
+from copy import deepcopy
 from itertools import chain, repeat
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -168,6 +168,14 @@ class CapturePollingTests(WorkerPollingFixture):
 
 class RemotePollingTests(DevelopmentCase):
     def setUp(self):
+        prior_claims = remote_execution._RUNNER_CLAIMS
+        saved_claims = deepcopy(prior_claims)
+
+        def check_runner_claims_restored():
+            self.assertIs(remote_execution._RUNNER_CLAIMS, prior_claims)
+            self.assertEqual(prior_claims, saved_claims)
+
+        self.addCleanup(check_runner_claims_restored)
         super().setUp()
         runner_claims = patch.object(remote_execution, '_RUNNER_CLAIMS', {})
         runner_claims.start()
@@ -330,6 +338,8 @@ class RemotePollingTests(DevelopmentCase):
             return released
 
         def read_after_release():
+            if reconcile.called and not collect.called:
+                self.fail('Owned reconciliation read a second snapshot before collecting the job')
             if busy:
                 raise busy.pop()
             return snapshot()
@@ -338,6 +348,7 @@ class RemotePollingTests(DevelopmentCase):
         with patch.object(self.store, 'snapshot', side_effect=read_after_release), \
                 patch.object(remote_execution, '_release', side_effect=release_then_make_store_busy) as release_calls, \
                 patch.object(execution, 'reconcile_execution', wraps=execution.reconcile_execution) as reconcile, \
+                patch.object(remote_execution, 'collect_colab', wraps=remote_execution.collect_colab) as collect, \
                 patch.object(remote_execution, 'time', clock):
             result = remote_execution.launch_colab(self.store, claim)
         self.assertTrue(result['ok'])
@@ -345,6 +356,7 @@ class RemotePollingTests(DevelopmentCase):
         reconcile.assert_called_once()
         self.assertIn('snapshot', reconcile.call_args.kwargs)
         self.assertIsNotNone(reconcile.call_args.kwargs['snapshot'])
+        collect.assert_called_once()
         self.assertEqual(clock.intervals, [.01])
         self.assertEqual(['read_store' in call.kwargs for call in release_calls.call_args_list], [True, False])
         self.assertEqual(len(list((self.sync / 'jobs').iterdir())), 1)
@@ -385,6 +397,7 @@ class RemotePollingTests(DevelopmentCase):
 
     def test_busy_reconciliation_read_after_done_names_the_original_job(self):
         claim, job = self.finish_remote_job()
+        self.assertIn((str(self.sync), job['job_id']), remote_execution._RUNNER_CLAIMS)
         release = remote_execution._release
         clock = PollClock()
 
@@ -431,15 +444,3 @@ class RemotePollingTests(DevelopmentCase):
             with self.assertRaises(ResearchError) as caught:
                 remote_execution._release(self.store, claim, root, job)
         self.assertIs(caught.exception, error)
-
-
-class RemotePollingFixtureTests(unittest.TestCase):
-    def test_remote_polling_cleanup_preserves_the_previous_runner_claims(self):
-        previous_claims = {('fixture-sentinel', 'seed'): {}}
-        with patch.object(remote_execution, '_RUNNER_CLAIMS', previous_claims):
-            case = RemotePollingTests('test_busy_reconciliation_read_after_done_names_the_original_job')
-            result = case.run()
-            self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
-            self.assertFalse(case.sync.exists())
-            self.assertIs(remote_execution._RUNNER_CLAIMS, previous_claims)
-            self.assertEqual(previous_claims, {('fixture-sentinel', 'seed'): {}})
