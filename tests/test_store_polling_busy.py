@@ -1,7 +1,11 @@
 """Store contention delays polling without replacing each waiter's deadline."""
 
 import os
+import sqlite3
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from itertools import chain, repeat
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -296,12 +300,17 @@ class RemotePollingTests(DevelopmentCase):
         self.assertEqual(caught.exception.details['job_id'], job['job_id'])
         self.assertGreaterEqual(clock.elapsed, claim['config']['timeout_seconds'])
 
-    def test_first_reconciliation_read_after_done_retries_a_busy_store(self):
+    def finish_remote_job(self):
         claim = self.make_remote_claim()
         root, job = remote_execution._publish_job(self.store, claim)
         self.assertFalse(remote_execution.serve_scan_once(self.sync))
         remote_execution._release(self.store, claim, root, job)
         self.assertTrue(remote_execution.serve_scan_once(self.sync))
+        self.assertTrue((root / 'results' / job['job_id'] / 'DONE').is_file())
+        return claim, job
+
+    def test_first_reconciliation_read_after_done_retries_a_busy_store(self):
+        claim, _ = self.finish_remote_job()
 
         snapshot = self.store.snapshot
         release = remote_execution._release
@@ -323,14 +332,76 @@ class RemotePollingTests(DevelopmentCase):
 
         busy_once = True
         with patch.object(self.store, 'snapshot', side_effect=read_after_release), \
-                patch.object(remote_execution, '_release', side_effect=release_then_make_store_busy), \
+                patch.object(remote_execution, '_release', side_effect=release_then_make_store_busy) as release_calls, \
                 patch.object(remote_execution, 'time', clock):
             result = remote_execution.launch_colab(self.store, claim)
         self.assertTrue(result['ok'])
         self.assertEqual(result['metric'], {'metric': 7})
         self.assertEqual(clock.intervals, [.01])
+        self.assertEqual(['read_store' in call.kwargs for call in release_calls.call_args_list], [True, False])
         self.assertEqual(len(list((self.sync / 'jobs').iterdir())), 1)
         self.assertEqual(len(snapshot()['records']['execution']), 1)
+
+    def test_done_near_deadline_keeps_the_command_store_wait(self):
+        claim, _ = self.finish_remote_job()
+        release = remote_execution._release
+        locked = threading.Event()
+        clock_offset = 0
+
+        def hold_write_lock():
+            with closing(sqlite3.connect(self.store._path)) as writer:
+                writer.execute('BEGIN EXCLUSIVE')
+                locked.set()
+                time.sleep(1.3)
+                writer.rollback()
+
+        def release_near_deadline(*args, **kwargs):
+            nonlocal clock_offset, writer_result
+            result = release(*args, **kwargs)
+            if 'read_store' in kwargs:
+                clock_offset = claim['config']['timeout_seconds'] - 0.05
+                writer_result = workers.submit(hold_write_lock)
+                self.assertTrue(locked.wait(3))
+            return result
+
+        clock = SimpleNamespace(monotonic=lambda: time.monotonic() + clock_offset, sleep=time.sleep)
+        writer_result = None
+        with ThreadPoolExecutor(max_workers=1) as workers, finishing.wait_for_store_in_command(), \
+                patch.object(remote_execution, '_release', side_effect=release_near_deadline), \
+                patch.object(remote_execution, 'time', clock):
+            result = remote_execution.launch_colab(self.store, claim)
+            self.assertIsNotNone(writer_result)
+            writer_result.result()
+        self.assertEqual((result['ok'], result['metric']), (True, {'metric': 7}))
+        self.assertEqual(len(self.store.snapshot()['records']['execution']), 1)
+
+    def test_busy_reconciliation_read_after_done_names_the_original_job(self):
+        claim, job = self.finish_remote_job()
+        release = remote_execution._release
+        clock = PollClock()
+
+        with closing(sqlite3.connect(self.store._path)) as writer:
+            def release_then_hold_store(*args, **kwargs):
+                result = release(*args, **kwargs)
+                clock.elapsed = claim['config']['timeout_seconds']
+                writer.execute('BEGIN EXCLUSIVE')
+                return result
+
+            with patch.object(finishing, 'SCOPED_FINISH_WAIT_SECONDS', 0.02), finishing.wait_for_store_in_command(), \
+                    patch.object(remote_execution, '_release', side_effect=release_then_hold_store), \
+                    patch.object(remote_execution, 'time', clock), self.assertRaises(ResearchError) as caught:
+                remote_execution.launch_colab(self.store, claim)
+
+        self.assertEqual(caught.exception.code, 'store_busy')
+        self.assertEqual(caught.exception.details['cause']['code'], 'store_busy')
+        self.assertEqual(caught.exception.details['admission_id'], claim['admission_id'])
+        self.assertEqual(caught.exception.details['job_id'], job['job_id'])
+        self.assertIn('reconcile-run', caught.exception.message)
+        self.assertNotIn('execution', self.store.snapshot()['records'])
+        result = execution.reconcile_execution(self.store, {'admission_id': claim['admission_id']},
+            expected_revision=self.store.revision, request_id='resume-after-busy-read')
+        self.assertEqual(result['metric'], {'metric': 7})
+        self.assertEqual(len(self.store.snapshot()['records']['execution']), 1)
 
     def test_other_remote_read_errors_surface_without_sleeping(self):
         claim = self.make_remote_claim()

@@ -852,6 +852,17 @@ class OutputRefusalTests(OtherWriters, OpennessReadingCase):
         receipt = self.invoke("turn-1", answer, attempt="attempt-turn-1-retry")
         self.assertEqual(receipt["result"]["status"], "completed")
 
+    def test_call_refusals_offer_standalone_reconciliation_before_the_chain_step(self):
+        for message in (review_worker.CALL_CHILD_STORE_BUSY_MSG, review_call_capture.CALL_CAPTURE_STORE_BUSY_MSG):
+            with self.subTest(message=message):
+                standalone, condition, chain = message.partition("For a review chain,")
+                self.assertTrue(condition)
+                self.assertIn('review-run', standalone)
+                self.assertIn('action "reconcile"', standalone)
+                self.assertIn('operation and invocation_id', standalone)
+                self.assertNotIn('review-series', standalone)
+                self.assertIn('review-series on its assignment', chain)
+
     def test_finish_refused_beyond_the_wait_is_recorded_by_the_same_request_without_a_call(self):
         answer = self.build_reading_response(self.packet)
         refusal = self.refuse_beyond_the_wait("review.invoke", lambda: self.invoke("turn-1", answer))

@@ -15,9 +15,9 @@ PROTOCOL = 'review-call-observation-v1'
 # The message of the capture of a reviewer call that a command owns when the store refused it beyond the wait.
 CALL_CAPTURE_STORE_BUSY_MSG = (
     'The research store stayed busy, and the observation of this reviewer call was not captured. No record holds what '
-    'the reviewer returned. Run review-series on its assignment, or review-run with action reconcile and the '
-    'operation and invocation_id from details. Each of them records the call as interrupted. The next run '
-    'then calls the reviewer again.')
+    'the reviewer returned. Run review-run with a payload containing action "reconcile" and the operation and '
+    'invocation_id from details. This records the call as interrupted. For a review chain, review-series on its '
+    'assignment can also reconcile the call.')
 
 
 def _check_bindings(records, artifacts, captured, operation, payload, request_id):

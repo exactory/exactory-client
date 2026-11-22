@@ -44,9 +44,9 @@ from .workspace import checked_parent
 # writes, and the records with which the worker takes and starts its reservation and captures its call.
 CALL_CHILD_STORE_BUSY_MSG = (
     'The research store stayed busy, and a transport process of this reviewer call was not recorded. That process '
-    'started no program, and no request was sent to the reviewer. The call has no outcome yet. Run review-series on '
-    'its assignment, or review-run with action reconcile and the operation and invocation_id from details. Each of '
-    'them records the call as interrupted. The next run then starts the reviewer.')
+    'started no program, and no request was sent to the reviewer. Run review-run with a payload containing '
+    'action "reconcile" and the operation and invocation_id from details. This records the call as interrupted. '
+    'For a review chain, review-series on its assignment can also reconcile the call.')
 WORKER_CHILD_STORE_BUSY_MSG = (
     'The research store stayed busy, and a transport process of the reviewer call of this review task was not '
     'recorded. That process started no program, and no request was sent to the reviewer. The worker captures this '

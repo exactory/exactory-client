@@ -7,11 +7,13 @@ route with the fixture of test_review_route_renewal, because the Claude runtime 
 """
 
 import copy
+import json
 import subprocess
 import sys
 import unittest
 from unittest.mock import patch
 
+from literature_fixtures import LiteratureCase
 from research_harness import record_check, review_output_correction as correction, review_task_execution
 from research_harness import review_claude_transport as claude
 from research_harness import review_protocol as protocol, review_transport as transport
@@ -21,6 +23,39 @@ import test_review_output_correction as fixtures
 import test_review_route_renewal as renewal
 
 MISSING_RUNTIME_ERROR = ResearchError('review_runtime_missing', 'The CLI is not installed')
+
+
+def record_sender_child(case, store, operation, invocation_id, respond):
+    reservation_id = review_task_execution.identify_call(operation, invocation_id)
+
+    def send(route, request, credential):
+        with subprocess.Popen([sys.executable, '-c', 'pass'], start_new_session=True) as child:
+            case.assertEqual(child.wait(timeout=10), 0)
+            membership = store.snapshot()['records']['review_pool_membership'][reservation_id]
+            case.assertEqual((membership['operation'], membership['invocation_id'], membership['released']),
+                             (operation, invocation_id, False))
+            case.assertEqual([row['pgid'] for row in membership['children']], [child.pid])
+        return respond(route, request, credential)
+
+    return patch.object(transport, 'send_request', side_effect=send)
+
+
+class StandaloneRouteProbeTests(LiteratureCase):
+    def test_route_probe_records_its_transport_child(self):
+        self.mutate(protocol.record_route, dict(renewal.ROUTE, id='route'))
+
+        def respond(route, request, credential):
+            packet_text = request['input'][0]['content'].removeprefix(transport.PACKET_LABEL)
+            packet = json.loads(packet_text)
+            output = dict(allowed_control=packet['allowed_control'], evidence_control=packet['evidence_control'],
+                          excluded_controls=[])
+            return renewal.build_stub_response(route, request, output, 1540)
+
+        with record_sender_child(self, self.store, 'review.route_probe', 'owned-probe', respond) as send:
+            probe = self.mutate(protocol.probe_route, dict(id='owned-probe', route_id='route'))['result']
+        send.assert_called_once()
+        self.assertEqual(probe['status'], 'completed')
+        self.assertEqual(list(self.store.snapshot()['records']['review_route_probe']), ['owned-probe'])
 
 
 class RecordedRuntimeTests(unittest.TestCase):
@@ -157,32 +192,13 @@ class ClaudeRouteAdmissionTests(renewal.RouteRenewalFixture):
         return self.case.mutate(correction.invoke_correction,
                                 dict(id=identifier, assignment_id=repair['id'], route_id='route'))['result']
 
-    def record_sender_child(self, operation, invocation_id):
-        reservation_id = review_task_execution.identify_call(operation, invocation_id)
-
-        def send(route, request, credential):
-            with subprocess.Popen([sys.executable, '-c', 'pass'], start_new_session=True) as child:
-                self.assertEqual(child.wait(timeout=10), 0)
-                membership = self.records()['review_pool_membership'][reservation_id]
-                self.assertEqual((membership['operation'], membership['invocation_id'], membership['released']),
-                                 (operation, invocation_id, False))
-                self.assertEqual([row['pgid'] for row in membership['children']], [child.pid])
-            return self.respond(route, request, credential)
-
-        return patch.object(transport, 'send_request', side_effect=send)
-
-    def test_route_probe_records_its_transport_child(self):
-        with self.record_sender_child('review.route_probe', 'owned-probe') as send:
-            probe = self.probe('route', 'owned-probe')
-        send.assert_called_once()
-        self.assertEqual(probe['status'], 'completed')
-
     def test_output_correction_records_its_transport_child(self):
         """Two refused reassessments are needed to admit a correction on the original verified route."""
         repair, delta = self.build_twice_refused_reassessment()
         self.outputs.append(delta)
         with patch.object(claude, '_cli', return_value=('/fixture/claude', '2.1.322 (Claude Code)')), \
-                self.record_sender_child('review.output_correction', 'owned-correction') as send:
+                record_sender_child(self, self.case.store, 'review.output_correction', 'owned-correction',
+                                    self.respond) as send:
             corrected = self.invoke_correction(repair, 'owned-correction')
         send.assert_called_once()
         self.assertEqual(corrected['correction_status'], 'accepted')

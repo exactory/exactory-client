@@ -389,10 +389,8 @@ class CIShardTests(unittest.TestCase):
 
     def test_run_modules_help_describes_the_reviewer_program_guard(self):
         with tempfile.TemporaryDirectory() as directory:
-            client = Path(directory)
-            self.copy_runner(client)
-            result = subprocess.run([sys.executable, str(client / "ci/unittest_shards.py"), "run-modules", "--help"],
-                                    cwd=client, capture_output=True, text=True, timeout=60)
+            result = subprocess.run([sys.executable, str(ROOT / "ci/unittest_shards.py"), "run-modules", "--help"],
+                                    cwd=directory, capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("reviewer program guard", " ".join(result.stdout.split()))
 

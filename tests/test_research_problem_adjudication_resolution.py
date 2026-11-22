@@ -1749,6 +1749,7 @@ class ReviewOutputRefusalTests(delivery_fixtures.ProblemDeliveryCase):
         with patch.object(review_refusal, "prepared_task_mutation", side_effect=commit_refusal), \
                 patch.object(finishing, "time", WaitlessTime()), self.assertRaises(ResearchError) as caught:
             self.record_cli(output, "focused", "review-adjudication", request=request)
+        self.assertEqual(busy, [])
         self.assertEqual(caught.exception.code, "review_evidence_undelivered")
         records = self.records()
         refusal = records["review_output_refusal"]["refused-1"]
