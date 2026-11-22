@@ -403,8 +403,10 @@ class CallContextRoleTests(RoleFixtures, unittest.TestCase):
 
     def test_k8_refresh_chain_reads_its_own_turns(self):
         """The refresh of a review that a chain of the session rules v4 recorded is a new chain in the slot (rules F1
-        and F4 of its design), so its call reads its own turns and not the turns of the earlier chain that its
-        context names in session_refresh: a contamination event on the final of the earlier chain stops no call."""
+        and F4 of its design), so rule PC1 reads its own turns and not the turns of the earlier chain that its
+        context names in session_refresh. The review of the slot counts by rule E5 of the refresh edges, which reads
+        a contamination across that link: after a contamination event on the final of the earlier chain, the plan of
+        the refresh head is the handoff to the repair of the head with that event."""
         import test_review_session_v4_refresh as refresh
         fixture = refresh.SessionRefreshTests()
         fixture.setUp()
@@ -416,7 +418,12 @@ class CallContextRoleTests(RoleFixtures, unittest.TestCase):
         records = fixture.case.read_records()
         self.assertEqual([turn['id'] for turn in protocol.list_review_turns(records, first)], [first['id']])
         self.assertIsNone(protocol.find_unverified_context(records, fixture.case.artifacts, first))
-        self.assertEqual(fixture.plan(first['id'])['state'], 'run')
+        plan = fixture.plan(first['id'])
+        self.assertEqual((plan['state'], plan['command'], plan['code']),
+                         ('handoff', 'review-assignment', 'review_context_contaminated'))
+        repair = plan['details']['step']['payload']['context']['context_repair']
+        self.assertEqual((plan['details']['step']['id'], repair['assignment_id']), (1, first['id']))
+        self.assertEqual(len(repair['event_ids']), 1)
 
     def test_k3_recorded_request_is_replayed_after_the_event(self):
         """A review-run request that is already committed returns its receipt after the probe failed: the replay

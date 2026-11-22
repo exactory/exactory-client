@@ -907,9 +907,9 @@ def select_problem_slot_assignments(records, stage, subject):
     return heads
 
 
-def _collect_problem_reviews(records, stage, subject):
+def _collect_problem_reviews(records, stage, subject, *, evaluation=None):
     from .review_context_repair import historical_reviews, slot_id
-    historical = {review['id'] for review in historical_reviews(records, None, stage)}
+    historical = {review['id'] for review in historical_reviews(records, None, stage, evaluation=evaluation)}
     if stage == 'result':
         current = {assignment['id'] for assignment in select_problem_slot_assignments(records, stage, subject).values()}
         return [review['id'] for review in sorted(records.get('value_review', {}).values(),
@@ -1389,6 +1389,8 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
     """Assess fixed independent pairs and their observed delivered problem evidence."""
     from .problem_claims import describe_problem_evidence, compute_problem_evidence_digest
     from .review_protocol import build_problem_subject, is_version_2_problem_result, validate_problem_bars
+    from .evaluation import Evaluation
+    evaluation = Evaluation.of(records, artifacts) if isinstance(artifacts, (ArtifactStore, Evaluation)) else None
     subject = build_problem_subject(records)
     staged_results = any((assignment.get('staged_review') or assignment.get('review_parts'))
                          and assignment.get('staged_review', {}).get('kind') != 'task'
@@ -1396,13 +1398,13 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
                          for assignment in records.get('review_assignment', {}).values())
     slot_outcomes = collect_problem_slot_outcomes(records, artifacts, subject)
     has_unfinished_results = bool(slot_outcomes['incomplete'] or slot_outcomes['pending'])
-    review_ids = _collect_problem_reviews(records, 'result', subject) if review_ids is None else review_ids
-    bar_review_ids = _collect_problem_reviews(records, 'bar', subject) if bar_review_ids is None else bar_review_ids
+    review_ids = _collect_problem_reviews(records, 'result', subject, evaluation=evaluation) if review_ids is None else review_ids
+    bar_review_ids = _collect_problem_reviews(records, 'bar', subject, evaluation=evaluation) if bar_review_ids is None else bar_review_ids
     obligations, pairs = [], {}
     for stage, identifiers, code in (('bar', bar_review_ids, 'problem_bar_pending'),
                                       ('result', review_ids, 'problem_review_pair_required')):
         if stage == 'result':
-            current_ids = set(_collect_problem_reviews(records, stage, subject))
+            current_ids = set(_collect_problem_reviews(records, stage, subject, evaluation=evaluation))
             superseded = [identifier for identifier in identifiers
                           if identifier in records.get('value_review', {}) and identifier not in current_ids]
             if superseded:
@@ -1432,7 +1434,7 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
             pairs[stage] = []
         obligations.extend(_independence(records, artifacts, pairs[stage]))
     bars, reviews = pairs['bar'], pairs['result']
-    slate_ids = _collect_problem_reviews(records, 'slate', build_problem_subject(records, 'slate'))
+    slate_ids = _collect_problem_reviews(records, 'slate', build_problem_subject(records, 'slate'), evaluation=evaluation)
     for identifier in dict.fromkeys(bar_review_ids + review_ids + slate_ids):
         review = records.get('value_review', {}).get(identifier)
         if review is None:

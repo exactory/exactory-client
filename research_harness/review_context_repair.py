@@ -33,6 +33,8 @@ EXHAUSTION_PROBE_MSG = (
     'context.context_repair.probe_id.')
 # The recorded events that end a reviewer context: a contamination of the context, or the retirement of its route.
 CAUSE_KINDS = ('contamination', 'route_retired')
+REPAIR_STALE_MSG = 'Later predecessor contamination requires explicit reassessment of the new evidence'
+REFRESH_CONTAMINATED_MSG = 'Contamination in the refresh lineage requires a repair of the current head.'
 # The suffix of 0.56.0 and earlier, kept so that assignments recorded with it stay verified: it said "Return an
 # additional reassessment object", which reviewers read as a second JSON object after the role's object.
 PROMPT_0560 = (
@@ -228,7 +230,7 @@ def _assignment(records, identifier):
     return saved
 
 
-def _lineage(records, assignment):
+def _lineage(records, assignment, *, within_refresh=False):
     chain, seen = [], set()
     while assignment is not None:
         identifier = assignment['id']
@@ -236,9 +238,17 @@ def _lineage(records, assignment):
             raise ResearchError('review_context_repair_mismatch', 'Reviewer lineage must be acyclic')
         seen.add(identifier)
         chain.append(assignment)
+        if within_refresh and 'session_refresh' in assignment.get('context', {}):
+            break
         parent = find_scientific_predecessor(assignment)
         assignment = _assignment(records, parent) if parent is not None else None
     return list(reversed(chain))
+
+
+def find_latest_chain_repair(records, assignment):
+    """The latest repair whose output and delivery rules apply in this refresh chain."""
+    return next((row for row in reversed(_lineage(records, assignment, within_refresh=True))
+                 if row.get('context', {}).get('context_repair') is not None), None)
 
 
 def slot_id(records, assignment):
@@ -307,11 +317,52 @@ def list_context_turns(records, assignment):
     return exposure[last_repair:]
 
 
-def cause_events(records, identifiers):
+def cause_events(records, identifiers, *, events_by_assignment=None):
     """The recorded contaminations and route retirements of the assignments in a lineage, in recorded order."""
-    return sorted((event for event in records.get('review_context_event', {}).values()
-                   if event['assignment_id'] in identifiers and event['kind'] in CAUSE_KINDS),
+    if events_by_assignment is None:
+        events = (event for event in records.get('review_context_event', {}).values()
+                  if event['assignment_id'] in identifiers)
+    else:
+        events = (event for identifier in identifiers for event in events_by_assignment.get(identifier, ()))
+    return sorted((event for event in events if event['kind'] in CAUSE_KINDS),
                   key=lambda event: (event['recorded_revision'], event['id']))
+
+
+def _index_context_events(records, evaluation):
+    if evaluation is not None:
+        return evaluation.index_records('review_context_event', 'assignment_id')
+    index = {}
+    for event in records.get('review_context_event', {}).values():
+        index.setdefault(event['assignment_id'], []).append(event)
+    return index
+
+
+def find_review_context_issue(records, assignment, *, evaluation=None, lineage=None, events_by_assignment=None):
+    """Return the context refusal for present independent credit, if any."""
+    def check():
+        chain = _lineage(records, assignment) if lineage is None else lineage
+        repair_index = next((i for i in range(len(chain) - 1, -1, -1)
+                             if chain[i].get('context', {}).get('context_repair') is not None), None)
+        refreshed = any('session_refresh' in row.get('context', {}) for row in chain)
+        events = events_by_assignment
+        if refreshed:
+            if events is None:
+                events = _index_context_events(records, evaluation)
+            exposure = (_exposure_lineage(records, assignment) if repair_index is None else chain[repair_index:])
+            if any(event['kind'] == 'contamination' for row in exposure for event in events.get(row['id'], ())):
+                return 'review_context_contaminated'
+        if repair_index is not None:
+            repair = chain[repair_index]['context']['context_repair']
+            predecessor = _assignment(records, repair['assignment_id'])
+            identifiers = {row['id'] for row in _exposure_lineage(records, predecessor)}
+            current = cause_events(records, identifiers, events_by_assignment=events)
+            if set(repair['event_ids']) != {event['id'] for event in current}:
+                return 'review_context_repair_stale'
+        return None
+
+    if evaluation is None:
+        return check()
+    return evaluation.once(('review_context_issue', assignment['id']), check)
 
 
 def _reviews(records, identifiers):
@@ -321,18 +372,50 @@ def _reviews(records, identifiers):
                   key=lambda value: (value.get('recorded_revision', 0), value['id']))
 
 
-def historical_reviews(records, dossier_id, stage):
+def historical_reviews(records, dossier_id, stage, *, evaluation=None, refresh_only=False):
     """Return retained findings whose independence was lost or reassessed."""
+    assignments = records.get('review_assignment', {})
+
+    def has_refresh_links():
+        return any('session_refresh' in row.get('context', {}) for row in assignments.values())
+
+    has_refresh = (has_refresh_links() if evaluation is None else
+                   evaluation.once('has_session_refresh_links', has_refresh_links))
+    if refresh_only and not has_refresh:
+        return []
+    recorded = ({review['assignment_id'] for kind in ('value_review', 'review_adjudication')
+                 for review in records.get(kind, {}).values()} if has_refresh else set())
+    events_by_assignment = _index_context_events(records, evaluation) if has_refresh else None
     historical = set()
-    contaminated = {event['assignment_id'] for event in records.get('review_context_event', {}).values()
-                    if event['kind'] == 'contamination'}
-    for saved in records.get('review_assignment', {}).values():
+    contaminated = set()
+    if not refresh_only:
+        if events_by_assignment is None:
+            contaminated = {event['assignment_id'] for event in records.get('review_context_event', {}).values()
+                            if event['kind'] == 'contamination'}
+        else:
+            contaminated = {identifier for identifier, events in events_by_assignment.items()
+                            if any(event['kind'] == 'contamination' for event in events)}
+    for saved in assignments.values():
         if saved['dossier_id'] != dossier_id or saved['role'] != stage:
             continue
+        if refresh_only and saved['id'] not in recorded:
+            continue
         chain = _lineage(records, saved)
-        for index, ancestor in enumerate(chain):
-            if ancestor.get('context', {}).get('context_repair') is not None:
-                historical.update(item['id'] for item in chain[:index])
+        if not refresh_only:
+            for index, ancestor in enumerate(chain):
+                if ancestor.get('context', {}).get('context_repair') is not None:
+                    historical.update(item['id'] for item in chain[:index])
+        if has_refresh and any('session_refresh' in row.get('context', {}) for row in chain):
+            if find_review_context_issue(records, saved, evaluation=evaluation, lineage=chain,
+                                         events_by_assignment=events_by_assignment):
+                historical.add(saved['id'])
+                # A recorded refresh replaced these reviews in its slot. Losing its independence
+                # does not make an older review current again.
+                if saved['id'] in recorded:
+                    historical.update(row['id'] for row in chain)
+            continue
+        if refresh_only:
+            continue
         if any(item['id'] in contaminated for item in list_context_turns(records, saved)):
             historical.add(saved['id'])
     return _reviews(records, historical)
@@ -662,11 +745,10 @@ def _is_unchanged(original, output, identities):
 
 def reassessment_reviews(records, assignment):
     """Find all same-phase final findings inherited by the latest repair."""
-    repairs = [item for item in _lineage(records, assignment)
-               if item.get('context', {}).get('context_repair') is not None]
-    if not repairs:
+    bound = find_latest_chain_repair(records, assignment)
+    if bound is None:
         return []
-    predecessor = _assignment(records, repairs[-1]['context']['context_repair']['assignment_id'])
+    predecessor = _assignment(records, bound['context']['context_repair']['assignment_id'])
     return _reviews(records, {item['id'] for item in _lineage(records, predecessor)})
 
 
@@ -679,7 +761,7 @@ def collect_problem_review_history(records, assignment):
                               if item['role'] == assignment['role']})
 
 
-def validate_repair_origin(records, artifacts, assignment):
+def validate_repair_origin(records, artifacts, assignment, *, lineage=None, events_by_assignment=None):
     """Retain exact original provenance when recording historical science.
 
     Current independent approval additionally requires validate_repair_binding.
@@ -687,7 +769,8 @@ def validate_repair_origin(records, artifacts, assignment):
     """
     from .review_protocol import route_state
 
-    repairs = [item for item in _lineage(records, assignment)
+    chain = _lineage(records, assignment) if lineage is None else lineage
+    repairs = [item for item in chain
                if item.get('context', {}).get('context_repair') is not None]
     if not repairs:
         return
@@ -695,7 +778,7 @@ def validate_repair_origin(records, artifacts, assignment):
     repair = bound['context']['context_repair']
     predecessor = _assignment(records, repair['assignment_id'])
     identifiers = {item['id'] for item in _exposure_lineage(records, predecessor)}
-    events = [event for event in cause_events(records, identifiers)
+    events = [event for event in cause_events(records, identifiers, events_by_assignment=events_by_assignment)
               if event['recorded_revision'] < bound['recorded_revision']]
     if set(repair['event_ids']) != {event['id'] for event in events}:
         raise ResearchError('review_context_repair_unverified', 'The original repair must cover its complete prospective exposure history')
@@ -725,26 +808,28 @@ def validate_repair_origin(records, artifacts, assignment):
         strategy.evidence(records, artifacts, event['evidence'])
 
 
-def validate_repair_binding(records, artifacts, assignment):
+def validate_repair_binding(records, artifacts, assignment, *, origin_records=None):
     """Current approval also requires coverage of later ancestor exposure."""
-    validate_repair_origin(records, artifacts, assignment)
-    repairs = [item for item in _lineage(records, assignment)
-               if item.get('context', {}).get('context_repair') is not None]
-    if not repairs:
-        return
-    repair = repairs[-1]['context']['context_repair']
-    predecessor = _assignment(records, repair['assignment_id'])
-    identifiers = {item['id'] for item in _exposure_lineage(records, predecessor)}
-    events = {event['id'] for event in cause_events(records, identifiers)}
-    if set(repair['event_ids']) != events:
-        raise ResearchError('review_context_repair_stale', 'Later predecessor contamination requires explicit reassessment of the new evidence')
+    from .evaluation import Evaluation
+    origin = records if origin_records is None else origin_records
+    chain = _lineage(origin, assignment)
+    refreshed = any('session_refresh' in row.get('context', {}) for row in chain)
+    current = records if refreshed else origin
+    evaluation = Evaluation.of(current, artifacts)
+    events_by_assignment = _index_context_events(current, evaluation) if refreshed else None
+    validate_repair_origin(origin, Evaluation.of(origin, artifacts), assignment,
+                           lineage=chain, events_by_assignment=events_by_assignment)
+    issue = find_review_context_issue(current, assignment, evaluation=evaluation, lineage=chain,
+                                      events_by_assignment=events_by_assignment)
+    if issue == 'review_context_repair_stale':
+        raise ResearchError('review_context_repair_stale', REPAIR_STALE_MSG)
+    if issue == 'review_context_contaminated':
+        raise ResearchError('review_context_contaminated', REFRESH_CONTAMINATED_MSG)
 
 
 def frozen_reassessment_packet(records, artifacts, assignment):
-    """The actual latest repair fixes its predecessor finals, even across later continuations/refreshes."""
-    repairs = [item for item in _lineage(records, assignment)
-               if item.get('context', {}).get('context_repair') is not None]
-    bound = repairs[-1] if repairs else assignment
+    """A repair fixes the predecessor finals for the rest of its session."""
+    bound = find_latest_chain_repair(records, assignment) or assignment
     if bound.get('session_chain'):
         return json.loads(artifacts.read(bound['session_chain']['logical']))
     return json.loads(artifacts.read(bound['packet']))
@@ -753,10 +838,9 @@ def frozen_reassessment_packet(records, artifacts, assignment):
 def validate_reassessment(records, artifacts, assignment, observed_output, *, reading_checks=True, packet=None, evidence_validator=None):
     """Require an observed, evidenced disposition of every inherited finding."""
     if packet is None:
-        chain = _lineage(records, assignment)
-        repairs = [item for item in chain if item.get('context', {}).get('context_repair') is not None]
-        repair = repairs[-1]['context']['context_repair'] if repairs else None
-        inherited = reassessment_reviews(records, assignment) if repairs else []
+        bound = find_latest_chain_repair(records, assignment)
+        repair = bound['context']['context_repair'] if bound else None
+        inherited = reassessment_reviews(records, assignment) if bound else []
     else:
         repair = packet.get('context_repair')
         inherited = packet.get('historical_reviews', []) if repair else []

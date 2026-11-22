@@ -182,7 +182,7 @@ def plan_stale_route(assignment, renewal=None):
 
 
 def plan_retired_route(assignment):
-    """The handoff of a head whose route record is retired: its slot continues through a context repair."""
+    """The handoff of a head whose route record is retired: complete_plan selects the step for this head."""
     return dict(state='handoff', command='review-assignment', code='review_route_retired',
                 details=dict(assignment_id=assignment['id'], route_id=assignment['route_id']))
 

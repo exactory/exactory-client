@@ -8542,6 +8542,47 @@
         "test_call_context_present.CallContextChainTests.test_w12_series_makes_no_call_on_a_route_record_whose_probe_failed_after_a_failed_call",
         "test_review_route_plan.EarlierTurnRouteTests.test_earlier_turn_on_a_stale_route_record_takes_the_retirement_of_that_record"
       ]
+    },
+    {
+      "id": "retired-recorded-v4-review-plans-repair-instead-of-refresh",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "retired reviewer route with a recorded v4 review",
+      "summary": "After a route retirement and an added problem area, the head's refresh plan was replaced by a repair of the earlier packet.",
+      "expected": "The retirement handoff keeps the already planned refresh payload and leaves the verified route as its only choice. The new chain records a review of the added area in the same slot.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e1_retirement_handoff_offers_only_the_planned_refresh"
+      ]
+    },
+    {
+      "id": "v4-refresh-inherits-the-reassessment-of-an-earlier-repair",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "review refresh after context repair",
+      "summary": "The refresh prompt delivered historical findings without a repair binding, but the final validator and the repair overflow readers still used the earlier repair.",
+      "expected": "The refresh link ends reassessment and exhaustion credit while preserving all scientific history. A subsequent genuine repair addresses every earlier final.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e2_refresh_after_repair_records_an_ordinary_final",
+        "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e3_refresh_refuses_the_still_valid_old_reassessment",
+        "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e6_fallback_v3_and_its_later_turn_owe_no_reassessment",
+        "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e8_new_repair_disposes_the_whole_slot_then_refreshes",
+        "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e9_incomplete_refresh_attempt_does_not_exhaust_the_earlier_repair"
+      ]
+    },
+    {
+      "id": "refreshed-review-retains-independent-credit-after-contamination",
+      "record": "20261120214114-one-release-for-every-open-record",
+      "class": "present-day review independence after a refresh",
+      "summary": "A later event on the original final, repair final or refresh root made different current readers disagree about the same slot.",
+      "expected": "State, plan, rendered reviews and current reviewers use the same present-day exposure check. A contaminated refresh becomes historical, leaves its observations readable and offers repair with the full cause binding.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e4_late_predecessor_event_after_refresh_start_keeps_the_stale_repair",
+        "test_review_session_v4_refresh_edges.SessionRefreshEdgeTests.test_e7_current_readers_agree_for_each_late_event_and_the_clean_control"
+      ]
     }
   ]
 }
