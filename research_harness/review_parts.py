@@ -1112,7 +1112,7 @@ def _list_delivered_texts(packet, handle, inventory, items):
     texts = []
     for unit, item in items.items():
         if unit in covered:
-            texts.append(dict(content=render_json(item), at=dict(unit=unit, item=True), offset=0))
+            texts.append((render_json(item), dict(unit=unit, item=True), 0))
     body_ids = {body['sha256'] for unit in covered for body in by_handle[unit]['bodies']}
     for entry in packet.get('evidence', []):
         original = entry.get('original_artifact', entry.get('artifact', {}))
@@ -1121,22 +1121,8 @@ def _list_delivered_texts(packet, handle, inventory, items):
             owner = entry.get('unit', handle)
             location = dict(unit=owner, item=True) if entry.get('item') else dict(
                 unit=owner, body=original['sha256'])
-            texts.append(dict(content=entry['content'], at=location,
-                              offset=entry.get('segment', {}).get('start', 0)))
+            texts.append((entry['content'], location, entry.get('segment', {}).get('start', 0)))
     return texts
-
-
-def _normalize_delivered_texts(packet, handle, inventory, items, normalized_by_content=None):
-    """Reuse normalization across shared text while keeping each source's location and order."""
-    if normalized_by_content is None:
-        normalized_by_content = {}
-    sources = []
-    for source in _list_delivered_texts(packet, handle, inventory, items):
-        content = source['content']
-        if content not in normalized_by_content:
-            normalized_by_content[content] = review_excerpts.normalize_with_offsets(content)
-        sources.append((source, *normalized_by_content[content]))
-    return sources
 
 
 def _verify_statements(packet, handle, statements, inventory, used, items=None):
@@ -1144,10 +1130,10 @@ def _verify_statements(packet, handle, statements, inventory, used, items=None):
     _require(isinstance(statements, list), 'Statements are an array')
     if items is None:
         items = read_delivered_items(packet)
-    return _match_statements(statements, _normalize_delivered_texts(packet, handle, inventory, items), used)
-
-
-def _match_statements(statements, sources, used):
+    sources = []
+    for content, at, start in _list_delivered_texts(packet, handle, inventory, items):
+        normalized, offsets = review_excerpts.normalize_with_offsets(content)
+        sources.append((content, at, start, normalized, offsets))
     verified = []
     unmatched = 0
     for statement in statements:
@@ -1159,14 +1145,13 @@ def _match_statements(statements, sources, used):
                  'Statements exceed their turn or individual allowance')
         phrase = review_excerpts.normalize_with_offsets(statement['text'])[0]
         found = False
-        for source, normalized, offsets in sources:
-            content = source['content']
+        for content, at, start, normalized, offsets in sources:
             position = normalized.find(phrase)
             if position >= 0 and phrase:
                 exact = content[offsets[position]:offsets[position + len(phrase) - 1] + 1]
                 if len(exact) <= STATEMENT_CHARACTERS:
-                    location = dict(source['at'], start=source['offset'] + offsets[position],
-                                    end=source['offset'] + offsets[position + len(phrase) - 1] + 1)
+                    location = dict(at, start=start + offsets[position],
+                                    end=start + offsets[position + len(phrase) - 1] + 1)
                     verified.append(dict(statement, text=exact, at=location))
                     found = True
                 break
@@ -1198,7 +1183,7 @@ def _validate_read(packet, output, inventory):
     seen = set()
     cards = []
     used = 0
-    items = read_delivered_items(packet)
+    items = None
     for card in output['cards']:
         fields(card, ('unit', 'summary', 'bearing', 'statements', 'depends_on', 'questions'),
                code='invalid_value_review')
@@ -1218,6 +1203,8 @@ def _validate_read(packet, output, inventory):
             borne.add(bearing['target'])
             material = material or bearing['relation'] != 'context'
         _require(not material or bool(card['statements']), 'A material bearing needs a statement')
+        if items is None and isinstance(card['statements'], list):
+            items = read_delivered_items(packet)
         statements, unmatched, used = _verify_statements(packet, card['unit'], card['statements'], inventory, used,
                                                          items)
         metadata = {key: copy.deepcopy(value) for key, value in by_handle[card['unit']].items()
@@ -1291,8 +1278,7 @@ def _validate_check(packet, output, inventory):
     handles = {row['handle'] for row in inventory['units']}
     findings = []
     used = 0
-    items = read_delivered_items(packet)
-    normalized_by_content = {}
+    items = None
     for finding in output['findings']:
         fields(finding, ('combination', 'finding', 'effect', 'statements'), code='invalid_value_review')
         identifier = finding['combination']
@@ -1309,10 +1295,10 @@ def _validate_check(packet, output, inventory):
             fields(statement, ('unit', 'text', 'why'), code='invalid_value_review')
             _require(isinstance(statement['unit'], str) and statement['unit'] in handles,
                      'A finding statement names a known unit')
-            unit = statement['unit']
-            verified, count, used = _match_statements(
-                [dict(text=statement['text'], why=statement['why'])],
-                _normalize_delivered_texts(packet, unit, inventory, items, normalized_by_content), used)
+            if items is None:
+                items = read_delivered_items(packet)
+            verified, count, used = _verify_statements(packet, statement['unit'],
+                [dict(text=statement['text'], why=statement['why'])], inventory, used, items)
             statements.extend(dict(entry, unit=statement['unit']) for entry in verified)
             unmatched += count
         findings.append(dict(copy.deepcopy(finding), turn=packet[KEY]['turn'],

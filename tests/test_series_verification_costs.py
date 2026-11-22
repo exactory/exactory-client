@@ -9,6 +9,7 @@ from weakref import ref
 from research_harness import (bar_sources, review_excerpts, review_parts as parts,
                               review_protocol, workspace)
 from research_harness.artifacts import ArtifactStore, describe_artifact
+from research_harness.errors import ResearchError
 from render_reference import use_reference_functions
 from review_parts_fixtures import make_output, make_packet, observe, plan
 import test_research_output_views as views
@@ -72,7 +73,16 @@ class StatementVerificationCosts(unittest.TestCase):
             parts.validate_output(packet, output, packet['_test_inventory'])
         self.assertEqual(read.call_count, 2)
 
-    def test_check_normalizes_each_delivered_text_once(self):
+    def test_read_refuses_an_invalid_card_before_rechecking_the_manifest(self):
+        packet = plan(make_packet(2, 200))
+        output = make_output(packet)
+        output['cards'][0]['statements'] = {}
+        with patch.object(parts, 'read_delivered_items', wraps=parts.read_delivered_items) as read:
+            with self.assertRaisesRegex(ResearchError, 'Statements are an array'):
+                parts.validate_output(packet, output, packet['_test_inventory'])
+        read.assert_called_once_with(packet)
+
+    def test_check_reads_populated_items_once_in_each_validation_stage(self):
         logical = make_packet(2, 200)
         read = plan(logical)
         observations = [observe(read)]
@@ -85,13 +95,14 @@ class StatementVerificationCosts(unittest.TestCase):
         output = make_output(check)
         output['findings'][0]['statements'] = [dict(unit='u1', text=text, why='Read the original.')
                                               for text in ('s0', 'xxxxxxxx', 'absent')]
-        with patch.object(review_excerpts, 'normalize_with_offsets',
-                          wraps=review_excerpts.normalize_with_offsets) as normalize:
+        with use_reference_functions():
+            expected = parts.validate_output(check, output, check['_test_inventory'])
+        with patch.object(parts, 'read_delivered_items', wraps=parts.read_delivered_items) as read:
             result = parts.validate_output(check, output, check['_test_inventory'])
+        self.assertEqual(result, expected)
         finding = result['findings'][0]
         self.assertEqual((len(finding['statements']), finding['unverified_statements']), (2, 1))
-        # One delivered item and three statement texts.
-        self.assertEqual(normalize.call_count, 4)
+        self.assertEqual(read.call_count, 2)
 
     def test_statement_verification_accepts_previously_read_items(self):
         packet = plan(make_packet(1, 200))
@@ -109,83 +120,72 @@ class StatementVerificationCosts(unittest.TestCase):
         self.assertEqual(supplied, expected)
         self.assertEqual(empty, ([], 1, len(statements[0]['text'])))
 
-    def test_check_shares_body_offsets_between_units_without_changing_locations(self):
-        body = 'Lead. Quoted source. Quoted source.'
-        reference = describe_artifact(body.encode(), 'text/plain')
-        logical = dict(evidence=[dict(artifact=reference, content=body, encoding='utf-8')],
-                       original_evidence=[dict(page=page, artifact=reference) for page in (1, 2)])
-        inventory = parts.build_inventory(logical, 'problem_adjudicator')
-        units = parts.enumerate_units(logical, 'problem_adjudicator', inventory)
-        handles = [unit['handle'] for unit in units]
-        self.assertEqual(len(handles), 2)
-        first = body.index('Quoted')
-        last = body.rindex('Quoted')
-        fragment = 'Quoted source.'
-        selections = [dict(unit=handle, body=reference['sha256'], start=start, end=start + len(fragment))
-                      for handle, start in zip(handles, (first, last))]
-        packet = parts.project_packet(parts.build_frame(logical, units), units, selections,
-            dict(protocol=parts.PROTOCOL, kind='check', turn=3, check_combinations=['c'],
-                 output_allowance=1000, findings_budget_remaining=2000),
-            dict(cards=[], combinations=[], findings=[]))
-        statements = [dict(unit=handle, text='Quoted', why='Read the exact source.') for handle in handles]
-        output = dict(kind='check', turn=3, findings=[
-            dict(combination='c', finding='The source supports this finding.', effect='supports', statements=statements)])
-        with use_reference_functions():
-            expected = parts.validate_output(packet, output, inventory)
-        with patch.object(review_excerpts, 'normalize_with_offsets',
-                          wraps=review_excerpts.normalize_with_offsets) as normalize:
-            actual = parts.validate_output(packet, output, inventory)
-        self.assertEqual(actual, expected)
-        self.assertEqual(actual['findings'][0]['statements'], [
-            dict(statement, text='Quoted',
-                 at=dict(unit=handles[0], body=reference['sha256'], start=first, end=first + len('Quoted')))
-            for statement in statements])
-        self.assertEqual([call.args[0] for call in normalize.call_args_list].count(fragment), 1)
-
-    def test_check_releases_candidate_rows_after_each_statement(self):
-        class TrackedSource(dict):
+    def test_check_offsets_and_manifest_reads_stay_within_release_bounds(self):
+        class TrackedOffsets(list):
             pass
 
-        count = 3
-        body = 'Q.' * count
-        reference = describe_artifact(body.encode(), 'text/plain')
-        logical = dict(objection=dict(id='objection'),
-                       evidence=[dict(artifact=reference, content=body, encoding='utf-8')],
-                       original_evidence=[dict(page=page, artifact=reference) for page in range(count)])
-        inventory = parts.build_inventory(logical, 'problem_adjudicator')
-        observations = []
-        for kind in ('read', 'combine', 'check'):
-            packet = parts.plan_turn(logical, inventory, observations, series_id='series',
-                                     output_tokens=128000, input_limit=1200000,
-                                     measure=lambda candidate: len(parts.render_json(candidate)))
-            self.assertEqual(parts.find_kind(packet), kind)
-            if kind != 'check':
-                selections = [dict(unit='u1', body=reference['sha256'], start=i * 2, end=i * 2 + 1)
-                              for i in range(count)]
-                combination = dict(units=['u1'], question='Q?', view='Read the source.', read=selections)
-                fixture_packet = dict(packet, _test_inventory=inventory)
-                observations.append(observe(fixture_packet, make_output(packet, [combination])))
-        self.assertEqual(len(packet['evidence']), count)
-        output = make_output(packet)
-        output['findings'][0]['statements'] = [dict(unit=row['handle'], text='Q', why='Review.')
-                                               for row in inventory['units']]
-        with use_reference_functions():
-            expected = parts.validate_output(packet, output, inventory)
-        self.assertEqual(len(expected['findings'][0]['statements']), count)
+        def validate(packet, output, inventory):
+            normalize = review_excerpts.normalize_with_offsets
+            source_texts = {entry['content'] for entry in packet['evidence']}
+            offsets_seen = []
+            peak = 0
 
-        normalize = parts._normalize_delivered_texts
-        candidate_refs, live_counts = [], []
+            def track_offsets(text):
+                nonlocal peak
+                normalized, offsets = normalize(text)
+                if text in source_texts:
+                    offsets = TrackedOffsets(offsets)
+                    offsets_seen.append(ref(offsets))
+                    peak = max(peak, sum(table() is not None for table in offsets_seen))
+                return normalized, offsets
 
-        def track_rows(*args, **kwargs):
-            rows = [(TrackedSource(source), text, offsets) for source, text, offsets in normalize(*args, **kwargs)]
-            candidate_refs.extend(ref(source) for source, _, _ in rows)
-            live_counts.append(sum(candidate() is not None for candidate in candidate_refs))
-            return rows
+            with patch.object(review_excerpts, 'normalize_with_offsets', new=track_offsets), \
+                    patch.object(parts, 'read_delivered_items', wraps=parts.read_delivered_items) as read:
+                result = parts.validate_output(packet, output, inventory)
+            self.assertFalse(any(table() is not None for table in offsets_seen))
+            return result, read.call_count, peak, len(offsets_seen)
 
-        with patch.object(parts, '_normalize_delivered_texts', new=track_rows):
-            actual = parts.validate_output(packet, output, inventory)
-        self.assertEqual(actual, expected)
-        self.assertEqual(live_counts, [count] * count)
+        for shape, bodies, spans, release_peak in (
+                ('shared body', ('Q1.Q2.', 'Q1.Q2.'), [(0, 0, 6)], 1),
+                ('shared segments', ('Q1.Q1.', 'Q1.Q1.'), [(0, 0, 2), (0, 3, 5)], 2),
+                ('distinct bodies', ('Q1.', 'Q2.'), [(0, 0, 3), (1, 0, 3)], 1),
+                ('no statements', (), [], 0)):
+            with self.subTest(shape=shape):
+                if bodies:
+                    references = {body: describe_artifact(body.encode(), 'text/plain') for body in bodies}
+                    logical = dict(evidence=[dict(artifact=reference, content=body, encoding='utf-8')
+                                             for body, reference in references.items()],
+                                   original_evidence=[dict(page=page, artifact=references[body])
+                                                      for page, body in enumerate(bodies, 1)])
+                    adapter = 'problem_adjudicator'
+                else:
+                    logical = make_packet(2, 200)
+                    adapter = 'problem_result'
+                inventory = parts.build_inventory(logical, adapter)
+                units = parts.enumerate_units(logical, adapter, inventory)
+                self.assertEqual(len(units), 2)
+                selections = [dict(unit=unit['handle']) for unit in units]
+                if bodies:
+                    selections = [dict(unit=units[owner]['handle'], body=references[bodies[owner]]['sha256'],
+                                       start=start, end=end) for owner, start, end in spans]
+                packet = parts.project_packet(parts.build_frame(logical, units), units, selections,
+                    dict(protocol=parts.PROTOCOL, kind='check', turn=3, check_combinations=['c'],
+                         output_allowance=1000, findings_budget_remaining=2000),
+                    dict(cards=[], combinations=[], findings=[]))
+                self.assertEqual(len(packet[parts.KEY]['delivered_items']), 0 if bodies else 2)
+                statements = [dict(unit=unit['handle'], text='Q', why='Review.') for unit in units] if bodies else []
+                output = dict(kind='check', turn=3, findings=[
+                    dict(combination='c', finding='Read the sources.', effect='supports', statements=statements)])
+                with use_reference_functions():
+                    expected, release_reads, expected_peak, release_normalizations = validate(packet, output, inventory)
+                actual, reads, peak, normalizations = validate(packet, output, inventory)
+                self.assertEqual(actual, expected)
+                self.assertEqual(len(actual['findings'][0]['statements']), len(statements))
+                self.assertEqual(expected_peak, release_peak)
+                self.assertLessEqual(peak, release_peak)
+                self.assertEqual(normalizations, release_normalizations)
+                self.assertEqual(release_reads, 1 + len(statements))
+                self.assertEqual(reads, 2 if statements else 1)
 
     def test_equal_fragments_keep_distinct_owners_body_digests_and_spans(self):
         fragment = 'Ａ  ﬁnd'
@@ -211,10 +211,7 @@ class StatementVerificationCosts(unittest.TestCase):
             dict(combination='c', finding='Read both sources.', effect='supports', statements=statements)])
         with use_reference_functions():
             expected = parts.validate_output(packet, output, inventory)
-        with patch.object(review_excerpts, 'normalize_with_offsets',
-                          wraps=review_excerpts.normalize_with_offsets) as normalize:
-            actual = parts.validate_output(packet, output, inventory)
+        actual = parts.validate_output(packet, output, inventory)
         self.assertEqual(actual['findings'][0]['statements'], [
             dict(statement, text=fragment, at=selection) for statement, selection in zip(statements, selections)])
         self.assertEqual(actual, expected)
-        self.assertEqual([call.args[0] for call in normalize.call_args_list].count(fragment), 1)
