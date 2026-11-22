@@ -1105,14 +1105,14 @@ def validate_deliveries(packet, inventory):
                  'review_parts_delivery_invalid')
 
 
-def _list_delivered_texts(packet, handle, inventory):
+def _list_delivered_texts(packet, handle, inventory, items):
     by_handle = {row['handle']: row for row in inventory['units']}
     covered = {row['handle'] for row in inventory['units']
                if row['handle'] == handle or row.get('carded_under') == handle}
     texts = []
-    for unit, item in read_delivered_items(packet).items():
+    for unit, item in items.items():
         if unit in covered:
-            texts.append(dict(content=render_json(item), at=dict(unit=unit, item=True), offset=0))
+            texts.append((render_json(item), dict(unit=unit, item=True), 0))
     body_ids = {body['sha256'] for unit in covered for body in by_handle[unit]['bodies']}
     for entry in packet.get('evidence', []):
         original = entry.get('original_artifact', entry.get('artifact', {}))
@@ -1121,17 +1121,19 @@ def _list_delivered_texts(packet, handle, inventory):
             owner = entry.get('unit', handle)
             location = dict(unit=owner, item=True) if entry.get('item') else dict(
                 unit=owner, body=original['sha256'])
-            texts.append(dict(content=entry['content'], at=location,
-                              offset=entry.get('segment', {}).get('start', 0)))
+            texts.append((entry['content'], location, entry.get('segment', {}).get('start', 0)))
     return texts
 
 
-def _verify_statements(packet, handle, statements, inventory, used):
+def _verify_statements(packet, handle, statements, inventory, used, items=None):
+    """Use already read items when supplied. The five-argument v3 call reads them here."""
     _require(isinstance(statements, list), 'Statements are an array')
+    if items is None:
+        items = read_delivered_items(packet)
     sources = []
-    for source in _list_delivered_texts(packet, handle, inventory):
-        normalized, offsets = review_excerpts.normalize_with_offsets(source['content'])
-        sources.append((source, normalized, offsets))
+    for content, at, start in _list_delivered_texts(packet, handle, inventory, items):
+        normalized, offsets = review_excerpts.normalize_with_offsets(content)
+        sources.append((content, at, start, normalized, offsets))
     verified = []
     unmatched = 0
     for statement in statements:
@@ -1143,14 +1145,13 @@ def _verify_statements(packet, handle, statements, inventory, used):
                  'Statements exceed their turn or individual allowance')
         phrase = review_excerpts.normalize_with_offsets(statement['text'])[0]
         found = False
-        for source, normalized, offsets in sources:
-            content = source['content']
+        for content, at, start, normalized, offsets in sources:
             position = normalized.find(phrase)
             if position >= 0 and phrase:
                 exact = content[offsets[position]:offsets[position + len(phrase) - 1] + 1]
                 if len(exact) <= STATEMENT_CHARACTERS:
-                    location = dict(source['at'], start=source['offset'] + offsets[position],
-                                    end=source['offset'] + offsets[position + len(phrase) - 1] + 1)
+                    location = dict(at, start=start + offsets[position],
+                                    end=start + offsets[position + len(phrase) - 1] + 1)
                     verified.append(dict(statement, text=exact, at=location))
                     found = True
                 break
@@ -1182,6 +1183,7 @@ def _validate_read(packet, output, inventory):
     seen = set()
     cards = []
     used = 0
+    items = None
     for card in output['cards']:
         fields(card, ('unit', 'summary', 'bearing', 'statements', 'depends_on', 'questions'),
                code='invalid_value_review')
@@ -1201,7 +1203,10 @@ def _validate_read(packet, output, inventory):
             borne.add(bearing['target'])
             material = material or bearing['relation'] != 'context'
         _require(not material or bool(card['statements']), 'A material bearing needs a statement')
-        statements, unmatched, used = _verify_statements(packet, card['unit'], card['statements'], inventory, used)
+        if items is None and isinstance(card['statements'], list):
+            items = read_delivered_items(packet)
+        statements, unmatched, used = _verify_statements(packet, card['unit'], card['statements'], inventory, used,
+                                                         items)
         metadata = {key: copy.deepcopy(value) for key, value in by_handle[card['unit']].items()
                     if key != 'handle'}
         covered = [row for row in header['units']
@@ -1273,6 +1278,7 @@ def _validate_check(packet, output, inventory):
     handles = {row['handle'] for row in inventory['units']}
     findings = []
     used = 0
+    items = None
     for finding in output['findings']:
         fields(finding, ('combination', 'finding', 'effect', 'statements'), code='invalid_value_review')
         identifier = finding['combination']
@@ -1289,8 +1295,10 @@ def _validate_check(packet, output, inventory):
             fields(statement, ('unit', 'text', 'why'), code='invalid_value_review')
             _require(isinstance(statement['unit'], str) and statement['unit'] in handles,
                      'A finding statement names a known unit')
+            if items is None:
+                items = read_delivered_items(packet)
             verified, count, used = _verify_statements(packet, statement['unit'],
-                [dict(text=statement['text'], why=statement['why'])], inventory, used)
+                [dict(text=statement['text'], why=statement['why'])], inventory, used, items)
             statements.extend(dict(entry, unit=statement['unit']) for entry in verified)
             unmatched += count
         findings.append(dict(copy.deepcopy(finding), turn=packet[KEY]['turn'],
@@ -1551,7 +1559,7 @@ def _list_series(records, artifacts, assignment_id):
     current = latest
     while current is not None and current['id'] not in seen:
         seen.add(current['id'])
-        frozen = strict_json(artifacts.read(current['packet']))
+        frozen = packet if current is latest else strict_json(artifacts.read(current['packet']))
         binding = frozen.get(KEY, {})
         if (find_kind(frozen) is None
                 or any(binding.get(key) != header.get(key) for key in
@@ -1628,16 +1636,21 @@ def _select_carried_state(packet, state):
     return state
 
 
-def observe_series(records, artifacts, assignment_id):
-    """Read each selected turn once in this evaluation, independently of series readiness."""
+def observe_series(records, artifacts, assignment_id, *, chain=None):
+    """Read each selected turn once in this evaluation, independently of series readiness.
+
+    Use the caller's legacy chain when supplied. The v3 protocol uses its own listing.
+    """
     from .evaluation import Evaluation
     evaluation = Evaluation.of(records, artifacts)
     latest = records.get('review_assignment', {}).get(assignment_id)
     if latest and latest.get(KEY, {}).get('protocol') == 'exactory-review-parts-v3':
         from .review_parts_v3 import observe_series as observe_v3
         return observe_v3(records, evaluation, assignment_id)
+    if chain is None:
+        chain = _list_series(records, evaluation, assignment_id)
     observations = []
-    for assignment, frozen in _list_series(records, evaluation, assignment_id):
+    for assignment, frozen in chain:
         observation = evaluation.once(('review_parts_turn', assignment['id']),
             lambda assignment=assignment, frozen=frozen:
                 _read_observed_turn(records, evaluation, assignment, frozen))
@@ -1774,7 +1787,7 @@ def verify_series(records, artifacts, final_assignment_id):
     delivery = None
     try:
         chain = _list_series(records, artifacts, final_assignment_id)
-        observations = observe_series(records, artifacts, final_assignment_id)
+        observations = observe_series(records, artifacts, final_assignment_id, chain=chain)
         packets = [row['packet'] for row in observations]
         if not chain or len(chain) != len(observations):
             add_issue('unobserved_turn')
