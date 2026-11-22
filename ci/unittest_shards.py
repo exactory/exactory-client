@@ -47,7 +47,8 @@ SHARD_GROUPS = (
     # The 11 recorded series of ProblemResultHistoryTests: 107 s.
     ("test_problem_result_history",),
     # The deposit workspace of ManagedStreamingTests with two files above 1 MiB: 38 s.
-    ("test_publication_streaming",),
+    # The published submission template is built once for TestSubmitWithAPendingRequest: 52 s for the class.
+    ("test_publication_streaming", "test_pending_remote_requests"),
     # The slate of incident A1 with 28,600,000 characters, whose size is the cause of the incident: 3,217 s of 3,243 s.
     ("test_review_parts_slate",),
     # The paged finding after 57 carried turns: 857 s of 1,394 s.
@@ -336,11 +337,10 @@ def main():
     group.add_argument("--shard-count", type=int, default=SHARD_COUNT)
     group.add_argument("--result", type=Path, required=True)
     group.add_argument("modules", nargs="+", help="Test modules of tests/, such as test_ci_shards.")
-    named = commands.add_parser(
-        "run-modules",
-        help="Run named test modules, classes or methods with the reviewer program guard. Run this command in the "
-             "plugin root. The exit status is 0 only when every named test runs and passes. A skipped test and an "
-             "expected failure give status 1, as in a CI shard.")
+    named_help = ("Run named test modules, classes or methods with the reviewer program guard. Run this command in "
+                  "the plugin root. The exit status is 0 only when every named test runs and passes. A skipped test "
+                  "and an expected failure give status 1, as in a CI shard.")
+    named = commands.add_parser("run-modules", help=named_help, description=named_help)
     named.add_argument("--top-level-directory", type=Path, default=Path("tests"),
                        help="The directory that goes first on the import path (default: %(default)s). For the "
                             "harness tests, use skills/math-solver/harness.")
