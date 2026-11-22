@@ -3364,7 +3364,8 @@ def _repair_packet(records, artifacts, value, repair):
     packet.pop(COMPLETE_MARKER, None)
     packet.pop('evidence', None)
     packet.pop('digest', None)
-    packet.update(protocol=bar_sources.PROTOCOL, reviewer_id=value['reviewer_id'])
+    form = supplied_evidence.PROTOCOL if value['role'] == 'adjudicator' else bar_sources.PROTOCOL
+    packet.update(protocol=form, reviewer_id=value['reviewer_id'])
     if 'prior_context' in packet:
         packet['prior_context'] = [supplied_evidence.deliver_passage(records, artifacts, mapping)
                                    for mapping in packet['prior_context']]

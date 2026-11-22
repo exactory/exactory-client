@@ -4,6 +4,7 @@ import importlib
 import json
 import tempfile
 from pathlib import Path
+from contextlib import ExitStack
 import unittest
 from unittest.mock import patch
 
@@ -165,8 +166,10 @@ class FieldClassTests(unittest.TestCase):
             self.fields.classify_packet(self.route, packet['role'], packet)
 
     def test_source_continuation_builders_declare_every_field(self):
-        from research_harness import bar_sources, capture_selection, review_context_repair
+        from research_harness import (bar_sources, capture_selection, problem_claims, review_context_repair,
+                                      review_prompt_paragraphs)
         from research_harness.artifacts import ArtifactStore
+        from test_review_prompt_paragraphs import build_packet as build_paragraph_source
         with tempfile.TemporaryDirectory() as directory:
             artifacts = ArtifactStore(Path(directory))
             selection = dict(version_id='work', source_id='capture', original_sha256='a' * 64,
@@ -175,26 +178,86 @@ class FieldClassTests(unittest.TestCase):
                 records = {capture_selection.SELECTION_KIND: {'capture': selection}}
                 if problem:
                     records['workspace'] = {'problem': {'area': 'finite', 'field': 'finite'}}
-                previous = dict(source_inventory=bar_sources.inventory(records, artifacts),
-                    source_rules=bar_sources.PROTOCOL_V3, pending_source_requests=[],
-                    settled_source_requests=[dict(request=dict(id='held'), limitations=['Uncaptured.'])],
+                predecessor = dict(source_inventory=bar_sources.inventory(records, artifacts), pending_source_requests=[],
                     bar_ids=[], candidates=[], candidate_set_digest=digest([]),
                     context_repair=dict(assignment_id='predecessor', slot_id='slot'))
-                with patch.object(bar_sources, 'SESSION_PROTOCOL', bar_sources.PROTOCOL_V3), \
-                        patch.object(review_protocol, '_source_parent', return_value=(dict(id='prior',
-                            packet_digest=digest(previous)), {'output': {}})), \
-                        patch.object(review_protocol, 'source_delivery_packet', return_value=previous), \
-                        patch.object(review_protocol, '_find_session_bodies', return_value={}), \
-                        patch.object(review_protocol, 'add_direction_evidence'), \
-                        patch.object(review_protocol, 'add_problem_bars', return_value=[]), \
-                        patch.object(review_protocol, 'require_calibrated_bars'), \
-                        patch.object(review_context_repair, 'collect_problem_review_history', return_value=[]):
+                for rules in (bar_sources.PROTOCOL, bar_sources.PROTOCOL_V3):
                     for role in bar_sources.ROLES:
-                        with self.subTest(problem=problem, role=role):
+                        with self.subTest(problem=problem, role=role, rules=rules), ExitStack() as stack:
+                            previous = dict(predecessor)
+                            if problem and role == 'result':
+                                previous.update(build_paragraph_source(accounts=True),
+                                    problem_evidence_digest=problem_claims.compute_problem_evidence_digest(records, artifacts))
+                            if rules == bar_sources.PROTOCOL_V3:
+                                previous.update(source_rules=rules, settled_source_requests=[
+                                    dict(request=dict(id='held'), limitations=['Uncaptured.'])])
+                            for module, name, result in (
+                                    (bar_sources, 'SESSION_PROTOCOL', rules),
+                                    (review_protocol, '_source_parent', (dict(id='prior',
+                                        packet_digest=digest(previous)), {'output': {}})),
+                                    (review_protocol, 'source_delivery_packet', previous),
+                                    (review_protocol, '_find_session_bodies', {}),
+                                    (review_protocol, 'add_direction_evidence', None),
+                                    (review_protocol, 'add_problem_bars', []),
+                                    (review_protocol, 'require_calibrated_bars', None),
+                                    (review_context_repair, 'collect_problem_review_history', [])):
+                                target = patch.object(module, name, result) if name == 'SESSION_PROTOCOL' else (
+                                    patch.object(module, name, return_value=result))
+                                stack.enter_context(target)
                             packet = review_protocol.build_packet(records, artifacts, None if problem else 'dossier',
                                                                   role, 'reviewer', prior_assignment_id='prior')
+                            if problem and role == 'result':
+                                self.assertIn('accounts', packet[review_prompt_paragraphs.CONDITIONS])
+                                self.assertEqual(packet['history_delivery'], review_protocol.transport.HISTORY_COMPACT_V2)
                             _, table = self.fields._select_table(role, packet)
                             self.assertEqual(packet.keys() - table.keys(), set())
+                            self.fields.classify_packet(self.route, role, packet)
+
+    def test_repair_builders_declare_raw_and_normalized_history(self):
+        from research_harness import bar_sources, review_parts_repair, review_supplied_evidence
+        from research_harness.artifacts import ArtifactStore
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = ArtifactStore(Path(directory))
+            for problem in (False, True):
+                for role in (*bar_sources.ROLES, 'adjudicator'):
+                    for rules in (bar_sources.PROTOCOL, bar_sources.PROTOCOL_V3):
+                        if role == 'adjudicator' and rules == bar_sources.PROTOCOL_V3:
+                            continue
+                        with self.subTest(problem=problem, role=role, rules=rules), ExitStack() as stack:
+                            form = (review_protocol._PROBLEM_PROTOCOL if problem else
+                                    review_supplied_evidence.PROTOCOL if role == 'adjudicator' else bar_sources.PROTOCOL)
+                            records = {'workspace': {'problem': {'area': 'A', 'field': 'F'}}} if problem else {}
+                            previous = dict(protocol=form, role=role, evidence=[])
+                            if rules == bar_sources.PROTOCOL_V3:
+                                previous['source_rules'] = rules
+                            repair = dict(packet=previous, scientific_history=[
+                                dict(assignment_id='prior', packet=previous, observed_output={})],
+                                predecessor=dict(id='prior'), slot_id='slot', event_ids=[], probe_id='probe',
+                                cause='a context event', historical_reviews=[])
+                            value = dict(role=role, reviewer_id='new', dossier_id=None if problem else 'dossier')
+                            if problem:
+                                value['subject'] = dict(kind='problem', statement_id=None)
+                            stack.enter_context(patch.object(bar_sources, 'describe_settlements', return_value=[
+                                dict(request=dict(id='held'), limitations=['Uncaptured.'])]))
+                            for name, result in (('add_problem_bars', []), ('add_problem_evidence', None),
+                                    ('add_problem_objections', None), ('compute_problem_review_currency', digest([])),
+                                    ('collect_historical_bar_objections', []), ('add_direction_evidence', None),
+                                    ('_find_session_bodies', {})):
+                                stack.enter_context(patch.object(review_protocol, name, return_value=result))
+                            packet = review_protocol._repair_packet(records, artifacts, value, repair)
+                            self.assertEqual(packet['protocol'], form)
+                            self.assertIn('previously_supplied_evidence', packet)
+                            self.fields.classify_packet(self.route, role, packet)
+                            normalized = review_parts_repair.prepare_history(records, artifacts, packet, history=[])
+                            self.fields.classify_packet(self.route, role, normalized)
+
+    def test_registered_stored_role_members_have_field_classes(self):
+        from ci.capacity_packet_inventory import iter_packet_schemas, read_packet_registry
+        for role, form, schema in iter_packet_schemas(read_packet_registry()):
+            if form in self.fields.FIELD_CLASSES.get(role, {}):
+                with self.subTest(role=role, form=form):
+                    self.assertEqual(schema.get('members', {}).keys() - self.fields.FIELD_CLASSES[role][form].keys(),
+                                     set())
 
     def test_new_plans_reserve_exact_identity_and_old_bounds_replay(self):
         packet = dict(protocol='exactory-problem-review-v2', role='result', dossier_id=None,

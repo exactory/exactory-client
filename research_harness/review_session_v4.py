@@ -369,6 +369,9 @@ STUDY_FORMS_PROMPT = STUDY_HANDLE_PROMPT + STUDY_WRITTEN_OUT_PROMPT + STUDY_EVID
 # Each frame reserves this envelope for the turn text, binding, delivery descriptors and bounded source rows, and
 # beside it the base prompt of the role as the turns render it (rule V3).
 FRAME_ENVELOPE_CHARACTERS = 20000
+# The ordinary envelope includes this much for the outer identity. Any excess
+# also travels outside the frame and must be reserved at its serialized size.
+OUTER_IDENTITY_CHARACTERS = 1024
 
 
 def find_session_kind(packet):
@@ -549,7 +552,9 @@ def check_v4_admission(records, artifacts, route, role, packet):
                for index, row in enumerate(composition.list_targets(rule, packet), 1)]
     moved = {kind: set() for kind in ('request', 'final')}
     profile = capacity.read_output_profile(records, route)
-    reserve = FRAME_ENVELOPE_CHARACTERS + measure_base_prompt(role, packet)
+    outer_identity = capacity.measure_capacity_value(route, _build_session_identity(packet))
+    reserve = (FRAME_ENVELOPE_CHARACTERS - OUTER_IDENTITY_CHARACTERS
+               + max(OUTER_IDENTITY_CHARACTERS, outer_identity) + measure_base_prompt(role, packet))
     try:
         while True:
             frames = classes.describe_role_frame(route, role, logical, ('request', 'final'), unit_fields=moved)
@@ -785,16 +790,21 @@ def _replace_frame_handles(value, handles):
     return value
 
 
+def _build_session_identity(logical):
+    packet = {key: logical[key] for key in ('protocol', 'role', 'reviewer_id', 'dossier_id') if key in logical}
+    packet['source_rules'] = PROTOCOL
+    if 'subject' in logical:
+        packet['subject'] = copy.deepcopy(logical['subject'])
+    return packet
+
+
 def build_session_packet(artifacts, route, logical, chain, number, inventory, state, plan, limits, kind, *, notice=None):
     from . import review_field_classes as classes
     frame = classes.classify_packet(route, logical['role'], inventory['logical_fields'],
                                      bounded_fields=plan['frame'][kind]['bounded_fields'])['frame']
     handles = {row['identity']['frame_handle']: row['handle'] for row in inventory['units'] if row['kind'] == 'frame'}
     frame = _replace_frame_handles(frame, handles)
-    packet = {key: logical[key] for key in ('protocol', 'role', 'reviewer_id', 'dossier_id')}
-    packet['source_rules'] = PROTOCOL
-    if 'subject' in logical:
-        packet['subject'] = copy.deepcopy(logical['subject'])
+    packet = _build_session_identity(logical)
     bounds = dict(output_tokens=plan['limits']['output_tokens']['value'], answer_bound=limits['answer_bound'],
                   material_allowance=limits['material_allowance'],
                   level_material_allowance=limits.get('level_material_allowance', limits['material_allowance']),
