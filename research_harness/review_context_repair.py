@@ -298,6 +298,15 @@ def _exposure_lineage(records, assignment):
     return ordered
 
 
+def list_context_turns(records, assignment):
+    """The turns whose reviewer context reaches an assignment: its exposure lineage from the latest context repair
+    on. A repair starts a new observed context, so a turn before it is no turn of this context."""
+    exposure = _exposure_lineage(records, assignment)
+    last_repair = max((index for index, item in enumerate(exposure)
+                       if item.get('context', {}).get('context_repair') is not None), default=0)
+    return exposure[last_repair:]
+
+
 def cause_events(records, identifiers):
     """The recorded contaminations and route retirements of the assignments in a lineage, in recorded order."""
     return sorted((event for event in records.get('review_context_event', {}).values()
@@ -324,14 +333,8 @@ def historical_reviews(records, dossier_id, stage):
         for index, ancestor in enumerate(chain):
             if ancestor.get('context', {}).get('context_repair') is not None:
                 historical.update(item['id'] for item in chain[:index])
-        exposure = _exposure_lineage(records, saved)
-        if any(ancestor['id'] in contaminated for ancestor in exposure):
-            # A repair starts a new observed context. Contamination earlier in
-            # that lineage does not contaminate its fresh transport by itself.
-            last_repair = max((i for i, item in enumerate(exposure)
-                               if item.get('context', {}).get('context_repair') is not None), default=0)
-            if any(item['id'] in contaminated for item in exposure[last_repair:]):
-                historical.add(saved['id'])
+        if any(item['id'] in contaminated for item in list_context_turns(records, saved)):
+            historical.add(saved['id'])
     return _reviews(records, historical)
 
 

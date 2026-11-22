@@ -539,6 +539,18 @@ def _plan_session_refresh(records, artifacts, assignment):
     return dict(state='continue', command='review-assignment', payload=payload)
 
 
+def _plan_context_handoff(assignment, lost):
+    """The handoff of a head while the review records give no verified context for a turn of its review (rules PC4
+    and PC5). complete_plan adds the step: the probe of the route record of the turn, its retirement when that record
+    takes no probe, or the step of the role."""
+    details = dict(assignment_id=assignment['id'], turn=lost, route_id=lost['route']['id'])
+    if protocol.is_contaminated_context(lost):
+        return dict(state='handoff', command='review-assignment', code='review_context_contaminated',
+                    details=dict(details, message=protocol.CONTEXT_CONTAMINATED_MSG))
+    return dict(state='handoff', command='review-probe', code='review_context_unverified',
+                details=dict(details, message=protocol.CONTEXT_UNVERIFIED_MSG))
+
+
 def _plan_head(records, artifacts, assignment):
     pending = _plan_pending_call(records, assignment)
     if pending is not None:
@@ -575,6 +587,12 @@ def _plan_head(records, artifacts, assignment):
             return dict(state='replace', command='review-assignment', code='review_context_unverified',
                         payload=_build_assignment_payload(records, assignment, replace=True),
                         details=dict(assignment_id=assignment['id']))
+    # Rule PC4: in every state of a head whose result is not recorded, the context of the present comes before the
+    # failure plan and the state of the head. A staged controller reads it in its own state.
+    if not assignment.get('staged_review') and not _list_recorded_finals(records, {assignment['id']}):
+        lost = protocol.find_blocking_context(records, artifacts, assignment)
+        if lost is not None:
+            return _plan_context_handoff(assignment, lost)
     if assignment.get('staged_review'):
         state = protocol.assignment_state(records, artifacts, assignment['id'])
         blocking = [item for item in state['obligations'] if item['code'] != 'review_task_pending']
@@ -893,6 +911,17 @@ def annotate_review_obligations(records, artifacts, report, *, context_failures=
                         continue
                 state = protocol.assignment_state(records, artifacts, identifier)
                 pending = [dict(item, assignment_id=identifier) for item in state.get('obligations', [])]
+                if (not assignment.get('staged_review') and not _list_recorded_finals(records, {identifier})
+                        and not any(item['code'] in ('review_context_unverified', 'review_context_contaminated')
+                                    for item in pending)):
+                    # Rule PC8: the row of a head whose review has a turn without a verified context.
+                    lost = protocol.find_blocking_context(records, artifacts, assignment)
+                    if lost is not None:
+                        from .graph import obligation
+                        pending.append(obligation(
+                            'review_context_contaminated' if protocol.is_contaminated_context(lost)
+                            else 'review_context_unverified', protocol.ROUTE_CONTEXT_MSG,
+                            assignment_id=identifier, turn=lost))
                 binding = records.get('review_attempt', {}).get(state.get('attempt_id'))
                 if (not state.get('obligations') and binding is not None
                         and not state.get('output_correction_id')

@@ -297,7 +297,10 @@ class ContinuationTests(unittest.TestCase):
         records['review_pool_membership'] = {identify_call('review.invoke', 'other'):
             dict(released=False, invocation_id='other', operation='review.invoke', state='running', children=[],
                  owner=dict(pid=987654321, pgid=987654321, started='gone'))}
-        with patch.object(protocol, 'assignment_state', return_value=dict(output=None, obligations=[])):
+        # The copy of the route record has no probe that matches it, so the read of the context of the present is
+        # replaced as the state is.
+        with patch.object(protocol, 'assignment_state', return_value=dict(output=None, obligations=[])), \
+                patch.object(protocol, 'find_unverified_context', return_value=None):
             plan = self.plan(records)
         self.assertEqual(plan['state'], 'wait')
         self.assertEqual(plan['code'], 'review_capacity_wait')

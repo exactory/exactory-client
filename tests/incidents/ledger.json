@@ -8526,6 +8526,22 @@
         "test_openness_carried_integration.ContentChangeCarryTests.test_supplement_bundle_keeps_the_readings_of_the_unchanged_units",
         "test_openness_carried_integration.SuppliedTextContentChangeTests.test_fetched_copy_after_a_supplied_text_keeps_the_readings_of_the_unchanged_units"
       ]
+    },
+    {
+      "id": "reviewer-call-on-a-context-that-the-present-does-not-verify",
+      "record": "20261120124838-a-call-for-a-chain-reads-the-context-frozen-at-its-assignment",
+      "class": "dead-end",
+      "summary": "review-run read only the context that an assignment froze when it was recorded. After a probe of the route record of a turn returned no answer, or after a contamination event named the assignment or an earlier turn of its review, review-run given directly sent the request in every role but a staged task, and review-series sent one more call when the head had a failed call. After a contamination that call could give no result that counts.",
+      "expected": "review-run, the dispatch of a staged task, review-output-correction and review-assignment after the first turn of a v7 or math v2 chain read the review records of the present: the state of the route record of each turn of the review and the contamination events that name each turn. While a turn has no verified context they send no request and record nothing, and they refuse with review_context_unverified or review_context_contaminated, details.turn and the plan of the head under details.next. plan_next gives the same code as a handoff in every state of a head whose result is not recorded, with the step that ends the state: the probe of the route record of the named turn, its retirement when that record takes no probe, or the step of the role. status lists the row of the head. A replayed request passes as before, and a head on a stale or retired route record keeps the refusal and the plan of that route record.",
+      "fixed_in": "0.92.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_call_context_present.CallContextRoleTests.test_w1_review_run_waits_for_a_probe_of_its_route_record_in_every_role",
+        "test_call_context_present.CallContextRoleTests.test_w2_review_run_is_refused_after_a_contamination_of_its_assignment_in_every_role",
+        "test_call_context_present.CallContextChainTests.test_w9_series_sends_no_recorded_assignment_after_a_contamination_of_an_own_earlier_turn",
+        "test_call_context_present.CallContextChainTests.test_w12_series_makes_no_call_on_a_route_record_whose_probe_failed_after_a_failed_call",
+        "test_review_route_plan.EarlierTurnRouteTests.test_earlier_turn_on_a_stale_route_record_takes_the_retirement_of_that_record"
+      ]
     }
   ]
 }
