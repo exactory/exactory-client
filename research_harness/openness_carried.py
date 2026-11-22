@@ -231,8 +231,12 @@ def read_chain_records(records, first, protocol):
     view = storage.pin_kinds(records, reading.READING_CONTENT_KINDS, stamp - 1)
     if (not records.verify_record_version('review_assignment', first['id'], stamp, digest(first))
             or first['id'] in records.read_snapshot(stamp - 1).get('review_assignment', {})):
-        raise ResearchError('claim_reassessment_required', 'The recorded input snapshot is unavailable; reassess the '
-                            'bound record.', {'record_id': 'review_assignment:' + first['id']})
+        raise ResearchError('claim_reassessment_required',
+                            'The history of this store does not show the first assignment of an earlier reading '
+                            'chain at its recorded_revision, so the harness cannot read that chain as it started. '
+                            'details.record_id names that assignment. Check the record with record-check, and '
+                            'report this refusal with its details.',
+                            {'record_id': 'review_assignment:' + first['id']})
     return view
 
 

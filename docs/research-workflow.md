@@ -1127,7 +1127,14 @@ carries a `cite` object, and a result reviewer cites a delivered record by its
 kind and id, without a digest: the recording binds the citation to the version
 that the packets delivered.
 
-Use the existing verified review routes. Both bar reviewers receive the field,
+Use the existing verified review routes. A record without a recorded capacity
+policy runs one reviewer call at a time. In a problem record, `next` gives the
+bar assignment as a step under `problem_bar_pending`; when its payload holds
+`scheduler`, keep that member in the first bar assignment, and the two bars
+then run at the same time on their two routes. In a study, give the first bar
+assignment a `scheduler` of the same form
+([the CLI reference](research-cli.md#staged-problem-reviews), "Capacity").
+Both bar reviewers receive the field,
 area and source context before the statement is shown, and calibrate levels
 2 and 3 of both significance grounds and comparative priority. Both result reviewers
 receive the exact claim, the complete openness finding with the searches its
@@ -1694,7 +1701,10 @@ For a user-fixed question, compare methods within that question's scope. Follow
 Two assessors first receive verified field context and the intent with the
 candidate withheld. Each bar states the field and Q1 venues considered, the
 advance over the closest prior work acceptable for that intent, the evidence
-standard, and disqualifying conditions. Persist both final bars before slate
+standard, and disqualifying conditions. The first bar assignment can carry the
+member `scheduler`, so that the two bars run at the same time
+([Problem creation milestones](#problem-creation-milestones), "Use the existing
+verified review routes"). Persist both final bars before slate
 delivery. Slate reviews assess `q1_venue` as potential if the planned method
 meets the success criterion; result reviews assess realized supported advance
 and actual evidence. This scientific bar describes the research standard.
@@ -2236,11 +2246,12 @@ assessments, checkpoints, inheritance, candidates, readiness and support reviews
 and scoped publication contracts.
 
 A store outside managed research retains the same indexed history once a review
-assignment of it stores a carried selection under
-`exactory-openness-carried-selection-v2`. This is the case for a problem record
-whose openness reading chain under `exactory-openness-reading-v7` started under
-0.91.4 or later. The verification of that chain reads the store as it stood
-before its first assignment (The reading protocol v7, under
+assignment of it belongs to an openness reading chain (the assignment holds
+the member `reading_chain`). The carried
+selection of a chain under `exactory-openness-reading-v7` reads the store as it
+stood before the first assignment of that chain and, since 0.92.0, each earlier
+chain on the content records as they stood before its own first assignment (The
+reading protocol v7, under
 [Problem creation](research-cli.md#problem-creation)). Every other store outside
 managed research is read without that history, as before.
 

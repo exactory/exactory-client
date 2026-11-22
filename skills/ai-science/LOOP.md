@@ -26,7 +26,12 @@ minimum's missing evidence before a cycle decision exists.
    dossier. Two independent assessors first state worthwhile consequences from
    intent and verified field context, without the author's slate or value advocacy.
    The bar names the field, Q1 venues, acceptable advance over closest prior
-   work, evidence standard and disqualifying conditions. Persist and reconcile
+   work, evidence standard and disqualifying conditions. A record without a
+   recorded capacity policy runs one reviewer call at a time. To run the two
+   bars at the same time on two verified routes, give the first bar
+   `review-assignment` the member `scheduler`
+   ([the CLI reference](../../docs/research-cli.md#staged-problem-reviews),
+   "Capacity"). Persist and reconcile
    those bars, then deliver the candidate slate. Assess
    objective adequacy and approach adequacy separately. Commit the exact approved
    target with its source delta; refresh materially affected findings. Recording

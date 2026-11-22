@@ -164,7 +164,11 @@ invalid submission records no dossier or selection change.
 
 Two assessors first receive the bar packet: the original intent, field question,
 authorized resources and verified prior context, including held-source identities
-and reading status. The complete inventory is bound to an immutable snapshot;
+and reading status. A record without a recorded capacity policy runs one
+reviewer call at a time. To run the two bars at the same time on two verified
+routes, give the first bar `review-assignment` the member `scheduler`
+([the CLI reference](research-cli.md#staged-problem-reviews), "Capacity"). The
+complete inventory is bound to an immutable snapshot;
 the packet includes its identity, total and first page, and assessors can request
 other pages, matching entries or exact source content. Inventory entries do not
 establish that a source was delivered or read. Initial `context.source_links`
@@ -762,16 +766,29 @@ two. `review-assignment`, `review-probe`, `review-run` and
 turn, a replacement and the child of a staged review. The refusal means that
 the plugin or the Codex CLI now installed differs from the one the route was
 recorded with. It says nothing about the earlier probes, attempts and output
-corrections of the route, which keep their standing. Record a new route with a
-new id and the same adapter, model, endpoint and configuration, probe it, and
-assign new reviews on it. An assignment on the stale route that has no observed
-output cannot run: assign its role again on the new route. For a refused
-session turn, the replacement runs on the new route, and `review-series` plans
-it (the [CLI reference](research-cli.md#review-chains-and-review-series), "The
-renewal of the route"). For a slot with history, retire the stale route and
-continue the slot through a context repair, as described below. The plan of a
-refused head and `review-assignment` read the installed runtime as `review-run`
-does. While the installed runtime of a route cannot be read, for example while
+corrections of the route, which keep their standing. Every plan names route
+records that take their commands. So `review-series` plans the steps for a head
+on a stale route before it executes a command there (the [CLI
+reference](research-cli.md#review-chains-and-review-series), the row of
+`review_route_runtime_stale`). New reviews run on a route record with the same
+route identity (adapter, model, endpoint and configuration) that pins the
+installed runtime. Record such a route with a new id and probe it, or probe one
+that the store already holds. An assignment on the stale route cannot run, and
+its chain takes no next turn there. For a refused session turn, the replacement
+runs on the new route record, and `review-series` plans it ("The renewal of the
+route"). The output correction and the new chain of a stopped chain also run on
+the new route record. For every other head on the stale route, the plan is the
+stale-route procedure, and the handoff lists its steps in their order. For a
+bar, a slate and a result, the order is this. First retire the stale route.
+Then probe the new route record. Then continue the slot through a context
+repair, as described below. The probe must come after the retirement. This
+order also applies to an assignment without an observed output. The same
+reviewer is not assigned again in its slot, so the slot continues through the
+repair. For a verification, a manuscript review, a standalone review and an
+adjudicator without parts, the steps assign the role again on the new route
+record. Every plan and `review-assignment` read the installed runtime as
+`review-run` does. While the installed runtime of a route cannot be read, for
+example while
 the Codex CLI is missing, `review-assignment` records a new assignment as
 before, and `review-run` then refuses it with `review_runtime_missing`. Under
 `record-check` the reading of an HTTPS route holds its adapter and the hash of

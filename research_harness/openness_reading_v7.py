@@ -40,21 +40,26 @@ VISUAL_TEXT_ROUTE_ANSWER = 'Register and probe the text route of the same model.
 LABEL_CHARACTERS = 120
 SELECTION_MISMATCH_MESSAGE = (
     'The carried selection of this chain does not verify. One of four cases is the cause. First, under '
-    'exactory-openness-carried-selection-v2, the stored selection is not the selection that the harness makes again '
-    'on the store as it stood before the first assignment. Second, an earlier chain no longer authenticates up to its '
-    'last carried turn under the records as they stand now. A contamination event on a carried turn has this effect, '
-    'and so has a failed latest probe of the route record of a carried chain. Third, a stored item of a carried turn '
-    'does not match the authenticated turn that it comes from or the inventory of this chain. Fourth, the stored '
-    'selection has a form or a protocol that this release does not verify. A carried turn whose answer fails the '
-    'output check of its turn gives the first case under exactory-openness-carried-selection-v2 and the second case '
-    'under exactory-openness-carried-selection-v1. This holds with or without a refusal record for that answer. The '
+    'exactory-openness-carried-selection-v2 or exactory-openness-carried-selection-v3, the stored selection is not '
+    'the selection that the harness makes again on the store as it stood before the first assignment. Second, an '
+    'earlier chain no longer authenticates up to its last carried turn under the review records as they stand now. '
+    'Under exactory-openness-carried-selection-v3 the harness reads the content records of that chain as they stood '
+    'before its first assignment, and under the earlier versions as they stand now. A contamination event on a '
+    'carried turn has this effect, and so has a failed latest probe of the route record of a carried chain. Third, a '
+    'stored item of a carried turn does not match the authenticated turn that it comes from or the inventory of '
+    'this chain. Fourth, the stored selection has a form or a protocol that this release does not verify. A carried '
+    'turn whose answer fails the output check of its turn gives the first case under '
+    'exactory-openness-carried-selection-v2 and exactory-openness-carried-selection-v3, and the second case under '
+    'exactory-openness-carried-selection-v1. This holds with or without a refusal record for that answer. The '
     'chain gives no finding, and a finding that it recorded is stale. When the latest probe of the route record of a '
     'carried chain failed, probe that route record again. A completed probe of that route record ends the refusal. No '
-    'probe can end it when review-probe refuses that route record with review_route_runtime_stale. In that case and '
-    'in every other case, check the record with record-check. When record-check reports the record ready, export a '
-    'new packet with the same reviewer_id. Assign it for a new finding. The new chain carries the turns of earlier '
-    'chains that still authenticate from their first turn on. It carries no turn of this chain, and it reads again '
-    'what this chain read itself.')
+    'probe can end it when review-probe refuses that route record with review_route_runtime_stale. The retirement '
+    'of that route record then ends it when the failed probe holds no answer and the latest earlier probe with an '
+    'answer verified the record. Otherwise, and in every other case, check the record with record-check. When '
+    'record-check reports the record ready, export a new packet with the same reviewer_id. Assign it for a new '
+    'finding. The new chain carries the turns of earlier chains that still authenticate from their first turn on. '
+    'After a contamination event or a failed probe it carries no turn of this chain, and it reads again what this '
+    'chain read itself.')
 ALLOWANCES_CHARACTERS = 30000
 TARGET_LABELS_CHARACTERS = 100000
 # The largest finding index in the frame of a final, in the measure of the route. A chain records its size in
@@ -163,11 +168,13 @@ NOTES_COST_TEXT = (
     ' The same bound holds for the size that the notes add to the next request, where escaping makes a quote, a '
     'backslash or a line break cost several characters.')
 ADMISSION_STOP_MESSAGE = (
-    'No reading protocol of this release admits this packet on this route, so the harness records no assignment. '
-    'details.admissions gives the refusal of each protocol in its order. details.targets is the number of '
-    'formulations of the packet. details.largest_one_request_targets, when it is above 0, is a number of '
-    'formulations with which exactory-openness-reading-v7 admits the packet on this route: the statement and its '
-    'first neighbours, counted up to the first number that the protocol refuses. details.serving_routes lists the '
+    'No reading protocol of this release admits this packet on the route record of the admission, so the harness '
+    'records no assignment. That route record is the one that details.successor.route_id names or, when that member '
+    'is absent, the route of this assignment or of its chain. details.admissions gives the refusal of each protocol '
+    'in its order. details.targets is the number of formulations of the packet. '
+    'details.largest_one_request_targets, when it is above 0, is a number of formulations with which '
+    'exactory-openness-reading-v7 admits the packet on that route record: the statement and its first neighbours, '
+    'counted up to the first number that the protocol refuses. details.serving_routes lists the '
     'verified registered routes whose input holds this review as one request. It does not show that a route admits a '
     'chain: the check of review-assignment in the steps of an answer does. When the list is empty, '
     'details.unserved_range states the smallest tasks of this release. details.decision states what the owner '
@@ -2633,8 +2640,9 @@ def plan_turn_recovery(records, artifacts, assignment, outcome):
 ORIGIN_VERIFICATION_MESSAGE = (
     'The harness cannot verify the carried selection of this chain from its first assignment. One of two cases is '
     'the cause. First, the reference carried_selection of that assignment names a protocol or a digest other than '
-    'those of the stored selection. Second, under exactory-openness-carried-selection-v2, recorded_revision of the '
-    'first assignment is not the revision at which the history of the store shows that assignment recorded. The '
+    'those of the stored selection. Second, under exactory-openness-carried-selection-v2 or '
+    'exactory-openness-carried-selection-v3, recorded_revision of the first assignment is not the revision at which '
+    'the history of the store shows that assignment recorded. The '
     'chain gives no finding. Check the record with record-check. When record-check reports the record ready, '
     'report this refusal.')
 STATE_VERIFICATION_MESSAGE = (

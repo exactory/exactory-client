@@ -88,9 +88,9 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `review-series` | `--assignment HEAD`, where any assignment of the chain resolves to the chain's current head, and `--workspace` (default `.`). Execute the planned actions of one review chain in process, through the same operations as the CLI, until the chain is done or needs the agent. It takes no `--file`, `--expected-revision` or `--request-id`, and has no turn limit. `--check` is refused with `check_unsupported` before any workspace or model effect. Every `stop` and `wait` line with a `code` carries `stop_class`, and the last line of a run that ends in a `stop` carries `stop_id`, the id of the `review_series_stop` record that the driver writes for that stop, with `revision_after_stop`, or `stop_record_error`. Since 0.89.2 a run that meets a review stop ends in a `stop` with the code `review_chain_stopped`, whose `stop_id` is the id of the `review_stop` record, and SIGTERM or SIGINT to the command stops its chain in the same way. [Review chains and `review-series`](#review-chains-and-review-series) states the plan of a chain, the exit statuses, the handoffs, the outcomes of a failed reviewer call, the stop record and the review stop. |
 | `review-stop` | `{id, action: "stop", mode, reason}` with exactly one of `assignment_id` and `scope: "store"`, or `{id, action: "release", stop_id, reason}`. Stop the reviewer calls of one review chain or of the whole store, and release that stop later. `mode` is `now`, which ends the running calls, or `after_turn`, which lets them finish. In both modes no new call of the scope starts until the release. `--check` is refused with `check_unsupported`. [Review chains and `review-series`](#review-chains-and-review-series) states the scope, the two modes, the settlement of the stopped calls and the release. |
 | `review-attempt` | Preserve imported output or failure history; imported assertions never establish verified independence. |
-| `review-context` | Record evidence of later contamination or other context observations, or retire a route: `kind: "route_retired"` on an assignment of that route, with the owner's instruction as evidence. A retired route accepts no new assignment or run, an assignment on it without an observed output is dead, and a preserved slot continues through a context repair that names the retirement as its cause. An assignment on a retired route keeps its observed output. This includes an output that an accepted output correction completed, and it holds for the route of the assignment and for the route of the correction. When the retirement names an assignment in the lineage of a context repair, that repair becomes stale, as after every cause event that is recorded later in its lineage. The state then shows `review_context_repair_stale`. |
+| `review-context` | Record evidence of later contamination or other context observations, or retire a route: `kind: "route_retired"` on an assignment of that route, with the owner's instruction as evidence. A retired route accepts no new assignment or run, and an assignment on it without an observed output is dead. The retirement applies to the whole route record, for every assignment on it. A retired route record has the state of its latest probe with an answer. So an observed output on it whose context was unverified only because the latest probe of the record holds no answer becomes ready again when that earlier probe verified the record. The step after a retirement is the step that the plan of the head names: run `review-series` on the head (handoff `review_route_retired`, [Review chains and review-series](#review-chains-and-review-series)). For a preserved slot of a `bar`, a `slate` or a `result` that step is a context repair that names the retirement as its cause. An assignment on a retired route keeps its observed output. This includes an output that an accepted output correction completed, and it holds for the route of the assignment and for the route of the correction. When the retirement names an assignment in the lineage of a context repair, that repair becomes stale, as after every cause event that is recorded later in its lineage. The state then shows `review_context_repair_stale`. |
 | `review-adjudication` | Record the exact observed focused finding. An output that fails its output contract leaves a refusal record. The finding's citations are checked against the delivery of the exact authenticated attempt that produced it, the packets that its request carried, and not against the saved packets of its lineage ([Problem creation](#problem-creation)). A turn of a parts v2 series that is not the final of a complete series, or a final that returned a request, is refused with `review_parts_pending` ([Reviews in fresh parts](#reviews-in-fresh-parts)). |
-| `review-output-correction` | `{id, assignment_id, route_id}`. When a post closes the chain of the assignment, a new correction is refused with `problem_already_posted` ([Problem creation](#problem-creation)). For a problem result reassessment whose two completed, authenticated outputs both have recorded refusals, the latest for `review_reassessment_mismatch`: when relabeling the latest output's `confirmed` findings whose content changed as `revised` would satisfy its output contract, ask the same reviewer once for that relabeling. Use a verified route with the original endpoint, model and adapter; a `codex_cli_visual_v1` assignment can use `codex_cli_v1` instead. The route record must pin the installed runtime, and the reviewer CLI of a Codex route or a Claude route must be installed. When the route record pins another runtime, the command is refused with `review_route_runtime_stale`. When the reviewer CLI cannot be read, the command is refused with `review_runtime_missing`. Both refusals come before any record, and the correction stays available. After `review_route_runtime_stale`, record a route with the same adapter, model, endpoint and configuration as the route that the command named. Probe the route. Then run the command with the id of that route as `route_id`. After `review_runtime_missing`, install the reviewer CLI. Then run the command again. The reviewer returns only those dispositions and reasons, or declines; every other value of the output is kept, and `value-review` then records the composed output with its `output_correction_id`. It is not a new review and grants no further sample. An accepted correction verifies against the runtime that its route record pins. It stays selected after the reviewer CLI, the plugin or the machine changes. It also verifies against the review records as they were before its call started. A review record that is written later does not remove the correction: an assignment, a call, an attempt, a probe, an output refusal, or a context event such as a route retirement or a contamination. Such a record shows in the state of the assignment, as it shows for an answer that needed no correction. An output correction can run on another route record than its assignment. In that case, the state of the assignment also reads the route state of the record that the correction named as `route_id`. When the latest probe of that record does not verify, the state shows `review_context_unverified` or `review_context_contaminated`. A completed probe on that route record removes the obligation. The handoff of `review_context_unverified` is then a probe of the route of the assignment, and the handoff of `review_context_contaminated` is a context repair. In both cases, run `review-probe` on the route record of the correction instead. On a `codex_cli_v1` route the native rollout of the correction turn is read once, when the answer is captured, and retained in the capture, so a correction finished after an interruption authenticates against the retained rollout. An interrupted correction is finished or reconciled as an interrupted `review-run` is. |
+| `review-output-correction` | `{id, assignment_id, route_id}`. When a post closes the chain of the assignment, a new correction is refused with `problem_already_posted` ([Problem creation](#problem-creation)). For a problem result reassessment whose two completed, authenticated outputs both have recorded refusals, the latest for `review_reassessment_mismatch`: when relabeling the latest output's `confirmed` findings whose content changed as `revised` would satisfy its output contract, ask the same reviewer once for that relabeling. Use a verified route with the original endpoint, model and adapter; a `codex_cli_visual_v1` assignment can use `codex_cli_v1` instead. The route record must pin the installed runtime, and the reviewer CLI of a Codex route or a Claude route must be installed. When the route record pins another runtime, the command is refused with `review_route_runtime_stale`. When the reviewer CLI cannot be read, the command is refused with `review_runtime_missing`. Both refusals come before any record, and the correction stays available. The plan names a route record that takes the correction. That is the route of the assignment. When that route record is stale, it is a verified route record with the same route identity (adapter, model, endpoint and configuration) that pins the installed runtime. When the store lacks such a route record or its probe, the plan is the handoff `review_route_runtime_stale` with the step for it. When the command itself gives `review_route_runtime_stale`, the runtime changed after the plan. Then run `review-series` on the head again. After `review_runtime_missing`, install the reviewer CLI. Then run the command again. The reviewer returns only those dispositions and reasons, or declines; every other value of the output is kept, and `value-review` then records the composed output with its `output_correction_id`. It is not a new review and grants no further sample. An accepted correction verifies against the runtime that its route record pins. It stays selected after the reviewer CLI, the plugin or the machine changes. It also verifies against the review records as they were before its call started. A review record that is written later does not remove the correction: an assignment, a call, an attempt, a probe, an output refusal, or a context event such as a route retirement or a contamination. Such a record shows in the state of the assignment, as it shows for an answer that needed no correction. An output correction can run on another route record than its assignment. In that case, the state of the assignment also reads the route state of the record that the correction named as `route_id`. When the latest probe of that record does not verify, the state shows `review_context_unverified` or `review_context_contaminated`. A completed probe on that route record removes the obligation. The handoff of `review_context_unverified` then names the probe of the route record of the correction. When that route record is stale, it takes no probe. The plan is then the stop `review_context_unverified` with the owner's decision. The handoff of `review_context_contaminated` is a context repair. In that case, run `review-probe` on the route record of the correction instead. On a `codex_cli_v1` route the native rollout of the correction turn is read once, when the answer is captured, and retained in the capture, so a correction finished after an interruption authenticates against the retained rollout. An interrupted correction is finished or reconciled as an interrupted `review-run` is. |
 | `review-budget` | `{max_calls, reason}`. Record the optional store-wide allowance of reviewer calls as `review_budget/store`: `max_calls` is a nonnegative integer, or null for no limit, and `reason` is nonempty text. A store without the record behaves as before. With it, the start of every ordinary `review-run`, `review-probe` and `review-output-correction`, and every reservation of a staged task, is refused with `review_budget_exhausted` when no call remains; the check runs in the transaction that records the start, together with the capacity admission ([Staged problem reviews](#staged-problem-reviews)), so two processes cannot both take the last call. Each admission counts once: a staged reservation and its accepted attempt count once, a replay, a capture, an acceptance and a reconciliation add nothing, and a failed or unknown outcome stays counted. An allowance below the calls already admitted is refused with `review_budget_below_charged`, whose details name the smallest allowance permitted as `minimum_max_calls` and a `review-budget` command under `recovery`; raising the allowance keeps the expenditure. With an allowance set, the ID of an imported call cannot admit a new call (`record_conflict`). `intermediate/reviews/usage.json` shows the allowance, the charged calls and the remaining calls under `review_budget`. The allowance counts calls, not money, and review usage stays outside the preparation budgets of `budget`. `--check` accepts or refuses without writing. |
 | `value-review` | Record the exact observed bar, slate or combined support/value result. An output that fails its output contract leaves a refusal record. The output's citations and bars are checked against the delivery of the exact authenticated attempt that produced it, the packets that its request carried, and not against the saved packets of its lineage ([Problem creation](#problem-creation)). A part turn of a problem result series is refused with `problem_evidence_part_pending` and leaves no refusal record. Of a parts v2 series, record only the final turn that returned the review; a read, combine or check turn and a final that returned a request carry no review ([Reviews in fresh parts](#reviews-in-fresh-parts)). A staged review is recorded from its controller's effective result; an incomplete assessment is refused with `assessment_incomplete`. |
 | `research-decision` | Select the canonical scientific action, artifact disposition and full-goal status. |
@@ -530,7 +530,10 @@ probe gives its key an observed limit of at least its input tokens less the
 output reservation. A capacity probe is also the latest input-boundary test of
 its route. After a capacity probe that fails, for example because the provider
 refuses the size, the route is unverified until a later probe of the route
-passes. A failed capacity probe on an HTTPS route keeps the provider's failure
+passes. One other event ends that state: the retirement of the route record,
+when the failed probe holds no answer and the latest earlier probe with an
+answer verified the record. A probe holds an answer when its stored response
+holds answer text, parsed or not. A failed capacity probe on an HTTPS route keeps the provider's failure
 under `error`, with its `message` and, when the message ends with one, its
 `http_status`.
 
@@ -933,8 +936,9 @@ The handoffs:
 | `review_slot_exhausted`, `review_refusal_notice_metadata_too_large` | For `review_slot_exhausted` only, `review-output-correction` when that operation admits the head and its request fits the route (the metadata correction of a problem result reassessment, below); the position is then not exhausted, and replacements can remain. Otherwise the step of the role of the head: `review-assignment` of a new eligible reviewer for a `bar` and for an `adjudicator`; `review-assignment` of a context repair with the member `exhaustion` for a `slate` and for a `result`; `export`, kind `problem-openness`, for an openness chain (a new chain; since 0.91.0, for a chain under v5, v6 or v7, the handoff states the admission of that chain under `details.successor`, and a stop with a decision takes its place when no protocol admits the new packet); `search review-packet` for another native mathematical review (a new attestation); `review-route` and then `review-assignment` for a `verification`, a `manuscript` and a `standalone` review. | An eligible problem result reassessment takes its one metadata correction, or the turn position is exhausted (A position whose replacements are spent, below). Follow `details.step`. On a stale route record this handoff also follows when no route record with the same adapter, model, endpoint and configuration can carry the replacement of a refused session turn (The renewal of the route, below). `details.renewal.unserved.reason` then says why: `limit` (the replacement does not fit, and capacity evidence does not change that), `probes_used` (the capacity probes of this refusal are used up) or `probe_unavailable` (the capacity probe cannot run). |
 | `review_resampling_forbidden` | `review-assignment` | An initial bar, slate or result review ended without an output; the same reviewer identity is not sampled again, so a new eligible reviewer is needed. |
 | `review_worker_reconciliation_required` | `review-attempt` | A pending invocation has no pool membership (a call of an earlier version). |
-| `review_context_*`, `review_route_retired` | `review-assignment` | A context repair is needed. |
-| `review_route_runtime_stale` | `review-route`, or the command of `details.step` for a head whose refused answer takes a replacement | The route record of the head is stale: it pins another reviewer runtime than the installed one. `review-assignment` refuses an assignment on a stale route record and records nothing. This holds for a first turn, a next turn, a replacement and the child of a staged review. `review-series` then ends with this handoff. The planner keeps the route of the chain, so `review-series` on the same head gives this handoff again. Record a new route with a new id and the same adapter, model, endpoint and configuration, probe it, and then follow the stale-route procedure of the [route instructions](research-decisions.md#commands-and-shared-state): assign the role again on the new route, or, for a slot with history, retire the stale route and continue the slot through a context repair; then run `review-series` with the new assignment. A first assignment that was refused is assigned again under the same id on the new route. A head whose refused answer takes a replacement differs: its handoff carries `details.renewal`. When `details.renewal.admitted` is true, the replacement can run on another route record with the same adapter, model, endpoint and configuration (The renewal of the route, below), and `details.renewal.lacks` names what the store lacks for it. For `record`, record the route and probe it. For `probe`, probe the route record of `details.renewal.route_id`. For `capacity`, obtain the owner's authorization first, because the capacity probe is a paid call, and then run the capacity probe of `details.step`. After that step, run `review-series` on the same head again. It records and sends the replacement on the new route record, or it names the next step. The reviewer, the slot and the count of replacements stay. When `details.renewal.admitted` is false, the replacement cannot run on another route record, and `details.steps` lists the steps of the stale-route procedure. `review-series` on the same head gives this handoff again until those steps are taken. This is the case for the first turn of a context repair, a turn of a series in parts, a turn of a reading chain, and a session turn whose earlier turn is no longer verified. When `review-output-correction` gave this code, record a new route with the same adapter, model, endpoint and configuration as the route that the command named, probe it, and run `review-output-correction` with the id of that route as `route_id`. The step of the plan names the route of the assignment, so replace its `route_id`. |
+| `review_context_unverified`, `review_context_contaminated`, each with `details.turn` | The command of `details.step`: `review-probe`; `review-context` for a route record that takes no probe; otherwise the command of the step of the role of the head | Since 0.92.0. The review records of the present give no verified context for a turn of the review of the head (A call reads the context of the present, below). `details.turn` names the turn, and `details.message` states the state and the step. For `review_context_unverified` the step is `review-probe` of the route record of that turn, which `details.route_id` names. When that record is stale, the step is its retirement (`review-context`, kind `route_retired`, on the named turn), and `details.steps` names `review-series` on the head after it. When that record is stale and retired and its state stays unverified, the step is the step of the role of the head. For `review_context_contaminated` the step is the step of the role of the head (next row). After the step, run `review-series` on the head again. |
+| `review_context_*` without `details.turn`, `review_route_retired` | The command of `details.step` | The context of the head itself is not verified, the context repair of its lineage does not hold, or its route record is retired. Follow `details.step`, the step that the plan of the head names. For `review_context_unverified` it is `review-probe` of the route record whose probe ends the state. For the other codes it is the step of the role of the head: `review-assignment` of a context repair for a `bar`, a `slate`, a `result` and an `adjudicator`; `export`, kind `problem-openness`, for an openness chain; `search review-packet` for another native mathematical review; `review-assignment` on another verified route for a `verification`, a `manuscript` and a `standalone` review. When the retired route record is also stale, `details.steps` first names the step that gives the store a verified route record with the same adapter, model, endpoint and configuration and the installed runtime: `review-route`, or `review-probe` of such a record. |
+| `review_route_runtime_stale` | The command of `details.step` | The route record of the head is stale: it pins another reviewer runtime than the installed one. A stale route record takes no assignment, no run, no probe and no output correction. Every plan names route records that take their commands. So `review-series` ends with this handoff before it executes a command on the stale route record. It also ends with this handoff when the runtime changes after the plan and a command gives this code. Every handoff of this code carries `details.renewal` with the members `admitted`, `route_id` and `lacks`. When `details.renewal.admitted` is false, the next step of the head cannot move to another route record. This is the case for a next turn, a recorded turn without a call, and a retry after a failed call. It is the case for the next call of a staged review and for the first turn of a context repair. It is the case for a turn of a series in parts and for a turn of a reading chain. It is also the case for a session turn whose earlier turn is no longer verified. It is also the case for a call that failed because the runtime changed during the call. `details.steps` then lists the steps of the stale-route procedure in the order to take them. The procedure needs a route record with the same route identity (adapter, model, endpoint and configuration) that pins the installed runtime. `details.renewal.lacks` says what the store holds for that route record. For a bar, a slate, a result, and an adjudicator in parts or in a staged review, the order is this. First retire the stale route record with `review-context` (step 8). Then verify the other route record. When `details.renewal.lacks` is `record`, record such a route and probe it (step 7). When `details.renewal.lacks` is `probe`, probe the route record that `details.renewal.route_id` names. The probe must come after the retirement, because the context repair needs a probe that is later than its cause events. Then continue the slot through the context repair (step 1). The repair can name that route record as `route_id`. A retirement withdraws the route record for every head on it. So, before the retirement, run `review-series` on every other head of this route record that holds a refused answer. That head then takes its replacement first. For an adjudicator without parts, `details.steps` lists step 7 and the assignment of a new reviewer (step 3). For a verification, a manuscript review and a standalone review, it lists step 7 and a new first assignment (step 6). For an openness chain or a math chain, it lists step 7 and the export or the review packet of a new chain (step 4 or 5). In these three lists, step 7 is the probe of the named route record when `lacks` is `probe`. When `lacks` is null, the lists hold no step 7. One head gets a shorter list. It holds an observed answer, and its context is not verified now, because the latest probe of its route record did not verify. `details.steps` then lists the retirement and `review-series`. The plan after the retirement names the step that follows it. Before the steps, `review-series` on the same head gives this handoff again. When `details.renewal.admitted` is true, work of the head can run on another route record. That route record has the same route identity and pins the installed runtime. `details.renewal.lacks` names what the store lacks for it. This is the case for the replacement of a refused answer (The renewal of the route, below), for the output correction, and for the new chain of a stopped chain. For `record`, record the route and probe it. For `probe`, probe the route record of `details.renewal.route_id`. For `capacity`, obtain the owner's authorization first, because the capacity probe is a paid call. Then run the capacity probe of `details.step`. After that step, run `review-series` on the same head again. It then does one of three things. It records and sends the replacement on the new route record. Or it names the output correction or the export of the new chain with that route record. Or it names the next step. For a new chain that this route record does not admit, the plan is the stop of that admission. The reviewer, the slot and the count of replacements stay. When `review-output-correction` itself gave this code, the runtime changed after the plan. Then run `review-series` on the head again. Take its step. |
 | `review_chain_stopped` | `review-stop` | A review stop stands for the chain or for the store; `details.step` is its release (The stop, above). `review-series` prints this plan as a `stop`. |
 | `openness_review_not_approved` | `export`, kind `problem-openness` | The final turn of an openness chain returned a result that `problem-openness` does not accept (for example the decision `revise` or `reject`, or an approved finding whose evidence or statement does not match); `details` hold `assignment_id`, `decision`, `reason`, `kind` and `refusal` (the `code` and `message` of the `problem-openness` refusal). Obtain a new finding after the reviewer's reason and the refusal are addressed. |
 | `openness_packet_outdated` | `export`, kind `problem-openness` | Since 0.90.0, for a chain under `exactory-openness-reading-v6`. The records changed after the packet was exported: a binding check of its minimum now fails, or the gaps that the harness computes from the records of now differ from `minimum_gaps` of the packet. The planner compares before it runs, replaces or continues a turn, and again when `problem-openness` refuses a final finding with a resolved outcome. `details` hold `assignment_id`, `kind`, `message`, `added` and `removed`; each changed entry is `{row, entry}`, where `entry` is the gap or the binding error and `row` names the fact that changed: `current_statement`, `material_searches`, `bound_records`, `decisive_captures`, `required_bundle`, `inspection_bytes`, `source_deferrals` or `family_reading`. No refusal is recorded against the reviewer's answer, and the reading turns of the chain stay verified. Export a new packet and start a new chain. A final finding with the outcome `unresolved` skips the audit of the minimum, so it is recorded also after the searches or the gaps of the minimum changed. It still passes the other checks of the recording, among them that its statement is the current statement of the problem (`openness_statement_mismatch`). |
@@ -1100,7 +1104,7 @@ starts a new sequence.
 | `scientific_refused` | an output refusal of a completed answer | a replacement of the turn that carries the refusal, at most two for the turn position; one more call in its place for a turn of an openness reading chain under a protocol before `exactory-openness-reading-v7` (since 0.91.0 a turn of a v7 chain takes the replacement), and for a problem result reassessment under the conditions of the metadata correction; the handoff `native_review_attestation_required` when the refusal recovery proposes a replacement of the first `native_math` turn; then the step of the role of the head (The replacement after a refused output, below) | `review_slot_exhausted` |
 | `input_over_limit` | the error code `review_input_too_large` | the existing initial-size replacement when it applies, else stop | `review_input_too_large` |
 | `runtime_unavailable` | the error code `review_runtime_missing` | the provider schedule with its own count; an attempt without `observed_at` runs at once | `review_runtime_missing` |
-| `runtime_stale` | the error code `review_route_runtime_stale` | the handoff `review-route` | `review_route_runtime_stale` |
+| `runtime_stale` | the error code `review_route_runtime_stale` | the handoff of the stale-route procedure (the row of `review_route_runtime_stale` in the table of handoffs), or the handoff `review_route_retired` when the route record is retired | `review_route_runtime_stale` |
 | `timeout` | an execution timeout | stop; since 0.90.0 one more call on the same assignment, unless the task floor or the turn budget ends the recovery, and from the second timeout of the failure sequence a replacement at a smaller task where the turn has an admissible one within its allowance, else stop (the smaller task after a capacity event, below) | `review_timeout`, or the code of the recovery or of the budget that the plan returns |
 | `format_unsupported` | the error code `review_format_unsupported` | stop | `review_format_unsupported` |
 | `unknown` | none of the above | on a Codex route, the provider schedule while every failed call of the turn position had no answer and at most 120 seconds of wall time; otherwise stop | `review_failure_unknown` |
@@ -1368,6 +1372,42 @@ first turn of a native review (`native_review_attestation_required`), and a
 replacement of the assignment (state `replace`) for every other turn. A head
 that ran on an unverified context stops with `review_context_unverified` for a
 decision about its route.
+
+A call reads the context of the present. Since 0.92.0 `review-run`, the
+dispatch of a staged task and `review-output-correction` also read the review
+records of the present before they start a call. They read two facts for the
+assignment and for each earlier turn of its review: the state of the route
+record of the turn (`context_status`, as `review-route-assess` gives it), and
+the contamination events that name the turn. For a slot of a `bar`, a `slate`
+or a `result` the earlier turns are the turns whose reviewer context reaches
+the assignment since the latest context repair. For every other review they
+are the turns that the request continues (`history_assignment_id` or
+`context.prior_assignment_id`). When a turn has no verified context, the
+call is refused and no request is sent. The details give `assignment_id`,
+`turn` and `next`, the plan of the head. `turn` is `{assignment_id, events,
+route: {id, context_status}, count}`: the turn that decides the step, the
+contamination events that name it, its route record with the state of the
+record, and the number of turns without a verified context. The turn is the
+first that a contamination event names, or else the first whose route record
+is not `verified_for_route`. The code is `review_context_contaminated` when a
+contamination event names that turn or the latest probe of its route record
+found a control of an excluded source, and `review_context_unverified`
+otherwise. `plan_next` gives the same code as a handoff for a head whose
+result is not recorded and that is no staged controller. It plans a pending
+call first, and this handoff before a run, a retry, a replacement or a next
+turn. The details of the handoff give `assignment_id`, `turn`, `route_id`,
+`message` and `step` (The handoffs, above). `status` lists the code as a row
+of the head with the member `turn`. A probe that verifies the route record
+ends the state of `review_context_unverified`, and the review continues from
+its last turn. A contamination event stays, and the review gives no result
+that counts. A request that is already
+committed is replayed as before. While the route record of the assignment is
+stale or retired and no contamination event names a turn, the refusal and
+the plan of that route record come first (`review_route_runtime_stale`,
+`review_route_retired`). For a chain under `exactory-openness-reading-v7`,
+`review-assignment` after the first assignment reads the same two facts for
+the turn that it continues or replaces, refuses with the same codes and
+records nothing.
 
 The smaller task after a capacity event. Since 0.90.0 four outcomes share one
 rule: `output_over_cap`, `input_over_limit`, `timeout` from the second timeout
@@ -2307,7 +2347,19 @@ Capacity. The default is one reviewer call at a time per store.
 `review-assignment` with `scheduler: {store_limit, route_limits,
 covered_adapters}` records `review_capacity_policy/store` (version 1, scope
 `store`); `route_limits` maps a route id to its own limit, and
-`covered_adapters` defaults to the four local adapters. Every covered call
+`covered_adapters` defaults to the four local adapters. Two reviews on two
+routes, such as the two bars, run at the same time only under a policy that
+admits two calls. Since 0.92.0, in a problem record that holds a route record
+which is not retired, `next` gives each of the first two bar assignments as a
+`review-assignment` step under the obligation `problem_bar_pending`: the
+payload `{role: "bar", dossier_id: null}` and, as
+the fields that the session chooses, `id`, `route_id`, `reviewer_id`,
+`author_id` and `context`. While the store holds no recorded policy and two
+or more route records of covered adapters are verified and not retired, the
+payload also holds `scheduler`: `store_limit` is the number of these route
+records, and `route_limits` gives each of them 1. Keep that member in the
+first bar assignment. In a study, where no step carries it, give the first
+bar assignment a `scheduler` of the same form. Every covered call
 passes one admission in the store transaction that records its start: the
 reservation of a staged task, and the start of an ordinary `review-run`, a
 `review-probe` and a `review-output-correction`. Admission counts the active
@@ -2356,7 +2408,12 @@ place until `review-run` with `action: "reconcile"` releases it. For a head
 whose call has to wait, `plan_next` gives a `wait` with the code
 `review_capacity_wait` and `details.calls_before`. Its action is the
 reconciliation of an active call whose process has ended, when there is one,
-and otherwise the head's own run, which then waits in the queue.
+and otherwise the head's own run, which then waits in the queue. Since 0.92.0,
+when the store limit holds back a call whose own route runs no call, the plan
+also carries `details.scheduler` and a `message`. `details.scheduler` is a
+policy of one call at a time on each verified route among the route of the
+call and the routes of the active and the waiting calls. Give it as
+`scheduler` with the next `review-assignment` of the record (Capacity, above).
 
 Capture, acceptance and recovery. `review-run` reserves the task
 (`review_reservation/<id>`, `review_task_execution/<task id>` and
@@ -6019,10 +6076,21 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   formulations and route identity (adapter, model, endpoint and
   configuration). The first assignment selects them once and stores the
   selection (`carried_selection: {protocol:
-  "exactory-openness-carried-selection-v2", digest, artifact}`). The selection
+  "exactory-openness-carried-selection-v3", digest, artifact}`; a chain that
+  0.91.4 to 0.91.14 started keeps its stored selection under
+  `exactory-openness-carried-selection-v2`). The selection
   reads the ready reading turns of each of those chains: the reading turns
   with an observed, authenticated output in a verified context, as far as the
-  chain authenticates from its first turn on. It first credits ranges and
+  chain authenticates from its first turn on. Under version 3 it reads each
+  earlier chain on the content records as they stood before the first
+  assignment of that chain, and on the review records as they stand. The
+  content records are the records of the kinds `work`, `source`,
+  `source_bundle`, `reading`, `main_capture_selection` and `bundle_selection`;
+  the review records are the other kinds, among them the assignments, the
+  attempts, the context events, the refusals, the route records and their
+  probes. So a chain keeps its ready reading turns for a later chain after a
+  command changed the content records, and the later chain reads the units
+  that are new or changed. It first credits ranges and
   searches, with the turns in this order: the latest chain first, and the
   turns of a chain in their order. For each unchanged unit, which is a unit of
   the new packet with the same identity and the same SHA-256 as in the earlier
@@ -6211,19 +6279,32 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
 - The admission of a successor chain. Where a problem chain cannot go on and a
   new export can, the plan is the handoff `export`, and its details state what
   the new chain will be: `details.successor` holds the admission that the new
-  packet meets on the same route with the same reviewer (`protocol`,
-  `admissions`, and `carried_readings` with `measure` for a v7 chain, or
-  `reads_every_unit_again` and `planned_reading_turns` for a v6 chain),
-  `details.message` says it in words, and `details.step` is the `export` with
-  the reviewer fixed, followed by `review-assignment --check` and
-  `review-assignment` on the same route. The step names the route of the
-  stopped chain. When that route record is stale (it pins another reviewer
-  runtime than the installed one), `review-assignment` and its check refuse
-  the first assignment of the new chain with `review_route_runtime_stale` and
-  record nothing. Record and probe a route with the same adapter, model,
-  endpoint and configuration, and assign the same export on it under the same
-  id. A v7 chain carries the same turns there, because the carried turns need
-  the same route identity and not the same route record. When no protocol
+  packet meets with the same reviewer on the route record that the step names
+  (`protocol`, `admissions`, and `carried_readings` with `measure` for a v7
+  chain, or `reads_every_unit_again` and `planned_reading_turns` for a v6
+  chain), `details.message` says it in words, and `details.step` is the
+  `export` with the reviewer fixed, followed by `review-assignment --check` and
+  `review-assignment`. The assignment of the step names a route record that
+  takes it. That is the route of the stopped chain. When that route record is
+  stale (it pins another reviewer runtime than the installed one), the step
+  names another route record. That route record is verified, has the same route
+  identity, and pins the installed runtime. `details.successor.route_id` then
+  names it, and `details.successor` states the admission on it. When the store
+  lacks such a route record or its probe, the plan is the handoff
+  `review_route_runtime_stale` with `details.renewal`. Its step records and
+  probes a route or probes the named route record. After that step,
+  `review-series` on the same head states the admission on the new route
+  record. When that record admits the new chain, it names the export there.
+  Otherwise its plan is the stop of that admission. Before that step,
+  `details.successor` states the admission on the route record of the stopped
+  chain. The two admissions can differ, because the capacity evidence of a
+  route belongs to its runtime. A route record with the installed runtime can
+  hold no capacity evidence of the size of the new chain. A call or a capacity
+  probe under that runtime shows that evidence. A v7 chain carries the same
+  turns on the new route record. The cause is that the carried turns need the
+  same route identity and not the same route record. When the route record of
+  the stopped chain is retired, the step leaves `route_id` open. When no
+  protocol
   admits the new packet, the plan is a stop with the decision of the admission
   above. This
   applies to problem chains under v5, v6 and v7; a chain under an earlier
@@ -6234,9 +6315,16 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   to a v7 chain after a denser ratio. For a chain under v5 or v6, the decision
   after an `output_over_cap` at the same size, and the decision
   `review_turn_failures_exhausted` after provider refusals, gain the answer
-  `Export a new packet and start a new chain on this route` when the admission
-  of a successor gives an export step; otherwise they hold the answers that
-  `details.decision` lists. A v7 turn whose input is over the limit at the
+  `Export a new packet and start a new chain with the same reviewer` when the
+  admission of a successor gives an export step; otherwise they hold the
+  answers that `details.decision` lists. While the store lacks the route record
+  of the new chain or its probe, that answer holds another step. This step
+  records and probes a route or probes the named route record, and
+  `review-series` comes after it. After that step, the decision holds the
+  export step, or the plan is the stop of the admission on the new route
+  record. The answer `Build a new math review packet and start the admitted
+  chain with the same reviewer` of a stopped math chain obeys the same rule.
+  A v7 turn whose input is over the limit at the
   lowest level of its position keeps the decision stop of its outcome, and its
   verified turns stay for a later chain. When the admission selects v7, the
   harness makes the selection of the carried turns of the new chain (Carried
@@ -6306,18 +6394,22 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   reading turns before the answer.
 - The verification of the carried selection. The harness verifies a stored
   selection under the protocol that it names. For
-  `exactory-openness-carried-selection-v2` the verification has two parts. In
+  `exactory-openness-carried-selection-v2` and
+  `exactory-openness-carried-selection-v3` the verification has two parts. In
   the first part the harness makes the selection again on the store as it
   stood at the revision before the first assignment, which it reads from the
   history of the store, and the stored turns must equal the result. A store
-  that holds such a selection keeps that history, as a managed store does.
+  that holds a reading chain keeps that history, as a managed store does.
   What is recorded later changes nothing in this part: a turn of an earlier
   chain that becomes ready later, a chain that is recorded later, a content
   record that changes later, and a contamination of a chain from which nothing
   is carried. In the second part every earlier chain that gives a carried turn
-  must authenticate up to its last carried turn under the records as they
-  stand now, and every stored range, search and entry must match its
-  authenticated turn and its unit. A selection under
+  must authenticate up to its last carried turn, and every stored range,
+  search and entry must match its authenticated turn and its unit. Version 2
+  reads the earlier chain under the records as they stand now. Version 3 reads
+  it under the review records as they stand now and the content records as
+  they stood before the first assignment of that chain (Carried turns, above).
+  A selection under
   `exactory-openness-carried-selection-v1` has the second part alone, which
   also requires a range or a search in every stored turn. A chain that fails
   either part is refused with `openness_reading_incomplete`, and a finding
@@ -6328,19 +6420,31 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   either part, is a refusal that is neither a refusal of the store nor
   `review_context_unverified` nor `openness_reading_incomplete`. The reading
   of an earlier chain can raise such a refusal (Carried turns, above). The
-  third, for a selection of version 2, is `claim_reassessment_required`. It
-  occurs when the records were read without the history of the store. Its
+  third, for a selection of version 2 or 3, is `claim_reassessment_required`.
+  It occurs when the records were read without the history of the store. For
+  a selection of version 3 it also occurs when the history does not show the
+  first assignment of an earlier chain at its `recorded_revision`. Version 3
+  reads each earlier chain when the selection is made, so this refusal can
+  also end a first assignment, its check, and the plan of a new chain in
+  `status`, `next` and `review-series`. Its
   message asks to reassess a bound record. That step belongs to managed
   research and does not apply to a problem chain. For
   `claim_reassessment_required`, run `record-check`, and then report the
   refusal with its details.
   `review-series` still reports a chain with a recorded finding as done. The
   state shows in the obligation `problem_openness_stale` of `status`. Three
-  later events are known to fail the second part, as they did before 0.91.4: a
+  later events are known to fail the second part of a selection of version 1
+  or 2, as they did before 0.91.4: a
   contamination event on a carried turn, a change of the content records from
   which a carried chain is observed (for example a source bundle that links
   the capture of a delivered text as a supplement), and a failed probe of the
   route record of a carried chain while it is the latest probe of that record.
+  For a selection of version 3 the first and the third fail the second part.
+  The second does not: a change of the content records fails the verification
+  of a v7 chain only when it changes a unit of the packet of that chain. The
+  refusal is then the one of the stored inventory (`openness_reading_incomplete`,
+  "A stored inventory or state of this chain differs ..."), `record-check`
+  reports the record ready, and the step is a new export.
   After the first and after the third, `record-check` stays ready. Its step
   `authentication` lists the turn that is no longer ready under `assignments`,
   with `review_context_contaminated` or `review_context_unverified` among its
@@ -6351,19 +6455,33 @@ ran, in order. A stored chain keeps its protocol. A chain under v6 follows
   `review-route-assess --route-id ID` shows the state that the latest probe of
   that route record gives: `context_status: verified_for_route` with that
   probe in `probe_id` after a completed probe, and `unverified` with a null
-  `probe_id` after a failed one. A stale route record takes no probe:
-  `review-probe` refuses it with `review_route_runtime_stale`, and no probe
-  can then end the third event. After the other two, and in that case, a new
+  `probe_id` after a failed one. One case differs: on a retired route record
+  whose failed latest probe holds no answer, the state and `probe_id` are
+  those of the latest probe with an answer. A stale route record takes no
+  probe: `review-probe` refuses it with `review_route_runtime_stale`, and no
+  probe can then end the third event. The step is then the retirement of that
+  route record: `review-context` with the kind `route_retired` on an
+  assignment of the carried chain, with the owner's instruction as evidence.
+  After it the route record has the state of its latest probe with an answer.
+  This ends the third event only when that probe verified the record; the
+  carried turns are then ready again, and the chain verifies. When that probe
+  failed a control, or no probe of the record holds an answer, the record
+  stays `unverified`, and when it showed a control of an excluded source, the
+  record stays `contaminated`. After the other two, and in these cases, a new
   export starts a chain that carries the turns of earlier chains that still
-  authenticate from their first turn on. It carries no turn of the v7 chain
+  authenticate from their first turn on. After a contamination event or a
+  failed probe it carries no turn of the v7 chain
   whose carried selection no longer verifies, so it reads again what that
   chain read itself. Every turn of that chain was read from a state that
   holds its carried turns, so the chain authenticates only together with
-  them.
+  them. After a change of the content records, the new chain stores a
+  selection of version 3. It carries the ready reading turns of each earlier
+  chain that qualifies, the v7 chain included, for the units that did not
+  change, and it reads the units that are new or changed.
   A chain that 0.91.0 to 0.91.10 recorded can fail for one more reason: the
   answer of a carried turn fails the output check of its turn (the item
-  before this one). A selection of version 2 then fails the first part, and
-  a selection of version 1 the second part. This holds with or without a
+  before this one). A selection of version 2 or 3 then fails the first part,
+  and a selection of version 1 the second part. This holds with or without a
   refusal record for that answer. While the store holds no refusal record
   for it, `record-check` lists that turn as ready. The step is a new export,
   as after the first two events.
@@ -7321,7 +7439,7 @@ example the population of the cohort tool. The post decision is
 | `problem_citation_work_ineligible` | Record citation metadata only for an existing `url:` work with no DOI and no arXiv identity; the refusal names `version_id`. A work with either identity is cited from its work record. |
 | `problem_citation_evidence_unbound` | Bind each span to a retained object of this store, the `response.sha256` of the named source record or the `text.sha256` of a `fulltext` capture of this exact version with that source, and keep the object retained; `source_id` and `sha256` name the span. Without details, the source record of a span changed after the record was made: record new metadata under a new id. |
 | `problem_citation_span_mismatch` | Make the field value equal the selected bytes exactly, or move `start` and `end` to the bytes that hold it; `source_id` and `sha256` name the span. |
-| `problem_bar_pending`, `review_bar_mismatch` | Obtain both current field/area bars. |
+| `problem_bar_pending`, `review_bar_mismatch` | Obtain both current field/area bars. Under `problem_bar_pending`, `next` gives the bar assignment as a step, with the member `scheduler` where it applies (Capacity, under [Staged problem reviews](#staged-problem-reviews)). |
 | `problem_review_pair_required`, `problem_evidence_unassessed`, `problem_assurance_pending` | Obtain the independent observed pair with delivered current evidence and all five assurances passed. When fewer than two result slots are occupied, `problem_review_pair_required` reports that the independent pair is missing, also when the occupied slot has pending work. It does not name a slot, and it carries `review_ids` (the current recorded reviews, possibly empty). |
 | `research_objection_unresolved` | Resolve the named material objection with evidence or a focused independent adjudication. An imported objection (`<id>@origin:<source identity>`) is resolved in this record the same way; its source's resolution does not count. |
 | `problem_objections_refresh_required` | A linked source record changed since its carry, or has unfinished relevant review work (`source_workspace`, `source_revision`): it recorded a bar or slate review, a new version of an objection or a carry of its own; or a current bar or slate slot head, or a current result head whose frozen packet delivers a bar, slate or imported objection identity, has no recorded `value-review`, a completed but unrecorded final included. A result head of an older statement counts too. Complete each such chain to its final assessment and record it; a superseded assignment and an intermediate turn need no record. When the code stays, refresh the source's own links first and record a new carry with a new id. Then refresh the destination reviews whose currency changed: a changed nonempty imported set needs a focused slate review and a new slate, a review whose currency did not change stays valid, and the gate lists what remains ([Carried objections](#carried-objections)). When the pending review belongs to an earlier statement whose candidate is still current, run `problem-statement` in the source with the exact payload of that statement under a new request id, which selects it again; record the review; then select the newer statement the same way. Complete relevant reviews before you supersede their candidate: when that candidate is already superseded, `problem-statement` refuses with `problem_candidate_missing`, and no command of this release records the review. Preserve the records and report it. |
