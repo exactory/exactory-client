@@ -6004,16 +6004,7 @@
       ]
     },
     {
-      "ast_sha256": "4a3098451275102a0a21cd811af7981a6721c11cde203170f7d44ea1190a4e64",
-      "callee": "research_harness.review_parts.read_delivered_items",
-      "caller": "research_harness.review_parts._list_delivered_texts",
-      "classification": "listed module",
-      "targets": [
-        "research_harness.review_parts.read_delivered_items"
-      ]
-    },
-    {
-      "ast_sha256": "7e2999c0096e6d6e42a204b07132e3249fa72ea6443a310c38ec73b78dd4c4ac",
+      "ast_sha256": "021fa7b7ae5a40059f68e62e697a6a0f8a3b49616556b0fbd8efbf136e89a806",
       "callee": "research_harness.review_parts._list_delivered_texts",
       "caller": "research_harness.review_parts._verify_statements",
       "classification": "listed module",
@@ -6067,7 +6058,7 @@
       ]
     },
     {
-      "ast_sha256": "667127b74e139360ff1bc0873b48199777bab56c98fa5519ff016fdb6d051231",
+      "ast_sha256": "1dba648dabc94f3276e172f54e0cd5499fb92d63e5df880323a13402d7c01321",
       "callee": "research_harness.review_parts._verify_statements",
       "caller": "research_harness.review_parts._validate_read",
       "classification": "listed module",
@@ -6213,7 +6204,7 @@
       ]
     },
     {
-      "ast_sha256": "1f979d68f505833a3b2cd694230f6d11169968d2eda79299247abd92fc4658a6",
+      "ast_sha256": "e84b121b465f777002ce3e9acd778fcd44dc6114857af78d4c120193cf6b9c73",
       "callee": "research_harness.review_parts._verify_statements",
       "caller": "research_harness.review_parts._validate_check",
       "classification": "listed module",
@@ -25741,15 +25732,6 @@
       ]
     },
     {
-      "ast_sha256": "4a8dc33e53ee21443210fa0ded2afab20dfa564be215665edb95735952142177",
-      "callee": "copy.deepcopy",
-      "caller": "research_harness.review_session_v4.build_session_packet",
-      "classification": "standard library",
-      "targets": [
-        "copy.deepcopy"
-      ]
-    },
-    {
       "ast_sha256": "d78158ad221c08a0a560ff41f76795e8879d35056182cd4e8729b03832222d41",
       "callee": "dict",
       "caller": "research_harness.review_session_v4.build_session_packet",
@@ -27480,16 +27462,6 @@
       ]
     },
     {
-      "ast_sha256": "f0b427a9df37856f9845ed31d324ea7a16b92bf9df7ced673803f9e5e2c3be49",
-      "callee": "UNCLASSIFIED_FIELD_MESSAGE.format",
-      "caller": "research_harness.review_field_classes._select_table",
-      "classification": "standard library",
-      "reason": "Reviewed built-in collection/string method does not mutate packet arguments.",
-      "targets": [
-        "builtins.format"
-      ]
-    },
-    {
       "ast_sha256": "0ca478cd4390363420aff01a277de364f1a3c413c98ddabb636d173897a615f4",
       "callee": "research_harness.review_condensing.validate_combination",
       "caller": "research_harness.openness_reading_v7.validate_turn_output",
@@ -27551,15 +27523,6 @@
       "classification": "standard library",
       "targets": [
         "functools.partial"
-      ]
-    },
-    {
-      "ast_sha256": "dbe35d9c0ef8bcfd350148257a1935d41d28c78799b78db53971f4006dac4891",
-      "callee": "ValueError",
-      "caller": "research_harness.review_field_classes._select_table",
-      "classification": "standard library",
-      "targets": [
-        "ValueError"
       ]
     },
     {
@@ -27830,6 +27793,105 @@
       "classification": "listed module",
       "targets": [
         "research_harness.review_visual_sources.validate_manifest"
+      ]
+    },
+    {
+      "ast_sha256": "401711a6e1ee238d163bda324ff6aa6aef8f5b1a0502892f5365094ce40c5434",
+      "callee": "research_harness.review_field_classes._refuse_unclassified_field",
+      "caller": "research_harness.review_field_classes._select_table",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes._refuse_unclassified_field"
+      ]
+    },
+    {
+      "ast_sha256": "afa0215ebcae068255e4419475b1d7e0f09652fbb39b3dd64a742f69c4dba844",
+      "callee": "research_harness.review_field_classes._project_binding_field",
+      "caller": "research_harness.review_field_classes._build_classified_frame",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes._project_binding_field"
+      ]
+    },
+    {
+      "ast_sha256": "022412d3ca3f5b242aaf76ad102953ebcf013733c72e6cb9d5fd03487cacbc93",
+      "callee": "isinstance",
+      "caller": "research_harness.review_field_classes.describe_role_frame",
+      "classification": "standard library",
+      "targets": [
+        "isinstance"
+      ]
+    },
+    {
+      "ast_sha256": "afa0215ebcae068255e4419475b1d7e0f09652fbb39b3dd64a742f69c4dba844",
+      "callee": "research_harness.review_field_classes._project_binding_field",
+      "caller": "research_harness.review_field_classes.describe_role_frame",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_field_classes._project_binding_field"
+      ]
+    },
+    {
+      "ast_sha256": "4a3098451275102a0a21cd811af7981a6721c11cde203170f7d44ea1190a4e64",
+      "callee": "research_harness.review_parts.read_delivered_items",
+      "caller": "research_harness.review_parts._verify_statements",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_parts.read_delivered_items"
+      ]
+    },
+    {
+      "ast_sha256": "4a3098451275102a0a21cd811af7981a6721c11cde203170f7d44ea1190a4e64",
+      "callee": "research_harness.review_parts.read_delivered_items",
+      "caller": "research_harness.review_parts._validate_read",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_parts.read_delivered_items"
+      ]
+    },
+    {
+      "ast_sha256": "4a3098451275102a0a21cd811af7981a6721c11cde203170f7d44ea1190a4e64",
+      "callee": "research_harness.review_parts.read_delivered_items",
+      "caller": "research_harness.review_parts._validate_check",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_parts.read_delivered_items"
+      ]
+    },
+    {
+      "ast_sha256": "56a85f4dd0168213fd36aa7868ed1d735580075a8b9a67b035f35036c1ead876",
+      "callee": "research_harness.review_route_capacity.measure_capacity_value",
+      "caller": "research_harness.review_session_v4.check_v4_admission",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_route_capacity.measure_capacity_value"
+      ]
+    },
+    {
+      "ast_sha256": "f05f5c1b1cba85e2c8aeb4de3ba280c38bf290c57c664dd93241869bd9ef3bdb",
+      "callee": "research_harness.review_session_v4._build_session_identity",
+      "caller": "research_harness.review_session_v4.check_v4_admission",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_session_v4._build_session_identity"
+      ]
+    },
+    {
+      "ast_sha256": "165de1ed9049cfd6d589566414da36d9b1a174c6a0322d6897fdad55b1974449",
+      "callee": "max",
+      "caller": "research_harness.review_session_v4.check_v4_admission",
+      "classification": "standard library",
+      "targets": [
+        "max"
+      ]
+    },
+    {
+      "ast_sha256": "caa4f6ea23be9c45c8684ba4cbbb0dc713af6664cc96c6130e0b2429ffe34ba6",
+      "callee": "research_harness.review_session_v4._build_session_identity",
+      "caller": "research_harness.review_session_v4.build_session_packet",
+      "classification": "listed module",
+      "targets": [
+        "research_harness.review_session_v4._build_session_identity"
       ]
     }
   ],
@@ -28395,7 +28457,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed 0.91.6: the text limits, the trim characters, the line-break rule and the UTF-16 count of the post command have their home here; the module builds no packet. Reviewed 0.91.8: POST_TEXT_BOUNDS holds the bounds of every text field of a problem post in place of the two limits of What a resolution would change, and find_non_plain_text_character, split_statement_details and find_post_text_violation hold the character rule, the split at the --- line and the order of the rules of a post text, which bin/exactory and problem_claims read; the module builds no packet."
     },
     "research_harness.execution": {
-      "ast_sha256": "b5a0d0df8f91af4cad1630bd069ffb8a47a3ca4e7372b7954e078c1c7b1e3032",
+      "ast_sha256": "618ddd050537491d64d3b5bec46ddb0cdfcba9dae51d05b64cec52b26480b200",
       "functions": {
         "_binding": "c5a1577c8efa18428b8d166fee62ec111d3f8b4ca767777d1c6da982fa3045ee",
         "_build_earlier_runtime": "4e9449595081c737c01e8d4c09ef916866f5ef7275f344af48057370cc16168d",
@@ -28409,19 +28471,19 @@
         "_owner": "69afd2267161b44b7f5004e2aca41dd46707def88a823d67fbe737333b701086",
         "_prelaunch": "96a206e0f0ea0e834249703f1bb0d12408671325b9052565746af77d82ddacd3",
         "_is_unstarted_local_run": "50e8bc036723fb52726aa8980eabeaf648690d8fa2f8a7d596a47142f5710dd5",
-        "_reconcile": "deae046ff1c3c159f8c3bec0a12226671ff9e432110d42f1eb318a02afec33ce",
+        "_reconcile": "a727310be3341922514b74236f7766251002b032af5070325ff8b526e42b51a2",
         "_runtime": "d02d1a74ce7563339d58ac35a7c520a1ebad8e16de5e3758cd6f701424e16a4d",
         "bind_execution": "caa3d7a39325b5209ade55e51bbfb40e02a5ff9c05befa9bfc3a71e6e0cb4e9e",
         "execution_status": "e59473b3c0e17736086cd4aa796890d74dae29789655494c67ff8fd096ef0f1a",
         "find_recorded_execution": "c2e2543e746e39effe57bb0e0900254bb3814fc7294a7bb5c08c6e5f55e9b6ad",
         "launch_execution": "123a7004140c4b4402e53efab80c7745271c150640bf9f709dc44eb85eaa4fee",
-        "reconcile_execution": "895baf406d6f67d625f568285a5c44062989099a06ff70408fe824ea78032185",
+        "reconcile_execution": "34442dfa7a92dd6c39003d399d899093a5cee4f04889e5c883b38722a09fd857",
         "record_imported_execution": "4f0c17c099e62ad7b175155252803ba5e5a8fca2c60e71c82f092671f4804379",
         "record_reconciliation": "ef5ab09a0d9ac90284c2121e572f5efa80f9b8d0d1aaab557c1c907240f1ed6d",
         "_select_record_busy_msg": "81ba2a1689fe45d19fc0cca8f79fb423e2c2192a9241a02274963b75235f3c65"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (0.91.11): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (0.91.11): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed for 0.92.1: The owned Colab launcher can supply the first authenticated reconciliation read through the public `snapshot` keyword."
     },
     "research_harness.execution_accounting": {
       "ast_sha256": "96cb4b85ec4977d5dc484eb0c4212c2d6e06d70e79663c62b3f76e359c0085d6",
@@ -30871,7 +30933,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (0.91.11): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed replay-first-writes, part 2 (0.91.11): the admission of an acquisition commits at the revision that the write lock finds when the store is at the caller's revision or a later one, reads the reservation of its operation inside its write, and waits for a busy store through finishing.retry_finishing_write; visual keeps the compare-and-swap; the start of a full-text job commits against the records of its check with the same condition and wait; the saved intent of a remote operation without a revision of the user commits against the saved intents and waits the same way, and a check answers the committed admission of an acquisition; no packet argument or member changes. Reviewed pending remote steps (0.91.12): exactory verify, exactory submit and exactory reconcile read the task before they send a request of a pending step, a verdict is sent only when the task shows its predecessor as current, and a pending step is cleared, recorded from the read or left pending; a submission whose declarations differ from the saved request of its record is refused on the managed path; no packet argument or member changes."
     },
     "research_harness.remote_execution": {
-      "ast_sha256": "0db14e6162fd34828a903b5283ea2e7f8d66b93f94f544c125e87529893a7c43",
+      "ast_sha256": "88fc970841c9c54945718f72bd55415ba9a41270553d1676894a3a6c2ab06cb8",
       "functions": {
         "_exclusive": "a181824c762f22c6a9ac9e49dd80bbe2f4320f1a13fd95f32e4ffa0f2a5cac22",
         "_execute_job": "2d249897e532d71a6eef654b076cf0b282ae3a523dfee127da52d0b23e1df69b",
@@ -30882,12 +30944,12 @@
         "_release": "2050dd87b1156ad2aaa4bb40ceabb8a7c843aadb74a3f2d53087a1ebbeeca572",
         "_runner_runtime": "6b188b637409b3a8c8ff155396b438b41855f5983813a2c4f7776b6d5b6cca42",
         "collect_colab": "7feacc94b10846187a756a71cd0cf09dda572760cb374f5d81812b11b137fd59",
-        "launch_colab": "63a62cf54e9f626243ee518070b8ef710d4be502a0f62fb4c02cbd873af37967",
+        "launch_colab": "29bb6f6cf5ba7daa6c082b651ab106f3700dbbc118eba76b3f2a831cd1b6e3b5",
         "serve_scan_once": "86ab82424dc8b2dbd788166c416a3b8f9f4e82fec0fdaff04ef86f8785c001be",
         "transport_root": "49d51a52f4d373dfa740ebc505e3bb7c387d2a7ef389b96b7f974811db744e67"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (0.91.11): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed finishing-writes-2 (0.91.11): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and the transport does not turn a refused record of that process into a failed observation: the refusal reaches the command that owns the call or the worker of a staged task; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (0.91.11): the records of an admitted run, of a remote intent, of an acquisition, of a full-text job and of a direct deposit commit against the records that they read, or at the revision that the write lock finds, and wait for a busy store through finishing.retry_finishing_write, which tries a COMMIT that readers hold up again within the wait; a refused answer of a remote step carries only the members that the step needs; no packet argument or member changes. Reviewed finishing-writes-2 (0.91.11): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and the transport does not turn a refused record of that process into a failed observation: the refusal reaches the command that owns the call or the worker of a staged task; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes. Reviewed for 0.92.1: DONE ends release polling, gives the first reconciliation snapshot the command's normal store wait and confines further polling to that read with a busy refusal identifying the original job."
     },
     "research_harness.report_views": {
       "ast_sha256": "287f72335a2552ced6a8cb7cb48d73ef2e4634157ee9add8183afa999faa2ac4",
@@ -31076,14 +31138,14 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed lane two-bars-scheduler (task T2.5, requirement R1.5): describe_route_scheduler gives one call for each verified route record of a covered adapter, and describe_capacity_wait and the first bar assignment of a record read it."
     },
     "research_harness.review_call_capture": {
-      "ast_sha256": "a17d2a5011965264d8bfccb1ad18bdb6399995f0d6bbc6466567dd57acc19e48",
+      "ast_sha256": "c1e68197228f65513c2ff3a2c35d7fce196b60efc52f6fdbb8e8b73da6331f9a",
       "functions": {
         "_check_bindings": "aec9cd70558fa45092e6dd6b7a022eef91cf3e8e578d77c8757176e70d03442b",
-        "capture_call": "94b92471e6f8b3e9e935a9bae50ff373010fc19c6f1b578deb600620956956b9",
+        "capture_call": "8e153c4139fe65c706406f241bcf7930f994e761e994390e3857d522650061b3",
         "read_call_observation": "9fe94bf236b7db2722f214bc01a6618b42cdfc1b1b7c86faf35398cf1fbc92ed"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (0.91.11): the capture waits import the attempt count and the wait from finishing; no behavior, packet argument or member changes. Reviewed finishing-writes-2 (0.91.11): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and the transport does not turn a refused record of that process into a failed observation: the refusal reaches the command that owns the call or the worker of a staged task; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (0.91.11): the capture waits import the attempt count and the wait from finishing; no behavior, packet argument or member changes. Reviewed finishing-writes-2 (0.91.11): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and the transport does not turn a refused record of that process into a failed observation: the refusal reaches the command that owns the call or the worker of a staged task; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes. Reviewed for 0.92.1: A capture refusal carries its original call identity and explains how to continue after a pending standalone reconciliation poll."
     },
     "research_harness.review_capacity_evidence": {
       "ast_sha256": "726ca00b521feccdc0902ac7b5ddb803106f25daa8b98152e0ff178a85938fdc",
@@ -31969,7 +32031,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_parts": {
-      "ast_sha256": "4d301e8b8f0a9a4285c41035f743bf582e1528ae90ff2904d40676da9bc662ec",
+      "ast_sha256": "07d0aec3a98322fbe1ccf4464372e2568a783a5d5ac2bc7a6d2b7be0aa4da302",
       "functions": {
         "_count_content": "c25e6d5d66bffc953d116e616287a25d6736b3efe6d742762cb95bf3e132e719",
         "_describe_unit": "ab1d1db4be19c42aafe09f942532f14048db0453e54e47de0fe9bf647237ca18",
@@ -31984,9 +32046,9 @@
         "_find_unit_rule": "ac9f3c226b2e896e37b6ec6fba7dbf447d1d032899a7c43cc01025ca59692eeb",
         "_has_original": "d74479cd60cea6697be0c67b07ccbe17f894035a508c1b340828b3dc1704834e",
         "_join_segments": "63194a4b012ceccfe66adfb983dc9d782bf469742ec2746c94c7e5da685e9bad",
-        "_list_delivered_texts": "fce490f6e60a8c9129333dacb4051971d5a0594daa2e278680683fa10ba2a59b",
+        "_list_delivered_texts": "5fe78f74e59a4a52a7649a00622c9ef174f29e25c7a60618b2a93cfdfab26fbf",
         "_list_final_priority": "4ca1ed61feb62e9704d81b86b164921bb00cc6a99146624432438c663f6368d2",
-        "_list_series": "9ed0b8f6769dccce173b4c46f29edd5e640b925928bf5d2279efa4858c9db920",
+        "_list_series": "96f32d69a052c15b64ca46377a202695cfce91891f8403e7b609727bca31cfe5",
         "_make_segment": "df124402fb2a96b60b521a80da5050deae101c75f5296efceac7723c6d672bfc",
         "_merge_spans": "99704b9021fea6a5f621286d57abbb7d7e00f4c6b7ac2ced434e420d7b3f2e6f",
         "_pack_card_weights": "47ffc924f71ada76da259b5fca460b40073e050c852f20ec87d708fe520a4b7e",
@@ -32001,12 +32063,12 @@
         "_require_text": "1a31e499b981093f42e5a27a601c47429f111aef7fe710d103a364d9e273b93c",
         "_select_carried_state": "d1e3f1a4dd5d892f345a38a3bdc599c472e1519246c2a38debcd976caec4dc32",
         "_select_combination_state": "a6dc23586bf39a67680ff5d09d63a831e35f2d023a3d6734071b5c9a553652f1",
-        "_validate_check": "b6efb27e73130b0cdcfa43710796adeb620fc7822fa12bb456896dce7240b9f8",
+        "_validate_check": "6d34fc8eb62e82ef895d1f29a28ef8902c3acc1d73078319fd5def1c8ce235a6",
         "_validate_combine": "e78fb4614c9a2bedf130acda9ef4773c4cc66a5ab37f3c1ea99ed503326e3c0f",
         "_validate_original": "5fb48cccf0d430b6dcc37d7eeeb5efc6bb17542039707c6eaa916ead567b3e7f",
-        "_validate_read": "e8a3519ba0a3bfa92f14c90cae74d46980ad29fb945ff1f9bcd68ee22f121526",
+        "_validate_read": "ec7a165cb92fb25e9a4477d24aa9f405364360d8ce0dcab5c8a6d5df3ee73122",
         "_validate_requests": "e397026f03b206265cc6a1dd7bffafc812102676f6a81c0db31b18f1e2346334",
-        "_verify_statements": "51b8d41072b9c13f961f2eb539ea4845c167043184d7774de4903d9e5bef663c",
+        "_verify_statements": "d3ac0c74c85aeb126e8f9eb7df1e10c9b29eccd9a9eafb4229079d3b5dbb8364",
         "build_frame": "be548debe26f80043d63de577c32c183ac00fb65241db6b33da7b28d59180c39",
         "build_inventory": "8ac908979c3997fff5d6ab4e9e163f8f5d0d1b6eb07aa0cbf67399d7bb57edda",
         "build_state": "574e7b5d7d9dce29bdc003de6586b2863ad4f759dd1d4b465e039bba1e4480c0",
@@ -32024,7 +32086,7 @@
         "has_series_attachment": "d7cac71b45c62965fb4504e24b0ba1ac09cb95757fdf77f975f8d6f7c6b3b621",
         "has_series_reference": "9109ae12cb6864d228000c9709e470fada6c46d0addf0aac3894bce24f8004e7",
         "is_unit_complete": "9ba7138df58a419a7c4e00c27a04433c7eb978fab0d4abff5207bb87200248bf",
-        "observe_series": "f56e0f23244b0acc4a1db20db44d50abc3274230a5867291e3c2c1dc3cc8f10c",
+        "observe_series": "b838162a9b558422eb2c34f6384f744ad2b28ebf69a7eacc5f71025e3211762e",
         "partition_card_weights": "7c05aef219bdfceab7a2601bb3b100a8fbb8a041724e95b651071921bfc8881b",
         "plan_check": "13149e112cc97b79ddcbefb00e1ea43398fef8b54561eef767195200bcd97b2a",
         "plan_combine": "373e80a8b7fabd375561e42035e9de6a1614e27b327684ee45688333f5f13693",
@@ -32046,12 +32108,13 @@
         "validate_deliveries": "b0dbe50b4a8857d652bfad208de19d19deddb3463cec1341ceea77023d837f43",
         "validate_output": "8b79c9523b6358dd1a2f563f1295782e25ff482c18ec275232c42c1b759e3fba",
         "validate_turn_output": "331fa047becf3c4a9afa9c490fb2f11a1550d501d64a0d79d8251aa6c7ccb707",
-        "verify_series": "e13d6c8c06847ecc489111b289230733d9bb5dbbb5157b6d3854c8a3be483b17"
+        "verify_series": "e3dfe8e48735c8725a1099e613a422ec93ad299c2410de7ecd0e04901adfd007"
       },
       "packet_call_digests": [
         "004a23c85487f6054ab9058abe6762f472aa7bbc3b9bc92a1c28d23164b8cdc9",
         "01cb36b4eb1a4d591b2a85bb7264b9a660d7677f433a59f71c7382de840c013b",
         "01d4c545eb6260c15569e0f82dcde2a88744b68c1d0395d7f774e38250d98085",
+        "021fa7b7ae5a40059f68e62e697a6a0f8a3b49616556b0fbd8efbf136e89a806",
         "04564159c7ccbb443c26f815b5feb79fa268a10dea61260fce6a712476c72dd4",
         "04d33f116949fd6d1074d7f0fdda186485a220df6d75b1ed6f0c32d6ab1392e2",
         "059e568bea261cf05443c77f77e84761590958afba4895bfd14d23d3e07ae08b",
@@ -32077,7 +32140,7 @@
         "197101c04aa6f0111bffb4ba9b72eadf38550a4d0ec531ed6e15a1a2bcce2b5f",
         "199fa15f102a748da4010e9c6c68fbe457dddeb9ec73f9b295de980cd49b7f78",
         "1ac4642efe689f17a603f842bfaabd3a8a497d46c976dac1cfb05b1834ce3c17",
-        "1f979d68f505833a3b2cd694230f6d11169968d2eda79299247abd92fc4658a6",
+        "1dba648dabc94f3276e172f54e0cd5499fb92d63e5df880323a13402d7c01321",
         "213bfebb585045589bc4caaa8465ec5dedc139b20ef0432fbd4e48193aea1710",
         "2297b5ec57890b6b7a28f2fe41a653b250e71f3cf59aae5ca8a3e78b4c4cd54a",
         "2357702bf7c7d02f04c581d32222d728da8676c7fa54845069332ba764b0f089",
@@ -32130,7 +32193,6 @@
         "648c82e9dabb8834f6fe009d403c78916faefcd12f3f55f50a31d695e236cc62",
         "64995665d7c8a50a10e8904b6d4665aacd2bf7d1ed59cea272e12a56dbd1d198",
         "65e5b7b9316950e2fe8eebc9c26321812a32cd0282971a53264721d7dddf3300",
-        "667127b74e139360ff1bc0873b48199777bab56c98fa5519ff016fdb6d051231",
         "67c5daf58de104e96b8272217487c263054151dea54e96a77cd62140b6f4c5bc",
         "680f0556e0eb9843f8033e1d5ce0f464fd9149efba4283b8da59366dc76f875d",
         "6a40ba60d0bc7d936832130ad7df47cc26ec65a8fcf7b8ce8c46b2549a3f627c",
@@ -32162,7 +32224,6 @@
         "7b23a4889d49fa040b6549dcc7c5299379fe94bc3a7083a4e53cb6d7741d3217",
         "7b39b189f07e09931e0244be54ebf5c2e58e003bfdd337b457f6027f1c6c401d",
         "7de3c69b19ba23b44536baf7dd4d1d908a07f9fd79c2f661c80d58f23a2391ab",
-        "7e2999c0096e6d6e42a204b07132e3249fa72ea6443a310c38ec73b78dd4c4ac",
         "7eec733dd5e13ac1e21d4cfd706d0e75feb936272b25dcd976fd1a8779069e89",
         "7ef223e34dffe55a4ac86bf35dfe50e2cc6d82102acf9e6dcbab1ec99674e350",
         "7f904e475d09ff0afac453a0ed62f420e275282a45f991238b2421fb4b83c2d9",
@@ -32251,6 +32312,7 @@
         "e5b853ad4e878f842fbbf987f6379ce9daca92681197d92ba4f525df9912a1ab",
         "e63f8351bbed2e0fb997ca628725c98b8395b243241c8ed7df3bbd09d68d756c",
         "e78117cec92cec54374f046cdbbfef3e6f45aef0c259e91e207ada34bb65d1ed",
+        "e84b121b465f777002ce3e9acd778fcd44dc6114857af78d4c120193cf6b9c73",
         "e8defc69bb5c17e71c6f4387bd0008d1836d0d09953805cbd7354fd780ed3eac",
         "e93a8d94b776935f1b385d04cf9128823afd496399bfa80f997c59fdacdda733",
         "e97a3efa60a6d667c1e1f20e91b630d02a74d1c9f400e51177ae9aa027117f9a",
@@ -32271,7 +32333,7 @@
         "ff1fa696affd5ae8387a2f966267283cd2fe63fd164ca3ca155ee1adf5488690",
         "ff4fd5fd685c75ddbcbdfac138c5b7f9b214f1ef1df0e3e4b0fe083a165c470f"
       ],
-      "reason": "Reviewed slate-series adapter, v3-only ordered admission, session precedence and preserved legacy repair delegation; authenticated slate journey and compatibility tests pin this source."
+      "reason": "Reviewed slate-series adapter, v3-only ordered admission, session precedence and preserved legacy repair delegation; authenticated slate journey and compatibility tests pin this source. Reviewed for 0.92.1: Legacy render verification reuses the chain, parsed tip and first-use item map while retaining released source matching and v3 dispatch."
     },
     "research_harness.review_parts_adjudicator": {
       "ast_sha256": "7ce6d6c2f2c471b3b325e0fe19b81fbc660fa707932aa7f8b78d322ff8fd291a",
@@ -33148,7 +33210,7 @@
       "reason": "Reviewed merged scientific projections, Stage 2 capacity/reading/refusal construction and immutable storage; changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed T5 version 2 probe delivery in _has_account_probes; version 1 follows its existing projection. Reviewed the 0.91.2 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. G8.11 and G8.12 of 0.92.0 (lane g8-finding-index, second change set, for review): the inventory of a bounded chain whose final names values by their bodies lists their spans in finding_units, located by key; its reading turns hold their number and the paragraph finding-units, and the reading frame reserves FINDING_UNITS_CHARACTERS; a carried credit does not cover a named span, in the reading plan and in the report of the carried selection; a capacity replacement selects the paragraphs of its new packet. Reviewed 0.91.6: two registered paragraphs, changes-if-resolved for result and adjudicator and slate-places for slate, each selected by a member of its packet; the text of every earlier version keeps its bytes. Reviewed the merge of 0.91.5 to 0.91.7 into 0.92.0: PARAGRAPHS holds the paragraphs changes-if-resolved and slate-places of 0.91.6 at their places and the paragraph finding-units of G8 before output-refusal-whole; SHARED_PARAGRAPH_NAMES keeps its five names, because the two paragraphs of 0.91.6 apply to problem packets only."
     },
     "research_harness.review_protocol": {
-      "ast_sha256": "cbcdd6c7ddaff9db811008e5330a59f14d5ec00eceb022f63162681d3ae8f551",
+      "ast_sha256": "7a7a17802f8382b6de7a3f22dad35e1ca11ed5c3013a7263315680d9ee938d1a",
       "functions": {
         "_assignment_state": "7eeb83602ce2740f59fe9421c9d78d0ae5677831398291998d4374c83aca6fac",
         "_bars": "32eae33223d02654a4c28ba7d928d16c458c21dd2ebbbc61d0d7b1461580854a",
@@ -33184,7 +33246,7 @@
         "_read_review_group": "a13f797457393a1ab9f274ff24a81c0b4835ed4f634cf584635009438a9a6afe",
         "_read_slot_records": "390e4cd8fc158308319058cbc845b8c89fedb89b83d524bda2c1463f337cfaf2",
         "_reference_templates": "d2e4382875c62d696528a4948e3c3e15fa2d8ed55c74504d2fdc0f473625a960",
-        "_repair_packet": "5442e88fa33b06b71171157bff38ab5deded471d35b49afea56578695753b156",
+        "_repair_packet": "4bad990c4f4b4b090f9e9df3069e7bf8f9657245d9b6f4bae31a418219a18e52",
         "_require_focused_identity": "138fa6d35d131d40fbf99bd07134615853023823120bce41c02863e8ed1ae58e",
         "_require_route_runtime": "8b26107bbe05d8e69e7f351b2d336e218554b5206f2d3ac0ea2b60e2fa5bc82e",
         "_route_state": "e97a15c0dab3270575dccdeefa48483ff6bd7557cc3150bd8c0f8ba33db37b29",
@@ -33383,7 +33445,7 @@
         "fb73c23fe96d794ff147c6bd36a7d4fd6ffeecb46aa49dc9c7ca43698bc76bdf",
         "fcd4adf30287e29937ffa4784f5a66fdacae6358791b9b3fd106bd77a2e6fda8"
       ],
-      "reason": "Reviewed slate-series adapter, v3-only ordered admission, session precedence and preserved legacy repair delegation; authenticated slate journey and compatibility tests pin this source. Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback after the committed invocation admission, plus invoke_assignment and probe_route forwarding: it renders derived views without changing authenticated packets, requests or their closed shapes. Reviewed 0.91.4 route renewal: is_route_stale compares the pinned runtime with the reading of the route state; require_installed_runtime refuses an assignment on a stale, unretired route record before any record; _require_route_runtime keeps its comparison and its message in a constant; record_assignment calls the check after the retirement check and before every dispatch. No packet member or stored record changes. Reviewed 0.91.4 origin view: read_origin returns the review records before one revision through _OriginRows; _assignment_state adds review_route_retired only without an output and reads the route state of a selected correction, and its context message is the constant ROUTE_CONTEXT_MSG; no packet member, call or stored record changes. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked. Reviewed the merge of 0.91.4 into 0.92.0: record_assignment calls require_installed_runtime after the retirement check and before the dossier check and every capacity, session v4 and parts v3 dispatch; _assignment_state takes the session v4 rules of 0.92.0 and the correction-route rule of 0.91.4 in separate statements. Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback after the committed invocation admission, plus invoke_assignment and probe_route forwarding: it renders derived views without changing authenticated packets, requests or their closed shapes. Reviewed 0.91.4 route renewal: is_route_stale compares the pinned runtime with the reading of the route state; require_installed_runtime refuses an assignment on a stale, unretired route record before any record; _require_route_runtime keeps its comparison and its message in a constant; record_assignment calls the check after the retirement check and before every dispatch. No packet member or stored record changes. Reviewed 0.91.4 origin view: read_origin returns the review records before one revision through _OriginRows; _assignment_state adds review_route_retired only without an output and reads the route state of a selected correction, and its context message is the constant ROUTE_CONTEXT_MSG; no packet member, call or stored record changes. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked. Reviewed 0.91.5 call payload definition: PROBE_PAYLOAD_FIELDS and INVOKE_PAYLOAD_FIELDS hold the members that the start checks of probe_route and invoke_assignment read, the same members as before; no packet argument or member changes. Reviewed 0.91.6: add_problem_candidates writes the member place_review into a new slate packet, and the source-request continuation of a slate review copies it from its parent packet; the member is declared for the slate packet, and every other packet member stays as it is. Reviewed the refusal details of evidence.shape (record 20261115234509): validate_adjudication_contract names /evidence for the evidence check of a problem adjudication. No packet member, packet call or stored record changes. Reviewed probe-capture-contention (0.91.7): the attempt limit, the wait and the retried codes of a scoped finishing write have one definition in finishing, which review_protocol._finish_call and the probe writes import; no packet argument or member changes. Reviewed the merge of 0.91.5 to 0.91.7 into 0.92.0: build_packet copies bars and own_bars of a problem_slate series (0.92.0) and then place_review (0.91.6) into the continuation of a slate; invoke_assignment checks INVOKE_PAYLOAD_FIELDS of 0.91.5 before the parts v3 and session v4 checks of 0.92.0; validate_adjudication_contract names /evidence, as 0.91.7 does, after the handle expansion and the parts branch of 0.92.0; probe_route, _finish_call and add_problem_candidates take the changes of 0.91.5 to 0.91.7. Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback after the committed invocation admission, plus invoke_assignment and probe_route forwarding: it renders derived views without changing authenticated packets, requests or their closed shapes. Reviewed 0.91.4 route renewal: is_route_stale compares the pinned runtime with the reading of the route state; require_installed_runtime refuses an assignment on a stale, unretired route record before any record; _require_route_runtime keeps its comparison and its message in a constant; record_assignment calls the check after the retirement check and before every dispatch. No packet member or stored record changes. Reviewed 0.91.4 origin view: read_origin returns the review records before one revision through _OriginRows; _assignment_state adds review_route_retired only without an output and reads the route state of a selected correction, and its context message is the constant ROUTE_CONTEXT_MSG; no packet member, call or stored record changes. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked. Reviewed 0.91.5 call payload definition: PROBE_PAYLOAD_FIELDS and INVOKE_PAYLOAD_FIELDS hold the members that the start checks of probe_route and invoke_assignment read, the same members as before; no packet argument or member changes. Reviewed 0.91.6: add_problem_candidates writes the member place_review into a new slate packet, and the source-request continuation of a slate review copies it from its parent packet; the member is declared for the slate packet, and every other packet member stays as it is. Reviewed the refusal details of evidence.shape (record 20261115234509): validate_adjudication_contract names /evidence for the evidence check of a problem adjudication. No packet member, packet call or stored record changes. Reviewed probe-capture-contention (0.91.7): the attempt limit, the wait and the retried codes of a scoped finishing write have one definition in finishing, which review_protocol._finish_call and the probe writes import; no packet argument or member changes. Reviewed finishing-writes-2 (0.91.11): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and the transport does not turn a refused record of that process into a failed observation: the refusal reaches the command that owns the call or the worker of a staged task; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes. Reviewed the merge of 0.91.14 into 0.92.0: invoke_assignment keeps the session_chain test of 0.92.0 with the waiting read of 0.91.11 and the refusal record that record_native_refusal returns; _finish_call and _invoke_once take the form of 0.91.11. Reviewed lane session-v4-prompt of 0.92.0: canonical_prompt appends the study forms to the final of a study series of the parts protocol v3 and leaves a v2 series prompt as it was; _is_problem_refresh reads the logical packet of the chain for a turn of a v4 session; record_assignment calls require_session_capacity at the one place where a session of an older rule set starts for a new chain that v4 did not admit. Reviewed lane retired-route-state of 0.92.0 (rule RS1): _route_state gives a retired route record whose latest probe gives unverified without an answer the state of its latest probe with an answer; the judgement of one probe moved unchanged into _judge_route_probe, and _has_probe_answer reads the answer text of a probe response. Packet members, calls, writes and closed shapes are unchanged. Reviewed lane session-v4-refresh of 0.92.0 (rules F1 to F8): the refresh of a problem review that a chain of the session rules v4 recorded is a new chain in the same slot, linked by the context member session_refresh; its packet is the first packet of the role with problem_refresh and the earlier reviews in historical_reviews. Reviewed lane manifest-recorded-profile of 0.92.0: record_assignment compares the installed PDF renderer for the assignment that a replacement names and for a new assignment on the visual route, and invoke_assignment compares it before the lineage is validated; no packet argument, member, call row or shape changes. Reviewed lane call-context-present (requirement R3.5, rules PC1 to PC8 with findings F1 to F6 of its review): a new reviewer call, an output correction, the next assignment of a v7 or math v2 chain and the plan of a head read the state of the route record and the contamination events of each turn of the review, and refuse or hand off with review_context_unverified or review_context_contaminated; historical_reviews reads the same turns through list_context_turns with the same result; packet members, packet builders, prompts, requests, writes and closed shapes are unchanged. Reviewed lane session-v4-refresh-edges (task T2.14, rules E1 to E5 of designs/session-v4-refresh-edges.md): the refusals of record_assignment and invoke_assignment on a retired route record name the plan of the head; _assignment_state reads the qualification of rule E5 through validate_repair_binding and keeps the observed output of a contaminated refresh; _bars leaves out a refresh review that does not count and the reviews that it replaced. No packet member, prompt or request changes. Reviewed lane call-context-refresh-link (task T2.16): find_unverified_context reads the contamination events of a refreshed slot on the turns of rule E5 and the state of the route record on the turns of the chain of the call since the latest refresh; list_review_turns gives the turns of the route half. No packet member, prompt or request changes. Writer's pass of release 0.92.0 (task T5.1, the texts that an installed command can show): CONTEXT_UNVERIFIED_MSG, CONTEXT_CONTAMINATED_MSG, RETIRED_ROUTE_ASSIGNMENT_MSG and RETIRED_ROUTE_RUN_MSG state the state, the members of the details and the step; no statement of code changes."
+      "reason": "Reviewed slate-series adapter, v3-only ordered admission, session precedence and preserved legacy repair delegation; authenticated slate journey and compatibility tests pin this source. Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback after the committed invocation admission, plus invoke_assignment and probe_route forwarding: it renders derived views without changing authenticated packets, requests or their closed shapes. Reviewed 0.91.4 route renewal: is_route_stale compares the pinned runtime with the reading of the route state; require_installed_runtime refuses an assignment on a stale, unretired route record before any record; _require_route_runtime keeps its comparison and its message in a constant; record_assignment calls the check after the retirement check and before every dispatch. No packet member or stored record changes. Reviewed 0.91.4 origin view: read_origin returns the review records before one revision through _OriginRows; _assignment_state adds review_route_retired only without an output and reads the route state of a selected correction, and its context message is the constant ROUTE_CONTEXT_MSG; no packet member, call or stored record changes. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked. Reviewed the merge of 0.91.4 into 0.92.0: record_assignment calls require_installed_runtime after the retirement check and before the dossier check and every capacity, session v4 and parts v3 dispatch; _assignment_state takes the session v4 rules of 0.92.0 and the correction-route rule of 0.91.4 in separate statements. Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback after the committed invocation admission, plus invoke_assignment and probe_route forwarding: it renders derived views without changing authenticated packets, requests or their closed shapes. Reviewed 0.91.4 route renewal: is_route_stale compares the pinned runtime with the reading of the route state; require_installed_runtime refuses an assignment on a stale, unretired route record before any record; _require_route_runtime keeps its comparison and its message in a constant; record_assignment calls the check after the retirement check and before every dispatch. No packet member or stored record changes. Reviewed 0.91.4 origin view: read_origin returns the review records before one revision through _OriginRows; _assignment_state adds review_route_retired only without an output and reads the route state of a selected correction, and its context message is the constant ROUTE_CONTEXT_MSG; no packet member, call or stored record changes. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked. Reviewed 0.91.5 call payload definition: PROBE_PAYLOAD_FIELDS and INVOKE_PAYLOAD_FIELDS hold the members that the start checks of probe_route and invoke_assignment read, the same members as before; no packet argument or member changes. Reviewed 0.91.6: add_problem_candidates writes the member place_review into a new slate packet, and the source-request continuation of a slate review copies it from its parent packet; the member is declared for the slate packet, and every other packet member stays as it is. Reviewed the refusal details of evidence.shape (record 20261115234509): validate_adjudication_contract names /evidence for the evidence check of a problem adjudication. No packet member, packet call or stored record changes. Reviewed probe-capture-contention (0.91.7): the attempt limit, the wait and the retried codes of a scoped finishing write have one definition in finishing, which review_protocol._finish_call and the probe writes import; no packet argument or member changes. Reviewed the merge of 0.91.5 to 0.91.7 into 0.92.0: build_packet copies bars and own_bars of a problem_slate series (0.92.0) and then place_review (0.91.6) into the continuation of a slate; invoke_assignment checks INVOKE_PAYLOAD_FIELDS of 0.91.5 before the parts v3 and session v4 checks of 0.92.0; validate_adjudication_contract names /evidence, as 0.91.7 does, after the handle expansion and the parts branch of 0.92.0; probe_route, _finish_call and add_problem_candidates take the changes of 0.91.5 to 0.91.7. Reviewed exact initial-candidate and refusal-successor group reads; domain filters and immutable selection semantics remain unchanged. Changed AST requires declaration review. Reviewed 0.90.0 final-text diff: message/prompt wording only; packet members, calls, writes and closed shapes are unchanged. Reviewed PR 143 legacy revisionless assignment ordering; packet construction is unchanged. Reviewed v7 gap fixes and the 0.91.0 writer texts: declared decisive ids, gap text, note rows and nullable anchors; arguments only in finals. Earlier protocols retain their construction. Reviewed the 0.91.0 writer pass: string constants only (AST equal with every string blanked); packet members, calls, writes and closed shapes are unchanged. Reviewed 0.91.2 after_start callback after the committed invocation admission, plus invoke_assignment and probe_route forwarding: it renders derived views without changing authenticated packets, requests or their closed shapes. Reviewed 0.91.4 route renewal: is_route_stale compares the pinned runtime with the reading of the route state; require_installed_runtime refuses an assignment on a stale, unretired route record before any record; _require_route_runtime keeps its comparison and its message in a constant; record_assignment calls the check after the retirement check and before every dispatch. No packet member or stored record changes. Reviewed 0.91.4 origin view: read_origin returns the review records before one revision through _OriginRows; _assignment_state adds review_route_retired only without an output and reads the route state of a selected correction, and its context message is the constant ROUTE_CONTEXT_MSG; no packet member, call or stored record changes. Reviewed 0.91.4 writer pass, part 2: message constants and docstrings only; the syntax tree is unchanged with every string blanked. Reviewed 0.91.5 call payload definition: PROBE_PAYLOAD_FIELDS and INVOKE_PAYLOAD_FIELDS hold the members that the start checks of probe_route and invoke_assignment read, the same members as before; no packet argument or member changes. Reviewed 0.91.6: add_problem_candidates writes the member place_review into a new slate packet, and the source-request continuation of a slate review copies it from its parent packet; the member is declared for the slate packet, and every other packet member stays as it is. Reviewed the refusal details of evidence.shape (record 20261115234509): validate_adjudication_contract names /evidence for the evidence check of a problem adjudication. No packet member, packet call or stored record changes. Reviewed probe-capture-contention (0.91.7): the attempt limit, the wait and the retried codes of a scoped finishing write have one definition in finishing, which review_protocol._finish_call and the probe writes import; no packet argument or member changes. Reviewed finishing-writes-2 (0.91.11): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and the transport does not turn a refused record of that process into a failed observation: the refusal reaches the command that owns the call or the worker of a staged task; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes. Reviewed the merge of 0.91.14 into 0.92.0: invoke_assignment keeps the session_chain test of 0.92.0 with the waiting read of 0.91.11 and the refusal record that record_native_refusal returns; _finish_call and _invoke_once take the form of 0.91.11. Reviewed lane session-v4-prompt of 0.92.0: canonical_prompt appends the study forms to the final of a study series of the parts protocol v3 and leaves a v2 series prompt as it was; _is_problem_refresh reads the logical packet of the chain for a turn of a v4 session; record_assignment calls require_session_capacity at the one place where a session of an older rule set starts for a new chain that v4 did not admit. Reviewed lane retired-route-state of 0.92.0 (rule RS1): _route_state gives a retired route record whose latest probe gives unverified without an answer the state of its latest probe with an answer; the judgement of one probe moved unchanged into _judge_route_probe, and _has_probe_answer reads the answer text of a probe response. Packet members, calls, writes and closed shapes are unchanged. Reviewed lane session-v4-refresh of 0.92.0 (rules F1 to F8): the refresh of a problem review that a chain of the session rules v4 recorded is a new chain in the same slot, linked by the context member session_refresh; its packet is the first packet of the role with problem_refresh and the earlier reviews in historical_reviews. Reviewed lane manifest-recorded-profile of 0.92.0: record_assignment compares the installed PDF renderer for the assignment that a replacement names and for a new assignment on the visual route, and invoke_assignment compares it before the lineage is validated; no packet argument, member, call row or shape changes. Reviewed lane call-context-present (requirement R3.5, rules PC1 to PC8 with findings F1 to F6 of its review): a new reviewer call, an output correction, the next assignment of a v7 or math v2 chain and the plan of a head read the state of the route record and the contamination events of each turn of the review, and refuse or hand off with review_context_unverified or review_context_contaminated; historical_reviews reads the same turns through list_context_turns with the same result; packet members, packet builders, prompts, requests, writes and closed shapes are unchanged. Reviewed lane session-v4-refresh-edges (task T2.14, rules E1 to E5 of designs/session-v4-refresh-edges.md): the refusals of record_assignment and invoke_assignment on a retired route record name the plan of the head; _assignment_state reads the qualification of rule E5 through validate_repair_binding and keeps the observed output of a contaminated refresh; _bars leaves out a refresh review that does not count and the reviews that it replaced. No packet member, prompt or request changes. Reviewed lane call-context-refresh-link (task T2.16): find_unverified_context reads the contamination events of a refreshed slot on the turns of rule E5 and the state of the route record on the turns of the chain of the call since the latest refresh; list_review_turns gives the turns of the route half. No packet member, prompt or request changes. Writer's pass of release 0.92.0 (task T5.1, the texts that an installed command can show): CONTEXT_UNVERIFIED_MSG, CONTEXT_CONTAMINATED_MSG, RETIRED_ROUTE_ASSIGNMENT_MSG and RETIRED_ROUTE_RUN_MSG state the state, the members of the details and the step; no statement of code changes. Reviewed for 0.92.1: The raw study adjudicator repair uses the focused protocol."
     },
     "research_harness.review_provider_usage": {
       "ast_sha256": "8b45cdd4c5b5a98325852d3040a320283c876c25fc99d358556999417a76c986",
@@ -33642,7 +33704,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review."
     },
     "research_harness.review_route_capacity": {
-      "ast_sha256": "bbd1e88dceff409a3133823a4efad24d574c8d58d3ae5b0ece7f3fffd63033f7",
+      "ast_sha256": "66523f63258fe33b43061f89b314c9802c48fc640f682a3d711aa7737dada709",
       "functions": {
         "_build_serving_parts": "a2e6e2bcdc2f59febcf2f1da601e09dad8a50b6ec6d333fa24930307e4891b44",
         "_build_serving_repair": "c50aaef3ccfcccf6064f9a4cdaa0a0f52111886dd9b185936b6d1e5a38ab47ca",
@@ -33711,7 +33773,7 @@
         "merge_profile_rows": "be408c3437ff8b29f6436f534c5c9d273232ad182c39cc7068eb587fb2648b3b",
         "pack_profile_prior": "cf2f899f6e103c3086dc749c6ad02492e7cb9d493c94d904c9e468847b82f22d",
         "plan_capacity_recovery": "8776555ceef7cc4b0eba64a194ed2ac1ee7e40805ac7e265c3d8615627a373d9",
-        "plan_chain_capacity": "0e62c9a62e26d129185e2cb9ddd21ce71e3b7d5064e74e2540f59e80dc9750dc",
+        "plan_chain_capacity": "f31300ce26d2b2792ab28d282ef7aec390edbf4c695cf8a2a840995fe55e4893",
         "prepare_assignment_capacity": "4906f06a32317971f5989c12fd9f31976a7af6ee96f89c2ca0679e42fdd7bbc1",
         "qualifies_for_output_profile": "0b6dc9c47e30814e0677cf564d8471f1242e0b88c51e852b32df6b03846c08fd",
         "read_chain_capacity_plan": "bf38987008e1c94cba95973349a93c3130505138d155212b78db7f5650e32bb3",
@@ -33874,7 +33936,7 @@
         "fc5b7c32b023357b2fb7c9a8d9d5624677a2845dd5a2e022120779e13eb9cbda",
         "ffdfc783a549c42578e6236ef07694427415cee2147068c18cd11ab6d1bd4c94"
       ],
-      "reason": "Reviewed slate-series adapter, v3-only ordered admission, session precedence and preserved legacy repair delegation; authenticated slate journey and compatibility tests pin this source. Reviewed the merge of 0.91.4 into 0.92.0: the two sides changed separate functions. Reviewed the merge of 0.91.14 into 0.92.0: describe_open_route_reports gives the forecast of a reading chain head with describe_turn_forecast (0.91.12); the capacity changes of 0.92.0 stand in other functions."
+      "reason": "Reviewed slate-series adapter, v3-only ordered admission, session precedence and preserved legacy repair delegation; authenticated slate journey and compatibility tests pin this source. Reviewed the merge of 0.91.4 into 0.92.0: the two sides changed separate functions. Reviewed the merge of 0.91.14 into 0.92.0: describe_open_route_reports gives the forecast of a reading chain head with describe_turn_forecast (0.91.12); the capacity changes of 0.92.0 stand in other functions. Reviewed for 0.92.1: Recognizes measured identity rows as irreducible when lowering the frame."
     },
     "research_harness.review_search_delivery": {
       "ast_sha256": "088fa27dd9ac4e402f6011c95adc73c8907d708aa7876b7f45b93ba735477c41",
@@ -34889,7 +34951,7 @@
       "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed lane manifest-recorded-profile of 0.92.0: a recorded page manifest of another render profile is verified from its stored page images, a manifest enters a new packet only under the renderer that it records (validate_delivered_manifest), and require_installed_renderer compares the profiles of new work on the visual route; no packet member, record kind or shape changes."
     },
     "research_harness.review_worker": {
-      "ast_sha256": "b7ee3fa2aabe2243e55f93af36817a8e81cfcf8ab0aa911936943ace957508c4",
+      "ast_sha256": "3024f3029e0d6057affd9f0592566ef74024674b88b219906795a2a297759692",
       "functions": {
         "_authorize_launch": "e414038be49883a66ab781190f44ff2b1dd713f55766d4ea292ad5d5f5b9318d",
         "_await_release": "627e3fd234bf8e2485e45cd23e2ec4ef05cc250e6543f8853e04001b579468b6",
@@ -34905,7 +34967,7 @@
         "_owner": "6c6524a2853dbe5f72cd977f647b5f47f610a40042724e57d09fda62e6b70ba6",
         "_process_table": "0f54167ac063e3d4c69813366dad61667422f4e0fae162e82d497812d74ac8bd",
         "_project_process_identity": "ae0537460a820ba98413356d898f655c1eb149d0a18b9405a97f308ebe489451",
-        "_register_child": "0d3984dddec8ee50fe81d70c16b7fa8110c9bb9d70c6660f4ed58a079df7b65e",
+        "_register_child": "2be59b94d892030603dbf0d5357798eaa5076b78329d53dbb99f40f60d23fad2",
         "_same_process": "88591e0393c25d8d733bff1b4d816601868a024ab2acf094db8802c4597cbc39",
         "_start_worker": "95098b94dda5bdf2f524d2c2311da942d9bc38f89b655db98c744139fe94d927",
         "_stop_unreleased_child": "3c245aa8488b464852d4f1eade2c0d4be41e5c95c7fd1305dbf51b35439f40a2",
@@ -34913,13 +34975,13 @@
         "confirm_termination": "3db5963a5c5de7e25833d00c67fcf6d34eea7d2ddbebb79d938294645d0e6484",
         "launch_worker": "fd53bc7080ce136d610bb99f301bc434f7d2fa3f1d8aa7a5c577d263567cfd73",
         "main": "d24c548da1e1dee3e182f93ac76c34f98278fbfb9a48f6322c934bafc05bd24a",
-        "own_call": "9342250ee9c5653648eb1b3cf82f747598bd1725667fba3b80d49bba24ec29ed",
+        "own_call": "eb543c56c7e9cc0aa2d792ac61ee258c0660119dcd8dba91698bdb5a6cf8cc9b",
         "read_call_termination": "ea9b2da7c34829cdcf1b7c6346c177f068e9713e8474d054b191241b8c5afdf9",
         "read_polling_store": "c2e867a3e4a0d5208db6eb7da95d320c5bfb131393701dd23b7c7334cc0588a5",
         "run_worker": "385b98207e1935ad5f039bf848ecb1f7c0a54ca1718995d2feafa93a7978ac48"
       },
       "packet_call_digests": [],
-      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (0.91.11): the capture waits import the attempt count and the wait from finishing; no behavior, packet argument or member changes. Reviewed finishing-writes-2 (0.91.11): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and the transport does not turn a refused record of that process into a failed observation: the refusal reaches the command that owns the call or the worker of a staged task; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes. Reviewed replay-first-writes, part 1 (0.91.11): a committed request is answered from a read before any write lock, a write transaction that finds its request committed ends with ROLLBACK, and the open of an existing store for creation checks its structure in a read; inside a command a read waits for a COMMIT in progress and a COMMIT for the readers of the store, for at most the shared wait, while a polling read and the render of the output views keep the busy timeout; no packet argument or member changes."
+      "reason": "Reviewed legacy scientific projection, packet construction, immutable storage and helper graph; changed AST requires declaration review. Reviewed finishing-writes (0.91.11): the capture waits import the attempt count and the wait from finishing; no behavior, packet argument or member changes. Reviewed finishing-writes-2 (0.91.11): the release of a Colab job, the records before a reviewer program, the captures and the finish of a review call and the refusal of a reviewer output wait for a busy store through finishing.retry_finishing_write; the owner of a call records the process that starts a reviewer program, and the transport does not turn a refused record of that process into a failed observation: the refusal reaches the command that owns the call or the worker of a staged task; review-series runs a run again with its request ID when the refusal of its output was refused after the wait; no packet argument or member changes. Reviewed replay-first-writes, part 1 (0.91.11): a committed request is answered from a read before any write lock, a write transaction that finds its request committed ends with ROLLBACK, and the open of an existing store for creation checks its structure in a read; inside a command a read waits for a COMMIT in progress and a COMMIT for the readers of the store, for at most the shared wait, while a polling read and the render of the output views keep the busy timeout; no packet argument or member changes. Reviewed for 0.92.1: The authority carries the original invocation identity to the child-record refusal, which explains standalone reconciliation and how to continue after a pending poll."
     },
     "research_harness.rounds": {
       "ast_sha256": "12c48c3b70682a177f4385921b30e8ea34135edfcbd804b2699e0f42e8eef529",
@@ -35423,7 +35485,7 @@
       "reason": "Reviewed v7 page-plan integration: bounded packet selection from immutable plan, inventory and state artifacts; complete native validation stays transient. T6.1-T6.7: reviewed explicit finding-version selection, mandatory exact index frame pricing and binding verification, delivered quote identities, named-gap checks, and versioned final-page composition. New helper functions and exact call edges are pinned. Reviewed the byte-measured page-room fallback: it retains the frozen allocation and current material bound; calibrated ratio adaptation is unchanged. G8 of 0.92.0 (lane g8-finding-index, for review): the finding index of a bounded chain takes the form that its stated size in inventory.fixed_bounds admits (complete, unit references or descriptor); admission lets the index give up values before other fixed fields move; answers are checked against the complete index of the plan; the finding version of a chain is fixed at its first assignment."
     },
     "research_harness.review_session_v4": {
-      "ast_sha256": "7b56ceef7ecaa4d0fbfc1f87f0bd2834c9362b32f9498e3b8f9165a12ee1a2d6",
+      "ast_sha256": "914c851b70159d927abef32110f36fde17a1ed5f9da5d41e77656b1569751bed",
       "functions": {
         "_describe_json": "7c6004e53039a80228d53341ea102c68af46e1cc51855d15c96893ebef98c919",
         "build_session_inventory": "6c17080602defdf017f7d02062e97511e93f35e65de7a180d8270969f769f7f2",
@@ -35441,7 +35503,7 @@
         "matches_turn_prompt": "409a77de2ed8f35adccbb961ffef844bb31ad9c027e024e67e2a648733d73450",
         "_describe_logical_fields": "844c9d9e4097556d1e4c12a5baf1e37c6d85c23e67a0b1e942fb70f272d893e1",
         "_list_frame_values": "092ad6ffa04b799669c30c2e6895760f76a144de90111efe4c6ef64c568f77c7",
-        "check_v4_admission": "e2a071bf8066017c0a19c7c12299273cae57bc2ca5499844278883843efbd86f",
+        "check_v4_admission": "a880104798b91cc543b6d19bc093fa4e90910019093d7071477669275f2de34a",
         "read_bound_session": "5287425e13ee465c10c2ae1c0004bad2653c3f6957a40aaab3f6b70ec986f18e",
         "_find_covered_end": "3c51d880c8def4a7f9cc6e3e2099a98c0b59cce28ae2acfe452bc5ce20ee4807",
         "_list_remaining_units": "51465c6d3108bbb85c1f8af1c52df4ba6be08f247a0c86d29b84a31b50219dcb",
@@ -35449,7 +35511,7 @@
         "_build_delivery": "8c8d245ba415f823a919af732cd1d6a56ade804b9eb3c9b4d410b6950974cd49",
         "_pack_session_deliveries": "c2d9eb6b583e18154d8b0e833a953fa600756892489e1e31e5d87ddfa5f4817c",
         "_replace_frame_handles": "253d8f9b89711c7836e762e53643784477821c7d2229c4b80cddf7673955204a",
-        "build_session_packet": "db4bd0463758813f90bb474dd86a3a1da45dd0e2d8bcb849f6a7320772651c88",
+        "build_session_packet": "c9bc7b6cbcf90605840a374d067042b295555ee7cc64bcac814f92c1eb675134",
         "validate_request_output": "1f9ed79b614c5497ba85230f381f47ac7703822ab575468f6c32e49cb6be9e6e",
         "_project_completed_turn": "e8e1a1106b07096248b46e480ed38af1f59bba6f8420338f7e206793ee3c2727",
         "build_handle_packet": "f1255930f1482ca5b379272985fe921406322d60a4202cb12c4e229be93477b9",
@@ -35498,6 +35560,7 @@
         "14ad9e11d524bba511f947691e72e082051e297a0fb619bcfc5be80ead1ce5b3",
         "14d47e41194ca2a0f1c6e37dd440026117b06eb896e1db63f84d6b7275209bac",
         "14dca018a60d1706f43c7bf1fe9e4e1145b8dd4371312aff0bca2622b5b5fa46",
+        "165de1ed9049cfd6d589566414da36d9b1a174c6a0322d6897fdad55b1974449",
         "16d60a18a9887ffd70507de4ce3ba457c0951021d20b618f0f49d171074e3adb",
         "19a54de97066c4b62ef53876b01a65ffbb14f6e273c8e5f83548124f693b99e2",
         "1bd3c1436119af107074a5e2834bc254c178e6c662e82a266aeb322d0048eb47",
@@ -35523,11 +35586,11 @@
         "4290f5be6ea2d7af01a786c247839147962b15b0deef612c6fe1fc389a9cdb43",
         "43c985c7a4f0d4ebb6ee834c3a9b9800a8c4854a3a5895ce5f0923acc9c8f8bd",
         "48b1c85e053bdfa185f4d4e8a2d9bd5d423082807e02a1595e8906d80b0ccebe",
-        "4a8dc33e53ee21443210fa0ded2afab20dfa564be215665edb95735952142177",
         "4fb5643ae1bf06438ffd73af799416b3aadf931b600aca23fd11721878d37c24",
         "521e5ebce66220f8584c4e695f9cbbb18120e9d8d679e69f7699d1a00c1276c1",
         "5481bf983363812cf6a96d033aed8cad2dfa0cf61b95c802d840a58783184d00",
         "550b3e6642faaeba92614933536c50824018745bfca2261d0cd4fdcae3507f4e",
+        "56a85f4dd0168213fd36aa7868ed1d735580075a8b9a67b035f35036c1ead876",
         "57d9831411a841f131b79a9885ed86af42c1ebbf7bd4a2d155f7407a3e4be923",
         "5caeddba133591ce3d9b88fe9c1349be30b8244a0f3dab0fa016091c201a170e",
         "5edc04fc8c87615d952ab8a191fa5cfc1d492666a6ae4b566ad79ed2c14c476f",
@@ -35585,6 +35648,7 @@
         "c35f5541483844156de1c78321d66547d70188b2bf6506a1283a0a62bc31fc28",
         "c8df974a3672de4f2b48ef4a0ef8471b31548a42e9308807a807a0ce12b45a00",
         "c951c30417be7371b89a10b67c294e3a03b167aefc35ce34436668ed9495fdfa",
+        "caa4f6ea23be9c45c8684ba4cbbb0dc713af6664cc96c6130e0b2429ffe34ba6",
         "cd616fa5eac42359fb82c8dcb9c3b47f194ffd5e5503949f81150676b61e0405",
         "cdbce75cce3bafa543e49e43a25f84d70cccf50c1affb6d7f8ef10dbeafaed54",
         "cdc1e42ef084910e3e904bb87c058b4d2056a6844ed34dc5ae9df0d401c04590",
@@ -35609,10 +35673,11 @@
         "ede36cae4ed28dfa4094675afc999ad918a60de57caa39430d4c6c93633b5fa0",
         "efa31dfa69682e94a25afe9bba08cd1ea0a53ca96a4b0cd279fb0e20e2d34556",
         "f056c702465ce56c72476ae2f10200b6083b18794e973a5c793a3a50d290c0f6",
+        "f05f5c1b1cba85e2c8aeb4de3ba280c38bf290c57c664dd93241869bd9ef3bdb",
         "f4a754821968299134e77b422c6e2ca247ea8c3091a015123650105744278f10",
         "fde398d9665beaeeaa6bf1928e922f017ec484bfd618ec011854c7860ae9a77c"
       ],
-      "reason": "Reviewed frozen session inventory, bounded packet construction and authenticated chain projection; changed AST requires declaration review. Reviewed lane session-v4-prompt of 0.92.0: build_turn_prompt puts the base prompt of the role (build_base_prompt: canonical_prompt without the source rules v2) before the turn text and appends the paragraphs that the logical packet selects; matches_turn_prompt rebuilds the whole prompt from its parameters and, with the logical packet, requires the recorded paragraphs to equal that selection; check_v4_admission reserves the envelope plus the base as the turns render it (measure_base_prompt reads the logical packet and returns a count); require_session_capacity raises the stop of rule V5 and writes no packet; the two binding checks pass the logical packet of the chain to matches_turn_prompt. Reviewed lane session-v4-refresh of 0.92.0 (rules F1 to F8): the refresh of a problem review that a chain of the session rules v4 recorded is a new chain in the same slot, linked by the context member session_refresh; its packet is the first packet of the role with problem_refresh and the earlier reviews in historical_reviews. Reviewed lane manifest-recorded-profile of 0.92.0: prepare_session_assignment compares the installed PDF renderer for the record of a new turn after its return for a replay; a session admits no visual route, so the comparison returns after one read of the route record; no packet argument, member, call row or shape changes."
+      "reason": "Reviewed frozen session inventory, bounded packet construction and authenticated chain projection; changed AST requires declaration review. Reviewed lane session-v4-prompt of 0.92.0: build_turn_prompt puts the base prompt of the role (build_base_prompt: canonical_prompt without the source rules v2) before the turn text and appends the paragraphs that the logical packet selects; matches_turn_prompt rebuilds the whole prompt from its parameters and, with the logical packet, requires the recorded paragraphs to equal that selection; check_v4_admission reserves the envelope plus the base as the turns render it (measure_base_prompt reads the logical packet and returns a count); require_session_capacity raises the stop of rule V5 and writes no packet; the two binding checks pass the logical packet of the chain to matches_turn_prompt. Reviewed lane session-v4-refresh of 0.92.0 (rules F1 to F8): the refresh of a problem review that a chain of the session rules v4 recorded is a new chain in the same slot, linked by the context member session_refresh; its packet is the first packet of the role with problem_refresh and the earlier reviews in historical_reviews. Reviewed lane manifest-recorded-profile of 0.92.0: prepare_session_assignment compares the installed PDF renderer for the record of a new turn after its return for a replay; a session admits no visual route, so the comparison returns after one read of the route record; no packet argument, member, call row or shape changes. Reviewed for 0.92.1: Shares the outer identity between renderer and admission and charges the full serialized copy."
     },
     "research_harness.review_parts_slate": {
       "ast_sha256": "09249c04eb7d2db3a59e256e9786a8098b3426831089d64e1b8ff06eac51fc4b",
@@ -35692,9 +35757,9 @@
       "reason": "Reviewed the pure condensation functions. cut_condensing_blocks, plan_condensing and forecast_condensing return blocks, rounds and counts from entry handles and sizes; describe_combination_bound returns the answer bound of a combining turn, which the families write into the capacity of the binding or the header of the turn; validate_combination checks one reviewer answer against its block and returns a copy; apply_combination returns a new carried state with its archives. No function receives or changes a packet. Changed AST requires declaration review."
     },
     "research_harness.review_field_classes": {
-      "ast_sha256": "e24c79bb37a295570b212b6048c012e8fa460f5c0e23521cbc8e7d16fd391d74",
+      "ast_sha256": "66f2ccc84c0c9bc29a69c608f1cc4eb7e0e002b4c821c4c726e7484a8aa016f7",
       "functions": {
-        "_build_classified_frame": "7ee5f2cafc30e1634d89fd14e7c472bb809c75d832a3a718d87dff8269c60e48",
+        "_build_classified_frame": "9457cc10ab9cfa698df75dbb58b26597a544dc7ca170a6af527156216b29f982",
         "_describe_value_reference": "207bb7400f166a7262a3a04023046563a7a0cd20e48327b05e34cd82fe9b9e5c",
         "_describe_value_unit": "04affd78bcc78149120149827e965e80e6ee22de33f2c174edb6e8a6cadea1ca",
         "_find_declared_row": "97a596de604b5d16e6646063d3675cc83e28a72497da500bb863cd23f4946b63",
@@ -35703,32 +35768,33 @@
         "_measure_field_overhead": "6e525c3161ea71347d326d8422828958ad73b891cffdeae0b109aefcca5b39ab",
         "_project_children": "f2b116f59cd7ade44c8818685256593341088d35d11719bc4373d4681c752f47",
         "_project_field": "00bfbdffcc279cefa49b9d7740585faaa4daa7e4a62319691a2e854f79f33021",
-        "_select_table": "28bdb99fd300a1d6779ac6bbcbdf72f77e74bca916341623ef91b1991d292949",
+        "_select_table": "100b2c24a1723b0e208a59302c9c2c553fab90667db462ecd3f12ba7015bd3e0",
         "classify_packet": "6fa1465a625588e2fb410a54ac0e0da5e4b5972b7495bcf328b202401a8da302",
         "describe_registry_classes": "c634b6a9eacad63177b99963620e76cee7f2963f269de5b8f06dcdf2583b23b0",
-        "describe_role_frame": "c24e72441fa9e3e8c32ac21bdd36b966a1a7196cad2165c948fc26a05155364b",
+        "describe_role_frame": "35c24510fd154e677ddc012c0c1db00449fde6a027220983f20f8e6be7a2679b",
         "describe_unit_references": "440c6e949c86d427e90a27184a32e99af6b6a3c211849a3cf18a438dbb569b6d",
         "list_frame_units": "797b4dcf09a3cbf395c885b361f7ea4b20f60ab9f58659ce2562a31b9a493e8b",
         "plan_role_capacity": "efec7d93095f232a2177efcc4820c0425d502d1b03edba12c63856facbbdcc63"
       },
       "packet_call_digests": [
+        "022412d3ca3f5b242aaf76ad102953ebcf013733c72e6cb9d5fd03487cacbc93",
         "03515546eb1073d4559dd90dd1a354a809c7655b3450e6b0cbc1220b16f82d61",
         "13f8df7b9c2b0c500725bbae091bf46a76845e083dbe27b0237fa868269a7ee1",
         "23672aaba98a94c1c1364c3c51ee0e2c6c734d7c20df8d6b58c4a9825da04653",
         "27ea516afd5d837faf23ef29be5e9239e795b36ac3f167a2f9b28b5e624a0681",
         "2b31c901bb8315dc09e6c3fb3d22bc1cd57f4ae9b0d1570345a644b1f5e45b67",
         "342f527d5aadd1f4c0a2a92ba221fed4a3f47a83c1336fcb015005cc2f089cf3",
+        "401711a6e1ee238d163bda324ff6aa6aef8f5b1a0502892f5365094ce40c5434",
         "57a480736b17987d944069b761ae0cac78ffc9801836af5c514ffa94e4ae1fb9",
         "59ee4b896a5b4214756d83e4757533d3ab372737569f434173bdc2a512157a62",
         "7bc7f91b9fc23504e21e0bf358f354b6cdcb195c4c194de3423e44075a431261",
         "998e695f47d863a6902b2439e931d054d361d8985de490f15001a8936eae5ecc",
         "99c6eaae71b11813fe453511a3774a4d9c2bf0c956443d5107af5b7aeafc5c2a",
+        "afa0215ebcae068255e4419475b1d7e0f09652fbb39b3dd64a742f69c4dba844",
         "bedcabf1caeda53a140420cdda9b36c02b070bfee37f1321dab3d6cf15659d38",
-        "dbe35d9c0ef8bcfd350148257a1935d41d28c78799b78db53971f4006dac4891",
-        "e2bc923e81286cb1aae8465bf6369bb389c9b3a14d7d123443679e320447ce3a",
-        "f0b427a9df37856f9845ed31d324ea7a16b92bf9df7ced673803f9e5e2c3be49"
+        "e2bc923e81286cb1aae8465bf6369bb389c9b3a14d7d123443679e320447ce3a"
       ],
-      "reason": "Reviewed the data table FIELD_CLASSES and the frame functions. classify_packet, describe_role_frame and list_frame_units read a role packet and return new values: a classified frame, units with handles and sizes, field rows, and per-kind frame bounds with the $descriptors and $unit: tags; plan_role_capacity calls review_route_capacity.plan_chain_capacity until no fixed field moves and returns the plan and the units; describe_unit_references returns the reference rows of a unit descriptor; describe_registry_classes reads the registry for release tooling. No function writes into the packet that it receives. The frame of classify_packet enters the packets of parts protocol v3 and session protocol v4 through their builders; the registry declares it in the parts-v3 wire variants with the provenance of classify_packet, and as the opaque frame of session_v4_binding with the provenance of review_session_v4.build_session_packet. The table rows that classify_packet returns under fields reach no packet. The keys of FIELD_CLASSES (protocol forms, the empty form and dotted field paths) and the row member overflow_unit are table data under non_packet_names. Changed AST requires declaration review."
+      "reason": "Reviewed the data table FIELD_CLASSES and the frame functions. classify_packet, describe_role_frame and list_frame_units read a role packet and return new values: a classified frame, units with handles and sizes, field rows, and per-kind frame bounds with the $descriptors and $unit: tags; plan_role_capacity calls review_route_capacity.plan_chain_capacity until no fixed field moves and returns the plan and the units; describe_unit_references returns the reference rows of a unit descriptor; describe_registry_classes reads the registry for release tooling. No function writes into the packet that it receives. The frame of classify_packet enters the packets of parts protocol v3 and session protocol v4 through their builders; the registry declares it in the parts-v3 wire variants with the provenance of classify_packet, and as the opaque frame of session_v4_binding with the provenance of review_session_v4.build_session_packet. The table rows that classify_packet returns under fields reach no packet. The keys of FIELD_CLASSES (protocol forms, the empty form and dotted field paths) and the row member overflow_unit are table data under non_packet_names. Changed AST requires declaration review. Reviewed for 0.92.1: Declares all reached fields and separates measured exact identity from delivery units."
     },
     "research_harness.review_final_pages": {
       "ast_sha256": "84a7bbb5e666d579aedaf591f5f174da535db78ea42aee8048b41e07a6a49698",
@@ -62554,6 +62620,11 @@
       "source": "synthetic production-builder fixtures",
       "test": "tests.test_capacity_packet_inventory.ProductionPacketInventoryTests.test_every_growing_variant_reaches_the_production_wire_builder"
     },
+    "slate/exactory-problem-review-v2": {
+      "builder": "research_harness.review_protocol.build_packet",
+      "source": "synthetic production-builder fixtures",
+      "test": "tests.test_capacity_packet_inventory.ProductionPacketInventoryTests.test_every_growing_variant_reaches_the_production_wire_builder"
+    },
     "standalone/exactory-independent-review-v1": {
       "builder": "research_harness.review_protocol.build_packet",
       "source": "synthetic production-builder fixtures",
@@ -78383,6 +78454,40 @@
                 }
               }
             },
+            "main_capture_selections": {
+              "class": "fixed",
+              "members": {
+                "protocol": {
+                  "class": "fixed"
+                },
+                "choices": {
+                  "class": "fixed",
+                  "items": {
+                    "class": "fixed",
+                    "members": {
+                      "version_id": {
+                        "class": "fixed"
+                      },
+                      "source_id": {
+                        "class": "fixed"
+                      },
+                      "original_sha256": {
+                        "class": "reference"
+                      },
+                      "text_sha256": {
+                        "class": "reference"
+                      },
+                      "reason": {
+                        "class": "fixed"
+                      },
+                      "protocol": {
+                        "class": "fixed"
+                      }
+                    }
+                  }
+                }
+              }
+            },
             "output_refusal": {
               "$ref": "stage2_output_refusal_notice"
             },
@@ -78705,6 +78810,68 @@
               "quantity": "units",
               "sample": "x"
             },
+            "settled_source_requests": {
+              "class": "collection",
+              "items": {
+                "class": "fixed",
+                "members": {
+                  "request": {
+                    "class": "fixed",
+                    "members": {
+                      "id": {
+                        "class": "fixed"
+                      },
+                      "kind": {
+                        "class": "fixed"
+                      },
+                      "version_id": {
+                        "class": "fixed"
+                      },
+                      "depth": {
+                        "class": "fixed"
+                      }
+                    }
+                  },
+                  "undelivered_spans": {
+                    "class": "fixed",
+                    "items": {
+                      "class": "fixed",
+                      "members": {
+                        "artifact_descriptor": {
+                          "class": "reference",
+                          "members": {
+                            "location": {
+                              "class": "fixed"
+                            },
+                            "sha256": {
+                              "class": "reference"
+                            },
+                            "media_type": {
+                              "class": "fixed"
+                            },
+                            "size": {
+                              "class": "fixed"
+                            }
+                          }
+                        },
+                        "start": {
+                          "class": "fixed"
+                        },
+                        "end": {
+                          "class": "fixed"
+                        }
+                      }
+                    }
+                  },
+                  "limitations": {
+                    "class": "fixed",
+                    "items": {
+                      "class": "fixed"
+                    }
+                  }
+                }
+              }
+            },
             "source_artifacts": {
               "$ref": "field_67e1ca4d4459~c1f0c9320f84"
             },
@@ -78881,6 +79048,40 @@
             "field": {
               "$ref": "field_a6a6f692ba11~2e683b16eab2"
             },
+            "main_capture_selections": {
+              "class": "fixed",
+              "members": {
+                "protocol": {
+                  "class": "fixed"
+                },
+                "choices": {
+                  "class": "fixed",
+                  "items": {
+                    "class": "fixed",
+                    "members": {
+                      "version_id": {
+                        "class": "fixed"
+                      },
+                      "source_id": {
+                        "class": "fixed"
+                      },
+                      "original_sha256": {
+                        "class": "reference"
+                      },
+                      "text_sha256": {
+                        "class": "reference"
+                      },
+                      "reason": {
+                        "class": "fixed"
+                      },
+                      "protocol": {
+                        "class": "fixed"
+                      }
+                    }
+                  }
+                }
+              }
+            },
             "output_refusal": {
               "$ref": "stage2_output_refusal_notice"
             },
@@ -78969,6 +79170,68 @@
             },
             "route_capacity": {
               "$ref": "stage2_route_capacity_notice"
+            },
+            "settled_source_requests": {
+              "class": "collection",
+              "items": {
+                "class": "fixed",
+                "members": {
+                  "request": {
+                    "class": "fixed",
+                    "members": {
+                      "id": {
+                        "class": "fixed"
+                      },
+                      "kind": {
+                        "class": "fixed"
+                      },
+                      "version_id": {
+                        "class": "fixed"
+                      },
+                      "depth": {
+                        "class": "fixed"
+                      }
+                    }
+                  },
+                  "undelivered_spans": {
+                    "class": "fixed",
+                    "items": {
+                      "class": "fixed",
+                      "members": {
+                        "artifact_descriptor": {
+                          "class": "reference",
+                          "members": {
+                            "location": {
+                              "class": "fixed"
+                            },
+                            "sha256": {
+                              "class": "reference"
+                            },
+                            "media_type": {
+                              "class": "fixed"
+                            },
+                            "size": {
+                              "class": "fixed"
+                            }
+                          }
+                        },
+                        "start": {
+                          "class": "fixed"
+                        },
+                        "end": {
+                          "class": "fixed"
+                        }
+                      }
+                    }
+                  },
+                  "limitations": {
+                    "class": "fixed",
+                    "items": {
+                      "class": "fixed"
+                    }
+                  }
+                }
+              }
             },
             "source_artifacts": {
               "$ref": "field_092e5a48a928~3c2b67e41766"
@@ -96070,6 +96333,195 @@
                 }
               }
             },
+            "complete_source_delivery": {
+              "class": "fixed",
+              "members": {
+                "alternate_body_sha256": {
+                  "$ref": "q6_48f660eea5de~0e698c644cc2"
+                },
+                "historical_existing_elisions": {
+                  "$ref": "q6_bb704edcdc4f~683b9083abc7"
+                },
+                "historical_search_elisions": {
+                  "$ref": "q6_bb704edcdc4f~683b9083abc7"
+                },
+                "historical_source_bodies": {
+                  "bound": {
+                    "field_class": {
+                      "characters": 15000,
+                      "overflow_unit": true
+                    }
+                  },
+                  "class": "fixed",
+                  "entry": "Q2",
+                  "fixture": "result/exactory-independent-review-sources-v2",
+                  "grows": true,
+                  "items": {
+                    "class": "fixed",
+                    "members": {
+                      "extraction_descriptor": {
+                        "$ref": "q6_e2dc00c4dbdf~b2db4cc34227"
+                      },
+                      "original_descriptor": {
+                        "$ref": "q6_e2dc00c4dbdf~b2db4cc34227"
+                      },
+                      "source_id": {
+                        "$ref": "q6_d5e12cc512c3~ed5815bd9a2d"
+                      },
+                      "version_id": {
+                        "$ref": "q6_d5e12cc512c3~ed5815bd9a2d"
+                      }
+                    }
+                  },
+                  "quantity": "units",
+                  "sample": "x"
+                },
+                "history_digest": {
+                  "$ref": "q6_d5e12cc512c3~ed5815bd9a2d"
+                },
+                "protected_sha256": {
+                  "$ref": "q6_48f660eea5de~0e698c644cc2"
+                },
+                "protocol": {
+                  "class": "fixed"
+                },
+                "restored_evidence": {
+                  "$ref": "q6_bb704edcdc4f~683b9083abc7"
+                },
+                "source_requests": {
+                  "$ref": "q6_bf2ecf1e913c~9355478c5273"
+                },
+                "sources": {
+                  "bound": {
+                    "field_class": {
+                      "characters": 15000,
+                      "overflow_unit": true
+                    }
+                  },
+                  "class": "fixed",
+                  "entry": "Q2",
+                  "fixture": "result/exactory-independent-review-sources-v2",
+                  "grows": true,
+                  "items": {
+                    "class": "fixed",
+                    "members": {
+                      "selected_original_sha256": {
+                        "$ref": "q6_d5e12cc512c3~ed5815bd9a2d"
+                      },
+                      "selected_source_id": {
+                        "$ref": "q6_d5e12cc512c3~ed5815bd9a2d"
+                      },
+                      "selected_text_sha256": {
+                        "$ref": "q6_d5e12cc512c3~ed5815bd9a2d"
+                      },
+                      "version_id": {
+                        "$ref": "q6_d5e12cc512c3~ed5815bd9a2d"
+                      }
+                    }
+                  },
+                  "quantity": "sources",
+                  "sample": "x"
+                }
+              }
+            },
+            "context_repair": {
+              "class": "fixed",
+              "members": {
+                "assignment_id": {
+                  "$ref": "field_242b460eb337~02ec83deb4cd"
+                },
+                "cause": {
+                  "bound": {
+                    "field_class": {
+                      "characters": 2000,
+                      "overflow_unit": true
+                    }
+                  },
+                  "class": "fixed",
+                  "entry": "Q2",
+                  "fixture": "result/exactory-independent-review-sources-v2",
+                  "grows": true,
+                  "items": {
+                    "class": "fixed",
+                    "members": {
+                      "id": {
+                        "$ref": "field_242b460eb337~02ec83deb4cd"
+                      },
+                      "kind": {
+                        "class": "fixed"
+                      },
+                      "reason": {
+                        "$ref": "field_242b460eb337~02ec83deb4cd"
+                      },
+                      "source": {
+                        "$ref": "field_242b460eb337~02ec83deb4cd"
+                      }
+                    }
+                  },
+                  "quantity": "units",
+                  "sample": "x"
+                },
+                "event_ids": {
+                  "$ref": "field_d4928169fe83~af8de5f91404"
+                },
+                "historical_review_ids": {
+                  "$ref": "field_d4928169fe83~af8de5f91404"
+                },
+                "probe_id": {
+                  "$ref": "field_242b460eb337~02ec83deb4cd"
+                },
+                "slot_id": {
+                  "$ref": "field_242b460eb337~02ec83deb4cd"
+                }
+              }
+            },
+            "continuation": {
+              "class": "fixed",
+              "members": {
+                "assignment_id": {
+                  "bound": {
+                    "field_class": {
+                      "characters": 512,
+                      "overflow_unit": true
+                    }
+                  },
+                  "class": "fixed",
+                  "entry": "Q3",
+                  "fixture": "result/exactory-independent-review-sources-v2",
+                  "grows": true,
+                  "quantity": "texts",
+                  "sample": "x"
+                },
+                "packet_digest": {
+                  "bound": {
+                    "field_class": {
+                      "characters": 512,
+                      "overflow_unit": true
+                    }
+                  },
+                  "class": "fixed",
+                  "entry": "Q3",
+                  "fixture": "result/exactory-independent-review-sources-v2",
+                  "grows": true,
+                  "quantity": "texts",
+                  "sample": "x"
+                },
+                "scientific_context": {
+                  "bound": {
+                    "field_class": {
+                      "characters": 512,
+                      "overflow_unit": true
+                    }
+                  },
+                  "class": "fixed",
+                  "entry": "Q3",
+                  "fixture": "result/exactory-independent-review-sources-v2",
+                  "grows": true,
+                  "quantity": "texts",
+                  "sample": "x"
+                }
+              }
+            },
             "digest": {
               "class": "fixed"
             },
@@ -96153,6 +96605,40 @@
               "quantity": "units",
               "sample": "x"
             },
+            "main_capture_selections": {
+              "class": "fixed",
+              "members": {
+                "protocol": {
+                  "class": "fixed"
+                },
+                "choices": {
+                  "class": "fixed",
+                  "items": {
+                    "class": "fixed",
+                    "members": {
+                      "version_id": {
+                        "class": "fixed"
+                      },
+                      "source_id": {
+                        "class": "fixed"
+                      },
+                      "original_sha256": {
+                        "class": "reference"
+                      },
+                      "text_sha256": {
+                        "class": "reference"
+                      },
+                      "reason": {
+                        "class": "fixed"
+                      },
+                      "protocol": {
+                        "class": "fixed"
+                      }
+                    }
+                  }
+                }
+              }
+            },
             "output_refusal": {
               "$ref": "stage2_output_refusal_notice"
             },
@@ -96169,6 +96655,82 @@
               "grows": true,
               "items": {},
               "quantity": "requests",
+              "sample": "x"
+            },
+            "previously_supplied_evidence": {
+              "bound": {
+                "field_class": {
+                  "characters": 256,
+                  "unit_rule": "each_entry"
+                }
+              },
+              "class": "collection",
+              "entry": "Q2",
+              "fixture": "result/exactory-independent-review-sources-v2",
+              "grows": true,
+              "items": {
+                "$ref": "field_aa0651cf53f2~e6daacb59e7e"
+              },
+              "quantity": "units",
+              "sample": "x"
+            },
+            "prior_context": {
+              "bound": {
+                "field_class": {
+                  "characters": 256,
+                  "unit_rule": "each_entry"
+                }
+              },
+              "class": "collection",
+              "entry": "Q2",
+              "fixture": "result/exactory-independent-review-sources-v2",
+              "grows": true,
+              "items": {
+                "class": "fixed",
+                "members": {
+                  "excerpt": {
+                    "$ref": "field_aa0651cf53f2~e6daacb59e7e"
+                  },
+                  "inspection": {
+                    "class": "fixed",
+                    "members": {
+                      "depth": {
+                        "$ref": "field_242b460eb337~f04e3f4e690f"
+                      },
+                      "digest": {
+                        "class": "fixed"
+                      },
+                      "mechanical_only": {
+                        "class": "fixed"
+                      },
+                      "reading_id": {
+                        "$ref": "field_242b460eb337~f04e3f4e690f"
+                      }
+                    }
+                  },
+                  "origin": {
+                    "class": "fixed",
+                    "members": {
+                      "artifact_descriptor": {
+                        "$ref": "field_b8d2f7a13c3d~f05a826c25a9"
+                      },
+                      "locator": {
+                        "$ref": "field_16ba91b4860e"
+                      },
+                      "source_id": {
+                        "$ref": "field_242b460eb337~f04e3f4e690f"
+                      }
+                    }
+                  },
+                  "scientific_truth_certified": {
+                    "class": "fixed"
+                  },
+                  "version_id": {
+                    "$ref": "field_242b460eb337~f04e3f4e690f"
+                  }
+                }
+              },
+              "quantity": "units",
               "sample": "x"
             },
             "protocol": {
@@ -97881,6 +98443,32 @@
                 }
               }
             },
+            "reviewer_excerpts": {
+              "class": "fixed",
+              "members": {
+                "allowances": {
+                  "$ref": "field_eb1ee5e7d2d2"
+                },
+                "excerpts": {
+                  "bound": {
+                    "field_class": {
+                      "characters": 256,
+                      "unit_rule": "stored_plan"
+                    }
+                  },
+                  "class": "carried",
+                  "entry": "Q4",
+                  "fixture": "result/exactory-independent-review-sources-v2",
+                  "grows": true,
+                  "items": {},
+                  "quantity": "excerpts",
+                  "sample": "x"
+                },
+                "protocol": {
+                  "class": "fixed"
+                }
+              }
+            },
             "reviewer_id": {
               "$ref": "field_3ada9d0ce5ff~752e59352567"
             },
@@ -97889,6 +98477,270 @@
             },
             "route_capacity": {
               "$ref": "stage2_route_capacity_notice"
+            },
+            "scientific_history": {
+              "bound": {
+                "field_class": {
+                  "characters": 256,
+                  "unit_rule": "stored_plan"
+                }
+              },
+              "class": "carried",
+              "entry": "Q2",
+              "fixture": "result/exactory-independent-review-sources-v2",
+              "grows": true,
+              "items": {
+                "class": "fixed",
+                "members": {
+                  "assignment_id": {
+                    "$ref": "field_242b460eb337~d2490ecbb43a"
+                  },
+                  "independence": {
+                    "$ref": "field_242b460eb337~d2490ecbb43a"
+                  },
+                  "observed_output": {
+                    "class": "fixed",
+                    "members": {
+                      "limitations": {
+                        "$ref": "field_d4928169fe83~528ec5cff8f5"
+                      },
+                      "objections": {
+                        "$ref": "field_6a0699c1fb8f~e96aafe23d86"
+                      },
+                      "stage": {
+                        "$ref": "field_242b460eb337~d2490ecbb43a"
+                      },
+                      "support": {
+                        "class": "fixed"
+                      },
+                      "value": {
+                        "$ref": "field_0768c63eea47~fd52a5c1af06"
+                      }
+                    }
+                  },
+                  "packet": {
+                    "class": "fixed",
+                    "members": {
+                      "digest": {
+                        "class": "fixed"
+                      },
+                      "dossier_id": {
+                        "$ref": "field_242b460eb337~d2490ecbb43a"
+                      },
+                      "evidence": {
+                        "bound": {
+                          "field_class": {
+                            "characters": 256,
+                            "unit_rule": "stored_plan"
+                          }
+                        },
+                        "class": "carried",
+                        "entry": "Q2",
+                        "fixture": "bar/exactory-independent-review-sources-v2",
+                        "grows": true,
+                        "items": {
+                          "class": "fixed",
+                          "members": {
+                            "artifact_reference_template": {
+                              "$ref": "field_6ea801d9769e~1a25d4887f31"
+                            },
+                            "content": {
+                              "$ref": "field_242b460eb337~d2490ecbb43a"
+                            },
+                            "encoding": {
+                              "class": "fixed"
+                            }
+                          }
+                        },
+                        "quantity": "units",
+                        "sample": "x"
+                      },
+                      "intent": {
+                        "class": "fixed",
+                        "members": {
+                          "deliverables": {
+                            "$ref": "field_d4928169fe83~528ec5cff8f5"
+                          },
+                          "full_objective": {
+                            "$ref": "field_242b460eb337~d2490ecbb43a"
+                          },
+                          "id": {
+                            "$ref": "field_242b460eb337~d2490ecbb43a"
+                          },
+                          "instruction": {
+                            "class": "fixed",
+                            "members": {
+                              "artifact_reference_template": {
+                                "$ref": "field_6ea801d9769e~1a25d4887f31"
+                              },
+                              "text": {
+                                "$ref": "field_242b460eb337~d2490ecbb43a"
+                              }
+                            }
+                          },
+                          "publication": {
+                            "$ref": "field_ec538250d761~1a4ad332546d"
+                          },
+                          "resources": {
+                            "bound": {
+                              "field_class": {
+                                "characters": 256,
+                                "unit_rule": "stored_plan"
+                              }
+                            },
+                            "class": "carried",
+                            "entry": "Q2",
+                            "fixture": "bar/exactory-independent-review-sources-v2",
+                            "grows": true,
+                            "items": {
+                              "$ref": "field_e4dc89a1f09f~6bb6bb8e3664"
+                            },
+                            "quantity": "units",
+                            "sample": "x"
+                          },
+                          "user_standard": {
+                            "$ref": "field_242b460eb337~d2490ecbb43a"
+                          }
+                        }
+                      },
+                      "pending_source_requests": {
+                        "$ref": "field_c0208c77e84f~538fcf9281ca"
+                      },
+                      "prior_context": {
+                        "$ref": "field_67e1ca4d4459~2096de2b67ac"
+                      },
+                      "protocol": {
+                        "class": "fixed"
+                      },
+                      "reviewer_id": {
+                        "$ref": "field_242b460eb337~d2490ecbb43a"
+                      },
+                      "role": {
+                        "class": "fixed"
+                      },
+                      "source_deliveries": {
+                        "$ref": "field_67e1ca4d4459~2096de2b67ac"
+                      },
+                      "source_inventory": {
+                        "class": "fixed",
+                        "members": {
+                          "artifact_descriptor": {
+                            "$ref": "field_b8d2f7a13c3d~ec6228e37db5"
+                          },
+                          "digest": {
+                            "class": "fixed"
+                          },
+                          "first_page": {
+                            "class": "fixed",
+                            "members": {
+                              "inventory_digest": {
+                                "$ref": "field_242b460eb337~d2490ecbb43a"
+                              },
+                              "inventory_total": {
+                                "class": "fixed"
+                              },
+                              "items": {
+                                "$ref": "field_67e1ca4d4459~2096de2b67ac"
+                              },
+                              "metadata_not_read": {
+                                "class": "fixed"
+                              },
+                              "next_page": {
+                                "class": "fixed"
+                              },
+                              "page": {
+                                "class": "fixed"
+                              },
+                              "page_size": {
+                                "class": "fixed"
+                              },
+                              "query": {
+                                "class": "fixed"
+                              },
+                              "total": {
+                                "class": "fixed"
+                              }
+                            }
+                          },
+                          "metadata_not_read": {
+                            "class": "fixed"
+                          },
+                          "page_size": {
+                            "class": "fixed"
+                          },
+                          "total": {
+                            "class": "fixed"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "quantity": "units",
+              "sample": "x"
+            },
+            "settled_source_requests": {
+              "class": "collection",
+              "items": {
+                "class": "fixed",
+                "members": {
+                  "request": {
+                    "class": "fixed",
+                    "members": {
+                      "id": {
+                        "class": "fixed"
+                      },
+                      "kind": {
+                        "class": "fixed"
+                      },
+                      "version_id": {
+                        "class": "fixed"
+                      },
+                      "depth": {
+                        "class": "fixed"
+                      }
+                    }
+                  },
+                  "undelivered_spans": {
+                    "class": "fixed",
+                    "items": {
+                      "class": "fixed",
+                      "members": {
+                        "artifact_descriptor": {
+                          "class": "reference",
+                          "members": {
+                            "location": {
+                              "class": "fixed"
+                            },
+                            "sha256": {
+                              "class": "reference"
+                            },
+                            "media_type": {
+                              "class": "fixed"
+                            },
+                            "size": {
+                              "class": "fixed"
+                            }
+                          }
+                        },
+                        "start": {
+                          "class": "fixed"
+                        },
+                        "end": {
+                          "class": "fixed"
+                        }
+                      }
+                    }
+                  },
+                  "limitations": {
+                    "class": "fixed",
+                    "items": {
+                      "class": "fixed"
+                    }
+                  }
+                }
+              }
             },
             "source_deliveries": {
               "$ref": "field_2d6af3493a18~a3cc068cbd93"
@@ -98475,6 +99327,40 @@
             },
             "history_delivery": {
               "$ref": "q6_d5e12cc512c3~24a6b351b774"
+            },
+            "main_capture_selections": {
+              "class": "fixed",
+              "members": {
+                "protocol": {
+                  "class": "fixed"
+                },
+                "choices": {
+                  "class": "fixed",
+                  "items": {
+                    "class": "fixed",
+                    "members": {
+                      "version_id": {
+                        "class": "fixed"
+                      },
+                      "source_id": {
+                        "class": "fixed"
+                      },
+                      "original_sha256": {
+                        "class": "reference"
+                      },
+                      "text_sha256": {
+                        "class": "reference"
+                      },
+                      "reason": {
+                        "class": "fixed"
+                      },
+                      "protocol": {
+                        "class": "fixed"
+                      }
+                    }
+                  }
+                }
+              }
             },
             "material_objections": {
               "$ref": "q6_bb704edcdc4f~fa1503d87546"
@@ -99734,6 +100620,23 @@
             "problem_evidence_digest": {
               "$ref": "q6_d5e12cc512c3~5c177fffd314"
             },
+            "problem_objection_carry": {
+              "class": "fixed",
+              "members": {
+                "protocol": {
+                  "class": "fixed"
+                },
+                "import_set_digest": {
+                  "class": "reference"
+                }
+              }
+            },
+            "problem_prompt_conditions": {
+              "class": "fixed",
+              "items": {
+                "class": "fixed"
+              }
+            },
             "problem_refresh": {
               "class": "fixed",
               "members": {
@@ -100820,6 +101723,68 @@
               },
               "quantity": "units",
               "sample": "x"
+            },
+            "settled_source_requests": {
+              "class": "collection",
+              "items": {
+                "class": "fixed",
+                "members": {
+                  "request": {
+                    "class": "fixed",
+                    "members": {
+                      "id": {
+                        "class": "fixed"
+                      },
+                      "kind": {
+                        "class": "fixed"
+                      },
+                      "version_id": {
+                        "class": "fixed"
+                      },
+                      "depth": {
+                        "class": "fixed"
+                      }
+                    }
+                  },
+                  "undelivered_spans": {
+                    "class": "fixed",
+                    "items": {
+                      "class": "fixed",
+                      "members": {
+                        "artifact_descriptor": {
+                          "class": "reference",
+                          "members": {
+                            "location": {
+                              "class": "fixed"
+                            },
+                            "sha256": {
+                              "class": "reference"
+                            },
+                            "media_type": {
+                              "class": "fixed"
+                            },
+                            "size": {
+                              "class": "fixed"
+                            }
+                          }
+                        },
+                        "start": {
+                          "class": "fixed"
+                        },
+                        "end": {
+                          "class": "fixed"
+                        }
+                      }
+                    }
+                  },
+                  "limitations": {
+                    "class": "fixed",
+                    "items": {
+                      "class": "fixed"
+                    }
+                  }
+                }
+              }
             },
             "source_artifacts": {
               "bound": {
@@ -105093,6 +106058,40 @@
               "quantity": "units",
               "sample": "x"
             },
+            "main_capture_selections": {
+              "class": "fixed",
+              "members": {
+                "protocol": {
+                  "class": "fixed"
+                },
+                "choices": {
+                  "class": "fixed",
+                  "items": {
+                    "class": "fixed",
+                    "members": {
+                      "version_id": {
+                        "class": "fixed"
+                      },
+                      "source_id": {
+                        "class": "fixed"
+                      },
+                      "original_sha256": {
+                        "class": "reference"
+                      },
+                      "text_sha256": {
+                        "class": "reference"
+                      },
+                      "reason": {
+                        "class": "fixed"
+                      },
+                      "protocol": {
+                        "class": "fixed"
+                      }
+                    }
+                  }
+                }
+              }
+            },
             "output_refusal": {
               "$ref": "stage2_output_refusal_notice"
             },
@@ -105468,6 +106467,68 @@
               "quantity": "units",
               "sample": "x"
             },
+            "settled_source_requests": {
+              "class": "collection",
+              "items": {
+                "class": "fixed",
+                "members": {
+                  "request": {
+                    "class": "fixed",
+                    "members": {
+                      "id": {
+                        "class": "fixed"
+                      },
+                      "kind": {
+                        "class": "fixed"
+                      },
+                      "version_id": {
+                        "class": "fixed"
+                      },
+                      "depth": {
+                        "class": "fixed"
+                      }
+                    }
+                  },
+                  "undelivered_spans": {
+                    "class": "fixed",
+                    "items": {
+                      "class": "fixed",
+                      "members": {
+                        "artifact_descriptor": {
+                          "class": "reference",
+                          "members": {
+                            "location": {
+                              "class": "fixed"
+                            },
+                            "sha256": {
+                              "class": "reference"
+                            },
+                            "media_type": {
+                              "class": "fixed"
+                            },
+                            "size": {
+                              "class": "fixed"
+                            }
+                          }
+                        },
+                        "start": {
+                          "class": "fixed"
+                        },
+                        "end": {
+                          "class": "fixed"
+                        }
+                      }
+                    }
+                  },
+                  "limitations": {
+                    "class": "fixed",
+                    "items": {
+                      "class": "fixed"
+                    }
+                  }
+                }
+              }
+            },
             "source_artifacts": {
               "$ref": "field_a90df77d1b5e~28dc1dcb5970"
             },
@@ -105614,8 +106675,96 @@
         "exactory-problem-review-v2": {
           "class": "fixed",
           "members": {
+            "main_capture_selections": {
+              "class": "fixed",
+              "members": {
+                "protocol": {
+                  "class": "fixed"
+                },
+                "choices": {
+                  "class": "fixed",
+                  "items": {
+                    "class": "fixed",
+                    "members": {
+                      "version_id": {
+                        "class": "fixed"
+                      },
+                      "source_id": {
+                        "class": "fixed"
+                      },
+                      "original_sha256": {
+                        "class": "reference"
+                      },
+                      "text_sha256": {
+                        "class": "reference"
+                      },
+                      "reason": {
+                        "class": "fixed"
+                      },
+                      "protocol": {
+                        "class": "fixed"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "previously_supplied_evidence": {
+              "bound": {
+                "field_class": {
+                  "characters": 256,
+                  "unit_rule": "each_entry"
+                }
+              },
+              "class": "collection",
+              "entry": "Q2",
+              "fixture": "slate/exactory-problem-review-v2",
+              "grows": true,
+              "items": {
+                "$ref": "field_aa0651cf53f2~e6daacb59e7e"
+              },
+              "quantity": "units",
+              "sample": "x"
+            },
+            "problem_objection_carry": {
+              "class": "fixed",
+              "members": {
+                "protocol": {
+                  "class": "fixed"
+                },
+                "import_set_digest": {
+                  "class": "reference"
+                }
+              }
+            },
             "protocol": {
               "class": "fixed"
+            },
+            "reviewer_excerpts": {
+              "class": "fixed",
+              "members": {
+                "allowances": {
+                  "$ref": "field_eb1ee5e7d2d2"
+                },
+                "excerpts": {
+                  "bound": {
+                    "field_class": {
+                      "characters": 256,
+                      "unit_rule": "stored_plan"
+                    }
+                  },
+                  "class": "carried",
+                  "entry": "Q4",
+                  "fixture": "slate/exactory-problem-review-v2",
+                  "grows": true,
+                  "items": {},
+                  "quantity": "excerpts",
+                  "sample": "x"
+                },
+                "protocol": {
+                  "class": "fixed"
+                }
+              }
             },
             "role": {
               "class": "fixed"
@@ -105628,6 +106777,68 @@
             },
             "digest": {
               "class": "fixed"
+            },
+            "settled_source_requests": {
+              "class": "collection",
+              "items": {
+                "class": "fixed",
+                "members": {
+                  "request": {
+                    "class": "fixed",
+                    "members": {
+                      "id": {
+                        "class": "fixed"
+                      },
+                      "kind": {
+                        "class": "fixed"
+                      },
+                      "version_id": {
+                        "class": "fixed"
+                      },
+                      "depth": {
+                        "class": "fixed"
+                      }
+                    }
+                  },
+                  "undelivered_spans": {
+                    "class": "fixed",
+                    "items": {
+                      "class": "fixed",
+                      "members": {
+                        "artifact_descriptor": {
+                          "class": "reference",
+                          "members": {
+                            "location": {
+                              "class": "fixed"
+                            },
+                            "sha256": {
+                              "class": "reference"
+                            },
+                            "media_type": {
+                              "class": "fixed"
+                            },
+                            "size": {
+                              "class": "fixed"
+                            }
+                          }
+                        },
+                        "start": {
+                          "class": "fixed"
+                        },
+                        "end": {
+                          "class": "fixed"
+                        }
+                      }
+                    }
+                  },
+                  "limitations": {
+                    "class": "fixed",
+                    "items": {
+                      "class": "fixed"
+                    }
+                  }
+                }
+              }
             },
             "source_rules": {
               "class": "fixed"

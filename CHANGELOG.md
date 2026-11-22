@@ -3,6 +3,8 @@
 Each version has a full release note in [docs/releases](docs/releases/). The
 newest version comes first.
 
+Version [0.92.1](docs/releases/0.92.1.md) repairs three areas that 0.92.0 left open. A Colab launcher reads the first reconciliation snapshot after `DONE` until its deadline, and a busy refusal of a reviewer call names its operation and its invocation. The render after a write builds the same files with fewer reads. Each member of a review packet has a field class, and the identity members of a packet stay in the frame. Two reviewer stubs that answer from the prompt alone drive the new forms of a review. No command selects these forms yet.
+
 Version [0.92.0](docs/releases/0.92.0.md) repairs how the harness plans and starts reviewer calls. A plan names a route record that takes its command. A retired route record keeps the state of its latest probe that has an answer. A recorded page manifest verifies under the renderer profile that it recorded. A reviewer call reads the context of each turn at the time of the call, and it refuses with `review_context_unverified` or `review_context_contaminated` before it sends a request. A later openness chain keeps the readings of the units that did not change, under `exactory-openness-carried-selection-v3`. `next` names the bar assignment with a `scheduler` for two routes. The plugin now holds the session rules v4, the parts protocol v3, the math protocol v2 and a v7 final in pages. No command selects these forms yet.
 
 Version [0.91.14](docs/releases/0.91.14.md) repairs two tests that failed in CI since 0.91.11. Two checksums of the transport inventory follow the source, and one test of the readiness gate patches the function that records an observation. No file of `research_harness` changes.

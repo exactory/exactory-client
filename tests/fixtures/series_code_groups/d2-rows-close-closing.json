@@ -977,6 +977,9 @@
         "research_harness/review_delivered_evidence.py:_read_authenticated_delivery.project#5": [
           "content"
         ],
+        "research_harness/review_field_classes.py:_refuse_unclassified_field#1": [
+          "form"
+        ],
         "research_harness/review_input_projection.py:_require_review_packet#1": [
           "content"
         ],
