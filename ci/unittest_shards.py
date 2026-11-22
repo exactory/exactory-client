@@ -336,11 +336,10 @@ def main():
     group.add_argument("--shard-count", type=int, default=SHARD_COUNT)
     group.add_argument("--result", type=Path, required=True)
     group.add_argument("modules", nargs="+", help="Test modules of tests/, such as test_ci_shards.")
-    named = commands.add_parser(
-        "run-modules",
-        help="Run named test modules, classes or methods with the reviewer program guard. Run this command in the "
-             "plugin root. The exit status is 0 only when every named test runs and passes. A skipped test and an "
-             "expected failure give status 1, as in a CI shard.")
+    named_help = ("Run named test modules, classes or methods with the reviewer program guard. Run this command in "
+                  "the plugin root. The exit status is 0 only when every named test runs and passes. A skipped test "
+                  "and an expected failure give status 1, as in a CI shard.")
+    named = commands.add_parser("run-modules", help=named_help, description=named_help)
     named.add_argument("--top-level-directory", type=Path, default=Path("tests"),
                        help="The directory that goes first on the import path (default: %(default)s). For the "
                             "harness tests, use skills/math-solver/harness.")

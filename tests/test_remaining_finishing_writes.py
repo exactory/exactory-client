@@ -420,6 +420,10 @@ class OwnedCallTransportTests(TaskExecutionFixture):
                 self.run_call("call")
         self.assertEqual((caught.exception.code, caught.exception.message),
                          ("store_busy", review_worker.CALL_CHILD_STORE_BUSY_MSG))
+        self.assertEqual(
+            {key: caught.exception.details.get(key) for key in ("reservation_id", "operation", "invocation_id")},
+            {"reservation_id": review_task_execution.identify_call("review.invoke", "call"),
+             "operation": "review.invoke", "invocation_id": "call"})
         self.assertFalse(self.has_called())
         records = self.store.snapshot()["records"]
         self.assertNotIn("call", records.get("review_attempt", {}))
@@ -840,8 +844,9 @@ class OutputRefusalTests(OtherWriters, OpennessReadingCase):
         self.assertIn(refusal.details["cause"]["code"], finishing.SCOPED_FINISH_RETRY_CODES)
         # The way on that the message names: the reconciliation records the call as interrupted, and the next run
         # calls the reviewer.
-        review_task_execution.reconcile_call(self.store, {"operation": "review.invoke", "invocation_id": "attempt-turn-1"},
-                                             request_id="reconcile-capture")
+        reconcile_payload = {key: refusal.details.get(key) for key in ("operation", "invocation_id")}
+        self.assertEqual(reconcile_payload, {"operation": "review.invoke", "invocation_id": "attempt-turn-1"})
+        review_task_execution.reconcile_call(self.store, reconcile_payload, request_id="reconcile-capture")
         attempt = self.store.snapshot()["records"]["review_attempt"]["attempt-turn-1"]
         self.assertEqual((attempt["status"], attempt["error"]["code"]), ("failed", "review_invocation_interrupted"))
         receipt = self.invoke("turn-1", answer, attempt="attempt-turn-1-retry")

@@ -296,6 +296,42 @@ class RemotePollingTests(DevelopmentCase):
         self.assertEqual(caught.exception.details['job_id'], job['job_id'])
         self.assertGreaterEqual(clock.elapsed, claim['config']['timeout_seconds'])
 
+    def test_first_reconciliation_read_after_done_retries_a_busy_store(self):
+        claim = self.make_remote_claim()
+        root, job = remote_execution._publish_job(self.store, claim)
+        self.assertFalse(remote_execution.serve_scan_once(self.sync))
+        remote_execution._release(self.store, claim, root, job)
+        self.assertTrue(remote_execution.serve_scan_once(self.sync))
+
+        snapshot = self.store.snapshot
+        release = remote_execution._release
+        busy = []
+        clock = PollClock()
+
+        def release_then_make_store_busy(*args, **kwargs):
+            nonlocal busy_once
+            released = release(*args, **kwargs)
+            if busy_once:
+                busy_once = False
+                busy.append(ResearchError('store_busy', 'Synthetic concurrent writer'))
+            return released
+
+        def read_after_release():
+            if busy:
+                raise busy.pop()
+            return snapshot()
+
+        busy_once = True
+        with patch.object(self.store, 'snapshot', side_effect=read_after_release), \
+                patch.object(remote_execution, '_release', side_effect=release_then_make_store_busy), \
+                patch.object(remote_execution, 'time', clock):
+            result = remote_execution.launch_colab(self.store, claim)
+        self.assertTrue(result['ok'])
+        self.assertEqual(result['metric'], {'metric': 7})
+        self.assertEqual(clock.intervals, [.01])
+        self.assertEqual(len(list((self.sync / 'jobs').iterdir())), 1)
+        self.assertEqual(len(snapshot()['records']['execution']), 1)
+
     def test_other_remote_read_errors_surface_without_sleeping(self):
         claim = self.make_remote_claim()
         for error in (ResearchError('stale_revision', 'Synthetic refusal'), ValueError('Synthetic defect')):

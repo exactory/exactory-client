@@ -7,10 +7,12 @@ route with the fixture of test_review_route_renewal, because the Claude runtime 
 """
 
 import copy
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
-from research_harness import record_check, review_output_correction as correction
+from research_harness import record_check, review_output_correction as correction, review_task_execution
 from research_harness import review_claude_transport as claude
 from research_harness import review_protocol as protocol, review_transport as transport
 from research_harness.errors import ResearchError
@@ -154,6 +156,36 @@ class ClaudeRouteAdmissionTests(renewal.RouteRenewalFixture):
     def invoke_correction(self, repair, identifier):
         return self.case.mutate(correction.invoke_correction,
                                 dict(id=identifier, assignment_id=repair['id'], route_id='route'))['result']
+
+    def record_sender_child(self, operation, invocation_id):
+        reservation_id = review_task_execution.identify_call(operation, invocation_id)
+
+        def send(route, request, credential):
+            with subprocess.Popen([sys.executable, '-c', 'pass'], start_new_session=True) as child:
+                self.assertEqual(child.wait(timeout=10), 0)
+                membership = self.records()['review_pool_membership'][reservation_id]
+                self.assertEqual((membership['operation'], membership['invocation_id'], membership['released']),
+                                 (operation, invocation_id, False))
+                self.assertEqual([row['pgid'] for row in membership['children']], [child.pid])
+            return self.respond(route, request, credential)
+
+        return patch.object(transport, 'send_request', side_effect=send)
+
+    def test_route_probe_records_its_transport_child(self):
+        with self.record_sender_child('review.route_probe', 'owned-probe') as send:
+            probe = self.probe('route', 'owned-probe')
+        send.assert_called_once()
+        self.assertEqual(probe['status'], 'completed')
+
+    def test_output_correction_records_its_transport_child(self):
+        """Two refused reassessments are needed to admit a correction on the original verified route."""
+        repair, delta = self.build_twice_refused_reassessment()
+        self.outputs.append(delta)
+        with patch.object(claude, '_cli', return_value=('/fixture/claude', '2.1.322 (Claude Code)')), \
+                self.record_sender_child('review.output_correction', 'owned-correction') as send:
+            corrected = self.invoke_correction(repair, 'owned-correction')
+        send.assert_called_once()
+        self.assertEqual(corrected['correction_status'], 'accepted')
 
     def test_claude_route_without_its_cli_refuses_the_correction_before_any_record(self):
         repair, delta = self.build_twice_refused_reassessment()

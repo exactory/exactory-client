@@ -519,14 +519,14 @@ class TestVerify(_TransportTestCase):
         self.assertEqual(json.loads(stdout_text)["id"], "22222222-2222-4222-8222-222222222222")
         self.assertEqual(stderr_text, "")
 
-    def _bind_the_verdict_in_a_verification_workspace(self) -> None:
+    def _bind_the_verdict_in_a_verification_workspace(self, **verdict_overrides: object) -> None:
         """Pin the task and bind an evidence-linked assessment of verdict.json, as the managed path requires."""
         from integration_fixtures import prepare_verification
         from reviewer_fixtures import verdict_assignment
         from research_harness.verification import bind_verdict, record_task
 
         case = prepare_verification(self.scratch_dir)
-        _write_verdict_file(self.scratch_dir / "verdict.json")
+        _write_verdict_file(self.scratch_dir / "verdict.json", **verdict_overrides)
         pinned = case.mutate(record_task, {"task": self._task()})["result"]
         payload = {"id": "transport-verdict", "task_digest": pinned["digest"],
             "body": case.artifacts.put((self.scratch_dir / "verdict.json").read_bytes(), "application/json"),

@@ -183,11 +183,17 @@ def launch_colab(store, claim):
     from .review_worker import read_polling_store
     root, job = _publish_job(store, claim)
     deadline = time.monotonic() + claim["config"]["timeout_seconds"] + _interval("EXACTORY_LAB_COLAB_WAIT", 1800)
+    done = root / "results" / job["job_id"] / "DONE"
+    terminal_visible = False
     while True:
-        released = _release(store, claim, root, job, read_store=read_polling_store)
-        if released is not _POLLING_READ_BUSY and (root / "results" / job["job_id"] / "DONE").exists():
-            return reconcile_execution(store, {"admission_id": claim["admission_id"]}, expected_revision=None,
-                request_id="remote-observe-" + digest(claim), owned=True)
+        if not terminal_visible:
+            released = _release(store, claim, root, job, read_store=read_polling_store)
+            terminal_visible = released is not _POLLING_READ_BUSY and done.exists()
+        if terminal_visible:
+            snapshot = read_polling_store(store.snapshot)
+            if snapshot is not None:
+                return reconcile_execution(store, {"admission_id": claim["admission_id"]}, expected_revision=None,
+                    request_id="remote-observe-" + digest(claim), owned=True, _snapshot=snapshot)
         if time.monotonic() >= deadline:
             raise ResearchError("execution_recovery_required", "The Colab runner has no confirmed terminal outcome. Check RUNNER_ALIVE heartbeat and reconcile the same admitted identity; its reservation remains charged.", {"job_id": job["job_id"]})
         time.sleep(max(0.01, _interval("EXACTORY_LAB_COLAB_POLL", 10)))

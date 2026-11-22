@@ -63,11 +63,16 @@ class _StandInService:
         if method == "GET":
             self.reads.append(path)
             return self._read_task(path, allow_missing)
-        self.bodies.append(body)
         fault, self.fault = self.fault, None
+        if fault == "connection_refused":
+            _transport._exit_with_error("The client cannot connect to the server.")
+        self.bodies.append(body)
         if fault == "never_arrives":
             self.posts.append((path, None))
             _transport._exit_with_error("The client cannot reach the server.")
+        if fault == "rate_limited":
+            self.posts.append((path, 429))
+            _transport._exit_with_error("The hourly posting limit is reached.")
         answer, status = self._file_verdict(body) if path == _VERDICTS_PATH else self.open_request()
         self.posts.append((path, status))
         if fault == "response_lost":
@@ -216,21 +221,31 @@ class TestVerifyWithAPendingVerdict(_PendingStepTestCase):
         self.assertEqual(self.service.reads, [_TASK_PATH, _TASK_PATH])
         self.assertNotIn("discarded", self.read_intent("verdict"))
 
-    def test_verify_after_a_request_that_never_arrived_sends_it_once_and_writes_the_receipt(self) -> None:
-        self.service.fault = "never_arrives"
+    def check_retry_after_unapplied_verdict(self, fault, first_posts) -> None:
+        self.service.fault = fault
         self._run(self._ARGV, expected_exit_code=1)
+        self.assertEqual(self.service.posts, first_posts)
         self.assertEqual(self.read_intent("verdict")["pending"]["name"], "verdict")
 
         _, stderr_text = self.run_done(self._ARGV)
 
         self.assertEqual(stderr_text, "")
-        self.assertEqual(self.service.posts, [(_VERDICTS_PATH, None), (_VERDICTS_PATH, 201)])
+        self.assertEqual(self.service.posts, first_posts + [(_VERDICTS_PATH, 201)])
         intent = self.read_intent("verdict")
         self.assertEqual(intent["status"], "complete")
         self.assertEqual(intent["discarded"], [{"name": "verdict",
                                                 "observation": {"kind": "remote_read", "viewerVerdictId": None}}])
         receipt = self.read_records()["verdict_receipt"][intent["id"]]
         self.assertEqual(receipt["response"]["id"], self.service.read_current_verdict_id())
+
+    def test_verify_after_a_request_that_never_arrived_sends_it_once_and_writes_the_receipt(self) -> None:
+        self.check_retry_after_unapplied_verdict("never_arrives", [(_VERDICTS_PATH, None)])
+
+    def test_verify_after_a_refused_connection_sends_the_pending_verdict_once(self) -> None:
+        self.check_retry_after_unapplied_verdict("connection_refused", [])
+
+    def test_verify_after_a_rate_limit_response_retries_on_the_managed_path(self) -> None:
+        self.check_retry_after_unapplied_verdict("rate_limited", [(_VERDICTS_PATH, 429)])
 
     def test_reconcile_with_the_verdict_id_records_the_answer_and_sends_nothing(self) -> None:
         answered = self.run_with_a_refused_answer_record(self._ARGV)
@@ -369,6 +384,44 @@ class TestVerifyWithAPendingVerdict(_PendingStepTestCase):
         self.assertTrue(stderr_text.startswith("Managed record skipped (verdict_body_mismatch): "), stderr_text)
         self.assertEqual(self.service.posts, [(_VERDICTS_PATH, 201), (_VERDICTS_PATH, 201)])
         self.assertEqual(self.read_intent("verdict")["pending"]["name"], "verdict")
+
+
+class TestVerifyWithAPendingRevision(_PendingStepTestCase):
+    _ARGV = TestVerifyWithAPendingVerdict._ARGV
+
+    def _task(self) -> dict:
+        return dict(test_transport.TestVerify._task(self), viewerVerdictId=self.predecessor)
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.predecessor = str(uuid.uuid4())
+        test_transport.TestVerify._bind_the_verdict_in_a_verification_workspace(
+            self, supersedesVerdictId=self.predecessor)
+        self.install_service(self._task())
+        self.service.verdicts.append({"id": self.predecessor, "status": "current"})
+
+    def check_that_applied_revision_is_not_sent_again(self) -> None:
+        self.assertEqual(self.service.posts, [(_VERDICTS_PATH, 201)])
+        self.assertEqual(self.service.bodies[0]["supersedesVerdictId"], self.predecessor)
+        filed = self.service.read_current_verdict_id()
+        self.assertNotEqual(filed, self.predecessor)
+        pending = self.read_intent("verdict")
+        self.assertEqual(pending["pending"]["name"], "verdict")
+        refusal = self.run_refused(self._ARGV)
+        self.assertEqual((refusal.code, refusal.details["viewerVerdictId"]), ("verdict_reconciliation_pending", filed))
+        stdout_text, _ = self.run_done(["reconcile", pending["id"], "--verdict-id", filed])
+        self.assertEqual(json.loads(stdout_text)["response"], {"id": filed})
+        self.assertEqual(self.read_intent("verdict")["status"], "complete")
+        self.assertEqual(self.service.posts, [(_VERDICTS_PATH, 201)])
+
+    def test_verify_does_not_resend_a_revision_after_a_refused_answer_record(self) -> None:
+        self.run_with_a_refused_answer_record(self._ARGV)
+        self.check_that_applied_revision_is_not_sent_again()
+
+    def test_verify_does_not_resend_a_revision_after_its_response_was_lost(self) -> None:
+        self.service.fault = "response_lost"
+        self._run(self._ARGV, expected_exit_code=1)
+        self.check_that_applied_revision_is_not_sent_again()
 
 
 class TestVerifyOnTheDirectPath(_PendingStepTestCase):
@@ -515,15 +568,18 @@ class TestSubmitWithAPendingRequest(_PendingStepTestCase):
         self.assertEqual(self.service.posts, [(self._SUBMISSIONS_PATH, 201)])
         self.assertEqual(self.read_intent("submit")["status"], "complete")
 
-    def _check_that_a_request_that_never_arrived_is_sent_on_the_managed_path(self, argv: list[str]) -> None:
-        self.service.fault = "never_arrives"
+    def check_retry_after_unapplied_submission(self, argv: list[str], fault, first_posts) -> None:
+        self.service.fault = fault
         self._run(argv, expected_exit_code=1)
+        self.assertEqual(self.service.posts, first_posts)
+        self.assertEqual(self.read_intent("submit")["pending"]["name"], "submit")
 
         refusal = self.run_refused(argv)
 
         # The request is recorded with its answer; the task is not ingested yet.
         self.assertEqual(refusal.code, "verification_ingest_pending")
-        self.assertEqual(self.service.posts, [(self._SUBMISSIONS_PATH, None), (self._SUBMISSIONS_PATH, 201)])
+        expected_posts = first_posts + [(self._SUBMISSIONS_PATH, 201)]
+        self.assertEqual(self.service.posts, expected_posts)
         intent = self.read_intent("submit")
         self.assertIsNone(intent["pending"])
         self.assertEqual(intent["responses"]["submit"]["observation"]["kind"], "direct_response")
@@ -533,25 +589,66 @@ class TestSubmitWithAPendingRequest(_PendingStepTestCase):
         self.service.is_ingested = True
         self.run_done(argv)
 
-        self.assertEqual(len(self.service.posts), 2)
+        self.assertEqual(self.service.posts, expected_posts)
+        self.assertEqual(self.read_intent("submit")["status"], "complete")
         self.assertEqual(len(self.read_records()["submission_receipt"]), 1)
 
     def test_submit_while_the_service_shows_no_task_sends_the_request_on_the_managed_path(self) -> None:
-        self._check_that_a_request_that_never_arrived_is_sent_on_the_managed_path(self._ARGV)
+        self.check_retry_after_unapplied_submission(self._ARGV, "never_arrives", [(self._SUBMISSIONS_PATH, None)])
 
     def test_managed_only_submit_while_the_service_shows_no_task_sends_the_request(self) -> None:
-        self._check_that_a_request_that_never_arrived_is_sent_on_the_managed_path(self._ARGV + ["--managed-only"])
+        self.check_retry_after_unapplied_submission(
+            self._ARGV + ["--managed-only"], "never_arrives", [(self._SUBMISSIONS_PATH, None)])
 
-    def test_submit_after_a_lost_response_joins_the_open_request_and_records_its_answer(self) -> None:
-        self.service.fault = "response_lost"
-        self._run(self._ARGV, expected_exit_code=1)
+    def test_submit_after_a_refused_connection_sends_the_pending_request(self) -> None:
+        """The locally verified publication keeps the retry on the managed path."""
+        self.check_retry_after_unapplied_submission(self._ARGV, "connection_refused", [])
 
-        refusal = self.run_refused(self._ARGV)
+    def test_managed_only_submit_after_a_refused_connection_sends_the_pending_request(self) -> None:
+        """The verified publication lets managed-only send and record the pending request."""
+        self.check_retry_after_unapplied_submission(self._ARGV + ["--managed-only"], "connection_refused", [])
+
+    def check_retry_before_ingest(self, argv: list[str]) -> None:
+        pending = self.read_intent("submit")
+        self.assertEqual(pending["pending"]["name"], "submit")
+        refusal = self.run_refused(argv)
 
         # The task is not ingested, so the request is sent again; the service answers with the open request.
         self.assertEqual(refusal.code, "verification_ingest_pending")
-        self.assertEqual(self.service.posts, [(self._SUBMISSIONS_PATH, 201), (self._SUBMISSIONS_PATH, 200)])
+        expected_posts = [(self._SUBMISSIONS_PATH, 201), (self._SUBMISSIONS_PATH, 200)]
+        self.assertEqual(self.service.posts, expected_posts)
         self.assertEqual(self.read_intent("submit")["responses"]["submit"]["response"]["id"], _VERIFICATION_ID)
+        self.assertEqual(self.run_refused(["reconcile", pending["id"]]).code, "verification_ingest_pending")
+
+        self.service.is_ingested = True
+        self.run_done(argv)
+        self.assertEqual(self.service.posts, expected_posts)
+        self.assertEqual(self.read_intent("submit")["status"], "complete")
+        self.assertEqual(len(self.read_records()["submission_receipt"]), 1)
+
+    def test_submit_after_a_refused_answer_record_joins_the_request_before_ingest(self) -> None:
+        """The verified publication lets the command retain the joined request through ingest."""
+        self.run_with_a_refused_answer_record(self._ARGV)
+        self.check_retry_before_ingest(self._ARGV)
+
+    def test_managed_only_submit_after_a_refused_answer_record_joins_the_request_before_ingest(self) -> None:
+        """Managed-only needs the verified publication to join the request and record its receipt."""
+        argv = self._ARGV + ["--managed-only"]
+        self.run_with_a_refused_answer_record(argv)
+        self.check_retry_before_ingest(argv)
+
+    def test_submit_after_a_lost_response_joins_the_open_request_and_records_its_answer(self) -> None:
+        """The verified publication lets the command finish the existing intent when the task appears."""
+        self.service.fault = "response_lost"
+        self._run(self._ARGV, expected_exit_code=1)
+        self.check_retry_before_ingest(self._ARGV)
+
+    def test_managed_only_submit_after_a_lost_response_joins_the_request_before_ingest(self) -> None:
+        """Managed-only needs the verified publication to finish the intent after a lost response."""
+        argv = self._ARGV + ["--managed-only"]
+        self.service.fault = "response_lost"
+        self._run(argv, expected_exit_code=1)
+        self.check_retry_before_ingest(argv)
 
     def _check_that_the_task_is_read_by_the_concept_doi(self, status: int) -> None:
         self.service.is_ingested = True
